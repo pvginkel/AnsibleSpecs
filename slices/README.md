@@ -8,6 +8,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
+| [data-disks](data-disks.md) | pending | — | microk8s-rebuild-completion (blocker for re-rebuilding srvk8s2 + remaining rebuilds) |
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
 | [backup-collector](backup-collector.md) | pending | openbao-static-seal | phase: openbao + secrets |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
