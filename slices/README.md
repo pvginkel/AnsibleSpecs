@@ -8,7 +8,6 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
-| [data-disks](data-disks.md) | pending | — | microk8s-rebuild-completion (blocker for re-rebuilding srvk8s2 + remaining rebuilds) |
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
 | [backup-collector](backup-collector.md) | pending | openbao-static-seal | phase: openbao + secrets |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
@@ -23,6 +22,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [dns-reservation-provider](completed/dns-reservation-provider/plan.md) | plan 02 | pam-credentials | phase: dns automation (folder also holds the api + terraform specs) |
 | [pre-drain-handoff](completed/pre-drain-handoff.md) | plan 03 | — | landed partially during phase 4c |
 | [embed-homelab-provider](completed/embed-homelab-provider.md) | plan 04 | tf-provider-resource-extensions (verify direction) | Jenkins agent image |
+| [data-disks](completed/data-disks.md) | merged into managed_filesystems | — | unblocks re-rebuild of srvk8s2 + remaining rebuilds |
 
 ## Deferred / Cancelled
 

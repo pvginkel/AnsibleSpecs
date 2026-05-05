@@ -1,5 +1,21 @@
 # data_disks — first-boot mount of declared data volumes
 
+> **Landed as `managed_filesystems`, not `data_disks`.** The
+> "Decisions taken with the operator" point that punted role
+> consolidation to a follow-up was overridden during execution: the
+> operator merged `data_disks` and `disk_resize` into one
+> `managed_filesystems` role consuming the same `(scsi_index,
+> mountpoint, fstype)` schema for both create and grow. The
+> duplication wasn't load-bearing and `disk_resize` was small.
+> Off-the-shelf `linux-system-roles.storage` was considered and
+> declined (pulls `blivet` onto every managed host, brings
+> LVM/RAID/encryption opinions we don't need). The role + wiring +
+> inventory landed in `/work/Ansible` commit
+> `2f0abfe ansible: merge disk_resize into managed_filesystems with
+> create path`. The k8s-rebuild and disk-resize runbooks landed in
+> `28ee128`. Treat the rest of this doc as the original design intent
+> — read it through the role-rename lens.
+
 ## Symptom
 
 `srvk8s2` came up from the Phase 4c rebuild with `/dev/sdb` (the 80 GB
