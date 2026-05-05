@@ -1,6 +1,6 @@
 # Phase 4d — k8s rebuild completion
 
-**Status**: ⏳ Restarted 2026-05-05 — gated on slice [data-disks](../slices/data-disks.md)
+**Status**: ⏳ Restarted 2026-05-05 — slice [data-disks](../slices/completed/data-disks.md) landed (as `managed_filesystems`); ready for the re-rebuild of `srvk8s2`.
 
 ## Goal
 
@@ -10,7 +10,7 @@ Finish the parity event Phase 4c started: rebuild `srvk8s3`, `srvk8s1`, and `wrk
 
 Soak verification on the rebuilt `srvk8s2` surfaced a real blocker: `terraform/prd/vms.tf` declares an 80 GB scsi1 data disk for every k8s worker, but neither cloud-init nor any Ansible role formats and mounts it. `srvk8s2` came up with `/dev/sdb` blank, no fs, not in fstab; 18 hours later containerd images had filled the 19 GB root to 87% and kubelet was emitting `FreeDiskSpaceFailed`/`ImageGCFailed` events every few minutes. The legacy nodes (`srvk8sl1`, `srvk8ss2`) carry `/dev/sdb1 → /var/snap` from out-of-band setup nobody re-codified when Phase 4 designed the from-scratch shape.
 
-The fix is slice [data-disks](../slices/data-disks.md) — a new `data_disks` role that partitions, formats, and mounts each data disk the inventory declares for the host, idempotent against existing nodes. Phase 4d is gated on that slice landing.
+The fix is slice [data-disks](../slices/completed/data-disks.md) — landed as the `managed_filesystems` role (which also subsumed the old `disk_resize` role; same `(scsi_index, mountpoint, fstype)` schema for create + grow). The role partitions, formats, and mounts each data disk the inventory declares for the host, idempotent against existing nodes.
 
 Knock-on changes to the phase plan:
 
@@ -66,7 +66,7 @@ Soak between rebuilds is at the operator's discretion — long enough to see at 
 
 ## Rebuilds, in order
 
-Once slice [data-disks](../slices/data-disks.md) has landed (role + wiring + `group_vars/k8s_prd.yml` declaration). Each rebuild follows the runbook (`/work/Ansible/docs/runbooks/k8s-rebuild.md`) and ends with the soak verification above.
+Slice [data-disks](../slices/completed/data-disks.md) has landed (role + wiring + `group_vars/k8s_prd.yml` declaration). Each rebuild follows the runbook (`/work/Ansible/docs/runbooks/k8s-rebuild.md`) and ends with the soak verification above.
 
 ### 1. `srvk8s2` re-rebuild (worker, restart of the original Phase 4c rebuild)
 
@@ -75,7 +75,7 @@ The live `srvk8s2` (VMID 911) is in TF state and joined the cluster, but came up
 - Evict + leave + remove-node (workers' standard rebuild flow).
 - `ssh root@pve1 'qm shutdown 911 ; sleep 5 ; qm destroy 911'` — destroy (not just shutdown) so the next apply provisions a clean disk; the existing sdb's blank state is fine but explicit destruction matches the "first boot of a fresh VM" semantic the role expects.
 - TF: `terraform apply -target='module.vm["srvk8s2"]' -replace='module.vm["srvk8s2"].proxmox_virtual_environment_vm.this'`. Verify the exact replace target against current TF state at the moment.
-- `rebuild-k8s.yml -e rebuild_target=srvk8s2`. New flow: `data_disks` partitions sdb, formats, mounts at `/var/snap`, fstab persisted; *then* microk8s installs cleanly into the mounted volume.
+- `rebuild-k8s.yml -e rebuild_target=srvk8s2`. New flow: `managed_filesystems` partitions sdb, formats, mounts at `/var/snap`, fstab persisted; *then* microk8s installs cleanly into the mounted volume.
 
 After: `df -h /var/snap` shows ~80 GB ext4, root usage drops back to ~10–15% (ballpark from `srvk8ss2`'s steady state), `ImageGCFailed` stops firing.
 
