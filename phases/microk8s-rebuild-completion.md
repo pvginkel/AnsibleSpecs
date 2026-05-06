@@ -1,6 +1,6 @@
 # Phase 4d — k8s rebuild completion
 
-**Status**: ⏳ Restarted 2026-05-05 — slice [data-disks](../slices/completed/data-disks.md) landed (as `managed_filesystems`); ready for the re-rebuild of `srvk8s2`.
+**Status**: ⏳ In progress — `srvk8s2` re-rebuilt 2026-05-05 (22 h soak clean) and `srvk8s3` rebuilt 2026-05-06 (initial soak clean). Next: `srvk8s1` (primary, NVMe + zpool2), then `wrkdevk8s`.
 
 ## Goal
 
@@ -17,6 +17,16 @@ Knock-on changes to the phase plan:
 - **Re-rebuild `srvk8s2`** as the first rebuild of the restart, before `srvk8s3`. Re-rebuilding `srvk8s2` first exercises the new role end-to-end on a worker before we use it on the primary, where a first-boot mount bug would collide with NVMe passthrough + zpool import — a much worse failure surface than a worker.
 - **The label-parity action from the original phase plan is closed by inspection.** Live `kubectl get nodes --show-labels` showed `srvk8sl1` carrying `homelab.local/{performance=high,storage=zpool2}` per its host_vars and the `srvk8s1` doctrine; `srvk8ss2` + `srvk8s2` carry only kubernetes-default labels. Workers nominally have no `homelab.local/*` labels per `decisions.md` "k8s node capability labels," and this matches reality. Helm-pinned workloads (gitblit, iotsupport, media, nginx, code-server, zigbee2mqtt, etc.) did land on `srvk8s2` once it was up; the original "no Helm-pinned workloads have appeared" diagnosis was a snapshot from earlier in the soak.
 - **The original soak verified clean** apart from the disk-pressure warning. No `panic`/`fatal`/`restart` in kubelite (only the benign `ContainerStatus … NotFound` cleanup race), MetalLB advertising on the workload VLAN, all daemonsets Ready, no PDB blocks, container restart counts all consistent with init-time noise.
+
+## Progress as of 2026-05-06
+
+- **`srvk8s2` re-rebuild — done (2026-05-05).** Joined with `/var/snap` on the formatted 80 GB sdb1 from first boot; root steady at 14% over a full 22 h soak, no `ImageGCFailed` recurrence, MetalLB advertising, daemon journals clean. Closes the data-disks gap end-to-end on a worker.
+- **`srvk8s3` rebuild (was `srvk8ss2`) — done (2026-05-06).** VMID 912 on `pve2`, joined ~10:09 CEST; `managed_filesystems` partitioned + formatted + mounted `/var/snap` before microk8s installed; MetalLB picked up `kubernetes-dashboard` + `dhcp` advertisement on srvk8s3 inside the first 15 minutes. Inventory rename (`host_vars/srvk8ss2.yml` → `srvk8s3.yml`, vm_id 107 → 912; `hosts.yml` membership swap) committed as `b88eb93`. Operator-discretion soak before moving on to the primary.
+- **Old VMID 107** (legacy `srvk8ss2`) is shut down on `pve2`; destroy deferred to the close-the-parity-event commit alongside VMID 104.
+- **Cluster:** 3 Ready (`srvk8sl1`, `srvk8s2`, `srvk8s3`), all v1.32.13. `srvk8sl1` still carries `homelab.local/{performance=high,storage=zpool2}` as designed for the primary.
+- **Stale references that survived step 3** — fold into the close-the-parity-event commit:
+  - `ansible/inventories/prd/group_vars/k8s_prd.yml:2` — header comment still names the legacy trio (`srvk8sl1, srvk8ss1, srvk8ss2`).
+  - `terraform/prd/vms.tf:85` — comment in the `srvk8s3` block: "*inherits srvk8ss2's slot*".
 
 ## Carry-over from 4c
 
@@ -68,7 +78,7 @@ Soak between rebuilds is at the operator's discretion — long enough to see at 
 
 Slice [data-disks](../slices/completed/data-disks.md) has landed (role + wiring + `group_vars/k8s_prd.yml` declaration). Each rebuild follows the runbook (`/work/Ansible/docs/runbooks/k8s-rebuild.md`) and ends with the soak verification above.
 
-### 1. `srvk8s2` re-rebuild (worker, restart of the original Phase 4c rebuild)
+### 1. `srvk8s2` re-rebuild (worker, restart of the original Phase 4c rebuild) — done 2026-05-05
 
 The live `srvk8s2` (VMID 911) is in TF state and joined the cluster, but came up without scsi1 mounted. Re-rebuild after data-disks lands so the role exercises the partition + format + mount path on first boot:
 
@@ -79,7 +89,7 @@ The live `srvk8s2` (VMID 911) is in TF state and joined the cluster, but came up
 
 After: `df -h /var/snap` shows ~80 GB ext4, root usage drops back to ~10–15% (ballpark from `srvk8ss2`'s steady state), `ImageGCFailed` stops firing.
 
-### 2. `srvk8ss2` → `srvk8s3` (worker #2)
+### 2. `srvk8ss2` → `srvk8s3` (worker #2) — done 2026-05-06
 
 Standard worker rebuild. Old VMID 107 on `pve2`, new VMID 912. Same flow as srvk8s2 minus the first-rebuild scaffolding (cloud-init/tls/known_hosts already exist):
 
