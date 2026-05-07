@@ -1,6 +1,6 @@
 # Phase 4d — k8s rebuild completion
 
-**Status**: ⏳ In progress — `srvk8s2` re-rebuilt 2026-05-05, `srvk8s3` rebuilt 2026-05-06, `srvk8s1` rebuilt 2026-05-07 (NVMe + zpool2 reattached). Next: `wrkdevk8s`, then close-the-parity-event commit.
+**Status**: ⏳ In progress — `srvk8s2` re-rebuilt 2026-05-05, `srvk8s3` rebuilt 2026-05-06, `srvk8s1` rebuilt 2026-05-07 (NVMe + zpool2 reattached), `wrkdevk8s` rebuilt 2026-05-07 (dev-tier dynamic shape; pivot mid-rebuild). Next: close-the-parity-event commit + stale-references fold-up.
 
 ## Goal
 
@@ -129,13 +129,23 @@ VMID 910 on `pve`. Per runbook "Primary rebuild," with two field deltas:
 - Runbook step 1 (`microk8s_primary_host` flip) skipped — verified stale; election in `rebuild-k8s.yml`'s first play picked srvk8s2 from the survivor pair, then srvk8s1 once it joined.
 - `zpool import` failed without `-f` — the rebuilt VM has a new ZFS hostid, so ZFS refused the import as a multi-mount safety check against the destroyed source VM. Fix folded into `rebuild-k8s.yml` as commit `a34d63f`. The runbook's "If a rebuild goes sideways" section already prescribed this if it hit; re-running the playbook on the new commit succeeded (the cordon held through the failed run, so the catch-up was clean).
 
-### 4. `wrkdevk8s` (single-node dev, greenfield)
+### 4. `wrkdevk8s` (single-node dev, greenfield) — done 2026-05-07
 
-Different shape: the live `wrkdevk8s` (VMID 119) is a manual VM never imported into TF state. Operator destroys VMID 119 manually; TF creates VMID 919 from scratch. Single-node cluster — no eviction or hand-off needed (peer-count gate skips it).
+VMID 919 on `pve`. Reachable at the reservation-allocated address `10.1.3.3` (in `10.1.3.0/24`). Single node Ready, 8 system pods Running, MetalLB speaker advertising, root at 8%, labels are kubernetes-defaults (dev-tier, no `homelab.local/*`).
 
-Drop the `microk8s_channel: 1.30/stable` override from `host_vars/wrkdevk8s.yml` so `group_vars/k8s_dev.yml`'s `1.32/stable` takes effect. Bump `vm_id` 119 → 919.
+Mid-rebuild pivot from the originally-planned static-IP shape:
 
-HelmCharts dev deployments are gone with the old VM and need re-deployment via the HelmCharts repo's normal `configs/dev` flow — operator workflow, separate from this phase.
+- wrkdevk8s drops `static_ip = true`, the vmbr1 backplane NIC, and the per-NIC static-IP fields on vmbr0. The per-VM module's `homelab_dns_reservation` allocates the IPv4 from `10.1.3.0/24`; DHCP option 6 / 15 carry resolver + `.home` search domain. Rationale: dev cluster doesn't host registry/dnsmasq pods (dev pulls from external `registry-dev`), so the bring-up cycle that pins prd k8s + Ceph to static IPs doesn't apply. Doctrine update folded into `decisions.md` "Ceph nodes and prd k8s nodes are static infrastructure".
+- `host_vars/wrkdevk8s.yml`: `vm_id` 119 → 919, dropped `microk8s_channel: 1.30/stable` override (group_vars `1.32/stable` takes over).
+
+Two unrelated bugs surfaced during the rebuild and are fixed inline:
+
+- `community.general.snap` raises `IndexError` when `snap info <pkg>` returns empty stdout (snapd's first-boot seed not yet complete). Role now waits on `snap wait system seed.loaded` before the install task.
+- `microk8s status --wait-ready` substring-matches `" Ready "` in `kubectl get nodes` output. A cordoned-only-node cluster prints `Ready,SchedulingDisabled` (comma instead of trailing space) — the gate fails forever. Multi-node clusters mask the bug. The role's `Wait for microk8s to be ready` (in `install.yml`) and `rebuild-k8s.yml`'s `Wait for microk8s Ready` now use `kubectl wait --for=condition=Ready node/<host>`, which is independent of `SchedulingDisabled`.
+
+HelmCharts dev deployments need re-deployment via the HelmCharts repo's normal `configs/dev` flow — operator workflow, separate from this phase.
+
+**Known follow-up:** other `microk8s status`-based tasks in the role (`addons.yml` line 2, `elect-primary.yml`'s status read) hit the same substring bug on a re-run against an already-cordoned single-node cluster. Worked around by manually uncordoning before the playbook re-run during this rebuild. A role-wide pass to make these calls cordon-safe is queued (no urgency; only bites on partial-rerun against single-node dev).
 
 ## Close-the-parity-event commit
 
