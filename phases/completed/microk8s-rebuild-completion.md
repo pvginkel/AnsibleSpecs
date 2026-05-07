@@ -1,6 +1,6 @@
 # Phase 4d — k8s rebuild completion
 
-**Status**: ⏳ In progress — `srvk8s2` re-rebuilt 2026-05-05, `srvk8s3` rebuilt 2026-05-06, `srvk8s1` rebuilt 2026-05-07 (NVMe + zpool2 reattached), `wrkdevk8s` rebuilt 2026-05-07 (dev-tier dynamic shape; pivot mid-rebuild). Next: close-the-parity-event commit + stale-references fold-up.
+**Status**: ✅ Closed 2026-05-07 — `srvk8s2` re-rebuilt 2026-05-05, `srvk8s3` rebuilt 2026-05-06, `srvk8s1` rebuilt 2026-05-07 (NVMe + zpool2 reattached), `wrkdevk8s` rebuilt 2026-05-07 (dev-tier dynamic shape; pivot mid-rebuild). Adoption known_hosts files retired, stale legacy-host references stripped from inventory + vms.tf, k8s-rebuild runbook refactored into a going-forward procedure. Old VMIDs 104/107 destroyed by operator.
 
 ## Goal
 
