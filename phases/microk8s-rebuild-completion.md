@@ -1,6 +1,6 @@
 # Phase 4d — k8s rebuild completion
 
-**Status**: ⏳ In progress — `srvk8s2` re-rebuilt 2026-05-05 (22 h soak clean) and `srvk8s3` rebuilt 2026-05-06 (initial soak clean). Next: `srvk8s1` (primary, NVMe + zpool2), then `wrkdevk8s`.
+**Status**: ⏳ In progress — `srvk8s2` re-rebuilt 2026-05-05, `srvk8s3` rebuilt 2026-05-06, `srvk8s1` rebuilt 2026-05-07 (NVMe + zpool2 reattached). Next: `wrkdevk8s`, then close-the-parity-event commit.
 
 ## Goal
 
@@ -18,15 +18,17 @@ Knock-on changes to the phase plan:
 - **The label-parity action from the original phase plan is closed by inspection.** Live `kubectl get nodes --show-labels` showed `srvk8sl1` carrying `homelab.local/{performance=high,storage=zpool2}` per its host_vars and the `srvk8s1` doctrine; `srvk8ss2` + `srvk8s2` carry only kubernetes-default labels. Workers nominally have no `homelab.local/*` labels per `decisions.md` "k8s node capability labels," and this matches reality. Helm-pinned workloads (gitblit, iotsupport, media, nginx, code-server, zigbee2mqtt, etc.) did land on `srvk8s2` once it was up; the original "no Helm-pinned workloads have appeared" diagnosis was a snapshot from earlier in the soak.
 - **The original soak verified clean** apart from the disk-pressure warning. No `panic`/`fatal`/`restart` in kubelite (only the benign `ContainerStatus … NotFound` cleanup race), MetalLB advertising on the workload VLAN, all daemonsets Ready, no PDB blocks, container restart counts all consistent with init-time noise.
 
-## Progress as of 2026-05-06
+## Progress as of 2026-05-07
 
-- **`srvk8s2` re-rebuild — done (2026-05-05).** Joined with `/var/snap` on the formatted 80 GB sdb1 from first boot; root steady at 14% over a full 22 h soak, no `ImageGCFailed` recurrence, MetalLB advertising, daemon journals clean. Closes the data-disks gap end-to-end on a worker.
-- **`srvk8s3` rebuild (was `srvk8ss2`) — done (2026-05-06).** VMID 912 on `pve2`, joined ~10:09 CEST; `managed_filesystems` partitioned + formatted + mounted `/var/snap` before microk8s installed; MetalLB picked up `kubernetes-dashboard` + `dhcp` advertisement on srvk8s3 inside the first 15 minutes. Inventory rename (`host_vars/srvk8ss2.yml` → `srvk8s3.yml`, vm_id 107 → 912; `hosts.yml` membership swap) committed as `b88eb93`. Operator-discretion soak before moving on to the primary.
-- **Old VMID 107** (legacy `srvk8ss2`) is shut down on `pve2`; destroy deferred to the close-the-parity-event commit alongside VMID 104.
-- **Cluster:** 3 Ready (`srvk8sl1`, `srvk8s2`, `srvk8s3`), all v1.32.13. `srvk8sl1` still carries `homelab.local/{performance=high,storage=zpool2}` as designed for the primary.
-- **Stale references that survived step 3** — fold into the close-the-parity-event commit:
+- **`srvk8s2` re-rebuild — done (2026-05-05).** Joined with `/var/snap` on the formatted 80 GB sdb1 from first boot; 22 h soak clean, no `ImageGCFailed` recurrence. Closed the data-disks gap end-to-end on a worker.
+- **`srvk8s3` rebuild (was `srvk8ss2`) — done (2026-05-06).** VMID 912 on `pve2`. `managed_filesystems` partitioned + formatted + mounted `/var/snap` before microk8s installed; MetalLB picked up advertisements within 15 minutes; ~22 h soak clean (root 14%, /var/snap 55%, daemon journals clean). Inventory rename committed as `b88eb93`.
+- **`srvk8s1` rebuild (was `srvk8sl1`) — done (2026-05-07).** VMID 910 on `pve`. NVMe scsi2 attached in the same TF apply; `zpool2` reattached cleanly (needed `-f` — see runbook fold-up below); `managed_filesystems` mounted scsi1 at `/var/snap`. After uncordon, the three zpool2-pinned workloads (`storage`, `media/mydownloads`, `prometheus-server`) flowed back onto srvk8s1 and went Running within minutes. Capability labels (`homelab.local/{performance=high,storage=zpool2}`) reconciled by `labels.yml` on first apply. `site.yml --check --diff --limit srvk8s1` reports `changed=0`. Inventory rename committed as `5084ed3`; zpool `-f` fix as `a34d63f`. TF state for `srvk8sl1` removed; `terraform plan` clean apart from the queued `wrkdevk8s` create.
+- **Cluster:** 3 Ready (`srvk8s1`, `srvk8s2`, `srvk8s3`), all v1.32.13. With srvk8s1 back, primary election picks it (lowest hostname among in-cluster nodes); during the rebuild window srvk8s2 served as the join-token mint.
+- **Old VMIDs 104, 107** (legacy `srvk8ss1`, `srvk8ss2`) are shut down; destroys deferred to the close-the-parity-event commit. VMID 103 already destroyed (NVMe handed to 910).
+- **Stale references that survived the worker rebuilds — fold into the close-the-parity-event commit:**
   - `ansible/inventories/prd/group_vars/k8s_prd.yml:2` — header comment still names the legacy trio (`srvk8sl1, srvk8ss1, srvk8ss2`).
-  - `terraform/prd/vms.tf:85` — comment in the `srvk8s3` block: "*inherits srvk8ss2's slot*".
+  - `terraform/prd/vms.tf` — "inherits *legacy*'s slot" comments in the srvk8s1 / srvk8s2 / srvk8s3 blocks (lines ~35, ~85, ~188).
+  - HelmCharts `configs/prd/dnsmasq.yaml` — leftover `srvk8ss1` (10.1.0.28) and `srvk8ss2` (10.1.0.29) entries; runbook step 3 said to drop them, was missed during the worker rebuilds. (`srvk8sl1` was dropped during step 3 of the srvk8s1 rebuild.)
 
 ## Carry-over from 4c
 
@@ -120,15 +122,12 @@ poetry run ansible-playbook playbooks/rebuild-k8s.yml -e rebuild_target=srvk8s3
 
 Soak per the verification block above; at minimum confirm 4 Ready (counting srvk8sl1 still on the old shape), no system-pod regressions.
 
-### 3. `srvk8sl1` → `srvk8s1` (primary, NVMe passthrough)
+### 3. `srvk8sl1` → `srvk8s1` (primary, NVMe passthrough) — done 2026-05-07
 
-Trickier:
-- Primary election is automatic (per-cluster, runtime, lowest-hostname-among-running rule — see `roles/microk8s/tasks/elect-primary.yml`). Once srvk8sl1 leaves, election picks `srvk8s2` from the surviving in-cluster pair on the next run. Nothing to flip in inventory.
-- The old VM gets **destroyed** (not just shut down) — qemu can't release the NVMe to the new VM otherwise.
-- `zpool import zpool2` runs from `rebuild-k8s.yml` after first boot.
-- HelmCharts workloads pinned to `homelab.local/storage=zpool2` are unschedulable during the window (storage chart, Prometheus). Document the maintenance window.
+VMID 910 on `pve`. Per runbook "Primary rebuild," with two field deltas:
 
-Per runbook "Primary rebuild" section — but note the runbook's step 1 (flip `microk8s_primary_host`) is stale and pending update; see "Runbook + decisions.md follow-ups" below.
+- Runbook step 1 (`microk8s_primary_host` flip) skipped — verified stale; election in `rebuild-k8s.yml`'s first play picked srvk8s2 from the survivor pair, then srvk8s1 once it joined.
+- `zpool import` failed without `-f` — the rebuilt VM has a new ZFS hostid, so ZFS refused the import as a multi-mount safety check against the destroyed source VM. Fix folded into `rebuild-k8s.yml` as commit `a34d63f`. The runbook's "If a rebuild goes sideways" section already prescribed this if it hit; re-running the playbook on the new commit succeeded (the cordon held through the failed run, so the catch-up was clean).
 
 ### 4. `wrkdevk8s` (single-node dev, greenfield)
 
@@ -155,7 +154,9 @@ Fold these in once the phase closes — quiet edits, no ops impact:
 - `/work/Ansible/docs/runbooks/k8s-rebuild.md` step 5 ("first worker rebuild — also pulls in the from-scratch shape's shared resources"): the targeting now needs to include `proxmox_virtual_environment_file.cloud_init` because the cloud-init content is meaningful per-VM (not just a thin wrapper). Update the example apply command.
 - `/work/Ansible/docs/runbooks/k8s-rebuild.md`: add a note about the `terraform state rm` of orphan k8s module instances *before* the first targeted apply — `for_each` orphan reconciliation isn't suppressed by `-target`, so the pre-apply state cleanup that 4c discovered needs to be in the runbook.
 - Same runbook: note the static-IP pivot — k8s rebuilds no longer go through `homelab_dns_reservation` and the operator owns `static-hosts.yaml` entries instead.
-- Same runbook, "Primary rebuild" step 1: the `microk8s_primary_host` flip is stale. The role now elects per cluster at runtime (`roles/microk8s/tasks/elect-primary.yml`); `group_vars/k8s_prd.yml` no longer carries the key. Drop the step or replace with "confirm election picks a survivor on the first post-leave run."
+- Same runbook, "Primary rebuild" step 1: the `microk8s_primary_host` flip is stale (verified during the srvk8s1 rebuild — skipped, no impact). The role now elects per cluster at runtime (`roles/microk8s/tasks/elect-primary.yml`); `group_vars/k8s_prd.yml` no longer carries the key. Drop the step or replace with "confirm election picks a survivor on the first post-leave run."
+- Same runbook, "Primary rebuild" step 7 prose ("Imports `zpool2`, then bootstrap → ...") still reads as if the import precedes role application. Actual order in `rebuild-k8s.yml` is bootstrap → baseline → managed_filesystems → microk8s → cordon → `zpool import` → wait Ready → wait DaemonSet pods Ready → uncordon. Tweak the wording to match.
+- Same runbook, "If a rebuild goes sideways" section: the `zpool import -f` line ("If this hits, fold the `-f` into `rebuild-k8s.yml`") is now retired by commit `a34d63f`. Replace with a note that the role uses `-f` because rebuilds always cross hostids; the multi-mount risk doesn't apply because the source VM is destroyed before the NVMe is reattached.
 - `decisions.md` "Bring-up-tier hosts" already updated in 4c. No further edit needed.
 
 ## Out of scope
