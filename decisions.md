@@ -130,6 +130,23 @@ Sequencing rationale: rebuild has no real rollback (once the rootfs is destroyed
 
 **LTS channels only.** Ceph is infrastructure the operator does not want to think about; chasing latest costs small surprises for negligible benefit on this workload. Track the current Ceph LTS, upgrade when the previous one goes EOL or sooner if a security fix forces it. Phase 5 picks the initial target channel against current state.
 
+### Ceph daemon memory targets
+
+10 GiB per-VM is the operating envelope for the microceph fleet (`srvceph1/2/3`). Microceph defaults — `osd_memory_target=4 GiB`, `mds_cache_memory_limit=4 GiB` — over-spec bluestore and metadata caches for this workload by ~2×: they fit fine on a node carrying only OSD+MON, but spill once a node also picks up the active MDS, MGR, and RGW. Symptom observed before tuning: srvceph1 sat at 8 GiB used / 1.5 GiB available with 4 GiB swap 100% full.
+
+**Targets**:
+- `osd_memory_target = 2684354560` (2.5 GiB) on the `osd` section. 2 GiB is the documented floor (`osd_memory_target_min`); 2.5 keeps a margin.
+- `mds_cache_memory_limit = 1073741824` (1 GiB) on the `mds` section.
+
+**Application**: cluster config DB via `microceph.ceph config set <section> <key> <value>`. The microceph phase encodes both as role variables (`group_vars/ceph_prd.yml` — e.g. `microceph_osd_memory_target`, `microceph_mds_cache_memory_limit`) and applies them through the same interface. Values stay tunable per-environment rather than hardcoded.
+
+**Restart-on-change is mandatory.** Microceph's snap is not built with tcmalloc; the daemons use glibc malloc, which doesn't return fragmented arenas to the OS. Lowering the caps shrinks the daemons' internal caches but RSS stays put until the daemon restarts — a write-only task is silently ineffective. The role must restart the affected daemon (or, on first roll-out, reboot the VM) when these values change. Reboot fits the existing `serial: 1` cluster-changes pattern and reclaims any stale swap in the same step.
+
+Deferred / revisit:
+- **Initial roll-out, srvceph2/3.** srvceph1 was rebooted to apply the new targets and lands at ~2 GiB used / ~7.4 GiB available. srvceph2/3 still hold their pre-tuning OSD RSS (~3.7 GiB each) plus stale partial swap (~400 / 630 MiB) from the same prior pressure. Both have ample available RAM today, so the cleanup is symmetry, not urgency: drain (`microceph.ceph osd set noout` → `snap restart microceph.osd` → wait for HEALTH_OK → `unset noout`), then `swapoff -a && swapon -a`. Land before the microceph role lands so the role's first apply finds a clean baseline.
+- **`MALLOC_ARENA_MAX=2` systemd override** on the microceph snap units. Caps glibc's per-thread arena count and limits long-run heap drift. Worth folding into the microceph role only if RSS climbs back over the targets in steady state; premature otherwise.
+- **RGW placement.** RGW is a placed singleton today, hosted on whichever node was chosen at install (currently srvceph1). ~130 MiB regardless of host and irrelevant to the memory envelope, but the microceph role should make the placement explicit — which node, why, and whether to run a second for HA — rather than inheriting an artefact of install order.
+
 ### k8s version policy
 
 **LTS channels only.** Same logic as Ceph. Track the current microk8s LTS channel; upgrade when the previous goes EOL or sooner if a security fix forces it. Channel pinned per cluster in `group_vars/k8s_{prd,dev}.yml` so dev can soak a new minor independently before prd moves.
