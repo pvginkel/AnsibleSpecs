@@ -26,7 +26,7 @@ This phase explicitly does not depend on OpenBao — accepted as sub-optimal bec
 - **`workload_class = background`** for CPU affinity.
 - **Sizing**: 3 GiB RAM, 32 GiB disk. Start low; observe via Prometheus and raise if it bites. The `modern-app-dev` image carries JDKs / Node / Go / Terraform / kubectl / Helm — one concurrent `iac` container running a full `site.yml` is the load to watch.
 - **OS update class: standalone.** `unattended-upgrades` + auto-reboot in a quiet window. Must not collide with OpenBao's window once that lands.
-- **TF guards**: `lifecycle { prevent_destroy = true }` on the VM resource. The on-push Jenkins job's plan stage fails the pipeline if `terraform plan` proposes `replace` or `destroy` on `srviac` (or, later, `srvvault`).
+- **TF guards**: the on-push Jenkins job's plan stage fails the pipeline if `terraform plan` proposes `replace` or `destroy` on `srviac` (or, later, `srvvault`). A second layer via `lifecycle { prevent_destroy = true }` on the VM resource is deferred — HCL requires it to be static, and the existing rebuild flow (k8s nodes via `terraform apply -replace`) depends on destroy being allowed in general. Adding per-VM protection means either a sibling `managed-vm-protected` module or a re-architecture of the existing one; out of scope for this phase. The plan-stage check is sufficient on its own.
 
 ### Host posture: minimal
 
@@ -139,7 +139,7 @@ All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock.
 4. **`iac-impl` in modern-app-dev.** Lands in `/work/DockerImages/modern-app-dev/bin/iac-impl` — the script that parses secrets.yaml, clones Ansible + TerraformState, symlinks state, runs `poetry install`, exec's terraform / ansible / bash, and pushes any state changes on exit. Same image rebuild pipeline rolls it out.
 5. **TerraformState repo skeleton.** Empty `prd/`, `scratch/`, `README.md`, `.gitignore`. State import is deferred to cutover (step 10).
 6. **`iac_agent` role + baseline change.** `iac_agent` installs Docker + insecure-registry daemon.json, places secrets.yaml (`force: no` guard), clones IaCAgent + runs `install.sh`, enables the Jenkins agent unit. `baseline` picks up `prometheus-node-exporter`. Add the fourth `hosts: iac_agent` play to `site.yml`.
-7. **`srviac` in TF + inventory.** New entry in `terraform/prd/vms.tf` with `prevent_destroy = true`. New `iac_agent` group, `host_vars/srviac.yml`. Delete the tracked `terraform/prd/terraform.tfvars` (the values now live in `secrets.yaml` as `TF_VAR_*`); the existing `*.tfvars` gitignore stops accidental recommits. Operator applies TF; operator runs `site.yml --limit srviac` from the workstation.
+7. **`srviac` in TF + inventory.** New entry in `terraform/prd/vms.tf`. New `iac_agent` group, `host_vars/srviac.yml`. The `*.tfvars` gitignore already keeps the workstation-local `terraform.tfvars` out of git; the example file is updated to point operators at the `TF_VAR_*` flow that `iac-impl` uses inside the container. Operator applies TF; operator runs `site.yml --limit srviac` from the workstation.
 8. **Operator populates `/etc/iac/secrets.yaml`.** Hand-edit on srviac. The role's secrets task uses `force: no` so re-runs never clobber operator-curated content; if the file is missing on a fresh srviac, the role places `secrets.example.yaml` (placeholder values) and fails loudly so a rebuild surfaces "you need to populate secrets" before anything else runs against bad credentials.
 9. **IaCAgent Jenkinsfiles.** Three pipeline scripts + the plan-stage destroy-check helper. Commit, tag.
 10. **Bootstrap TerraformState.** From the operator workstation, copy current `terraform/prd/terraform.tfstate` and `terraform/scratch/terraform.tfstate` into the new repo's `prd/` and `scratch/`, push. Verify from srviac: `iac -c 'cd /work/Ansible/terraform/prd && terraform plan'` is no-op.
@@ -155,7 +155,7 @@ All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock.
 - Push a trivial change to `pvginkel/Ansible` `main` → `iac-on-push` triggers, holds the flock, runs all sub-steps successfully, releases the flock.
 - During the on-push run, attempt `iac` from another SSH session → fails within 60 seconds with the held-PID surfaced (no waiting).
 - `iac-scheduled-drift` runs clean (no diff) on a quiescent prd. Deliberately mutate a managed file on a host → next run flags it.
-- Plan-stage check: insert a destroy on srviac in TF → the on-push job fails at plan, not at apply. `prevent_destroy` also rejects the apply if the plan check is bypassed.
+- Plan-stage check: insert a destroy on srviac in TF → the on-push job fails at plan, not at apply.
 - `prometheus-node-exporter` exposes `:9100/metrics` on srviac; the in-cluster Prometheus scrape config (landed via HelmCharts, outside this repo) picks it up.
 
 ## secrets.yaml lifecycle
@@ -192,6 +192,6 @@ All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock.
 4. `/work/DockerImages/modern-app-dev`: add `bin/iac-impl`. Cascading rebuild via existing pipeline.
 5. New repo `pvginkel/TerraformState`: empty `prd/`, `scratch/`, `README.md`, `.gitignore`. State bootstrap at cutover.
 6. `roles/iac_agent` + `roles/baseline` (node_exporter) + `inventories/prd/group_vars/iac_agent.yml` + `inventories/prd/host_vars/srviac.yml` + group declaration + the new `hosts: iac_agent` play in `site.yml`.
-7. `terraform/prd/vms.tf`: new `srviac` entry with `prevent_destroy = true`. Delete tracked `terraform.tfvars`. (Operator applies.)
+7. `terraform/prd/vms.tf`: new `srviac` entry. Refresh `terraform.tfvars.example` to point at the `TF_VAR_*` flow. (Operator applies.)
 8. IaCAgent Jenkinsfile additions for the three jobs + plan-stage check helper.
 9. Cutover commit in this repo: `docs/runbooks/iac-agent.md` written; retire any "from-workstation" notes in existing runbooks.
