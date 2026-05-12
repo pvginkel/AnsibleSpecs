@@ -129,24 +129,34 @@ apply with `--check --diff` first, then the real apply.
 ### F. Kubernetes API server consumer (folded into `microk8s` role)
 
 Microk8s manages the API server cert at
-`/var/snap/microk8s/current/certs/server.crt` and surfaces a
-`microk8s refresh-certs` command. The integration shape is the
-least obvious of the three and is flagged for investigation
-*before* role-design time:
+`/var/snap/microk8s/current/certs/server.crt`. Custom certs are
+supported: drop the externally-issued `server.crt` + `server.key`
+into that directory and append (don't replace) the homelab root
+to `ca.crt` so the in-cluster trust chain reaches the new leaf.
 
-- Confirm whether microk8s permits dropping an externally-issued
-  cert into the server.crt path and surviving a `snap refresh` or
-  whether the snap re-asserts a self-signed cert.
-- Confirm SANs needed: each node's hostname, FQDN, vmbr0 IP, and
-  any kube-apiserver cluster-internal name (typically
-  `kubernetes.default.svc.cluster.local` and `kubernetes`).
-- Renewal hook: `microk8s stop && microk8s start` is heavyweight;
-  prefer the addon-equivalent of `kill -HUP` on kube-apiserver if
-  it exists.
-
-If microk8s's snap fights the externally-issued cert, fall back to
-a leaf-only sweep covering OpenBao + PVE in v1 and re-open k8s as a
-v1.1 task.
+- Install `certbot` on each microk8s node.
+- Cert SANs cover the node's short hostname, FQDN, vmbr0 IP, and
+  the kube-apiserver cluster-internal names (`kubernetes`,
+  `kubernetes.default`, `kubernetes.default.svc`,
+  `kubernetes.default.svc.cluster.local`, plus the cluster service
+  IP `10.152.183.1` for microk8s defaults).
+- Append the homelab root to
+  `/var/snap/microk8s/current/certs/ca.crt`. The kubelet, scheduler,
+  and controller-manager all read this file for their trust
+  bundle; appending (rather than replacing) keeps microk8s's own
+  internal CA valid for cluster-internal components that don't
+  switch immediately.
+- Renewal hook: `microk8s stop && microk8s start`. kube-apiserver
+  does not honour SIGHUP for cert reload, and the broader microk8s
+  stop/start is the supported path. Cluster downtime is ~10-30s per
+  node, which is fine under `serial: 1` with cordon/drain — same
+  pattern as cluster updates.
+- Edge case: `microk8s refresh-certs` regenerates from
+  `csr.conf.template` and would clobber the externally-issued
+  cert. Document in the role README that the operator must not run
+  `microk8s refresh-certs` on these nodes once external certs are
+  in place. Pin a tag/marker file in the role to make accidental
+  invocation noisy.
 
 ### G. Windows trust install
 
@@ -210,11 +220,11 @@ After each consumer rolls in:
   internal traffic (corosync, pmxcfs replication). Replacing it
   is a deeper PVE-side operation than the user-facing pveproxy
   cert; deliberately out of scope.
-- **Microk8s API server cert is the soft spot.** If the snap
-  re-asserts its own self-signed cert at refresh time, the v1
-  rollout drops k8s and ships OpenBao + PVE only. Don't gate
-  the slice on the k8s piece — investigate during role design,
-  cut scope if needed.
+- **`microk8s refresh-certs` clobbers external certs.** It
+  regenerates from `csr.conf.template` using microk8s's internal
+  CA. Don't run it on nodes with externally-issued certs in
+  place. The role marks the certs directory with a sentinel file
+  so accidental invocation is noisy.
 - **Intermediate compromise = forge-anything until rotation.**
   Mitigated by 47-day leaf lifetime (compromise window for any
   given leaf is bounded) and offline root (recovery = sign a
@@ -246,8 +256,9 @@ In dependency order:
    reviewed end-to-end before role apply.
 5. **PVE consumer**: certbot + pveproxy cert swap in
    `proxmox_host` role.
-6. **k8s consumer** (if microk8s permits): certbot + cert swap in
-   `microk8s` role. Otherwise: deferred to v1.1, slice updated
-   to reflect.
+6. **k8s consumer**: certbot + cert swap + ca.crt append + role
+   guard against `microk8s refresh-certs`, in the `microk8s` role.
+   Per-node rollout under `serial: 1` with cordon/drain, same as
+   cluster updates.
 7. **Monitoring**: cert-expiry textfile exporter + Prometheus
    alert rule (HelmCharts side).
