@@ -10,6 +10,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 |---|---|---|---|
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
 | [backup-collector](backup-collector.md) | pending | openbao-static-seal | phase: openbao + secrets |
+| [internal-tls-step-ca](internal-tls-step-ca.md) | pending | openbao-static-seal | phase: openbao + secrets |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
