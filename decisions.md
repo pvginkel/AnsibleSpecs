@@ -256,6 +256,7 @@ Why the split:
 Concrete behaviour:
 - **`baseline` enforces the package state per host class.** On cluster members it purges `unattended-upgrades` (no silent fallback to Ubuntu defaults). On standalone VMs it installs and configures it. Observable state is "package state matches host class."
 - **Stop-gap until `update.yml` lands**: `baseline_apt_dist_upgrade: true` on a cluster-member host forces a dist-upgrade through baseline. Manual but adequate for a homelab on a private network.
+- **Drift pipeline ignores patch posture.** The apt cache refresh + dist-upgrade tasks in `baseline` are tagged `os_update`, and `iac-scheduled-drift` runs with `--skip-tags os_update`. Pending upstream packages are patch posture (owned by the update pipelines: `update-k8s.yml` today, future plays for ceph/etc.), not infrastructure drift. **Rework when a real cluster-wide update path supersedes the stop-gap**: once every cluster class has its own `update-*.yml` driving apt, the apt cache + dist-upgrade tasks should probably leave `site.yml` entirely (and the `baseline_apt_dist_upgrade` knob with them) rather than continuing to live in `baseline` behind a tag.
 
 Operational guards (to be folded into runbooks/playbooks at the relevant phase):
 - **Stagger reboot windows.** The Jenkins agent VM and the OpenBao VM must not reboot in the same window. A simultaneous reboot would compound any unseal/connectivity issue and would mean nothing left running to diagnose it.
