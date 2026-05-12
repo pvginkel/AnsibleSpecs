@@ -63,11 +63,11 @@ implement.
   three under the Azure design. Accepted as the cost of removing the
   cloud dependency. The HA work narrows the *availability* gap; it
   doesn't change the confidentiality gap.
-- **TLS**: per-node cert with SANs covering own short hostname,
-  FQDN, and the VIP hostname (`openbao.home`). Single cert per node;
-  three near-identical certs across the cluster. Homelab CA approach
-  (external one-shot vs. self-signed-with-explicit-trust vs. PKI-on-
-  OpenBao itself) decided in the Phase 6 role design.
+- **TLS**: per-node leaf cert with SANs covering own short hostname,
+  FQDN, and the VIP hostname (`openbao.home`). Issued by the homelab
+  `step-ca` via ACME; 47-day validity, renewed daily by `certbot`.
+  See decisions.md "Internal TLS / homelab CA" for the broader
+  design.
 
 ## Steps
 
