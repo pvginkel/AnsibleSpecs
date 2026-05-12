@@ -26,7 +26,7 @@ This phase explicitly does not depend on OpenBao — accepted as sub-optimal bec
 - **`workload_class = background`** for CPU affinity.
 - **Sizing**: 3 GiB RAM, 32 GiB disk. Start low; observe via Prometheus and raise if it bites. The `modern-app-dev` image carries JDKs / Node / Go / Terraform / kubectl / Helm — one concurrent `iac` container running a full `site.yml` is the load to watch.
 - **OS update class: standalone.** `unattended-upgrades` + auto-reboot in a quiet window. Must not collide with OpenBao's window once that lands.
-- **TF guards**: the on-push Jenkins job's plan stage fails the pipeline if `terraform plan` proposes `replace` or `destroy` on `srviac` (or, later, `srvvault`). A second layer via `lifecycle { prevent_destroy = true }` on the VM resource is deferred — HCL requires it to be static, and the existing rebuild flow (k8s nodes via `terraform apply -replace`) depends on destroy being allowed in general. Adding per-VM protection means either a sibling `managed-vm-protected` module or a re-architecture of the existing one; out of scope for this phase. The plan-stage check is sufficient on its own.
+- **TF guards**: the on-push Jenkins job's plan stage fails the pipeline if `terraform plan` proposes `replace` or `destroy` on `srviac` (and any further protected-VM names appended to `check-protected-vms.sh`'s argument list — Phase 3 will add the OpenBao host(s) once their deployment shape is decided). A second layer via `lifecycle { prevent_destroy = true }` on the VM resource is deferred — HCL requires it to be static, and the existing rebuild flow (k8s nodes via `terraform apply -replace`) depends on destroy being allowed in general. Adding per-VM protection means either a sibling `managed-vm-protected` module or a re-architecture of the existing one; out of scope for this phase. The plan-stage check is sufficient on its own.
 
 ### Host posture: minimal
 
@@ -122,11 +122,11 @@ Consumers in this phase: `GIT_API_TOKEN` (`iac-impl` clones + pushes `TerraformS
 Three jobs land in this phase. Pipeline scripts live in IaCAgent. Each job composes its work into one `iac -c '...'` per stage so the lock is held across the steps that must be atomic.
 
 1. **`iac-on-push`** — trigger: push to `main` on `pvginkel/Ansible`. Sequential, fail-fast:
-   - Plan-stage check: `iac -c 'cd /work/Ansible/terraform/prd && terraform plan -json -out=/tmp/plan.tfplan && terraform show -json /tmp/plan.tfplan | <destroy-check>'`, fail if any `replace`/`destroy` proposes on `srviac` or `srvvault`. Belt-and-braces with `prevent_destroy`.
+   - Plan-stage check: `iac -c 'cd /work/Ansible/terraform/prd && terraform plan -json -out=/tmp/plan.tfplan && terraform show -json /tmp/plan.tfplan | <destroy-check>'`, fail if any `replace`/`destroy` proposes on a protected VM (today: `srviac`).
    - `iac -c 'cd /work/Ansible/terraform/prd && terraform apply -auto-approve'`.
    - `iac -c 'cd /work/Ansible/ansible && ansible-playbook playbooks/site.yml --limit "!iac_agent"'`.
    - `iac -c 'cd /work/Ansible/ansible && ansible-playbook playbooks/update-k8s.yml'` — idempotent rolling update, no-op if no upgrades pending (per commit `76ab186`).
-2. **`iac-scheduled-update`** — trigger: cron, weekly. `iac -c 'cd /work/Ansible/ansible && ansible-playbook playbooks/update-k8s.yml'`. Future: `update-ceph` and the `srvvault` reboot window. Reboot stagger is enforced by the play order itself.
+2. **`iac-scheduled-update`** — trigger: cron, weekly. `iac -c 'cd /work/Ansible/ansible && ansible-playbook playbooks/update-k8s.yml'`. Future: `update-ceph` and the OpenBao reboot window. Reboot stagger is enforced by the play order itself.
 3. **`iac-scheduled-drift`** — trigger: cron, daily. `iac -c 'cd /work/Ansible/terraform/prd && terraform plan -detailed-exitcode'` and `iac -c 'cd /work/Ansible/ansible && ansible-playbook playbooks/site.yml --check --diff --limit "!iac_agent"'`. Push-notifies on `changed > 0` or non-zero exit.
 
 All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock. A manual run and a scheduled job cannot race — but with the 60-second timeout one of them fails fast rather than waiting. Failure notification: post-stage in each pipeline calls `send_message.py` (running inside the container) with job name + URL.
