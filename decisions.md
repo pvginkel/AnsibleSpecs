@@ -310,6 +310,10 @@ Implications:
 - Rebuilding the agent VM is a no-op operationally; everything reproducible from the image + the state repo + Jenkins job config — but only via the workstation path.
 - Image build and tagging are part of the CI surface — pin versions in the image, not on the VM.
 
+Deferred / revisit:
+
+- **Operator runbook sweep.** `docs/runbooks/adoption.md`, `disk-resize.md`, `k8s-rebuild.md`, `k8s-upgrade.md`, `vm-rebuild.md`, and `scratch-vm.md` describe their procedures as `wrkdev` running TF/Ansible directly. After Phase 1 (iac-agent), the routine path goes through `iac` on srviac instead; `wrkdev` is reserved for srviac mutation + break-glass. Each runbook needs either a "for routine use, run via `iac` on srviac; this runbook documents the operator-workstation path" header, or a rewrite of the steps to use `iac -c '…'`. Mechanical sweep, non-urgent — both paths still work today.
+
 ## Backup
 
 - **Cluster vzdump job** — Ansible-managed via the `proxmox_host` role from Phase 2. Daily snapshot-mode dump of every VM to the `local-backup` storage on `pve`, mail-on-failure to the operator, retain three. The job lives in `/etc/pve/jobs.cfg` (cluster-shared via pmxcfs); the role writes it from `pve` only and the cluster propagates.
