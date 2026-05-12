@@ -56,14 +56,14 @@ Both acquire `/var/lock/iac.lock` via `flock -w 60` (1-minute timeout; on failur
 
 Logic split:
 
-- **`/usr/local/bin/iac`** is a thin host shim. ~30 lines bash: acquire flock, then `docker run --rm [-it] -v /etc/iac/secrets.yaml:/etc/iac/secrets.yaml:ro registry:5000/modern-app-dev:latest iac-impl "$@"`. The shim adds `-it` only when stdin is a tty.
-- **`iac-impl`** lives inside the `modern-app-dev` image. Each run:
+- **`/usr/local/bin/iac`** is a thin host shim. ~30 lines bash: acquire flock, then `docker run --rm [-it] -v /etc/iac/secrets.yaml:/etc/iac/secrets.yaml:ro -v /usr/local/bin/iac-impl:/usr/local/bin/iac-impl:ro registry:5000/modern-app-dev:latest /usr/local/bin/iac-impl "$@"`. The shim adds `-it` only when stdin is a tty.
+- **`iac-impl`** lives in `pvginkel/IaCAgent` (`bin/iac-impl`) and is materialized by `install.sh` at `/usr/local/bin/iac-impl` on the host, then bind-mounted into the container at the same path. Keeping it host-side rather than baking it into the image means iteration on the script doesn't require a `modern-app-dev` rebuild — push to IaCAgent, re-run the role on srviac, next `iac` call picks it up. Each run:
   1. Parses `/etc/iac/secrets.yaml`. Exports `env:` entries; writes `files:` entries at their declared mode.
   2. Clones `pvginkel/Ansible` and `pvginkel/TerraformState` (both `prd/` and `scratch/` subtrees) into `/work/`. Both, always — avoids a scope flag, and the clones are small.
-  3. Symlinks `/work/Ansible/terraform/{prd,scratch}/terraform.tfstate` → `/work/TerraformState/{prd,scratch}/terraform.tfstate` so terraform reads and writes through into the state-repo clone.
+  3. Copies any existing `/work/TerraformState/{prd,scratch}/terraform.tfstate` into `/work/Ansible/terraform/{prd,scratch}/` so terraform sees the current state on entry. (Copy, not symlink, because terraform's rename-on-write would break a symlink. The reverse copy happens in step 6.)
   4. Runs `poetry install --no-root` in `/work/Ansible/ansible/` so `ansible-playbook` is on `$PATH`.
   5. Exec's `bash` (interactive) or `sh -c "$SCRIPT"` (the `-c` form).
-  6. On exit, if `/work/TerraformState` has uncommitted state changes, commits and pushes with `GIT_API_TOKEN`.
+  6. On exit, copies any `/work/Ansible/terraform/{prd,scratch}/terraform.tfstate` back into the state-repo clone, then commits and pushes with `GIT_API_TOKEN` if anything changed.
 
 Same image for Jenkins jobs and the operator shell — updates to TF/Ansible/kubectl/etc. ride the existing image rebuild pipeline.
 
@@ -136,7 +136,7 @@ All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock.
 1. **Phase doc + slice.** This file updated to the agreed shape; new slice `slices/site-yml-layout.md` opens the structural question for the analyst.
 2. **`site.yml` exclusion.** First play's `hosts:` line becomes `managed:!k8s_prd:!k8s_dev:!ceph_prd`; the microk8s play is removed. No infra change yet; the new `iac_agent` play is added later in the sequence (it would target an empty group until step 6).
 3. **IaCAgent repo skeleton.** `bin/iac`, `bin/send_message.py`, `etc/iac/secrets.example.yaml`, `etc/docker/daemon.json`, `etc/cron.d/iac-prune`, `systemd/jenkins-agent.service`, `install.sh`. Tag `v0.1.0`. Jenkinsfiles land in a follow-up commit (step 9).
-4. **`iac-impl` in modern-app-dev.** Lands in `/work/DockerImages/modern-app-dev/bin/iac-impl` — the script that parses secrets.yaml, clones Ansible + TerraformState, symlinks state, runs `poetry install`, exec's terraform / ansible / bash, and pushes any state changes on exit. Same image rebuild pipeline rolls it out.
+4. **`iac-impl` in IaCAgent.** Lands in `pvginkel/IaCAgent/bin/iac-impl` and is installed to `/usr/local/bin/iac-impl` by `install.sh`. The host shim bind-mounts it into the container at the same path. Same script handles secrets parsing, repo clones, state sync in/out, `poetry install`, and the user-facing exec. No `modern-app-dev` rebuild needed to iterate on it.
 5. **TerraformState repo skeleton.** Empty `prd/`, `scratch/`, `README.md`, `.gitignore`. State import is deferred to cutover (step 10).
 6. **`iac_agent` role + baseline change.** `iac_agent` installs Docker + insecure-registry daemon.json, places secrets.yaml (`force: no` guard), clones IaCAgent + runs `install.sh`, enables the Jenkins agent unit. `baseline` picks up `prometheus-node-exporter`. Add the fourth `hosts: iac_agent` play to `site.yml`.
 7. **`srviac` in TF + inventory.** New entry in `terraform/prd/vms.tf`. New `iac_agent` group, `host_vars/srviac.yml`. The `*.tfvars` gitignore already keeps the workstation-local `terraform.tfvars` out of git; the example file is updated to point operators at the `TF_VAR_*` flow that `iac-impl` uses inside the container. Operator applies TF; operator runs `site.yml --limit srviac` from the workstation.
@@ -149,7 +149,7 @@ All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock.
 
 ## Verification
 
-- `iac` on srviac opens bash inside `modern-app-dev` with `/work/Ansible` and `/work/TerraformState/{prd,scratch}` populated as fresh clones, `terraform.tfstate` symlinks in place, `/etc/iac/secrets.yaml` mounted. All env entries exported. All file entries written with the declared mode.
+- `iac` on srviac opens bash inside `modern-app-dev` with `/work/Ansible` and `/work/TerraformState/{prd,scratch}` populated as fresh clones, current state files copied into the Ansible terraform dirs, `/etc/iac/secrets.yaml` mounted. All env entries exported. All file entries written with the declared mode.
 - `iac -c 'cd /work/Ansible/terraform/prd && terraform plan'` is no-op against the bootstrapped state.
 - `iac -c 'cd /work/Ansible/ansible && ansible-playbook playbooks/site.yml --check --diff --limit "!iac_agent"'` reports `changed=0`.
 - Push a trivial change to `pvginkel/Ansible` `main` → `iac-on-push` triggers, holds the flock, runs all sub-steps successfully, releases the flock.
@@ -189,7 +189,7 @@ All three acquire `/var/lock/iac.lock`; manual `iac` runs acquire the same lock.
 1. This plan, updated in `phases/iac-agent.md`. New slice `slices/site-yml-layout.md`. Updated `phases/README.md` / `slices/README.md` as needed.
 2. `ansible/playbooks/site.yml`: first play excludes `k8s_prd:k8s_dev:ceph_prd`; microk8s play removed. No infra change yet.
 3. New repo `pvginkel/IaCAgent`: initial skeleton — `bin/iac`, `bin/send_message.py`, `etc/iac/secrets.example.yaml`, `etc/docker/daemon.json`, `etc/cron.d/iac-prune`, `systemd/jenkins-agent.service`, `install.sh`, `README.md`. Tag `v0.1.0`.
-4. `/work/DockerImages/modern-app-dev`: add `bin/iac-impl`. Cascading rebuild via existing pipeline.
+4. `pvginkel/IaCAgent`: add `bin/iac-impl`. Folded into commit 3 (the skeleton commit) since `install.sh` and the shim both reference it.
 5. New repo `pvginkel/TerraformState`: empty `prd/`, `scratch/`, `README.md`, `.gitignore`. State bootstrap at cutover.
 6. `roles/iac_agent` + `roles/baseline` (node_exporter) + `inventories/prd/group_vars/iac_agent.yml` + `inventories/prd/host_vars/srviac.yml` + group declaration + the new `hosts: iac_agent` play in `site.yml`.
 7. `terraform/prd/vms.tf`: new `srviac` entry. Refresh `terraform.tfvars.example` to point at the `TF_VAR_*` flow. (Operator applies.)
