@@ -56,23 +56,29 @@ The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified b
 ## Secrets — OpenBao
 
 - **OpenBao**, not HashiCorp Vault proper. Linux Foundation fork, MPL 2.0, API-compatible with Vault. All Vault integrations work unchanged: `community.hashi_vault` (Ansible), External Secrets Operator (Helm), HashiCorp Vault Jenkins plugin.
-- Runs in a **dedicated VM on Proxmox** — not in Kubernetes, to avoid the chicken-and-egg where k8s needs secrets that live in k8s.
-- **Auto-unseal via Azure Key Vault** (Standard tier, software-protected RSA key). Estimated cost: ~$1/year.
-- **Key Vault firewall** allowlists home WAN IP only. A stolen box moved off-network cannot reach Azure to unseal.
-- **Dedicated Azure service principal** with minimum perms (`Get`, `Wrap Key`, `Unwrap Key`) on the one key.
+- Runs as a **3-node cluster** of dedicated VMs on Proxmox — `srvvault1` / `srvvault2` / `srvvault3`, one per PVE host (VMIDs `910–912`). Not in Kubernetes, to avoid the chicken-and-egg where k8s needs secrets that live in k8s. **Integrated Raft** for replication and leader election; same application-layer HA shape as the existing k8s and Ceph clusters. PVE-level HA was rejected — ZFS replication needs ZFS on each node, and shared storage either reintroduces the Ceph chicken-and-egg or requires hardware investment.
+- **Static seal** with the key at `/etc/openbao/seal/static.key` (root:openbao 0440), the same file on all three nodes. Auto-unseal on every boot from local disk. The seal key is distributed via **ansible-vault** — encrypted file in the repo, passphrase in Roboform; a fresh node receives the key from `ansible-playbook --ask-vault-pass` on first apply. Azure Key Vault auto-unseal was the previous design and is dropped — no cloud dependency, no service principal, no Azure firewall.
 - **Recovery keys**: Shamir 3-of-5, stored in Roboform. Used only for admin ops (rekey, re-seal, new root token) — never during boot.
+- **Endpoint**: clients hit `https://openbao.home:8200`, a VIP managed by Keepalived on all three nodes. A `vrrp_script` polls `/v1/sys/leader` every two seconds; only the current Raft leader's check succeeds, raising its VRRP priority above the followers and pulling the VIP to it. Failover on a leadership change is typically ~4–6 s. No HAProxy, no nginx, no manual DNS flips.
+- **Network boundary**: ufw on each srvvaultN. Default-deny inbound. Allow `8200/tcp` from k8s node IPs and from the Jenkins agent VM; `8201/tcp` (Raft) and VRRP (IP proto 112) from the other two srvvaultN; `22/tcp` from the Jenkins agent VM only. No management VLAN; vmbr0 only.
+- **Admin path**: operator reaches OpenBao via VSCode Remote-SSH from `wrkdevwin` into the Jenkins agent VM, then `bao` / port-forwarded UI from there. `wrkdevwin` holds the personal SSH key for that one hop; the Jenkins agent VM holds the OpenBao admin token, automation SSH keys for the fleet, and any other privileged material.
 - **Wife runbook**: points at Roboform emergency access + recovery-key procedure. Lives in `docs/runbooks/`.
-- **Future direction**: replace Azure auto-unseal with peer-unseal between two sites — a cheap USB-attached HSM at a friend's house unseals ours; ours unseals theirs. Removes the Azure dependency for routine reboots; manual Shamir is then only needed if both sites are simultaneously unreachable. Not pursued now; recorded as the option to revisit if Azure cost or trust becomes the constraint.
+- **Future direction**: peer-unseal between two sites (cheap USB-attached HSM at a friend's house unsealing ours; ours unsealing theirs) remains available — it would restore a three-domain isolation model. Lower priority now that Azure is out of the picture.
 
 ## OpenBao backup / DR
 
-- Weekly automated JSON dump of KV secrets + policies + auth/mount config.
-- Runs via systemd timer on the OpenBao VM; authenticates via an AppRole with read-only policy.
-- Encrypted with `age` before leaving the box. Public key lives on the backup machine (no protection needed, it's public). Private key stored only in Roboform.
-- Backup file written to an existing cloud-storage path (already daily-synced).
-- **12-week retention**, older pruned via `rclone`.
-- **Seal-migration runbook** (Azure → Shamir) documented in `docs/runbooks/`. Untested but written.
-- **Three independent failure domains**: Azure (wrap key), Roboform (age private key + recovery shards), the box itself (ciphertext + age public key). Losing any two still allows recovery.
+- **Canonical backup**: daily JSON dump of KV secrets + policies + auth/mount config.
+- **Runs on all three nodes; leader-only execution.** Each srvvaultN has a systemd timer (daily, randomised delay) that fires the same wrapper script; the script guards on `/v1/sys/leader`'s `is_self` flag, so the two followers exit in milliseconds and only the leader writes. If a leadership election is in flight when the timers fire, all three skip — the next cycle picks it up.
+- **Dump path**: the wrapper authenticates via an AppRole with a read-only export policy, produces the JSON dump, and POSTs the plaintext bytes to the in-cluster `backup-server` (a small Go service in `/work/DockerImages/backup-server/`, deployed by the `storage` chart in `/work/HelmCharts`) at `http://backup-server.storage.svc.cluster.local:8080/upload?filename=<UTC-ISO8601>.json`. The bearer token authorising the upload lives on each srvvaultN as a file (mode 0400, owner openbao) materialised by the `openbao` role from ansible-vault.
+- **Server-side encryption.** `backup-server` holds the operator's age public key (single recipient, in the `backup-server-age-key` ConfigMap), encrypts each upload with it, and streams the ciphertext via `rclone` to the existing cloud-storage path. The age **private** key lives only in Roboform; without it, no dump is recoverable. **OpenBao itself never holds the age key, public or private** — encryption happens server-side.
+- **Retention** is enforced server-side by `backup-server` (per-scope `tokens.yaml` entry — keeps the N most recent objects, prunes the rest after each successful upload). The OpenBao timer is fire-and-forget; it does not manage retention.
+- **All three srvvaultN are excluded from the cluster vzdump job.** The seal key and Raft data live on the same rootfs; bundling them in a PVE backup would defeat the seal. The dump via `backup-server` is the only backup; this also forces drills to exercise the path that actually matters.
+- **Recovery paths**:
+  - *Single-node loss* (PVE host down, VM corruption, disk failure): Terraform recreates the affected srvvaultN; `bootstrap` + `baseline` + `openbao` roles converge; static seal key arrives via ansible-vault; the role's join task points the new node at the existing cluster; OpenBao Raft pulls the snapshot from the leader. VIP is unaffected throughout — it lives on whichever surviving node is leader.
+  - *Whole-cluster loss* (all three down simultaneously, the extreme case): Terraform recreates all three; roles converge; first node initialises a fresh OpenBao with the same seal key, the others Raft-join. The latest JSON dump is pulled from cloud storage with `rclone`, decrypted with the age private key from Roboform, and replayed via the API. ESO resyncs Kubernetes Secrets; consumers reconnect.
+- **Failure domains**: two — Roboform (Shamir recovery shards + age private key + ansible-vault passphrase) and the cluster-plus-its-backups (Raft data + live seal key on each srvvaultN + age public key on `backup-server` in k8s + the cloud-storage path with the encrypted dumps). Both must leak for full secret compromise. Three-domain isolation existed under the Azure design; one domain was deliberately given up to remove the cloud dependency.
+- **Bootstrap dependency**: the daily dump requires k8s + the `storage` chart's `backup-server` to be up. OpenBao itself does not depend on either for booting or serving secrets — only the daily backup write does. A k8s outage longer than one cycle means one or more missed daily backups; recoverability falls back to the previous successful dump.
+- **Recovery drill** is a Phase 2 deliverable: exercise the single-node-loss path on the live cluster (rebuild one VM, watch Raft snapshot); exercise the whole-cluster path on scratch VMs (init from JSON dump). Document timings in the runbook.
 
 ## Workflow + learning
 
@@ -174,7 +180,7 @@ Today: microk8s's `dashboard` addon (the upstream `kubernetes/dashboard` project
 
 Two Ansible inventories: `prd` and `scratch`. The split is **production-grade vs deliberately disposable**, not a risk gradient.
 
-- **`prd`** holds every host that must keep working: the PVE cluster, the 3-node prod k8s cluster (`k8s_prd`), the dev k8s node (`k8s_dev` — `wrkdevk8s`), the Ceph cluster, the OpenBao VM, the operator workstation (`wrkdev`). All production-grade. CI's default path runs against this inventory.
+- **`prd`** holds every host that must keep working: the PVE cluster, the 3-node prod k8s cluster (`k8s_prd`), the dev k8s node (`k8s_dev` — `wrkdevk8s`), the Ceph cluster, the 3-node OpenBao cluster (`srvvault1/2/3`), the operator workstation (`wrkdev`). All production-grade. CI's default path runs against this inventory.
 - **`scratch`** holds the disposable Terraform-provisioned scratch fleet — today, two microk8s scratch nodes (`wrkscratchk8s1`, `wrkscratchk8s2`) used in Phase 4 to exercise the role install + idempotent join paths. The only hosts where breakage is free.
 
 When a procedure says "test it on a scratch VM first," that means a host in the `scratch` inventory — never `wrkdev` or `wrkdevk8s`. `wrkdev` is the operator's workstation; `wrkdevk8s` is the single-node cluster used to develop HelmCharts against.
@@ -189,7 +195,7 @@ The user's application has four deployment stages: `dev`, `test`, `uat`, `prd`. 
 - All managed hosts **must** have forward DNS entries (`hostname.home`) resolvable from the operator workstation and from each other.
 - Ansible inventories use **short hostnames**; the `.home` search domain fills in the FQDN. Never hard-code IPs.
 - For Terraform-provisioned VMs, the per-VM module declares a `homelab_dns_reservation` resource that registers the (hostname, MAC) pair with the dnsmasq sidecar API; the API allocates the IPv4 from `10.1.3.0/24`. `depends_on` on the VM resource orders the reservation before VM create, so the VM's first DHCP request lands on a known reservation. See "MAC addressing" below for the resource shape.
-- **Bootstrap-critical hosts do not resolve through the dnsmasq pod.** dnsmasq runs as a Kubernetes pod, so the k8s nodes themselves and the OpenBao VM cannot depend on it: the cluster could not boot from cold if its nodes resolved through a service hosted on the cluster, and OpenBao must be reachable to deliver secrets to the cluster that hosts dnsmasq. These hosts carry static resolver configuration — `/etc/hosts` for the names they need at boot, plus an upstream resolver (LAN router or public DNS) reached directly. The configuration is not standard Ubuntu defaults; the `baseline` role applies it based on host class.
+- **Bootstrap-critical hosts do not resolve through the dnsmasq pod.** dnsmasq runs as a Kubernetes pod, so the k8s nodes themselves and the OpenBao cluster cannot depend on it: the cluster could not boot from cold if its nodes resolved through a service hosted on the cluster, and OpenBao must be reachable to deliver secrets to the cluster that hosts dnsmasq. These hosts carry static resolver configuration — `/etc/hosts` for the names they need at boot, plus an upstream resolver (LAN router or public DNS) reached directly. The configuration is not standard Ubuntu defaults; the `baseline` role applies it based on host class.
 - **The operator workstation needs a secondary resolver too**, for the same reason. The dnsmasq pod runs as a 2-replica StatefulSet pinned to different k8s nodes, so a single node reboot is invisible to it — but if the workstation only knows about one of the two replicas, a roll that touches the node hosting that replica blacks out resolution from the workstation mid-run. DHCP option 6 advertising both replicas covers it; configuring both resolvers statically on the workstation works too. Either way, list both — never one.
 
 ## Network topology for managed VMs
@@ -206,7 +212,7 @@ Per-host-class shape:
 |---|---|
 | Ceph nodes (`srvceph1/2/3`) | vmbr0 + vmbr1 |
 | k8s nodes (`srvk8s1/2/3`) | vmbr0 + vmbr0 tag=2 + vmbr1 |
-| Everything else (operator workstation, OpenBao, scratch) | vmbr0 only |
+| Everything else (operator workstation, OpenBao cluster, scratch) | vmbr0 only |
 
 Deferred / revisit:
 
@@ -217,7 +223,7 @@ Deferred / revisit:
 - **Operator-created VMs (legacy)** keep their existing VMIDs in the 100–199 range. Today: `103` (srvk8sl1), `104` (srvk8ss1), `107` (srvk8ss2), `113` (srvceph1), `114` (srvceph2), `115` (srvceph3), plus the unmanaged VMs.
 - **Terraform-owned VMs** use the **900-and-up range**. VMIDs `900–909` are reserved for the scratch fleet (today: `wrkscratchk8s1=901`, `wrkscratchk8s2=902`); `910` and up belong to the persistent fleet. The convention extends to every TF-managed VM going forward.
 - Phase 3a imports the six existing managed VMs under their legacy VMIDs — no live mutation, just modeling what's there. Phase 4 (k8s) and Phase 5 (Ceph) rebuilds reassign them to VMIDs in the 900-and-up range as a side-effect of the rebuild. This also rotates each NIC to the deterministic-MAC scheme below (the locally-administered MAC is derived from the VMID), and prompts a one-time dnsmasq reservation update per VM.
-- Phase 6's `srvvault` (OpenBao) and Phase 10's Jenkins agent VM are greenfield in the 900-and-up range from creation.
+- Phase 2's `srvvault1`/`srvvault2`/`srvvault3` (OpenBao cluster, VMIDs `910–912`) and the (now-completed) iac-agent phase's Jenkins agent VM are greenfield in the 900-and-up range from creation.
 
 ## MAC addressing for managed VMs
 
@@ -237,7 +243,7 @@ Deferred / revisit:
 - Ansible's `ssh_args` set `UserKnownHostsFile` to the per-config file and `GlobalKnownHostsFile=/dev/null`, so playbook runs are independent of the operator's personal `~/.ssh/known_hosts` (and identical between workstation and ephemeral CI container). `HostKeyAlgorithms=ssh-ed25519` ignores the rsa/ecdsa keys sshd auto-generates non-deterministically.
 - Public host keys are not secret. They're committed; the diff is auditable. Host private keys live in tfstate (already sensitive — the API token, cloud-init user-data containing our authorized SSH pubkeys, etc., were already there).
 - A rebuild without `terraform taint tls_private_key.host_*` keeps the same identity, so destroy+recreate of a VM no longer trips host-key warnings. Cloud-init only runs on first boot, though, so picking up a new pinned key requires `terraform apply -replace=<vm-resource>`.
-- **Future evolution**: once OpenBao is up (Phase 6+), replace the per-host pubkeys with one `@cert-authority *.home <CA pubkey>` line, signing host certs at provision time. Per-host files in `known_hosts.d/` collapse to one CA line.
+- **Future evolution**: once OpenBao is up (Phase 2+), replace the per-host pubkeys with one `@cert-authority *.home <CA pubkey>` line, signing host certs at provision time. Per-host files in `known_hosts.d/` collapse to one CA line.
 
 ## OS updates
 
@@ -246,12 +252,12 @@ Three policies, one per host class. The class is a property of the host, recorde
 | Class | Members | Update policy |
 |---|---|---|
 | **Cluster members** | k8s nodes, ceph nodes | Ansible-controlled. `update.yml` plays drain → `apt full-upgrade` → conditional reboot → uncordon, with `serial: 1`. Operator-triggered for now; CI-scheduled in Phase 10. |
-| **Standalone VMs** | Jenkins agent VM, OpenBao VM | `unattended-upgrades` + auto-reboot in a quiet window. Ansible installs and configures the package, then steps back. |
+| **Standalone service VMs** | Jenkins agent VM, `srvvault1`/`srvvault2`/`srvvault3` | `unattended-upgrades` + auto-reboot in a quiet window. Ansible installs and configures the package, then steps back. |
 | **Self-managed** | Home Assistant, Windows VMs, IoT, end-user devices | Outside this update system entirely. Documented but not managed. |
 
 Why the split:
 - The Jenkins agent cannot run a pipeline that reboots itself — the orchestrator must not be what is being mutated. Letting the OS handle its own updates avoids this.
-- OpenBao with Azure auto-unseal re-engages its seal automatically on reboot, so it no longer needs the operator-triggered cadence the original "Ansible owns updates everywhere" rule assumed.
+- OpenBao with static seal re-engages its seal automatically on reboot (key read from local disk), so it no longer needs the operator-triggered cadence the original "Ansible owns updates everywhere" rule assumed. With three nodes in a Raft cluster the cadence also matters less — quorum survives one node rebooting.
 
 Concrete behaviour:
 - **`baseline` enforces the package state per host class.** On cluster members it purges `unattended-upgrades` (no silent fallback to Ubuntu defaults). On standalone VMs it installs and configures it. Observable state is "package state matches host class."
@@ -259,8 +265,8 @@ Concrete behaviour:
 - **Drift pipeline ignores patch posture.** The apt cache refresh + dist-upgrade tasks in `baseline` are tagged `os_update`, and `iac-scheduled-drift` runs with `--skip-tags os_update`. Pending upstream packages are patch posture (owned by the update pipelines: `update-k8s.yml` today, future plays for ceph/etc.), not infrastructure drift. **Rework when a real cluster-wide update path supersedes the stop-gap**: once every cluster class has its own `update-*.yml` driving apt, the apt cache + dist-upgrade tasks should probably leave `site.yml` entirely (and the `baseline_apt_dist_upgrade` knob with them) rather than continuing to live in `baseline` behind a tag.
 
 Operational guards (to be folded into runbooks/playbooks at the relevant phase):
-- **Stagger reboot windows.** The Jenkins agent VM and the OpenBao VM must not reboot in the same window. A simultaneous reboot would compound any unseal/connectivity issue and would mean nothing left running to diagnose it.
-- **Post-boot health check on OpenBao.** After its reboot window, confirm OpenBao came back unsealed within N minutes; alert otherwise. Catches silent Azure-unseal failure (firewall drift, expired SP credential, Azure outage) early instead of when the next consumer fails to fetch a secret.
+- **Stagger reboot windows across the four standalone service VMs.** Jenkins agent + `srvvault1/2/3` must not reboot in the same window. For the OpenBao cluster specifically, no two srvvaultN should be in the same window — quorum survives one node rebooting, not two.
+- **Post-boot health check on OpenBao.** After each srvvaultN's reboot window, confirm the node came back unsealed and Raft-joined within N minutes; alert otherwise. Catches silent static-seal failure (key file missing, wrong permissions, service did not start, disk corruption) and rejoin failure (Raft can't reach a peer, TLS expired) early instead of when the next consumer fails to fetch a secret.
 
 ## Proxmox VM CPU affinity
 
@@ -302,8 +308,8 @@ Path split — what runs where:
 
 Guards against accidental self-mutation:
 
-- **Terraform `lifecycle { prevent_destroy = true }`** on the Jenkins agent VM and the OpenBao VM resources. Hard stop at apply on a destroy.
-- **CI plan-stage check** that fails the pipeline if `terraform plan` proposes `replace` or `destroy` on either VM. Belt-and-braces with `prevent_destroy` — the lifecycle block stops apply, the plan check stops the run before it ever reaches apply.
+- **Terraform `lifecycle { prevent_destroy = true }`** on the Jenkins agent VM and on each `srvvaultN` resource. Hard stop at apply on a destroy.
+- **CI plan-stage check** that fails the pipeline if `terraform plan` proposes `replace` or `destroy` on any of these. Belt-and-braces with `prevent_destroy` — the lifecycle block stops apply, the plan check stops the run before it ever reaches apply.
 
 Implications:
 - The state repo is a sensitive artifact (host private keys, API tokens). Same protections as any other secret-bearing repo.
