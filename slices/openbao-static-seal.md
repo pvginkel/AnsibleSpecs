@@ -65,9 +65,13 @@ implement.
   doesn't change the confidentiality gap.
 - **TLS**: per-node leaf cert with SANs covering own short hostname,
   FQDN, and the VIP hostname (`openbao.home`). Issued by the homelab
-  `step-ca` via ACME; 47-day validity, renewed daily by `certbot`.
-  See decisions.md "Internal TLS / homelab CA" for the broader
-  design.
+  `step-ca` via the JWK provisioner, driven by the `internal_tls`
+  Ansible role introduced in the step-ca slice; 47-day validity, re-
+  issued by the role on every iac-scheduled-drift cycle once remaining
+  validity drops below the threshold. The OpenBao role includes
+  `internal_tls` with the SAN list above and a reload handler that
+  SIGHUPs the openbao process. See decisions.md "Internal TLS /
+  homelab CA" for the broader design.
 
 ## Steps
 
