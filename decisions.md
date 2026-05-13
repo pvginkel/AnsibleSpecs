@@ -197,6 +197,12 @@ Deferred / revisit:
 - **`MALLOC_ARENA_MAX=2` systemd override** on the microceph snap units. Caps glibc's per-thread arena count and limits long-run heap drift. Worth folding into the microceph role only if RSS climbs back over the targets in steady state; premature otherwise.
 - **RGW placement.** RGW is a placed singleton today, hosted on whichever node was chosen at install (currently srvceph1). ~130 MiB regardless of host and irrelevant to the memory envelope, but the microceph role should make the placement explicit — which node, why, and whether to run a second for HA — rather than inheriting an artefact of install order.
 
+### Ceph VIP migration
+
+`ceph.home` (10.1.0.38) is a leader-tracking Keepalived VIP on srvceph1/2/3 — design captured in [`slices/internal-ha-vips.md`](slices/internal-ha-vips.md). Because srvceph1/2/3 are not Ansible-managed today, v1 of that slice configures Keepalived **by hand** on each node, with the exact `keepalived.conf` + mgr-tracking script recorded in `docs/runbooks/ceph-vip.md`.
+
+**When Ceph moves to Ansible (Phase 5 — see [`phases/README.md`](phases/README.md))**, the `microceph` role takes over the VIP: it includes the shared `keepalived` role with the same VRID, VIP, password, and mgr-tracking script, and the hand-rolled config on srvcephN is retired in the same change. The manual runbook becomes a backstop for disaster recovery rather than the day-to-day path. Skipping this step would leave two sources of truth for the Ceph VIP config and silently drift on the next Phase 5 apply.
+
 ### k8s version policy
 
 **LTS channels only.** Same logic as Ceph. Track the current microk8s LTS channel; upgrade when the previous goes EOL or sooner if a security fix forces it. Channel pinned per cluster in `group_vars/k8s_{prd,dev}.yml` so dev can soak a new minor independently before prd moves.
