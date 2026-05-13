@@ -14,6 +14,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
+| [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness, backup-collector | phase: helm + tf harness |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 | [cloud-init-first-boot-only](cloud-init-first-boot-only.md) | pending | — | (correctness; stops snippet edits cascading to VM rebuilds) |
 | [site-yml-layout](site-yml-layout.md) | pending | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
