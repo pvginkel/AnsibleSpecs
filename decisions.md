@@ -122,6 +122,7 @@ Homelab-wide CA for internal-DNS TLS. Stands up in its own phase ahead of OpenBa
   - In-cluster (cert-manager + step-ca ClusterIssuer): the DNS management API, `backup-server`.
   - Everything else (dnsmasq UI, other in-cluster service endpoints, IoT, printers) stays on snakeoil / self-signed until later sweeps; in-cluster services migrate by flipping their Ingress annotation when they get touched anyway.
 - **Root rotation**: planned as a single event in year 9 (root cert validity 10 years from init). Yearly rotation rejected — the operational cost of touching every Linux trust store and every Windows machine annually outweighs the blast-radius benefit when the root key sits offline in Roboform.
+- **SSH CA is a deferred follow-up.** step-ca can also issue SSH host and user certificates, which would replace the static `known_hosts.d/` + `authorized_keys` pattern in `bootstrap` / `adopt.yml`. Intentionally out of scope for the TLS slice — same CA instance gets a new SSH provisioner pair in a later slice, paired with a parallel `ssh_host_cert` role and sshd / ssh_config changes. The TLS slice doesn't need to anticipate it; the SSH slice can lean on the CA that's already running.
 
 ## Workflow + learning
 
