@@ -7,12 +7,13 @@ The homelab build-out, executed top-down. New phases get inserted into the pendi
 | # | Phase | Status | Notes |
 |---|---|---|---|
 | 1 | (microceph) | planned | (was phase 5) |
-| 2 | (openbao + secrets) | planned | 3-node Raft cluster (`srvvault1/2/3`), static seal via ansible-vault, leader-tracking keepalived VIP, daily dump via `backup-server`. v1 `step-ca` rollout (OpenBao + PVE + k8s API certs) lands in the same phase. Depends on slice [openbao-static-seal](../slices/openbao-static-seal.md) |
-| 3 | (helm + tf harness) | planned | depends on slice [helm-tf-deploy-harness](../slices/helm-tf-deploy-harness.md) |
-| 4 | (storage CSIs + tf) | planned | (was phase 8) |
-| 5 | (keycloak tf) | planned | (was phase 9) |
-| 6 | (dns automation) | planned | (was phase 10) |
-| 7 | (drift assertions) | planned | (was phase 11 "CI + drift"; scope reduced — iac-agent absorbs scheduling, this is what remains for sophisticated drift checks) |
+| 2 | (internal TLS / step-ca) | planned | Homelab CA + `internal_tls` Ansible role. Two issuance paths: ACME (in-cluster, cert-manager + ClusterIssuer) and JWK (VMs, role-driven). v1 consumers: PVE + microk8s API (VMs), DNS management API + `backup-server` (in-cluster). OpenBao listener certs come in the next phase via the same role. Depends on slice [internal-tls-step-ca](../slices/internal-tls-step-ca.md) |
+| 3 | (openbao + secrets) | planned | 3-node Raft cluster (`srvvault1/2/3`), static seal via ansible-vault, leader-tracking keepalived VIP, daily dump via `backup-server`. OpenBao listener certs issued by the `internal_tls` role from Phase 2. Includes the secrets resolver rewrite of `iac-impl` (Python + `!bao` refs via AppRole) between standing up the cluster and the runtime-consumer sweep. Depends on slices [openbao-static-seal](../slices/openbao-static-seal.md), [iac-secrets-resolver](../slices/iac-secrets-resolver.md) |
+| 4 | (helm + tf harness) | planned | depends on slice [helm-tf-deploy-harness](../slices/helm-tf-deploy-harness.md) |
+| 5 | (storage CSIs + tf) | planned | (was phase 8) |
+| 6 | (keycloak tf) | planned | (was phase 9) |
+| 7 | (dns automation) | planned | (was phase 10) |
+| 8 | (drift assertions) | planned | (was phase 11 "CI + drift"; scope reduced — iac-agent absorbs scheduling, this is what remains for sophisticated drift checks) |
 
 ## Completed
 
