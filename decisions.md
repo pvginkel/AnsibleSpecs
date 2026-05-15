@@ -254,7 +254,7 @@ The Proxmox cluster has two physical bridges plus a workload VLAN on the first:
 
 - **`vmbr0`** — 1 Gb house network. Internet-facing. Default route, DNS, DHCP (dnsmasq) all live here. Each managed VM's `network_devices[0]` lives on this bridge with `vlan_id=0`; the per-VM module's `homelab_dns_reservation` keys off that NIC's MAC.
 - **`vmbr1`** — 10 Gb backplane between the PVE/Ceph/k8s nodes. Separate subnet, not reachable from the house LAN. Carries inter-node Ceph and Kubernetes traffic. Per-VM static address declared in `vms.tf` (or rendered guest-side at provision time); no IPAM, no reservation resource. Addresses are stable across rebuilds — the backplane is a shared subnet across PVE/Ceph/k8s/etc., so they're hand-curated.
-- **`vmbr0` tag 2** — Kubernetes workload network. Same physical 1 Gb fabric as vmbr0, separate VLAN and subnet (`10.2.0.0/16`). Reserved for k8s services; BGP via MetalLB was partly set up and abandoned, but the subnet allocation is preserved. Per-VM static address declared in `vms.tf`, sequential within `10.2.0.0/16`. No IPAM.
+- **`vmbr0` tag 2** — Kubernetes workload network. Same physical 1 Gb fabric as vmbr0, separate VLAN and subnet (`10.2.0.0/16`). Reserved for k8s services. MetalLB runs in **L2 mode** today — IPv4 in practice; the pool config carries an IPv6 CIDR but v6 is not the operational focus. BGP via MetalLB was partly set up and abandoned; the `10.2.0.0/16` allocation is preserved against re-enabling it — a backlog item, see Deferred below. Per-VM static address declared in `vms.tf`, sequential within `10.2.0.0/16`. No IPAM.
 
 Per-host-class shape:
 
@@ -267,6 +267,7 @@ Per-host-class shape:
 Deferred / revisit:
 
 - **Audit that vmbr1 actually carries the traffic it's meant to.** The 10 Gb backplane was built up incrementally; the operator is not confident every Ceph/k8s node is steering traffic over it as designed. Verify once Phase 3a is done and Terraform is the source of truth for VM network config — the audit is much cheaper against a known-declarative baseline.
+- **Re-enable BGP mode for MetalLB.** Backlog item. MetalLB's BGP mode runs a speaker on each node that peers with one or more external BGP-capable routers (`BGPPeer` + `BGPAdvertisement` CRs; native BGP or FRR mode). The homelab has no BGP-speaking router today — standing one up is the gating dependency and the bulk of the work. The MetalLB pool's IPv6 side (dual-stack in config, not relied on) gets sorted as part of the same rework rather than as a separate effort. Distinct from Calico's BGP, which is separately tabled — the `microk8s` role runs Calico in VXLAN mode and strips the `k8s,bgp` CLUSTER_TYPE suffix.
 
 ## VMID convention
 
