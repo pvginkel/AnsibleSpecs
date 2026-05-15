@@ -57,11 +57,11 @@ step-ca cert flips — those leaf certs SAN `kubernetes-api.home` and
 
 The three VIPs are pre-registered in the operator's address table:
 
-| Service | VIP hostname | VIP IP | Port(s) | VRID | Leader-tracking? |
-|---|---|---|---|---|---|
-| Kubernetes API (prd) | `kubernetes-api.home` | `10.1.0.37` | 16443 | 51 | No (plain VRRP) |
-| Ceph (mgr / dashboard / mons) | `ceph.home` | `10.1.0.38` | 8443 (dashboard), 3300 / 6789 (mons) | 52 | Yes (mgr-active) |
-| OpenBao (secrets) | `secrets.home` | `10.1.0.39` | 8200 | 53 | Yes (Raft leader) |
+| Service                       | VIP hostname          | VIP IP      | Port(s)                              | VRID | Leader-tracking?  |
+|-------------------------------|-----------------------|-------------|--------------------------------------|------|-------------------|
+| Kubernetes API (prd)          | `kubernetes-api.home` | `10.1.0.37` | 16443                                | 51   | No (plain VRRP)   |
+| Ceph (mgr / dashboard / mons) | `ceph.home`           | `10.1.0.38` | 8443 (dashboard), 3300 / 6789 (mons) | 52   | Yes (mgr-active)  |
+| OpenBao (secrets)             | `secrets.home`        | `10.1.0.39` | 8200                                 | 53   | Yes (Raft leader) |
 
 The `VRID` column (VRRP virtual-router-id) namespaces each cluster's
 VRRP traffic on the shared LAN; values are arbitrary in `1..255` but
@@ -189,6 +189,7 @@ active=$(microceph.ceph mgr stat --format json 2>/dev/null | jq -r .active_name)
 # /etc/keepalived/keepalived.conf
 global_defs {
     router_id srvceph1                # set per host
+    enable_script_security
 }
 
 vrrp_script chk_ceph_mgr {
@@ -239,6 +240,7 @@ Manual rollout, per node:
 
 ```sh
 sudo apt install keepalived jq
+sudo mkdir -p /etc/keepalived/scripts/
 sudo install -m 0755 ceph-mgr-active.sh /etc/keepalived/scripts/
 sudo install -m 0644 keepalived.conf /etc/keepalived/
 sudo systemctl enable --now keepalived
