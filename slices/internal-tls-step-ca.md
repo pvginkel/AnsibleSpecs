@@ -154,23 +154,33 @@ roles via `include_role` with vars; it has no host-class of its own.
 - `internal_tls_reload_handler`: handler name to notify on cert
   change. Caller defines the handler.
 
-**Behaviour**:
+**Behaviour** — *split issuance*. The privileged half (minting a JWK
+token, which needs the fleet provisioner password) runs on the Ansible
+controller; the unprivileged half (generating the keypair, fetching
+the signed leaf) runs on the target. The provisioner password never
+lands on the target; the leaf private key never leaves it. Only a
+short-lived, SAN-scoped token crosses between them.
 
-1. Ensure the `step-cli` package is installed (apt).
-2. Bootstrap the `step` CLI with the homelab CA fingerprint if not
-   already done on the host (idempotent; one-shot).
-3. Read current cert expiry from `internal_tls_cert_path` if present;
-   compute remaining validity.
-4. If cert is missing or remaining validity is below the threshold:
-   1. Pull the JWK provisioner password from ansible-vault, write it
-      to a `mktemp` location with mode `0600` for the duration of the
-      task.
-   2. Run `step ca certificate --provisioner ansible-jwk
-      --provisioner-password-file <tmp> --san …` for each SAN.
+1. Install `step-cli` from Smallstep's apt repository (the package is
+   not in the Ubuntu/Debian archives). The role ships the signing key
+   and adds a `deb822` source.
+2. Assert the target trusts the homelab root (`baseline` must have
+   run); no per-host `step ca bootstrap` is needed — the token flow
+   plus system trust covers it.
+3. Decide if issuance is due: missing cert, or `step certificate
+   needs-renewal --expires-in <threshold>` reports the leaf inside the
+   renewal window.
+4. If due:
+   1. **On the controller** (`delegate_to: localhost`): write the
+      vaulted JWK password to a `/dev/shm` tempfile (mode `0600`),
+      `step ca token` to mint a short-lived token scoped to the SAN
+      set, delete the tempfile in an `always` block. The token mint
+      anchors CA trust against the repo's copy of the homelab root, so
+      the iac agent container needs only the `step` CLI.
+   2. **On the target**: `step ca certificate --token <token>` — the
+      keypair is generated locally.
    3. `chmod` + `chown` per inputs.
-   4. Delete the temp password file in an `always` block, even on
-      failure.
-   5. Notify the caller's reload handler.
+   4. Notify the caller's reload handler.
 5. If neither missing nor expiring, no-op — task reports `ok`.
 
 **Idempotency / drift behaviour**:
@@ -303,9 +313,12 @@ After each consumer rolls in:
   only renewal needs step-ca, so a step-ca outage shorter than ~33
   days (47 – 14) is invisible.
 - **JWK provisioner password is fleet-wide.** Compromise = forge any
-  cert matching the `allowedSANs` regex until the password is rotated.
-  Mitigations: SAN regex tightly scopes issuance to `*.home` + the
-  kube-apiserver internal names; rotation is one provisioner-update
+  cert the provisioner's SAN policy allows, until the password is
+  rotated. Mitigations: the SAN policy is fully enumerated — every
+  name the CA may sign is listed literally (no wildcards); the
+  split-issuance design (§D) keeps the password off consumer VMs
+  entirely — it is decrypted only on the iac controller and written
+  to a `/dev/shm` tempfile there; rotation is one provisioner-update
   + one ansible-vault re-encrypt. Documented in the bootstrap runbook
   so it isn't novel work when the day comes.
 - **The PVE cluster CA stays self-signed.** It signs cluster-internal
