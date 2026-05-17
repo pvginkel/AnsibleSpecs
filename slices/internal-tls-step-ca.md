@@ -2,10 +2,12 @@
 
 ## Status (as of 2026-05-17)
 
-**Next action — §J cert-expiry monitoring.** With §E exercised, the
-only open VM-consumer work in this slice is the cert-expiry metric +
-alert (the VM textfile collector and the in-cluster equivalent). §F
-(k8s API server) stays parked behind the HA VIP slice.
+**Next action — none in this repo.** The Ansible-side work is done:
+§J's VM cert-expiry metric ships in the `internal_tls` role. What
+remains is operator-delivered and lives in other repos — the HelmCharts
+Prometheus alert rule and the in-cluster (nginx-configurator) metric,
+both specced in [`internal-tls-monitoring.md`](internal-tls-monitoring.md).
+§F (k8s API server) stays parked behind the HA VIP slice.
 
 **Done:**
 
@@ -31,6 +33,10 @@ alert (the VM textfile collector and the in-cluster equivalent). §F
   CLI (`318ea8b`, `4ca6a49`).
 - **§I Windows trust** — homelab root installed on `wrkdevwin`; Chrome
   no longer warns on the homelab cert.
+- **§J VM cert-expiry metric** — the `internal_tls` role publishes
+  `internal_tls_cert_not_after_seconds` (the leaf's absolute not-after
+  epoch) to the node-exporter textfile collector on every run, one
+  `.prom` file per cert. PVE nodes pick it up on the next role apply.
 - **Runbook** — `docs/runbooks/step-ca-bootstrap.md`.
 
 **Pending:**
@@ -38,8 +44,10 @@ alert (the VM textfile collector and the in-cluster equivalent). §F
 - §F k8s API server consumer — **deferred to the HA VIP slice**
   ([`internal-ha-vips.md`](internal-ha-vips.md)); its leaf SANs name
   the `kubernetes-api.home` VIP, which does not exist yet.
-- §J cert-expiry monitoring — VM textfile collector + the in-cluster
-  equivalent.
+- §J monitoring, HelmCharts/DockerImages side — the Prometheus alert
+  rule on `internal_tls_cert_not_after_seconds` and the in-cluster
+  cert-expiry metric. Operator-delivered; specced in
+  [`internal-tls-monitoring.md`](internal-tls-monitoring.md).
 
 ## Goal
 
@@ -187,16 +195,29 @@ One-line `certutil -addstore -f "ROOT" homelab-root.crt` from an
 elevated PowerShell on `wrkdevwin`. Procedure + Firefox note in
 `docs/runbooks/step-ca-bootstrap.md`.
 
-### J. Cert-expiry monitoring — PENDING
+### J. Cert-expiry monitoring — VM metric DONE; alert + in-cluster specced
 
-- VM consumers: a `cert_expiry_seconds` metric via the Prometheus
-  node-exporter textfile collector, from a post-issue hook the
-  `internal_tls` role writes.
-- In-cluster consumers: certs are `certbot`-issued files on disk — an
-  equivalent textfile-collector check is needed (cert-manager metrics
-  do not apply; there is no cert-manager). Fold into the
-  nginx-configurator work.
-- Alert: `cert_expiry_seconds < 17 * 86400`.
+VM consumers — **done**. The `internal_tls` role publishes the leaf's
+absolute expiry as `internal_tls_cert_not_after_seconds`, a node-exporter
+textfile-collector gauge written on every role run (`tasks/metric.yml`,
+one `.prom` per cert under `internal_tls_textfile_dir`). The value is
+the not-after epoch, not "seconds remaining" — a static file whose
+correctness does not decay between runs, so one write stays accurate as
+`time()` advances for the whole life of the leaf.
+
+Remaining — **operator-delivered, see
+[`internal-tls-monitoring.md`](internal-tls-monitoring.md)**:
+
+- The HelmCharts Prometheus alert rule:
+  `internal_tls_cert_not_after_seconds - time() < 10 * 86400`. The
+  10-day threshold sits below the role's 14-day VM renewal threshold
+  (so a healthy renewer never trips it) and below the monthly
+  in-cluster path's ~17-day floor — one rule covers both. (An earlier
+  draft said `< 17 * 86400`; 17 > 14 would flap every VM renewal cycle.)
+- The in-cluster cert-expiry metric — certbot-issued files, emitted by
+  `nginx-configurator` under the same metric name rather than via a
+  node-exporter textfile collector. Folds into the nginx-configurator
+  work.
 
 ## Verification
 
@@ -257,8 +278,11 @@ Done:
 6. **Ansible** — `proxmox_host` includes `internal_tls` for the
    pveproxy cert (§E); exercised live, with the `become: false`
    token-mint fix (`83e8e53`).
+7. **Ansible** — `internal_tls` publishes the
+   `internal_tls_cert_not_after_seconds` textfile metric (§J, VM side).
 
 Remaining:
 
-7. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
-8. **Monitoring** — cert-expiry metric + alert (§J).
+8. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
+9. **Monitoring** — Prometheus alert rule + in-cluster cert-expiry
+   metric (§J), per `internal-tls-monitoring.md`. Operator-delivered.

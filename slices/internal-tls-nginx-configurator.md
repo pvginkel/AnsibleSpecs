@@ -142,6 +142,13 @@ pattern policy would reject them.
   live in the certbot `live/` dir — drop them from the deployment, the
   renewal CronJob, and `args.sh`.
 
+## Monitoring
+
+The in-cluster cert-expiry metric (§J of the parent slice) is emitted
+from `nginx-configurator` — a `/metrics` endpoint exposing
+`internal_tls_cert_not_after_seconds` per managed leaf. Design:
+[`internal-tls-monitoring.md`](internal-tls-monitoring.md) "Piece 2".
+
 ## Migration
 
 - Existing snakeoil `<name>.crt`/`.key` under `/etc/nginx/ssl` become
