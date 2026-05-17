@@ -1,188 +1,151 @@
 # Internal TLS via step-ca — nginx-configurator change
 
 What's needed to replace the self-signed ("snakeoil") certificates that
-`nginx-configurator` generates for internal services with real leaves
-issued by the homelab `step-ca`. This is the in-cluster half of the
-`internal-tls-step-ca` slice (the slice's §G/§H describe a cert-manager
-`ClusterIssuer` + Ingress annotations — that mechanism does not exist in
-this homelab; `nginx-configurator` is the real path, and the slice
-§G/§H should be rewritten to match).
+nginx serves for internal services with real leaves issued by the
+homelab `step-ca`, over **ACME**. This is the in-cluster half of the
+`internal-tls-step-ca` slice; that slice's §G/§H describe a cert-manager
+`ClusterIssuer` + Ingress annotations — a mechanism this homelab does
+not use — and should be rewritten to point here.
 
-The code lives in `/work/DockerImages/nginx-configurator/` and
-`/work/DockerImages/certbot/`.
+Code: `/work/DockerImages/{nginx-configurator,certbot,certificate-renewer}/`
+and `/work/HelmCharts/charts/nginx/`.
 
-## Current behaviour
+## Scope
 
-`nginx-configurator` watches Services and renders nginx server blocks.
-Per entry:
+In-cluster / nginx-fronted services only. VM certificates (PVE, k8s
+API, OpenBao) are a separate mechanism — the Ansible `internal_tls`
+role via step-ca's **JWK** provisioner.
 
-- **`nginx.webathome.org/is-public: yes`** → `_ensure_ssl_certificate`
-  calls the `certbot` sidecar (`GET /request?domains=…`), which runs
-  `certbot certonly --webroot` against Let's Encrypt. Cert lands at
-  `…/live/<name>/fullchain.pem`.
-- **`nginx.webathome.org/enable-ssl: yes`** (non-public) →
-  `_ensure_snakeoil_ssl_certificate` calls
-  `certutils.py:generate_snakeoil_certificate`, which shells
-  `openssl req -x509` — a 3650-day self-signed cert, **hardcoded
-  `CN=kubernetes.home`** regardless of the actual service name. Cert
-  lands at `…/ssl/<name>.crt` + `.key`.
+Whether a service gets a certificate is decided by the
+`nginx.webathome.org/enable-ssl` annotation (and `is-public`), exactly
+as today — **that selection mechanism does not change**. Rolling the
+annotation out to more services is the operator's separate follow-on
+and is out of scope here. This change only swaps the *cert source* for
+`enable-ssl` (non-public) services: self-signed → step-ca.
 
-Only the second path changes. Public/Let's Encrypt stays as-is.
+## How it works today
 
-## Target behaviour
+- **`nginx-configurator`** (watcher) — on a Service event, per entry:
+  - `is-public` → `_ensure_ssl_certificate` → `GET certbot/request` →
+    `certbot certonly --webroot` against Let's Encrypt.
+  - `enable-ssl` (non-public) → `_ensure_snakeoil_ssl_certificate` →
+    `certutils.generate_snakeoil_certificate` → `openssl req -x509`, a
+    3650-day self-signed cert (hardcoded `CN=kubernetes.home` on every
+    one).
+- **`certbot`** sidecar — Flask endpoint `/request?domains=…` running
+  `certbot certonly --webroot` against Let's Encrypt's directory.
+- **`certificate-renewer`** — a monthly CronJob (`0 1 1 * *`,
+  `charts/nginx/templates/nginxmanager-renewal-cronjob.yaml`). Walks
+  every service: public → re-request via certbot (`--renew-by-default`
+  forces a fresh cert), snakeoil → regenerate. Then restarts nginx.
 
-Internal (`enable-ssl`, non-public) services get a `step-ca`-issued
-leaf — CN + SANs from the entry's real `server_names`, signed by the
-homelab intermediate, 47-day validity. Browsers/clients that trust the
-homelab root (baseline role on Linux; runbook for Windows) stop showing
-warnings. The annotation `nginx.webathome.org/enable-ssl` keeps its
-name and meaning ("this service gets HTTPS"); only the cert *source*
-changes.
+So renewal *does* exist — it is the monthly CronJob, unconditional
+re-issue. The watcher only does *initial* issuance ("create if the file
+is missing"); the CronJob does renewal.
 
-## Decision 1 — issuance method: JWK provisioner (recommended)
+## The change: internal certs via step-ca's ACME provisioner
 
-`step-ca` issues to VMs via a JWK provisioner and to in-cluster ACME
-clients via an ACME provisioner. For `nginx-configurator`:
+step-ca exposes an ACME provisioner; `certbot` speaks ACME to any
+directory via `--server`. So internal certs flow through the **same
+certbot path** as public ones — just
+`--server https://ca.home/acme/acme/directory` instead of Let's
+Encrypt.
 
-**Recommended — a dedicated JWK provisioner.** `step ca certificate
---provisioner <name> --provisioner-password-file <file>` is a
-synchronous request→(cert,key) call: a clean drop-in for
-`generate_snakeoil_certificate`, no ACME challenge dance. Use a
-**dedicated** provisioner (not the VM-fleet `ansible-jwk`) with its own
-password, so the fleet password never enters the cluster — the
-slice's split-issuance design exists specifically to keep that password
-off as many hosts as possible.
+**No credential anywhere.** ACME is challenge-based: the proof of
+control *is* the authorization, there is no pre-shared password (unlike
+step-ca's JWK provisioner). HTTP-01 — step-ca fetches
+`http://<name>.home/.well-known/acme-challenge/<token>`; nginx already
+serves that webroot for *every* entry (`template.j2`'s port-80 block
+includes `letsencrypt.conf` unconditionally), and step-ca runs
+in-cluster so it reaches nginx's LoadBalancer IP. The webroot volume
+`certbot` and nginx already share for Let's Encrypt is reused as-is.
 
-There is **no split issuance** here (unlike the Ansible `internal_tls`
-role): `nginx-configurator` is a single in-cluster pod issuing its own
-certs; it holds the provisioner password in a mounted k8s Secret and
-calls `step` directly. The controller/target split only mattered for
-the Ansible case (one controller, many VM targets).
+**No `step` CLI in any image** — `certbot` is the ACME client; it
+needs nothing from Smallstep.
 
-**Alternative — ACME.** `step-ca` has an ACME provisioner; `certbot`
-can target any ACME directory via `--server`. Internal certs could flow
-through the *same* `certbot` path as public ones, just pointed at
-`https://ca.home/acme/acme/directory`. Cleaner unification, but a bigger
-refactor than "replace `certutils.py:7`", and HTTP-01 challenge solving
-for `.home` names adds moving parts. Worth it only if unifying the two
-paths is a goal in itself; otherwise JWK is the smaller, sufficient
-change.
-
-## Decision 2 — SAN policy on the new provisioner
-
-The provisioner needs an X.509 SAN allow-policy. In-cluster service
-names (`<svc>.home`) churn — every new HelmChart that wants HTTPS adds
-one. Two options:
-
-- **Enumerated** — consistent with the VM-side "no wildcards" stance,
-  but every new internal site needs a `ca.json` edit + `step-ca`
-  reload before its cert can issue.
-- **`*.home` wildcard** on this provisioner — pragmatic; the
-  provisioner is in-cluster-only and the LAN is closed.
-
-Operator's call. If enumerated, `nginx-configurator` will fail issuance
-for any name not yet in the policy — make that failure mode loud.
+The snakeoil generator (`generate_snakeoil_certificate`) is deleted.
 
 ## What changes — concretely
 
 ### step-ca
 
-Add the dedicated JWK provisioner (e.g. `nginx-configurator`) — same
-47-day claims as `ansible-jwk`, its own SAN policy (Decision 2), its own
-generated password. Capture the password in Roboform and document the
-provisioner alongside `ansible-jwk` in
-`Ansible/docs/runbooks/step-ca-bootstrap.md` (provisioner list +
-password-rotation procedure).
+The `acme` provisioner already exists with 47-day claims (ceremony
+§A.4). It needs an X.509 **name policy** allowing the internal `.home`
+names. Decision: enumerate them (consistent with the VM-side
+"no wildcards" stance, but a `ca.json` edit + reload per new internal
+site) or allow `*.home` on this provisioner (pragmatic; the provisioner
+is in-cluster-only and the LAN is closed). Operator's call. This is
+ACME-provisioner config — not a credential.
 
-### nginx-configurator image (`Dockerfile`)
+### `certbot` image + `certbot.py`
 
-Install `step-cli`. The base is `python:slim` (Debian), so the same
-Smallstep apt-repo approach the Ansible `internal_tls` role uses works
-here — or copy a pinned `step` binary in a build stage. Pin the version
-either way.
+- **Trust the homelab root.** `certbot` connects to `https://ca.home`;
+  the container must trust step-ca's chain. The base is `certbot/certbot`
+  (Alpine) — add the homelab root to the system bundle, or set
+  `REQUESTS_CA_BUNDLE` / `SSL_CERT_FILE`.
+- `/request` — add a way to select the CA (a `ca` query param, or a
+  second endpoint). When internal, append
+  `--server https://ca.home/acme/acme/directory` to the certbot args;
+  public stays on the default directory.
+- Internal (`.home`) and public domains never collide, so certbot's
+  `live/<domain>/` layout holds both; certbot creates a separate ACME
+  account for step-ca automatically.
 
-### nginx-configurator deployment (HelmCharts)
+### `nginx-configurator` + `nginxconfigurator.py`
 
-- Mount the provisioner password as a k8s Secret (file, not env — so it
-  can be passed as `--provisioner-password-file`).
-- Make the homelab root cert available in the pod for `step --root`
-  (the pod must validate the TLS connection to `ca.home`).
-- New env: CA URL (`https://ca.home`), provisioner name, password file
-  path, renewal threshold (days).
+- `_ensure_snakeoil_ssl_certificate` → call certbot with the internal
+  CA selector — the same shape as `_ensure_ssl_certificate`. The two
+  `_ensure_*` methods effectively merge: only the certbot `ca`
+  parameter differs.
+- Delete `generate_snakeoil_certificate` from this image's
+  `certutils.py`.
+- Decide what the `CERTBOT_DISABLED` dev escape hatch should mean now
+  that internal certs also go through certbot (today it gates only the
+  public path).
 
-### `certutils.py`
+### `certificate-renewer` + `certificaterenewer.py`
 
-- Replace `generate_snakeoil_certificate(server_name, keyout, out)`
-  with something like `request_internal_certificate(server_names,
-  keyout, out)`:
-  - shells `step ca certificate <server_names[0]> <out> <keyout>
-    --provisioner <name> --provisioner-password-file <file>
-    --ca-url https://ca.home --root <root> --force`
-  - passes **every** entry in `server_names` as `--san` (the snakeoil
-    code ignored them and hardcoded `kubernetes.home` — fixing that is
-    part of this change).
-- Add a `certificate_needs_renewal(crt_path, threshold_days)` helper —
-  `step certificate needs-renewal <crt> --expires-in <threshold*24>h`
-  (exit 0 = renew, 1 = still good).
-
-### `nginxconfigurator.py`
-
-- `_ensure_snakeoil_ssl_certificate` → `_ensure_internal_ssl_certificate`.
-  The current guard is `if os.path.exists(out) and os.path.exists(keyout):
-  return`. That was fine for 3650-day certs; with 47-day leaves it must
-  become **"exists *and* not within the renewal threshold → return,
-  else (re)issue"**, using `certificate_needs_renewal`.
-- On (re)issue, `restart_nginx` so nginx picks up the new cert.
-- Optional: rename `NGINX_SNAKEOIL_SSL_CERTIFICATES_TARGET` →
-  `…_INTERNAL_…` for honesty. Cosmetic.
+- `renew_snakeoil_ssl_certificate` → certbot with the internal CA
+  selector — same as `renew_ssl_certificate`.
+- Delete `generate_snakeoil_certificate` from this image's
+  `certutils.py` too (the two images carry separate copies).
+- **Cadence check.** Monthly re-issue is comfortable for 90-day Let's
+  Encrypt certs but tight for **47-day** step-ca leaves: renewed on the
+  1st, a leaf is always ≥17 days from expiry — but *one* missed CronJob
+  run leaves ~17 days and *two* misses expire it. Consider moving the
+  schedule to weekly or fortnightly once step-ca certs are in the mix.
 
 ### `template.j2`
 
-No structural change. The non-public branch already points
-`ssl_certificate`/`ssl_certificate_key` at the internal cert dir.
-`step ca certificate` writes leaf+intermediate (a chain) to the cert
-file, which is what nginx should serve.
+- Internal certs now live in certbot's `live/<name>/` layout, the same
+  as public. The `{% else %}` (snakeoil) branch collapses into the
+  public branch — both `ssl_certificate` →
+  `{{ ssl_certificates_target }}/<name>/fullchain.pem`. The
+  `snakeoil_ssl_certificates_target` variable and the separate path go
+  away.
 
-## Renewal — do not skip this
+### Deployment / CronJob (`charts/nginx/`)
 
-This is the largest behaviour change and is easy to miss because the
-issuance swap looks self-contained.
+- `NGINX_SNAKEOIL_SSL_CERTIFICATES_TARGET`, the `/etc/nginx/ssl` mount,
+  and the `nginx-ssl` subPath are no longer needed once internal certs
+  live in the certbot `live/` dir — drop them from the deployment, the
+  renewal CronJob, and `args.sh`.
 
-`nginx-configurator` is **event-driven** — it reacts to Service
-add/update/delete. **A certificate nearing expiry generates no Service
-event.** With 3650-day snakeoil certs that never mattered. With 47-day
-step-ca leaves, an internal site silently breaks ~47 days after deploy
-unless something re-checks.
+## Migration
 
-Needed: a **periodic re-check**. The simplest fit is a recurring
-`Timer` that re-runs the cert-ensure pass (or all of `_rewrite_config`)
-every few hours; `_ensure_internal_ssl_certificate`'s threshold check
-then re-issues anything inside the window and `restart_nginx` rolls it.
-
-Note this gap is **not new** — `_ensure_ssl_certificate` (the public
-path) is also "request only if the file is missing", and there is no
-renewal cron/timer in either the `nginx-configurator` or `certbot`
-container. So either public-cert renewal is driven by something outside
-this code (clarify what), or it's an existing latent gap. Whichever it
-is: the new periodic re-check should cover **both** paths, or the
-internal path must at minimum not regress below the public one.
+- Existing snakeoil `<name>.crt`/`.key` under `/etc/nginx/ssl` become
+  orphaned once the template stops referencing them — clean up.
+- On first rollout each `enable-ssl` service needs an initial ACME
+  issuance; the watcher does it on the next Service event (or a
+  restart), and the monthly CronJob would also catch it. A one-off
+  trigger avoids waiting.
 
 ## Dependencies / ordering
 
-1. The dedicated provisioner must exist on `step-ca` **before** the new
-   image rolls out — otherwise issuance fails closed.
-2. Clients must trust the homelab root: Linux hosts via the `baseline`
-   role (done); Windows per the bootstrap runbook.
-3. `step-ca` must be reachable from the pod — it is (`ca.home` →
-   `10.2.1.15`, in-cluster).
-4. Roll the `nginx-configurator` image and its deployment together
-   (image needs `step`; deployment needs the Secret + env).
-
-## Open question for the operator
-
-How do the **public** Let's Encrypt certs renew today? Nothing in
-`certbot.py` / `nginxconfigurator.py` schedules it (`--renew-by-default`
-only forces a fresh cert *when `/request` is called*, and `/request` is
-only called when `fullchain.pem` is missing). Knowing this decides
-whether the new periodic re-check is a brand-new mechanism or an
-extension of an existing one.
+1. The `acme` provisioner's name policy must allow the internal names
+   before issuance works — otherwise step-ca refuses and certbot fails.
+2. The `certbot` image must trust the homelab root.
+3. step-ca must be reachable from the `certbot` pod — it is (`ca.home`
+   → `10.2.1.15`, in-cluster).
+4. Clients must trust the homelab root: Linux via the `baseline` role
+   (done), Windows per the bootstrap runbook.
