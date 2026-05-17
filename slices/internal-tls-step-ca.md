@@ -104,14 +104,15 @@ Smallstep chart, or a thin local wrapper.
   matching §A. Both with the 47-day claims.
 - **Persistence**: PVC backed by Ceph RBD (TF-owned PV, claimRef
   pre-bound, per the established storage pattern).
-- **Service**:
-  - ClusterIP for in-cluster cert-manager consumers.
-  - MetalLB LoadBalancer (or NodePort) so VM consumers (pve hosts,
-    microk8s nodes from the host side, future srvvaultN) can reach the
-    ACME and JWK endpoints over the homelab LAN.
-- **DNS**: `ca.home` resolves to the LoadBalancer IP. Static entry in
-  HelmCharts `configs/prd/dnsmasq.yaml`'s static-hosts section (the CA
-  is bring-up-tier in spirit — workloads that need certs depend on it).
+- **Service**: a single MetalLB `LoadBalancer`. MetalLB runs in L2
+  mode and serves addresses from the Kubernetes services range
+  (`10.2.0.0/16`); the UDM Pro routes that range, so VM consumers
+  (pve hosts, microk8s nodes from the host side, future srvvaultN)
+  reach the ACME and JWK endpoints across it just as in-cluster pods
+  do. As built: `ca.home → 10.2.1.15`.
+- **DNS**: `ca.home` resolves to the LoadBalancer IP, as a dnsmasq
+  static entry (the CA is bring-up-tier in spirit — workloads that
+  need certs depend on it).
 - **Secrets**: encrypted intermediate key + its passphrase from §A.7.
 
 ### B'. HelmCharts: cert-manager `ClusterIssuer` for step-ca's ACME
