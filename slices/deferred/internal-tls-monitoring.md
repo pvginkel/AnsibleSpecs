@@ -1,16 +1,30 @@
 # Internal TLS via step-ca — cert-expiry monitoring (§J)
 
-The §J monitoring deliverables that live **outside the Ansible repo**.
-The VM-side metric already ships in the `internal_tls` role; this doc
-covers the two operator-delivered pieces:
+## Status — deferred (2026-05-17)
+
+Observability is not a current priority. The **VM-side metric is already
+done and live** — the `internal_tls` role publishes
+`internal_tls_cert_not_after_seconds` and PVE nodes serve it (verified
+on `pve`). That part is unaffected by this deferral.
+
+Parked is the rest of §J: the Prometheus **alert rule** and the
+**in-cluster metric**. Until they land, no expiry alert fires — a silent
+renewer failure would surface only when a leaf actually expires.
+Acceptable for now: 47-day leaves, a working renewer, and a small fleet.
+Reactivate before that risk grows — e.g. when more consumers join, or
+ahead of the OpenBao listener certs in the next phase.
+
+## Scope
+
+The §J monitoring deliverables that live **outside the Ansible repo**:
 
 1. the **Prometheus alert rule** — HelmCharts `prometheus`;
 2. the **in-cluster cert-expiry metric** — DockerImages
    `nginx-configurator` + HelmCharts `nginx`.
 
-Parent slice: [`internal-tls-step-ca.md`](internal-tls-step-ca.md) §J.
+Parent slice: [`internal-tls-step-ca.md`](../internal-tls-step-ca.md) §J.
 In-cluster cert mechanics:
-[`internal-tls-nginx-configurator.md`](internal-tls-nginx-configurator.md).
+[`internal-tls-nginx-configurator.md`](../internal-tls-nginx-configurator.md).
 
 ## The metric — `internal_tls_cert_not_after_seconds`
 

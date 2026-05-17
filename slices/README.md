@@ -31,4 +31,6 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 
 ## Deferred / Cancelled
 
-(empty)
+| Slice | Status | Notes |
+|---|---|---|
+| [internal-tls-monitoring](deferred/internal-tls-monitoring.md) | deferred | §J cert-expiry alert rule + in-cluster metric. The VM-side metric already shipped; alerting is parked — observability is not a current priority. |

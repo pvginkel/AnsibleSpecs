@@ -2,11 +2,12 @@
 
 ## Status (as of 2026-05-17)
 
-**Next action — none in this repo.** The Ansible-side work is done:
-§J's VM cert-expiry metric ships in the `internal_tls` role. What
-remains is operator-delivered and lives in other repos — the HelmCharts
-Prometheus alert rule and the in-cluster (nginx-configurator) metric,
-both specced in [`internal-tls-monitoring.md`](internal-tls-monitoring.md).
+**Next action — none.** The Ansible-side work is done: §J's VM
+cert-expiry metric ships in the `internal_tls` role. The rest of §J —
+the HelmCharts Prometheus alert rule and the in-cluster
+(nginx-configurator) metric — is **deferred**: observability is not a
+current priority. Design parked in
+[`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md).
 §F (k8s API server) stays parked behind the HA VIP slice.
 
 **Done:**
@@ -46,8 +47,9 @@ both specced in [`internal-tls-monitoring.md`](internal-tls-monitoring.md).
   the `kubernetes-api.home` VIP, which does not exist yet.
 - §J monitoring, HelmCharts/DockerImages side — the Prometheus alert
   rule on `internal_tls_cert_not_after_seconds` and the in-cluster
-  cert-expiry metric. Operator-delivered; specced in
-  [`internal-tls-monitoring.md`](internal-tls-monitoring.md).
+  cert-expiry metric. **Deferred** — observability is not a current
+  priority. Design parked in
+  [`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md).
 
 ## Goal
 
@@ -195,7 +197,7 @@ One-line `certutil -addstore -f "ROOT" homelab-root.crt` from an
 elevated PowerShell on `wrkdevwin`. Procedure + Firefox note in
 `docs/runbooks/step-ca-bootstrap.md`.
 
-### J. Cert-expiry monitoring — VM metric DONE; alert + in-cluster specced
+### J. Cert-expiry monitoring — VM metric DONE; alert + in-cluster DEFERRED
 
 VM consumers — **done**. The `internal_tls` role publishes the leaf's
 absolute expiry as `internal_tls_cert_not_after_seconds`, a node-exporter
@@ -205,8 +207,9 @@ the not-after epoch, not "seconds remaining" — a static file whose
 correctness does not decay between runs, so one write stays accurate as
 `time()` advances for the whole life of the leaf.
 
-Remaining — **operator-delivered, see
-[`internal-tls-monitoring.md`](internal-tls-monitoring.md)**:
+Remaining — **deferred**, observability is not a current priority.
+Design parked in
+[`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md):
 
 - The HelmCharts Prometheus alert rule:
   `internal_tls_cert_not_after_seconds - time() < 10 * 86400`. The
@@ -285,4 +288,5 @@ Remaining:
 
 8. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
 9. **Monitoring** — Prometheus alert rule + in-cluster cert-expiry
-   metric (§J), per `internal-tls-monitoring.md`. Operator-delivered.
+   metric (§J). **Deferred** — see
+   `deferred/internal-tls-monitoring.md`.

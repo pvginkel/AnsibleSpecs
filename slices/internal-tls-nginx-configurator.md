@@ -146,8 +146,10 @@ pattern policy would reject them.
 
 The in-cluster cert-expiry metric (§J of the parent slice) is emitted
 from `nginx-configurator` — a `/metrics` endpoint exposing
-`internal_tls_cert_not_after_seconds` per managed leaf. Design:
-[`internal-tls-monitoring.md`](internal-tls-monitoring.md) "Piece 2".
+`internal_tls_cert_not_after_seconds` per managed leaf. **Deferred** —
+design parked in
+[`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md)
+"Piece 2".
 
 ## Migration
 
