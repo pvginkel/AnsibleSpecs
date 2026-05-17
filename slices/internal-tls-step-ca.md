@@ -2,16 +2,10 @@
 
 ## Status (as of 2026-05-17)
 
-**Next action — exercise §E (the PVE consumer) against the live
-cluster.** `proxmox_host` now includes `internal_tls`; because §D has
-not run against the live CA yet, this is also `internal_tls`'s first
-live exercise. Apply to one node first, then the rest, and verify:
-
-- `curl https://pve:8006/` from a managed Linux host → exit 0, no
-  `-k`; chain shows the homelab intermediate.
-- Browser on `wrkdevwin` → no warning; ~47-day leaf, SANs = `pve` +
-  `pve.home`.
-- A second run reports `changed=0` — the threshold gate holds.
+**Next action — §J cert-expiry monitoring.** With §E exercised, the
+only open VM-consumer work in this slice is the cert-expiry metric +
+alert (the VM textfile collector and the in-cluster equivalent). §F
+(k8s API server) stays parked behind the HA VIP slice.
 
 **Done:**
 
@@ -24,8 +18,13 @@ live exercise. Apply to one node first, then the rest, and verify:
 - **§C baseline distributes the root** — applied to the non-cluster
   managed hosts (pve×3, srviac, wrkdev); verified live. k8s nodes pick
   it up on rebuild; Ceph nodes are unmanaged until Phase 5.
-- **§D `internal_tls` role** — committed (Ansible `7cd02f7`). First
-  live exercise rides in on §E.
+- **§D `internal_tls` role** — committed (Ansible `7cd02f7`), exercised
+  live via §E. The first run surfaced one bug — `become: true` from the
+  consuming play reached the `delegate_to: localhost` token mint and
+  tried to sudo on the controller; fixed in `83e8e53`.
+- **§E PVE consumer** — `proxmox_host` includes `internal_tls`; all
+  three PVE nodes (pve, pve1, pve2) serve homelab CA leaves on `:8006`,
+  pveproxy reloaded.
 - **§G in-cluster ACME** — nginx-configurator/certbot issue over the
   step-ca ACME directory; `https://kubernetes/` serves a real homelab
   leaf, weekly renewal wired. The iac-agent image carries the `step`
@@ -36,7 +35,6 @@ live exercise. Apply to one node first, then the rest, and verify:
 
 **Pending:**
 
-- Exercise §E against the live PVE cluster (code landed; see §E).
 - §F k8s API server consumer — **deferred to the HA VIP slice**
   ([`internal-ha-vips.md`](internal-ha-vips.md)); its leaf SANs name
   the `kubernetes-api.home` VIP, which does not exist yet.
@@ -116,7 +114,7 @@ verified.
 `update-ca-certificates`. Applied to the non-cluster managed hosts;
 k8s nodes pick it up via `rebuild-k8s.yml` on rebuild.
 
-### D. `internal_tls` Ansible role — DONE (committed, not exercised)
+### D. `internal_tls` Ansible role — DONE
 
 Reusable role at `ansible/roles/internal_tls/`, consumed via
 `include_role`. **Split issuance**: the JWK token mint (needs the fleet
@@ -126,10 +124,12 @@ leaf key never leaves the target. Threshold-gated re-issue
 (`internal_tls_renewal_threshold_days`, default 14). Inputs + behaviour
 documented in the role README.
 
-Outstanding: exercise it standalone against a scratch VM before wiring
-any consumer (the live CA now exists, so this is unblocked).
+Exercised live via §E. The first run surfaced one bug: `become: true`
+from the consuming play propagated to the `delegate_to: localhost`
+token mint and tried to sudo on the controller — the controller-side
+block now carries `become: false` (`83e8e53`).
 
-### E. PVE consumer (fold into `proxmox_host` role) — CODE DONE, not yet exercised
+### E. PVE consumer (fold into `proxmox_host` role) — DONE
 
 `proxmox_host` includes `internal_tls`, per-node — *not* cluster-writer
 gated: `/etc/pve/local` resolves to the node-private
@@ -154,9 +154,8 @@ its own leaf.
   other PVE nodes — inherent to how PVE stores `pveproxy-ssl.*`, and
   within the cluster's single root-trust domain.
 
-Outstanding: exercise against the live cluster (`site.yml --limit pve`
-first, then the rest). This is also `internal_tls`'s first live
-exercise (§D).
+All three PVE nodes (pve, pve1, pve2) serve homelab CA leaves on
+`:8006` with pveproxy reloaded; verified live.
 
 ### F. Kubernetes API server consumer — DEFERRED to the HA VIP slice
 
@@ -256,10 +255,10 @@ Done:
 5. **In-cluster ACME** — nginx-configurator/certbot/certificate-renewer
    per `internal-tls-nginx-configurator.md`.
 6. **Ansible** — `proxmox_host` includes `internal_tls` for the
-   pveproxy cert (§E).
+   pveproxy cert (§E); exercised live, with the `become: false`
+   token-mint fix (`83e8e53`).
 
 Remaining:
 
-7. **Ansible** — exercise §E against the live PVE cluster.
-8. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
-9. **Monitoring** — cert-expiry metric + alert (§J).
+7. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
+8. **Monitoring** — cert-expiry metric + alert (§J).
