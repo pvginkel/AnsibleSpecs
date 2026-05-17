@@ -54,11 +54,20 @@ Encrypt.
 **No credential anywhere.** ACME is challenge-based: the proof of
 control *is* the authorization, there is no pre-shared password (unlike
 step-ca's JWK provisioner). HTTP-01 — step-ca fetches
-`http://<name>.home/.well-known/acme-challenge/<token>`; nginx already
+`http://<name>/.well-known/acme-challenge/<token>`; nginx already
 serves that webroot for *every* entry (`template.j2`'s port-80 block
 includes `letsencrypt.conf` unconditionally), and step-ca runs
 in-cluster so it reaches nginx's LoadBalancer IP. The webroot volume
 `certbot` and nginx already share for Let's Encrypt is reused as-is.
+
+A `server-name` annotation carries both an FQDN and a bare name
+(`backup-server.home, backup-server`); both go on the cert as SANs.
+ACME validates **every** SAN with its own challenge, so step-ca runs
+HTTP-01 against both — which works because bare names resolve
+homelab-wide. The bare-name challenge runs from step-ca's *pod*, so on
+the first internal cert, confirm step-ca validated both identifiers
+(pod resolver search-domains / `ndots` are the one place this could
+differ from the rest of the LAN). If the first cert works, all do.
 
 **No `step` CLI in any image** — `certbot` is the ACME client; it
 needs nothing from Smallstep.
@@ -70,12 +79,14 @@ The snakeoil generator (`generate_snakeoil_certificate`) is deleted.
 ### step-ca
 
 The `acme` provisioner already exists with 47-day claims (ceremony
-§A.4). It needs an X.509 **name policy** allowing the internal `.home`
-names. Decision: enumerate them (consistent with the VM-side
-"no wildcards" stance, but a `ca.json` edit + reload per new internal
-site) or allow `*.home` on this provisioner (pragmatic; the provisioner
-is in-cluster-only and the LAN is closed). Operator's call. This is
-ACME-provisioner config — not a credential.
+§A.4). Leave it with **no X.509 name policy** — it signs any name that
+passes an ACME challenge. Issuance is already gated twice (the
+`enable-ssl` annotation decides which services `nginx-configurator`
+requests for; the ACME challenge proves control), so a third
+server-side name-list gate buys little on a closed LAN and would mean
+a `ca.json` edit + reload per new internal site. No policy also keeps
+the bare single-label names (`backup-server`) issuable — a `*.home`
+pattern policy would reject them.
 
 ### `certbot` image + `certbot.py`
 
@@ -142,10 +153,11 @@ ACME-provisioner config — not a credential.
 
 ## Dependencies / ordering
 
-1. The `acme` provisioner's name policy must allow the internal names
-   before issuance works — otherwise step-ca refuses and certbot fails.
-2. The `certbot` image must trust the homelab root.
-3. step-ca must be reachable from the `certbot` pod — it is (`ca.home`
+1. The `certbot` image must trust the homelab root.
+2. step-ca must be reachable from the `certbot` pod — it is (`ca.home`
    → `10.2.1.15`, in-cluster).
-4. Clients must trust the homelab root: Linux via the `baseline` role
+3. Clients must trust the homelab root: Linux via the `baseline` role
    (done), Windows per the bootstrap runbook.
+4. Bare single-label names must resolve to nginx from step-ca's pod —
+   set up homelab-wide; confirm on the first internal cert (see "The
+   change" above).
