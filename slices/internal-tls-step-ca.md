@@ -2,18 +2,16 @@
 
 ## Status (as of 2026-05-17)
 
-**Next action — verify the in-cluster ACME delivery.** The operator is
-implementing the nginx-configurator + certbot ACME changes (design:
-[`internal-tls-nginx-configurator.md`](internal-tls-nginx-configurator.md)).
-A fresh context picks up here: confirm an internal `enable-ssl` service
-now serves a step-ca-issued leaf instead of a snakeoil cert —
+**Next action — exercise §E (the PVE consumer) against the live
+cluster.** `proxmox_host` now includes `internal_tls`; because §D has
+not run against the live CA yet, this is also `internal_tls`'s first
+live exercise. Apply to one node first, then the rest, and verify:
 
-- `curl https://<internal-site>/` from a managed Linux host → exit 0,
-  no `-k`; chain shows the homelab intermediate.
-- `step certificate inspect` / browser: ~47-day leaf, SANs cover the
-  FQDN (and the bare name), no warning.
-- Confirm the monthly `certificate-renewer` CronJob covers it (and note
-  the 47-day-vs-monthly margin — see the write-up).
+- `curl https://pve:8006/` from a managed Linux host → exit 0, no
+  `-k`; chain shows the homelab intermediate.
+- Browser on `wrkdevwin` → no warning; ~47-day leaf, SANs = `pve` +
+  `pve.home`.
+- A second run reports `changed=0` — the threshold gate holds.
 
 **Done:**
 
@@ -26,27 +24,24 @@ now serves a step-ca-issued leaf instead of a snakeoil cert —
 - **§C baseline distributes the root** — applied to the non-cluster
   managed hosts (pve×3, srviac, wrkdev); verified live. k8s nodes pick
   it up on rebuild; Ceph nodes are unmanaged until Phase 5.
-- **§D `internal_tls` role** — committed (Ansible `7cd02f7`). **Not yet
-  exercised against the live CA.**
+- **§D `internal_tls` role** — committed (Ansible `7cd02f7`). First
+  live exercise rides in on §E.
+- **§G in-cluster ACME** — nginx-configurator/certbot issue over the
+  step-ca ACME directory; `https://kubernetes/` serves a real homelab
+  leaf, weekly renewal wired. The iac-agent image carries the `step`
+  CLI (`318ea8b`, `4ca6a49`).
+- **§I Windows trust** — homelab root installed on `wrkdevwin`; Chrome
+  no longer warns on the homelab cert.
 - **Runbook** — `docs/runbooks/step-ca-bootstrap.md`.
-
-**In flight (operator):**
-
-- In-cluster ACME — the nginx-configurator/certbot change above.
-- The iac-agent container image gaining the `step` CLI — needed before
-  iac-scheduled-drift runs `internal_tls` in production (not needed to
-  exercise the role from `wrkdev`, where the controller already has
-  `step`).
 
 **Pending:**
 
-- Exercise `internal_tls` standalone on a scratch VM.
-- §E PVE consumer.
+- Exercise §E against the live PVE cluster (code landed; see §E).
 - §F k8s API server consumer — **deferred to the HA VIP slice**
   ([`internal-ha-vips.md`](internal-ha-vips.md)); its leaf SANs name
   the `kubernetes-api.home` VIP, which does not exist yet.
-- §J cert-expiry monitoring.
-- §I Windows trust install on `wrkdevwin`.
+- §J cert-expiry monitoring — VM textfile collector + the in-cluster
+  equivalent.
 
 ## Goal
 
@@ -134,15 +129,34 @@ documented in the role README.
 Outstanding: exercise it standalone against a scratch VM before wiring
 any consumer (the live CA now exists, so this is unblocked).
 
-### E. PVE consumer (fold into `proxmox_host` role) — PENDING
+### E. PVE consumer (fold into `proxmox_host` role) — CODE DONE, not yet exercised
 
-- `include_role: internal_tls` with:
-  - SANs = node short hostname + FQDN.
-  - Cert = `/etc/pve/local/pveproxy-ssl.pem`,
-    key = `/etc/pve/local/pveproxy-ssl.key`, `root:root 0640`.
-  - Reload handler = `systemctl reload pveproxy`.
-- The PVE *cluster* CA at `/etc/pve/pve-root-ca.pem` is untouched —
-  only the user-facing pveproxy cert moves.
+`proxmox_host` includes `internal_tls`, per-node — *not* cluster-writer
+gated: `/etc/pve/local` resolves to the node-private
+`/etc/pve/nodes/<node>/` directory, so each PVE node issues and serves
+its own leaf.
+
+- SANs = node short hostname + `.home` FQDN.
+- Cert = `/etc/pve/local/pveproxy-ssl.pem`,
+  key = `/etc/pve/local/pveproxy-ssl.key`, **`root:www-data 0640`**.
+  *Not* `root:root` (as an earlier draft said): `/etc/pve` is pmxcfs
+  (FUSE) — it presents every file as `root:www-data 0640` and rejects
+  `chown`/`chmod`, so `root:root` makes the role's `file` tasks fail
+  with `EPERM`. `root:www-data 0640` matches what pmxcfs shows, so
+  those tasks are clean no-ops. `pveproxy` runs as `www-data`.
+  (Verified live on `pve`.)
+- Reload handler = `systemctl reload pveproxy` (graceful — no dropped
+  connections).
+- The PVE *cluster* CA at `/etc/pve/pve-root-ca.pem` and the
+  `pve-ssl.*` node certs are untouched — only the user-facing pveproxy
+  cert moves.
+- The leaf key is written into pmxcfs, which replicates it to the
+  other PVE nodes — inherent to how PVE stores `pveproxy-ssl.*`, and
+  within the cluster's single root-trust domain.
+
+Outstanding: exercise against the live cluster (`site.yml --limit pve`
+first, then the rest). This is also `internal_tls`'s first live
+exercise (§D).
 
 ### F. Kubernetes API server consumer — DEFERRED to the HA VIP slice
 
@@ -239,11 +253,13 @@ Done:
 3. **HelmCharts** — `charts/step-ca` + dev/prd release config.
 4. **Ansible** — `internal_tls` role + vaulted JWK password.
 
+5. **In-cluster ACME** — nginx-configurator/certbot/certificate-renewer
+   per `internal-tls-nginx-configurator.md`.
+6. **Ansible** — `proxmox_host` includes `internal_tls` for the
+   pveproxy cert (§E).
+
 Remaining:
 
-5. **In-cluster ACME** — nginx-configurator/certbot/certificate-renewer
-   per `internal-tls-nginx-configurator.md` (operator, in flight).
-6. **Ansible** — exercise `internal_tls` on a scratch VM, then the PVE
-   consumer (§E) wired into `proxmox_host`.
-7. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
-8. **Monitoring** — cert-expiry metric + alert (§J).
+7. **Ansible** — exercise §E against the live PVE cluster.
+8. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
+9. **Monitoring** — cert-expiry metric + alert (§J).
