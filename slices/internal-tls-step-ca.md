@@ -8,10 +8,6 @@ HelmCharts Prometheus alert rule and the in-cluster
 (nginx-configurator) metric — is **deferred** (observability is not a
 current priority); design parked in
 [`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md).
-One loose thread, outside this repo: the `kubernetes-api-dev.home` DNS
-alias is not yet served (a HelmCharts `configs/prd/dnsmasq.yaml` entry,
-per [`internal-ha-vips.md`](internal-ha-vips.md) §E) — the dev leaf is
-served but unreachable by that name until it lands.
 
 **Done:**
 
@@ -230,14 +226,12 @@ nothing internal trusts the homelab CA.)
   file self-heals on the next converge.
 
 Scope is prd (3 nodes) + dev (`wrkdevk8s`); applied and verified live
-on both.
-
-**Open thread (not this repo):** `kubernetes-api-dev.home` does not
-resolve — the dev leaf is served via SNI but unreachable by that name
-until the alias is added to HelmCharts `configs/prd/dnsmasq.yaml`
-(`kubernetes-api-dev.home → 10.1.3.3`), the entry
-[`internal-ha-vips.md`](internal-ha-vips.md) §E commit 3 calls for.
-The prd VIP name `kubernetes-api.home` already resolves.
+on both. Both `kubernetes-api.home` and `kubernetes-api-dev.home`
+resolve (the dnsmasq aliases from
+[`internal-ha-vips.md`](internal-ha-vips.md) §E), and the dev API is
+reachable by name from the operator's workstation. The prd k8s nodes
+themselves do not resolve those names — they run on public DNS by
+design — which is immaterial: nothing reaches the API from a prd node.
 
 ### G. In-cluster consumers (nginx-configurator) — design split out
 
