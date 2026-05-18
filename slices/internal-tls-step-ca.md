@@ -2,16 +2,16 @@
 
 ## Status (as of 2026-05-18)
 
-**Next action — operator applies §F** via `site-k8s.yml`, the single
-in-place convergence playbook for the k8s clusters (`serial: 1`). One
-run lands the homelab root cert (baseline — the k8s nodes were rebuilt
-before §C and never got it), pins `ca.home` in the nodes' `/etc/hosts`,
-and issues the kube-apiserver leaf, in that order. Once applied and
-verified, the slice is complete bar the deferred §J monitoring
-remainder. The rest of §J — the HelmCharts Prometheus alert
-rule and the in-cluster (nginx-configurator) metric — is **deferred**:
-observability is not a current priority. Design parked in
+**Next action — none.** §A–§J are all done or deliberately deferred;
+the slice is ready to retire to `completed/`. §J's remainder — the
+HelmCharts Prometheus alert rule and the in-cluster
+(nginx-configurator) metric — is **deferred** (observability is not a
+current priority); design parked in
 [`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md).
+One loose thread, outside this repo: the `kubernetes-api-dev.home` DNS
+alias is not yet served (a HelmCharts `configs/prd/dnsmasq.yaml` entry,
+per [`internal-ha-vips.md`](internal-ha-vips.md) §E) — the dev leaf is
+served but unreachable by that name until it lands.
 
 **Done:**
 
@@ -33,6 +33,13 @@ observability is not a current priority. Design parked in
 - **§E PVE consumer** — `proxmox_host` includes `internal_tls`; all
   three PVE nodes (pve, pve1, pve2) serve homelab CA leaves on `:8006`,
   pveproxy reloaded.
+- **§F k8s API server consumer** — the `microk8s` role serves a homelab
+  leaf on the kube-apiserver via `--tls-sni-cert-key`; converged onto
+  prd + dev with `site-k8s.yml`. Verified live: the 47-day homelab
+  leaf answers SNI `kubernetes-api.home` / `kubernetes-api-dev.home` on
+  every node, microk8s's own cert still answers other SNIs (internal
+  PKI untouched), and a homelab-root-trusting client validates it
+  without `-k`.
 - **§G in-cluster ACME** — nginx-configurator/certbot issue over the
   step-ca ACME directory; `https://kubernetes/` serves a real homelab
   leaf, weekly renewal wired. The iac-agent image carries the `step`
@@ -47,9 +54,6 @@ observability is not a current priority. Design parked in
 
 **Pending:**
 
-- §F k8s API server consumer — **implemented in the `microk8s` role**;
-  pending the operator's first apply via `site-k8s.yml` and the
-  Verification checks. Moves to Done once verified live.
 - §J monitoring, HelmCharts/DockerImages side — the Prometheus alert
   rule on `internal_tls_cert_not_after_seconds` and the in-cluster
   cert-expiry metric. **Deferred** — observability is not a current
@@ -179,7 +183,7 @@ its own leaf.
 All three PVE nodes (pve, pve1, pve2) serve homelab CA leaves on
 `:8006` with pveproxy reloaded; verified live.
 
-### F. Kubernetes API server consumer — IMPLEMENTED (pending live apply)
+### F. Kubernetes API server consumer — DONE
 
 The HA VIP (`kubernetes-api.home`, 10.1.0.37) is up — the `microk8s`
 role manages it via `tasks/keepalived.yml` — so §F landed here rather
@@ -225,8 +229,15 @@ nothing internal trusts the homelab CA.)
   so a `microk8s refresh-certs` or snap refresh that rewrote the args
   file self-heals on the next converge.
 
-Scope is prd (3 nodes) + dev (`wrkdevk8s`). Operator runs the apply;
-the slice's Verification list covers the checks.
+Scope is prd (3 nodes) + dev (`wrkdevk8s`); applied and verified live
+on both.
+
+**Open thread (not this repo):** `kubernetes-api-dev.home` does not
+resolve — the dev leaf is served via SNI but unreachable by that name
+until the alias is added to HelmCharts `configs/prd/dnsmasq.yaml`
+(`kubernetes-api-dev.home → 10.1.3.3`), the entry
+[`internal-ha-vips.md`](internal-ha-vips.md) §E commit 3 calls for.
+The prd VIP name `kubernetes-api.home` already resolves.
 
 ### G. In-cluster consumers (nginx-configurator) — design split out
 
