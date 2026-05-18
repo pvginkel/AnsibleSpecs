@@ -1,14 +1,15 @@
 # 07 — Homelab internal TLS via step-ca
 
-## Status (as of 2026-05-17)
+## Status (as of 2026-05-18)
 
-**Next action — none.** The Ansible-side work is done: §J's VM
-cert-expiry metric ships in the `internal_tls` role. The rest of §J —
-the HelmCharts Prometheus alert rule and the in-cluster
-(nginx-configurator) metric — is **deferred**: observability is not a
-current priority. Design parked in
+**Next action — operator applies §F.** The k8s API server consumer is
+implemented in the `microk8s` role; `apply-k8s-apiserver-cert.yml`
+rolls it onto the running prd + dev clusters (`serial: 1`). Once that
+is applied and verified, the slice is complete bar the deferred §J
+monitoring remainder. The rest of §J — the HelmCharts Prometheus alert
+rule and the in-cluster (nginx-configurator) metric — is **deferred**:
+observability is not a current priority. Design parked in
 [`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md).
-§F (k8s API server) stays parked behind the HA VIP slice.
 
 **Done:**
 
@@ -42,9 +43,9 @@ current priority. Design parked in
 
 **Pending:**
 
-- §F k8s API server consumer — **deferred to the HA VIP slice**
-  ([`internal-ha-vips.md`](internal-ha-vips.md)); its leaf SANs name
-  the `kubernetes-api.home` VIP, which does not exist yet.
+- §F k8s API server consumer — **implemented in the `microk8s` role**;
+  pending the operator's first apply via `apply-k8s-apiserver-cert.yml`
+  and the Verification checks. Moves to Done once verified live.
 - §J monitoring, HelmCharts/DockerImages side — the Prometheus alert
   rule on `internal_tls_cert_not_after_seconds` and the in-cluster
   cert-expiry metric. **Deferred** — observability is not a current
@@ -167,15 +168,49 @@ its own leaf.
 All three PVE nodes (pve, pve1, pve2) serve homelab CA leaves on
 `:8006` with pveproxy reloaded; verified live.
 
-### F. Kubernetes API server consumer — DEFERRED to the HA VIP slice
+### F. Kubernetes API server consumer — IMPLEMENTED (pending live apply)
 
-The k8s API leaf is reached via the `kubernetes-api.home` HA VIP, which
-does not exist until [`internal-ha-vips.md`](internal-ha-vips.md)
-lands. SAN set (the VIP names, the in-cluster `kubernetes.*` names,
-`127.0.0.1`, the cluster service IPs) is recorded in the bootstrap
-runbook's JWK policy and in `internal-ha-vips.md` §E. Folds into the
-`microk8s` role under `serial: 1` with cordon/drain; a sentinel file
-guards against `microk8s refresh-certs` clobbering the external cert.
+The HA VIP (`kubernetes-api.home`, 10.1.0.37) is up — the `microk8s`
+role manages it via `tasks/keepalived.yml` — so §F landed here rather
+than waiting on the HA VIP slice.
+
+The leaf is served **additively** via the kube-apiserver's
+`--tls-sni-cert-key` SNI flag — it does *not* replace microk8s's own
+`server.crt`. A client whose SNI matches the leaf's SANs gets the
+homelab leaf; kubelet, controller-manager, and in-cluster `kubernetes`
+Service traffic still get microk8s's own cert validated against the
+cluster CA. microk8s's internal PKI and every kubeconfig are untouched.
+(Replacing `server.crt` outright — which the bootstrap runbook's full
+k8s SAN set originally implied — would break the control plane:
+nothing internal trusts the homelab CA.)
+
+- **Leaf SANs**: `kubernetes-api` + `kubernetes-api.home` (prd),
+  `kubernetes-api-dev` + `kubernetes-api-dev.home` (dev). DNS-only;
+  both pairs are already in the JWK policy's `dns` allow-list, so **no
+  `ca.json` change is needed**. The runbook's other k8s entries
+  (`kubernetes.*`, `127.0.0.1`, the service ClusterIPs) belonged to
+  the replacement design and are unused by the SNI leaf.
+- **Role**: `microk8s/tasks/internal_tls.yml` includes `internal_tls`
+  (leaf → `/var/snap/microk8s/current/certs/homelab-api.{crt,key}`,
+  `root:microk8s 0660`) and upserts `--tls-sni-cert-key` into the
+  `kube-apiserver` args. Per-node, gated on the per-cluster
+  `microk8s_apiserver_homelab_sans`. Rebuilt nodes pick it up via
+  `rebuild-k8s.yml`.
+- **Reload**: a `Restart microk8s kubelite` handler restarts only
+  `snap.microk8s.daemon-kubelite` — picks up the arg without bouncing
+  containerd, so workload pods survive; the node's control plane blips
+  for a few seconds.
+- **Rollout onto the running clusters**: `apply-k8s-apiserver-cert.yml`,
+  `serial: 1` across prd + dev. No drain — the kubelite-only restart
+  leaves workloads in place, and on prd the VIP + peer nodes cover the
+  blip.
+- **No sentinel file** (an earlier sketch called for one): the role
+  re-asserts both the leaf and the `--tls-sni-cert-key` arg every run,
+  so a `microk8s refresh-certs` or snap refresh that rewrote the args
+  file self-heals on the next converge.
+
+Scope is prd (3 nodes) + dev (`wrkdevk8s`). Operator runs the apply;
+the slice's Verification list covers the checks.
 
 ### G. In-cluster consumers (nginx-configurator) — design split out
 
@@ -257,8 +292,12 @@ After each consumer rolls in:
 - **The PVE cluster CA stays self-signed.** It signs cluster-internal
   traffic (corosync, pmxcfs); replacing it is deeper than the
   user-facing pveproxy cert and is out of scope.
-- **`microk8s refresh-certs` clobbers external certs** — relevant to
-  §F; the role drops a sentinel file so accidental invocation is noisy.
+- **`microk8s refresh-certs` regenerates microk8s's own certs only.**
+  The §F homelab leaf lives under a distinct filename
+  (`homelab-api.{crt,key}`) and is wired in via `--tls-sni-cert-key`,
+  so `refresh-certs` does not touch it. If a snap refresh ever rewrote
+  the `kube-apiserver` args file, the `microk8s` role re-asserts the
+  flag (and re-issues the leaf if missing) on the next converge.
 - **Intermediate compromise = forge-anything until rotation.** Bounded
   by the 47-day leaf lifetime and the offline root; rotation procedure
   is in the bootstrap runbook.
@@ -283,10 +322,12 @@ Done:
    token-mint fix (`83e8e53`).
 7. **Ansible** — `internal_tls` publishes the
    `internal_tls_cert_not_after_seconds` textfile metric (§J, VM side).
+8. **Ansible** — k8s API server consumer (§F): the `microk8s` role
+   serves a homelab leaf via the apiserver `--tls-sni-cert-key` flag;
+   `apply-k8s-apiserver-cert.yml` rolls it onto prd + dev.
 
 Remaining:
 
-8. **Ansible** — k8s API server consumer (§F), after the HA VIP slice.
 9. **Monitoring** — Prometheus alert rule + in-cluster cert-expiry
    metric (§J). **Deferred** — see
    `deferred/internal-tls-monitoring.md`.
