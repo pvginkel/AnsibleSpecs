@@ -7,12 +7,14 @@ done and live** — the `internal_tls` role publishes
 `internal_tls_cert_not_after_seconds` and PVE nodes serve it (verified
 on `pve`). That part is unaffected by this deferral.
 
-Parked is the rest of §J: the Prometheus **alert rule** and the
-**in-cluster metric**. Until they land, no expiry alert fires — a silent
-renewer failure would surface only when a leaf actually expires.
-Acceptable for now: 47-day leaves, a working renewer, and a small fleet.
-Reactivate before that risk grows — e.g. when more consumers join, or
-ahead of the OpenBao listener certs in the next phase.
+Parked is the rest of §J: the Prometheus **alert rule**, the
+**in-cluster metric**, and the **k8s API server cert's metric path**
+(the k8s nodes have no textfile collector — see below). Until they
+land, no expiry alert fires — a silent renewer failure would surface
+only when a leaf actually expires. Acceptable for now: 47-day leaves, a
+working renewer, and a small fleet. Reactivate before that risk grows —
+e.g. when more consumers join, or ahead of the OpenBao listener certs
+in the next phase.
 
 ## Scope
 
@@ -49,6 +51,28 @@ one file per cert. It is scraped by the existing `homelab-nodes` job in
 `configs/prd/prometheus-values.yaml` (node-exporter `:9100` on
 pve/pve1/pve2/srviac/wrkdev). No HelmCharts change is needed for the VM
 metric to appear — only the alert rule below.
+
+### k8s API server cert — needs a separate path
+
+§F's kube-apiserver leaf is issued on the k8s nodes by `internal_tls`,
+but those nodes **have no node-exporter textfile collector**: they run
+`node_exporter` as an in-cluster DaemonSet (hostNetwork `:9100`) and
+carry no Debian `prometheus-node-exporter` package, so there is no
+`/var/lib/prometheus/node-exporter/` directory. `internal_tls`'s
+`metric.yml` detects the missing directory and **skips** the metric on
+these nodes — so the kube-apiserver leaf's expiry is currently
+published nowhere.
+
+Closing this is part of the deferred §J work. Preferred approach: give
+the in-cluster node-exporter DaemonSet a textfile-collector directory
+backed by a `hostPath` (a chart-values change on the prometheus
+`prometheus-node-exporter` subchart — extra arg
+`--collector.textfile.directory` + a hostPath volume), then point
+`internal_tls_textfile_dir` at that hostPath for the k8s nodes
+(`playbooks/group_vars/k8s.yml` or per-cluster). `internal_tls` then
+writes the same `internal_tls_cert_not_after_seconds` `.prom` there and
+the DaemonSet's node-exporter picks it up — same metric, same alert
+rule (Piece 1), scraped through the DaemonSet's existing path.
 
 ## Piece 1 — Prometheus alert rule (HelmCharts)
 
