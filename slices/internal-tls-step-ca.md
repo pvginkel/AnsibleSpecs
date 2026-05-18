@@ -2,11 +2,13 @@
 
 ## Status (as of 2026-05-18)
 
-**Next action — operator applies §F.** The k8s API server consumer is
-implemented in the `microk8s` role; `apply-k8s-apiserver-cert.yml`
-rolls it onto the running prd + dev clusters (`serial: 1`). Once that
-is applied and verified, the slice is complete bar the deferred §J
-monitoring remainder. The rest of §J — the HelmCharts Prometheus alert
+**Next action — operator applies §F**, in two steps. First
+`apply-k8s-baseline.yml --tags ca_trust` — the k8s nodes were rebuilt
+before §C and never got the homelab root cert, which the `internal_tls`
+consumer requires. Then `apply-k8s-apiserver-cert.yml` rolls the leaf
+onto the running prd + dev clusters (`serial: 1`). Once applied and
+verified, the slice is complete bar the deferred §J monitoring
+remainder. The rest of §J — the HelmCharts Prometheus alert
 rule and the in-cluster (nginx-configurator) metric — is **deferred**:
 observability is not a current priority. Design parked in
 [`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md).
@@ -20,8 +22,10 @@ observability is not a current priority. Design parked in
 - **§B step-ca chart** — deployed to dev + prd; `ca.home → 10.2.1.15`;
   verified end-to-end (provisioners, chain, a real 47-day JWK leaf).
 - **§C baseline distributes the root** — applied to the non-cluster
-  managed hosts (pve×3, srviac, wrkdev); verified live. k8s nodes pick
-  it up on rebuild; Ceph nodes are unmanaged until Phase 5.
+  managed hosts (pve×3, srviac, wrkdev); verified live. The k8s nodes
+  predate this task (rebuilt before §C) — distributed to them in place
+  via `apply-k8s-baseline.yml --tags ca_trust`; Ceph nodes unmanaged
+  until Phase 5.
 - **§D `internal_tls` role** — committed (Ansible `7cd02f7`), exercised
   live via §E. The first run surfaced one bug — `become: true` from the
   consuming play reached the `delegate_to: localhost` token mint and
@@ -122,8 +126,15 @@ verified.
 
 `baseline` copies `roles/baseline/files/homelab-root.crt` to
 `/usr/local/share/ca-certificates/homelab-root.crt` and runs
-`update-ca-certificates`. Applied to the non-cluster managed hosts;
-k8s nodes pick it up via `rebuild-k8s.yml` on rebuild.
+`update-ca-certificates`. Applied to the non-cluster managed hosts.
+
+The k8s nodes were rebuilt *before* this task landed, so the
+"pick it up on rebuild" assumption never held — all four
+(srvk8s1/2/3, wrkdevk8s) were missing the root cert, which §F's
+`internal_tls` consumer caught with a hard assert. They get it in
+place via `apply-k8s-baseline.yml --tags ca_trust` (the cert copy
+task is tagged `ca_trust` for exactly this). Ceph nodes are unmanaged
+until Phase 5.
 
 ### D. `internal_tls` Ansible role — DONE
 
