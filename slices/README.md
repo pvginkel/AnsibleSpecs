@@ -10,7 +10,6 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 |---|---|---|---|
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
 | [backup-collector](backup-collector.md) | pending | openbao-static-seal | phase: openbao + secrets |
-| [internal-tls-step-ca](internal-tls-step-ca.md) | pending | openbao-static-seal | phase: openbao + secrets |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
@@ -28,6 +27,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [pre-drain-handoff](completed/pre-drain-handoff.md) | plan 03 | — | landed partially during phase 4c |
 | [embed-homelab-provider](completed/embed-homelab-provider.md) | plan 04 | tf-provider-resource-extensions (verify direction) | Jenkins agent image |
 | [data-disks](completed/data-disks.md) | merged into managed_filesystems | — | unblocks re-rebuild of srvk8s2 + remaining rebuilds |
+| [internal-tls-step-ca](completed/internal-tls-step-ca.md) | spec 07 | — | phase: internal TLS; openbao reuses the `internal_tls` role |
 
 ## Deferred / Cancelled
 

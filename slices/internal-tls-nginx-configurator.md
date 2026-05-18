@@ -2,10 +2,8 @@
 
 What's needed to replace the self-signed ("snakeoil") certificates that
 nginx serves for internal services with real leaves issued by the
-homelab `step-ca`, over **ACME**. This is the in-cluster half of the
-`internal-tls-step-ca` slice; that slice's §G/§H describe a cert-manager
-`ClusterIssuer` + Ingress annotations — a mechanism this homelab does
-not use — and should be rewritten to point here.
+homelab `step-ca`, over **ACME**. This is the in-cluster half (§G) of
+the [`internal-tls-step-ca`](completed/internal-tls-step-ca.md) slice.
 
 Code: `/work/DockerImages/{nginx-configurator,certbot,certificate-renewer}/`
 and `/work/HelmCharts/charts/nginx/`.

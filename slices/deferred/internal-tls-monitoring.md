@@ -24,7 +24,7 @@ The §J monitoring deliverables that live **outside the Ansible repo**:
 2. the **in-cluster cert-expiry metric** — DockerImages
    `nginx-configurator` + HelmCharts `nginx`.
 
-Parent slice: [`internal-tls-step-ca.md`](../internal-tls-step-ca.md) §J.
+Parent slice: [`internal-tls-step-ca.md`](../completed/internal-tls-step-ca.md) §J.
 In-cluster cert mechanics:
 [`internal-tls-nginx-configurator.md`](../internal-tls-nginx-configurator.md).
 
