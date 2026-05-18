@@ -2,11 +2,11 @@
 
 ## Status (as of 2026-05-18)
 
-**Next action — operator applies §F**, in two steps. First
-`apply-k8s-baseline.yml --tags ca_trust` — the k8s nodes were rebuilt
-before §C and never got the homelab root cert, which the `internal_tls`
-consumer requires. Then `apply-k8s-apiserver-cert.yml` rolls the leaf
-onto the running prd + dev clusters (`serial: 1`). Once applied and
+**Next action — operator applies §F** via `site-k8s.yml`, the single
+in-place convergence playbook for the k8s clusters (`serial: 1`). One
+run lands the homelab root cert (baseline — the k8s nodes were rebuilt
+before §C and never got it), pins `ca.home` in the nodes' `/etc/hosts`,
+and issues the kube-apiserver leaf, in that order. Once applied and
 verified, the slice is complete bar the deferred §J monitoring
 remainder. The rest of §J — the HelmCharts Prometheus alert
 rule and the in-cluster (nginx-configurator) metric — is **deferred**:
@@ -24,8 +24,8 @@ observability is not a current priority. Design parked in
 - **§C baseline distributes the root** — applied to the non-cluster
   managed hosts (pve×3, srviac, wrkdev); verified live. The k8s nodes
   predate this task (rebuilt before §C) — distributed to them in place
-  via `apply-k8s-baseline.yml --tags ca_trust`; Ceph nodes unmanaged
-  until Phase 5.
+  via `site-k8s.yml --tags ca_trust`; Ceph nodes unmanaged until
+  Phase 5.
 - **§D `internal_tls` role** — committed (Ansible `7cd02f7`), exercised
   live via §E. The first run surfaced one bug — `become: true` from the
   consuming play reached the `delegate_to: localhost` token mint and
@@ -48,8 +48,8 @@ observability is not a current priority. Design parked in
 **Pending:**
 
 - §F k8s API server consumer — **implemented in the `microk8s` role**;
-  pending the operator's first apply via `apply-k8s-apiserver-cert.yml`
-  and the Verification checks. Moves to Done once verified live.
+  pending the operator's first apply via `site-k8s.yml` and the
+  Verification checks. Moves to Done once verified live.
 - §J monitoring, HelmCharts/DockerImages side — the Prometheus alert
   rule on `internal_tls_cert_not_after_seconds` and the in-cluster
   cert-expiry metric. **Deferred** — observability is not a current
@@ -132,8 +132,8 @@ The k8s nodes were rebuilt *before* this task landed, so the
 "pick it up on rebuild" assumption never held — all four
 (srvk8s1/2/3, wrkdevk8s) were missing the root cert, which §F's
 `internal_tls` consumer caught with a hard assert. They get it in
-place via `apply-k8s-baseline.yml --tags ca_trust` (the cert copy
-task is tagged `ca_trust` for exactly this). Ceph nodes are unmanaged
+place via `site-k8s.yml --tags ca_trust` (the cert copy task is
+tagged `ca_trust` for exactly this). Ceph nodes are unmanaged
 until Phase 5.
 
 ### D. `internal_tls` Ansible role — DONE
@@ -207,14 +207,19 @@ nothing internal trusts the homelab CA.)
   `kube-apiserver` args. Per-node, gated on the per-cluster
   `microk8s_apiserver_homelab_sans`. Rebuilt nodes pick it up via
   `rebuild-k8s.yml`.
+- **`ca.home` resolution (prd)**: the prd k8s nodes resolve through
+  public DNS for cold-boot independence and can't see the homelab
+  `ca.home`. `10.2.1.15 ca.home` is pinned in their `/etc/hosts` via
+  `microk8s_etc_hosts_entries` — `etc-hosts` runs before `internal_tls`
+  in the role, so `step` can reach the CA. dev (`wrkdevk8s`) resolves
+  `ca.home` through homelab DNS already and needs no pin.
 - **Reload**: a `Restart microk8s kubelite` handler restarts only
   `snap.microk8s.daemon-kubelite` — picks up the arg without bouncing
   containerd, so workload pods survive; the node's control plane blips
   for a few seconds.
-- **Rollout onto the running clusters**: `apply-k8s-apiserver-cert.yml`,
-  `serial: 1` across prd + dev. No drain — the kubelite-only restart
-  leaves workloads in place, and on prd the VIP + peer nodes cover the
-  blip.
+- **Rollout onto the running clusters**: `site-k8s.yml`, `serial: 1`
+  across prd + dev. No drain — the kubelite-only restart leaves
+  workloads in place, and on prd the VIP + peer nodes cover the blip.
 - **No sentinel file** (an earlier sketch called for one): the role
   re-asserts both the leaf and the `--tls-sni-cert-key` arg every run,
   so a `microk8s refresh-certs` or snap refresh that rewrote the args
@@ -335,7 +340,7 @@ Done:
    `internal_tls_cert_not_after_seconds` textfile metric (§J, VM side).
 8. **Ansible** — k8s API server consumer (§F): the `microk8s` role
    serves a homelab leaf via the apiserver `--tls-sni-cert-key` flag;
-   `apply-k8s-apiserver-cert.yml` rolls it onto prd + dev.
+   `site-k8s.yml` converges it onto prd + dev.
 
 Remaining:
 
