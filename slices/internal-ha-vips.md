@@ -70,8 +70,9 @@ mapping is committed to `ansible/group_vars/all/vips.yml` once the
 role lands so callers can reference it symbolically.
 
 Dev cluster (`wrkdevk8s`) is single-node; **no VIP**. The
-`kubernetes-api-dev.home` alias resolves directly to wrkdevk8s's
-LAN IP via a dnsmasq static host entry.
+`kubernetes-api-dev.home` alias is a dnsmasq CNAME pointing at
+`wrkdevk8s.home`, so it tracks the node's address without
+duplicating it.
 
 ## Steps
 
@@ -340,8 +341,8 @@ In dependency order:
    IP, hostname, virtual-router-id, and which cluster each belongs
    to. Vault-encrypted shared VRRP password.
 3. **HelmCharts**: `configs/prd/dnsmasq.yaml` — static host entries
-   for `kubernetes-api.home`, `ceph.home`, and the
-   `kubernetes-api-dev.home` alias to wrkdevk8s.
+   for the `kubernetes-api.home` and `ceph.home` VIPs, plus a CNAME
+   for the `kubernetes-api-dev.home` alias → `wrkdevk8s.home`.
 4. **Ansible**: k8s VIP wired into the `microk8s` role. Per-node
    rollout under `serial: 1`.
 5. **Runbook**: `docs/runbooks/ceph-vip.md` — manual procedure for
