@@ -2,7 +2,7 @@
 
 ## Goal
 
-Rewrite the OpenBao decisions before Phase 6 starts. Three changes
+Rewrite the OpenBao decisions before Phase 2 starts. Three changes
 land together:
 
 1. Drop Azure Key Vault auto-unseal in favour of a file-based static
@@ -13,10 +13,10 @@ land together:
    other cluster on this fleet (k8s, Ceph) already does.
 3. Front the cluster with a leader-tracking VIP managed by Keepalived
    so failover is automatic, sub-5-second, and clients use a single
-   `https://openbao.home:8200` endpoint that follows the Raft leader.
+   `https://secrets.home:8200` endpoint that follows the Raft leader.
 
-This is a doc-only plan. Phase 6 is still unwritten; this rewrites the
-decisions that Phase 6's role + runbook + Terraform work will then
+This is a doc-only plan. Phase 2 is still unwritten; this rewrites the
+decisions that Phase 2's role + runbook + Terraform work will then
 implement.
 
 ## Decisions taken with the operator
@@ -27,7 +27,7 @@ implement.
   across three independent VMs, the same shape as the existing k8s
   and Ceph clusters.
 - **3 VMs, one per PVE node**: `srvvault1` on `pve`, `srvvault2` on
-  `pve1`, `srvvault3` on `pve2`. VMIDs `910`, `911`, `912` (persistent
+  `pve1`, `srvvault3` on `pve2`. VMIDs `913`, `914`, `915` (persistent
   fleet, per the 900-and-up convention). Memory budget ~1 GB per VM
   is well within each PVE host's headroom; the PVE memory pressure
   the operator has seen in practice is ZFS ARC, not VM allocations.
@@ -64,7 +64,7 @@ implement.
   cloud dependency. The HA work narrows the *availability* gap; it
   doesn't change the confidentiality gap.
 - **TLS**: per-node leaf cert with SANs covering own short hostname,
-  FQDN, and the VIP hostname (`openbao.home`). Issued by the homelab
+  FQDN, and the VIP hostname (`secrets.home`). Issued by the homelab
   `step-ca` via the JWK provisioner, driven by the `internal_tls`
   Ansible role introduced in the step-ca slice; 47-day validity, re-
   issued by the role on every iac-scheduled-drift cycle once remaining
@@ -102,7 +102,7 @@ Rewrite the section. New content:
 - **Recovery keys**: Shamir 3-of-5, stored in Roboform. Used only for
   admin ops (rekey, re-seal, new root token) — never during boot.
   *(unchanged)*
-- **Endpoint**: clients hit `https://openbao.home:8200`, a VIP
+- **Endpoint**: clients hit `https://secrets.home:8200`, a VIP
   managed by Keepalived on all three nodes. A `vrrp_script` polls
   `/v1/sys/leader` every two seconds; only the current Raft leader's
   check succeeds, raising its VRRP priority above the followers and
@@ -122,7 +122,7 @@ Rewrite the section. New content:
   material.
 - **Wife runbook**: points at Roboform emergency access + recovery-
   key procedure. Lives in `docs/runbooks/`. *(unchanged; written as
-  part of Phase 6.)*
+  part of Phase 2.)*
 - **Future direction**: peer-unseal between two sites (cheap USB HSM
   at a friend's house unsealing ours; ours unsealing theirs) remains
   available — it would restore a three-domain isolation model.
@@ -176,7 +176,7 @@ Rewrite the section. New content:
   compromise. Three-domain isolation existed under the Azure design;
   one domain was deliberately given up to remove the cloud
   dependency.
-- **Recovery drill** is a Phase 6 deliverable: exercise the
+- **Recovery drill** is a Phase 2 deliverable: exercise the
   single-node-loss path on the live cluster (rebuild one VM, watch
   Raft snapshot); exercise the whole-cluster path on a scratch VM
   (init from JSON dump). Document timings in the runbook.
@@ -217,12 +217,12 @@ Update the OpenBao paragraphs:
 
 ### `decisions.md` — "VMID convention"
 
-Update the Phase 6 reference:
+Update the Phase 2 reference:
 
-- "Phase 6's `srvvault` (OpenBao) and Phase 10's Jenkins agent VM are
+- "Phase 2's `srvvault` (OpenBao) and Phase 10's Jenkins agent VM are
   greenfield in the 900-and-up range from creation." →
-  "Phase 6's `srvvault1`/`srvvault2`/`srvvault3` (OpenBao cluster,
-  VMIDs 910–912) and Phase 10's Jenkins agent VM are greenfield in
+  "Phase 2's `srvvault1`/`srvvault2`/`srvvault3` (OpenBao cluster,
+  VMIDs 913–915) and Phase 10's Jenkins agent VM are greenfield in
   the 900-and-up range from creation."
 
 ### `ansible/inventories/prd/hosts.yml`
@@ -231,22 +231,22 @@ Replace the singular forward declaration with three:
 
 - Under `openbao:`, replace `srvvault:` with `srvvault1:`,
   `srvvault2:`, `srvvault3:`.
-- Update the comment from "OpenBao VM, created in Phase 6." to
-  "OpenBao 3-node Raft cluster, created in Phase 6."
-- Drop the `# `openbao` joins once srvvault has a vm_id (Phase 6).`
-  comment under `pve_vms:`. Membership stays deferred to Phase 6 (the
+- Update the comment from "OpenBao VM, created in Phase 2." to
+  "OpenBao 3-node Raft cluster, created in Phase 2."
+- Drop the `# `openbao` joins once srvvault has a vm_id (Phase 2).`
+  comment under `pve_vms:`. Membership stays deferred to Phase 2 (the
   host_vars don't exist yet, so adding the group now would surface
   empty-vm_id errors in the proxmox_host role); this plan only
   reshapes the names.
 
-### `phases/README.md` — Phase 6 summary
+### `phases/README.md` — Phase 2 summary
 
-Rewrite the Phase 6 paragraph:
+Rewrite the Phase 2 paragraph:
 
 > Stand up the 3-node OpenBao Raft cluster (`srvvault1` / `srvvault2`
 > / `srvvault3`, one per PVE host). Static seal with the key
 > distributed via ansible-vault. Keepalived on each node fronts the
-> cluster with a leader-tracking VIP at `openbao.home`. Canonical
+> cluster with a leader-tracking VIP at `secrets.home`. Canonical
 > backup is the weekly age-encrypted JSON dump, run on all three
 > nodes with leader-only execution; srvvaultN are excluded from the
 > cluster vzdump job. AppRole credentials for Ansible, Jenkins,
@@ -268,7 +268,7 @@ Doc-only plan; no apply runs. Verification is operator review:
   one domain by dropping Azure; we did not regain it by going to
   three nodes — three nodes is an availability win, not a
   confidentiality win).
-- Confirm the recovery paths are concrete enough that Phase 6 can
+- Confirm the recovery paths are concrete enough that Phase 2 can
   write the runbook directly from them.
 - `ansible-lint` and `yamllint` pass on the inventory edit (one
   forward-declaration change; no functional impact).
@@ -287,7 +287,7 @@ Doc-only plan; no apply runs. Verification is operator review:
   srvvaultN during bring-up before declaring victory.
 - **VIP must live on the vmbr0 subnet, outside the dnsmasq DHCP
   pool, with no MAC reservation** (it's a virtual IP, not a VM IP).
-  Phase 6 picks the address; document it in `static-hosts.yaml`
+  Phase 2 picks the address; document it in `static-hosts.yaml`
   alongside the other operator-curated entries.
 - **Network-partition VIP duplication**: if a partition isolates one
   srvvaultN from the other two, the minority node will hear no VRRP
@@ -297,7 +297,7 @@ Doc-only plan; no apply runs. Verification is operator review:
   even with a duplicate VIP — clients on the wrong side just get
   errors. Documented as a known property, not engineered around.
 - **The static seal key reaches the repo via ansible-vault at
-  bootstrap time.** The Phase 6 runbook needs an explicit step for
+  bootstrap time.** The Phase 2 runbook needs an explicit step for
   "generate seal key, encrypt with ansible-vault, commit, copy
   passphrase to Roboform, verify decryption" — easy to forget, and
   the only window where the cleartext key exists outside Roboform's
@@ -307,7 +307,7 @@ Doc-only plan; no apply runs. Verification is operator review:
   `wrkdev` stays in inventory as a baseline-managed personal dev
   box; it just no longer carries automation keys or admin tokens.
   Capture this consequence in Phase 10's doc when it lands; for now
-  it's only implicit in the new Phase 6 shape.
+  it's only implicit in the new Phase 2 shape.
 - **No OpenBao leader-change hook** is exposed by OSS OpenBao. The
   VIP-tracking mechanism polls `/v1/sys/leader` from Keepalived's
   `vrrp_script` every 2 s. If a future OpenBao release exposes a
@@ -322,7 +322,7 @@ Doc-only plan; no apply runs. Verification is operator review:
 
 ## Commits
 
-1. `decisions.md` rewrites + `phases/README.md` Phase 6 summary
+1. `decisions.md` rewrites + `phases/README.md` Phase 2 summary
    update + `ansible/inventories/prd/hosts.yml` forward-declaration
    change. Single commit; the inventory change is meaningless without
    the decisions, and the decisions reference the new names.

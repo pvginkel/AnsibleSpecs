@@ -27,7 +27,7 @@ Concrete output, by repo:
   - `ansible/roles/baseline/` — installs + enables `prometheus-node-exporter` universally. New `baseline_os_update_class` var (`cluster` default = purge unattended-upgrades; `standalone` = install + auto-reboot at `baseline_unattended_reboot_time`). `srviac` runs the standalone class.
   - `ansible/roles/managed_filesystems/tasks/main.yml` — `delegate_to` defaults to `inventory_hostname` so the role can no-op on hosts without a `pve_node` (PVE hosts themselves).
   - `ansible/ansible.cfg` — `ssh_args` adds `IdentityFile=~/.ssh/id_ed25519_ansible` + `IdentitiesOnly=yes` so the iac container's root user can SSH to managed hosts as `ansible@`.
-  - `ansible/inventories/prd/hosts.yml` — new `iac_agent` group with `srviac`; included under `managed` + `pve_vms`. `openbao` placeholder removed pending Phase 3's deployment-shape decision.
+  - `ansible/inventories/prd/hosts.yml` — new `iac_agent` group with `srviac`; included under `managed` + `pve_vms`. `openbao` placeholder removed pending Phase 2's deployment-shape decision.
   - `ansible/inventories/prd/host_vars/srviac.yml` — `vm_id: 920`, `pve_node: pve`, `workload_class: background`.
   - `ansible/inventories/prd/group_vars/iac_agent.yml` — `baseline_os_update_class: standalone`.
   - `docs/runbooks/iac-agent.md` — operator-facing runbook (cutover sequence, day-to-day, recovery, secret rotation).
@@ -53,11 +53,11 @@ Concrete output, by repo:
 
 - **Pending iac image rebuild signal**: a `poetry.lock` change in `pvginkel/Ansible` requires a corresponding iac image rebuild. The next `iac` call after a push (and before the rebuild lands in the registry) emits a loud `iac-impl: WARNING — /work/Ansible/poetry.lock differs from /app/poetry.lock` line on stderr. Most calls still succeed — but if you're running a play that touches the changed deps, wait for the rebuild and re-pull.
 
-- **`secrets.yaml` is operator-curated, root-owned, mode 0600.** Plaintext on disk and on the wire to backup-server is the conscious tradeoff documented in `decisions.md` "OpenBao backup / DR". Phase 3 (OpenBao) shrinks this file to just the Bao admin token + AppRole bootstrap.
+- **`secrets.yaml` is operator-curated, root-owned, mode 0600.** Plaintext on disk and on the wire to backup-server is the conscious tradeoff documented in `decisions.md` "OpenBao backup / DR". Phase 2 (OpenBao) shrinks this file to just the Bao admin token + AppRole bootstrap.
 
 ## What didn't land in this phase
 
-- **`lifecycle.prevent_destroy` on the VM resource.** HCL requires it to be a static literal; per-VM protection means either a sibling `managed-vm-protected` module or making it universal (which breaks the existing `terraform apply -replace=<vm>` k8s rebuild flow). Operator decision was to rely on the on-push job's plan-stage destroy check (`check-protected-vms.sh srviac`) and skip the lifecycle layer. Revisit when Phase 3 lands and the protected-VM count grows.
+- **`lifecycle.prevent_destroy` on the VM resource.** HCL requires it to be a static literal; per-VM protection means either a sibling `managed-vm-protected` module or making it universal (which breaks the existing `terraform apply -replace=<vm>` k8s rebuild flow). Operator decision was to rely on the on-push job's plan-stage destroy check (`check-protected-vms.sh srviac`) and skip the lifecycle layer. Revisit when Phase 2 lands and the protected-VM count grows.
 
 - **Whitelist refactor of `site.yml`.** Phase 1 added the first exclusion (`!k8s_prd:!k8s_dev:!ceph_prd`); the larger structural question — does `site.yml` still make sense as exclusions accumulate? — is carved into [`slices/site-yml-layout.md`](../../slices/site-yml-layout.md) as an open question for the analyst. No proposed direction.
 
