@@ -17,6 +17,8 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 | [cloud-init-first-boot-only](cloud-init-first-boot-only.md) | pending | — | (correctness; stops snippet edits cascading to VM rebuilds) |
 | [site-yml-layout](site-yml-layout.md) | pending | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
+| [network-devices-host-vars-sot](network-devices-host-vars-sot.md) | pending | — | (correctness; eliminates the vms.tf↔host_vars network-config dual-edit) |
+| [ssh-host-ca](ssh-host-ca.md) | pending | internal-tls-step-ca | phase: openbao + secrets (hard prerequisite — must land first) |
 
 ## Completed
 
