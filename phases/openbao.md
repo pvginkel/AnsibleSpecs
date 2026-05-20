@@ -53,22 +53,20 @@ This phase implements existing decisions; it does not re-open them.
   **completed**; the `secrets.home` VIP allocation in
   `group_vars/all/vips.yml` and the dnsmasq CNAME plumbing come from
   it. Phase 2 consumes the VIP; no new VIP work in this phase.
+- [`network-devices-host-vars-sot`](../slices/completed/network-devices-host-vars-sot.md) —
+  **completed**; `network_devices` for each VM lives in its host_var
+  and Terraform reads it back. `srvvault1/2/3` declare their NIC
+  config in host_vars only — no `vms.tf` `network_devices` literal,
+  no dual-edit.
 
-The `network-devices-host-vars-sot` slice is also pending. It moves
-the source of truth for `network_devices` from `vms.tf` into the
-per-VM `host_vars` (Terraform reads them back). Sequencing matters:
-land it before card #6 to declare `srvvault1/2/3` network config in
-host_vars only; land card #6 first and the three VMs need entries
-in *both* (the same dual-edit this slice is removing).
+Two corrections to the original slice / `decisions.md` reflected
+throughout this doc:
 
-Two corrections were applied to the slice + `decisions.md` while
-writing this doc, and this doc reflects the corrected values:
-
-- **VMIDs `913` / `914` / `915`** for `srvvault1/2/3`. The slice
-  originally said 910–912 — already occupied by `srvk8s1/2/3`.
-- **VIP hostname `secrets.home`** (`10.1.0.39`, VRID 53) — the value
-  already committed in `ansible/inventories/prd/group_vars/all/vips.yml`.
-  Earlier slice/`decisions.md` prose said `openbao.home`.
+- **VMIDs `913` / `914` / `915`** for `srvvault1/2/3` (slice
+  originally said 910–912 — already occupied by `srvk8s1/2/3`).
+- **VIP hostname `secrets.home`** (`10.1.0.39`, VRID 53; the
+  `internal-ha-vips` slice renamed it from the earlier
+  `openbao.home`).
 
 Where the `openbao-static-seal` slice still reads "weekly JSON dump
 via rclone", `decisions.md` "OpenBao backup / DR" supersedes it: the
@@ -94,29 +92,37 @@ Card #40 slots **between #10 and #11**: the resolver needs the
 cluster up and reachable on the VIP, and it provisions the first
 AppRole — which #11 then extends for Jenkins and ESO.
 
-## Open decisions before card #6
+## Decisions taken before card #6 (2026-05-20)
 
-Five operator calls outstanding before the Terraform changes for the
-three `srvvault` VMs can land. Each is referenced from the section
-that needs it; consolidated here as the next-conversation entry
-point.
+The five operator calls the original draft of this doc deferred have
+all been made. Recorded here once; the relevant sections below
+embed the concrete values.
 
-1. **`prevent_destroy` mechanism** — sibling `managed-vm-protected`
-   module (hard TF guard, also blocks the recovery drill until
-   lifted) vs. the CI `check-protected-vms.sh` plan check alone
-   (what `srviac` uses today). Tradeoffs in §Terraform.
-2. **vzdump opt-out shape** — needed (confirmed); pick the variable
-   name + default on the `managed-vm` module so `srvvault1` on `pve`
-   is excluded from the cluster vzdump job.
-3. **Static IPs** — specific `10.1.0.x` (and IPv6) addresses for
-   `srvvault1/2/3` on vmbr0; matching entries in HelmCharts
-   `configs/prd/dnsmasq.yaml` static-hosts.
-4. **CPU + disk size** — pick concrete values; the slice gave
-   "~1 GB RAM" but left CPU and root disk as ranges.
-5. **Sequencing vs `network-devices-host-vars-sot`** — land that
-   slice first and declare `srvvault` network config in host_vars
-   only, or accept the dual-edit (`vms.tf` `network_devices` +
-   host_var `static_netplan`) that slice is designed to remove.
+1. **`prevent_destroy` mechanism** — CI `check-protected-vms.sh`
+   plan-stage check alone, same as `srviac` today. No HCL
+   `lifecycle { prevent_destroy = true }` and no sibling
+   `managed-vm-protected` module. Card #13's recovery-drill
+   `terraform apply -replace` works without a code edit, at the cost
+   of the destroy guard living only in CI.
+2. **vzdump opt-out shape** — add `exclude_from_backup` (bool,
+   default `false`) on the `managed-vm` module. `srvvault1` sets it
+   true to keep PVE's cluster vzdump job from co-locating the seal
+   key with the Raft data; `srvvault2/3` leave it default (their
+   PVE nodes have no backup datastore so the disk is already
+   `backup = false`).
+3. **Static IPs** — `srvvault{1,2,3}` get
+   `10.1.0.{40,41,42}/16` and `2a10:3781:16a9:1::{40,41,42}/64` on
+   vmbr0 (contiguous to the `.39` `secrets.home` VIP; v6 suffix
+   mirrors the v4 last octet, per the prd-k8s pattern). Matching
+   IPv4 static-host entries in HelmCharts `configs/prd/dnsmasq.yaml`
+   landed in commit `ce043a8` — address-only, no MAC reservation
+   (static netplan owns the address; no DHCP role to play).
+4. **CPU + disk size** — 2 vCPU, 1 GB RAM, 24 GB root disk per VM.
+   Resize is online for both RAM (VirtIO balloon) and disk if card
+   #8's init shows the budget is tight.
+5. **Sequencing vs `network-devices-host-vars-sot`** — resolved by
+   that slice landing 2026-05-19. `srvvault*` `network_devices`
+   lives in host_vars only.
 
 ## Terraform — `srvvault` VMs + VIP (card #6)
 
@@ -125,49 +131,52 @@ Three VMs added to `terraform/prd/vms.tf` via the existing
 
 - VMIDs **913 / 914 / 915**; `srvvault1`→`pve`, `srvvault2`→`pve1`,
   `srvvault3`→`pve2` (one per PVE host — a host loss takes one node).
-- `workload_class = "background"`; ~1 GB RAM, 1–2 vCPU; a single
-  root disk (~20–32 GB). No passthrough or data disk — Raft data and
-  the seal key live on the rootfs.
+- `workload_class = "background"`; **2 vCPU, 1 GB RAM, 24 GB** root
+  disk. No passthrough or data disk — Raft data and the seal key
+  live on the rootfs. Resize is online for both RAM and the disk if
+  card #8's init shows the budget is tight.
 - **`static_ip = true`.** `srvvaultN` are bootstrap-critical
   (`decisions.md` "Bootstrap-critical hosts do not resolve through
   the dnsmasq pod") — OpenBao must be reachable to serve the cluster
   that hosts dnsmasq, so it cannot take its own address/DNS from it.
-  Per-NIC addresses declared in `vms.tf`; hostname→IP triples added
-  to HelmCharts `configs/prd/dnsmasq.yaml` static-hosts.
+  Per-NIC addresses live in each host_var's `network_devices`
+  (`network-devices-host-vars-sot` slice); Terraform reads them back.
+  HelmCharts `configs/prd/dnsmasq.yaml` static-host entries for the
+  three IPv4 addresses landed in commit `ce043a8` — address-only, no
+  MAC reservation (static netplan owns the address).
 - **vmbr0 only** (`decisions.md` network table — OpenBao is in the
-  "everything else" class).
-- Deterministic MACs derived from the VMID, per the MAC scheme.
+  "everything else" class). Concrete addresses:
+
+  | Host | VMID | MAC (NIC 0) | IPv4 | IPv6 |
+  |---|---|---|---|---|
+  | `srvvault1` | 913 | `02:A7:F3:03:91:00` | `10.1.0.40/16` | `2a10:3781:16a9:1::40/64` |
+  | `srvvault2` | 914 | `02:A7:F3:03:92:00` | `10.1.0.41/16` | `2a10:3781:16a9:1::41/64` |
+  | `srvvault3` | 915 | `02:A7:F3:03:93:00` | `10.1.0.42/16` | `2a10:3781:16a9:1::42/64` |
+
+  MACs derived from the VMID per `decisions.md` "MAC scheme"
+  (`02:A7:F3:VV:VV:EE`); IPv6 host suffix mirrors the IPv4 last
+  octet, matching the prd k8s nodes.
 
 The VIP `secrets.home` (`10.1.0.39`) is already in `vips.yml`. It is
-**not** a VM and gets no `homelab_dns_reservation` — add it as a
-static-host entry in `configs/prd/dnsmasq.yaml`, outside the DHCP
-pool, no MAC reservation.
+**not** a VM and gets no `homelab_dns_reservation` — its static-host
+entry in `configs/prd/dnsmasq.yaml` already exists from
+`internal-ha-vips`, outside the DHCP pool, no MAC reservation.
 
-**Two `managed-vm` gaps to close in this card:**
+**One `managed-vm` gap to close in this card:** add a per-VM
+`exclude_from_backup` bool (default `false`) override forcing
+`backup = false` on the disk. The module computes a disk's `backup`
+flag from the node's `pve_node_backup_datastore`; only `pve` has a
+backup datastore today, so `srvvault1` would be captured by the
+cluster vzdump job — which `decisions.md` "OpenBao backup / DR"
+forbids (a PVE backup co-locates the seal key with the Raft data).
+`srvvault1` sets `exclude_from_backup: true`; `srvvault2/3` (on
+`pve1`/`pve2`) are already `backup = false` and leave the new var
+default.
 
-1. **Per-VM `prevent_destroy`.** `decisions.md` "Production execution
-   model" lists `lifecycle { prevent_destroy = true }` on each
-   `srvvaultN`. It is a Terraform-level guard: any plan that would
-   destroy the VM — a stray `terraform destroy`, a
-   replacement-forcing attribute change, the block being removed —
-   errors at plan time instead of running. HCL needs it as a static
-   literal, so the `managed-vm` module cannot take it as a per-VM
-   variable; the options are a sibling `managed-vm-protected` module
-   or relying on the CI plan-stage `check-protected-vms.sh` check
-   alone (as `srviac` does today). Note the cost: `prevent_destroy`
-   also blocks the deliberate `terraform apply -replace` used by the
-   single-node recovery drill (card #13) and any future rebuild —
-   those need the flag lifted by a code edit first. Decide in card
-   #6 whether the hard guard is worth that friction or the CI check
-   suffices.
-2. **vzdump opt-out.** The module computes a disk's `backup` flag
-   from the node's `pve_node_backup_datastore`. Only `pve` has a
-   backup datastore today, so `srvvault1` would be captured by the
-   cluster vzdump job — which `decisions.md` "OpenBao backup / DR"
-   forbids (a PVE backup co-locates the seal key with the Raft
-   data). Add a per-VM `exclude_from_backup` override forcing
-   `backup = false` on `srvvault1`'s disk. `srvvault2/3` (on
-   `pve1`/`pve2`) are already `backup = false`.
+Per-VM `prevent_destroy` is **not** added: the CI
+`check-protected-vms.sh` plan-stage check guards destroys, same as
+`srviac` today. Card #13's recovery-drill `terraform apply -replace`
+works without a code edit.
 
 **No repo writes.** Per `ssh-host-ca`, the apply emits each VM's
 ed25519 host pubkey into the `host_pubkeys` Terraform output rather
