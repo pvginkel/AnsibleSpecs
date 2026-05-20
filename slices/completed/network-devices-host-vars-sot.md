@@ -1,6 +1,9 @@
 # network_devices as host_vars — single source of truth
 
-**Status**: pending.
+**Status: complete (2026-05-19).** Landed as Commit A (`f146386`,
+baseline consumer) followed by Commit B (`0f579a2`, Terraform reader).
+`terraform plan` is a no-op against the committed state; `srvvault*`
+in Phase 2 declares its network config in host_vars only.
 
 ## Symptom
 
