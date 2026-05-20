@@ -18,7 +18,6 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [cloud-init-first-boot-only](cloud-init-first-boot-only.md) | pending | — | (correctness; stops snippet edits cascading to VM rebuilds) |
 | [site-yml-layout](site-yml-layout.md) | pending | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
 | [network-devices-host-vars-sot](network-devices-host-vars-sot.md) | pending | — | (correctness; eliminates the vms.tf↔host_vars network-config dual-edit) |
-| [ssh-host-ca](ssh-host-ca.md) | pending | internal-tls-step-ca | phase: openbao + secrets (hard prerequisite — must land first) |
 
 ## Completed
 
@@ -30,6 +29,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [embed-homelab-provider](completed/embed-homelab-provider.md) | plan 04 | tf-provider-resource-extensions (verify direction) | Jenkins agent image |
 | [data-disks](completed/data-disks.md) | merged into managed_filesystems | — | unblocks re-rebuild of srvk8s2 + remaining rebuilds |
 | [internal-tls-step-ca](completed/internal-tls-step-ca.md) | spec 07 | — | phase: internal TLS; openbao reuses the `internal_tls` role |
+| [ssh-host-ca](completed/ssh-host-ca.md) | — | internal-tls-step-ca | phase: openbao + secrets (the hard prerequisite — landed before OpenBao provisioning) |
 
 ## Deferred / Cancelled
 
