@@ -43,8 +43,13 @@ This phase implements existing decisions; it does not re-open them.
 - [`iac-secrets-resolver`](../slices/iac-secrets-resolver.md) — the
   `iac-impl` rewrite and `!bao` reference resolution (card #40).
 - [`backup-collector`](../slices/backup-collector.md) — the
-  `backup-server` collector the daily dump targets (its chart +
-  image are already built — Trello cards #1–#2).
+  `backup-server` collector the daily dump targets. The container
+  image is built (`/work/DockerImages/backup-server/`, with
+  `upload-api.md` documenting the `POST /upload` contract used in
+  §Backup pipeline); the Helm chart and an in-cluster deployment do
+  **not** yet exist. Card #12 has both as a cross-repo prerequisite
+  in HelmCharts before the daily timer can post anywhere — track
+  alongside Trello cards #1–#2.
 - [`ssh-host-ca`](../slices/completed/ssh-host-ca.md) — **completed**
   prerequisite — `ssh_host_cert` role + `host_pubkeys` TF output;
   documents the Play-0 bootstrap handoff Phase 2 reuses (see
@@ -94,9 +99,8 @@ AppRole — which #11 then extends for Jenkins and ESO.
 
 ## Decisions taken before card #6 (2026-05-20)
 
-The five operator calls the original draft of this doc deferred have
-all been made. Recorded here once; the relevant sections below
-embed the concrete values.
+Five calls that gated the start of card #6 are recorded once here;
+the sections below embed the concrete values.
 
 1. **`prevent_destroy` mechanism** — CI `check-protected-vms.sh`
    plan-stage check alone, same as `srviac` today. No HCL
@@ -191,8 +195,13 @@ Operator runs `cd terraform/prd && terraform apply`.
 ## Inventory & fleet parity (cards #6–#7)
 
 - `host_vars/srvvault{1,2,3}.yml` — `vm_id`, `pve_node`,
-  `workload_class: background`. Static-IP hosts also need their
-  `static_netplan` host_var (see `srvk8s*` / `wrkdevk8s` for shape).
+  `workload_class: background`, plus a `network_devices:` block per
+  the `network-devices-host-vars-sot` slice. Use `srvk8s1.yml` as
+  the shape reference: one vmbr0 entry carrying the IPv4 + IPv6
+  addresses from the §Terraform table and the MAC derived from the
+  VMID. NIC order is load-bearing — `network_devices[0]` is the
+  vmbr0 primary, which Terraform reads back for the cloud-init
+  template.
 - `inventories/prd/hosts.yml` — move the `openbao` group from
   forward-declaration into the `managed` and `pve_vms` parents (the
   comment blocking this is explicit that it waits on the host_vars).
