@@ -1,10 +1,16 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: planned. The `internal-tls-step-ca` slice — the gate on
-this phase, since OpenBao's listener certs reuse the `internal_tls`
-role — is closed (`slices/completed/`). Execution is tracked on the
-Trello board **Ansible**, list **OpenBao backlog**: cards #6–#15 plus
-#40 remain open; #1–#5 are done.
+**Status**: planned. Both hard prerequisites are now closed:
+
+- `internal-tls-step-ca` — `internal_tls` role for the listener certs.
+- `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
+  Terraform no longer writes the repo for host identity, so the
+  Phase 2 TF apply is pipeline-safe (the `iac-on-push` job that
+  cannot commit). Adds the `ssh_host_cert` role and the
+  `host_pubkeys` Terraform output for the first-boot handoff.
+
+Execution is tracked on the Trello board **Ansible**, list **OpenBao
+backlog**: cards #6–#15 plus #40 remain open; #1–#5 are done.
 
 ## Goal
 
@@ -39,6 +45,21 @@ This phase implements existing decisions; it does not re-open them.
 - [`backup-collector`](../slices/backup-collector.md) — the
   `backup-server` collector the daily dump targets (its chart +
   image are already built — Trello cards #1–#2).
+- [`ssh-host-ca`](../slices/completed/ssh-host-ca.md) — **completed**
+  prerequisite — `ssh_host_cert` role + `host_pubkeys` TF output;
+  documents the Play-0 bootstrap handoff Phase 2 reuses (see
+  §Terraform and §The `openbao` role).
+- [`internal-ha-vips`](../slices/completed/internal-ha-vips.md) —
+  **completed**; the `secrets.home` VIP allocation in
+  `group_vars/all/vips.yml` and the dnsmasq CNAME plumbing come from
+  it. Phase 2 consumes the VIP; no new VIP work in this phase.
+
+The `network-devices-host-vars-sot` slice is also pending. It moves
+the source of truth for `network_devices` from `vms.tf` into the
+per-VM `host_vars` (Terraform reads them back). Sequencing matters:
+land it before card #6 to declare `srvvault1/2/3` network config in
+host_vars only; land card #6 first and the three VMs need entries
+in *both* (the same dual-edit this slice is removing).
 
 Two corrections were applied to the slice + `decisions.md` while
 writing this doc, and this doc reflects the corrected values:
@@ -72,6 +93,30 @@ backup is **daily** and goes to `backup-server`. See §Backup pipeline.
 Card #40 slots **between #10 and #11**: the resolver needs the
 cluster up and reachable on the VIP, and it provisions the first
 AppRole — which #11 then extends for Jenkins and ESO.
+
+## Open decisions before card #6
+
+Five operator calls outstanding before the Terraform changes for the
+three `srvvault` VMs can land. Each is referenced from the section
+that needs it; consolidated here as the next-conversation entry
+point.
+
+1. **`prevent_destroy` mechanism** — sibling `managed-vm-protected`
+   module (hard TF guard, also blocks the recovery drill until
+   lifted) vs. the CI `check-protected-vms.sh` plan check alone
+   (what `srviac` uses today). Tradeoffs in §Terraform.
+2. **vzdump opt-out shape** — needed (confirmed); pick the variable
+   name + default on the `managed-vm` module so `srvvault1` on `pve`
+   is excluded from the cluster vzdump job.
+3. **Static IPs** — specific `10.1.0.x` (and IPv6) addresses for
+   `srvvault1/2/3` on vmbr0; matching entries in HelmCharts
+   `configs/prd/dnsmasq.yaml` static-hosts.
+4. **CPU + disk size** — pick concrete values; the slice gave
+   "~1 GB RAM" but left CPU and root disk as ranges.
+5. **Sequencing vs `network-devices-host-vars-sot`** — land that
+   slice first and declare `srvvault` network config in host_vars
+   only, or accept the dual-edit (`vms.tf` `network_devices` +
+   host_var `static_netplan`) that slice is designed to remove.
 
 ## Terraform — `srvvault` VMs + VIP (card #6)
 
@@ -123,6 +168,14 @@ pool, no MAC reservation.
    data). Add a per-VM `exclude_from_backup` override forcing
    `backup = false` on `srvvault1`'s disk. `srvvault2/3` (on
    `pve1`/`pve2`) are already `backup = false`.
+
+**No repo writes.** Per `ssh-host-ca`, the apply emits each VM's
+ed25519 host pubkey into the `host_pubkeys` Terraform output rather
+than into `ansible/files/known_hosts.d/`. The provisioning play
+reads that output in a localhost Play 0 (mirroring `rebuild-k8s.yml`),
+writes a transient `tmp/known_hosts`, and the bootstrap play uses it
+via `ansible_ssh_args` for the one pre-certificate SSH connection.
+After bootstrap, `ssh_host_cert` issues a real step-ca-signed cert.
 
 Operator runs `cd terraform/prd && terraform apply`.
 
@@ -198,12 +251,28 @@ role applied with the election naturally routing each node down the
 init or the join path.
 
 Playbook: a new `playbooks/site-openbao.yml`, mirroring
-`site-k8s.yml` — a non-serial election/install pass, then a
-`serial: 1` converge of `baseline` + `managed_filesystems` +
-`openbao` (cluster changes are serialized). `site.yml` excludes the
-`openbao` group, as it already does for the cluster groups. The
-exact playbook split may be revisited by the pending
-`slices/site-yml-layout.md` slice.
+`site-k8s.yml` and `rebuild-k8s.yml`:
+
+- **Play 0 (localhost, run once)** — read
+  `terraform -chdir=../terraform/prd output -json host_pubkeys`,
+  filter to the openbao hosts, write a transient
+  `tmp/known_hosts.openbao` for the pre-cert connection. Same pattern
+  as `rebuild-k8s.yml`'s Play 0.
+- **Bootstrap play** — `bootstrap` (uses the transient known_hosts
+  via `ansible_ssh_args`).
+- **Converge play (`serial: 1`)** — `baseline` +
+  `managed_filesystems` + `openbao` + `ssh_host_cert` as the trailing
+  role (the order `site-k8s.yml` already uses: after `baseline` for
+  the `ca.home` /etc/hosts pin, after the cluster role so the host is
+  in steady state before its host cert is signed). Once the
+  ssh_host_cert role applies, sshd serves the signed cert and the
+  transient known_hosts is no longer needed — every subsequent run
+  validates against the committed `known_hosts.d/homelab`
+  `@cert-authority` line.
+
+`site.yml` excludes the `openbao` group, as it already does for the
+cluster groups. The exact playbook split may be revisited by the
+pending [`site-yml-layout`](../slices/site-yml-layout.md) slice.
 
 ## Bootstrap procedure (card #8)
 
