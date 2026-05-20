@@ -8,8 +8,11 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
+| [internal-ha-vips](internal-ha-vips.md) | pending | internal-tls-step-ca | phase: openbao + secrets (secrets.home VIP); k8s-api + ceph.home cert flips |
+| [internal-tls-nginx-configurator](internal-tls-nginx-configurator.md) | pending | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca) |
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
 | [backup-collector](backup-collector.md) | pending | openbao-static-seal | phase: openbao + secrets |
+| [iac-secrets-resolver](iac-secrets-resolver.md) | pending | openbao-static-seal | phase: openbao + secrets (gates the runtime-secrets sweep for the IaC agent) |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
