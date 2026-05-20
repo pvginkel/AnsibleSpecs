@@ -1,6 +1,8 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: planned. Both hard prerequisites are now closed:
+**Status**: in progress. Card #6 closed 2026-05-20 (build #25 via
+`iac-on-push`): `srvvault1/2/3` exist on PVE at VMIDs 913/914/915.
+Both hard prerequisites had already closed:
 
 - `internal-tls-step-ca` — `internal_tls` role for the listener certs.
 - `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
@@ -10,7 +12,15 @@
   `host_pubkeys` Terraform output for the first-boot handoff.
 
 Execution is tracked on the Trello board **Ansible**, list **OpenBao
-backlog**: cards #6–#15 plus #40 remain open; #1–#5 are done.
+backlog**: cards #7–#15 plus #40 remain open; #1–#6 are done.
+
+**Next card**: #7 — bootstrap + baseline + fleet parity for
+`srvvault1/2/3`. See §Inventory & fleet parity for the specific
+files that still need to land, and §The `openbao` role + §Bootstrap
+procedure for the playbook (`site-openbao.yml`) #7 needs in place
+(the Play 0 known_hosts handoff is what gives the bootstrap play a
+trusted channel before `ssh_host_cert` has issued any cert on the
+new VMs — so #7 and #8 may want to bundle).
 
 ## Goal
 
@@ -81,7 +91,7 @@ backup is **daily** and goes to `backup-server`. See §Backup pipeline.
 
 | Card | Work | Section |
 |---|---|---|
-| #6  | Terraform — 3 `srvvault` VMs + VIP reservation | §Terraform |
+| ~~#6~~ | ~~Terraform — 3 `srvvault` VMs + VIP reservation~~ — **done** | §Terraform (as-built) |
 | #7  | Bootstrap + baseline `srvvault1/2/3` (fleet parity) | §Inventory & fleet parity |
 | #8  | `openbao` role — install + init `srvvault1` | §The `openbao` role, §Bootstrap |
 | #9  | Raft join `srvvault2` + `srvvault3` | §The `openbao` role |
@@ -128,90 +138,109 @@ the sections below embed the concrete values.
    that slice landing 2026-05-19. `srvvault*` `network_devices`
    lives in host_vars only.
 
-## Terraform — `srvvault` VMs + VIP (card #6)
+## Terraform — `srvvault` VMs + VIP (card #6, as-built)
 
-Three VMs added to `terraform/prd/vms.tf` via the existing
-`managed-vm` module:
+Three VMs added to `terraform/prd/vms.tf` via the `managed-vm`
+module. Applied via `iac-on-push` #25 on 2026-05-20; commits
+`96d73a8` (module change), `97a7ef0` (host_vars), `95ecefe`
+(`vms.tf`), `acf61a8` (comment fixups).
 
-- VMIDs **913 / 914 / 915**; `srvvault1`→`pve`, `srvvault2`→`pve1`,
-  `srvvault3`→`pve2` (one per PVE host — a host loss takes one node).
-- `workload_class = "background"`; **2 vCPU, 1 GB RAM, 24 GB** root
-  disk. No passthrough or data disk — Raft data and the seal key
-  live on the rootfs. Resize is online for both RAM and the disk if
-  card #8's init shows the budget is tight.
-- **`static_ip = true`.** `srvvaultN` are bootstrap-critical
-  (`decisions.md` "Bootstrap-critical hosts do not resolve through
-  the dnsmasq pod") — OpenBao must be reachable to serve the cluster
-  that hosts dnsmasq, so it cannot take its own address/DNS from it.
-  Per-NIC addresses live in each host_var's `network_devices`
-  (`network-devices-host-vars-sot` slice); Terraform reads them back.
-  HelmCharts `configs/prd/dnsmasq.yaml` static-host entries for the
-  three IPv4 addresses landed in commit `ce043a8` — address-only, no
-  MAC reservation (static netplan owns the address).
-- **vmbr0 only** (`decisions.md` network table — OpenBao is in the
-  "everything else" class). Concrete addresses:
+| Host | VMID | PVE node | MAC (NIC 0) | IPv4 | IPv6 |
+|---|---|---|---|---|---|
+| `srvvault1` | 913 | `pve` | `02:A7:F3:03:91:00` | `10.1.0.40/16` | `2a10:3781:16a9:1::40/64` |
+| `srvvault2` | 914 | `pve1` | `02:A7:F3:03:92:00` | `10.1.0.41/16` | `2a10:3781:16a9:1::41/64` |
+| `srvvault3` | 915 | `pve2` | `02:A7:F3:03:93:00` | `10.1.0.42/16` | `2a10:3781:16a9:1::42/64` |
 
-  | Host | VMID | MAC (NIC 0) | IPv4 | IPv6 |
-  |---|---|---|---|---|
-  | `srvvault1` | 913 | `02:A7:F3:03:91:00` | `10.1.0.40/16` | `2a10:3781:16a9:1::40/64` |
-  | `srvvault2` | 914 | `02:A7:F3:03:92:00` | `10.1.0.41/16` | `2a10:3781:16a9:1::41/64` |
-  | `srvvault3` | 915 | `02:A7:F3:03:93:00` | `10.1.0.42/16` | `2a10:3781:16a9:1::42/64` |
+Per-VM shape: 2 vCPU, 1 GB RAM, 24 GB root disk; `workload_class =
+background`, `static_ip = true`, `from_scratch = true`. Resize is
+online for both RAM and disk if card #8's init shows the budget is
+tight. Raft data and the static seal key both live on the rootfs —
+no passthrough or data disk.
 
-  MACs derived from the VMID per `decisions.md` "MAC scheme"
-  (`02:A7:F3:VV:VV:EE`); IPv6 host suffix mirrors the IPv4 last
-  octet, matching the prd k8s nodes.
+`srvvault1` sets `exclude_from_backup = true` on the new
+`managed-vm` flag added by `96d73a8`; this forces `backup = false`
+on its root disk to keep the cluster vzdump job from co-locating the
+static seal key with the Raft data (`decisions.md` "OpenBao backup /
+DR"). `srvvault2`/`srvvault3` are on `pve1`/`pve2` which declare no
+backup datastore, so their `backup = false` falls out automatically.
 
-The VIP `secrets.home` (`10.1.0.39`) is already in `vips.yml`. It is
-**not** a VM and gets no `homelab_dns_reservation` — its static-host
-entry in `configs/prd/dnsmasq.yaml` already exists from
-`internal-ha-vips`, outside the DHCP pool, no MAC reservation.
+The VIP `secrets.home` (`10.1.0.39`, VRID 53) is already in
+`group_vars/all/vips.yml`. HelmCharts `configs/prd/dnsmasq.yaml`
+static-host entries for the three srvvault IPv4 addresses landed in
+HelmCharts commit `ce043a8` (address-only, no MAC reservation).
 
-**One `managed-vm` gap to close in this card:** add a per-VM
-`exclude_from_backup` bool (default `false`) override forcing
-`backup = false` on the disk. The module computes a disk's `backup`
-flag from the node's `pve_node_backup_datastore`; only `pve` has a
-backup datastore today, so `srvvault1` would be captured by the
-cluster vzdump job — which `decisions.md` "OpenBao backup / DR"
-forbids (a PVE backup co-locates the seal key with the Raft data).
-`srvvault1` sets `exclude_from_backup: true`; `srvvault2/3` (on
-`pve1`/`pve2`) are already `backup = false` and leave the new var
-default.
+Per-VM `prevent_destroy` is **not** set — CI's
+`check-protected-vms.sh` guards destroys, same as `srviac` today, so
+card #13's recovery-drill `terraform apply -replace` works without a
+code edit.
 
-Per-VM `prevent_destroy` is **not** added: the CI
-`check-protected-vms.sh` plan-stage check guards destroys, same as
-`srviac` today. Card #13's recovery-drill `terraform apply -replace`
-works without a code edit.
+The TF apply emits each VM's ed25519 host pubkey into the
+`host_pubkeys` Terraform output (per `ssh-host-ca`); card #7/#8's
+provisioning play reads that output in a localhost Play 0 to
+materialise a transient `tmp/known_hosts.openbao` for the pre-cert
+bootstrap SSH.
 
-**No repo writes.** Per `ssh-host-ca`, the apply emits each VM's
-ed25519 host pubkey into the `host_pubkeys` Terraform output rather
-than into `ansible/files/known_hosts.d/`. The provisioning play
-reads that output in a localhost Play 0 (mirroring `rebuild-k8s.yml`),
-writes a transient `tmp/known_hosts`, and the bootstrap play uses it
-via `ansible_ssh_args` for the one pre-certificate SSH connection.
-After bootstrap, `ssh_host_cert` issues a real step-ca-signed cert.
+### SSH-trust gaps surfaced and closed alongside card #6
 
-Operator runs `cd terraform/prd && terraform apply`.
+The iac-on-push run was the first new TF apply against PVE since
+the `ssh-host-ca` cutover. The bpg/proxmox provider opens its own
+SSH client for snippet uploads (separate from Ansible's `ssh_args`),
+and that uncovered two gaps in the SSH host-trust setup. Both fixed
+in this phase ahead of card #6's apply succeeding; future host-trust
+work must touch all four places:
+
+- **iac container `/root/.ssh/known_hosts`** — `support/iac-image/Dockerfile`
+  now COPYs `ansible/files/known_hosts.d/homelab` into the image at
+  the path bpg's Go SSH client reads (commit `c8f5b8f`).
+- **Operator workstation `~/.ssh/known_hosts`** — documented one-time
+  append in `docs/runbooks/operator-workstation.md` for the same
+  reason; the workstation bpg client follows the same path.
+- **`terraform/{prd,scratch}/providers.tf`** — `ssh { node { name=...,
+  address=...<short>.home } ... }` blocks pin bpg's connect target
+  to the FQDN (commit `b6ab5b9`). Required because
+  `ssh_host_cert` mints certs with `[<short>, <short>.home]`
+  principals (no IPs), and bpg defaults to SSH-ing to the LAN IP the
+  Proxmox API returns.
+- **`ansible.cfg`'s `UserKnownHostsFile`** — already covered by the
+  `ssh-host-ca` slice itself; no change in this card.
 
 ## Inventory & fleet parity (cards #6–#7)
 
-- `host_vars/srvvault{1,2,3}.yml` — `vm_id`, `pve_node`,
-  `workload_class: background`, plus a `network_devices:` block per
-  the `network-devices-host-vars-sot` slice. Use `srvk8s1.yml` as
-  the shape reference: one vmbr0 entry carrying the IPv4 + IPv6
-  addresses from the §Terraform table and the MAC derived from the
-  VMID. NIC order is load-bearing — `network_devices[0]` is the
-  vmbr0 primary, which Terraform reads back for the cloud-init
-  template.
-- `inventories/prd/hosts.yml` — move the `openbao` group from
-  forward-declaration into the `managed` and `pve_vms` parents (the
-  comment blocking this is explicit that it waits on the host_vars).
-- `group_vars/openbao.yml` — `baseline_os_update_class: standalone`
-  (`decisions.md` "OS updates" — `srvvaultN` are standalone service
-  VMs: `unattended-upgrades` + auto-reboot, staggered windows, no
-  two `srvvaultN` in the same window), plus OpenBao role variables.
+**Landed in card #6** (commit `97a7ef0`):
+`inventories/prd/host_vars/srvvault{1,2,3}.yml` — `vm_id`,
+`pve_node`, `workload_class: background`, the staggered
+`baseline_unattended_reboot_time` (srvvault1=03:30, srvvault2=04:00,
+srvvault3=04:30 — `decisions.md` "Stagger reboot windows"; srviac
+keeps the 03:00 default), and a `network_devices:` block with the
+vmbr0 NIC carrying static IPv4/IPv6 + gateway + nameservers.
+Terraform reads `network_devices` back via `yamldecode` to render
+the cloud-init template (`network-devices-host-vars-sot` slice).
+
+The `openbao` group in `inventories/prd/hosts.yml` is still a
+forward declaration — the comment there spells out exactly why
+(parent-group move was deferred from #6 to #7).
+
+**Remaining for card #7**:
+
+- `inventories/prd/hosts.yml` — move the `openbao` group from the
+  forward-declaration block into the `managed` and `pve_vms`
+  parents (and drop the deferred-declaration comment under
+  `pve_vms.children`). Sequence this with the `site-openbao.yml`
+  introduction below; landing the parent-group move *without*
+  `site-openbao.yml` would have iac-on-push's `site.yml` SSH into
+  ssh_host_cert-less srvvaultN with no transient known_hosts in
+  play — exactly the failure mode that kept the move out of #6.
+- `inventories/prd/group_vars/openbao.yml` —
+  `baseline_os_update_class: standalone` (`decisions.md` "OS
+  updates": srvvaultN are standalone service VMs — `unattended-upgrades`
+  + auto-reboot, staggered windows already encoded per-host).
+  OpenBao-role variables follow under card #8 once the role exists.
 - Card #7 brings the three VMs to fleet shape with `bootstrap` +
   `baseline` (+ `managed_filesystems`, a no-op with no extra disks)
-  before any OpenBao bits — same as every other managed host.
+  before any OpenBao bits — same as every other managed host. With
+  no ssh_host_cert on the new VMs yet, the bootstrap connection
+  must come through the Play 0 known_hosts handoff that
+  `site-openbao.yml` introduces (see §The `openbao` role).
 
 ## The `openbao` role (cards #8–#12)
 
