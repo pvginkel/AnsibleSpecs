@@ -292,11 +292,16 @@ Deferred / revisit:
 
 ## SSH host keys for managed VMs
 
-- Terraform generates an ed25519 host keypair per VM (`tls_private_key`), embeds the private half in cloud-init's `ssh_keys:` block so the VM boots with that identity, and writes the public half to `ansible/files/known_hosts.d/<config-name>` as a `known_hosts` entry. The repo is the registry; one file per Terraform config.
-- Ansible's `ssh_args` set `UserKnownHostsFile` to the per-config file and `GlobalKnownHostsFile=/dev/null`, so playbook runs are independent of the operator's personal `~/.ssh/known_hosts` (and identical between workstation and ephemeral CI container). `HostKeyAlgorithms=ssh-ed25519` ignores the rsa/ecdsa keys sshd auto-generates non-deterministically.
-- Public host keys are not secret. They're committed; the diff is auditable. Host private keys live in tfstate (already sensitive — the API token, cloud-init user-data containing our authorized SSH pubkeys, etc., were already there).
-- A rebuild without `terraform taint tls_private_key.host_*` keeps the same identity, so destroy+recreate of a VM no longer trips host-key warnings. Cloud-init only runs on first boot, though, so picking up a new pinned key requires `terraform apply -replace=<vm-resource>`.
-- **Future evolution**: once OpenBao is up (Phase 2+), replace the per-host pubkeys with one `@cert-authority *.home <CA pubkey>` line, signing host certs at provision time. Per-host files in `known_hosts.d/` collapse to one CA line.
+The homelab step-ca is also an SSH host CA. Every managed host serves a step-ca-signed SSH host certificate; Ansible verifies hosts through one committed `@cert-authority` line in `ansible/files/known_hosts.d/homelab`. Issuance and renewal are owned by the `ssh_host_cert` role, the SSH-side counterpart of `internal_tls`. Slice: [`slices/completed/ssh-host-ca.md`](slices/completed/ssh-host-ca.md). Ceremony: `docs/runbooks/step-ca-bootstrap.md` "Enabling the SSH host CA".
+
+- **One provisioner, both cert types.** `ansible-jwk` issues the X.509 leaves and the SSH host certs — same fleet-wide vaulted password (`internal_tls_jwk_provisioner_password` in `group_vars/all/vips.yml`). Controller-side split issuance: the token is minted on the iac container, the host key never leaves the target.
+- **47-day certs, 14-day renewal threshold.** Same shape as the TLS leaves; `ssh_host_cert` re-signs on each `iac-scheduled-drift` cycle when the cert is within the threshold, otherwise no-op.
+- **No principal scoping in the SSH host policy.** The `@cert-authority` line is loaded only by Ansible's `UserKnownHostsFile` and Ansible only connects to homelab hostnames, so ssh's own principal-vs-connect-target check already rejects a forged cert with a non-homelab principal. Adding a host needs no CA change.
+- **Terraform no longer writes the repo for host identity.** It still generates a per-VM ed25519 keypair (`tls_private_key.host_ed25519`, persisted in tfstate) and embeds the private half via cloud-init so the VM boots with a stable identity. The public half is surfaced as the `host_pubkeys` Terraform output and consumed only by the bootstrap playbook's transient known_hosts under `tmp/`, for the single pre-certificate connection to a brand-new VM.
+- **sshd serves the ed25519 host key plus its certificate.** The role installs `/etc/ssh/sshd_config.d/10-homelab-host-cert.conf` with `HostKey` + `HostCertificate`. rsa/ecdsa stay off — sshd auto-generates them non-deterministically. `HostKeyAlgorithms` in `ansible.cfg` accepts the ed25519 host certificate (steady state) and plain ed25519 (the pre-cert bootstrap window).
+- **Trust boundary.** The `@cert-authority` line is loaded only by Ansible's `UserKnownHostsFile`. The operator's personal `~/.ssh/known_hosts` is untouched.
+- **Cold-boot envelope ~33 days.** A managed host's cert lives on its own disk, so step-ca outages shorter than 47 − 14 days are invisible. Beyond that, renewals fail and certs eventually expire; verification breaks until step-ca returns or a cert is replaced manually.
+- **SSH user CA stays deferred.** This slice covers host certs only (replacing `known_hosts.d/`). Replacing `authorized_keys` with a user CA is a separate, lower-priority sweep.
 
 ## OS updates
 
