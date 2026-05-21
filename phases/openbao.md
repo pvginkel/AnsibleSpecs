@@ -1,8 +1,15 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: in progress. Cards #6–#7 closed 2026-05-20: `srvvault1/2/3`
-exist on PVE at VMIDs 913/914/915 and the inventory/playbook scaffolding
-for fleet parity is in place. Both hard prerequisites had already closed:
+**Status**: in progress. Card #6 closed 2026-05-20; card #7 closed
+2026-05-21: `srvvault1/2/3` exist on PVE at VMIDs 913/914/915, the
+inventory/playbook scaffolding for fleet parity is in place, and
+the three VMs have been brought to fleet shape via `bootstrap` +
+`baseline` + `managed_filesystems` + `ssh_host_cert`. Card #7 also
+carried two collateral changes: `/etc/hosts` block management
+consolidated from the `microk8s` role into `baseline` under
+`baseline_etc_hosts_entries` (single mechanism, fleet-wide), and
+Jenkins (`iac-on-push` + `iac-scheduled-drift`) wired to run the
+new `site-openbao.yml`. Both hard prerequisites had already closed:
 
 - `internal-tls-step-ca` — `internal_tls` role for the listener certs.
 - `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
@@ -236,12 +243,24 @@ the cloud-init template (`network-devices-host-vars-sot` slice).
   `!openbao`, matching the `!k8s_prd:!k8s_dev:!ceph_prd` carve-out.
   iac-on-push's `site.yml` run never tries to SSH the openbao
   hosts; convergence flows through `site-openbao.yml`.
+- `roles/baseline/` — gained `baseline_etc_hosts_entries` (var +
+  blockinfile task under marker `# ANSIBLE baseline`). The
+  microk8s role's `microk8s_etc_hosts_entries` was retired and its
+  values (`172.17.0.3 registry`, `10.2.1.15 ca.home`,
+  `192.168.178.43 registry-dev`) moved to `baseline_etc_hosts_entries`
+  in `group_vars/k8s_prd.yml` / `k8s_dev.yml`. Single mechanism
+  fleet-wide; consequence for card #8 below.
+- `jenkins/iac-on-push/Jenkinsfile` — new `Ansible site-openbao`
+  stage between the `site.yml` apply and `update-k8s`.
+- `jenkins/iac-scheduled-drift/Jenkinsfile` — new
+  `Ansible drift (openbao)` stage after the k8s drift stage,
+  running `check-ansible-drift.sh playbooks/site-openbao.yml
+  --skip-tags os_update`.
 
-The first apply of `site-openbao.yml` brings the three VMs to fleet
-shape via `bootstrap` + `baseline` + `managed_filesystems` (a no-op
-with no extra disks) + `ssh_host_cert` — same as every other managed
-host, with the Play 0 known_hosts handoff covering the
-pre-certificate connection.
+The first apply of `site-openbao.yml` brought the three VMs to
+fleet shape via `bootstrap` + `baseline` + `managed_filesystems`
+(a no-op with no extra disks) + `ssh_host_cert`, with the Play 0
+known_hosts handoff covering the pre-certificate connection.
 
 ## The `openbao` role (cards #8–#12)
 
@@ -284,12 +303,12 @@ Task files (orchestrated from `tasks/main.yml`):
   JWK token mint runs `delegate_to: localhost` with `become: false`
   (fixed in Ansible `83e8e53`), so including it from this role's
   `become: true` play is safe. No action needed; do not re-wrap it.
-- **`ca.home` must resolve on `srvvaultN` before `internal_tls`
-  runs.** These hosts use static resolver config and do not see
-  homelab DNS. As §F of the step-ca slice did for the prd k8s nodes,
-  pin `10.2.1.15 ca.home` in `/etc/hosts` (via the `baseline`
-  static-resolver config for this host class, or an `etc-hosts` task
-  in this role ordered ahead of `internal_tls`).
+- **`ca.home` resolution is already in place.** `srvvaultN` use
+  static resolver config and don't see homelab DNS; card #7 pinned
+  `10.2.1.15 ca.home` in `/etc/hosts` via
+  `baseline_etc_hosts_entries` set in `group_vars/openbao.yml`. The
+  `openbao` role does **not** need its own etc-hosts task — adding
+  one would just duplicate the baseline-owned block.
 - **No sentinel files.** Re-assert config, the seal key, and the
   leaf on every run; a converged run is a fast no-op, and a node
   that drifted (or was rebuilt) self-heals on the next apply.
@@ -298,29 +317,28 @@ Cards #8 (`srvvault1` init) and #9 (`srvvault2/3` join) are the same
 role applied with the election naturally routing each node down the
 init or the join path.
 
-Playbook: a new `playbooks/site-openbao.yml`, mirroring
-`site-k8s.yml` and `rebuild-k8s.yml`:
+Playbook (`playbooks/site-openbao.yml`) is already in place from
+card #7, mirroring `site-k8s.yml` and `rebuild-k8s.yml`:
 
-- **Play 0 (localhost, run once)** — read
+- **Play 0 (localhost, run once)** — reads
   `terraform -chdir=../terraform/prd output -json host_pubkeys`,
-  filter to the openbao hosts, write a transient
+  filters to the openbao hosts, writes a transient
   `tmp/known_hosts.openbao` for the pre-cert connection. Same pattern
   as `rebuild-k8s.yml`'s Play 0.
 - **Bootstrap play** — `bootstrap` (uses the transient known_hosts
   via `ansible_ssh_args`).
-- **Converge play (`serial: 1`)** — `baseline` +
-  `managed_filesystems` + `openbao` + `ssh_host_cert` as the trailing
-  role (the order `site-k8s.yml` already uses: after `baseline` for
-  the `ca.home` /etc/hosts pin, after the cluster role so the host is
-  in steady state before its host cert is signed). Once the
-  ssh_host_cert role applies, sshd serves the signed cert and the
-  transient known_hosts is no longer needed — every subsequent run
-  validates against the committed `known_hosts.d/homelab`
-  `@cert-authority` line.
+- **Converge play (`serial: 1` on apply, parallel under `--check`)** —
+  currently `baseline` + `managed_filesystems` + `ssh_host_cert` as
+  the trailing role. Card #8 inserts the `openbao` role between
+  `managed_filesystems` and `ssh_host_cert` (the order `site-k8s.yml`
+  already uses: after `baseline` so the `ca.home` /etc/hosts pin
+  exists, after the cluster role so the host is in steady state
+  before its host cert is signed). A placeholder comment in the
+  converge play marks the slot.
 
-`site.yml` excludes the `openbao` group, as it already does for the
-cluster groups. The exact playbook split may be revisited by the
-pending [`site-yml-layout`](../slices/site-yml-layout.md) slice.
+`site.yml` already excludes the `openbao` group (card #7). The
+exact playbook split may be revisited by the pending
+[`site-yml-layout`](../slices/site-yml-layout.md) slice.
 
 ## Bootstrap procedure (card #8)
 
