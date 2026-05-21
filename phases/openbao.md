@@ -332,26 +332,20 @@ the older weekly/rclone text in `openbao-static-seal`):
    - New `openbao.tf`: declare `homelab_backup_credential.openbao`
      (scope `openbao`, retention 14) and an output for the minted
      token (sensitive).
-2. **Inventory** (`inventories/prd/group_vars/openbao.yml`): add
-   `backup-server.home backup-server` to
-   `baseline_etc_hosts_entries` pointing at the NGINX LB
-   (`10.2.1.7`). The srvvaultN nodes don't resolve via the home DNS
-   server, so resolution comes from `/etc/hosts` — same pattern as
-   the existing `ca.home` entry.
-3. **Play 0 (`site-openbao.yml`)**: extend the existing `terraform
+2. **Play 0 (`site-openbao.yml`)**: extend the existing `terraform
    output` step to capture the backup credential's token alongside
    `host_pubkeys`; stash as a fact for the role.
-4. **`approle.yml`**: add a `backup` AppRole + policy granting
+3. **`approle.yml`**: add a `backup` AppRole + policy granting
    `read` on the export endpoints OpenBao needs for a full JSON
    dump (`sys/policies/acl/*`, `sys/auth`, `sys/mounts`,
    `kv/data/*`, `kv/metadata/*`). Print its `role_id` +
    `secret_id` alongside the other four (rotation flow identical).
-5. **New `tasks/backup.yml`**: write the token to
+4. **New `tasks/backup.yml`**: write the token to
    `/etc/openbao/backup-token` (0400 openbao) from the Play 0 fact;
    render the wrapper script at `/usr/local/sbin/openbao-backup`;
    render the systemd `.service` + `.timer` units; enable + start
    the timer.
-6. **Wrapper script (Bash, leader-guarded):**
+5. **Wrapper script (Bash, leader-guarded):**
    - `curl -fsS --cacert ... https://<self>.home:8200/v1/sys/leader`
      → exit early unless `"is_self":true`.
    - AppRole login to obtain a short-lived token.
