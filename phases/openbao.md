@@ -295,11 +295,14 @@ port `443` instead of OpenBao's native `8200`.
 - `include_role: haproxy` (new role — `roles/haproxy/`, modelled
   on the same reusable shape as `roles/keepalived/`: callers pass
   `haproxy_frontends:` and `haproxy_backends:` as vars).
-- One frontend listening on `0.0.0.0:443`, `mode tcp`,
-  `option httpchk GET /v1/sys/health HTTP/1.1\r\nHost:\ secrets`,
-  `http-check expect status 200 429`. Backend is a single server
-  `127.0.0.1:8200 check check-ssl verify required ca-file
-  /etc/ssl/certs/ca-certificates.crt`.
+- One frontend listening on `0.0.0.0:443`, `mode tcp`, default
+  backend `openbao`. Backend is a single server
+  `127.0.0.1:8200 check` — plain TCP-connect check, deliberately
+  no `option httpchk`. The leader-tracking VIP already keeps
+  traffic off sealed / follower nodes; an HTTPS-level health check
+  would only fire in an all-nodes-sealed scenario, where it would
+  trade OpenBao's clear `503 {"errors":["Vault is sealed"]}` for a
+  transport-level connection refusal and hide the diagnostic.
 - **No TLS termination on HAProxy.** The TCP frontend forwards the
   client's TLS connection straight through; the cert OpenBao
   presents is the same per-node `internal_tls` leaf, now with bare
@@ -329,8 +332,8 @@ currently active.
   dev eth0` on each node + `tcpdump -ni eth0 vrrp` confirm
   failover.
 - `curl -sS https://secrets/v1/sys/health` from a `.home` client
-  returns 200 (active) or 429 (standby — should only happen if
-  HAProxy's health check is too permissive on the backend pool).
+  returns 200. The VIP only lives on the leader, so 429 (standby)
+  is not an expected response here.
 - `curl -sS https://secrets.home/v1/sys/health` and
   `https://secrets:443/v1/sys/health` both succeed (cert SAN
   coverage).
