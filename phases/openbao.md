@@ -1,8 +1,8 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: in progress. Card #6 closed 2026-05-20 (build #25 via
-`iac-on-push`): `srvvault1/2/3` exist on PVE at VMIDs 913/914/915.
-Both hard prerequisites had already closed:
+**Status**: in progress. Cards #6–#7 closed 2026-05-20: `srvvault1/2/3`
+exist on PVE at VMIDs 913/914/915 and the inventory/playbook scaffolding
+for fleet parity is in place. Both hard prerequisites had already closed:
 
 - `internal-tls-step-ca` — `internal_tls` role for the listener certs.
 - `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
@@ -12,15 +12,13 @@ Both hard prerequisites had already closed:
   `host_pubkeys` Terraform output for the first-boot handoff.
 
 Execution is tracked on the Trello board **Ansible**, list **OpenBao
-backlog**: cards #7–#15 plus #40 remain open; #1–#6 are done.
+backlog**: cards #8–#15 plus #40 remain open; #1–#7 are done.
 
-**Next card**: #7 — bootstrap + baseline + fleet parity for
-`srvvault1/2/3`. See §Inventory & fleet parity for the specific
-files that still need to land, and §The `openbao` role + §Bootstrap
-procedure for the playbook (`site-openbao.yml`) #7 needs in place
-(the Play 0 known_hosts handoff is what gives the bootstrap play a
-trusted channel before `ssh_host_cert` has issued any cert on the
-new VMs — so #7 and #8 may want to bundle).
+**Next card**: #8 — the `openbao` role itself (install + config +
+static seal + init `srvvault1`). The role slots into
+`site-openbao.yml`'s converge play between `managed_filesystems` and
+`ssh_host_cert` (the placeholder comment is already in the file).
+See §The `openbao` role + §Bootstrap procedure.
 
 ## Goal
 
@@ -92,7 +90,7 @@ backup is **daily** and goes to `backup-server`. See §Backup pipeline.
 | Card | Work | Section |
 |---|---|---|
 | ~~#6~~ | ~~Terraform — 3 `srvvault` VMs + VIP reservation~~ — **done** | §Terraform (as-built) |
-| #7  | Bootstrap + baseline `srvvault1/2/3` (fleet parity) | §Inventory & fleet parity |
+| ~~#7~~ | ~~Bootstrap + baseline `srvvault1/2/3` (fleet parity)~~ — **done** | §Inventory & fleet parity (as-built) |
 | #8  | `openbao` role — install + init `srvvault1` | §The `openbao` role, §Bootstrap |
 | #9  | Raft join `srvvault2` + `srvvault3` | §The `openbao` role |
 | #10 | keepalived leader-tracking VIP | §keepalived VIP |
@@ -204,7 +202,7 @@ work must touch all four places:
 - **`ansible.cfg`'s `UserKnownHostsFile`** — already covered by the
   `ssh-host-ca` slice itself; no change in this card.
 
-## Inventory & fleet parity (cards #6–#7)
+## Inventory & fleet parity (cards #6–#7, as-built)
 
 **Landed in card #6** (commit `97a7ef0`):
 `inventories/prd/host_vars/srvvault{1,2,3}.yml` — `vm_id`,
@@ -216,31 +214,34 @@ vmbr0 NIC carrying static IPv4/IPv6 + gateway + nameservers.
 Terraform reads `network_devices` back via `yamldecode` to render
 the cloud-init template (`network-devices-host-vars-sot` slice).
 
-The `openbao` group in `inventories/prd/hosts.yml` is still a
-forward declaration — the comment there spells out exactly why
-(parent-group move was deferred from #6 to #7).
+**Landed in card #7**:
 
-**Remaining for card #7**:
-
-- `inventories/prd/hosts.yml` — move the `openbao` group from the
-  forward-declaration block into the `managed` and `pve_vms`
-  parents (and drop the deferred-declaration comment under
-  `pve_vms.children`). Sequence this with the `site-openbao.yml`
-  introduction below; landing the parent-group move *without*
-  `site-openbao.yml` would have iac-on-push's `site.yml` SSH into
-  ssh_host_cert-less srvvaultN with no transient known_hosts in
-  play — exactly the failure mode that kept the move out of #6.
+- `inventories/prd/hosts.yml` — `openbao` group moved out of the
+  forward-declaration block into both `managed` and `pve_vms`. The
+  parent-group move and `site-openbao.yml` (below) landed together;
+  landing the move alone would have iac-on-push's `site.yml` SSH
+  into ssh_host_cert-less srvvaultN with no transient known_hosts
+  in play.
 - `inventories/prd/group_vars/openbao.yml` —
   `baseline_os_update_class: standalone` (`decisions.md` "OS
   updates": srvvaultN are standalone service VMs — `unattended-upgrades`
   + auto-reboot, staggered windows already encoded per-host).
   OpenBao-role variables follow under card #8 once the role exists.
-- Card #7 brings the three VMs to fleet shape with `bootstrap` +
-  `baseline` (+ `managed_filesystems`, a no-op with no extra disks)
-  before any OpenBao bits — same as every other managed host. With
-  no ssh_host_cert on the new VMs yet, the bootstrap connection
-  must come through the Play 0 known_hosts handoff that
-  `site-openbao.yml` introduces (see §The `openbao` role).
+- `playbooks/site-openbao.yml` — Play 0 (`tmp/known_hosts.openbao`
+  handoff from `terraform output host_pubkeys`), bootstrap play, and
+  converge play (`baseline` → `managed_filesystems` → `ssh_host_cert`
+  trailing). The `openbao` role slot between `managed_filesystems`
+  and `ssh_host_cert` is marked with a placeholder comment for #8.
+- `playbooks/site.yml` — first play's host pattern now includes
+  `!openbao`, matching the `!k8s_prd:!k8s_dev:!ceph_prd` carve-out.
+  iac-on-push's `site.yml` run never tries to SSH the openbao
+  hosts; convergence flows through `site-openbao.yml`.
+
+The first apply of `site-openbao.yml` brings the three VMs to fleet
+shape via `bootstrap` + `baseline` + `managed_filesystems` (a no-op
+with no extra disks) + `ssh_host_cert` — same as every other managed
+host, with the Play 0 known_hosts handoff covering the
+pre-certificate connection.
 
 ## The `openbao` role (cards #8–#12)
 
