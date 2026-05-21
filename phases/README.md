@@ -7,7 +7,7 @@ The homelab build-out, executed top-down. New phases get inserted into the pendi
 | # | Phase | Status | Notes |
 |---|---|---|---|
 | 1 | (microceph) | planned | (was phase 5) |
-| 2 | [openbao + secrets](openbao.md) | in progress | 3-node Raft cluster (`srvvault1/2/3`), static seal via ansible-vault, leader-tracking keepalived VIP, daily dump via `backup-server`. OpenBao listener certs issued by the `internal_tls` role. Includes the secrets resolver rewrite of `iac-impl` (Python + `!bao` refs via AppRole) between standing up the cluster and the runtime-consumer sweep. Cards #1–#7 done; next is #8 (the `openbao` role itself). Depends on slices [openbao-static-seal](../slices/openbao-static-seal.md), [iac-secrets-resolver](../slices/iac-secrets-resolver.md) |
+| 2 | [openbao + secrets](openbao.md) | in progress | 3-node Raft cluster (`srvvault1/2/3`), static seal via ansible-vault, leader-tracking keepalived VIP, daily dump via `backup-server`. OpenBao listener certs issued by the `internal_tls` role. Includes the secrets resolver rewrite of `iac-impl` (Python + `!bao` refs via AppRole) between standing up the cluster and the runtime-consumer sweep. Cards #1–#9 done (3-node Raft cluster up, srvvault1 leading); next is #10 (leader-tracking keepalived VIP). Depends on slices [openbao-static-seal](../slices/openbao-static-seal.md), [iac-secrets-resolver](../slices/iac-secrets-resolver.md) |
 | 3 | (helm + tf harness) | planned | depends on slice [helm-tf-deploy-harness](../slices/helm-tf-deploy-harness.md) |
 | 4 | (storage CSIs + tf) | planned | (was phase 8) |
 | 5 | (keycloak tf) | planned | (was phase 9) |
