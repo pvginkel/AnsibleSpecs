@@ -8,7 +8,6 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
-| [home-dns-routing](home-dns-routing.md) | pending | — | (cleanup; removes most `baseline_etc_hosts_entries` pins on cold-boot-independent VMs) |
 | [internal-ha-vips](internal-ha-vips.md) | pending | internal-tls-step-ca | phase: openbao + secrets (secrets.home VIP); k8s-api + ceph.home cert flips |
 | [internal-tls-nginx-configurator](internal-tls-nginx-configurator.md) | pending | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca) |
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
@@ -34,6 +33,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [internal-tls-step-ca](completed/internal-tls-step-ca.md) | spec 07 | — | phase: internal TLS; openbao reuses the `internal_tls` role |
 | [ssh-host-ca](completed/ssh-host-ca.md) | — | internal-tls-step-ca | phase: openbao + secrets (the hard prerequisite — landed before OpenBao provisioning) |
 | [network-devices-host-vars-sot](completed/network-devices-host-vars-sot.md) | — | — | (correctness; eliminated the vms.tf↔host_vars network-config dual-edit ahead of `srvvault*`) |
+| [home-dns-routing](completed/home-dns-routing.md) | — | — | (cleanup; removed most `baseline_etc_hosts_entries` pins on cold-boot-independent VMs) |
 
 ## Deferred / Cancelled
 
