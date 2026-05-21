@@ -1,44 +1,25 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: in progress. Card #6 closed 2026-05-20; card #7 closed
-2026-05-21; card #8 closed 2026-05-21. `srvvault1` is initialised
-and serves Raft as a single-node cluster (`Initialized: true,
-Sealed: false, HA Mode: active`); the static seal auto-unseals
-across reboot. Root token + 5 recovery keys are in Roboform.
-`srvvault2/3` are converged and waiting for the join task that
-card #9 adds. Card #7 also carried two collateral changes:
-`/etc/hosts` block management consolidated from the `microk8s`
-role into `baseline` under `baseline_etc_hosts_entries` (single
-mechanism, fleet-wide), and Jenkins (`iac-on-push` +
-`iac-scheduled-drift`) wired to run the new `site-openbao.yml`.
-Both hard prerequisites had already closed:
-
-- `internal-tls-step-ca` — `internal_tls` role for the listener certs.
-- `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
-  Terraform no longer writes the repo for host identity, so the
-  Phase 2 TF apply is pipeline-safe (the `iac-on-push` job that
-  cannot commit). Adds the `ssh_host_cert` role and the
-  `host_pubkeys` Terraform output for the first-boot handoff.
-
-Execution is tracked on the Trello board **Ansible**, list **OpenBao
-backlog**: cards #8–#15 plus #40 remain open; #1–#7 are done.
+**Status**: in progress. Cards #6 / #7 / #8 done. `srvvault1` is a
+single-node Raft cluster (`Initialized: true, Sealed: false, HA Mode:
+active`); the static seal auto-unseals across reboot; root token + 5
+recovery keys are in Roboform. `srvvault2/3` are converged and waiting
+for the join task that card #9 will add. Cards #8–#15 plus #40 remain
+open on Trello **Ansible** / **OpenBao backlog**.
 
 **Next card**: #9 — add `tasks/join.yml` to the `openbao` role so
-`srvvault2/3` Raft-join the cluster `srvvault1` already serves.
-The elect-bootstrap probe now sees srvvault1 reporting
-`initialized: true`, so on the next apply srvvault2/3 will route
-down the join path instead of init. See §The `openbao` role.
+`srvvault2/3` Raft-join the cluster `srvvault1` already serves. The
+`elect-bootstrap` probe now sees srvvault1 reporting
+`initialized: true`, so on the next apply srvvault2/3 will route down
+the join path instead of init. See §The `openbao` role.
 
-**Surfaced during card #8 (open follow-ups)**:
-- `baseline`: forced `update-ca-certificates -f` on every
-  converge — the homelab root cert had quietly disappeared from
-  srvvault1's `/etc/ssl/certs/ca-certificates.crt` after a
-  package trigger rebuilt the bundle; the handler-driven refresh
-  pattern didn't self-heal. Landed in Ansible commit `5ab42fa`.
-- `wait-online` hang: srvvault1's `systemd-networkd-wait-online`
-  blocks ~120s on every reboot. Likely the v6-routable check
-  with `accept_ra: false` + no static v6 default route. Tracked
-  on Trello as card #42, not blocking card #9.
+**Open follow-ups from card #8**:
+
+- `wait-online` hang on srvvault1 boot — `systemd-networkd-wait-online`
+  blocks ~120s before timing out non-fatally. Trello card #42. Likely
+  v6-routable check vs. `accept_ra: false` + no static v6 default
+  route. Not blocking card #9 but worth fixing before #13 (recovery
+  drills time reboots).
 
 ## Goal
 
@@ -60,50 +41,32 @@ either degrades backup/renewal, not OpenBao's ability to serve.
 
 This phase implements existing decisions; it does not re-open them.
 
-- [`decisions.md`](../decisions.md) — sections **"Secrets —
-  OpenBao"**, **"OpenBao backup / DR"**, **"Runtime secrets — IaC
-  agent resolver"**, **"Internal TLS / homelab CA"**. Authoritative
-  where any slice below diverges (the slices predate later
-  amendments).
-- [`openbao-static-seal`](../slices/openbao-static-seal.md) — the
-  cluster shape: drop Azure, 3-node Raft, file static seal via
-  ansible-vault, keepalived VIP.
+- [`decisions.md`](../decisions.md) — sections **"Secrets — OpenBao"**,
+  **"OpenBao backup / DR"**, **"Runtime secrets — IaC agent
+  resolver"**, **"Internal TLS / homelab CA"**, **"OS updates"**
+  (carries the OpenBao-package exception added during card #8 — the
+  package is Ansible-pinned, not `unattended-upgrades`-managed).
+- [`openbao-static-seal`](../slices/openbao-static-seal.md) — cluster
+  shape. Two corrections applied throughout: VMIDs are 913/914/915
+  (slice originally said 910–912); VIP hostname is `secrets.home`
+  (`10.1.0.39`, VRID 53). The slice still reads "weekly JSON dump via
+  rclone" — `decisions.md` "OpenBao backup / DR" supersedes that;
+  backup is **daily** to `backup-server`.
 - [`iac-secrets-resolver`](../slices/iac-secrets-resolver.md) — the
   `iac-impl` rewrite and `!bao` reference resolution (card #40).
 - [`backup-collector`](../slices/backup-collector.md) — the
-  `backup-server` collector the daily dump targets. The container
-  image is built (`/work/DockerImages/backup-server/`, with
-  `upload-api.md` documenting the `POST /upload` contract used in
-  §Backup pipeline); the Helm chart and an in-cluster deployment do
-  **not** yet exist. Card #12 has both as a cross-repo prerequisite
-  in HelmCharts before the daily timer can post anywhere — track
-  alongside Trello cards #1–#2.
-- [`ssh-host-ca`](../slices/completed/ssh-host-ca.md) — **completed**
-  prerequisite — `ssh_host_cert` role + `host_pubkeys` TF output;
-  documents the Play-0 bootstrap handoff Phase 2 reuses (see
-  §Terraform and §The `openbao` role).
+  in-cluster collector the daily dump targets. Image is built
+  (`/work/DockerImages/backup-server/`); chart + deployment do not
+  yet exist — card #12 has both as a HelmCharts prerequisite.
+- [`ssh-host-ca`](../slices/completed/ssh-host-ca.md) — closed; gave
+  us the `ssh_host_cert` role + `host_pubkeys` TF output that Play 0
+  of `site-openbao.yml` consumes.
 - [`internal-ha-vips`](../slices/completed/internal-ha-vips.md) —
-  **completed**; the `secrets.home` VIP allocation in
-  `group_vars/all/vips.yml` and the dnsmasq CNAME plumbing come from
-  it. Phase 2 consumes the VIP; no new VIP work in this phase.
+  closed; the `secrets.home` VIP entry in `group_vars/all/vips.yml`
+  comes from it.
 - [`network-devices-host-vars-sot`](../slices/completed/network-devices-host-vars-sot.md) —
-  **completed**; `network_devices` for each VM lives in its host_var
-  and Terraform reads it back. `srvvault1/2/3` declare their NIC
-  config in host_vars only — no `vms.tf` `network_devices` literal,
-  no dual-edit.
-
-Two corrections to the original slice / `decisions.md` reflected
-throughout this doc:
-
-- **VMIDs `913` / `914` / `915`** for `srvvault1/2/3` (slice
-  originally said 910–912 — already occupied by `srvk8s1/2/3`).
-- **VIP hostname `secrets.home`** (`10.1.0.39`, VRID 53; the
-  `internal-ha-vips` slice renamed it from the earlier
-  `openbao.home`).
-
-Where the `openbao-static-seal` slice still reads "weekly JSON dump
-via rclone", `decisions.md` "OpenBao backup / DR" supersedes it: the
-backup is **daily** and goes to `backup-server`. See §Backup pipeline.
+  closed; `network_devices` lives in host_vars only and Terraform
+  reads it back.
 
 ## Build order
 
@@ -111,7 +74,7 @@ backup is **daily** and goes to `backup-server`. See §Backup pipeline.
 |---|---|---|
 | ~~#6~~ | ~~Terraform — 3 `srvvault` VMs + VIP reservation~~ — **done** | §Terraform (as-built) |
 | ~~#7~~ | ~~Bootstrap + baseline `srvvault1/2/3` (fleet parity)~~ — **done** | §Inventory & fleet parity (as-built) |
-| ~~#8~~ | ~~`openbao` role — install + init `srvvault1`~~ — **done** | §The `openbao` role, §Bootstrap |
+| ~~#8~~ | ~~`openbao` role — install + init `srvvault1`~~ — **done** | §The `openbao` role |
 | #9  | Raft join `srvvault2` + `srvvault3` | §The `openbao` role |
 | #10 | keepalived leader-tracking VIP | §keepalived VIP |
 | #40 | Secrets resolver — `iac-impl` rewrite + `!bao` refs | §Secrets resolver |
@@ -125,43 +88,7 @@ Card #40 slots **between #10 and #11**: the resolver needs the
 cluster up and reachable on the VIP, and it provisions the first
 AppRole — which #11 then extends for Jenkins and ESO.
 
-## Decisions taken before card #6 (2026-05-20)
-
-Five calls that gated the start of card #6 are recorded once here;
-the sections below embed the concrete values.
-
-1. **`prevent_destroy` mechanism** — CI `check-protected-vms.sh`
-   plan-stage check alone, same as `srviac` today. No HCL
-   `lifecycle { prevent_destroy = true }` and no sibling
-   `managed-vm-protected` module. Card #13's recovery-drill
-   `terraform apply -replace` works without a code edit, at the cost
-   of the destroy guard living only in CI.
-2. **vzdump opt-out shape** — add `exclude_from_backup` (bool,
-   default `false`) on the `managed-vm` module. `srvvault1` sets it
-   true to keep PVE's cluster vzdump job from co-locating the seal
-   key with the Raft data; `srvvault2/3` leave it default (their
-   PVE nodes have no backup datastore so the disk is already
-   `backup = false`).
-3. **Static IPs** — `srvvault{1,2,3}` get
-   `10.1.0.{40,41,42}/16` and `2a10:3781:16a9:1::{40,41,42}/64` on
-   vmbr0 (contiguous to the `.39` `secrets.home` VIP; v6 suffix
-   mirrors the v4 last octet, per the prd-k8s pattern). Matching
-   IPv4 static-host entries in HelmCharts `configs/prd/dnsmasq.yaml`
-   landed in commit `ce043a8` — address-only, no MAC reservation
-   (static netplan owns the address; no DHCP role to play).
-4. **CPU + disk size** — 2 vCPU, 1 GB RAM, 24 GB root disk per VM.
-   Resize is online for both RAM (VirtIO balloon) and disk if card
-   #8's init shows the budget is tight.
-5. **Sequencing vs `network-devices-host-vars-sot`** — resolved by
-   that slice landing 2026-05-19. `srvvault*` `network_devices`
-   lives in host_vars only.
-
-## Terraform — `srvvault` VMs + VIP (card #6, as-built)
-
-Three VMs added to `terraform/prd/vms.tf` via the `managed-vm`
-module. Applied via `iac-on-push` #25 on 2026-05-20; commits
-`96d73a8` (module change), `97a7ef0` (host_vars), `95ecefe`
-(`vms.tf`), `acf61a8` (comment fixups).
+## Terraform — `srvvault` VMs + VIP (as-built)
 
 | Host | VMID | PVE node | MAC (NIC 0) | IPv4 | IPv6 |
 |---|---|---|---|---|---|
@@ -170,257 +97,190 @@ module. Applied via `iac-on-push` #25 on 2026-05-20; commits
 | `srvvault3` | 915 | `pve2` | `02:A7:F3:03:93:00` | `10.1.0.42/16` | `2a10:3781:16a9:1::42/64` |
 
 Per-VM shape: 2 vCPU, 1 GB RAM, 24 GB root disk; `workload_class =
-background`, `static_ip = true`, `from_scratch = true`. Resize is
-online for both RAM and disk if card #8's init shows the budget is
-tight. Raft data and the static seal key both live on the rootfs —
-no passthrough or data disk.
+background`, `static_ip = true`, `from_scratch = true`. Raft data and
+the static seal key both live on the rootfs. `srvvault1` sets
+`exclude_from_backup = true` (new `managed-vm` flag) to keep the PVE
+vzdump job off the static seal key; `srvvault2/3` are on `pve1`/`pve2`
+which declare no backup datastore, so `backup = false` is automatic.
 
-`srvvault1` sets `exclude_from_backup = true` on the new
-`managed-vm` flag added by `96d73a8`; this forces `backup = false`
-on its root disk to keep the cluster vzdump job from co-locating the
-static seal key with the Raft data (`decisions.md` "OpenBao backup /
-DR"). `srvvault2`/`srvvault3` are on `pve1`/`pve2` which declare no
-backup datastore, so their `backup = false` falls out automatically.
-
-The VIP `secrets.home` (`10.1.0.39`, VRID 53) is already in
+VIP `secrets.home` (`10.1.0.39`, VRID 53) is pre-allocated in
 `group_vars/all/vips.yml`. HelmCharts `configs/prd/dnsmasq.yaml`
-static-host entries for the three srvvault IPv4 addresses landed in
-HelmCharts commit `ce043a8` (address-only, no MAC reservation).
+holds the IPv4 static-host entries for srvvault1/2/3 (commit
+`ce043a8` over there).
 
 Per-VM `prevent_destroy` is **not** set — CI's
-`check-protected-vms.sh` guards destroys, same as `srviac` today, so
+`check-protected-vms.sh` guards destroys (same shape as `srviac`), so
 card #13's recovery-drill `terraform apply -replace` works without a
 code edit.
 
 The TF apply emits each VM's ed25519 host pubkey into the
-`host_pubkeys` Terraform output (per `ssh-host-ca`); card #7/#8's
-provisioning play reads that output in a localhost Play 0 to
-materialise a transient `tmp/known_hosts.openbao` for the pre-cert
-bootstrap SSH.
+`host_pubkeys` output (per `ssh-host-ca`); `site-openbao.yml`'s
+Play 0 reads it into a transient `tmp/known_hosts.openbao` for the
+pre-cert bootstrap connection.
 
-### SSH-trust gaps surfaced and closed alongside card #6
+## Inventory & fleet parity (as-built)
 
-The iac-on-push run was the first new TF apply against PVE since
-the `ssh-host-ca` cutover. The bpg/proxmox provider opens its own
-SSH client for snippet uploads (separate from Ansible's `ssh_args`),
-and that uncovered two gaps in the SSH host-trust setup. Both fixed
-in this phase ahead of card #6's apply succeeding; future host-trust
-work must touch all four places:
-
-- **iac container `/root/.ssh/known_hosts`** — `support/iac-image/Dockerfile`
-  now COPYs `ansible/files/known_hosts.d/homelab` into the image at
-  the path bpg's Go SSH client reads (commit `c8f5b8f`).
-- **Operator workstation `~/.ssh/known_hosts`** — documented one-time
-  append in `docs/runbooks/operator-workstation.md` for the same
-  reason; the workstation bpg client follows the same path.
-- **`terraform/{prd,scratch}/providers.tf`** — `ssh { node { name=...,
-  address=...<short>.home } ... }` blocks pin bpg's connect target
-  to the FQDN (commit `b6ab5b9`). Required because
-  `ssh_host_cert` mints certs with `[<short>, <short>.home]`
-  principals (no IPs), and bpg defaults to SSH-ing to the LAN IP the
-  Proxmox API returns.
-- **`ansible.cfg`'s `UserKnownHostsFile`** — already covered by the
-  `ssh-host-ca` slice itself; no change in this card.
-
-## Inventory & fleet parity (cards #6–#7, as-built)
-
-**Landed in card #6** (commit `97a7ef0`):
-`inventories/prd/host_vars/srvvault{1,2,3}.yml` — `vm_id`,
-`pve_node`, `workload_class: background`, the staggered
-`baseline_unattended_reboot_time` (srvvault1=03:30, srvvault2=04:00,
-srvvault3=04:30 — `decisions.md` "Stagger reboot windows"; srviac
-keeps the 03:00 default), and a `network_devices:` block with the
-vmbr0 NIC carrying static IPv4/IPv6 + gateway + nameservers.
-Terraform reads `network_devices` back via `yamldecode` to render
-the cloud-init template (`network-devices-host-vars-sot` slice).
-
-**Landed in card #7**:
-
-- `inventories/prd/hosts.yml` — `openbao` group moved out of the
-  forward-declaration block into both `managed` and `pve_vms`. The
-  parent-group move and `site-openbao.yml` (below) landed together;
-  landing the move alone would have iac-on-push's `site.yml` SSH
-  into ssh_host_cert-less srvvaultN with no transient known_hosts
-  in play.
+- `inventories/prd/host_vars/srvvault{1,2,3}.yml` — `vm_id`,
+  `pve_node`, `workload_class: background`, staggered
+  `baseline_unattended_reboot_time` (srvvault1=03:30, srvvault2=04:00,
+  srvvault3=04:30; srviac keeps 03:00), and a `network_devices:`
+  block with the vmbr0 NIC carrying static IPv4/IPv6 + gateway +
+  nameservers.
+- `inventories/prd/hosts.yml` — `openbao` group lives in both
+  `managed` and `pve_vms`. `playbooks/site.yml`'s first play
+  excludes it (`!openbao`); convergence flows through
+  `site-openbao.yml`.
 - `inventories/prd/group_vars/openbao.yml` —
-  `baseline_os_update_class: standalone` (`decisions.md` "OS
-  updates": srvvaultN are standalone service VMs — `unattended-upgrades`
-  + auto-reboot, staggered windows already encoded per-host).
-  OpenBao-role variables follow under card #8 once the role exists.
-- `playbooks/site-openbao.yml` — Play 0 (`tmp/known_hosts.openbao`
-  handoff from `terraform output host_pubkeys`), bootstrap play, and
-  converge play (`baseline` → `managed_filesystems` → `ssh_host_cert`
-  trailing). The `openbao` role slot between `managed_filesystems`
-  and `ssh_host_cert` is marked with a placeholder comment for #8.
-- `playbooks/site.yml` — first play's host pattern now includes
-  `!openbao`, matching the `!k8s_prd:!k8s_dev:!ceph_prd` carve-out.
-  iac-on-push's `site.yml` run never tries to SSH the openbao
-  hosts; convergence flows through `site-openbao.yml`.
-- `roles/baseline/` — gained `baseline_etc_hosts_entries` (var +
-  blockinfile task under marker `# ANSIBLE baseline`). The
-  microk8s role's `microk8s_etc_hosts_entries` was retired and its
-  values (`172.17.0.3 registry`, `10.2.1.15 ca.home`,
-  `192.168.178.43 registry-dev`) moved to `baseline_etc_hosts_entries`
-  in `group_vars/k8s_prd.yml` / `k8s_dev.yml`. Single mechanism
-  fleet-wide; consequence for card #8 below.
-- `jenkins/iac-on-push/Jenkinsfile` — new `Ansible site-openbao`
-  stage between the `site.yml` apply and `update-k8s`.
-- `jenkins/iac-scheduled-drift/Jenkinsfile` — new
-  `Ansible drift (openbao)` stage after the k8s drift stage,
-  running `check-ansible-drift.sh playbooks/site-openbao.yml
-  --skip-tags os_update`.
+  `baseline_os_update_class: standalone` + the `openbao` role's
+  inputs (`openbao_seal_current_key_id`,
+  `baseline_etc_hosts_entries` pinning `ca.home` + `secrets.home`
+  + each srvvaultN's `.home` FQDN derived from peer host_vars).
+- `playbooks/site-openbao.yml` — Play 0 (transient
+  `tmp/known_hosts.openbao` from `terraform output host_pubkeys`),
+  bootstrap play, converge play (`baseline` →
+  `managed_filesystems` → `openbao` → `ssh_host_cert`, `serial: 1`
+  on apply, parallel on `--check`).
+- Jenkins — `iac-on-push` runs `site-openbao.yml` as a stage
+  between the `site.yml` apply and `update-k8s`;
+  `iac-scheduled-drift` runs `check-ansible-drift.sh
+  playbooks/site-openbao.yml --skip-tags os_update`.
+- `roles/baseline/` — owns `baseline_etc_hosts_entries`
+  (blockinfile under `# ANSIBLE baseline`) and, after a card-#8
+  follow-up, force-runs `update-ca-certificates -f` on every
+  converge so the homelab root can't quietly drop out of the
+  system bundle.
 
-The first apply of `site-openbao.yml` brought the three VMs to
-fleet shape via `bootstrap` + `baseline` + `managed_filesystems`
-(a no-op with no extra disks) + `ssh_host_cert`, with the Play 0
-known_hosts handoff covering the pre-certificate connection.
+## The `openbao` role
 
-## The `openbao` role (cards #8–#12)
+`ansible/roles/openbao/`, modelled on the `microk8s` role's
+clustered shape — a deterministic per-node election decides
+init-vs-join, so a rebuilt node never strands the cluster.
 
-New role `ansible/roles/openbao/`, standard layout. Clustered shape
-modelled on the `microk8s` role — a deterministic per-node election
-decides init-vs-join, so a rebuilt node never strands the cluster.
+**Task files orchestrated from `tasks/main.yml`** (cards in
+parentheses):
 
-Task files (orchestrated from `tasks/main.yml`):
+- `elect-bootstrap.yml` (#8) — bootstrap candidate is the
+  lowest-sorted member of `groups['openbao']` (=`srvvault1`). Each
+  host probes every peer's `/v1/sys/health` over `https://<peer>.
+  home:8200/...`; the cluster-init signal is true if any peer
+  reports `initialized: true`. Greenfield runs see all probes fail
+  unreachable → init runs. Rebuilt-bootstrap-candidate sees the
+  surviving cluster → routes to join.
+- `install.yml` (#8) — fetches the pinned `.deb` from GitHub
+  releases (sha256-pinned), `apt install`s it. OpenBao does **not**
+  publish an apt repo; upgrades happen by bumping `openbao_version`
+  + `openbao_deb_sha256` together (next drift cycle picks up).
+  Standalone-service-VM `unattended-upgrades` policy has an
+  explicit OpenBao-package exception per `decisions.md` "OS
+  updates".
+- `dirs.yml` (#8) — creates `/etc/openbao/{seal,tls}` and
+  `/var/lib/openbao/raft` ahead of `internal_tls` (which writes the
+  leaf into `/etc/openbao/tls/`) and `config.yml` (which drops the
+  seal key into `/etc/openbao/seal/`).
+- `internal_tls.yml` (#8) — `include_role: internal_tls` for the
+  listener leaf. SANs: short hostname, `.home` FQDN, `secrets.home`.
+  Reload handler SIGHUPs `openbao`.
+- `config.yml` (#8) — renders `/etc/openbao/openbao.hcl` (Raft
+  storage, TLS listener, `seal "static"`, `api_addr` /
+  `cluster_addr`, `disable_mlock = true`) and places the
+  ansible-vault'd static seal key at
+  `/etc/openbao/seal/static.key` (`openbao:openbao 0400` — the
+  .deb's `chown -R openbao:openbao /etc/openbao` postinst would
+  otherwise drift the slice's `root:openbao 0440`).
+- `init.yml` (#8) — bootstrap node only, only when cluster
+  uninitialized: `bao operator init -format=json -recovery-shares=5
+  -recovery-threshold=3`; stages the JSON output at
+  `/dev/shm/openbao-init.json` (`root 0600`, tmpfs) for the
+  operator to capture into Roboform. `no_log: true` on both the
+  init command and the copy task, so secrets never reach
+  controller logs.
+- `join.yml` (#9, **next**) — non-bootstrap nodes, runs when the
+  cluster is initialized and this node isn't already in
+  `bao operator raft list-peers`. Issues
+  `bao operator raft join https://<bootstrap>.home:8200`. After
+  join, the local node auto-unseals from the static seal and Raft
+  streams the snapshot from the leader. Idempotent — already-joined
+  is a no-op.
+- `keepalived.yml` (#10) — `include_role: keepalived` in
+  leader-tracking mode against `homelab_vips.openbao`.
+- `approle.yml` (#40 → extended in #11) — enable approle auth +
+  policies + AppRoles for `iac-agent`, Jenkins, ESO.
+- `audit.yml` (#11) — enable the file audit device.
+- `backup.yml` (#12) — leader-guarded daily dump + `backup-server`
+  POST timer.
 
-- `elect-bootstrap.yml` — pick the bootstrap node (lowest-sorted
-  member of `groups['openbao']`, i.e. `srvvault1`) and read each
-  node's `/v1/sys/health` to learn whether the cluster is already
-  initialized. Mirrors `microk8s/tasks/elect-primary.yml`.
-- `install.yml` — fetch the pinned OpenBao `.deb` from GitHub
-  releases, sha256-verify, install via `apt`. OpenBao does **not**
-  maintain an apt repository (card #4's "distro package + apt repo"
-  premise turned out to be wrong; the project ships `.deb` assets on
-  releases and a community-maintained snap, neither of which fits
-  `unattended-upgrades`). Upgrades are Ansible-driven: bump
-  `openbao_version` + `openbao_deb_sha256` together; next drift cycle
-  picks them up. Standalone-service-VM policy gets a documented
-  OpenBao exception — `decisions.md` needs a corrective note.
-- `config.yml` — render `/etc/openbao/openbao.hcl` (Raft `storage`
-  stanza, TLS `listener`, `seal "static"` stanza, `api_addr`/
-  `cluster_addr`, `disable_mlock = true`); write the static seal key
-  to `/etc/openbao/seal/static.key` (`openbao:openbao 0400`, not the
-  slice's `root:openbao 0440` — the .deb postinst runs `chown -R
-  openbao:openbao /etc/openbao` on every install/upgrade, so the
-  slice's ownership would drift) from the ansible-vault'd file in
-  the repo; create directories. The bundled .deb systemd unit is left
-  in place; hardening override and ufw land in card #11.
-- `internal_tls.yml` — `include_role: internal_tls` for the listener
-  leaf (see §TLS). Runs before the service is enabled.
-- `init.yml` — bootstrap node only, and only when the cluster is not
-  yet initialized: `bao operator init`, then surface the root token
-  and Shamir recovery keys for the operator to store (see §Bootstrap).
-- `join.yml` — every non-bootstrap node, and any node that comes up
-  uninitialized while the cluster exists: `bao operator raft join`
-  against a healthy peer, peer address resolved on the controller.
-  Idempotent — a node already in `raft list-peers` is a no-op.
-- `keepalived.yml` — `include_role: keepalived` (see §keepalived VIP).
-- `approle.yml` — post-init, leader only: auth methods, policies,
-  AppRoles (cards #40 and #11).
-- `audit.yml` — enable the file audit device (card #11).
-- `backup.yml` — dump script + systemd timer (card #12).
+**Defaults / inputs** (`defaults/main.yml`): `openbao_version`
+(currently `2.5.4`), `openbao_deb_sha256`, paths, SAN list, and
+`openbao_recovery_shares`/`_threshold` (5/3). `openbao_seal_current_key_id`
+is required (asserted) and set in `group_vars/openbao.yml`.
 
-**Operational learnings carried from the step-ca phase:**
+**Operational notes carried forward:**
 
-- The `internal_tls` role already splits issuance correctly — the
-  JWK token mint runs `delegate_to: localhost` with `become: false`
-  (fixed in Ansible `83e8e53`), so including it from this role's
-  `become: true` play is safe. No action needed; do not re-wrap it.
-- **`ca.home` resolution is already in place.** `srvvaultN` use
-  static resolver config and don't see homelab DNS; card #7 pinned
-  `10.2.1.15 ca.home` in `/etc/hosts` via
-  `baseline_etc_hosts_entries` set in `group_vars/openbao.yml`. The
-  `openbao` role does **not** need its own etc-hosts task — adding
-  one would just duplicate the baseline-owned block.
+- `internal_tls` already splits issuance correctly — the JWK token
+  mint runs `delegate_to: localhost, become: false` (Ansible commit
+  `83e8e53`). Including it from a `become: true` play is safe.
+- `ca.home` resolution comes from `baseline_etc_hosts_entries` in
+  `group_vars/openbao.yml`. The role does **not** need its own
+  etc-hosts task.
 - **No sentinel files.** Re-assert config, the seal key, and the
-  leaf on every run; a converged run is a fast no-op, and a node
-  that drifted (or was rebuilt) self-heals on the next apply.
+  leaf on every run; a converged run is a fast no-op; a drifted
+  node self-heals on next apply.
+- **`disable_mlock = true`** in the HCL. The .deb's bundled systemd
+  unit omits `CAP_IPC_LOCK` (`CapabilityBoundingSet=CAP_SYSLOG`
+  only) and sets `MemorySwapMax=0`; OpenBao's integrated-storage
+  guidance recommends `disable_mlock = true` for the same reasons.
+  Card #11's hardening override doesn't need to chase
+  `CAP_IPC_LOCK` back in.
 
-Cards #8 (`srvvault1` init) and #9 (`srvvault2/3` join) are the same
-role applied with the election naturally routing each node down the
-init or the join path.
+## Bootstrap procedure (card #8, closed)
 
-Playbook (`playbooks/site-openbao.yml`) is already in place from
-card #7, mirroring `site-k8s.yml` and `rebuild-k8s.yml`:
+For reference / DR — the steps the operator ran on 2026-05-21:
 
-- **Play 0 (localhost, run once)** — reads
-  `terraform -chdir=../terraform/prd output -json host_pubkeys`,
-  filters to the openbao hosts, writes a transient
-  `tmp/known_hosts.openbao` for the pre-cert connection. Same pattern
-  as `rebuild-k8s.yml`'s Play 0.
-- **Bootstrap play** — `bootstrap` (uses the transient known_hosts
-  via `ansible_ssh_args`).
-- **Converge play (`serial: 1` on apply, parallel under `--check`)** —
-  currently `baseline` + `managed_filesystems` + `ssh_host_cert` as
-  the trailing role. Card #8 inserts the `openbao` role between
-  `managed_filesystems` and `ssh_host_cert` (the order `site-k8s.yml`
-  already uses: after `baseline` so the `ca.home` /etc/hosts pin
-  exists, after the cluster role so the host is in steady state
-  before its host cert is signed). A placeholder comment in the
-  converge play marks the slot.
-
-`site.yml` already excludes the `openbao` group (card #7). The
-exact playbook split may be revisited by the pending
-[`site-yml-layout`](../slices/site-yml-layout.md) slice.
-
-## Bootstrap procedure (card #8)
-
-One-time, operator-driven. The full per-step recipe lives in the
-role's [README](../../Ansible/ansible/roles/openbao/README.md);
-condensed here:
-
-1. Generate the static seal key off the controller
-   (`openssl rand -out … 32`); `ansible-vault encrypt` it;
-   `cp` into `roles/openbao/files/static.key`; shred the cleartext.
-   Vault passphrase → Roboform.
-2. Set `openbao_seal_current_key_id` in
-   `inventories/prd/group_vars/openbao.yml` (suggested:
-   `YYYYMMDD-N`).
+1. `openssl rand -out /tmp/openbao-static.key 32` off the
+   controller; `ansible-vault encrypt` it; `cp` into
+   `roles/openbao/files/static.key`; shred the cleartext. Vault
+   passphrase → Roboform.
+2. Set `openbao_seal_current_key_id` (`YYYYMMDD-N`) in
+   `inventories/prd/group_vars/openbao.yml`.
 3. Wire the role into `playbooks/site-openbao.yml`'s converge play
-   — replace the placeholder comment between `managed_filesystems`
-   and `ssh_host_cert` with the role include.
-4. Commit (1)–(3) in one go. This is the only window where the
-   cleartext key exists outside Roboform — do it deliberately.
-5. First apply (`--ask-vault-pass` or `ANSIBLE_VAULT_PASSWORD_FILE`)
-   converges `srvvault1`; `init.yml` runs `bao operator init`.
-6. Capture the root token and the **Shamir 3-of-5 recovery keys**
-   into Roboform from `/dev/shm/openbao-init.json` on `srvvault1`,
-   then delete the file. Recovery keys are admin-only (rekey,
-   re-seal, new root token) — never used at boot; the static seal
-   auto-unseals.
-7. Verify auto-unseal survives a reboot of `srvvault1` before
-   joining the other two.
+   between `managed_filesystems` and `ssh_host_cert`.
+4. Commit (1)–(3) in one go.
+5. `ansible-playbook playbooks/site-openbao.yml --ask-vault-pass
+   --diff` — converges `srvvault1`; `init.yml` runs `bao operator
+   init`.
+6. Capture root token + 5 recovery keys from
+   `/dev/shm/openbao-init.json` into Roboform; delete the file.
+7. Reboot srvvault1; confirm `bao status` reports
+   `Initialized: true, Sealed: false` (static seal auto-unsealed).
 
 The role does not persist the root token; #11 retires it once the
 AppRoles and policies exist.
 
 ## TLS — `internal_tls` listener leaf
 
-The role includes `internal_tls` (the role the step-ca phase built —
-see its README) for the OpenBao listener cert:
+The role includes `internal_tls` for the OpenBao listener cert:
 
-- SANs: the node's short hostname, its `.home` FQDN, and the VIP
-  hostname `secrets.home`.
-- Cert + key under `/etc/openbao/tls/`, owner `root:openbao`.
-- Reload handler SIGHUPs the `openbao` process (OpenBao reloads its
-  listener cert on SIGHUP without dropping the Raft connection).
+- SANs: short hostname, `.home` FQDN, `secrets.home`.
+- Cert + key under `/etc/openbao/tls/`, owner `openbao:openbao
+  0640` (matches the .deb's chown).
+- Reload handler SIGHUPs `openbao` (reloads listener cert without
+  dropping Raft).
 - 47-day leaf, re-issued under the 14-day threshold on each
   iac-scheduled-drift cycle — standard `internal_tls` behaviour.
 
-First issuance happens at role-apply time; there is no self-signed
-bootstrap step (`decisions.md` "OpenBao bootstrap").
+First issuance happens at role-apply time; no self-signed bootstrap
+step (`decisions.md` "OpenBao bootstrap").
 
 ## keepalived VIP (card #10)
 
-The role includes the `keepalived` role (see its README) in
-**leader-tracking** mode:
+The role includes `keepalived` in **leader-tracking** mode:
 
 - VIP `secrets.home` from `homelab_vips.openbao`; VRID 53; shared
   `vrrp_auth_password`; unicast peers (the other two `srvvaultN`).
-- A `vrrp_script` polls `https://127.0.0.1:8200/v1/sys/leader` every
-  ~2 s; the check passes only when that node is the Raft leader,
-  raising its priority above the followers so the VIP follows
-  leadership. Failover ~4–6 s.
+- A `vrrp_script` polls `https://127.0.0.1:8200/v1/sys/leader`
+  every ~2s; the check passes only when the node is the Raft
+  leader, raising its priority above the followers so the VIP
+  follows leadership. Failover ~4–6s.
 
 Verify: VIP migrates on `bao operator step-down`; `tcpdump` shows
 VRRP on the wire; `https://secrets.home:8200` reaches the leader
@@ -442,49 +302,49 @@ VIP are up (#10) and before the consumer sweep (#11). Cross-repo:
   Print `role_id` and a one-shot `secret_id` at apply time for the
   operator to paste into `srviac`'s `/etc/iac/secrets.yaml`.
 - **`pvginkel/IaCAgent`** — rewrite `bin/iac-impl` from bash to
-  Python: a `!bao mount/path#key` YAML constructor, two-pass resolve
-  (literal env first to get `OPENBAO_URL`/`ROLE_ID`/`SECRET_ID`,
-  AppRole login, then sentinel walk), hard-fail before any clone on
-  a missing ref or auth failure. Update `secrets.example.yaml`.
-- **`docs/runbooks/iac-cold-boot.md`** — the literal-substitution
+  Python: a `!bao mount/path#key` YAML constructor, two-pass
+  resolve (literal env first to get
+  `OPENBAO_URL`/`ROLE_ID`/`SECRET_ID`, AppRole login, then sentinel
+  walk), hard-fail before any clone on a missing ref or auth
+  failure. Update `secrets.example.yaml`.
+- **`docs/runbooks/iac-cold-boot.md`** — literal-substitution
   procedure for whole-cluster recovery before OpenBao is back.
 
-Consequence for #11: Ansible-via-`iac-impl` does **not** get its own
-AppRole — it consumes env + files the resolver already materialised.
+Consequence for #11: Ansible-via-`iac-impl` does **not** get its
+own AppRole — it consumes env + files the resolver already
+materialised.
 
 ## Auth, policies, audit, hardening (card #11)
 
 - **AppRoles** for **Jenkins** (pipeline secrets) and **ESO**
-  (in-cluster secret sync), each with a per-consumer least-privilege
-  policy. Ansible is deliberately absent — see #40.
-- **Retire the root token** captured at bootstrap once the AppRoles
-  and an admin path exist.
+  (in-cluster secret sync), each with a per-consumer
+  least-privilege policy. Ansible is deliberately absent — see #40.
+- **Retire the root token** captured at bootstrap once the
+  AppRoles and an admin path exist.
 - **Audit** — enable the file audit device from day one.
 - **systemd hardening** — a unit override layered on top of the
   bundled unit (which already sets `ProtectSystem=full`,
   `ProtectHome=read-only`, `PrivateTmp=yes`, `PrivateDevices=yes`,
-  `NoNewPrivileges=yes`, `MemorySwapMax=0`). Card #8 settled the
-  mlock question: `disable_mlock = true` in the HCL, matching the
-  .deb's omitted `CAP_IPC_LOCK` and OpenBao's integrated-storage
-  guidance. Card #11 layers any additional `Protect*` directives on
-  top.
-- **ufw** — default-deny inbound; allow `8200/tcp` from k8s node IPs
-  and `srviac` (the Jenkins agent VM), `8201/tcp` + VRRP (proto 112)
-  from the other two `srvvaultN`, `22/tcp` from `srviac` only
-  (`decisions.md` "Secrets — OpenBao" network boundary). Moved here
-  from card #8 to keep that card narrow and avoid locking out the
-  wrkdev-driven bootstrap window.
+  `NoNewPrivileges=yes`, `MemorySwapMax=0`). `disable_mlock = true`
+  was settled in card #8; #11 only layers additional `Protect*`
+  directives if needed.
+- **ufw** — default-deny inbound; allow `8200/tcp` from k8s node
+  IPs and `srviac` (the Jenkins agent VM), `8201/tcp` + VRRP
+  (proto 112) from the other two `srvvaultN`, `22/tcp` from
+  `srviac` only (`decisions.md` "Secrets — OpenBao" network
+  boundary). Moved here from card #8 to keep #8 narrow and avoid
+  locking out the wrkdev-driven bootstrap window.
 
 ## Backup pipeline (card #12)
 
-Per `decisions.md` "OpenBao backup / DR" (authoritative — it
-supersedes the `openbao-static-seal` slice's older weekly/rclone
-text):
+Per `decisions.md` "OpenBao backup / DR" (authoritative — supersedes
+the older weekly/rclone text in `openbao-static-seal`):
 
 - A **daily** systemd timer on each `srvvaultN`, randomized delay,
   fires the same wrapper script.
 - The script guards on `/v1/sys/leader`'s `is_self` — the two
-  followers exit in milliseconds; only the leader produces the dump.
+  followers exit in milliseconds; only the leader produces the
+  dump.
 - The leader authenticates with a read-only export AppRole and
   produces the JSON dump (KV + policies + auth/mount config).
 - It uploads the plaintext bytes to the in-cluster `backup-server`:
@@ -496,11 +356,11 @@ text):
   server-side; OpenBao holds neither the age key nor a retention
   policy. API contract:
   `/work/DockerImages/backup-server/upload-api.md`.
-- The bearer token is a file on each node (`0400`, owner `openbao`),
-  materialised from ansible-vault. The token fixes the scope folder
-  (`openbao`) and the retention count via `backup-server`'s
-  `tokens.yaml` — adding that entry is a HelmCharts-side change,
-  a cross-repo dependency for this card.
+- The bearer token is a file on each node (`0400`, owner
+  `openbao`), materialised from ansible-vault. The token fixes the
+  scope folder (`openbao`) and the retention count via
+  `backup-server`'s `tokens.yaml` — adding that entry is a
+  HelmCharts-side change, a cross-repo prerequisite for this card.
 
 (The `PUT /v1/backup/...` shape in `slices/backup-collector.md` was
 an early sketch; the as-built API is the `POST /upload` form above,
@@ -512,10 +372,10 @@ matching `decisions.md`.)
   apply` recreates one `srvvaultN`, the role converges it, it
   Raft-joins, the leader streams the snapshot. VIP unaffected
   throughout. Record timings.
-- **Whole-cluster loss (#14)** — on scratch VMs: fresh init with the
-  same seal key, replay the JSON dump (decrypted with the
-  Roboform-held age key) via the API, confirm KV/policies/mounts
-  return. Record timings.
+- **Whole-cluster loss (#14)** — on scratch VMs: fresh init with
+  the same seal key, replay the JSON dump (decrypted with the
+  Roboform-held age key) via the API, confirm KV / policies /
+  mounts return. Record timings.
 
 Both feed the runbook.
 
@@ -524,7 +384,7 @@ Both feed the runbook.
 In `pvginkel/Ansible` `docs/runbooks/`:
 
 - `openbao.md` — operator runbook: admin path (wrkdevwin → Jenkins
-  agent VM → `bao`/UI), recovery procedures with the drill timings,
+  agent VM → `bao` / UI), recovery procedures with drill timings,
   seal-key and AppRole rotation.
 - `iac-cold-boot.md` — from card #40.
 - **Wife runbook** — outline only in this phase; full version ships
@@ -538,15 +398,16 @@ In `pvginkel/Ansible` `docs/runbooks/`:
   OpenBao, a consumer pod reads it).
 - `bao operator raft list-peers` shows three voters; auto-unseal
   survives a reboot on every node; the VIP tracks the leader.
-- Add `srvvaultN` to the HelmCharts Prometheus `extraScrapeConfigs`.
+- Add `srvvaultN` to the HelmCharts Prometheus
+  `extraScrapeConfigs`.
 - Compress this doc to an as-built retrospective and move it to
   `phases/completed/openbao.md`; update the `phases/README.md`
   tables.
 
 ## Caveats
 
-- **VRRP needs multicast (or unicast) on vmbr0.** Linux bridges pass
-  multicast by default; the `keepalived` role prefers explicit
+- **VRRP needs multicast (or unicast) on vmbr0.** Linux bridges
+  pass multicast by default; the `keepalived` role prefers explicit
   unicast peers, which sidesteps it. Verify VRRP on the wire during
   bring-up before declaring the VIP done.
 - **Two failure domains, not three.** Roboform (Shamir keys + age
