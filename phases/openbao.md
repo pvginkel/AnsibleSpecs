@@ -237,10 +237,15 @@ parentheses):
   `openbao_rotate_secret_ids=true` mints + prints fresh secret-ids;
   `openbao_retire_root_token=true` revokes the root token via
   revoke-self.
-- `audit.yml` (#11) — bootstrap-host only. Enables the file audit
-  device at `/var/log/openbao/audit.log`. The parent directory is
-  created with `openbao:openbao 0750` so OpenBao can write the
-  append-only log (created 0600 by the daemon).
+- **File audit device** (#11) — declared in `openbao.hcl.j2` as an
+  `audit "file" "<name>"` stanza pointing at
+  `/var/log/openbao/audit.log`. OpenBao 2.5 rejects the API enable
+  path with `cannot enable audit device via API; use declarative,
+  config-based audit device management instead`, so the device
+  lives in config rather than a runtime sys/audit POST. `dirs.yml`
+  creates the parent directory `openbao:openbao 0750` so the
+  daemon can open the append-only log on the restart triggered by
+  the config render.
 - `ufw.yml` (#11) — `apt install ufw` + default-deny inbound +
   allow-list (22/tcp from `srviac`, 443/tcp from `k8s_prd` +
   `srviac`, 8200/tcp from openbao peers + `srviac`, 8201/tcp + VRRP
@@ -458,10 +463,13 @@ creds once" flow lives at the role README's "First-apply
 procedure" — two applies, between which the printed admin creds
 get ansible-vault'd into group_vars.
 
-**Audit device.** `audit.yml` enables the file audit device at
-`/var/log/openbao/audit.log`; parent directory is created
-`openbao:openbao 0750`. Same bootstrap-host gating + token chain
-as the auth tasks.
+**Audit device.** Declared in `openbao.hcl.j2`, not via the
+sys/audit API — OpenBao 2.5 rejects API enables with `cannot
+enable audit device via API; use declarative, config-based audit
+device management instead`. `dirs.yml` creates
+`/var/log/openbao` with `openbao:openbao 0750` ahead of the
+config render so the daemon can open the append-only log on the
+restart triggered by the new audit stanza.
 
 **systemd hardening.** `hardening.yml` drops
 `/etc/systemd/system/openbao.service.d/hardening.conf` with a
