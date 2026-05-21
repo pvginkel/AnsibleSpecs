@@ -8,6 +8,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
+| [home-dns-routing](home-dns-routing.md) | pending | — | (cleanup; removes most `baseline_etc_hosts_entries` pins on cold-boot-independent VMs) |
 | [internal-ha-vips](internal-ha-vips.md) | pending | internal-tls-step-ca | phase: openbao + secrets (secrets.home VIP); k8s-api + ceph.home cert flips |
 | [internal-tls-nginx-configurator](internal-tls-nginx-configurator.md) | pending | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca) |
 | [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
