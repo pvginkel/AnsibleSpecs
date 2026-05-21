@@ -9,7 +9,15 @@ carried two collateral changes: `/etc/hosts` block management
 consolidated from the `microk8s` role into `baseline` under
 `baseline_etc_hosts_entries` (single mechanism, fleet-wide), and
 Jenkins (`iac-on-push` + `iac-scheduled-drift`) wired to run the
-new `site-openbao.yml`. Both hard prerequisites had already closed:
+new `site-openbao.yml`. Card #8 commit (a) — the `openbao` role
+itself — landed 2026-05-21; the role is committed but not yet
+wired into `site-openbao.yml`. Card #8 closes only after the
+operator-driven §Bootstrap procedure (generate the seal key,
+ansible-vault encrypt it, set `openbao_seal_current_key_id`, wire
+the role into `site-openbao.yml`, first apply on `srvvault1`,
+capture root token + Shamir recovery keys to Roboform, verify
+auto-unseal across a reboot). Both hard prerequisites had already
+closed:
 
 - `internal-tls-step-ca` — `internal_tls` role for the listener certs.
 - `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
@@ -21,11 +29,14 @@ new `site-openbao.yml`. Both hard prerequisites had already closed:
 Execution is tracked on the Trello board **Ansible**, list **OpenBao
 backlog**: cards #8–#15 plus #40 remain open; #1–#7 are done.
 
-**Next card**: #8 — the `openbao` role itself (install + config +
-static seal + init `srvvault1`). The role slots into
-`site-openbao.yml`'s converge play between `managed_filesystems` and
-`ssh_host_cert` (the placeholder comment is already in the file).
-See §The `openbao` role + §Bootstrap procedure.
+**Next step**: close card #8 by running the operator-driven
+§Bootstrap procedure — generate the static seal key, ansible-vault
+encrypt it into `roles/openbao/files/`, set
+`openbao_seal_current_key_id` in `inventories/prd/group_vars/openbao.yml`,
+replace the placeholder comment in `site-openbao.yml` with the
+role include, commit all four together, then run the first apply
+with `--ask-vault-pass`. See §The `openbao` role + §Bootstrap
+procedure.
 
 ## Goal
 
@@ -98,7 +109,7 @@ backup is **daily** and goes to `backup-server`. See §Backup pipeline.
 |---|---|---|
 | ~~#6~~ | ~~Terraform — 3 `srvvault` VMs + VIP reservation~~ — **done** | §Terraform (as-built) |
 | ~~#7~~ | ~~Bootstrap + baseline `srvvault1/2/3` (fleet parity)~~ — **done** | §Inventory & fleet parity (as-built) |
-| #8  | `openbao` role — install + init `srvvault1` | §The `openbao` role, §Bootstrap |
+| #8  | `openbao` role — install + init `srvvault1` — **role committed; operator bootstrap pending** | §The `openbao` role, §Bootstrap |
 | #9  | Raft join `srvvault2` + `srvvault3` | §The `openbao` role |
 | #10 | keepalived leader-tracking VIP | §keepalived VIP |
 | #40 | Secrets resolver — `iac-impl` rewrite + `!bao` refs | §Secrets resolver |
@@ -274,14 +285,24 @@ Task files (orchestrated from `tasks/main.yml`):
   member of `groups['openbao']`, i.e. `srvvault1`) and read each
   node's `/v1/sys/health` to learn whether the cluster is already
   initialized. Mirrors `microk8s/tasks/elect-primary.yml`.
-- `install.yml` — add the OpenBao apt repo and install the package
-  (distro package, so `unattended-upgrades` covers it per the
-  standalone-service-VM policy).
+- `install.yml` — fetch the pinned OpenBao `.deb` from GitHub
+  releases, sha256-verify, install via `apt`. OpenBao does **not**
+  maintain an apt repository (card #4's "distro package + apt repo"
+  premise turned out to be wrong; the project ships `.deb` assets on
+  releases and a community-maintained snap, neither of which fits
+  `unattended-upgrades`). Upgrades are Ansible-driven: bump
+  `openbao_version` + `openbao_deb_sha256` together; next drift cycle
+  picks them up. Standalone-service-VM policy gets a documented
+  OpenBao exception — `decisions.md` needs a corrective note.
 - `config.yml` — render `/etc/openbao/openbao.hcl` (Raft `storage`
-  stanza, TLS `listener`, `seal` stanza, `api_addr`/`cluster_addr`);
-  write the static seal key to `/etc/openbao/seal/static.key`
-  (`root:openbao 0440`) from the ansible-vault'd file in the repo;
-  create directories; install the systemd unit + hardening override.
+  stanza, TLS `listener`, `seal "static"` stanza, `api_addr`/
+  `cluster_addr`, `disable_mlock = true`); write the static seal key
+  to `/etc/openbao/seal/static.key` (`openbao:openbao 0400`, not the
+  slice's `root:openbao 0440` — the .deb postinst runs `chown -R
+  openbao:openbao /etc/openbao` on every install/upgrade, so the
+  slice's ownership would drift) from the ansible-vault'd file in
+  the repo; create directories. The bundled .deb systemd unit is left
+  in place; hardening override and ufw land in card #11.
 - `internal_tls.yml` — `include_role: internal_tls` for the listener
   leaf (see §TLS). Runs before the service is enabled.
 - `init.yml` — bootstrap node only, and only when the cluster is not
@@ -342,18 +363,30 @@ exact playbook split may be revisited by the pending
 
 ## Bootstrap procedure (card #8)
 
-One-time, operator-driven, before the role's first apply:
+One-time, operator-driven. The full per-step recipe lives in the
+role's [README](../../Ansible/ansible/roles/openbao/README.md);
+condensed here:
 
-1. Generate the static seal key; `ansible-vault encrypt` it into the
-   `openbao` role's files; copy the vault passphrase to Roboform.
-2. Commit the encrypted key. This is the only window where the
+1. Generate the static seal key off the controller
+   (`openssl rand -out … 32`); `ansible-vault encrypt` it;
+   `cp` into `roles/openbao/files/static.key`; shred the cleartext.
+   Vault passphrase → Roboform.
+2. Set `openbao_seal_current_key_id` in
+   `inventories/prd/group_vars/openbao.yml` (suggested:
+   `YYYYMMDD-N`).
+3. Wire the role into `playbooks/site-openbao.yml`'s converge play
+   — replace the placeholder comment between `managed_filesystems`
+   and `ssh_host_cert` with the role include.
+4. Commit (1)–(3) in one go. This is the only window where the
    cleartext key exists outside Roboform — do it deliberately.
-3. First apply (`--ask-vault-pass` or `ANSIBLE_VAULT_PASSWORD_FILE`)
+5. First apply (`--ask-vault-pass` or `ANSIBLE_VAULT_PASSWORD_FILE`)
    converges `srvvault1`; `init.yml` runs `bao operator init`.
-4. Capture the root token and the **Shamir 3-of-5 recovery keys**
-   into Roboform. Recovery keys are admin-only (rekey, re-seal, new
-   root token) — never used at boot; the static seal auto-unseals.
-5. Verify auto-unseal survives a reboot of `srvvault1` before
+6. Capture the root token and the **Shamir 3-of-5 recovery keys**
+   into Roboform from `/dev/shm/openbao-init.json` on `srvvault1`,
+   then delete the file. Recovery keys are admin-only (rekey,
+   re-seal, new root token) — never used at boot; the static seal
+   auto-unseals.
+7. Verify auto-unseal survives a reboot of `srvvault1` before
    joining the other two.
 
 The role does not persist the root token; #11 retires it once the
@@ -425,15 +458,20 @@ AppRole — it consumes env + files the resolver already materialised.
 - **Retire the root token** captured at bootstrap once the AppRoles
   and an admin path exist.
 - **Audit** — enable the file audit device from day one.
-- **systemd hardening** — a unit override with `ProtectSystem`,
-  `ProtectHome`, `NoNewPrivileges`, `PrivateTmp`, etc. Caveat:
-  OpenBao locks memory (`mlock`) — the override must keep
-  `CAP_IPC_LOCK` / `LimitMEMLOCK` intact, or decide `disable_mlock`
-  per OpenBao's integrated-storage guidance during role design.
+- **systemd hardening** — a unit override layered on top of the
+  bundled unit (which already sets `ProtectSystem=full`,
+  `ProtectHome=read-only`, `PrivateTmp=yes`, `PrivateDevices=yes`,
+  `NoNewPrivileges=yes`, `MemorySwapMax=0`). Card #8 settled the
+  mlock question: `disable_mlock = true` in the HCL, matching the
+  .deb's omitted `CAP_IPC_LOCK` and OpenBao's integrated-storage
+  guidance. Card #11 layers any additional `Protect*` directives on
+  top.
 - **ufw** — default-deny inbound; allow `8200/tcp` from k8s node IPs
-  and the Jenkins agent VM, `8201/tcp` + VRRP (proto 112) from the
-  other two `srvvaultN`, `22/tcp` from the Jenkins agent VM only
-  (`decisions.md` "Secrets — OpenBao" network boundary).
+  and `srviac` (the Jenkins agent VM), `8201/tcp` + VRRP (proto 112)
+  from the other two `srvvaultN`, `22/tcp` from `srviac` only
+  (`decisions.md` "Secrets — OpenBao" network boundary). Moved here
+  from card #8 to keep that card narrow and avoid locking out the
+  wrkdev-driven bootstrap window.
 
 ## Backup pipeline (card #12)
 
