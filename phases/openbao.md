@@ -1,18 +1,26 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: in progress. Cards #6 / #7 / #8 / #9 / #10 done. The
-3-node Raft cluster is reachable on `https://secrets/` via the
-leader-tracking `secrets.home` VIP + per-node HAProxy 443 → 8200
-TCP pass-through; static seal auto-unseals across reboot; root token
-+ 5 recovery keys are in Roboform. Cards #11–#15 plus #40 remain
-open on Trello **Ansible** / **OpenBao backlog**.
+**Status**: in progress. Cards #6 / #7 / #8 / #9 / #10 / #40 / #11
+done. The 3-node Raft cluster is reachable on `https://secrets/` via
+the leader-tracking `secrets.home` VIP + per-node HAProxy 443 → 8200
+TCP pass-through; static seal auto-unseals across reboot. The
+`approle` auth method is enabled, the `kv/` mount is up, four
+AppRoles (`openbao-admin`, `iac-agent`, `jenkins`, `eso`) are
+provisioned, the file audit device is on, a systemd hardening drop-
+in is in place, and ufw rules are written (but not enabled). The
+root token has been retired; the controller now logs in via the
+`openbao-admin` AppRole (creds ansible-vault'd in
+`group_vars/openbao.yml`). The IaC agent's `iac-impl` is a Python
+program with the `!bao` resolver; cold-boot is documented at
+[`docs/runbooks/iac-cold-boot.md`](../../Ansible/docs/runbooks/iac-cold-boot.md).
+Cards #12–#15 remain open on Trello **Ansible** / **OpenBao
+backlog**.
 
-**Next card**: #40 — secrets resolver. Rewrite `bin/iac-impl` in
-Python with a `!bao mount/path#key` YAML constructor + two-pass
-resolve via an `iac-agent` AppRole; provision that AppRole and a
-least-privilege policy from the `openbao` role. Sequenced between
-#10 (cluster reachable) and #11 (rest of the auth/policy work).
-See §Secrets resolver.
+**Next card**: #12 — backup pipeline (OpenBao side). Daily leader-
+guarded JSON dump, AppRole-authenticated, POSTed to the in-cluster
+`backup-server`. Cross-repo prerequisite: backup-server chart +
+deployment + `tokens.yaml` entry in HelmCharts. See §Backup
+pipeline.
 
 ## Goal
 
@@ -70,16 +78,18 @@ This phase implements existing decisions; it does not re-open them.
 | ~~#8~~ | ~~`openbao` role — install + init `srvvault1`~~ — **done** | §The `openbao` role |
 | ~~#9~~ | ~~Raft join `srvvault2` + `srvvault3`~~ — **done** | §The `openbao` role |
 | ~~#10~~ | ~~keepalived VIP + HAProxy 443 → 8200 + bare `secrets` SAN~~ — **done** | §VIP + HAProxy port-fronting |
-| #40 | Secrets resolver — `iac-impl` rewrite + `!bao` refs | §Secrets resolver |
-| #11 | Auth + policies + audit + systemd hardening | §Auth, policies, hardening |
+| ~~#40~~ | ~~Secrets resolver — `iac-impl` rewrite + `!bao` refs~~ — **done** | §Secrets resolver |
+| ~~#11~~ | ~~Auth + policies + audit + systemd hardening~~ — **done** | §Auth, policies, hardening |
 | #12 | Backup pipeline (OpenBao side) | §Backup pipeline |
 | #13 | Recovery drill — single-node loss | §Recovery drills |
 | #14 | Recovery drill — whole-cluster loss | §Recovery drills |
 | #15 | First consumer migration + close the phase | §Verification & close |
 
-Card #40 slots **between #10 and #11**: the resolver needs the
-cluster up and reachable on the VIP, and it provisions the first
-AppRole — which #11 then extends for Jenkins and ESO.
+#40 + #11 landed together: they share `roles/openbao/approle.yml`
+and the AppRole/policy design is coherent in one pass. The cluster
+side (auth + audit + hardening + ufw) and the IaC agent side
+(Python `iac-impl` + `!bao` resolver + cold-boot runbook) were
+sequenced in one bundle to avoid touching `approle.yml` twice.
 
 ## Terraform — `srvvault` VMs + VIP (as-built)
 
@@ -205,16 +215,52 @@ parentheses):
   leader-tracking mode against `homelab_vips.openbao`. The
   `vrrp_script` polls `/v1/sys/leader` on the local listener and
   lifts the leader's VRRP priority above the followers'.
-- `approle.yml` (#40 → extended in #11) — enable approle auth +
-  policies + AppRoles for `iac-agent`, Jenkins, ESO.
-- `audit.yml` (#11) — enable the file audit device.
+- `hardening.yml` (#11) — drops
+  `/etc/systemd/system/openbao.service.d/hardening.conf` with
+  conservative `Protect*` / `Restrict*` directives layered on top of
+  the .deb's unit. Notifies daemon-reload + restart on change. See
+  `templates/openbao-hardening.conf.j2` for the directive set and
+  the rationale for what was deliberately NOT added.
+- `auth-token.yml` (#40) — included by `approle.yml` and `audit.yml`
+  to set `_openbao_token`. Two paths: `openbao_admin_token` (extra-
+  var, bootstrap / rescue) wins; otherwise login via the vault'd
+  `openbao_admin_role_id` / `_secret_id`. Falls through to empty
+  string when neither is configured — calling tasks `when` on a
+  non-empty token so the drift cycle no-ops before first
+  provisioning.
+- `approle.yml` (#40 + #11) — bootstrap-host only. Enables the
+  `approle` auth method, the `kv/` mount (kv-v2), and writes four
+  policies + four AppRoles: `openbao-admin` (controller identity),
+  `iac-agent` (resolver in srviac's iac container), `jenkins`
+  (pipeline secrets), `eso` (in-cluster secret sync). Reads
+  current state before writing so a converged run is a no-op.
+  `openbao_rotate_secret_ids=true` mints + prints fresh secret-ids;
+  `openbao_retire_root_token=true` revokes the root token via
+  revoke-self.
+- `audit.yml` (#11) — bootstrap-host only. Enables the file audit
+  device at `/var/log/openbao/audit.log`. The parent directory is
+  created with `openbao:openbao 0750` so OpenBao can write the
+  append-only log (created 0600 by the daemon).
+- `ufw.yml` (#11) — `apt install ufw` + default-deny inbound +
+  allow-list (22/tcp from `srviac`, 443/tcp from `k8s_prd` +
+  `srviac`, 8200/tcp from openbao peers + `srviac`, 8201/tcp + VRRP
+  proto 112 from openbao peers). Rules are inserted on every run;
+  `state: enabled` is gated on `openbao_ufw_enable` (default
+  `false`). Flipping the var to `true` closes wrkdev's SSH path —
+  future runs must come through srviac/Jenkins.
 - `backup.yml` (#12) — leader-guarded daily dump + `backup-server`
   POST timer.
 
 **Defaults / inputs** (`defaults/main.yml`): `openbao_version`
-(currently `2.5.4`), `openbao_deb_sha256`, paths, SAN list, and
-`openbao_recovery_shares`/`_threshold` (5/3). `openbao_seal_current_key_id`
-is required (asserted) and set in `group_vars/openbao.yml`.
+(currently `2.5.4`), `openbao_deb_sha256`, paths, SAN list,
+`openbao_recovery_shares`/`_threshold` (5/3), plus the card-#40/#11
+inputs — `openbao_admin_token`,
+`openbao_admin_role_id`/`_secret_id`, `openbao_*_kv_paths`,
+`openbao_*_token_ttl`, `openbao_rotate_secret_ids`,
+`openbao_retire_root_token`, `openbao_ufw_enable`.
+`openbao_seal_current_key_id` is required (asserted) and set in
+`group_vars/openbao.yml`; `openbao_admin_role_id`/`_secret_id` are
+ansible-vault'd into the same file after first apply.
 
 **Operational notes carried forward:**
 
@@ -328,54 +374,118 @@ node currently holds Raft leadership. Ansible commit `19b6f55`
 - `curl -sS https://secrets.home/v1/sys/health` and
   `https://secrets:443/v1/sys/health` both succeed (SAN coverage).
 
-## Secrets resolver — `!bao` refs (card #40)
+## Secrets resolver — `!bao` refs (card #40, as-built)
 
-Implements `slices/iac-secrets-resolver.md`. Turns OpenBao into a
-usable secrets source for the IaC agent. Lands after the cluster +
-VIP are up (#10) and before the consumer sweep (#11). Cross-repo:
+Implements [`slices/iac-secrets-resolver.md`](../slices/iac-secrets-resolver.md).
+Turns OpenBao into a usable secrets source for the IaC agent. Landed
+together with card #11 because both cards extend the same
+`roles/openbao/approle.yml`.
 
-- **`pvginkel/Ansible`** — `poetry add hvac`; commit
-  `pyproject.toml` + `poetry.lock` (separate commit, so the iac
-  image-rebuild window is clean).
-- **`openbao` role** (`approle.yml`) — enable `approle`; write the
-  `iac-agent` policy granting `read` only on the KV paths
-  `secrets.yaml` references (not `kv/*`); write the `iac-agent`
-  AppRole bound to it (short token TTL, `token_no_default_policy`).
-  Print `role_id` and a one-shot `secret_id` at apply time for the
-  operator to paste into `srviac`'s `/etc/iac/secrets.yaml`.
-- **`pvginkel/IaCAgent`** — rewrite `bin/iac-impl` from bash to
-  Python: a `!bao mount/path#key` YAML constructor, two-pass
-  resolve (literal env first to get
-  `OPENBAO_URL`/`ROLE_ID`/`SECRET_ID`, AppRole login, then sentinel
-  walk), hard-fail before any clone on a missing ref or auth
-  failure. Update `secrets.example.yaml`.
+Cross-repo changes:
+
+- **`pvginkel/Ansible`** — `poetry add hvac`; `pyproject.toml` +
+  `poetry.lock` committed in one go. The next iac image rebuild
+  picks up the dep; until then `iac-impl`'s "baked /app/poetry.lock
+  differs from cloned" warning fires expectedly.
+- **`pvginkel/Ansible` `openbao` role** — `approle.yml` provisions
+  the `iac-agent` policy + AppRole alongside the `openbao-admin` /
+  `jenkins` / `eso` triple. Policy is rendered from
+  `openbao_iac_agent_kv_paths` (list of KV-v2 paths) via
+  `templates/policy.hcl.j2`; an empty list yields a fully-formed but
+  inert AppRole (reads return 403 until the operator adds a path).
+  Short token TTL (1 h), `token_no_default_policy = true`,
+  `bind_secret_id = true`.
+- **`pvginkel/IaCAgent`** — `bin/iac-impl` is now Python. Key
+  pieces:
+  - `BaoRef(mount, path, key, source)` dataclass + a SafeLoader
+    `!bao` constructor; a typo can't fall through as a literal
+    string.
+  - Two-pass resolve: first pass plucks the irreducible-literal env
+    set (`OPENBAO_URL`, `OPENBAO_ROLE_ID`, `OPENBAO_SECRET_ID`,
+    `GIT_API_TOKEN`) — hard-fail if any of them is a `!bao` ref;
+    second pass walks the parsed tree and resolves every sentinel
+    against OpenBao via hvac's AppRole flow + kv-v2 read.
+  - Hard-fail before any clone / state-sync / user command on:
+    missing secrets file, missing irreducible literal, AppRole
+    login failure, unresolvable ref, key not present at the
+    resolved path, value not a string.
+  - Same surface as the bash version otherwise: `-v / --verbose`,
+    no-arg → interactive `bash`, `-c <script>` → `sh -c …`;
+    `SECRETS_FILE` / `WORK` env overrides; baked-lockfile drift
+    warning; TerraformState clone + sync + push at exit.
+- **`pvginkel/IaCAgent` `etc/iac/secrets.example.yaml`** — schema
+  rewrite. The four irreducibles are explicit at the top; every
+  other env entry is a `!bao kv/iac/…#key` example with the intended
+  KV path in a comment. One `files:` entry (the Ansible SSH key)
+  uses `content: !bao …` to demonstrate the materialisation pattern.
 - **`docs/runbooks/iac-cold-boot.md`** — literal-substitution
-  procedure for whole-cluster recovery before OpenBao is back.
+  procedure when OpenBao is unreachable. Snapshot
+  `/etc/iac/secrets.yaml`, replace every `!bao` with the Roboform-
+  held literal, recover, flip refs back.
 
 Consequence for #11: Ansible-via-`iac-impl` does **not** get its
-own AppRole — it consumes env + files the resolver already
-materialised.
+own AppRole — it consumes env + files the resolver materialised
+before any further code runs.
 
-## Auth, policies, audit, hardening (card #11)
+## Auth, policies, audit, hardening, ufw (card #11, as-built)
 
-- **AppRoles** for **Jenkins** (pipeline secrets) and **ESO**
-  (in-cluster secret sync), each with a per-consumer
-  least-privilege policy. Ansible is deliberately absent — see #40.
-- **Retire the root token** captured at bootstrap once the
-  AppRoles and an admin path exist.
-- **Audit** — enable the file audit device from day one.
-- **systemd hardening** — a unit override layered on top of the
-  bundled unit (which already sets `ProtectSystem=full`,
-  `ProtectHome=read-only`, `PrivateTmp=yes`, `PrivateDevices=yes`,
-  `NoNewPrivileges=yes`, `MemorySwapMax=0`). `disable_mlock = true`
-  was settled in card #8; #11 only layers additional `Protect*`
-  directives if needed.
-- **ufw** — default-deny inbound; allow `8200/tcp` from k8s node
-  IPs and `srviac` (the Jenkins agent VM), `8201/tcp` + VRRP
-  (proto 112) from the other two `srvvaultN`, `22/tcp` from
-  `srviac` only (`decisions.md` "Secrets — OpenBao" network
-  boundary). Moved here from card #8 to keep #8 narrow and avoid
-  locking out the wrkdev-driven bootstrap window.
+Cluster-side companion to #40. Lands the auth surface + the
+hardening + the firewall posture in one pass.
+
+**Controller identity.** A new `openbao-admin` AppRole owns the
+cluster's administrative surface (full capabilities on `sys/*` +
+`auth/*` + `identity/*` + the `kv/*` mount). Its `role_id` +
+`secret_id` are ansible-vault'd into
+`inventories/prd/group_vars/openbao.yml` after the first apply
+prints them. From then on, every run (drift cycle included) logs
+in with the admin AppRole; the bootstrap-time root token is
+retired (`revoke-self`) once those creds are in vault. The role
+authenticates with a chain in `tasks/auth-token.yml`:
+operator-supplied `openbao_admin_token` wins; else admin AppRole
+login; else `_openbao_token = ""` and the auth tasks skip cleanly
+with a debug message (drift cycle pre-bootstrap behaviour).
+
+**Auth provisioning.** `approle.yml` runs only on the bootstrap
+host (writes replicate to followers via Raft). Idempotently:
+enable `approle`, enable the `kv/` mount (kv-v2), render +
+write four policies (`openbao-admin`, `iac-agent`, `jenkins`,
+`eso`) via `templates/policy.hcl.j2` and `admin-policy.hcl.j2`,
+write four AppRoles (`token_no_default_policy = true`,
+`bind_secret_id = true`, short TTLs). role_ids are read +
+printed on every run; secret_ids are only minted when
+`-e openbao_rotate_secret_ids=true`. The "operator captures
+creds once" flow lives at the role README's "First-apply
+procedure" — two applies, between which the printed admin creds
+get ansible-vault'd into group_vars.
+
+**Audit device.** `audit.yml` enables the file audit device at
+`/var/log/openbao/audit.log`; parent directory is created
+`openbao:openbao 0750`. Same bootstrap-host gating + token chain
+as the auth tasks.
+
+**systemd hardening.** `hardening.yml` drops
+`/etc/systemd/system/openbao.service.d/hardening.conf` with a
+conservative Protect*/Restrict* set on top of the .deb's bundled
+unit. Notifies daemon-reload + restart on change. Deliberately
+NOT set: `MemoryDenyWriteExecute` (Go uses PROT_EXEC mmap),
+`SystemCallFilter` (untested), `PrivateUsers` (could break
+bind-mounts), `ProtectSystem=strict` (upgrades blocked under
+package updates) — see the template for the rationale.
+
+**ufw.** `ufw.yml` writes the documented allow-list on every run
+but leaves ufw inactive until `openbao_ufw_enable=true`. Rules:
+22/tcp from `srviac` only; 443/tcp from `k8s_prd` + `srviac`
+(consumers via the keepalived VIP / HAProxy 443→8200);
+8200/tcp from openbao peers (elect-bootstrap probes) + `srviac`
+(admin path); 8201/tcp from openbao peers (Raft); VRRP proto
+112 from openbao peers (the `community.general.ufw` module's
+proto enum doesn't include vrrp, so the VRRP rule is a raw
+`ufw allow … proto vrrp` command, idempotency via
+`changed_when: 'Rule added' in stdout`). Flipping
+`openbao_ufw_enable` to `true` is the operator's call — it
+closes wrkdev's SSH path to `srvvaultN`, after which all
+OpenBao management must flow through `srviac` / Jenkins
+(matching `decisions.md` "Secrets — OpenBao" admin path).
 
 ## Backup pipeline (card #12)
 
