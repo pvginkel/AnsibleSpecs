@@ -10,11 +10,25 @@ together — there is no host shape that has one without the other.
 
 Once paired, the `.home` pins in `baseline_etc_hosts_entries` are
 redundant on every host that uses this setup. They're removed, except
-the registry bootstrap entries.
+the registry bootstrap entries and the OpenBao Raft-peer pins (see
+"Exception" below).
 
-The cluster-DNS dependency this introduces is acceptable: a full
-cluster outage slow-fails `.home` lookups (~5 s default), but the
-cold-boot path on these hosts doesn't resolve `.home` names anyway.
+The cluster-DNS dependency this introduces is acceptable for most
+`.home` names — `ca.home` (TLS renewal, ~33-day envelope),
+`backup-server.home` (daily-cycle slack), `secrets.home` (resolved
+only by off-host clients; keepalived's vrrp_script polls the local
+hostname rather than the VIP). A full cluster outage slow-fails
+those lookups at ~5 s, with no correctness impact.
+
+**Exception: OpenBao Raft peers.** `srvvault{1,2,3}.home` stay pinned
+in `/etc/hosts` on the srvvault nodes themselves. openbaod's
+`cluster_addr` (`https://srvvaultN.home:8201`) is re-resolved on
+every restart for Raft peer comms; the role's `bao operator raft
+join` and the `elect-bootstrap` peer probes both hit
+`https://srvvaultM.home:8200` at converge. A whole-cluster cold-boot
+must not block on `.home` resolution when the in-cluster dnsmasq is
+itself unavailable. The peer triples are sourced from each peer's
+`host_vars/network_devices` so the pin list has no IP literals.
 
 ## The rule
 
@@ -110,13 +124,13 @@ restarts `systemd-resolved` on change.
 
 ### `inventories/prd/group_vars/openbao.yml`
 
-- Drop the entire `baseline_etc_hosts_entries` block. Every name in
-  it (`ca.home`, `backup-server.home`, `secrets.home`,
-  `srvvault{1,2,3}.home`) resolves through the routing domain.
-- Rewrite the preceding comment block. Replace the per-name
-  rationale with a one-paragraph note: "public DNS plus baseline-
-  rendered `~home` routing via in-cluster dnsmasq; no static pins
-  needed."
+- Trim `baseline_etc_hosts_entries` down to just the three
+  `srvvault{1,2,3}.home` peer pins — Raft cold-boot requires them
+  (see "Exception" in the goal section).
+- Drop `ca.home`, `backup-server.home`, and `secrets.home`. None of
+  those is bootstrap-critical on srvvaultN.
+- Rewrite the preceding comment block to record why the three peer
+  pins remain and why the rest can go.
 
 ### `inventories/prd/group_vars/k8s_prd.yml`
 
