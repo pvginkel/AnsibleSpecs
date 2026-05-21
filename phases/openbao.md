@@ -1,23 +1,17 @@
 # Phase 2 — OpenBao + secrets
 
 **Status**: in progress. Card #6 closed 2026-05-20; card #7 closed
-2026-05-21: `srvvault1/2/3` exist on PVE at VMIDs 913/914/915, the
-inventory/playbook scaffolding for fleet parity is in place, and
-the three VMs have been brought to fleet shape via `bootstrap` +
-`baseline` + `managed_filesystems` + `ssh_host_cert`. Card #7 also
-carried two collateral changes: `/etc/hosts` block management
-consolidated from the `microk8s` role into `baseline` under
-`baseline_etc_hosts_entries` (single mechanism, fleet-wide), and
-Jenkins (`iac-on-push` + `iac-scheduled-drift`) wired to run the
-new `site-openbao.yml`. Card #8 commit (a) — the `openbao` role
-itself — landed 2026-05-21; the role is committed but not yet
-wired into `site-openbao.yml`. Card #8 closes only after the
-operator-driven §Bootstrap procedure (generate the seal key,
-ansible-vault encrypt it, set `openbao_seal_current_key_id`, wire
-the role into `site-openbao.yml`, first apply on `srvvault1`,
-capture root token + Shamir recovery keys to Roboform, verify
-auto-unseal across a reboot). Both hard prerequisites had already
-closed:
+2026-05-21; card #8 closed 2026-05-21. `srvvault1` is initialised
+and serves Raft as a single-node cluster (`Initialized: true,
+Sealed: false, HA Mode: active`); the static seal auto-unseals
+across reboot. Root token + 5 recovery keys are in Roboform.
+`srvvault2/3` are converged and waiting for the join task that
+card #9 adds. Card #7 also carried two collateral changes:
+`/etc/hosts` block management consolidated from the `microk8s`
+role into `baseline` under `baseline_etc_hosts_entries` (single
+mechanism, fleet-wide), and Jenkins (`iac-on-push` +
+`iac-scheduled-drift`) wired to run the new `site-openbao.yml`.
+Both hard prerequisites had already closed:
 
 - `internal-tls-step-ca` — `internal_tls` role for the listener certs.
 - `ssh-host-ca` — homelab step-ca is now also an SSH host CA;
@@ -29,14 +23,22 @@ closed:
 Execution is tracked on the Trello board **Ansible**, list **OpenBao
 backlog**: cards #8–#15 plus #40 remain open; #1–#7 are done.
 
-**Next step**: close card #8 by running the operator-driven
-§Bootstrap procedure — generate the static seal key, ansible-vault
-encrypt it into `roles/openbao/files/`, set
-`openbao_seal_current_key_id` in `inventories/prd/group_vars/openbao.yml`,
-replace the placeholder comment in `site-openbao.yml` with the
-role include, commit all four together, then run the first apply
-with `--ask-vault-pass`. See §The `openbao` role + §Bootstrap
-procedure.
+**Next card**: #9 — add `tasks/join.yml` to the `openbao` role so
+`srvvault2/3` Raft-join the cluster `srvvault1` already serves.
+The elect-bootstrap probe now sees srvvault1 reporting
+`initialized: true`, so on the next apply srvvault2/3 will route
+down the join path instead of init. See §The `openbao` role.
+
+**Surfaced during card #8 (open follow-ups)**:
+- `baseline`: forced `update-ca-certificates -f` on every
+  converge — the homelab root cert had quietly disappeared from
+  srvvault1's `/etc/ssl/certs/ca-certificates.crt` after a
+  package trigger rebuilt the bundle; the handler-driven refresh
+  pattern didn't self-heal. Landed in Ansible commit `5ab42fa`.
+- `wait-online` hang: srvvault1's `systemd-networkd-wait-online`
+  blocks ~120s on every reboot. Likely the v6-routable check
+  with `accept_ra: false` + no static v6 default route. Tracked
+  on Trello as card #42, not blocking card #9.
 
 ## Goal
 
@@ -109,7 +111,7 @@ backup is **daily** and goes to `backup-server`. See §Backup pipeline.
 |---|---|---|
 | ~~#6~~ | ~~Terraform — 3 `srvvault` VMs + VIP reservation~~ — **done** | §Terraform (as-built) |
 | ~~#7~~ | ~~Bootstrap + baseline `srvvault1/2/3` (fleet parity)~~ — **done** | §Inventory & fleet parity (as-built) |
-| #8  | `openbao` role — install + init `srvvault1` — **role committed; operator bootstrap pending** | §The `openbao` role, §Bootstrap |
+| ~~#8~~ | ~~`openbao` role — install + init `srvvault1`~~ — **done** | §The `openbao` role, §Bootstrap |
 | #9  | Raft join `srvvault2` + `srvvault3` | §The `openbao` role |
 | #10 | keepalived leader-tracking VIP | §keepalived VIP |
 | #40 | Secrets resolver — `iac-impl` rewrite + `!bao` refs | §Secrets resolver |
