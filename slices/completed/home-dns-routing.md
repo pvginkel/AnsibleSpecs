@@ -1,241 +1,67 @@
 # home-dns-routing — `.home` routing as part of the public-DNS setup
 
-## Goal
-
-Treat "public DNS" as a paired configuration: a host that resolves
-through public upstreams (`8.8.8.8` / `8.8.4.4`) gets, in the same
-breath, a systemd-resolved **routing domain** that sends `*.home`
-queries to the two in-cluster dnsmasq LB IPs. The two pieces ship
-together — there is no host shape that has one without the other.
-
-Once paired, the `.home` pins in `baseline_etc_hosts_entries` are
-redundant on every host that uses this setup. They're removed, except
-the registry bootstrap entries and the OpenBao Raft-peer pins (see
-"Exception" below).
-
-The cluster-DNS dependency this introduces is acceptable for most
-`.home` names — `ca.home` (TLS renewal, ~33-day envelope),
-`backup-server.home` (daily-cycle slack), `secrets.home` (resolved
-only by off-host clients; keepalived's vrrp_script polls the local
-hostname rather than the VIP). A full cluster outage slow-fails
-those lookups at ~5 s, with no correctness impact.
-
-**Exception: OpenBao Raft peers.** `srvvault{1,2,3}.home` stay pinned
-in `/etc/hosts` on the srvvault nodes themselves. openbaod's
-`cluster_addr` (`https://srvvaultN.home:8201`) is re-resolved on
-every restart for Raft peer comms; the role's `bao operator raft
-join` and the `elect-bootstrap` peer probes both hit
-`https://srvvaultM.home:8200` at converge. A whole-cluster cold-boot
-must not block on `.home` resolution when the in-cluster dnsmasq is
-itself unavailable. The peer triples are sourced from each peer's
-`host_vars/network_devices` so the pin list has no IP literals.
-
 ## The rule
 
-> Public-DNS configuration *is* (public upstreams) + (`~home` routing
-> domain at `10.2.1.2`, `10.2.1.3`). The baseline role applies both
-> from the same trigger; an inventory cannot pick one without the
-> other.
+Public-DNS configuration *is* (public upstreams) + (`~home` routing
+domain at `10.2.1.2`, `10.2.1.3`). The `baseline` role applies both
+from the same trigger (any `network_devices[*].nameservers` defined);
+an inventory cannot pick one without the other.
 
-Today, the hosts under this rule are `srvvault{1,2,3}` and
-`srvk8s{1,2,3}` — every host whose `network_devices[*].nameservers`
-in host_vars is set to public DNS.
+`Domains=~home` is a **routing** domain, not a search domain — fully
+qualified `*.home` queries route to dnsmasq, no bare-name expansion
+goes through the routing scope. Bare-name resolution still works for
+applications that hit the stub at `127.0.0.53` via NSS (ping, curl,
+openbao, ansible) because glibc expands via the link's search domain
+and the stub fans out to all matching scopes including the routing
+one. `resolvectl query <bare-name>` is the only path that bypasses
+this — it expands internally and queries only the per-link scope, so
+it returns NXDomain for `.home` short names. Operationally a non-issue.
 
-Ceph is not managed by Ansible yet and is out of scope for this
-slice.
+Hosts under the rule today: `srvvault{1,2,3}` and `srvk8s{1,2,3}`.
+Ceph is not Ansible-managed yet; it picks up the same pattern in
+Phase 5.
 
-## Decisions taken with the operator
+## /etc/hosts pins that remain
 
-- **Paired by definition, not by a separate flag.** The same
-  condition that triggers the static-netplan render with public
-  nameservers triggers the systemd-resolved drop-in. No new
-  `baseline_home_dns_routing` toggle — public DNS and `.home`
-  routing are one decision.
-- **Routing domain, not search domain.** `Domains=~home`
-  (tilde-prefixed) routes `*.home` queries to the dnsmasq IPs but
-  does *not* add `home` to the search list. Every consumer in this
-  repo and HelmCharts already uses fully qualified `*.home`; keeping
-  bare-name expansion out of the resolver is one less thing to
-  reason about.
-- **Both dnsmasq LB IPs (`10.2.1.2`, `10.2.1.3`).** Same pair already
-  configured as `microk8s_coredns_home_forwarders`. systemd-resolved
-  rotates between them; one being down doesn't break resolution.
-- **5 s timeout is acceptable.** Slow-fail during a full cluster
-  outage. Annoying, not a correctness problem.
-- **registry / registry-dev stay in `/etc/hosts`.** The in-cluster
-  dnsmasq pulls its own image from the registry on startup —
-  resolving `registry` through dnsmasq itself is the same
-  chicken-and-egg the CoreDNS hosts-block already sidesteps. And dev
-  resolves `registry-dev` to a LAN-direct address, unrelated to the
-  in-cluster dnsmasq path. Both remain static pins.
+The routing domain replaces `baseline_etc_hosts_entries` for most
+`.home` names. Three categories of pin still belong there:
 
-## Mechanism
+- **`registry` / `registry-dev`** — in-cluster dnsmasq pulls its own
+  image from the registry on startup; resolving `registry` through
+  dnsmasq itself would be a chicken-and-egg. `registry-dev` is a
+  LAN-direct address unrelated to the in-cluster path.
+- **`srvvault{1,2,3}.home`** on the srvvault nodes themselves —
+  openbaod's `cluster_addr` re-resolves on every restart for Raft
+  peer comms, and the role's `bao operator raft join` /
+  elect-bootstrap peer probes hit `https://srvvaultM.home:8200` at
+  converge. A whole-cluster cold-boot must not block on `.home`
+  resolution when the in-cluster dnsmasq is itself unavailable.
+  Peer triples are sourced from each peer's
+  `host_vars/network_devices` so the pin list has no IP literals.
+- Future quorum-bound services follow the same exception (see
+  [[feedback-raft-peer-dns-pins]] in the operator's memory).
 
-A single template + task pair in `baseline`, triggered by the same
-condition that drives the static-netplan public-DNS render (i.e. the
-host has any `network_devices[*].nameservers` defined):
+Everything else (`ca.home`, `backup-server.home`, `secrets.home`)
+tolerates the 5 s slow-fail under a full cluster outage: TLS
+renewal has a ~33-day envelope, the daily backup tolerates missed
+cycles, and keepalived's vrrp_script polls the local hostname
+rather than the VIP.
 
-```ini
-# /etc/systemd/resolved.conf.d/home-routing.conf
-[Resolve]
-DNS=10.2.1.2 10.2.1.3
-Domains=~home
-```
+## Where it lives
 
-Why a global `resolved.conf.d` drop-in (not netplan,
-not a per-link `.network` file):
+- `roles/baseline/templates/home-routing.conf.j2` — renders
+  `/etc/systemd/resolved.conf.d/home-routing.conf` with the DNS
+  pair from `baseline_home_dns_routing_servers` (default
+  `[10.2.1.2, 10.2.1.3]`) and `Domains=~home`.
+- `roles/baseline/tasks/main.yml` — render-or-absent task pair gated
+  on `network_devices[*].nameservers`, next to the static-netplan
+  task so the coupling is visually obvious.
+- `roles/baseline/handlers/main.yml` — `Restart systemd-resolved`.
+  Briefly drops the local stub on change; runs late in the play.
 
-- Netplan's `nameservers` block doesn't express a routing-only
-  domain. Threading the dnsmasq IPs through
-  `nameservers.addresses` would pull them into the general-query
-  path; the whole point is to leave the link DNS as 8.8.8.8/4.4
-  and add a routing-only side channel.
-- A global `Domains=~home` creates an additional routing scope
-  alongside the per-link DNS that netplan already configures.
-  Per-link 8.8.8.8 stays the default route; `*.home` matches the
-  global scope and goes to dnsmasq.
-- One file, one handler, one condition. Easy to reason about.
+## Caveat worth remembering
 
-The task and its absent-state counterpart are gated on the same
-predicate as the static-netplan render — "this host has explicit
-`nameservers` in `network_devices`." Hosts without it (DHCP-from-
-dnsmasq hosts: `srviac`, `wrkdev*`, etc.) get no drop-in. A handler
-restarts `systemd-resolved` on change.
-
-## Steps
-
-### `roles/baseline/`
-
-- `templates/home-routing.conf.j2`: the three-line drop-in shown
-  above. DNS pair parameterised via a role default
-  (`baseline_home_dns_routing_servers: [10.2.1.2, 10.2.1.3]`) so the
-  addresses live in one place.
-- `defaults/main.yml`: add `baseline_home_dns_routing_servers` with
-  the default value above. No other new variables — the trigger is
-  the existing `network_devices` shape.
-- `tasks/main.yml`: a task pair that template-renders the drop-in
-  when any `network_devices[*].nameservers` is defined, and
-  `file: state=absent` removes it otherwise. Both notify the
-  resolver handler. Place these next to the existing netplan task so
-  the coupling is visually obvious.
-- `handlers/main.yml`: handler restarts `systemd-resolved.service`.
-- `README.md`: one paragraph documenting the pairing — explicit
-  `nameservers` in host_vars implies the `.home` routing drop-in.
-
-### `inventories/prd/group_vars/openbao.yml`
-
-- Trim `baseline_etc_hosts_entries` down to just the three
-  `srvvault{1,2,3}.home` peer pins — Raft cold-boot requires them
-  (see "Exception" in the goal section).
-- Drop `ca.home`, `backup-server.home`, and `secrets.home`. None of
-  those is bootstrap-critical on srvvaultN.
-- Rewrite the preceding comment block to record why the three peer
-  pins remain and why the rest can go.
-
-### `inventories/prd/group_vars/k8s_prd.yml`
-
-- Trim `baseline_etc_hosts_entries` from
-  ```yaml
-  - "172.17.0.3 registry"
-  - "10.2.1.15 ca.home"
-  ```
-  to just
-  ```yaml
-  - "172.17.0.3 registry"
-  ```
-  Keep `registry` (bootstrap). Drop `ca.home`. Update the comment to
-  say the only entry left is the registry bootstrap pin; `.home`
-  names resolve through the routing domain.
-
-### `inventories/prd/group_vars/k8s_dev.yml`
-
-No change. `k8s_dev` doesn't carry per-NIC `nameservers`; it DHCPs
-through the LAN dnsmasq and already resolves `.home` natively. Its
-`registry-dev` entry stays put.
-
-### `decisions.md`
-
-Add a short paragraph wherever DNS is discussed (confirm the section
-before writing — likely under "Networking"):
-
-> Hosts configured with public DNS upstreams are configured at the
-> same time with a systemd-resolved `~home` routing domain pointing
-> at the two in-cluster dnsmasq LB IPs. The two pieces are a single
-> decision, applied together by the baseline role. `registry` and
-> `registry-dev` remain pinned in `/etc/hosts` (in-cluster dnsmasq
-> depends on the registry to start); no other `.home` names belong
-> in `baseline_etc_hosts_entries`.
-
-## Verification
-
-On one srvvaultN after the apply:
-
-- `resolvectl status` shows global `DNS` includes
-  `10.2.1.2 10.2.1.3` with `~home`.
-- `resolvectl query ca.home` resolves to `10.2.1.15` via the dnsmasq
-  route.
-- `resolvectl query google.com` resolves via `8.8.8.8` (the link
-  DNS), unchanged.
-- `/etc/hosts` no longer carries `ca.home`, `backup-server.home`,
-  `secrets.home`, or `srvvault*.home`.
-
-On one srvk8sN:
-
-- Same `resolvectl status` check.
-- `/etc/hosts` no longer carries `ca.home`; `registry` stays.
-
-Failure-mode checks:
-
-- With one dnsmasq pod drained: `resolvectl query ca.home` still
-  succeeds via the second LB IP. Latency tick, no failure.
-- With the cluster fully down (drill, not a real ask):
-  `resolvectl query ca.home` slow-fails at ~5 s.
-  `resolvectl query google.com` is unaffected. Host services that
-  don't touch `.home` are unaffected.
-
-## Caveats
-
-- **Slow-fail under full cluster outage.** ~5 s per `.home` lookup
-  when both dnsmasq pods are unreachable. New shape, not a new
-  failure mode (the same hosts already accept losing their cluster
-  dependencies).
-- **`systemd-resolved` must be the active resolver.** Ubuntu
-  default. `/etc/resolv.conf` is the stub-resolver symlink. The
-  baseline role doesn't currently enforce that symlink; if a host
-  has been hand-edited off it, the drop-in is ignored. Add an
-  assertion task if drift is suspected — out of scope for this
-  slice.
-- **`systemctl restart systemd-resolved` briefly drops the local
-  stub resolver.** Handler runs at the end of the play; most
-  converged work is done by then. Worth a line in the role README.
-- **Empty-list `blockinfile` path.** Removing every entry from
-  `baseline_etc_hosts_entries` makes the list empty on srvvaultN.
-  The role already handles the empty case
-  (`state: absent` when `length == 0`); confirm on one host before
-  rolling to the rest.
-
-## Dependencies
-
-- None. The two dnsmasq LB IPs already exist and are already used
-  by `microk8s_coredns_home_forwarders`.
-
-## Consumed by
-
-- Sets the pattern for any future tier-0 VM that lands on public
-  DNS (next OpenBao or k8s rebuild). No further hosts-file pinning
-  for `.home` names.
-
-## Commits
-
-Two:
-
-1. `baseline` role: template, defaults, task pair, handler, README.
-   Self-contained; the trigger is the existing `network_devices`
-   shape, so this commit alone immediately starts rendering the
-   drop-in on every host with explicit `nameservers`. No inventory
-   touched yet; `/etc/hosts` still carries the redundant pins until
-   commit 2.
-2. Inventory trim + `decisions.md` note: drop the openbao
-   hosts-entries block, trim the k8s_prd block to just `registry`,
-   add the decision paragraph. Single commit so the trims and the
-   decision land together.
+`systemd-resolved` must be the active resolver (Ubuntu default;
+`/etc/resolv.conf` is the stub symlink). The baseline role does not
+enforce the symlink — a host hand-edited off it would silently
+ignore the drop-in. If drift is suspected, add an assertion task.
