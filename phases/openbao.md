@@ -1,17 +1,18 @@
 # Phase 2 — OpenBao + secrets
 
-**Status**: in progress. Cards #6 / #7 / #8 / #9 done. All three
-`srvvaultN` are voters in a single Raft cluster (srvvault1 leader,
-srvvault2/3 followers); each one's static seal auto-unseals across
-reboot; root token + 5 recovery keys are in Roboform. Cards #10–#15
-plus #40 remain open on Trello **Ansible** / **OpenBao backlog**.
+**Status**: in progress. Cards #6 / #7 / #8 / #9 / #10 done. The
+3-node Raft cluster is reachable on `https://secrets/` via the
+leader-tracking `secrets.home` VIP + per-node HAProxy 443 → 8200
+TCP pass-through; static seal auto-unseals across reboot; root token
++ 5 recovery keys are in Roboform. Cards #11–#15 plus #40 remain
+open on Trello **Ansible** / **OpenBao backlog**.
 
-**Next card**: #10 — leader-tracking keepalived VIP for
-`secrets.home`, plus HAProxy in TCP pass-through mode on each
-`srvvaultN` so clients reach the cluster on `https://secrets/`
-(443 → local OpenBao on 8200, no TLS termination at HAProxy). Adds
-the bare `secrets` SAN to the OpenBao listener cert. See §VIP +
-HAProxy port-fronting.
+**Next card**: #40 — secrets resolver. Rewrite `bin/iac-impl` in
+Python with a `!bao mount/path#key` YAML constructor + two-pass
+resolve via an `iac-agent` AppRole; provision that AppRole and a
+least-privilege policy from the `openbao` role. Sequenced between
+#10 (cluster reachable) and #11 (rest of the auth/policy work).
+See §Secrets resolver.
 
 ## Goal
 
@@ -68,7 +69,7 @@ This phase implements existing decisions; it does not re-open them.
 | ~~#7~~ | ~~Bootstrap + baseline `srvvault1/2/3` (fleet parity)~~ — **done** | §Inventory & fleet parity (as-built) |
 | ~~#8~~ | ~~`openbao` role — install + init `srvvault1`~~ — **done** | §The `openbao` role |
 | ~~#9~~ | ~~Raft join `srvvault2` + `srvvault3`~~ — **done** | §The `openbao` role |
-| #10 | keepalived leader-tracking VIP + HAProxy 443 → 8200 + bare `secrets` SAN | §VIP + HAProxy port-fronting |
+| ~~#10~~ | ~~keepalived VIP + HAProxy 443 → 8200 + bare `secrets` SAN~~ — **done** | §VIP + HAProxy port-fronting |
 | #40 | Secrets resolver — `iac-impl` rewrite + `!bao` refs | §Secrets resolver |
 | #11 | Auth + policies + audit + systemd hardening | §Auth, policies, hardening |
 | #12 | Backup pipeline (OpenBao side) | §Backup pipeline |
@@ -196,13 +197,14 @@ parentheses):
   srvvault1 doesn't take the join path today; that generalisation
   lands with card #13 when join-target selection has to handle a
   missing bootstrap peer.
+- `haproxy.yml` (#10) — `include_role: haproxy` (new reusable role,
+  modelled on `keepalived`'s shape) for the single TCP pass-through
+  frontend on `0.0.0.0:443` → `127.0.0.1:8200`. Plain TCP `check`,
+  no httpchk; rationale in §VIP + HAProxy port-fronting.
 - `keepalived.yml` (#10) — `include_role: keepalived` in
-  leader-tracking mode against `homelab_vips.openbao`.
-- `haproxy.yml` (#10) — `include_role: haproxy` (new role) for the
-  443 → 127.0.0.1:8200 TCP pass-through frontend. `mode tcp`,
-  `option httpchk GET /v1/sys/health`, accepts 200/429 as healthy.
-  No TLS termination — OpenBao's listener cert reaches the client
-  unmodified.
+  leader-tracking mode against `homelab_vips.openbao`. The
+  `vrrp_script` polls `/v1/sys/leader` on the local listener and
+  lifts the leader's VRRP priority above the followers'.
 - `approle.yml` (#40 → extended in #11) — enable approle auth +
   policies + AppRoles for `iac-agent`, Jenkins, ESO.
 - `audit.yml` (#11) — enable the file audit device.
@@ -260,85 +262,71 @@ AppRoles and policies exist.
 
 The role includes `internal_tls` for the OpenBao listener cert:
 
-- SANs: short hostname, `.home` FQDN, `secrets.home`, bare
-  `secrets` (the last one added in card #10 so `https://secrets/`
-  via HAProxy validates against the same per-node cert HAProxy
-  passes through untouched).
+- SANs: short hostname, `.home` FQDN, `secrets`, `secrets.home`.
+  The bare `secrets` was added in card #10 so the bare-hostname URL
+  HAProxy fronts validates against the same per-node cert HAProxy
+  passes through untouched.
 - Cert + key under `/etc/openbao/tls/`, owner `openbao:openbao
   0640` (matches the .deb's chown).
 - Reload handler SIGHUPs `openbao` (reloads listener cert without
   dropping Raft).
 - 47-day leaf, re-issued under the 14-day threshold on each
   iac-scheduled-drift cycle — standard `internal_tls` behaviour.
+- `internal_tls` also re-issues when the caller's `internal_tls_
+  san_list` drifts from the leaf's on-disk DNS SANs (`step
+  certificate inspect --format json` comparison, Ansible commit
+  `cb28d50`). Without this, the card #10 SAN addition would have
+  silently waited up to 33 days for the renewal window.
 
 First issuance happens at role-apply time; no self-signed bootstrap
 step (`decisions.md` "OpenBao bootstrap").
 
-## VIP + HAProxy port-fronting (card #10)
+## VIP + HAProxy port-fronting (as-built)
 
-Two pieces land together: a leader-tracking VIP for `secrets.home`,
-and HAProxy on each node so the cluster is reachable on the edge
-port `443` instead of OpenBao's native `8200`.
+Each `srvvaultN` runs keepalived + HAProxy so clients reach the
+cluster on `https://secrets/` (edge port 443) regardless of which
+node currently holds Raft leadership. Ansible commit `19b6f55`
+(role wiring) + `9339477` (listener tweak); AnsibleSpecs commit
+`1c1ef7e` for the original section text.
 
-### keepalived (leader-tracking VIP)
-
-- `include_role: keepalived` in **leader-tracking** mode.
-- VIP `secrets.home` from `homelab_vips.openbao`; VRID 53; shared
-  `vrrp_auth_password`; unicast peers (the other two `srvvaultN`).
-- A `vrrp_script` polls `https://127.0.0.1:8200/v1/sys/leader`
-  every ~2s; the check passes only when the node is the Raft
-  leader, raising its priority above the followers so the VIP
-  follows leadership. Failover ~4–6s.
-
-### HAProxy (TCP pass-through, 443 → 8200)
-
-- `include_role: haproxy` (new role — `roles/haproxy/`, modelled
-  on the same reusable shape as `roles/keepalived/`: callers pass
-  `haproxy_frontends:` and `haproxy_backends:` as vars).
-- One frontend listening on `0.0.0.0:443`, `mode tcp`, default
-  backend `openbao`. Backend is a single server
-  `127.0.0.1:8200 check` — plain TCP-connect check, deliberately
-  no `option httpchk`. The leader-tracking VIP already keeps
-  traffic off sealed / follower nodes; an HTTPS-level health check
+- **HAProxy** (`roles/openbao/tasks/haproxy.yml` + new reusable
+  `roles/haproxy/`, modelled on `roles/keepalived/` — callers pass
+  `haproxy_frontends:` / `haproxy_backends:`). Single TCP pass-
+  through frontend `0.0.0.0:443` → `127.0.0.1:8200`, plain TCP
+  `check`. No `option httpchk`: the leader-tracking VIP already
+  keeps traffic off sealed / follower nodes; an HTTPS-level check
   would only fire in an all-nodes-sealed scenario, where it would
   trade OpenBao's clear `503 {"errors":["Vault is sealed"]}` for a
-  transport-level connection refusal and hide the diagnostic.
-- **No TLS termination on HAProxy.** The TCP frontend forwards the
-  client's TLS connection straight through; the cert OpenBao
-  presents is the same per-node `internal_tls` leaf, now with bare
-  `secrets` as an extra SAN. This sidesteps the cert-sync problem
-  a TLS-terminating LB would create (which node renews the public
-  cert? how do followers get it?) and matches the canonical
-  HashiCorp Vault HA pattern.
-- HAProxy upgrades on the standalone-service-VM
-  `unattended-upgrades` schedule. HAProxy restart on package
-  upgrade is fast and only drops in-flight TCP connections; the
-  leader-tracking VIP migrates if the upgrade happens to land on
-  the current leader.
+  transport-level refusal and hide the diagnostic.
+- **No TLS termination on HAProxy.** The client's TLS connection
+  flows straight through to OpenBao's listener — same per-node
+  `internal_tls` leaf, now covering `secrets` as an extra SAN.
+  Sidesteps the cert-sync problem a TLS-terminating LB would create
+  and matches the canonical Vault HA pattern.
+- **keepalived** (`roles/openbao/tasks/keepalived.yml`) — leader-
+  tracking VRRP against `homelab_vips.openbao` (VIP `secrets.home`,
+  VRID 53, unicast peers). The `vrrp_script` `curl`s
+  `https://<self>.home:8200/v1/sys/leader` every 2 s and exits 0
+  only when `"is_self":true`; weight 50 lifts the leader's
+  effective priority above the followers' base 100. Failover ~4 s
+  (= `fall × interval`).
+- **Listener** — `tls_disable_client_certs = "true"` in the
+  `listener "tcp"` stanza. Without it OpenBao advertises optional
+  client-cert auth in the TLS handshake and browsers prompt the
+  operator to pick a client cert. We only enable AppRole.
+- **HAProxy upgrades** on the standalone-service-VM
+  `unattended-upgrades` schedule; restart on package upgrade
+  drops only in-flight TCP connections, and the leader-tracking
+  VIP migrates if the upgrade lands on the current leader.
 
-### Bare `secrets` SAN
+### Verify (carry-forward for #13 / #14 drills)
 
-Append `"secrets"` to `openbao_san_list` in the role defaults.
-Each `srvvaultN`'s `internal_tls` cert now covers `secrets`,
-`secrets.home`, `srvvaultN`, `srvvaultN.home`. HAProxy's pass-
-through means whichever node holds the VIP serves its own cert
-to the client; all three SAN lists are identical, so the
-client's hostname check passes regardless of which node is
-currently active.
-
-### Verify
-
-- `bao operator step-down` migrates the VIP; `ip -br addr show
-  dev eth0` on each node + `tcpdump -ni eth0 vrrp` confirm
-  failover.
+- `bao operator step-down` migrates the VIP; `ip -br addr show`
+  on each node + `tcpdump -ni eth0 vrrp` confirm failover.
 - `curl -sS https://secrets/v1/sys/health` from a `.home` client
-  returns 200. The VIP only lives on the leader, so 429 (standby)
-  is not an expected response here.
+  returns 200 (VIP lives on the leader; 429 is not expected here).
 - `curl -sS https://secrets.home/v1/sys/health` and
-  `https://secrets:443/v1/sys/health` both succeed (cert SAN
-  coverage).
-- HAProxy `stats socket` (Unix) shows the backend `up` on each
-  node.
+  `https://secrets:443/v1/sys/health` both succeed (SAN coverage).
 
 ## Secrets resolver — `!bao` refs (card #40)
 
