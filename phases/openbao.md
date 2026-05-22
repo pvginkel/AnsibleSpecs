@@ -22,11 +22,12 @@ snapshot plus a plaintext JSON export) to the in-cluster
 
 **Next card**: **#14 — recovery drill, whole-cluster loss** —
 **open.** The drill has been run once and the snapshot restore is
-proven, but it left one outstanding fix — `backup.yml`'s `no_log` /
-`hostvars` credential resolution, see §Recovery drills. #14 stays
-open until that fix lands and a fresh whole-cluster rebuild
-re-verifies the backup pipeline arms cleanly end-to-end. Card #15 is
-also open on Trello **Ansible** / **OpenBao backlog**.
+proven. The one outstanding fix it left — `backup.yml`'s `no_log` /
+`hostvars` credential resolution — has now landed (controller-file
+credential staging, see §Recovery drills + §Backup pipeline). #14
+stays open until a fresh whole-cluster rebuild re-verifies the backup
+pipeline arms cleanly end-to-end. Card #15 is also open on Trello
+**Ansible** / **OpenBao backlog**.
 
 ## Goal
 
@@ -78,7 +79,7 @@ backup/renewal, not OpenBao's ability to serve.
 | ~~#11~~ | ~~Auth + policies + audit + systemd hardening + ufw~~ — **done** | §Auth surface |
 | ~~#12~~ | ~~Backup pipeline (OpenBao side)~~ — **done** | §Backup pipeline |
 | ~~#13~~ | ~~Recovery drill — single-node loss~~ — **done** | §Recovery drills |
-| #14 | Recovery drill — whole-cluster loss — *open; `backup.yml` fix outstanding* | §Recovery drills |
+| #14 | Recovery drill — whole-cluster loss — *open; `backup.yml` fix landed, rebuild re-verify pending* | §Recovery drills |
 | #15 | First consumer migration + close the phase | §Verification & close |
 
 ## Cluster as-built (cards #6–#10)
@@ -141,7 +142,7 @@ resolution), and (post-card-#11) the ansible-vault'd
 | `auth-token.yml` | #40 | Acquires `_openbao_token` — operator extra-var → admin AppRole login → empty (drift no-op). |
 | `approle.yml` | #40 + #11 + #12 | Bootstrap-host only. Enables approle + kv-v2 mount, writes 5 policies + 5 AppRoles, prints role_ids; mints + prints secret_ids on `openbao_rotate_secret_ids=true`; retires root on `openbao_retire_root_token=true`. |
 | `ufw.yml` | #11 | Allow-list inserted on every run; `state: enabled` only on `openbao_ufw_enable=true`. |
-| `backup.yml` | #12 | Every node: delivers the `backup` AppRole creds + upload token to `/etc/openbao/`, deploys the leader-guarded wrapper + systemd timer. Self-skips until its inputs exist. |
+| `backup.yml` | #12 | Every node: reads the `backup` AppRole creds + upload token from controller-side staging files, delivers them to `/etc/openbao/`, deploys the leader-guarded wrapper + systemd timer. Self-skips until its inputs exist. |
 
 **Defaults / inputs** (`defaults/main.yml`): `openbao_version`
 (currently `2.5.4`), `openbao_deb_sha256`, paths, SAN list,
@@ -339,13 +340,21 @@ for the snapshot, plus list/read on the policy catalogue, `sys/auth`,
   (scope `openbao`, retention 14), against the `pvginkel/homelab`
   provider's `backup_server_token` (the backup-server management
   token). `site-openbao.yml` Play 0 reads it via `terraform output
-  openbao_backup_token`; the role writes it to
-  `/etc/openbao/backup-token`.
-- The `backup` AppRole's `role_id` + `secret_id` are role-delivered
-  straight to `/etc/openbao/` on each node — `approle.yml` mints,
-  `backup.yml` writes — with no group_vars/vault entry. The
-  consumers are co-located with OpenBao's own seal key, so a
-  credential at rest there adds no marginal exposure.
+  openbao_backup_token` and stages it to `tmp/openbao-backup-token`;
+  `backup.yml` writes it to `/etc/openbao/backup-token` on each node.
+- The `backup` AppRole's `role_id` + `secret_id` carry no
+  group_vars/vault entry. `approle.yml` (bootstrap host) provisions
+  them and stages them to `tmp/openbao-backup-role-id` /
+  `tmp/openbao-backup-secret-id`; `backup.yml` delivers them to
+  `/etc/openbao/` on each node. The consumers are co-located with
+  OpenBao's own seal key, so a credential at rest there adds no
+  marginal exposure.
+- All three inputs cross from their producer to every node through
+  controller-side staging files, not `hostvars`: the values are
+  `no_log`, and ansible-core 2.20 no longer exposes `no_log` data
+  between hosts. The staging files persist in the playbook's `tmp/`
+  (gitignored) — they are the rendezvous across the `serial: 1`
+  batches and keep `backup.yml` evaluable under a drift `--check`.
 - `backup.yml` self-skips (debug message, no failing unit) until
   both the AppRole creds and the upload token exist.
 
@@ -389,24 +398,25 @@ empty-KV 404 branch has run so far.
   with the admin AppRole or a recovery-key-minted root. Restore is a
   manual runbook step, no role code.
 
-  The drill exposed four bugs. Three are fixed: the `internal_tls`
+  The drill exposed four bugs, all now fixed: the `internal_tls`
   DNS-ordering flush (handlers flush before the leaf is issued); the
   `auth-token.yml` fresh-cluster tolerance (a rebuilt cluster has no
   admin AppRole yet); the `join.yml` target generalisation (the #13
-  code lift). **The fourth is outstanding** — `backup.yml` resolves
-  its three inputs (the backup AppRole `role_id` + `secret_id` and
-  the upload token) by reading `no_log` registered data / facts back
-  through `hostvars`, which ansible-core 2.20 no longer exposes, so
-  `site-openbao.yml` hard-fails at `backup.yml` on every converge
-  once the admin AppRole exists. Stopgap: `--skip-tags
-  openbao_backup`. The fix is a redesign of how `backup.yml` obtains
-  those three inputs without crossing `hostvars` on `no_log` data
-  (per-node self-mint, or centralised mint with controller-file
-  delivery — design fork still open).
+  code lift); and `backup.yml`'s credential resolution. That fourth
+  one: `backup.yml` resolved its three inputs (the backup AppRole
+  `role_id` + `secret_id` and the upload token) by reading `no_log`
+  registered data / facts back through `hostvars`, which ansible-core
+  2.20 no longer exposes — so `site-openbao.yml` hard-failed at
+  `backup.yml` on every converge once the admin AppRole existed. The
+  fix routes all three through controller-side staging files instead
+  (see §Backup pipeline §Credential model): `approle.yml` and Play 0
+  write them to the playbook's `tmp/`, `backup.yml` reads them back.
+  The interim `--skip-tags openbao_backup` stopgap on
+  `iac-scheduled-drift` can be dropped once the fix is verified.
 
-  **Card #14 stays open** until that fix lands, is confirmed, and a
-  fresh whole-cluster rebuild re-verifies the backup pipeline arms
-  cleanly end-to-end.
+  **Card #14 stays open** until a fresh whole-cluster rebuild
+  re-verifies the backup pipeline arms cleanly end-to-end with the
+  new credential staging.
 
 Both feed `docs/runbooks/openbao.md`.
 
