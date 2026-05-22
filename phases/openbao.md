@@ -316,9 +316,9 @@ holds neither the age key nor a retention policy. API contract:
 
 The two artifacts have different jobs. The snapshot is what a
 recovery restores from (`bao operator raft snapshot restore`) —
-atomic, complete, and it brings back the original root token,
-recovery keys, and AppRole credentials, so consumers need no
-credential redistribution. The JSON export is break-glass only: a
+atomic and complete: it replaces cluster state with the snapshot's,
+so AppRole credentials and the Shamir recovery-key configuration come
+back intact and consumers need no credential redistribution. The JSON export is break-glass only: a
 secret can be read with `age` + `jq` and no running OpenBao —
 insurance against a future circular dependency once consumers
 migrate DR-relevant secrets into the KV tree. It is not a restore
@@ -379,9 +379,12 @@ empty-KV 404 branch has run so far.
   seal key), then `bao operator raft snapshot restore` replays the
   snapshot from the latest `.tgz` (fetched from the rclone
   destination, decrypted with the Roboform-held age key). The
-  restore brings back the original root token / recovery keys /
-  AppRole creds. No new role code — restore is a manual runbook
-  step. Confirm KV / policies / mounts return. Record timings.
+  restore brings back the AppRole creds intact (no consumer
+  redistribution); the root token retired in card #11 does not
+  return — re-authenticate with the admin AppRole or a
+  recovery-key-minted root. No new role code — restore is a manual
+  runbook step. Confirm KV / policies / mounts return. Record
+  timings.
 
 Both feed `docs/runbooks/openbao.md`.
 
