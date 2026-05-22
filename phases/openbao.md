@@ -119,8 +119,9 @@ excludes it (`!openbao`) — convergence flows through
 **Group vars.** `inventories/prd/group_vars/openbao.yml` —
 `baseline_os_update_class: standalone`, the role's
 `openbao_seal_current_key_id`, the `baseline_etc_hosts_entries`
-pinning `ca.home` + `secrets.home` + each srvvaultN's `.home` FQDN,
-and (post-card-#11) the ansible-vault'd `openbao_admin_role_id` +
+pinning each srvvaultN's `.home` FQDN (cold-boot Raft peer
+resolution), and (post-card-#11) the ansible-vault'd
+`openbao_admin_role_id` +
 `openbao_admin_secret_id` for the controller's drift-cycle identity.
 
 **The `openbao` role** (`ansible/roles/openbao/`) orchestrates from
@@ -160,8 +161,12 @@ AppRole creds are required for steady-state and ansible-vault'd.
 - **`disable_mlock = true`** in the HCL — the .deb's unit omits
   `CAP_IPC_LOCK` and sets `MemorySwapMax=0`. The hardening drop-in
   doesn't chase mlock back in.
-- **`ca.home` resolution** comes from `baseline_etc_hosts_entries`,
-  not a role-owned task.
+- **`ca.home` resolution** routes through the baseline-rendered
+  `~home` systemd-resolved drop-in (to the in-cluster dnsmasq), not
+  `/etc/hosts`. `main.yml` flushes handlers before `internal_tls.yml`
+  so a freshly-rebuilt node has that drop-in live before the first
+  leaf issuance — baseline's resolved-restart handler is otherwise
+  play-end-deferred.
 - **CI runs `site-openbao.yml`** as a stage in `iac-on-push` after
   `site.yml` and before `update-k8s`; `iac-scheduled-drift` runs
   `check-ansible-drift.sh playbooks/site-openbao.yml --skip-tags
@@ -414,10 +419,20 @@ In `pvginkel/Ansible` `docs/runbooks/`:
   `phases/completed/openbao.md`; update the `phases/README.md`
   tables.
 
-## Operational lessons (cards #6–#11 + #40)
+## Operational lessons (cards #6–#11 + #40 + #13)
 
 Captured here because they are not derivable from the as-built code
 without the failure that motivated them:
+
+- **First leaf issuance on a rebuilt node needs live `~home` DNS.**
+  `internal_tls`'s `step ca certificate` resolves `ca.home` through
+  the baseline `~home` systemd-resolved drop-in. baseline's
+  resolved-restart handler is play-end-deferred, so a single-play
+  fresh-node converge (a rebuild, or the whole-cluster drill) issued
+  against stale DNS and failed with `lookup ca.home … no such host`.
+  `main.yml` now flushes handlers before `internal_tls.yml`. The
+  original bring-up never hit this — baseline (card #7) and the
+  openbao role (card #8) were separate applies.
 
 - **OpenBao 2.5 audit devices are declarative.** The sys/audit API
   enable path returns `400 cannot enable audit device via API; use
