@@ -211,6 +211,8 @@ Deferred / revisit:
 
 Today: `1.32/stable`, both clusters. The strict-confinement variant (`1.32-strict/stable`) is rejected — extra surface for limited benefit on this workload.
 
+**A cluster upgrade also has to bump the `kubernetes` Python client in the other repos.** Several consumers reach the cluster API through the `kubernetes` Python client (all via the same `load_incluster_config()` + `get_default_copy()` pattern) and must pin it to the cluster's minor (`kubernetes~=32.0` for 1.32): the DockerImages images `dnsmasq-config-generator`, `nginx-configurator`, `infra-statistics`, `certbot` (each in its `requirements.txt` / `Dockerfile`); the `ZigbeeControl` app (`pyproject.toml` — currently lagging at `>=28,<29`, realign to `~=32.0`); and the Helm deploy tooling in `HelmCharts/tools/requirements.txt`. The client tolerates n±1 skew, so the safe order is: bump every pin to the new minor (e.g. `~=33.0`), rebuild + redeploy the affected images, *then* upgrade the cluster. Noted here because the sequencing is an upgrade-procedure concern even though the pins live outside this repo. Origin: a rebuild with an unpinned client pulled `kubernetes` 36.0.0, whose `auth_settings()` had regressed out of step with `load_incluster_config()`, sent every request unauthenticated, and broke service-annotation DNS.
+
 ### k8s node capability labels
 
 Per-node capability labels reconciled by the `microk8s` role from `host_vars/<node>.yml`. Today's set:
