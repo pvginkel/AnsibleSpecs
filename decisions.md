@@ -2,12 +2,12 @@
 
 > **End-of-push handling.** This document is transitional scaffolding for the initial homelab build-out. When the initial push closes, every section here needs to be either:
 >
-> - **executed upon** — the decision is implemented in code and the section retired, or
+- **executed upon** — the decision is implemented in code and the section retired, or
 > - **absorbed** — the text moves to a permanent home (project README, role README, runbook, or inline comment at the right code site).
->
 > Don't treat this as a long-lived constitution. It expires.
+>
 
-Source of truth for design decisions on this repo. When a decision changes, update this file — don't leave stale notes elsewhere.
+> Source of truth for design decisions on this repo. When a decision changes, update this file — don't leave stale notes elsewhere.
 
 ## Scope
 
@@ -101,6 +101,7 @@ Once OpenBao is up, runtime secrets are resolved at IaC-container startup by an 
 - **Cold boot.** Operator pulls each ref's value from Roboform, substitutes literals into `secrets.yaml`, runs the IaC container until OpenBao is restored, flips refs back. Documented as `docs/runbooks/iac-cold-boot.md`. Same shape and mental model as the wife runbook.
 - **What does *not* get its own AppRole.** Ansible-via-iac-impl consumes env + files materialised by the resolver before it ever runs, so it does not need an AppRole of its own. Jenkins (for pipeline secrets) and ESO (for in-cluster secret sync) each retain their own AppRoles + policies; Ansible does not.
 - **Operational consequence.** OpenBao becomes a hard runtime dependency of every `iac` invocation — Jenkins post-stages, ad-hoc operator runs, scheduled drift. Outages above the seal-key + clone window manifest as IaC-paralysis until OpenBao is back or the operator runs the cold-boot procedure.
+- **TerraformState repository sync.** There's currently a full daily sync of all my GitHub repos into a site that gives unauthenticated access to all my code from my local network. This includes the TerraformState repository. The scripts must be changed to specifically exclude this repository.
 
 ## Internal TLS / homelab CA
 
@@ -148,12 +149,12 @@ Hosts brought under management without being built from scratch will never be by
 
 Adoption is therefore a transitional state. Every adopted VM has a planned rebuild that ends the transition. Trigger per host class:
 
-| Host class  | Rebuild trigger          | Notes                                                                                                  |
-|-------------|--------------------------|--------------------------------------------------------------------------------------------------------|
-| k8s VMs     | As part of Phase 4       | microk8s state lives in `/var/snap/microk8s`; nothing OS-side worth preserving. `serial: 1` with drain/cordon. |
-| Ceph VMs    | As part of Phase 5       | OSD disks reattached to fresh OS, not reformatted (see "Ceph rebuild path" below).                     |
-| `wrkdev`    | Operator-scheduled       | Operator-managed; rebuild on operator's cadence.                                                       |
-| pve hosts   | **No scheduled rebuild** | Bare metal, no shadow-clone, no destroy-and-recreate. Fidelity-only.                                   |
+| Host class | Rebuild trigger          | Notes                                                                                                          |
+|------------|--------------------------|----------------------------------------------------------------------------------------------------------------|
+| k8s VMs    | As part of Phase 4       | microk8s state lives in `/var/snap/microk8s`; nothing OS-side worth preserving. `serial: 1` with drain/cordon. |
+| Ceph VMs   | As part of Phase 5       | OSD disks reattached to fresh OS, not reformatted (see "Ceph rebuild path" below).                             |
+| `wrkdev`   | Operator-scheduled       | Operator-managed; rebuild on operator's cadence.                                                               |
+| pve hosts  | **No scheduled rebuild** | Bare metal, no shadow-clone, no destroy-and-recreate. Fidelity-only.                                           |
 
 ### Pre-rebuild sanity check (option)
 
@@ -263,11 +264,11 @@ The Proxmox cluster has two physical bridges plus a workload VLAN on the first:
 
 Per-host-class shape:
 
-| Class | NICs |
-|---|---|
-| Ceph nodes (`srvceph1/2/3`) | vmbr0 + vmbr1 |
-| k8s nodes (`srvk8s1/2/3`) | vmbr0 + vmbr0 tag=2 + vmbr1 |
-| Everything else (operator workstation, OpenBao cluster, scratch) | vmbr0 only |
+| Class                                                            | NICs                        |
+|------------------------------------------------------------------|-----------------------------|
+| Ceph nodes (`srvceph1/2/3`)                                      | vmbr0 + vmbr1               |
+| k8s nodes (`srvk8s1/2/3`)                                        | vmbr0 + vmbr0 tag=2 + vmbr1 |
+| Everything else (operator workstation, OpenBao cluster, scratch) | vmbr0 only                  |
 
 Deferred / revisit:
 
@@ -310,11 +311,11 @@ The homelab step-ca is also an SSH host CA. Every managed host serves a step-ca-
 
 Three policies, one per host class. The class is a property of the host, recorded in inventory.
 
-| Class | Members | Update policy |
-|---|---|---|
-| **Cluster members** | k8s nodes, ceph nodes | Ansible-controlled. `update.yml` plays drain → `apt full-upgrade` → conditional reboot → uncordon, with `serial: 1`. Operator-triggered for now; CI-scheduled in Phase 10. |
-| **Standalone service VMs** | Jenkins agent VM, `srvvault1`/`srvvault2`/`srvvault3` | `unattended-upgrades` + auto-reboot in a quiet window. Ansible installs and configures the package, then steps back. |
-| **Self-managed** | Home Assistant, Windows VMs, IoT, end-user devices | Outside this update system entirely. Documented but not managed. |
+| Class                      | Members                                               | Update policy                                                                                                                                                              |
+|----------------------------|-------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Cluster members**        | k8s nodes, ceph nodes                                 | Ansible-controlled. `update.yml` plays drain → `apt full-upgrade` → conditional reboot → uncordon, with `serial: 1`. Operator-triggered for now; CI-scheduled in Phase 10. |
+| **Standalone service VMs** | Jenkins agent VM, `srvvault1`/`srvvault2`/`srvvault3` | `unattended-upgrades` + auto-reboot in a quiet window. Ansible installs and configures the package, then steps back.                                                       |
+| **Self-managed**           | Home Assistant, Windows VMs, IoT, end-user devices    | Outside this update system entirely. Documented but not managed.                                                                                                           |
 
 Why the split:
 - The Jenkins agent cannot run a pipeline that reboots itself — the orchestrator must not be what is being mutated. Letting the OS handle its own updates avoids this.
