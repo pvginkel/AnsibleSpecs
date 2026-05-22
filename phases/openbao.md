@@ -1,7 +1,7 @@
 # Phase 2 — OpenBao + secrets
 
 **Status**: in progress. Cards **#6 / #7 / #8 / #9 / #10 / #40 / #11
-/ #12 done**. The 3-node Raft cluster on `srvvault1/2/3` is reachable on
+/ #12 / #13 done**. The 3-node Raft cluster on `srvvault1/2/3` is reachable on
 `https://secrets/` (leader-tracking keepalived VIP + per-node HAProxy
 443 → 8200 TCP pass-through). Static seal auto-unseals across reboot.
 The `approle` auth method is enabled, the `kv/` mount is up, four
@@ -20,13 +20,12 @@ A daily leader-guarded backup uploads a `.tgz` (a native Raft
 snapshot plus a plaintext JSON export) to the in-cluster
 `backup-server`.
 
-**Next card**: **#13 — recovery drill, single-node loss**. On the
-live cluster, `terraform apply -replace` recreates one `srvvaultN`;
-the role must converge it back to a voter (Raft-join, snapshot
-stream) with the VIP unaffected, and the drill timings feed
-`docs/runbooks/openbao.md`. Needs a small code lift — generalize the
-join-target gate in the role's `main.yml` so a rebuilt bootstrap
-candidate routes to `join.yml`. See §Recovery drills. Cards #14–#15
+**Next card**: **#14 — recovery drill, whole-cluster loss** —
+**open.** The drill has been run once and the snapshot restore is
+proven, but it left one outstanding fix — `backup.yml`'s `no_log` /
+`hostvars` credential resolution, see §Recovery drills. #14 stays
+open until that fix lands and a fresh whole-cluster rebuild
+re-verifies the backup pipeline arms cleanly end-to-end. Card #15 is
 also open on Trello **Ansible** / **OpenBao backlog**.
 
 ## Goal
@@ -78,8 +77,8 @@ backup/renewal, not OpenBao's ability to serve.
 | ~~#40~~ | ~~Secrets resolver — `iac-impl` rewrite + `!bao` refs~~ — **done** | §Secrets resolver |
 | ~~#11~~ | ~~Auth + policies + audit + systemd hardening + ufw~~ — **done** | §Auth surface |
 | ~~#12~~ | ~~Backup pipeline (OpenBao side)~~ — **done** | §Backup pipeline |
-| #13 | Recovery drill — single-node loss | §Recovery drills |
-| #14 | Recovery drill — whole-cluster loss | §Recovery drills |
+| ~~#13~~ | ~~Recovery drill — single-node loss~~ — **done** | §Recovery drills |
+| #14 | Recovery drill — whole-cluster loss — *open; `backup.yml` fix outstanding* | §Recovery drills |
 | #15 | First consumer migration + close the phase | §Verification & close |
 
 ## Cluster as-built (cards #6–#10)
@@ -371,25 +370,43 @@ empty-KV 404 branch has run so far.
 
 ## Recovery drills (cards #13–#14)
 
-- **Single-node loss (#13)** — on the live cluster: `terraform
-  apply -replace=...` recreates one `srvvaultN`, the role
-  converges it, it Raft-joins, the leader streams the snapshot.
-  VIP unaffected throughout. Record timings into the runbook.
-  - Code lift: generalize the join-target gate in `main.yml` so a
-    rebuilt bootstrap candidate also routes to `join.yml` (today
-    the `inventory_hostname != openbao_bootstrap_host` gate routes
-    it to `init.yml` instead). The slice for #13 owns this.
-- **Whole-cluster loss (#14)** — on the real `srvvault` VMs:
-  rebuild all three, the role converges a fresh empty cluster (same
-  seal key), then `bao operator raft snapshot restore` replays the
-  snapshot from the latest `.tgz` (fetched from the rclone
-  destination, decrypted with the Roboform-held age key). The
-  restore brings back the AppRole creds intact (no consumer
-  redistribution); the root token retired in card #11 does not
-  return — re-authenticate with the admin AppRole or a
-  recovery-key-minted root. No new role code — restore is a manual
-  runbook step. Confirm KV / policies / mounts return. Record
-  timings.
+- **Single-node loss (#13)** — **done.** Drilled on the live
+  cluster: `terraform apply -replace` recreated `srvvault1` (the
+  bootstrap node — the case the code lift exists for). The role
+  converged it, it Raft-joined and reclaimed its voter slot via its
+  stable `node_id`, the leader streamed the snapshot, and the VIP
+  failed over cleanly to a surviving node — quorum never lost. The
+  code lift landed: `main.yml` routes init vs join off cluster +
+  local-init state and `join.yml` targets a live initialized peer,
+  so a rebuilt bootstrap node joins like any follower.
+- **Whole-cluster loss (#14)** — **open.** Drilled once on the real
+  `srvvault` VMs: all three rebuilt, a fresh cluster initialised with
+  the same seal key, `bao operator raft snapshot restore` replayed
+  the latest `.tgz`'s snapshot, and `srvvault2/3` rejoined — three
+  voters, KV / policies / mounts restored and verified. The restore
+  brings the AppRole creds back intact (no consumer redistribution);
+  the card-#11-retired root token does not return — re-authenticate
+  with the admin AppRole or a recovery-key-minted root. Restore is a
+  manual runbook step, no role code.
+
+  The drill exposed four bugs. Three are fixed: the `internal_tls`
+  DNS-ordering flush (handlers flush before the leaf is issued); the
+  `auth-token.yml` fresh-cluster tolerance (a rebuilt cluster has no
+  admin AppRole yet); the `join.yml` target generalisation (the #13
+  code lift). **The fourth is outstanding** — `backup.yml` resolves
+  its three inputs (the backup AppRole `role_id` + `secret_id` and
+  the upload token) by reading `no_log` registered data / facts back
+  through `hostvars`, which ansible-core 2.20 no longer exposes, so
+  `site-openbao.yml` hard-fails at `backup.yml` on every converge
+  once the admin AppRole exists. Stopgap: `--skip-tags
+  openbao_backup`. The fix is a redesign of how `backup.yml` obtains
+  those three inputs without crossing `hostvars` on `no_log` data
+  (per-node self-mint, or centralised mint with controller-file
+  delivery — design fork still open).
+
+  **Card #14 stays open** until that fix lands, is confirmed, and a
+  fresh whole-cluster rebuild re-verifies the backup pipeline arms
+  cleanly end-to-end.
 
 Both feed `docs/runbooks/openbao.md`.
 
