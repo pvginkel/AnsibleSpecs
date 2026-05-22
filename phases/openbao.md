@@ -16,8 +16,9 @@ ansible-vault'd into `inventories/prd/group_vars/openbao.yml`. The
 IaC agent's `iac-impl` is Python with the `!bao` resolver; cold-boot
 is documented at
 [`docs/runbooks/iac-cold-boot.md`](../../Ansible/docs/runbooks/iac-cold-boot.md).
-A daily leader-guarded backup uploads a JSON dump (ACL policies +
-auth methods + mounts + the KV tree) to the in-cluster `backup-server`.
+A daily leader-guarded backup uploads a `.tgz` (a native Raft
+snapshot plus a plaintext JSON export) to the in-cluster
+`backup-server`.
 
 **Next card**: **#13 — recovery drill, single-node loss**. On the
 live cluster, `terraform apply -replace` recreates one `srvvaultN`;
@@ -295,15 +296,37 @@ admin path).
 Per `decisions.md` "OpenBao backup / DR". A daily systemd timer on
 each `srvvaultN` runs `/usr/local/sbin/openbao-backup` (rendered by
 the `openbao` role). The script guards on `/v1/sys/leader`'s
-`is_self` — followers exit 0, only the Raft leader dumps. The leader
-logs in with the read-only `backup` AppRole, walks the ACL policies
-+ auth methods + mounts + the KV-v2 tree into one JSON object, and
-`POST`s it to `https://backup-server.home/upload`. `backup-server`
-age-encrypts server-side, stores the object as
+`is_self` — followers exit 0, only the Raft leader runs. The leader
+logs in with the read-only `backup` AppRole and assembles one `.tgz`:
+
+| Member | Source | Role |
+|---|---|---|
+| `raft.snap` | `GET /v1/sys/storage/raft/snapshot` | Native Raft snapshot — the atomic restore artifact. |
+| `kv.json` | KV-v2 tree walk | Plaintext secrets; break-glass reads + inspection. |
+| `policies.json` | `sys/policies/acl` | ACL policy catalogue (name → HCL). |
+| `auth.json` / `mounts.json` | `sys/auth` / `sys/mounts` | Auth method + mount config. |
+| `manifest.json` | — | Export timestamp, host, OpenBao version. |
+
+It `POST`s the bundle to `https://backup-server.home/upload`.
+`backup-server` age-encrypts server-side, stores the object as
 `<scope>/<utc-timestamp>_<stem>.age` on its rclone destination, and
 prunes the `openbao` scope to its retention count (14). OpenBao
 holds neither the age key nor a retention policy. API contract:
 `/work/DockerImages/backup-server/api.md`.
+
+The two artifacts have different jobs. The snapshot is what a
+recovery restores from (`bao operator raft snapshot restore`) —
+atomic, complete, and it brings back the original root token,
+recovery keys, and AppRole credentials, so consumers need no
+credential redistribution. The JSON export is break-glass only: a
+secret can be read with `age` + `jq` and no running OpenBao —
+insurance against a future circular dependency once consumers
+migrate DR-relevant secrets into the KV tree. It is not a restore
+path.
+
+The `backup` policy is all-read: `read` on `sys/storage/raft/snapshot`
+for the snapshot, plus list/read on the policy catalogue, `sys/auth`,
+`sys/mounts`, and the KV-v2 tree for the export. No write capability.
 
 **Credential model — no ansible-vault.**
 
@@ -329,15 +352,17 @@ token is invalidated server-side; uploaded objects are kept.
 
 **Retrieval is out of band.** backup-server is upload-only — no
 download endpoint. To restore (card #14), fetch the `.age` object
-from the rclone destination directly and decrypt with the
-Roboform-held age key.
+from the rclone destination directly, decrypt with the Roboform-held
+age key, and `tar xzf` the bundle.
 
-**Verified.** The upload path is proven end-to-end — a manual
-`systemctl start openbao-backup.service` on the leader produced and
-uploaded a dump, object confirmed in the rclone destination. The
-empty-KV `LIST` 404 branch is exercised; the `kv_walk` recursion is
-not — `kv/` holds no secrets yet. It first runs for real when card
-#15 migrates a consumer's secrets into the mount.
+**Verification status.** The original JSON-dump pipeline (card #12
+as first built) was proven end-to-end — a manual `systemctl start
+openbao-backup.service` produced and uploaded a dump. The snapshot +
+`.tgz` rework is **not yet exercised**: it is verified as the first
+step of the card #13/#14 drill session — seed KV secrets, trigger a
+manual backup, confirm the `.tgz` lands and the snapshot restores.
+That same step finally exercises the `kv_walk` recursion; only the
+empty-KV 404 branch has run so far.
 
 ## Recovery drills (cards #13–#14)
 
@@ -349,10 +374,14 @@ not — `kv/` holds no secrets yet. It first runs for real when card
     rebuilt bootstrap candidate also routes to `join.yml` (today
     the `inventory_hostname != openbao_bootstrap_host` gate routes
     it to `init.yml` instead). The slice for #13 owns this.
-- **Whole-cluster loss (#14)** — on scratch VMs: fresh init with
-  the same seal key, replay the JSON dump (decrypted with the
-  Roboform-held age key) via the API, confirm KV / policies /
-  mounts return. Record timings.
+- **Whole-cluster loss (#14)** — on the real `srvvault` VMs:
+  rebuild all three, the role converges a fresh empty cluster (same
+  seal key), then `bao operator raft snapshot restore` replays the
+  snapshot from the latest `.tgz` (fetched from the rclone
+  destination, decrypted with the Roboform-held age key). The
+  restore brings back the original root token / recovery keys /
+  AppRole creds. No new role code — restore is a manual runbook
+  step. Confirm KV / policies / mounts return. Record timings.
 
 Both feed `docs/runbooks/openbao.md`.
 
