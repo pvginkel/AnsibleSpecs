@@ -136,9 +136,9 @@ and (post-card-#11) the ansible-vault'd `openbao_admin_role_id` +
 | `keepalived.yml` | #10 | `include_role: keepalived` leader-tracking against `homelab_vips.openbao`. |
 | `hardening.yml` | #11 | systemd drop-in `Protect*`/`Restrict*` directives. |
 | `auth-token.yml` | #40 | Acquires `_openbao_token` — operator extra-var → admin AppRole login → empty (drift no-op). |
-| `approle.yml` | #40 + #11 | Bootstrap-host only. Enables approle + kv-v2 mount, writes 4 policies + 4 AppRoles, prints role_ids; mints + prints secret_ids on `openbao_rotate_secret_ids=true`; retires root on `openbao_retire_root_token=true`. |
+| `approle.yml` | #40 + #11 + #12 | Bootstrap-host only. Enables approle + kv-v2 mount, writes 5 policies + 5 AppRoles, prints role_ids; mints + prints secret_ids on `openbao_rotate_secret_ids=true`; retires root on `openbao_retire_root_token=true`. |
 | `ufw.yml` | #11 | Allow-list inserted on every run; `state: enabled` only on `openbao_ufw_enable=true`. |
-| `backup.yml` | #12 | **Pending.** Leader-guarded daily dump + `backup-server` POST timer. |
+| `backup.yml` | #12 | Every node: delivers the `backup` AppRole creds + upload token to `/etc/openbao/`, deploys the leader-guarded wrapper + systemd timer. Self-skips until its inputs exist. |
 
 **Defaults / inputs** (`defaults/main.yml`): `openbao_version`
 (currently `2.5.4`), `openbao_deb_sha256`, paths, SAN list,
@@ -290,9 +290,13 @@ admin path).
 
 ## Backup pipeline (#12)
 
-**Status**: not started. `backup-server` is already deployed via
-HelmCharts (`configs/prd/storage*`); the remaining work is the
-Terraform credential resource and the Ansible role extensions.
+**Status**: implemented, pending operator apply + verification. The
+Terraform credential (`terraform/prd/openbao.tf`), Play 0 token
+capture, the `backup` AppRole + export policy, and `tasks/backup.yml`
++ wrapper + systemd timer are all in place. `backup-server` is
+already deployed via HelmCharts (`configs/prd/storage*`). Remaining:
+the operator runs `terraform apply` then the bring-up play, and the
+dump path is verified end-to-end.
 
 Per `decisions.md` "OpenBao backup / DR" (authoritative — supersedes
 the older weekly/rclone text in `openbao-static-seal`):
