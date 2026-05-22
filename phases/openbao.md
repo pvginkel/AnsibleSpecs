@@ -392,10 +392,10 @@ Both feed `docs/runbooks/openbao.md`.
 
 In `pvginkel/Ansible` `docs/runbooks/`:
 
-- `openbao.md` — operator runbook: admin path (wrkdevwin → Jenkins
-  agent VM → `bao` / UI), recovery procedures with drill timings,
-  seal-key + AppRole rotation. **Not yet authored**; ships with #13 /
-  #14 timings.
+- `openbao.md` — operator runbook: admin path, single-node +
+  whole-cluster recovery, break-glass read, seal-key + AppRole
+  rotation. **Drafted**; the Drill log section's timings are filled
+  in after the #13 / #14 drills run.
 - `iac-cold-boot.md` — closed (card #40).
 - **Wife runbook** — outline only in this phase; full version ships
   with card #15. Points at Roboform emergency access and the Shamir
