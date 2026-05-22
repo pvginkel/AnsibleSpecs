@@ -1,7 +1,7 @@
 # Phase 2 — OpenBao + secrets
 
 **Status**: in progress. Cards **#6 / #7 / #8 / #9 / #10 / #40 / #11
-done**. The 3-node Raft cluster on `srvvault1/2/3` is reachable on
+/ #12 done**. The 3-node Raft cluster on `srvvault1/2/3` is reachable on
 `https://secrets/` (leader-tracking keepalived VIP + per-node HAProxy
 443 → 8200 TCP pass-through). Static seal auto-unseals across reboot.
 The `approle` auth method is enabled, the `kv/` mount is up, four
@@ -16,15 +16,17 @@ ansible-vault'd into `inventories/prd/group_vars/openbao.yml`. The
 IaC agent's `iac-impl` is Python with the `!bao` resolver; cold-boot
 is documented at
 [`docs/runbooks/iac-cold-boot.md`](../../Ansible/docs/runbooks/iac-cold-boot.md).
+A daily leader-guarded backup uploads a JSON dump (ACL policies +
+auth methods + mounts + the KV tree) to the in-cluster `backup-server`.
 
-**Next card**: **#12 — backup pipeline (OpenBao side)**. Daily
-leader-guarded JSON dump, AppRole-authenticated, POSTed to the
-in-cluster `backup-server` (already deployed via HelmCharts). The
-scope credential is minted by Terraform with the new
-`homelab_backup_credential` resource (`pvginkel/homelab` provider);
-the minted token reaches the srvvaultN nodes via `terraform output`
-from `site-openbao.yml` Play 0. See §Backup pipeline (#12). Cards
-#13–#15 also open on Trello **Ansible** / **OpenBao backlog**.
+**Next card**: **#13 — recovery drill, single-node loss**. On the
+live cluster, `terraform apply -replace` recreates one `srvvaultN`;
+the role must converge it back to a voter (Raft-join, snapshot
+stream) with the VIP unaffected, and the drill timings feed
+`docs/runbooks/openbao.md`. Needs a small code lift — generalize the
+join-target gate in the role's `main.yml` so a rebuilt bootstrap
+candidate routes to `join.yml`. See §Recovery drills. Cards #14–#15
+also open on Trello **Ansible** / **OpenBao backlog**.
 
 ## Goal
 
@@ -74,7 +76,7 @@ backup/renewal, not OpenBao's ability to serve.
 | ~~#10~~ | ~~keepalived VIP + HAProxy 443 → 8200 + bare `secrets` SAN~~ — **done** | §Cluster as-built |
 | ~~#40~~ | ~~Secrets resolver — `iac-impl` rewrite + `!bao` refs~~ — **done** | §Secrets resolver |
 | ~~#11~~ | ~~Auth + policies + audit + systemd hardening + ufw~~ — **done** | §Auth surface |
-| #12 | Backup pipeline (OpenBao side) | §Backup pipeline (#12) |
+| ~~#12~~ | ~~Backup pipeline (OpenBao side)~~ — **done** | §Backup pipeline |
 | #13 | Recovery drill — single-node loss | §Recovery drills |
 | #14 | Recovery drill — whole-cluster loss | §Recovery drills |
 | #15 | First consumer migration + close the phase | §Verification & close |
@@ -288,88 +290,54 @@ Flipping `openbao_ufw_enable` to `true` closes wrkdev's SSH path to
 `srviac` / Jenkins (matching `decisions.md` "Secrets — OpenBao"
 admin path).
 
-## Backup pipeline (#12)
+## Backup pipeline (card #12, as-built)
 
-**Status**: implemented, pending operator apply + verification. The
-Terraform credential (`terraform/prd/openbao.tf`), Play 0 token
-capture, the `backup` AppRole + export policy, and `tasks/backup.yml`
-+ wrapper + systemd timer are all in place. `backup-server` is
-already deployed via HelmCharts (`configs/prd/storage*`). Remaining:
-the operator runs `terraform apply` then the bring-up play, and the
-dump path is verified end-to-end.
+Per `decisions.md` "OpenBao backup / DR". A daily systemd timer on
+each `srvvaultN` runs `/usr/local/sbin/openbao-backup` (rendered by
+the `openbao` role). The script guards on `/v1/sys/leader`'s
+`is_self` — followers exit 0, only the Raft leader dumps. The leader
+logs in with the read-only `backup` AppRole, walks the ACL policies
++ auth methods + mounts + the KV-v2 tree into one JSON object, and
+`POST`s it to `https://backup-server.home/upload`. `backup-server`
+age-encrypts server-side, stores the object as
+`<scope>/<utc-timestamp>_<stem>.age` on its rclone destination, and
+prunes the `openbao` scope to its retention count (14). OpenBao
+holds neither the age key nor a retention policy. API contract:
+`/work/DockerImages/backup-server/api.md`.
 
-Per `decisions.md` "OpenBao backup / DR" (authoritative — supersedes
-the older weekly/rclone text in `openbao-static-seal`):
+**Credential model — no ansible-vault.**
 
-- A **daily** systemd timer on each `srvvaultN`, randomized delay,
-  fires the same wrapper script.
-- The script guards on `/v1/sys/leader`'s `is_self` — the two
-  followers exit in milliseconds; only the leader produces the
-  dump.
-- The leader authenticates with a read-only `backup` AppRole and
-  produces the JSON dump (KV + policies + auth/mount config).
-- It uploads the plaintext bytes to the in-cluster `backup-server`
-  at `https://backup-server.home/`: `POST /upload?filename=<stem>`,
-  `Authorization: Bearer <token>`, the dump as the raw
-  `--data-binary` body. `backup-server` age-encrypts server-side,
-  stores the object as `<scope>/<utc-timestamp>_<stem>.age`, and
-  prunes the scope to its retention count — encryption and
-  retention are entirely server-side; OpenBao holds neither the age
-  key nor a retention policy. API contract:
-  `/work/DockerImages/backup-server/upload-api.md`.
-- The bearer token is a file on each node (`0400`, owner
-  `openbao`), materialised from a Terraform-minted credential
-  (`homelab_backup_credential.openbao` — scope `openbao`, retention
-  14). Token reaches Ansible via `terraform output` from
-  `site-openbao.yml` Play 0; no ansible-vault entry.
+- The scope-bound *upload token* is minted by Terraform:
+  `homelab_backup_credential.openbao` in `terraform/prd/openbao.tf`
+  (scope `openbao`, retention 14), against the `pvginkel/homelab`
+  provider's `backup_server_token` (the backup-server management
+  token). `site-openbao.yml` Play 0 reads it via `terraform output
+  openbao_backup_token`; the role writes it to
+  `/etc/openbao/backup-token`.
+- The `backup` AppRole's `role_id` + `secret_id` are role-delivered
+  straight to `/etc/openbao/` on each node — `approle.yml` mints,
+  `backup.yml` writes — with no group_vars/vault entry. The
+  consumers are co-located with OpenBao's own seal key, so a
+  credential at rest there adds no marginal exposure.
+- `backup.yml` self-skips (debug message, no failing unit) until
+  both the AppRole creds and the upload token exist.
 
-**Implementation outline:**
+**Rotation.** `terraform taint homelab_backup_credential.openbao`
+then re-apply Terraform and `site-openbao.yml`: the provider mints a
+fresh token, Play 0 picks it up, the role rewrites the file. The old
+token is invalidated server-side; uploaded objects are kept.
 
-1. **Terraform** (`terraform/prd/`):
-   - `variables.tf` + `providers.tf`: add `backup_server_url` +
-     `backup_server_token` (sensitive), mirroring the
-     `dns_reservation_*` pair. Operator pastes the URL
-     (`https://backup-server.home/`) and the existing
-     `backupServer.managementToken` value from HelmCharts
-     `configs/prd/storage-values.yaml` into the gitignored
-     `terraform.tfvars`; `terraform.tfvars.example` documents both.
-   - New `openbao.tf`: declare `homelab_backup_credential.openbao`
-     (scope `openbao`, retention 14) and an output for the minted
-     token (sensitive).
-2. **Play 0 (`site-openbao.yml`)**: extend the existing `terraform
-   output` step to capture the backup credential's token alongside
-   `host_pubkeys`; stash as a fact for the role.
-3. **`approle.yml`**: add a `backup` AppRole + policy granting
-   `read` on the export endpoints OpenBao needs for a full JSON
-   dump (`sys/policies/acl/*`, `sys/auth`, `sys/mounts`,
-   `kv/data/*`, `kv/metadata/*`). Print its `role_id` +
-   `secret_id` alongside the other four (rotation flow identical).
-4. **New `tasks/backup.yml`**: write the token to
-   `/etc/openbao/backup-token` (0400 openbao) from the Play 0 fact;
-   render the wrapper script at `/usr/local/sbin/openbao-backup`;
-   render the systemd `.service` + `.timer` units; enable + start
-   the timer.
-5. **Wrapper script (Bash, leader-guarded):**
-   - `curl -fsS --cacert ... https://<self>.home:8200/v1/sys/leader`
-     → exit early unless `"is_self":true`.
-   - AppRole login to obtain a short-lived token.
-   - Iterate KV mounts + policies + auth/mounts; emit JSON dump.
-   - `curl -fsS -X POST https://backup-server.home/upload?filename=...`
-     with bearer auth + raw body.
-   - Exit nonzero on any step; systemd journals capture it; the
-     drift cycle is the operator's notification vehicle (failed
-     timers show in `systemctl --failed`).
+**Retrieval is out of band.** backup-server is upload-only — no
+download endpoint. To restore (card #14), fetch the `.age` object
+from the rclone destination directly and decrypt with the
+Roboform-held age key.
 
-**Token rotation.** `terraform taint
-homelab_backup_credential.openbao` then apply — the provider
-destroys the credential and mints a fresh one; Play 0 picks up the
-new value on the next `site-openbao.yml` run and the role rewrites
-`/etc/openbao/backup-token`. The old token is invalidated on the
-backup-server side at destroy time; previously-uploaded objects
-under the `openbao` scope are not removed.
-
-(The `PUT /v1/backup/...` shape in `slices/backup-collector.md` was
-an early sketch; the as-built API is `POST /upload`.)
+**Verified.** The upload path is proven end-to-end — a manual
+`systemctl start openbao-backup.service` on the leader produced and
+uploaded a dump, object confirmed in the rclone destination. The
+empty-KV `LIST` 404 branch is exercised; the `kv_walk` recursion is
+not — `kv/` holds no secrets yet. It first runs for real when card
+#15 migrates a consumer's secrets into the mount.
 
 ## Recovery drills (cards #13–#14)
 
