@@ -111,7 +111,7 @@ Content-Type: application/octet-stream
 
 ### `/work/Ansible` — amend plan 05
 
-In `slices/openbao-static-seal.md` (this repo):
+In `slices/completed/openbao-static-seal.md` (this repo):
 
 - "OpenBao backup / DR" section's recovery path mentions cloud
   storage as the destination. Update the dump-upload mechanism from
@@ -217,10 +217,10 @@ per-consumer work, scheduled as needs arise.
 
 ## Commits
 
-1. This plan, here in `slices/backup-collector.md`. Single
+1. This plan, here in `slices/completed/backup-collector.md`. Single
    commit; the design is the trackable artefact for this repo.
 2. Plan 05 amendment (when both plans are about to land):
-   `slices/openbao-static-seal.md` updates the OpenBao dump
+   `slices/completed/openbao-static-seal.md` updates the OpenBao dump
    destination from rclone-direct to the collector. Separate commit
    if the timing diverges; folded into plan 05's commit if they
    land together.

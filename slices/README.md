@@ -10,9 +10,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 |---|---|---|---|
 | [internal-ha-vips](internal-ha-vips.md) | pending | internal-tls-step-ca | phase: openbao + secrets (secrets.home VIP); k8s-api + ceph.home cert flips |
 | [internal-tls-nginx-configurator](internal-tls-nginx-configurator.md) | pending | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca) |
-| [openbao-static-seal](openbao-static-seal.md) | pending | — | phase: openbao + secrets |
-| [backup-collector](backup-collector.md) | pending | openbao-static-seal | phase: openbao + secrets |
-| [iac-secrets-resolver](iac-secrets-resolver.md) | pending | openbao-static-seal | phase: openbao + secrets (gates the runtime-secrets sweep for the IaC agent) |
+| [runtime-secrets-sweep](runtime-secrets-sweep.md) | pending | phase: openbao + secrets | (consumer migration — iac/secrets.yaml, Jenkins, HelmCharts via ESO) |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
@@ -34,6 +32,9 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [ssh-host-ca](completed/ssh-host-ca.md) | — | internal-tls-step-ca | phase: openbao + secrets (the hard prerequisite — landed before OpenBao provisioning) |
 | [network-devices-host-vars-sot](completed/network-devices-host-vars-sot.md) | — | — | (correctness; eliminated the vms.tf↔host_vars network-config dual-edit ahead of `srvvault*`) |
 | [home-dns-routing](completed/home-dns-routing.md) | — | — | (cleanup; removed most `baseline_etc_hosts_entries` pins on cold-boot-independent VMs) |
+| [openbao-static-seal](completed/openbao-static-seal.md) | — | — | phase: openbao + secrets (cluster + seal-key shape; landed) |
+| [backup-collector](completed/backup-collector.md) | — | openbao-static-seal | phase: openbao + secrets (in-cluster collector; OpenBao is its first consumer) |
+| [iac-secrets-resolver](completed/iac-secrets-resolver.md) | — | openbao-static-seal | phase: openbao + secrets (`iac-impl` `!bao` resolver; gates [runtime-secrets-sweep](runtime-secrets-sweep.md)) |
 
 ## Deferred / Cancelled
 
