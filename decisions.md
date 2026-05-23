@@ -68,6 +68,19 @@ The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified b
 - **Wife runbook**: points at Roboform emergency access + recovery-key procedure. Lives in `docs/runbooks/`.
 - **Future direction**: peer-unseal between two sites (cheap USB-attached HSM at a friend's house unsealing ours; ours unsealing theirs) remains available — it would restore a three-domain isolation model. Lower priority now that Azure is out of the picture.
 
+### Secret rotation — TODO codify
+
+Rotation of AppRole `secret_id`s and of application secrets lives in the operator's head today; the `runtime-secrets-sweep` slice exercises the flow but doesn't formalise it. Three distinct patterns to capture:
+
+- **AppRole `secret_id` whose value lives in OpenBao KV** (`jenkins`, `iac-agent`): `bao write -force auth/approle/role/<name>/secret-id` mints a new one without invalidating the old; `bao kv put kv/<consumer>/...-approle role_id=… secret_id=…` updates the canonical copy. ESO / the resolver picks it up on next refresh; optional `kubectl annotate externalsecret … force-sync=$(date +%s) --overwrite` shrinks the window. Old `secret_id`s are explicitly destroyed via `auth/approle/role/<name>/secret-id-destroy` after the new one is in use.
+- **AppRole `secret_id` whose value lives in a hand-staged k8s Secret** (`eso` — bootstrap-tier): same `bao write -force`, but the new value is written via `kubectl create secret … --dry-run=client | kubectl apply -f -` into the `openbao-eso-approle` Secret in the `external-secrets` namespace, followed by `kubectl rollout restart deployment/external-secrets` because ESO reads the AppRole material on pod startup only.
+- **Application secrets** (everything under `kv/iac`, `kv/jenkins`, `kv/eso/<chart>`): `bao kv put` to the new value; consumer picks up on next resolution. No restarts.
+
+TODOs:
+- Capture all three patterns in `docs/runbooks/openbao.md` (per-consumer cold-boot sections already planned by the slice — fold rotation into the same per-consumer subsections).
+- Decide whether a `scripts/bao-rotate-approle.sh` helper is worth shipping. Two-liners don't strictly need one, but a helper makes "is it time to rotate?" cadence work easier.
+- Decide the rotation cadence policy itself (calendar-driven? incident-driven only?) — not codified anywhere yet.
+
 ## OpenBao backup / DR
 
 - **Canonical backup**: a daily `.tgz` bundling a native Raft snapshot (`bao operator raft snapshot save`) and a plaintext JSON export of the KV secrets + policies + auth/mount config. The snapshot is the restore artifact — atomic, complete, and the supported recovery path. The JSON export is break-glass: it lets a secret be read with `age` + `jq` and no running OpenBao, and is not itself a restore mechanism.
