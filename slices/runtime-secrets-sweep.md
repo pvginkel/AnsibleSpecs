@@ -180,19 +180,30 @@ Repeat until the only literals left are the four irreducibles.
 
 #### C.2. Jenkins credential store → `kv/jenkins`
 
-1. Audit Jenkins credentials in the UI. For each, decide pipeline
-   secret (move) vs. infrastructure (leave). API tokens, deploy
-   keys, registry creds → move. The Vault plugin's own AppRole, the
-   bootstrap admin creds → leave.
-2. For each migrated credential: `bao kv put kv/jenkins/<name>
-   <key>=<value>`.
-3. Extend `openbao_jenkins_kv_paths`; converge.
-4. Refactor each pipeline that consumed the credential:
-   `withCredentials([...])` → `withVault([configuration: [...],
-   vaultSecrets: [[path: 'kv/data/jenkins/<name>', secretValues:
-   [[envVar: 'X', vaultKey: '<key>']]]]])`. The closure body reads
-   `env.X` exactly as it did before.
-5. Once a pipeline runs green against the OpenBao-backed secret,
+**Policy widening (one-time).** Set
+`openbao_jenkins_kv_paths: [jenkins/*]` in
+`inventories/prd/group_vars/openbao.yml` and converge. The prefix
+glob is right for Jenkins because pipelines reference paths
+dynamically — there's no enumerable manifest like iac's `secrets.yaml`
+or an ExternalSecret's `remoteRefs` to mirror leaf-by-leaf, and
+within `kv/jenkins/*` there's no second principal to isolate against.
+Cross-consumer isolation is preserved: the jenkins AppRole still
+cannot read `kv/iac`, `kv/eso`, or `kv/shared`. After this single
+widening, every subsequent migration is just KV write + pipeline
+refactor; no more policy diffs per secret.
+
+**Per-credential sweep.** For each Jenkins UI credential:
+
+1. Audit: pipeline secret (move) vs. infrastructure (leave). API
+   tokens, deploy keys, registry creds → move. The Vault plugin's
+   own AppRole, the bootstrap admin creds → leave.
+2. `bao kv put kv/jenkins/<name> <key>=<value>`.
+3. Refactor each consuming pipeline:
+   `withCredentials([...])` →
+   `withVault([vaultSecrets: [[path: 'kv/jenkins/<name>',
+   secretValues: [[envVar: 'X', vaultKey: '<key>']]]]])`. The
+   closure body reads `env.X` exactly as it did before.
+4. Once the pipeline runs green against the OpenBao-backed secret,
    delete the Jenkins credential entry. The migrated pipeline is
    now atomic with the OpenBao value.
 
