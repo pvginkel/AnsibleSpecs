@@ -99,26 +99,46 @@ blocks the per-secret work.
    decisions.md §Internal TLS — "regular Kubernetes Secret, not
    delivered via ESO from OpenBao"). That Secret + the role_id in the
    ClusterSecretStore spec are the ESO-side bootstrap-tier credential.
-2. **Jenkins: install the HashiCorp Vault plugin + configure.**
-   This Jenkins chart (`charts/jenkins/`) is a bare wrapper around
-   `jenkins:lts-jdk21` — no JCasC, no plugin pinning. Plugins are
-   operator-installed via the Jenkins UI and persist on the PVC.
-   So this step splits:
-   - **Operator (Jenkins UI):** install `hashicorp-vault-plugin`
-     and `kubernetes-credentials-provider` from Manage Plugins.
-     Configure the OpenBao server entry (Manage Jenkins → System
-     → Vault Plugin) pointing at `https://secrets.home`.
-   - **HelmCharts:** add an `ExternalSecret` in the `jenkins`
-     namespace that materialises a k8s Secret carrying the
-     `jenkins` AppRole `role_id` + `secret_id`. Label the Secret
-     `jenkins.io/credentials-type: vaultAppRoleCredential` so the
-     `kubernetes-credentials-provider` plugin exposes it as a
-     Jenkins credential without anyone typing the `secret_id` into
-     the UI. Pipelines reference the resulting credential ID from
-     the Vault plugin's global config.
+2. **Jenkins: install the HashiCorp Vault plugin + configure (UI
+   only).** This Jenkins chart (`charts/jenkins/`) is a bare wrapper
+   around `jenkins:lts-jdk21` — no JCasC, no plugin pinning. Plugins
+   are operator-installed via the Jenkins UI and persist on the PVC.
+   No HelmCharts changes are needed for this prereq.
 
-   This is the first ESO consumer; a useful early proof that the
-   ESO path works end-to-end.
+   The earlier draft of this step routed the `jenkins` AppRole
+   `role_id`/`secret_id` through ESO + a labelled k8s Secret + the
+   `kubernetes-credentials-provider` plugin, so the `secret_id`
+   would never be typed into Jenkins. That bridge doesn't exist:
+   the HashiCorp Vault plugin does not register any
+   `SecretToCredentialConverter` extensions
+   (`grep -rn SecretToCredentialConverter` against the plugin
+   source returns empty). The only ways to populate a Vault
+   AppRole credential into Jenkins's credential store are UI
+   entry, JCasC, or a startup script. JCasC was rejected as
+   over-machinery — the `jenkins` AppRole `secret_id` has no TTL
+   set in OpenBao and rotates only when the operator decides to;
+   it isn't worth a ConfigMap + envFrom + pod-restart-for-rotation
+   chain for a once-a-year UI click.
+
+   Operator steps:
+   - Install `hashicorp-vault-plugin` from Manage Plugins.
+   - Mint the AppRole creds:
+     `bao read -field=role_id auth/approle/role/jenkins/role-id`
+     and
+     `bao write -force -field=secret_id auth/approle/role/jenkins/secret-id`.
+   - Jenkins → Manage Credentials → System → Global: create a
+     "Vault App Role Credential" with `id` = `jenkins-vault-approle`,
+     role_id + secret_id pasted from above, path `approle`.
+   - Manage Jenkins → System → Vault Plugin: Vault URL =
+     `https://secrets.home`, paste the contents of
+     `/work/Ansible/ansible/roles/baseline/files/homelab-root.crt`
+     into "Vault CA Bundle" (the Jenkins container's JVM
+     truststore doesn't carry the homelab root), select the
+     `jenkins-vault-approle` credential as the default.
+
+   Rotation flow is its own distinct pattern (UI-entered, not
+   KV-stored), tracked in
+   [`decisions.md`](../decisions.md) §Secret rotation — TODO codify.
 3. **IaC agent: no work.** `iac-impl` is already in place (phase 2
    card #40 / [`iac-secrets-resolver`](completed/iac-secrets-resolver.md)).
 
