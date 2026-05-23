@@ -99,14 +99,26 @@ blocks the per-secret work.
    decisions.md §Internal TLS — "regular Kubernetes Secret, not
    delivered via ESO from OpenBao"). That Secret + the role_id in the
    ClusterSecretStore spec are the ESO-side bootstrap-tier credential.
-2. **Jenkins: install the HashiCorp Vault plugin + configure.** In
-   the Jenkins Helm values (HelmCharts), pin the plugin in JCasC,
-   add the OpenBao server entry (`https://secrets.home`), and bind
-   the `jenkins` AppRole via a Jenkins Credentials entry pointing at
-   an ESO-materialised k8s Secret — so the `jenkins` AppRole
-   `secret_id` itself isn't typed into the Jenkins UI. This is the
-   first ESO consumer; a useful early proof that the ESO path works
-   end-to-end.
+2. **Jenkins: install the HashiCorp Vault plugin + configure.**
+   This Jenkins chart (`charts/jenkins/`) is a bare wrapper around
+   `jenkins:lts-jdk21` — no JCasC, no plugin pinning. Plugins are
+   operator-installed via the Jenkins UI and persist on the PVC.
+   So this step splits:
+   - **Operator (Jenkins UI):** install `hashicorp-vault-plugin`
+     and `kubernetes-credentials-provider` from Manage Plugins.
+     Configure the OpenBao server entry (Manage Jenkins → System
+     → Vault Plugin) pointing at `https://secrets.home`.
+   - **HelmCharts:** add an `ExternalSecret` in the `jenkins`
+     namespace that materialises a k8s Secret carrying the
+     `jenkins` AppRole `role_id` + `secret_id`. Label the Secret
+     `jenkins.io/credentials-type: vaultAppRoleCredential` so the
+     `kubernetes-credentials-provider` plugin exposes it as a
+     Jenkins credential without anyone typing the `secret_id` into
+     the UI. Pipelines reference the resulting credential ID from
+     the Vault plugin's global config.
+
+   This is the first ESO consumer; a useful early proof that the
+   ESO path works end-to-end.
 3. **IaC agent: no work.** `iac-impl` is already in place (phase 2
    card #40 / [`iac-secrets-resolver`](completed/iac-secrets-resolver.md)).
 
