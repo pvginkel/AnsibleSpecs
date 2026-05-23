@@ -141,6 +141,23 @@ Homelab-wide CA for internal-DNS TLS. Stands up in its own phase ahead of OpenBa
 - **Root rotation**: planned as a single event in year 9 (root cert validity 10 years from init). Yearly rotation rejected — the operational cost of touching every Linux trust store and every Windows machine annually outweighs the blast-radius benefit when the root key sits offline in Roboform.
 - **SSH CA is a deferred follow-up.** step-ca can also issue SSH host and user certificates, which would replace the static `known_hosts.d/` + `authorized_keys` pattern in `bootstrap` / `adopt.yml`. Intentionally out of scope for the TLS slice — same CA instance gets a new SSH provisioner pair in a later slice, paired with a parallel `ssh_host_cert` role and sshd / ssh_config changes. The TLS slice doesn't need to anticipate it; the SSH slice can lean on the CA that's already running.
 
+### Root rotation mechanism
+
+The "year 9" rotation event needs both the outgoing and the incoming root trusted simultaneously for a transition window — every consumer pinned to either root must validate during the cutover. Mechanism:
+
+- **In-repo shape: a single PEM bundle, `ansible/roles/baseline/files/homelab-root.crt`.** Holds 1..N concatenated PEM blocks. One file to review in PRs, one file the drift pipeline fetches from `https://ca.home/roots.pem` and compares against. Steady state is one cert; rotation windows are two.
+- **Drift comparison is by fingerprint set, not byte diff.** Once the bundle carries two roots, `/roots.pem`'s ordering is no longer pinned to the repo's. The `iac-scheduled-drift` "Homelab CA root drift" stage parses both sides and asserts the SHA-256 fingerprint sets are equal.
+- **On-host shape: one file per cert.** Debian's `update-ca-certificates` walks `/usr/local/share/ca-certificates/` and processes only one PEM block per `.crt` file; a multi-cert bundle dropped there is silently truncated. The `baseline` ca-trust task splits the bundle and writes each cert as `/usr/local/share/ca-certificates/homelab-root-<fp8>.crt`, where `<fp8>` is the first 8 hex chars of the cert's SHA-256 fingerprint. Naming by fingerprint (not by position-in-bundle) keeps filenames stable across bundle reordering and across removal of a root post-rotation, so neither churns `update-ca-certificates -f` runs.
+- **The install task reconciles, not just writes.** baseline enumerates desired certs (from the bundle) against present `homelab-root-*.crt` files on disk and `state: absent`s the diff. Without this, the retired root lingers on every host past the cutover and is trusted forever. The existing self-heal grep against `/etc/ssl/certs/ca-certificates.crt` generalises to a loop over the desired set.
+- **HelmCharts holds two copies of the same file** — `/work/HelmCharts/homelab-root.crt` and `/work/HelmCharts/charts/nginx/files/ca/homelab-root.crt`. A rotation that updates the in-repo bundle here must update both files there in the same change window, ordered *before* the new root starts appearing in step-ca's `/roots.pem` (otherwise the drift pipeline fires until HelmCharts catches up). Eventual fix is to collapse the duplication — single source via submodule, build-time fetch from this repo, or moving the canonical copy under HelmCharts and having Ansible read from there — recorded as a follow-up rather than blocking the next rotation.
+- **Runbook**: `docs/runbooks/step-ca-root-rotation.md`. Documents the cutover sequence — generate new root offline, install in step-ca alongside the old, add to the bundle in both repos, confirm the drift pipeline goes green, fleet-wide `baseline` apply to land the second cert, soak, then remove the old root from step-ca + both repos + apply again to drop it from hosts. Parallels the existing "Intermediate rotation" section in `step-ca-bootstrap.md` but at a different scope and cadence.
+
+TODOs gating the next rotation:
+- Write `docs/runbooks/step-ca-root-rotation.md`.
+- Update the `baseline` ca-trust task to read the bundle, split by cert, name by fingerprint, reconcile against `/usr/local/share/ca-certificates/homelab-root-*.crt`. Generalise the self-heal grep over the desired set.
+- Update the `iac-scheduled-drift` "Homelab CA root drift" stage from byte diff to fingerprint-set comparison.
+- Decide and implement the HelmCharts deduplication mechanism, or accept the two-copy maintenance burden by documenting both paths in the runbook.
+
 ## Workflow + learning
 
 - "Bob Ross" mode: Claude builds and annotates, user reads, reviews, and tweaks. No step-by-step hand-holding.
