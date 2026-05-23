@@ -22,6 +22,73 @@ close the phase"). It depends on phase 2 (cluster + AppRoles + audit
 `jenkins`, `eso`) were provisioned by phase 2 card #11 with inert
 policies waiting for paths.
 
+## Status (as of 2026-05-23)
+
+**Stage A — consumer-side infrastructure**: ✓ DONE. End-to-end
+smoke test green: `kv/jenkins/smoke` → `withVault` pipeline →
+masked value in console output. Operational landmarks shipped:
+
+- **ESO**: chart `external-secrets` (upstream wrapper) in
+  HelmCharts. `ClusterSecretStore openbao-prd` Ready=True, auth via
+  the `eso` AppRole. The AppRole `secret_id` is hand-staged into
+  the `openbao-eso-approle` Secret in the `external-secrets`
+  namespace (not in git).
+- **TLS trust to `secrets.home` (cluster side)**: the CSS uses
+  `caProvider` pointing at the `homelab-root-ca` ConfigMap;
+  `charts/external-secrets/post-install.sh` refreshes that
+  ConfigMap each deploy from `/work/HelmCharts/homelab-root.crt`
+  (canonical in-repo copy of the homelab root).
+- **TLS trust to `secrets.home` (Jenkins side)**: init-container
+  pattern landed in `charts/jenkins/templates/jenkins-deployment.yaml`
+  — copies `$JAVA_HOME/lib/security/cacerts` into an emptyDir,
+  `keytool -importcert`s the homelab root, main container sets
+  `JAVA_OPTS=-Djavax.net.ssl.trustStore=/cacerts/cacerts`. ConfigMap
+  source mirrors the `charts/nginx/files/ca/` shape.
+- **Jenkins AppRole credential**: UI-entered (id
+  `jenkins-vault-approle`). The HashiCorp Vault plugin doesn't
+  register any `SecretToCredentialConverter` extensions, so
+  ESO-materialised auto-import isn't possible; JCasC rejected as
+  over-machinery for an operator-initiated yearly rotation. Pattern
+  captured in decisions.md §Secret rotation as its own category
+  (UI-entered, not KV-stored).
+- **`kv/jenkins/*` policy scope**: prefix-glob.
+  `openbao_jenkins_kv_paths: [jenkins/*]` in
+  `inventories/prd/group_vars/openbao.yml`. Single one-time
+  widening; subsequent migrations don't touch the policy. Per-
+  consumer scoping choice for `iac-agent` and `eso` is deferred to
+  each sweep based on whether that consumer has a leaf manifest
+  worth mirroring.
+- **Token-self capabilities** (`lookup-self`, `renew-self`,
+  `capabilities-self`) added to
+  `roles/openbao/templates/policy.hcl.j2` — every non-admin AppRole
+  gets these so Vault clients can validate their own tokens after
+  login. Surfaced by ESO failing validation; same gap would have
+  hit the Vault plugin and `iac-impl`.
+- **Rotation patterns** captured in decisions.md §Secret rotation
+  — TODO codify: KV-stored (`iac-agent`), UI-entered (`jenkins`),
+  hand-staged k8s Secret (`eso` bootstrap-tier), and application
+  secrets. Codification into `docs/runbooks/openbao.md` is Stage D.
+- **Homelab root rotation mechanism** captured in decisions.md
+  §Root rotation mechanism (unrelated to this slice but surfaced
+  here; runbook + baseline task updates are TODOs there, not here).
+
+**Stage B — KV layout placeholders**: ✗ SKIPPED. The smoke test
+already populates `kv/jenkins/`; `_README` placeholders were pure
+convention with no consumer.
+
+**Stage C — per-consumer migration sweeps**: pending. **Blocked
+on a secrets inventory audit** the operator has requested out-of-
+band: an analysis of every secret across `srviac:/etc/iac/secrets.yaml`,
+the Jenkins credential store, and HelmCharts `configs/<env>/*-values.yaml`.
+The audit produces the current-state picture and a plan for
+organising `kv/iac`, `kv/jenkins`, `kv/eso/<chart>/...`, and
+`kv/shared/<area>/...` before C.1 starts. Expected to be ready when
+the next conversation starts; pick up by reading the audit first,
+then deciding sweep order and per-consumer policy scoping.
+
+**Stage D — cold-boot doc updates**: pending; can land after any
+one of the C.* sweeps.
+
 ## Decisions
 
 The per-consumer mechanism is settled in
@@ -85,7 +152,7 @@ of those.
 
 ## Steps
 
-### A. Bring up the consumer-side infrastructure
+### A. Bring up the consumer-side infrastructure (DONE — see Status above)
 
 These prerequisites are not "secret migration" but their absence
 blocks the per-secret work.
@@ -142,15 +209,35 @@ blocks the per-secret work.
 3. **IaC agent: no work.** `iac-impl` is already in place (phase 2
    card #40 / [`iac-secrets-resolver`](completed/iac-secrets-resolver.md)).
 
-### B. KV layout + initial seed
+### B. KV layout + initial seed (SKIPPED — see Status above)
 
-- `bao secrets list` confirms `kv/` is mounted (phase 2 card #11).
-- Establish the top-level prefixes by writing a `_README` placeholder
-  in each: `kv/iac/_README`, `kv/jenkins/_README`, `kv/eso/_README`,
-  `kv/shared/_README`. Pure convention so `bao kv list kv/` shows
-  the prefixes from day one.
+Original intent: write `_README` placeholders under each top-level
+prefix so `bao kv list kv/` shows the structure from day one.
+Skipped — the smoke test established `kv/jenkins/` already, and the
+placeholders were ceremony without a consumer.
 
 ### C. Per-consumer migration sweeps
+
+**Prerequisite: secrets inventory audit.** Before the first sweep,
+the operator's audit (requested out-of-band; expected ready at the
+start of the next conversation) lands the current-state map across
+`srviac:/etc/iac/secrets.yaml`, Jenkins credential store, and
+HelmCharts `configs/<env>/*-values.yaml`, plus a proposed `kv/`
+organisation. The audit determines:
+
+- Which secrets belong under each consumer's prefix vs. `kv/shared`.
+- Whether any secrets are duplicated across consumers today (same
+  value typed into Jenkins, embedded in a Helm values file, and
+  literal in `secrets.yaml` — candidates for `kv/shared/`).
+- Per-consumer policy scoping for `iac-agent` and `eso` (jenkins
+  is already settled at `jenkins/*` — see Status). Whether iac
+  stays per-leaf depends on whether its `secrets.yaml` manifest
+  is small enough to keep curating; whether ESO stays per-leaf
+  depends on the chart count vs. the value of the per-leaf audit
+  trail.
+
+Without the audit, sweep order and `kv/` layout decisions would be
+speculative. Read the audit first.
 
 Each sweep follows the same shape; do one consumer at a time so the
 operator's attention stays focused.
@@ -320,12 +407,14 @@ Append per-consumer sections to
 - **Per-chart Helm audit is the slow part.** Don't batch; one
   chart per commit makes review and rollback tractable. CLAUDE.md
   "commit early and often" applies in HelmCharts.
-- **Adding the (N+1)th iac secret is now a four-touch change:**
-  KV write + group_vars policy widening + Ansible converge +
-  `secrets.yaml` ref. Worth a one-paragraph "adding a new iac
-  secret" section in the iac-agent runbook once the dust settles.
-  Jenkins and ESO follow the same pattern at their respective
-  surfaces.
+- **Per-consumer "add a new secret" friction differs.** Jenkins is
+  now two touches (`bao kv put` + pipeline edit) because the policy
+  was widened to `kv/jenkins/*` once. iac and ESO friction depends
+  on the per-leaf-vs-prefix scoping decided at each sweep (see the
+  audit prerequisite above): per-leaf is four-touch (KV write +
+  group_vars edit + converge + consumer-side ref); prefix-glob
+  matches Jenkins's two-touch shape. Each consumer's runbook
+  paragraph should reflect whichever scoping was chosen.
 - **No automated drift between consumer config and KV paths.** A
   pipeline that references a KV path the policy doesn't grant
   fails at runtime, not at config-edit time. A small lint script
