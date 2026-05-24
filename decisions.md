@@ -82,6 +82,17 @@ TODOs:
 - Decide whether a `scripts/bao-rotate-approle.sh` helper is worth shipping. Two-liners don't strictly need one, but a helper makes "is it time to rotate?" cadence work easier.
 - Decide the rotation cadence policy itself (calendar-driven? incident-driven only?) — not codified anywhere yet.
 
+## Ceph RGW credentials — per-app, minted by TF
+
+Today's posture: a single Ceph RGW user, `csi-prd`, holds the production S3 credentials used by every chart that talks to S3 (design-assistant per stage, electronics-inventory, iot, librechat, etc.) and by the Jenkins artifact-publishing pipelines. A second user, `csi-dev`, exists for the workstation cluster (`wrkdevk8s`) but is unused — every prd-cluster deployment, across all chart stages (`@prd`, `@uat`, `@tst`, `@dev`), authenticates as `csi-prd`. The runtime-secrets-sweep slice migrates this shape into `kv/shared/ceph-rgw/s3` as a *transitional* shared bucket and flags retirement here.
+
+- **The "dev" in `csi-dev` maps to cluster, not app stage.** All storage in all namespaces on the prd cluster goes to `csi-prd`, regardless of which app stage the chart is at. The `csi-dev` user has no production traffic; it can be nuked.
+- **Per-app RGW users are the right shape, minted by the HomelabTerraformProvider.** Each chart deployment owns its own RGW user, keyed to its namespace and stage. The TF provider gains a `homelab_ceph_rgw_user` (or similar) resource; chart provisioning writes the minted access_key/secret_key into the chart's own `kv/eso/k8s/<cluster>/<ns-base>/<stage>/s3#access_key_id,secret_access_key` path. Rotation is per-app; blast radius bounds itself.
+- **Once per-app minting lands, retire the `csi-prd` credential.** Just the access_key/secret_key pair — the user, its buckets, and any data stay put; no storage migration. The shared credential exists today only because there was no other available access pair; per-app users make it redundant. The `kv/shared/ceph-rgw/s3` entry the runtime-secrets-sweep slice writes is explicitly transitional and retires in the same pass (delete the KV path, `radosgw-admin key rm` to invalidate the old access key, or rotate it to a value no consumer has).
+- **Workstation `.env` consequence.** DesignAssistant local-dev `.env` files hold prd Ceph credentials today, because `csi-prd` was the only available account. Per-app minting plus a dedicated dev-workstation account (per checkout, or one shared workstation user) breaks the prd-creds-on-workstation leak without changing the workstation workflow. Tracked in the runtime-secrets-sweep slice's §Loose ends as a follow-on.
+
+Forward-looking; the runtime-secrets-sweep slice does not block on this. It captures today's shape in `kv/shared/`, flags it transitional, and hands off to the slice that adds the TF resource.
+
 ## OpenBao backup / DR
 
 - **Canonical backup**: a daily `.tgz` bundling a native Raft snapshot (`bao operator raft snapshot save`) and a plaintext JSON export of the KV secrets + policies + auth/mount config. The snapshot is the restore artifact — atomic, complete, and the supported recovery path. The JSON export is break-glass: it lets a secret be read with `age` + `jq` and no running OpenBao, and is not itself a restore mechanism.
@@ -285,6 +296,60 @@ The user's application has four deployment stages: `dev`, `test`, `uat`, `prd`. 
 - **Bootstrap-critical hosts do not resolve through the dnsmasq pod.** dnsmasq runs as a Kubernetes pod, so the k8s nodes themselves and the OpenBao cluster cannot depend on it: the cluster could not boot from cold if its nodes resolved through a service hosted on the cluster, and OpenBao must be reachable to deliver secrets to the cluster that hosts dnsmasq. These hosts carry static resolver configuration — `/etc/hosts` for the names they need at boot, plus an upstream resolver (LAN router or public DNS) reached directly. The configuration is not standard Ubuntu defaults; the `baseline` role applies it based on host class.
 - **The operator workstation needs a secondary resolver too**, for the same reason. The dnsmasq pod runs as a 2-replica StatefulSet pinned to different k8s nodes, so a single node reboot is invisible to it — but if the workstation only knows about one of the two replicas, a roll that touches the node hosting that replica blacks out resolution from the workstation mid-run. DHCP option 6 advertising both replicas covers it; configuring both resolvers statically on the workstation works too. Either way, list both — never one.
 - **Public DNS upstreams imply a `~home` routing domain.** Hosts configured with public DNS upstreams are configured at the same time with a systemd-resolved `~home` routing domain pointing at the two in-cluster dnsmasq LB IPs. The two pieces are a single decision, applied together by the `baseline` role from the same trigger (`network_devices[*].nameservers` defined). `registry` and `registry-dev` remain pinned in `/etc/hosts` (in-cluster dnsmasq depends on the registry to start); on the OpenBao nodes the three `srvvault{1,2,3}.home` peer triples also remain pinned (Raft `cluster_addr` re-resolves on every restart and a whole-cluster cold-boot must not depend on dnsmasq). No other `.home` names belong in `baseline_etc_hosts_entries`. Full-cluster outage slow-fails the rest at ~5 s; link DNS (and any non-`.home` query) is unaffected. See [`slices/completed/home-dns-routing.md`](slices/completed/home-dns-routing.md).
+
+## Ingress isolation — TODO split public from internal
+
+Today a single in-cluster NGINX ingress (chart: `nginx`,
+`charts/nginx`) terminates **both** public sites (`is_public: yes`,
+`*.webathome.org` / `*.ginbov.nl`, Let's Encrypt) and internal sites
+(`*.home`, step-ca). Whether a request to an internal site is
+rejected from the public internet depends on a per-vhost `allow
+192.168.0.0/16; allow 10.0.0.0/8; allow 172.16.0.0/12; deny all;`
+block emitted by the nginx-configurator template
+(`/work/DockerImages/nginx-configurator/app/template.j2:14`).
+
+History: the `{% if not a.is_public %}` guard around that block was
+missing for a stretch. Every internal site got a public-resolvable
+Let's Encrypt cert (because Certbot proves over the same listener
+and the names are resolvable externally for cert issuance), and the
+filter never fired. A single `/etc/hosts` entry on an attacker's
+machine routed straight through. No log line, no error — the cert
+validated, the site loaded.
+
+The guard is in place now. The architectural problem isn't: the
+model is still "every vhost gets the filter right, forever." One
+typo (`is_public: yes` on the wrong site), one template regression,
+one new annotation that bypasses `location /` — and the door
+re-opens silently.
+
+**Target shape**: two separate ingress Deployments + LB IPs, each
+configured from a disjoint subset of `external-services.yaml`.
+
+- **Public NGINX**: own Service + MetalLB LB IP, own upstream pool.
+  Knows only `is_public: yes` sites. No `allow` rules anywhere —
+  everything it serves is meant to be reachable. Let's Encrypt
+  renewal lives here.
+- **Internal NGINX**: existing behavior, internal LB IP, no path
+  from the public internet (router NAT does not forward to this
+  IP). step-ca renewal lives here. Filter rules become defense in
+  depth, not the primary gate.
+
+The hard property: the public ingress has **no upstream config for
+internal sites**. Compromising the public NGINX exposes the public
+set only — a network-level guarantee, not a template-correctness
+guarantee.
+
+Cost: one extra LB IP, `nginx-configurator` filters its view twice,
+two cert renewal flows (public LE + internal step-ca — already
+separate concerns), `dns.webathome.org/hostname` annotations become
+class-aware so internal hostnames resolve to the internal LB IP and
+public hostnames to the public one.
+
+Not in scope for `runtime-secrets-sweep`. Belongs in the same broader
+"HelmCharts publishable" arc — file a separate slice when the secrets
+sweep settles. Captured here so future-self doesn't re-discover the
+gap by reading the template comment and assuming "we always had this
+right."
 
 ## Network topology for managed VMs
 
