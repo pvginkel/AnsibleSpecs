@@ -391,7 +391,7 @@ other 4 are bootstrap irreducibles).
 Per the named-accounts principle:
 
 - New Home Assistant long-lived token for iac-agent (don't reuse
-  the one homeassistant-mcp will get).
+  the one home-assistant-mcp will get).
 - New GitHub PAT for iac-agent (don't reuse the Jenkins clone PAT;
   retire the Jenkins-shared `GIT_API_TOKEN` after this step).
 - The Proxmox / DNS-reservation / Jenkins-agent / SSH-key entries
@@ -758,6 +758,22 @@ as work lands; review at end-of-slice for nothing-left-behind.
   one of the 13 charts but it's the most disruptive of them; do
   last in the §3.c third pass so the easy ones build the helper
   template muscle memory first.
+- **HelmCharts chart rename: `homeassistant-mcp` →
+  `home-assistant-mcp`.** "Home Assistant" is two words; the
+  rest of the slice's naming hyphenates it (`kv/iac/home-assistant`,
+  `kv/eso/<C>/home-assistant-mcp/<S>/home-assistant`). The
+  HelmCharts chart name + namespace + ingress hostnames
+  (`homeassistant-mcp.home`, `homeassistant-mcp`) currently
+  smush. Rename touches: `charts/homeassistant-mcp/` directory,
+  `Chart.yaml` `name:`, every manifest's `app:` label + resource
+  `name:` field, `configs/{prd,dev}/homeassistant-mcp-values.yaml`
+  filenames, the chart's `.sh` shell wrapper, and the
+  ingress hostnames. Pair with the planned chart-redeploy
+  normalisation pass (where namespaces also gain `-<stage>`
+  suffixes); same effort window. Until the rename lands, KV
+  writes referencing `home-assistant-mcp` as `<ns-base>` won't
+  match any live ExternalSecret consumer — sequence the rename
+  before the chart's C.3 sweep.
 - **step-ca bootstrap secrets — extract from HelmCharts to
   ansible-vault.** `configs/prd/step-ca.yaml` today holds the
   four bootstrap-tier Secrets (`step-ca-config`,
