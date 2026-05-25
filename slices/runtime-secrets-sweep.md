@@ -584,6 +584,50 @@ Pre-migration verification per audit §3.c:
 Mechanically the third pass is the second pass shape, applied to
 templates rather than values files.
 
+**Fourth pass — secrets in chart `files/` directories loaded into
+ConfigMaps** (audit §3.d). 13+ charts use the
+`(.Files.Glob "files/**").AsConfig` pattern to embed files into
+ConfigMaps; some of those files carry secret material. Affected
+charts:
+
+- `calendar-support` — `files/service-account-key.json` (Google
+  service account, PEM private key inside), plus borderline
+  `files/calendars.json` and `files/config.json` (operator decides
+  KV-or-ConfigMap).
+- `media` — `files/gluetun/wg0.conf` (TorGuard WireGuard
+  PrivateKey + Endpoint, travel together), plus
+  `files/mydownloads/config.xml` (TVDb API key, Firebase server
+  key, Plex pw, two user pw hashes).
+- `pgadmin` — `files/pgpass` (reuses electronics-inventory and
+  guacamole DB passwords from §3.c).
+- `phpmyadmin` — `files/10-webathome-org.php` (reuses webathome-org
+  MySQL root password from §3.c).
+- `version-poller` — `files/config.yaml` (Jenkins API token + 5
+  pipeline trigger tokens).
+- `elasticsearch` — `files/kibana/kibana.yml`
+  (`xpack.security.encryptionKey`).
+
+Mechanism per chart:
+
+1. Split `files/` into a non-secret subtree (still
+   `Files.Glob`'d into the ConfigMap) and a secret subtree
+   (excluded from the Glob target).
+2. KV write + policy widen as for the other passes.
+3. ExternalSecret materialises a Secret whose `data.[].secretKey`
+   matches each filename; the pod volume-mounts the Secret
+   (typically `subPath: <filename>`) into the same path the app
+   reads.
+4. For "split a file into secret-fields + non-secret-fields"
+   cases (kibana.yml, mydownloads config.xml), the chart change
+   is non-trivial — either init-container templating with envsubst
+   from env vars sourced from the Secret, or splitting the file
+   so the secret-portion lives in a separate mountable file.
+
+This pass is mechanically the most disruptive of the four — the
+volume-mount split is more invasive than the `value:` →
+`valueFrom: secretKeyRef:` change of the second/third passes. Do
+chart-by-chart with one commit per chart.
+
 **Non-trivial chart changes flagged in the audit, called out
 individually:**
 
@@ -719,6 +763,17 @@ as work lands; review at end-of-slice for nothing-left-behind.
   decisions.md §Ceph RGW credentials. Tracking the `csi-dev` user
   nuke + `csi-prd` credential retirement here so neither gets
   forgotten when the TF resource lands.
+- **Per-app readonly DB users for pgadmin / phpmyadmin.** Today
+  pgadmin's `pgpass` and phpmyadmin's `10-webathome-org.php` hold
+  the *admin* DB passwords for guacamole, electronics-inventory,
+  and webathome-org (same values as audit §3.c). After the §3.d
+  fourth pass, pgadmin/phpmyadmin become additional consumers of
+  the same KV leaves. The named-accounts answer is to mint
+  readonly Postgres/MySQL users dedicated to the admin UIs; the
+  KV leaf for pgadmin/phpmyadmin then becomes its own credential
+  with bounded privilege. Forward work — not a precondition for
+  the §3.d migration, but worth doing before considering the
+  named-accounts pass closed.
 - **MyDownloadsClient + ScanToPdfClient keystore rotation.**
   Audit / dump shows both `MyDownloadsClient_keystore_secret` and
   `ScanToPdfClient_keystore_secret` are set to the same value,
