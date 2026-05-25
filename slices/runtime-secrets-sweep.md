@@ -763,6 +763,20 @@ as work lands; review at end-of-slice for nothing-left-behind.
   decisions.md §Ceph RGW credentials. Tracking the `csi-dev` user
   nuke + `csi-prd` credential retirement here so neither gets
   forgotten when the TF resource lands.
+- **Guacamole chart wiring for OIDC client_secret.** Chart
+  currently wires only `OPENID_CLIENT_ID` (see
+  `charts/guacamole/templates/guacamole-deployment.yaml:68-69`),
+  implying the OIDC implicit flow. The Keycloak `guacamole`
+  client has a `client_secret` regardless; the secure default
+  for Guacamole + Keycloak is the authorization-code flow with
+  both. Add `oidc.clientSecret` to chart values + wire
+  `OPENID_CLIENT_SECRET` env var in the deployment template,
+  then `kv/eso/prd/guacamole/prd/oidc#client_id,client_secret`
+  becomes the canonical leaf. Sequence the chart-template change
+  before guacamole's §C.3 sweep. Surfaces a broader methodology
+  gap — the audit catches "secrets that *are* embedded" but not
+  "secrets that *should* be wired but aren't"; see
+  `tmp/further-audit-request.md`.
 - **Per-app readonly DB users for pgadmin / phpmyadmin.** Today
   pgadmin's `pgpass` and phpmyadmin's `10-webathome-org.php` hold
   the *admin* DB passwords for guacamole, electronics-inventory,
