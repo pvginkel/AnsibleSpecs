@@ -93,7 +93,7 @@ Strategy refined out of the audit (see Decisions below for the full
 shape, Loose ends for what gets handed off):
 
 - KV path grammar for ESO settled at
-  `kv/eso/k8s/<cluster>/<ns-base>/<stage>/<leaf>#<key>` — stage
+  `kv/eso/<cluster>/<ns-base>/<stage>/<leaf>#<key>` — stage
   always present; one flat leaf segment; no nesting past it.
 - **URLs never enter Vault.** Endpoint URLs, realm names, broker
   addresses, etc. move to chart values (for ESO consumers) or
@@ -135,7 +135,7 @@ of those.
   ```
   kv/iac/<leaf>#<key>                                       (iac-agent)
   kv/jenkins/<leaf>#<key>                                   (jenkins)
-  kv/eso/k8s/<cluster>/<ns-base>/<stage>/<leaf>#<key>       (eso)
+  kv/eso/<cluster>/<ns-base>/<stage>/<leaf>#<key>           (eso)
   kv/shared/<area>/<leaf>#<key>                             (cross-consumer)
   ```
 
@@ -149,7 +149,7 @@ of those.
     regardless, so the path doesn't change when the live ns gets
     renamed.
   - `<stage>` is always present, even for charts that have only
-    one stage today (`dnsmasq` → `kv/eso/k8s/prd/dnsmasq/prd/...`).
+    one stage today (`dnsmasq` → `kv/eso/prd/dnsmasq/prd/...`).
     Explicit so adding a future dev/uat stage never requires
     moving the prd keys.
   - `<leaf>` is one segment, hyphen-compound for sub-structure
@@ -161,7 +161,7 @@ of those.
 
   Consumer-rooted because policy management is per-consumer; a flat
   layout muddles that. Policy globs follow the natural prefix:
-  `kv/iac/*`, `kv/jenkins/*`, `kv/eso/k8s/<cluster>/<ns-base>/<stage>/*`
+  `kv/iac/*`, `kv/jenkins/*`, `kv/eso/<cluster>/<ns-base>/<stage>/*`
   per ns+stage tuple, `kv/shared/<area>/*` per shared area on each
   consumer that touches it.
 
@@ -508,7 +508,10 @@ largest single block at 20 lines across 13 charts and the one
 that makes HelmCharts publishable.
 
 KV path shape for every leaf:
-`kv/eso/k8s/<cluster>/<ns-base>/<stage>/<leaf>#<key>` per Decisions.
+`kv/eso/<cluster>/<ns-base>/<stage>/<leaf>#<key>` per Decisions.
+(Audit §5 originally proposed `kv/eso/k8s/...`; the `k8s/` segment
+dropped because ESO is the Kubernetes operator — the segment was
+redundant with the consumer name `eso`.)
 
 **Chart-side helper (one-time).** Before the first chart migrates,
 land the `_externalsecret.tpl` helper (per `tmp/helmcharts-new-values.md`)
@@ -529,10 +532,10 @@ per-env values file then carries only `storeRef` + per-entry
 
 Per chart:
 
-1. `bao kv put kv/eso/k8s/<cluster>/<ns-base>/<stage>/<leaf> <key>=<value>`
+1. `bao kv put kv/eso/<cluster>/<ns-base>/<stage>/<leaf> <key>=<value>`
    for each secret value the chart's Secret currently embeds.
 2. Extend `openbao_eso_kv_paths` with
-   `kv/eso/k8s/<cluster>/<ns-base>/<stage>/*` (one entry per
+   `kv/eso/<cluster>/<ns-base>/<stage>/*` (one entry per
    ns+stage tuple); converge OpenBao.
 3. In the chart, drop the `kind: Secret` template, add an
    `externalSecrets:` entry to `values.yaml` that targets the
