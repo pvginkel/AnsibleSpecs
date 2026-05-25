@@ -742,6 +742,26 @@ as work lands; review at end-of-slice for nothing-left-behind.
   one of the 13 charts but it's the most disruptive of them; do
   last in the §3.c third pass so the easy ones build the helper
   template muscle memory first.
+- **step-ca bootstrap secrets — extract from HelmCharts to
+  ansible-vault.** `configs/prd/step-ca.yaml` today holds the
+  four bootstrap-tier Secrets (`step-ca-config`,
+  `step-ca-secrets`, `step-ca-ca-password`,
+  `step-ca-ssh-host-ca-password`) as base64-encoded literals.
+  These cannot move into OpenBao (chicken-and-egg — OpenBao's
+  own listener cert is issued by this same path; see
+  decisions.md §Internal TLS). To make HelmCharts publishable
+  they extract into ansible-vault'd files materialised by a
+  small Ansible role at cluster bring-up; the chart consumes
+  pre-existing k8s Secrets unchanged. Same tier as the seal key
+  and JWK provisioner password — see decisions.md
+  §Bootstrap-tier ciphertext. Public material (`step-ca-certs`:
+  intermediate cert, root cert, SSH host CA pub) can stay in
+  HelmCharts as-is. Work shape: new `step_ca_bootstrap` Ansible
+  role (or fold into an existing role) + drop the four Secret
+  manifests from `configs/prd/step-ca.yaml` + update
+  `docs/runbooks/step-ca-bootstrap.md` with the bring-up order.
+  Independent of the main sweep — schedule alongside or after
+  the C.3 publishability pass.
 - **Decision on duplicate OpenAI keys.** Audit §2.a notes
   `OPENAI_API_KEY_CI_CD` and `OPENAI_API_KEY` (DA validation)
   may be the same value. Decide during C.2 whether to collapse to
