@@ -22,7 +22,29 @@ close the phase"). It depends on phase 2 (cluster + AppRoles + audit
 `jenkins`, `eso`) were provisioned by phase 2 card #11 with inert
 policies waiting for paths.
 
-## Status (as of 2026-05-24)
+## Next-session entry point
+
+A fresh Claude picking this up: read this slice top to bottom,
+then read `tmp/secret-inventory.md` (§3.d included),
+`tmp/helmcharts-new-values.md`, `tmp/jenkins-credentials-dump.txt`,
+`tmp/naming-review.md`, and `tmp/further-audit-request.md`. The
+status block below names every decision settled in prior sessions
+plus the artifacts that hold the working data; no re-litigation
+needed unless the operator opens one.
+
+Starting position is **execute C.0** (write `kv/shared/*` paths,
+widen consumer policies). Naming-review markup is final per the
+status block; KV path grammar is settled. The five Q1–Q5 open
+questions and Q6 naming aesthetics are all resolved. After C.0,
+sweep C.1 (iac) → C.2 (jenkins + global env vars) → C.3 (eso,
+four-pass).
+
+If the operator triggered the secondary audits per
+`tmp/further-audit-request.md` between sessions, fold those
+findings into the per-chart C.3 sweeps as you touch each chart;
+don't re-block the slice on them.
+
+## Status (as of 2026-05-25)
 
 **Stage A — consumer-side infrastructure**: ✓ DONE. End-to-end
 smoke test green: `kv/jenkins/smoke` → `withVault` pipeline →
@@ -76,44 +98,78 @@ masked value in console output. Operational landmarks shipped:
 already populates `kv/jenkins/`; `_README` placeholders were pure
 convention with no consumer.
 
-**Stage C — per-consumer migration sweeps**: ready. The secrets
-inventory audit landed in `tmp/`:
+**Stage C — per-consumer migration sweeps**: ready to execute.
+The audit + naming review are complete; per-consumer policy
+scoping settled; sweep order locked. Artifacts in `tmp/`:
 
 - `tmp/secret-inventory.md` — every literal across `srviac:/etc/iac/secrets.yaml`,
-  the Jenkins credential store, and HelmCharts `configs/<env>/*.yaml`,
-  plus §3.c (chart-template hard-coded DB passwords — 20 lines
-  across 13 templates, the single largest leak surface) and §4
-  (cross-source duplications).
+  the Jenkins credential store, and HelmCharts (`configs/<env>/*.yaml`,
+  `charts/<chart>/templates/*`, `charts/<chart>/values.yaml`,
+  `charts/<chart>/files/*`). §3.a = configs literals; §3.b = extra-manifest
+  Secrets; §3.c = chart-template hard-coded DB passwords (20 lines
+  across 13 templates); §3.d = chart `files/` directory leaks (9
+  files across 7 charts, all glob-loaded into ConfigMaps); §4 =
+  cross-source duplications; §"Methodology gap" = secrets that
+  *should* be wired but aren't (guacamole OIDC client_secret is
+  the worked example).
 - `tmp/helmcharts-new-values.md` — per-chart `externalSecrets:`
-  blocks needed in each chart's `values.yaml` to feed ESO.
+  blocks needed in each chart's `values.yaml` to feed ESO, plus
+  the `_externalsecret.tpl` helper proposal.
 - `tmp/jenkins-credentials-dump.txt` — UI-side credential dump
-  (live secrets; rotate on close, listed in §Loose ends).
+  (live secrets, captured to disambiguate audit §2.a's "unknown"
+  rows). Rotate on close; listed in §Loose ends.
+- `tmp/naming-review.md` — every concrete KV leaf+key the audit
+  implies. **Operator markup complete** — Q1 (bundle OIDC
+  client_id+client_secret) ✓, Q2 (`kv/shared/wifi-iot` flat) ✓,
+  Q3 (distinct per stage) ✓, Q4 (S3 keys via shared transitional
+  bucket — strategy A) ✓, Q5 (don't migrate gmail/calendar dead
+  creds) ✓, Q6 (naming aesthetics — `homeassistant` not
+  `home-assistant` since chart name is `homeassistant-mcp`;
+  other proposed names accepted as-is) ✓.
+- `tmp/further-audit-request.md` — three follow-up audit passes
+  (DockerImages, AnsibleSpecs, Ansible-repo-unvaulted) plus §4
+  optional repos and §5 "what the audits will NOT catch."
+  **Assume operator runs these between sessions; fold findings
+  into per-chart C.3 sweeps as you touch each chart, don't
+  re-block the slice on them.**
 
-Strategy refined out of the audit (see Decisions below for the full
-shape, Loose ends for what gets handed off):
+Decisions settled in the latest session (all reflected in §Decisions
+below + the relevant §C subsections):
 
-- KV path grammar for ESO settled at
-  `kv/eso/<cluster>/<ns-base>/<stage>/<leaf>#<key>` — stage
-  always present; one flat leaf segment; no nesting past it.
-- **URLs never enter Vault.** Endpoint URLs, realm names, broker
-  addresses, etc. move to chart values (for ESO consumers) or
-  Jenkins global env vars (for pipelines). Vault holds credentials
-  only.
+- **KV path grammar.** `kv/iac/<leaf>#<key>`,
+  `kv/jenkins/<leaf>#<key>`, `kv/shared/<area>/<leaf>#<key>`,
+  `kv/eso/<cluster>/<ns-base>/<stage>/<leaf>#<key>`. Stage always
+  present (even single-stage charts); one flat leaf segment;
+  consumer-rooted by AppRole name; the originally-proposed
+  `kv/eso/k8s/...` collapsed to `kv/eso/<cluster>/...` because
+  ESO is k8s-only.
+- **URLs never enter Vault.** Endpoint URLs / realm names /
+  broker addresses go to Jenkins global env vars or chart
+  values, not KV.
 - **Per-consumer named accounts** for Elasticsearch, MQTT, Home
-  Assistant, OpenAI, GitHub PAT, RGW-S3 (where TF provider gains
-  the ability to mint). "Shared" only for values that are
-  *genuinely* one principal used in multiple places (today: the
-  RGW S3 user, samba users, the Jenkins admin password) — and
-  even those shrink as per-consumer minting becomes available.
-- **Jenkins global env vars** are the right home for non-secret
-  pipeline test config (Keycloak base URL, realm name, OIDC token
-  URL, Elasticsearch cluster URL). Decouples test config from
-  pipeline code without misusing the credential store.
+  Assistant, OpenAI, GitHub PAT, RGW-S3 (when TF provider
+  mint lands). `kv/shared/` shrinks from 11 audit candidates to
+  4 survivors: `ceph-rgw/s3` (transitional), `samba/users`,
+  `jenkins/admin-password`, `wifi-iot`.
+- **OIDC credentials bundle**: `client_id` + `client_secret`
+  travel in the same KV leaf.
+- **step-ca bootstrap secrets** (the four `step-ca-*` Secrets in
+  `configs/prd/step-ca.yaml`) extract from HelmCharts to
+  ansible-vault, materialised at cluster bring-up via a small
+  Ansible role — same bootstrap-tier as the OpenBao seal key
+  and JWK provisioner password (decisions.md
+  §Bootstrap-tier ciphertext + §Internal TLS).
+- **custom_metadata for documentation**: mechanism known
+  (`bao kv metadata put -custom-metadata=…`); decision to adopt
+  as convention deferred to first rotation cycle.
+- **Guacamole OIDC client_secret**: chart-template gap — chart
+  wires only `OPENID_CLIENT_ID` today (implicit flow), needs
+  authorization-code flow with both. Fix required before
+  guacamole's §C.3 sweep; tracked in §Loose ends.
 
 Sweep order: **C.0 (shared bucket) → C.1 (iac) → C.2 (jenkins +
-global env vars) → C.3 (eso)**. Shared-first avoids the "write to
-`kv/iac` then move to `kv/shared` later" churn for values whose
-shared status is already known from the audit.
+global env vars) → C.3 (eso, four passes)**. Shared-first avoids
+the "write to `kv/iac` then move to `kv/shared` later" churn.
 
 **Stage D — cold-boot doc updates**: pending; can land after any
 one of the C.* sweeps.
@@ -851,6 +907,41 @@ as work lands; review at end-of-slice for nothing-left-behind.
   `OPENAI_API_KEY_CI_CD` and `OPENAI_API_KEY` (DA validation)
   may be the same value. Decide during C.2 whether to collapse to
   one KV leaf or keep distinct per-pipeline.
+- **Further audit passes (DockerImages / AnsibleSpecs / Ansible
+  repo).** Three downstream audit passes captured in
+  `tmp/further-audit-request.md`. None blocking; fold findings
+  into per-chart C.3 sweeps as they touch each chart, or into a
+  follow-up slice if a finding is sufficiently distinct (e.g. a
+  DockerImages-side image rebuild that's its own piece of work).
+- **`custom_metadata` convention adoption.** Mechanism
+  documented in `tmp/naming-review.md` §7 (`bao kv metadata put
+  -custom-metadata=key=value`). Decision deferred to first
+  rotation cycle — at that point decide whether `notes` /
+  `scopes` / `rotated_at` annotations become a slice-wide
+  convention or stay ad-hoc.
+- **Q6 naming aesthetics — accepted as-is.** Operator's review
+  pass produced one rename (`home-assistant` → `homeassistant`
+  because the HelmCharts chart is `homeassistant-mcp`); other
+  proposed names (`dns-reservation`, `dhcp-app`,
+  `iotsupport-pipeline-oidc`, `mydownloads-android-keystore`,
+  `keycloak-iotsupport-admin`, `keycloak-da-admin`) stand. Final;
+  no re-litigation needed during the sweeps.
+- **calendar-support borderline files.** `calendars.json`
+  (calendar IDs + emails) and `config.json` (RIVM `servicekey`
+  in URL) — operator decides KV vs. leave-in-ConfigMap during
+  calendar-support's §C.3 sweep. Default = KV both unless the
+  operator opts out.
+- **mydownloads keystore.password verification.** Audit §3.d
+  flagged `<password>password</password>` in
+  `charts/media/files/mydownloads/config.xml:8`. Verify whether
+  it's a placeholder (in which case strip from the migration set)
+  or a real value (in which case move to KV).
+- **version-poller pipeline-tokens grouping.** Bundle five
+  pipeline trigger tokens (`helmcharts`, `dockerimages`, `home`,
+  `newsfilter`, `webathome`) into one
+  `kv/eso/prd/version-poller/prd/pipelines` leaf (default), or
+  split per-pipeline. No rotation-cadence reason to split;
+  bundle unless operator prefers granularity.
 
 ## Commits
 
