@@ -187,8 +187,10 @@ of those.
   values that are genuinely one principal in many places** —
   today: the Ceph RGW S3 user (until per-app minting lands —
   see decisions.md §Ceph RGW credentials), the two samba users,
-  and the Jenkins admin password. The audit's §4 listed 11 shared
-  candidates; only 3 survive this principle. Account-creation is
+  the Jenkins admin password, and the Wi-Fi password (genuinely
+  one physical credential used by Jenkins firmware-burn pipelines
+  and the iot chart's management UI). The audit's §4 listed 11
+  shared candidates; only 4 survive this principle. Account-creation is
   a per-consumer migration prerequisite, not part of the KV write
   step. **Rotation stays operator-driven; not automated** — the
   win is the *ability* to rotate per-consumer, not the cadence.
@@ -344,7 +346,7 @@ so the operator's attention stays focused.
 
 First. The remaining `kv/shared/*` set is small (per Decisions —
 "Per-consumer named accounts" shrank audit §4 from ~11 candidates
-to 3 survivors), but doing it ahead of C.1 avoids the
+to 4 survivors), but doing it ahead of C.1 avoids the
 "write-to-iac-then-move-to-shared" churn for values whose shared
 status is already known.
 
@@ -362,6 +364,11 @@ named-accounts principle):
 - `kv/shared/jenkins/admin-password#password` — same value
   referenced from `infra-statistics` (chart) and the Jenkins admin
   account itself.
+- `kv/shared/wifi-iot#password` — single Wi-Fi password baked
+  into IoT-device firmware by Jenkins build pipelines and served
+  by the `iot` chart's management UI. Physical credential; the
+  named-accounts principle doesn't apply (there's one Wi-Fi
+  password in the world).
 
 For each:
 
@@ -433,7 +440,11 @@ Global properties → Environment variables, not Vault. From audit
 - `KEYCLOAK_TEST_OIDC_TOKEN_URL` = `http://keycloak.keycloak-dev:8080/realms/homelab-dev/protocol/openid-connect/token`
 - `ELASTICSEARCH_CLUSTER_URL` = `http://elasticsearch.elasticsearch.svc.cluster.local:9200`
 - `S3_ENDPOINT_URL` = `http://srvceph1:7480`
-- `IOTSUPPORT_CLIENT_ID` = `iotsupport-pipeline`
+
+(OIDC `client_id` values bundle with their `client_secret` in
+`kv/jenkins/*` rather than being separated here — per "credentials
+together" rule; affects `IOTSUPPORT_CLIENT_ID`, `KEYCLOAK_TEST_IOTSUPPORT_ADMIN_CLIENT_ID`,
+`KEYCLOAK_TEST_DESIGN_ASSISTANT_ADMIN_CLIENT_ID`.)
 
 Pipelines reference `env.X` exactly as they do today via
 `withCredentials`. Delete the corresponding Jenkins credential
@@ -483,8 +494,10 @@ resolved against the credentials dump):
   tokens and the GitHub plugin's auto-generated entry. System-
   managed; leave.
 - `gmail-credentials`, `CALENDAR_BEARER_TOKEN`: no
-  `withCredentials` references found in the survey. Verify dead;
-  delete from Jenkins UI rather than migrating.
+  `withCredentials` references found in the survey. **Not
+  migrated** — operator's Jenkins-credential backup covers
+  restoration if alive; first pipeline failure surfaces the
+  consumer. Not pre-deleted from Jenkins UI.
 
 #### C.3. HelmCharts secrets → `kv/eso` + `ExternalSecret`
 
@@ -766,10 +779,6 @@ as work lands; review at end-of-slice for nothing-left-behind.
   `OPENAI_API_KEY_CI_CD` and `OPENAI_API_KEY` (DA validation)
   may be the same value. Decide during C.2 whether to collapse to
   one KV leaf or keep distinct per-pipeline.
-- **Dead Jenkins credentials.** `gmail-credentials`,
-  `CALENDAR_BEARER_TOKEN` have no `withCredentials` references.
-  Verify dead and delete from the Jenkins UI rather than
-  migrating; if alive, find the consumer and treat as normal C.2.
 
 ## Commits
 
