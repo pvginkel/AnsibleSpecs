@@ -49,7 +49,7 @@ lands the provider resource types those phases need.
 /work/HelmCharts
 ├── charts/                         # unchanged — Helm chart sources
 ├── configs/
-│   ├── dev/                        # chart-development against wrkdevk8s
+│   ├── dev/                        # chart-development against srvk8sdev
 │   │   └── <chart>/
 │   │       ├── release.yaml
 │   │       ├── values.yaml
@@ -89,7 +89,7 @@ conditional layout collapse. One path-resolution rule everywhere; the
 small cost is a `prd/<chart>/prd/` visual redundancy on stageless
 charts, which is a worthwhile trade for a uniform CLI.
 
-The `dev` config tree (chart development against `wrkdevk8s`) follows
+The `dev` config tree (chart development against `srvk8sdev`) follows
 the same shape: `configs/dev/<chart>/<stage>/`. Most dev configs use a
 single stage; conventionally that's `dev` (so
 `configs/dev/<chart>/dev/`), but the harness doesn't constrain it.

@@ -109,8 +109,8 @@ After the module lands and `terraform plan` is no-op:
   `mac_address` field. Drop the "Deterministic MAC: …" inline
   comments — the convention is implicit in the module.
 - Adoption MACs (`BC:24:11:...`) on `srvceph1/2/3` stay verbatim.
-- `wrkdevk8s` is the natural first user (it has a single NIC and is
-  the next rebuild). Doing wrkdevk8s in the same commit as the module
+- `srvk8sdev` is the natural first user (it has a single NIC and is
+  the next rebuild). Doing srvk8sdev in the same commit as the module
   change is fine; the rest can land as a single bundle.
 
 ### Scratch config (`terraform/scratch/main.tf`)

@@ -196,7 +196,7 @@ of those.
   ```
 
   Conventions inside the ESO path:
-  - `<cluster>` is `prd` (homelab main) or `dev` (the wrkdevk8s
+  - `<cluster>` is `prd` (homelab main) or `dev` (the srvk8sdev
     workstation cluster). Always present.
   - `<ns-base>` is the chart name without any stage suffix
     (`design-assistant`, `dnsmasq`). The live k8s namespace

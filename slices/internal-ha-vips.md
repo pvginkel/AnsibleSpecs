@@ -69,9 +69,9 @@ must be unique across all VRRP groups reachable on the LAN. The
 mapping is committed to `ansible/group_vars/all/vips.yml` once the
 role lands so callers can reference it symbolically.
 
-Dev cluster (`wrkdevk8s`) is single-node; **no VIP**. The
+Dev cluster (`srvk8sdev`) is single-node; **no VIP**. The
 `kubernetes-api-dev.home` alias is a dnsmasq CNAME pointing at
-`wrkdevk8s.home`, so it tracks the node's address without
+`srvk8sdev.home`, so it tracks the node's address without
 duplicating it.
 
 ## Steps
@@ -278,7 +278,7 @@ slice's commits**.
 - **k8s API server step-ca cert**: re-issue under the policy update
   above with the VIP IP added. Drives the internal-tls slice §F.
 - **kubeconfig update**: change wrkdev's kubeconfig from
-  `https://10.1.3.3:16443` (wrkdevk8s direct IP) to
+  `https://10.1.3.3:16443` (srvk8sdev direct IP) to
   `https://kubernetes-api-dev.home:16443`; if any prd kubeconfig is
   introduced, use `https://kubernetes-api.home:16443`.
 - **Ceph dashboard**: clients flip to `https://ceph.home:8443`
@@ -342,7 +342,7 @@ In dependency order:
    to. Vault-encrypted shared VRRP password.
 3. **HelmCharts**: `configs/prd/dnsmasq.yaml` — static host entries
    for the `kubernetes-api.home` and `ceph.home` VIPs, plus a CNAME
-   for the `kubernetes-api-dev.home` alias → `wrkdevk8s.home`.
+   for the `kubernetes-api-dev.home` alias → `srvk8sdev.home`.
 4. **Ansible**: k8s VIP wired into the `microk8s` role. Per-node
    rollout under `serial: 1`.
 5. **Runbook**: `docs/runbooks/ceph-vip.md` — manual procedure for
