@@ -18,6 +18,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 | [cloud-init-first-boot-only](cloud-init-first-boot-only.md) | pending | — | (correctness; stops snippet edits cascading to VM rebuilds) |
 | [site-yml-layout](site-yml-layout.md) | pending | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
+| [metallb-chart-migration](metallb-chart-migration.md) | pending | — | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
 
 ## Completed
 

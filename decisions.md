@@ -403,6 +403,19 @@ Deferred / revisit:
 - **Ceph nodes and prd k8s nodes are static infrastructure, not dynamic reservations**: `srvceph1/2/3` and `srvk8s1/2/3` opt out of the `homelab_dns_reservation` resource via `static_ip = true` on the `managed-vm` module. Their hostname → IP triples live exclusively in HelmCharts `configs/prd/dnsmasq.yaml`'s static-hosts section, hand-curated alongside printers/IoT/network gear. Rationale: the dnsmasq sidecar runs in-cluster behind the registry; the registry container itself depends on Ceph storage to boot, and the cluster nodes that host both the registry and dnsmasq cannot get their own addresses or DNS from a service they themselves are required to bring up. Any chain that puts bring-up-tier addressing behind the dynamic API creates a cold-boot ordering failure. Static IPs (declared per-NIC in `vms.tf`, rendered into the cloud-init template's netplan section) sidestep the cycle entirely. External nameservers (`8.8.8.8` / `8.8.4.4`) are pinned at the host so containerd's image-pull DNS path on these nodes never depends on the cluster being healthy. `srvk8sdev` is dev-tier and stays on the dynamic reservation — it doesn't host registry/dnsmasq pods (dev pulls from external `registry-dev`), so the bring-up cycle doesn't apply.
 - **Cloud-init is a first-boot artefact.** Its scope: ansible user, ansible SSH pubkey, pinned ed25519 host key, qemu-guest-agent, and (for hosts with static addresses on any NIC) the initial netplan render. After first boot, Ansible owns drift detection and convergence on these surfaces — the `static_netplan` task in the baseline role re-asserts `/etc/netplan/50-cloud-init.yaml` from inventory data (`static_netplan` host_var) so a static-IP change in `vms.tf` plus a matching host_var update lands on the running host without a rebuild. The `managed-vm` module pins `lifecycle.ignore_changes = [initialization]` on the VM resource so a template edit re-renders the snippet but does not recreate the VM. To pick up a template change on first boot of an existing host, rebuild via `terraform apply -replace='module.vm["<name>"]'`.
 
+## OS image channels (cloud image canary)
+
+`terraform/prd/main.tf` declares `local.os_image_channels` — a map from channel name to `{ url, file_name }` pointing at an Ubuntu cloud image. Each VM in `vms.tf` selects one via `image_channel = "<channel>"`; the default is `stable`. `proxmox_download_file.ubuntu_cloud_image` is keyed by `(pve_node, channel)` so a channel is downloaded to a PVE node only when at least one from-scratch VM on that node selects it.
+
+Two channels today:
+
+- **`stable`** — current LTS (today: noble / 24.04). Every from-scratch VM defaults here.
+- **`testing`** — next LTS (today: resolute / 26.04). Single opt-in slot for canary work; `srvk8sdev` is the live canary.
+
+Promoting `testing` → `stable` is a one-line edit in the channels map. Both URLs typically point at upstream's `/<series>/current/` symlinks; pinning to a dated build is allowed but not the default.
+
+Each role's `meta/main.yml` lists every Ubuntu series the role is expected to support (today: `noble`, `resolute`) so ansible-lint reflects intent. The listing is informational — roles install via `apt` + `snap` + `netplan`, which work the same across LTS releases.
+
 ## SSH host keys for managed VMs
 
 The homelab step-ca is also an SSH host CA. Every managed host serves a step-ca-signed SSH host certificate; Ansible verifies hosts through one committed `@cert-authority` line in `ansible/files/known_hosts.d/homelab`. Issuance and renewal are owned by the `ssh_host_cert` role, the SSH-side counterpart of `internal_tls`. Slice: [`slices/completed/ssh-host-ca.md`](slices/completed/ssh-host-ca.md). Ceremony: `docs/runbooks/step-ca-bootstrap.md` "Enabling the SSH host CA".
