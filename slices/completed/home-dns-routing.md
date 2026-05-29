@@ -2,20 +2,27 @@
 
 ## The rule
 
-Public-DNS configuration *is* (public upstreams) + (`~home` routing
-domain at `10.2.1.2`, `10.2.1.3`). The `baseline` role applies both
-from the same trigger (any `network_devices[*].nameservers` defined);
-an inventory cannot pick one without the other.
+Public-DNS configuration *is* (public upstreams on the link, marked
+`+DefaultRoute`) + (a `home` search **and** routing domain at
+`10.2.1.2`, `10.2.1.3`). The `baseline` role applies both from the same
+trigger (any `network_devices[*].nameservers` defined); an inventory
+cannot pick one without the other.
 
-`Domains=~home` is a **routing** domain, not a search domain — fully
-qualified `*.home` queries route to dnsmasq, no bare-name expansion
-goes through the routing scope. Bare-name resolution still works for
-applications that hit the stub at `127.0.0.53` via NSS (ping, curl,
-openbao, ansible) because glibc expands via the link's search domain
-and the stub fans out to all matching scopes including the routing
-one. `resolvectl query <bare-name>` is the only path that bypasses
-this — it expands internally and queries only the per-link scope, so
-it returns NXDomain for `.home` short names. Operationally a non-issue.
+The dnsmasq scope owns `.home` outright via `Domains=home` (search +
+routing), and the public-DNS link carries **no** `search:` — that is
+deliberate. An earlier cut used `Domains=~home` (routing-only) on the
+dnsmasq scope and left `search: [home]` on the link, expecting the
+stub to fan out across matching scopes and prefer the positive answer.
+It does not reliably: the link's `home` ties with `~home` on suffix
+length, so `.home` queries also reach the public upstreams, whose
+authoritative `NXDOMAIN` for `.home` shadows the dnsmasq answer and
+sticks in the negative cache — intermittent, host-dependent resolution
+failures (the OpenBao VIP-wait against `secrets.home` was the canary:
+one node failed 6/6 while a peer with a warm positive cache passed).
+Putting the suffix on the dnsmasq scope and removing it from the link
+means both single-label completion and `.home` routing land on the one
+resolver that knows `.home`; the public scope only ever sees
+non-`.home` names, via `+DefaultRoute`.
 
 Hosts under the rule today: `srvvault{1,2,3}` and `srvk8s{1,2,3}`.
 Ceph is not Ansible-managed yet; it picks up the same pattern in
@@ -52,7 +59,8 @@ rather than the VIP.
 - `roles/baseline/templates/home-routing.conf.j2` — renders
   `/etc/systemd/resolved.conf.d/home-routing.conf` with the DNS
   pair from `baseline_home_dns_routing_servers` (default
-  `[10.2.1.2, 10.2.1.3]`) and `Domains=~home`.
+  `[10.2.1.2, 10.2.1.3]`) and `Domains=home`. The paired
+  `static-netplan.yaml.j2` render carries no `search:` on the link.
 - `roles/baseline/tasks/main.yml` — render-or-absent task pair gated
   on `network_devices[*].nameservers`, next to the static-netplan
   task so the coupling is visually obvious.
