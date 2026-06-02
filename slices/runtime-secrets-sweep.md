@@ -962,6 +962,35 @@ as work lands; review at end-of-slice for nothing-left-behind.
   `jenkins-vault-approle` credential + destroy old accessors) — the
   no-TTL secret_id had been copied into KV, so it stays valid until
   rotated. Operator-owned.
+- **Remove the chart-template plaintext fallbacks (cleanup with the
+  `postgres`/`rabbitmq` rotation handlers).** The ESO-migrated charts
+  still carry real plaintext in the `else` branches for the stateful
+  intra-release creds — `_designassistant.tpl` (DATABASE_URL),
+  `db-deployment.yaml` (POSTGRES_PASSWORD), the rabbitmq default in
+  `values.yaml`, and the equivalents in electronics-inventory / iot /
+  keycloak / open-webui — plus the whole `configs/dev/*` dev-cluster
+  configs. That's the non-ESO fallback (keeps dev working today). When
+  the `postgres`/`rabbitmq` rotation handlers land — same db/rabbitmq
+  plumbing — do this in the same pass: deploy ESO to the dev cluster,
+  populate its `externalSecrets.secrets`, then drop the `else`
+  literals + the `configs/dev/*` secret values. After that the charts
+  have no raw-secret fallback and HelmCharts is publishable.
+- **Split credentials out of the DB/RabbitMQ connection strings.**
+  Today the `url` key in `kv/eso/.../db` and `.../rabbitmq` embeds the
+  password, because the app consumes a single `DATABASE_URL` /
+  `RABBITMQ_URL` and you can't `secretKeyRef` a password into the
+  middle of a URL. Switch to k8s env interpolation: store only
+  `password` in KV (drop the `url` key), expose `DB_PASSWORD` /
+  `RABBITMQ_PASSWORD` via `secretKeyRef`, and assemble the URL in the
+  manifest from a credential-free template —
+  `value: postgresql+psycopg://design-assistant:$(DB_PASSWORD)@design-assistant-db:5432/design-assistant`
+  (k8s substitutes `$(VAR)` from an earlier env var; keep passwords in
+  the `[A-Za-z0-9]` charset so no `$`/URL-encoding surprises). The
+  connection string in the chart then carries no credential, so
+  HelmCharts can read it for the Kubernetes architecture-as-code
+  generation. Applies to design-assistant + electronics-inventory /
+  iot / keycloak / open-webui DBs and the DA rabbitmq. Pairs naturally
+  with the rotation-handler cleanup above.
 - **Q6 naming aesthetics — accepted as-is.** Operator's review
   pass produced one rename (`home-assistant` → `homeassistant`
   because the HelmCharts chart is `homeassistant-mcp`); other
