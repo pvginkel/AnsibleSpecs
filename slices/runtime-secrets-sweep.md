@@ -930,12 +930,36 @@ as work lands; review at end-of-slice for nothing-left-behind.
   into per-chart C.3 sweeps as they touch each chart, or into a
   follow-up slice if a finding is sufficiently distinct (e.g. a
   DockerImages-side image rebuild that's its own piece of work).
-- **`custom_metadata` convention adoption.** Mechanism
-  documented in `tmp/naming-review.md` §7 (`bao kv metadata put
-  -custom-metadata=key=value`). Decision deferred to first
-  rotation cycle — at that point decide whether `notes` /
-  `scopes` / `rotated_at` annotations become a slice-wide
-  convention or stay ad-hoc.
+- **`custom_metadata` convention — ADOPTED (2026-06-02).** Every kv
+  leaf carries:
+  - `notes` — freeform sourcing/rotation context.
+  - `rotated_at=<ISO date>` — present once minted fresh; absence means
+    transcript-exposed / still needs rotation.
+  - `rotation` — trust class: `unrestricted` (we mint, no other party),
+    `coordinated` (we mint but must register in a system we run),
+    `external` (a third party mints it).
+  - `rotation_mechanism` — the system/handler used to mint the
+    replacement (`random`, `postgres`, `rabbitmq`, `keycloak`, `mqtt`,
+    `elasticsearch`, `kibana`, `ceph-rgw`, `ceph-cephx`, `samba`,
+    `jenkins`, `home-assistant`, `proxmox`, `ssh`, `wifi`, `dnsmasq`,
+    `backup-server`, `android-keystore`, `mysql`, `openai`, `google`,
+    `github`, `mouser`, `twitter`, `torguard`, `third-party-blob`).
+
+  `rotation` is the trust axis; `rotation_mechanism` is what a rotation
+  job dispatches on. Tooling in the Ansible repo: `scripts/openbao-
+  annotate-rotation.sh` (classify + stamp, idempotent), `scripts/
+  openbao-rotation-audit.sh` (checklist of leaves still needing
+  rotation, grouped by mechanism), `scripts/openbao-rotate-
+  unrestricted.sh` (the `random` handler). Future per-mechanism
+  rotation cronjobs key off `rotation_mechanism`, each scoped to one
+  system's admin creds + an OpenBao policy over just that mechanism's
+  leaves (avoid one god-job with admin to everything).
+- **Strays in kv (not real secrets).** Two leaves are excluded from
+  the rotation tooling (`is_stray` in the scripts) and want cleanup:
+  `test/nested/leaf` (test data — delete) and `eso/jenkins-approle`
+  (sits outside the `eso/<cluster>/…` grammar — looks like a misplaced
+  write of the Jenkins Vault AppRole secret_id; investigate before
+  deleting/relocating). Operator-owned.
 - **Q6 naming aesthetics — accepted as-is.** Operator's review
   pass produced one rename (`home-assistant` → `homeassistant`
   because the HelmCharts chart is `homeassistant-mcp`); other
