@@ -946,14 +946,12 @@ as work lands; review at end-of-slice for nothing-left-behind.
     `github`, `mouser`, `twitter`, `torguard`, `third-party-blob`).
 
   `rotation` is the trust axis; `rotation_mechanism` is what a rotation
-  job dispatches on. Tooling in the Ansible repo: `scripts/openbao-
-  annotate-rotation.sh` (classify + stamp, idempotent), `scripts/
-  openbao-rotation-audit.sh` (checklist of leaves still needing
-  rotation, grouped by mechanism), `scripts/openbao-rotate-
-  unrestricted.sh` (the `random` handler). Future per-mechanism
-  rotation cronjobs key off `rotation_mechanism`, each scoped to one
-  system's admin creds + an OpenBao policy over just that mechanism's
-  leaves (avoid one god-job with admin to everything).
+  job dispatches on. Tooling lives in the Ansible repo under
+  `scripts/rotation/` (`annotate.sh`, `audit.sh`,
+  `rotate-unrestricted.sh`) with a `README.md` documenting the taxonomy.
+  Future per-mechanism rotation cronjobs key off `rotation_mechanism`,
+  each scoped to one system's admin creds + an OpenBao policy over just
+  that mechanism's leaves (avoid one god-job with admin to everything).
 - **Strays in kv (not real secrets).** Two leaves are excluded from
   the rotation tooling (`is_stray` in the scripts) and want cleanup:
   `test/nested/leaf` (test data — delete) and `eso/jenkins-approle`
