@@ -952,12 +952,16 @@ as work lands; review at end-of-slice for nothing-left-behind.
   Future per-mechanism rotation cronjobs key off `rotation_mechanism`,
   each scoped to one system's admin creds + an OpenBao policy over just
   that mechanism's leaves (avoid one god-job with admin to everything).
-- **Strays in kv (not real secrets).** Two leaves are excluded from
-  the rotation tooling (`is_stray` in the scripts) and want cleanup:
-  `test/nested/leaf` (test data — delete) and `eso/jenkins-approle`
-  (sits outside the `eso/<cluster>/…` grammar — looks like a misplaced
-  write of the Jenkins Vault AppRole secret_id; investigate before
-  deleting/relocating). Operator-owned.
+- **Strays in kv — DELETED (2026-06-02).** `test/nested/leaf` (test
+  data) and `eso/jenkins-approle` (an orphaned copy of the `jenkins`
+  AppRole role_id/secret_id, residue of the abandoned ESO-delivery
+  draft — nothing consumed it; the eso policy `kv/data/eso/prd/*`
+  didn't even cover it) are both removed. The `is_stray` guard in
+  `scripts/rotation/` stays as a backstop. **Still open:** rotate the
+  `jenkins` AppRole secret_id (mint fresh + re-paste the Jenkins
+  `jenkins-vault-approle` credential + destroy old accessors) — the
+  no-TTL secret_id had been copied into KV, so it stays valid until
+  rotated. Operator-owned.
 - **Q6 naming aesthetics — accepted as-is.** Operator's review
   pass produced one rename (`home-assistant` → `homeassistant`
   because the HelmCharts chart is `homeassistant-mcp`); other
