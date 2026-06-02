@@ -216,10 +216,27 @@ of those.
     `mqtt#username` + `mqtt#password`).
 
   Consumer-rooted because policy management is per-consumer; a flat
-  layout muddles that. Policy globs follow the natural prefix:
-  `kv/iac/*`, `kv/jenkins/*`, `kv/eso/<cluster>/<ns-base>/<stage>/*`
-  per ns+stage tuple, `kv/shared/<area>/*` per shared area on each
-  consumer that touches it.
+  layout muddles that.
+
+  The granularity rule: glob at the boundary where a *distinct principal*
+  reads, enumerate where multiple principals share. `kv/shared` is
+  enumerated per consumer because three consumers (iac, jenkins, eso)
+  read it and "which leaf each gets" is a real least-privilege line.
+  `kv/jenkins/*` and `kv/eso/<cluster>/*` are globbed because each is
+  read by a single principal — a per-(chart,stage) eso whitelist grants
+  the same working set as `eso/<cluster>/*` while adding a silent-failure
+  footgun (forget a group_vars line → the chart's ExternalSecret sits in
+  SecretSyncError after deploy). The per-*cluster* eso split is kept
+  because the dev workstation cluster is a separate trust domain (its own
+  ESO, likely its own AppRole + `eso/dev/*`). Secrets too sensitive for
+  ESO to hold are bootstrap-tier and never live under `kv/eso` anyway, so
+  the glob doesn't widen real exposure. (Earlier drafts enumerated eso
+  per (chart,stage); reverted — the C.3 pass-4 SecretSyncError gap was
+  that footgun firing.) `kv/iac` is the one consumer kept enumerated:
+  it's a single principal too, but its source is the small hand-curated
+  `/etc/iac/secrets.yaml` manifest (6 leaves), so the explicit list
+  mirrors the manifest 1:1 and the friction is negligible. The same rule
+  would permit `iac/*`; it's enumerated by choice, not necessity.
 
 - **URLs never enter Vault.** Vault holds credentials only. Endpoint
   URLs (S3, Elasticsearch, Keycloak, HA, MQTT broker), realm names,
