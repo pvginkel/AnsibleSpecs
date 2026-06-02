@@ -1,4 +1,17 @@
-# NN — Internal HA VIPs (Keepalived)
+# Internal HA VIPs (Keepalived)
+
+**Status: complete (2026-06-02).** Landed: the reusable `keepalived`
+role (`ansible/roles/keepalived/`), the VIP map in
+`ansible/inventories/prd/group_vars/all/vips.yml` (k8s VRID 51, Ceph
+52, secrets/OpenBao 53, with the vault'd shared VRRP password), the
+k8s-API VIP wired into the `microk8s` role, and the OpenBao
+`secrets.home` VIP (Raft-leader-tracking) wired into the `openbao`
+role. DNS for the VIPs is the dnsmasq static block in HelmCharts
+`configs/prd/dnsmasq.yaml`. The Ceph `ceph.home` VIP is configured
+manually per `docs/runbooks/ceph-vip.md` until Phase 5 brings
+srvceph* under Ansible management. The cross-slice §E follow-ups
+(step-ca JWK policy update + the k8s-API and Ceph step-ca cert flips)
+are tracked with the internal-tls slice, not here.
 
 ## Goal
 

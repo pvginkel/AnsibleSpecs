@@ -1,4 +1,13 @@
-# 11 — Cloud-init is first-boot only; decouple from VM lifecycle
+# Cloud-init is first-boot only; decouple from VM lifecycle
+
+**Status: complete (2026-06-02).** Landed: the `managed-vm` module
+pins `lifecycle.ignore_changes = [initialization[0].user_data_file_id]`
+— narrowed to just the user-data file so `ip_config` changes still
+propagate — and the prd `cloud-init.yaml.tftpl` was stripped of its
+editorial comments so a template edit no longer triggers a spurious
+plan. Pick up a deliberate template change via
+`terraform apply -replace=<vm>`. The decision is recorded in
+`decisions.md` ("cloud-init is a first-boot artefact").
 
 ## Symptom
 

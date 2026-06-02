@@ -1,9 +1,19 @@
 # Internal TLS via step-ca — nginx-configurator change
 
+**Status: complete (2026-06-02).** Landed in DockerImages and
+HelmCharts: the `certbot` image now trusts the homelab root and
+selects the step-ca ACME directory for internal names
+(`CERTBOT_INTERNAL_CA_URL`), the former `certificate-renewer` image is
+merged into certbot's renewal command on a weekly CronJob (safe for
+step-ca's 47-day leaves), and `charts/nginx` serves a unified
+real-leaf cert path with the snakeoil generation removed. The only
+parked item is the cert-expiry alert rule + in-cluster metric, tracked
+in [`deferred/internal-tls-monitoring.md`](../deferred/internal-tls-monitoring.md).
+
 What's needed to replace the self-signed ("snakeoil") certificates that
 nginx serves for internal services with real leaves issued by the
 homelab `step-ca`, over **ACME**. This is the in-cluster half (§G) of
-the [`internal-tls-step-ca`](completed/internal-tls-step-ca.md) slice.
+the [`internal-tls-step-ca`](internal-tls-step-ca.md) slice.
 
 Code: `/work/DockerImages/{nginx-configurator,certbot,certificate-renewer}/`
 and `/work/HelmCharts/charts/nginx/`.
@@ -146,7 +156,7 @@ The in-cluster cert-expiry metric (§J of the parent slice) is emitted
 from `nginx-configurator` — a `/metrics` endpoint exposing
 `internal_tls_cert_not_after_seconds` per managed leaf. **Deferred** —
 design parked in
-[`deferred/internal-tls-monitoring.md`](deferred/internal-tls-monitoring.md)
+[`deferred/internal-tls-monitoring.md`](../deferred/internal-tls-monitoring.md)
 "Piece 2".
 
 ## Migration
