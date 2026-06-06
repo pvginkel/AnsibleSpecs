@@ -1,5 +1,19 @@
 # 04 — Embed the homelab provider in the `modern-app-dev` image
 
+> **Superseded (2026-06):** the binary still ships baked into the
+> `modern-app-dev` image, but the consumption mechanism changed from a
+> **filesystem mirror** to a Terraform **dev override**. The mirror pinned a
+> hash in each consumer's `.terraform.lock.hcl`, so every provider rebuild
+> forced a `terraform init -upgrade` / lock refresh. `dev_overrides` ignores
+> the registry, the version constraint, and the lock for `pvginkel/homelab`,
+> so a rebuilt binary is picked up with no init. Current facts: binary lives
+> at `/home/ubuntu/.local/lib/terraform-providers/terraform-provider-homelab`
+> in the image; `/etc/terraform.rc` carries the `dev_overrides` block; the
+> `homelab` entry is removed from `terraform/{prd,scratch}/.terraform.lock.hcl`.
+> The version-mirror layout, version-in-path, and the lock-refresh caveats
+> below no longer apply. See `docs/runbooks/operator-workstation.md` in the
+> Ansible repo for the live description.
+
 ## Goal
 
 Cut the `pvginkel/homelab` provider over from the local dev override to a
