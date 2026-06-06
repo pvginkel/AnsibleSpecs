@@ -1,25 +1,5 @@
 # 04 — Embed the homelab provider in the `modern-app-dev` image
 
-> **Superseded (2026-06):** the binary still ships baked into the
-> `modern-app-dev` image, but the consumption mechanism changed from a
-> **filesystem mirror** to a Terraform **dev override**. The mirror pinned a
-> hash in each consumer's `.terraform.lock.hcl`, so every provider rebuild
-> forced a `terraform init -upgrade` / lock refresh. `dev_overrides` ignores
-> the registry, the version constraint, and the lock for `pvginkel/homelab`,
-> so a rebuilt binary is picked up with no init. Current facts: in the iac
-> image the binary lives at
-> `/root/.local/lib/terraform-providers/terraform-provider-homelab` (terraform
-> runs as root there); in `modern-app-dev` it is under
-> `/home/ubuntu/.local/lib/...`; both images' `/etc/terraform.rc` carries the
-> `dev_overrides` block. The `pvginkel/homelab` entry **stays** in
-> `terraform/{prd,scratch}/.terraform.lock.hcl` — the override ignores its
-> hash (so rebuilds need no refresh), but `terraform init` still needs the
-> recorded version so its state-reconcile pass doesn't query the unpublished
-> public registry. The version-mirror layout, version-in-path, and the
-> lock-refresh caveats below no longer apply. See
-> `docs/runbooks/operator-workstation.md` in the Ansible repo for the live
-> description.
-
 ## Goal
 
 Cut the `pvginkel/homelab` provider over from the local dev override to a
@@ -28,6 +8,22 @@ lands, `terraform init` resolves the provider from a baked-in filesystem
 mirror with no per-machine setup — same path for Claude, the Jenkins CI
 build, and the operator's manual `terraform apply` runs (all of which
 happen inside `modern-app-dev`).
+
+> **Update (2026-06): versioned mirror + CI-maintained lock.** The mechanism
+> below is unchanged (baked filesystem mirror, no dev override), but the version
+> model evolved. Each provider build is stamped `0.1.<jenkins-build>` — a fresh
+> version every build, so a consumer never sees the same version with a changed
+> binary (which was forcing manual `terraform init -upgrade` / lock refreshes).
+> The provider Jenkinsfile now also regenerates the consumer lock
+> (`terraform/{prd,scratch}/.terraform.lock.hcl`) from the freshly built binary
+> via `terraform providers lock -fs-mirror=…` and pushes it to Ansible `main`.
+> The `iac` container re-clones Ansible each run, so it always gets a matching
+> lock; the operator's workstation needs a `git pull`. Local source builds use
+> `scripts/install-local.sh`; `scripts/fetch-install.sh` pulls the CI binary.
+> Dependency: a consuming image must rebuild to bake the new version, or its
+> mirror lags the pushed lock. The "Version model" decision below ("loose
+> constraint, image is source of truth, leave the lock as-is") is superseded by
+> this.
 
 This plan runs **after** plan 02. Plan 02 wires the provider into the
 per-VM module against the dev override, so we can iterate on the
