@@ -6,13 +6,19 @@
 > hash in each consumer's `.terraform.lock.hcl`, so every provider rebuild
 > forced a `terraform init -upgrade` / lock refresh. `dev_overrides` ignores
 > the registry, the version constraint, and the lock for `pvginkel/homelab`,
-> so a rebuilt binary is picked up with no init. Current facts: binary lives
-> at `/home/ubuntu/.local/lib/terraform-providers/terraform-provider-homelab`
-> in the image; `/etc/terraform.rc` carries the `dev_overrides` block; the
-> `homelab` entry is removed from `terraform/{prd,scratch}/.terraform.lock.hcl`.
-> The version-mirror layout, version-in-path, and the lock-refresh caveats
-> below no longer apply. See `docs/runbooks/operator-workstation.md` in the
-> Ansible repo for the live description.
+> so a rebuilt binary is picked up with no init. Current facts: in the iac
+> image the binary lives at
+> `/root/.local/lib/terraform-providers/terraform-provider-homelab` (terraform
+> runs as root there); in `modern-app-dev` it is under
+> `/home/ubuntu/.local/lib/...`; both images' `/etc/terraform.rc` carries the
+> `dev_overrides` block. The `pvginkel/homelab` entry **stays** in
+> `terraform/{prd,scratch}/.terraform.lock.hcl` — the override ignores its
+> hash (so rebuilds need no refresh), but `terraform init` still needs the
+> recorded version so its state-reconcile pass doesn't query the unpublished
+> public registry. The version-mirror layout, version-in-path, and the
+> lock-refresh caveats below no longer apply. See
+> `docs/runbooks/operator-workstation.md` in the Ansible repo for the live
+> description.
 
 ## Goal
 
