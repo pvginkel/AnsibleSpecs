@@ -236,7 +236,9 @@ Sequencing rationale: rebuild has no real rollback (once the rootfs is destroyed
 
 ### Ceph version policy
 
-**LTS channels only.** Ceph is infrastructure the operator does not want to think about; chasing latest costs small surprises for negligible benefit on this workload. Track the current Ceph LTS, upgrade when the previous one goes EOL or sooner if a security fix forces it. Phase 5 picks the initial target channel against current state.
+**LTS channels only.** Ceph is infrastructure the operator does not want to think about; chasing latest costs small surprises for negligible benefit on this workload. Track the current Ceph LTS, upgrade when the previous one goes EOL or sooner if a security fix forces it. Phase 5 picks the initial target channel against current state. (microceph snap channels are named after Ceph *releases*, not Ubuntu releases — `reef` = Ceph 18, `squid` = Ceph 19, `tentacle` = Ceph 20. Pin a named channel, never the floating `latest`.)
+
+**Dev runs a release ahead, single-node.** A co-located single-node microceph on `srvk8sdev` (the `ceph_dev` group, converged by `playbooks/site-ceph.yml`) provides isolated dev storage — block (RBD), file (CephFS), and object (RGW/S3) — so HelmCharts and TF-provider iteration stops churning the prod Ceph cluster. It tracks `squid/stable` (Ceph 19), a release ahead of prd's `reef` (Ceph 18), soaking the next Ceph before prd moves — the same dev-ahead pattern as the k8s channel policy. Channel pinned in `group_vars/ceph_dev.yml`; daemon memory caps tuned well below prd since the node carries no persistent load. The `microceph` role is single-node-only today; Phase 5 extends it to the 3-node prd fleet (multi-node join, `serial:1` drain, VIP takeover).
 
 ### Ceph daemon memory targets
 
