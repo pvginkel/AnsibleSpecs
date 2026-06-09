@@ -245,7 +245,7 @@ Sequencing rationale: rebuild has no real rollback (once the rootfs is destroyed
 10 GiB per-VM is the operating envelope for the microceph fleet (`srvceph1/2/3`). Microceph defaults — `osd_memory_target=4 GiB`, `mds_cache_memory_limit=4 GiB` — over-spec bluestore and metadata caches for this workload by ~2×: they fit fine on a node carrying only OSD+MON, but spill once a node also picks up the active MDS, MGR, and RGW. Symptom observed before tuning: srvceph1 sat at 8 GiB used / 1.5 GiB available with 4 GiB swap 100% full.
 
 **Targets**:
-- `osd_memory_target = 2684354560` (2.5 GiB) on the `osd` section. 2 GiB is the documented floor (`osd_memory_target_min`); 2.5 keeps a margin.
+- `osd_memory_target = 2684354560` (2.5 GiB) on the `osd` section. The hard floor is ~896 MiB (`osd_memory_base` + `osd_memory_cache_min`) — there is no separate `osd_memory_target_min` key, contrary to an earlier note here; 2.5 GiB keeps a comfortable margin.
 - `mds_cache_memory_limit = 1073741824` (1 GiB) on the `mds` section.
 
 **Application**: cluster config DB via `microceph.ceph config set <section> <key> <value>`. The microceph phase encodes both as role variables (`group_vars/ceph_prd.yml` — e.g. `microceph_osd_memory_target`, `microceph_mds_cache_memory_limit`) and applies them through the same interface. Values stay tunable per-environment rather than hardcoded.
