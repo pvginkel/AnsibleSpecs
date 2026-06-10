@@ -41,8 +41,8 @@ resources are `homelab_rbd_image`, `homelab_cephfs_subvolume`,
 `homelab_s3_storage`, and `homelab_zfs_dataset` (see the
 HomelabTerraformProvider README — that README is authoritative, not
 plan 08's tables). ZFS datasets are managed through the
-`iac-provisioner` DaemonSet agent (image already in DockerImages;
-the chart that deploys it is a prerequisite this plan adds).
+`iac-provisioner` DaemonSet agent, whose chart already exists in this
+repo (`charts/iac-provisioner`) and is deployed on both clusters.
 
 ## Decisions taken with the operator
 
@@ -238,9 +238,11 @@ After the restructure, **every chart** in `charts/` has a
   hardcoded copies of the god credential.
 - Inline dev secrets remain acceptable where they exist today (the dev
   cluster is isolated); no OpenBao dependency for dev.
-- ZFS-backed pieces have no dev equivalent (`srvk8sdev` carries no ZFS
-  pool) — dev configs for media/storage/prometheus substitute
-  microceph-backed volumes for the `zpool2` bits.
+- ZFS in dev is available (the `iac-provisioner` agent runs on
+  `srvk8sdev` too) but optional — dev configs for media/storage/
+  prometheus may either declare small `homelab_zfs_dataset`s against
+  srvk8sdev's pool or substitute microceph-backed volumes for the
+  `zpool2` bits, whichever makes the chart exercisable.
 - Dev releases are normally **not installed** — the directory's job is
   to make `poetry run deploy dev/<chart>` work on demand.
 
@@ -278,10 +280,12 @@ Per release-stage `infrastructure.tf`:
   bare hostPath (no PVC), TF manages only the dataset. Exact dataset
   boundaries (dataset vs subdirectory, e.g. `prometheus` vs
   `prometheus/db`) get confirmed against `zfs list -r zpool2` before
-  import. **Prerequisite:** a new `iac-provisioner` chart in this repo
-  (privileged DaemonSet, hostPID, hostPort 9655, node-selected to
-  ZFS-carrying nodes, bearer-token auth; image already built from
-  DockerImages) must be deployed before any ZFS TF applies.
+  import. The agent side is already in place: `charts/iac-provisioner`
+  (privileged DaemonSet, hostPID, hostPort 9655, scheduled onto nodes
+  carrying the `homelab.local/storage` label, bearer token via
+  ExternalSecret from `eso/<cluster>/iac-provisioner/api/token`) is
+  deployed on prd (srvk8s1) and dev (srvk8sdev); it migrates to the
+  new layout like any other release.
 - **Post-apply PV manifests retire.** The static PVs currently shipped
   via `<release>.yaml` post-apply files (grafana, prometheus
   alertmanager, step-ca) fold into the same TF modules.
@@ -306,7 +310,7 @@ set in the shared provider config):
 | `ceph_pool` (RBD pool **and** subvolume group) | `csi-prd` | `k8s` (new; see cutover) |
 | S3 endpoint | `http://ceph:7480` (prod RGW) | `http://srvk8sdev` (microceph RGW, port 80) |
 | S3 admin | `tf-provider` user on prod RGW | `tf-provider` user on microceph RGW |
-| ZFS | `zfs_pools = { zpool2 = <its node> }` + provisioner token | unset — srvk8sdev carries no ZFS pool |
+| ZFS | `zfs_pools = { zpool2 = <its node, srvk8s1> }` + provisioner token | srvk8sdev's pool mapping + dev token (agent deployed there) |
 
 Note the provider constraint: one `ceph_pool` serves as both the RBD
 pool and the CephFS subvolume group — pool and group must share a name
@@ -578,10 +582,10 @@ Drive end-to-end:
 9. Dev proof: `poetry run deploy dev/design-assistant` brings the
    chart up on `srvk8sdev` entirely on microceph (RBD, CephFS, S3) —
    no `csi-dev`, no prod-Ceph dependency, no god key.
-10. ZFS proof (separate, after iac-provisioner is deployed): one
-    `zpool2` consumer (storage's `rclone-backup` is the smallest)
-    imported as `homelab_zfs_dataset`; plan is a no-op, quota change
-    applies in place, `destroy` refuses under `prevent_destroy`.
+10. ZFS proof: one `zpool2` consumer (storage's `rclone-backup` is
+    the smallest) imported as `homelab_zfs_dataset`; plan is a no-op,
+    quota change applies in place, `destroy` refuses under
+    `prevent_destroy`.
 
 Once design-assistant works, the rest is mechanical per-chart
 migration; the god-credential retirement checklist runs after the last
@@ -618,9 +622,10 @@ S3 consumer (apps, validation jobs, dev tree) is migrated.
   at the call site (module default) is the only protection; the agent
   does refuse to destroy a dataset with children or snapshots. TF
   applies that touch ZFS depend on the `iac-provisioner` DaemonSet
-  being up on the pool's node — a chicken-and-egg to respect when that
-  chart itself is being migrated (deploy it before any ZFS-consuming
-  release).
+  being up on the pool's node — already running on both clusters, but
+  a chicken-and-egg to respect when migrating the iac-provisioner
+  release itself to the new layout (migrate it before, or at least
+  never simultaneously with, a ZFS-consuming release).
 - **microceph is single-node, size 1, memory-capped.** Dev storage is
   deliberately disposable; nothing recoverable may live only there.
 - **`recommend-resources.py` and the architecture generator** key off
@@ -641,16 +646,15 @@ S3 consumer (apps, validation jobs, dev tree) is migrated.
 4. (Ansible repo) microceph dev deltas: `k8s` pool + subvolume group,
    ceph-csi + TF cephx users, `tf-provider` RGW admin users on both
    RGWs.
-5. (HelmCharts repo) `iac-provisioner` chart (privileged DaemonSet,
-   hostPort 9655) + prd release, before any ZFS-consuming migration.
-6. (HelmCharts repo) design-assistant migrated end-to-end as the proof
+5. (HelmCharts repo) design-assistant migrated end-to-end as the proof
    (all four stages + dev tree), per Verification.
-7. (HelmCharts repo) per-chart migration commits, mechanical, one per
+6. (HelmCharts repo) per-chart migration commits, mechanical, one per
    chart — each commit: restructure + namespace migration + storage
-   import + dev config.
-8. (HelmCharts repo) `configs/dev/_ci/` + (app repos) validation
+   import + dev config. (The `iac-provisioner` chart already landed on
+   main and migrates as one of these.)
+7. (HelmCharts repo) `configs/dev/_ci/` + (app repos) validation
    pipeline cutover to microceph.
-9. (Ansible + operator) god-credential retirement checklist; csi-dev
+8. (Ansible + operator) god-credential retirement checklist; csi-dev
    pool/group deletion on prod Ceph after the orphan audit.
 
 ## Execution access requirements
