@@ -34,13 +34,15 @@ chart and one CLI orchestrates the deploy. After this plan lands:
 - The shared god-mode RGW credential (`kv/shared/ceph-rgw/s3`) retires
   in favor of per-release scoped users minted by `homelab_s3_storage`.
 
-This plan absorbs phase 8 (storage migration to TF) for Ceph-backed
-storage and is the substrate for phase 9 (Keycloak realms/clients/roles
-to TF). Plan 08 landed in the provider with different shapes than
-written: the resources are `homelab_rbd_image`, `homelab_cephfs_subvolume`,
-and `homelab_s3_storage` (see the HomelabTerraformProvider README —
-that README is authoritative, not plan 08's tables). `homelab_zfs_dataset`
-did **not** land; ZFS-backed storage stays out of scope here.
+This plan absorbs phase 8 (storage migration to TF) and is the
+substrate for phase 9 (Keycloak realms/clients/roles to TF). Plan 08
+landed in the provider with different shapes than written: the
+resources are `homelab_rbd_image`, `homelab_cephfs_subvolume`,
+`homelab_s3_storage`, and `homelab_zfs_dataset` (see the
+HomelabTerraformProvider README — that README is authoritative, not
+plan 08's tables). ZFS datasets are managed through the
+`iac-provisioner` DaemonSet agent (image already in DockerImages;
+the chart that deploys it is a prerequisite this plan adds).
 
 ## Decisions taken with the operator
 
@@ -57,10 +59,11 @@ did **not** land; ZFS-backed storage stays out of scope here.
 - **`uninstall` and `destroy` are separate commands.** A redeploy
   after `uninstall` reuses the still-existing TF resources via the
   static-PV `claimRef` discipline.
-- **ZFS pools by Ansible, datasets by TF** was the plan-08 intent, but
-  the provider shipped without a ZFS dataset resource. ZFS-backed
-  pieces (prometheus's `zpool2` local PV, media/storage hostPaths)
-  keep their current arrangement until the provider grows the resource.
+- **ZFS pools by Ansible, datasets by TF.** Pool creation is per-host,
+  lifetime equals the VM's. Datasets are per-release
+  `homelab_zfs_dataset` resources, applied through the
+  `iac-provisioner` DaemonSet (privileged, hostPort 9655, one pod per
+  ZFS-carrying node). Existing `zpool2` datasets are imported.
 - **Operator-runs-TF carve-out.** The existing rule in CLAUDE.md
   governs this repo's `terraform/`. The application monorepo's
   per-release TF runs through Jenkins like Helm always has.
@@ -90,7 +93,10 @@ did **not** land; ZFS-backed storage stays out of scope here.
   `homelab_s3_storage` (scoped user owning exactly its buckets,
   `max_buckets = -1`). The god credential is deleted at the end of the
   migration. Anything missed breaks loudly and gets fixed by moving it
-  to a scoped credential — accepted.
+  to a scoped credential — accepted. **Operator-verified:** the
+  provider adopts pre-existing buckets (it re-links ownership to the
+  per-release user), so the prd buckets migrate without a manual
+  `radosgw-admin bucket unlink/link` step.
 
 ## Repository layout
 
@@ -125,6 +131,7 @@ did **not** land; ZFS-backed storage stays out of scope here.
 │   ├── namespace/
 │   ├── static-rbd-pv/              # homelab_rbd_image + PV w/ claimRef
 │   ├── static-cephfs-pv/           # homelab_cephfs_subvolume + PV w/ claimRef
+│   ├── static-zfs-pv/              # homelab_zfs_dataset + local PV w/ nodeAffinity + claimRef
 │   └── s3-storage/                 # homelab_s3_storage + kubernetes_secret
 ├── _providers/                     # shared provider config
 │   └── providers.tf
@@ -133,9 +140,6 @@ did **not** land; ZFS-backed storage stays out of scope here.
 │       └── pyproject.toml
 └── Jenkinsfile                     # invokes the CLI
 ```
-
-(`static-zfs-pv` from the earlier draft is dropped — no provider
-resource backs it yet.)
 
 **Stage is always required, including for charts that have only one
 deployment.** Stageless charts (`dnsmasq`, `registry`, etc.) live at
@@ -234,6 +238,9 @@ After the restructure, **every chart** in `charts/` has a
   hardcoded copies of the god credential.
 - Inline dev secrets remain acceptable where they exist today (the dev
   cluster is isolated); no OpenBao dependency for dev.
+- ZFS-backed pieces have no dev equivalent (`srvk8sdev` carries no ZFS
+  pool) — dev configs for media/storage/prometheus substitute
+  microceph-backed volumes for the `zpool2` bits.
 - Dev releases are normally **not installed** — the directory's job is
   to make `poetry run deploy dev/<chart>` work on demand.
 
@@ -262,11 +269,22 @@ Per release-stage `infrastructure.tf`:
   `ensure_bucket_exists` becomes a harmless head-bucket (bucket
   pre-exists; the scoped user can't create buckets; the code path is
   warn-only).
+- **ZFS** — `terraform-modules/static-zfs-pv`: a `homelab_zfs_dataset`
+  whose `mountpoint_resolved` feeds a local PV (nodeAffinity to the
+  pool's node) with the same claimRef/Retain/prevent_destroy
+  discipline. Existing `zpool2` consumers are imported: prometheus's
+  local PV (`/zpool2/prometheus/db`), media's `mydownloads` hostPath,
+  storage's `rclone-backup`. Where a release consumes the dataset as a
+  bare hostPath (no PVC), TF manages only the dataset. Exact dataset
+  boundaries (dataset vs subdirectory, e.g. `prometheus` vs
+  `prometheus/db`) get confirmed against `zfs list -r zpool2` before
+  import. **Prerequisite:** a new `iac-provisioner` chart in this repo
+  (privileged DaemonSet, hostPID, hostPort 9655, node-selected to
+  ZFS-carrying nodes, bearer-token auth; image already built from
+  DockerImages) must be deployed before any ZFS TF applies.
 - **Post-apply PV manifests retire.** The static PVs currently shipped
   via `<release>.yaml` post-apply files (grafana, prometheus
-  alertmanager, step-ca) fold into the same TF modules. prometheus's
-  `zpool2` local PV stays a plain `kubernetes_persistent_volume` in TF
-  with the hostPath it has today (no ZFS resource yet).
+  alertmanager, step-ca) fold into the same TF modules.
 
 Naming: `homelab_s3_storage.name` = the release namespace
 (`<chart>-<stage>`); bucket names stay exactly as deployed today (no
@@ -278,7 +296,9 @@ resources).
 `_providers/providers.tf` declares `homelab`, `kubernetes`, `keycloak`.
 The CLI injects the right backend group per cluster as env vars
 (`HOMELAB_CEPH_MON_HOST/USER/KEY/POOL`, `HOMELAB_S3_ENDPOINT/
-S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY`):
+S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY`,
+`HOMELAB_ZFS_PROVISIONER_TOKEN`; `zfs_pools` is a provider attribute,
+set in the shared provider config):
 
 | | prd cluster | dev cluster |
 |---|---|---|
@@ -286,6 +306,7 @@ S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY`):
 | `ceph_pool` (RBD pool **and** subvolume group) | `csi-prd` | `k8s` (new; see cutover) |
 | S3 endpoint | `http://ceph:7480` (prod RGW) | `http://srvk8sdev` (microceph RGW, port 80) |
 | S3 admin | `tf-provider` user on prod RGW | `tf-provider` user on microceph RGW |
+| ZFS | `zfs_pools = { zpool2 = <its node> }` + provisioner token | unset — srvk8sdev carries no ZFS pool |
 
 Note the provider constraint: one `ceph_pool` serves as both the RBD
 pool and the CephFS subvolume group — pool and group must share a name
@@ -305,13 +326,13 @@ Everything currently deployed is imported, not recreated:
   pre-formatted ext4 (made by `scripts/make-rbd.sh`); new ones are
   created raw and formatted by ceph-csi on first mount — both work
   under the same PV `fsType`.
-- `terraform import homelab_s3_storage.x <name>` re-reads the key and
-  reconciles the bucket set — but the prd buckets are currently owned
-  by the **god** user, not a per-release user. **Open verification
-  item:** confirm the provider's create/import path adopts a
-  pre-existing bucket by re-linking ownership; if it doesn't, the
-  migration step is a manual `radosgw-admin bucket unlink/link` per
-  bucket before the apply, or a small provider fix.
+- `homelab_s3_storage` adopts pre-existing buckets (operator-verified):
+  declaring the existing prd buckets re-links their ownership from the
+  god user to the new per-release user — no manual `radosgw-admin`
+  step.
+- `terraform import homelab_zfs_dataset.x zpool2/<name>` per existing
+  dataset (prometheus, mydownloads, rclone-backup — exact names per
+  `zfs list`).
 - Existing PVs are *not* imported: the namespace migration (below)
   creates fresh TF-owned PVs against the same underlying objects.
 
@@ -434,6 +455,7 @@ delegated):
 rbd ls csi-prd && rbd ls csi-dev
 ceph fs subvolume ls cephfs csi-prd && ceph fs subvolume ls cephfs csi-dev
 radosgw-admin bucket list && radosgw-admin user list
+zfs list -r -o name,quota,mountpoint zpool2   # on the node carrying zpool2
 ```
 
 Diff against the lists above. Orphan deletions are manual and happen
@@ -553,6 +575,10 @@ Drive end-to-end:
 9. Dev proof: `poetry run deploy dev/design-assistant` brings the
    chart up on `srvk8sdev` entirely on microceph (RBD, CephFS, S3) —
    no `csi-dev`, no prod-Ceph dependency, no god key.
+10. ZFS proof (separate, after iac-provisioner is deployed): one
+    `zpool2` consumer (storage's `rclone-backup` is the smallest)
+    imported as `homelab_zfs_dataset`; plan is a no-op, quota change
+    applies in place, `destroy` refuses under `prevent_destroy`.
 
 Once design-assistant works, the rest is mechanical per-chart
 migration; the god-credential retirement checklist runs after the last
@@ -581,17 +607,17 @@ S3 consumer (apps, validation jobs, dev tree) is migrated.
   from the set deletes the bucket and its objects; destroy purges
   everything. `prevent_destroy = true` on the resource in the module
   default; bucket-set edits remain a reviewed-diff concern.
-- **Bucket adoption is unverified.** Whether the provider cleanly
-  adopts a pre-existing bucket owned by another user (the god user)
-  needs a test before the first prd S3 migration; fallback is a manual
-  `radosgw-admin bucket unlink/link` step or a provider fix.
-- **Renames force destroy+recreate** in all three storage resources.
-  Imported objects keep their historical names forever (e.g. RBD
-  `guacamole`, `iotsupport-db`); naming consistency is not worth data
-  migration.
-- **No ZFS resource in the provider.** prometheus's `zpool2` local PV
-  and the media/storage hostPaths keep their current arrangement;
-  revisit if/when `homelab_zfs_dataset` lands.
+- **Renames force destroy+recreate** in all four storage resources
+  (for `homelab_zfs_dataset`, both `pool` and `name`). Imported
+  objects keep their historical names forever (e.g. RBD `guacamole`,
+  `iotsupport-db`); naming consistency is not worth data migration.
+- **ZFS destroy has no provider-side guard.** `prevent_destroy = true`
+  at the call site (module default) is the only protection; the agent
+  does refuse to destroy a dataset with children or snapshots. TF
+  applies that touch ZFS depend on the `iac-provisioner` DaemonSet
+  being up on the pool's node — a chicken-and-egg to respect when that
+  chart itself is being migrated (deploy it before any ZFS-consuming
+  release).
 - **microceph is single-node, size 1, memory-capped.** Dev storage is
   deliberately disposable; nothing recoverable may live only there.
 - **`recommend-resources.py` and the architecture generator** key off
@@ -607,16 +633,50 @@ S3 consumer (apps, validation jobs, dev tree) is migrated.
    `release.yaml` parsing (`disabled`, `upstream`,
    `post_rollout_manifests`).
 3. (HelmCharts repo) `terraform-modules/` (namespace, static-rbd-pv,
-   static-cephfs-pv, s3-storage) and `_providers/` scaffolding.
+   static-cephfs-pv, static-zfs-pv, s3-storage) and `_providers/`
+   scaffolding.
 4. (Ansible repo) microceph dev deltas: `k8s` pool + subvolume group,
    ceph-csi + TF cephx users, `tf-provider` RGW admin users on both
    RGWs.
-5. (HelmCharts repo) design-assistant migrated end-to-end as the proof
+5. (HelmCharts repo) `iac-provisioner` chart (privileged DaemonSet,
+   hostPort 9655) + prd release, before any ZFS-consuming migration.
+6. (HelmCharts repo) design-assistant migrated end-to-end as the proof
    (all four stages + dev tree), per Verification.
-6. (HelmCharts repo) per-chart migration commits, mechanical, one per
+7. (HelmCharts repo) per-chart migration commits, mechanical, one per
    chart — each commit: restructure + namespace migration + storage
    import + dev config.
-7. (HelmCharts repo) `configs/dev/_ci/` + (app repos) validation
+8. (HelmCharts repo) `configs/dev/_ci/` + (app repos) validation
    pipeline cutover to microceph.
-8. (Ansible + operator) god-credential retirement checklist; csi-dev
+9. (Ansible + operator) god-credential retirement checklist; csi-dev
    pool/group deletion on prod Ceph after the orphan audit.
+
+## Execution access requirements
+
+What the agent driving this plan needs, beyond the HelmCharts working
+copy (current state: the work container has **no ssh keys and no
+kubeconfig** — none of the live-cluster items below work without a
+grant or the operator running them):
+
+- **Kubernetes**: kubeconfig (or in-cluster access) for the dev
+  cluster (`srvk8sdev`) for the dev-tree and microceph cutover work;
+  prd-cluster access (or the Jenkins pipeline path) for namespace
+  migrations and per-chart cutovers.
+- **Prod Ceph admin** (any of srvceph1-3, or pasted command output):
+  the orphan-audit enumeration, cephx user creation for TF, and the
+  eventual csi-dev pool/group deletion.
+- **microceph on srvk8sdev** (root/ssh, or via Ansible): pool/group
+  rename, cephx + RGW `tf-provider` user creation — or just apply the
+  Ansible deltas of commit 4.
+- **TF provider credentials** in the stopgap `credentials/` directory:
+  per-cluster `HOMELAB_CEPH_*`, `HOMELAB_S3_*`,
+  `HOMELAB_ZFS_PROVISIONER_TOKEN`.
+- **Repos** (write): HelmCharts, Ansible (commit 4), the state Git
+  repo (decisions.md "Production execution model"); the app/UI repos
+  for the validation-pipeline cutover (DesignAssistantProject,
+  ElectronicsInventoryUI, IoTSupportUI) — or divvy those to other
+  agents.
+- **OpenBao** (operator-mediated is fine): writing the per-app
+  validation S3 paths and, at the end, deleting `kv/shared/ceph-rgw/s3`
+  and its consumer grants.
+- **Jenkins**: trigger/observe the HelmCharts pipeline; update the
+  validation jobs' credential bindings.
