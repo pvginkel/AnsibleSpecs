@@ -13,7 +13,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending (refinement) | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
-| [zfs-dataset-provider](zfs-dataset-provider/plan.md) | pending | supersedes the ZFS mechanism in tf-provider-resource-extensions | phase: storage CSIs (static-PV modules); folder also holds the api + terraform specs |
+| [zfs-dataset-provider](zfs-dataset-provider/plan.md) | in progress (code complete; pending deploy + smoke) | supersedes the ZFS mechanism in tf-provider-resource-extensions | phase: storage CSIs (static-PV modules); folder also holds the api + terraform specs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness, backup-collector | phase: helm + tf harness |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
