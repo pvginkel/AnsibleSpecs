@@ -398,9 +398,9 @@ on prod RGW. New arrangement:
   `electronics-inventory-validation`, `iot-support-validation` — all on
   microceph.
 - The minted scoped keys land where the pipelines read credentials
-  (OpenBao per-app paths, e.g. `kv/shared/validation/<app>/s3`).
-  Pre-phase-6 stopgap: operator copies TF outputs into OpenBao/Jenkins
-  once; phase 6 automates the hand-off.
+  (OpenBao per-app paths, e.g. `kv/shared/validation/<app>/s3`) —
+  written by the `_ci` TF root via the OpenBao provider if that's
+  wired by then, otherwise a one-time operator copy of the TF outputs.
 - App-repo `Jenkinsfile.validation` changes: `withVault` path swap +
   `S3_ENDPOINT_URL` → microceph. (Separate repos; mechanical.)
 
@@ -505,15 +505,18 @@ to git before the destroy lands.
   release pulls it via symlink or include — settled at impl time.
   Symlink wins on maintenance; the alternative is per-release
   duplication with a `terraform fmt`-driven sync check.
-- **Credentials.** From OpenBao via Jenkins credential injection,
-  exposed to the deploy container as environment variables. The CLI
-  selects the per-cluster `HOMELAB_*` group (prod Ceph + prod RGW for
-  prd, microceph for dev), passes TF vars via `TF_VAR_*` / `HOMELAB_*`
-  env, and Helm via `--set` / `--set-file` as needed. **Pre-phase 6
-  stopgap**: a gitignored `credentials/` directory on the deploy host
-  holds the same variables; the CLI reads from it when the env vars
-  aren't set. The stopgap commits explicitly to migrating to OpenBao
-  when phase 6 lands.
+- **Credentials are environment variables, full stop.** OpenBao is
+  the source; Jenkins credential injection (or the operator's shell
+  for manual runs) exposes them to the process as env vars. The
+  provider already reads every config attribute from its `HOMELAB_*`
+  env fallback, so TF needs no `TF_VAR_*` plumbing for provider
+  config — the CLI just runs `terraform` in the inherited
+  environment. The CLI's only credential job is per-cluster
+  selection: when both clusters' groups are present (e.g. a
+  cluster-suffixed naming scheme), it re-exports the target cluster's
+  set as the bare `HOMELAB_*` names before invoking TF. Helm-side
+  secrets keep the same pattern (`--set` from env) where needed. No
+  credential files on disk.
 
 ## Namespace migration
 
@@ -667,9 +670,10 @@ grant or the operator running them):
 - **microceph on srvk8sdev** (root/ssh, or via Ansible): pool/group
   rename, cephx + RGW `tf-provider` user creation — or just apply the
   Ansible deltas of commit 4.
-- **TF provider credentials** in the stopgap `credentials/` directory:
-  per-cluster `HOMELAB_CEPH_*`, `HOMELAB_S3_*`,
-  `HOMELAB_ZFS_PROVISIONER_TOKEN`.
+- **TF provider credentials as environment variables**
+  (OpenBao-sourced, per the credentials decision): per-cluster
+  `HOMELAB_CEPH_*`, `HOMELAB_S3_*`, `HOMELAB_ZFS_PROVISIONER_TOKEN`
+  set in the environment the agent runs TF from.
 - **Repos** (write): HelmCharts, Ansible (commit 4), the state Git
   repo (decisions.md "Production execution model"); the app/UI repos
   for the validation-pipeline cutover (DesignAssistantProject,
