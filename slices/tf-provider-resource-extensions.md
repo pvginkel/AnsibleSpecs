@@ -94,6 +94,16 @@ Operations:
 
 ### `homelab_zfs_dataset`
 
+> **Mechanism superseded — see [`zfs-dataset-provider/`](zfs-dataset-provider/plan.md).**
+> The SSH transport below (provider `zfs_pools` + `zfs_ssh_user`/`zfs_ssh_key`,
+> direct `zfs` over an SSH session) was replaced before implementation by the
+> **iac-provisioner** node agent: a privileged DaemonSet that runs the host's
+> `zfs` via `nsenter`, addressed per node over hostPort. The **resource shape
+> below is unchanged** — only the transport differs. The Ceph resources in this
+> slice shipped via go-ceph cgo; ZFS is the one resource still to build, now per
+> the new slice. Read the rows below for the resource contract; ignore the SSH
+> specifics in *Provider configuration* and *Caveats*.
+
 Inputs:
 
 | Name          | Type           | Required | Notes                                                     |
