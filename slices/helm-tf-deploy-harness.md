@@ -688,3 +688,37 @@ grant or the operator running them):
   and its consumer grants.
 - **Jenkins**: trigger/observe the HelmCharts pipeline; update the
   validation jobs' credential bindings.
+
+## Amendments (2026-06-10, during execution)
+
+Operator decisions taken while landing the dev tree; they refine the
+text above where they conflict:
+
+- **The default stage is `prd` on every cluster, including dev.** The
+  dev config tree is `configs/dev/<chart>/prd/`, namespaces
+  `<chart>-prd` on the dev cluster. The "conventionally that's dev"
+  note under Repository layout is superseded — one rule everywhere.
+- **`_shared/` = shared per-stage TF code, not (only) singleton state.**
+  `configs/<cluster>/<chart>/_shared/infrastructure*.tf` holds the
+  chart's TF recipe parameterized by `var.namespace`/`var.stage`,
+  folded by the CLI into every stage's working directory — shared code,
+  per-stage state. Per-stage inputs (sizes, name overrides for
+  unrenameable imports: CephFS subvolumes and S3 buckets; RBD images
+  can be `rbd rename`d) ride in `<stage>/*.auto.tfvars`. True
+  cross-stage singletons (the Keycloak realm) get their own root with
+  its own state when phase 9 lands.
+- **Module sources are `./terraform-modules/<name>`** via a symlink the
+  CLI plants in each working directory (TF has no import aliases);
+  working dirs live under `<repo>/.tf-work/`, not in `configs/`.
+- **Storage sizes live in Terraform only.** The chart-side PVC request
+  is decorative under claimRef pre-binding; the shared helpers default
+  it, and values files carry just `volumeName`.
+- **Reattach is explicit in the CLI**: a Released Retain-PV keeps the
+  dead PVC's uid in claimRef; deploy clears it (namespace-scoped)
+  before Helm runs, which is what makes uninstall → redeploy actually
+  reattach.
+- The dev microceph mon address is `10.1.3.3` (the slice's
+  192.168.188.17 predates the network change).
+- Migration ordering note learned the hard way: uninstall ESO
+  *consumers* before ESO itself, or their ExternalSecret finalizers
+  deadlock namespace and CRD deletion.
