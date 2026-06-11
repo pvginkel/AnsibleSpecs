@@ -15,6 +15,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [zfs-dataset-provider](zfs-dataset-provider/plan.md) | in progress (code complete; pending deploy + smoke) | supersedes the ZFS mechanism in tf-provider-resource-extensions | phase: storage CSIs (static-PV modules); folder also holds the api + terraform specs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
+| [helm-tf-deploy-harness-ceph-changes](helm-tf-deploy-harness-ceph-changes.md) | pending (dev first; behind chart rebuild) | helm-tf-deploy-harness | Ceph cred consolidation (combined cephx + RGW admin per cluster, `shared/<env>/…`) |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness, backup-collector | phase: helm + tf harness |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 
