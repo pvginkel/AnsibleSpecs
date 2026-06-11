@@ -689,36 +689,109 @@ grant or the operator running them):
 - **Jenkins**: trigger/observe the HelmCharts pipeline; update the
   validation jobs' credential bindings.
 
-## Amendments (2026-06-10, during execution)
+## Execution status (2026-06-11)
 
-Operator decisions taken while landing the dev tree; they refine the
-text above where they conflict:
+Execution runs in the **isolated clone `HelmCharts-2`**; nothing is
+pushed anywhere yet (local commits in HelmCharts-2, Ansible,
+TerraformState, and this repo). The dev cluster (`srvk8sdev`) is the
+test bed throughout.
+
+### Done
+
+- **Commit 2 — `tools/deploy` CLI.** Verbs deploy/template/plan/stop/
+  uninstall/destroy/wait/config/output/import; per-(release, stage,
+  phase) state in the TerraformState checkout, committed mechanically;
+  per-cluster env injection from `_providers/clusters.yaml` (+
+  cluster-suffixed `HOMELAB_<CLUSTER>_*` re-export); deploy clears
+  stale claimRef uids on Released PVs (the explicit relink step);
+  refuses `disabled:`. See `tools/deploy/README.md`.
+- **Commit 3 — `terraform-modules/` + `_providers/`.** namespace,
+  static-rbd-pv, static-cephfs-pv, static-zfs-pv, s3-storage;
+  claimRef + Retain + hardcoded prevent_destroy (TF forbids
+  parameterizing lifecycle — deliberate destroy is a temporary
+  module-edit commit).
+- **Commit 4 — Ansible microceph deltas, applied to srvk8sdev.**
+  `k8s` pool + same-named subvolume group, cephx users
+  (csi-rbd-dev/csi-cephfs-dev/tf-provider), RGW Admin Ops user
+  tf-provider. The prod-RGW tf-provider user is NOT created yet
+  (production-touching).
+- **Dev tree fully migrated and redeployed.** All 44 releases as
+  `configs/dev/<chart>/prd/` (+ chart-level `_shared/`), validated
+  (config + template) and spot-deployed; foundation set +
+  design-assistant green in `*-prd` namespaces, entirely on microceph.
+  The dev `*.sh` tree, args.sh translations, and god-credential copies
+  are gone from the dev tree.
+- **Verification (dev-scoped) green**: deploy / uninstall-reattach
+  (data survives) / destroy-refusal under prevent_destroy / ZFS
+  create + in-place quota + destroy via iac-provisioner /
+  scoped-S3 PUT-GET-DELETE with bucket-create denied / infra-only
+  release (`chart: null`) / `import` adoption of pre-existing RGW
+  users.
+- **`configs/dev/_ci`** mints the three validation S3 users/buckets on
+  microceph; publish runbook in `configs/dev/_ci/README.md`.
+
+### Outstanding
+
+1. **Storage naming cleanup (decision below, NOT yet implemented):**
+   helper takes a base name and appends `-pvc`/`-pv` in code; static
+   becomes the default mode; dynamic provisioning is dropped;
+   `volumeName` plumbing and tombstone comments are removed; legacy
+   claim names normalized. Audit for prd releases currently rendering
+   the dynamic branch before flipping the default.
+2. **Commit 6+ — prd tree restructure** + Jenkinsfile rewrite +
+   `recommend-resources.py` / `gen-architecture.py` updates (CLI
+   `config` parity), per-chart namespace migrations, prd storage
+   adoption (decision below), `disabled:` pipeline handling.
+3. **God-credential retirement, csi-dev pool/group deletion on prod
+   Ceph, validation-pipeline cutover in the app repos, prod-RGW
+   tf-provider user.**
+4. **Operator/OpenBao staging:** `eso/dev/{telegram-mcp,trello-mcp,
+   media}/...` kv entries (flagged in the dev values headers);
+   `kv/shared/validation/<app>/s3` per the `_ci` runbook + jenkins
+   policy widening.
+
+## Decisions taken during execution (operator)
 
 - **The default stage is `prd` on every cluster, including dev.** The
-  dev config tree is `configs/dev/<chart>/prd/`, namespaces
-  `<chart>-prd` on the dev cluster. The "conventionally that's dev"
-  note under Repository layout is superseded — one rule everywhere.
-- **`_shared/` = shared per-stage TF code, not (only) singleton state.**
+  dev tree is `configs/dev/<chart>/prd/`, namespaces `<chart>-prd` on
+  the dev cluster. Supersedes the "conventionally that's dev" note
+  under Repository layout.
+- **`_shared/` = shared per-stage TF code.**
   `configs/<cluster>/<chart>/_shared/infrastructure*.tf` holds the
-  chart's TF recipe parameterized by `var.namespace`/`var.stage`,
-  folded by the CLI into every stage's working directory — shared code,
-  per-stage state. Per-stage inputs (sizes, name overrides for
-  unrenameable imports: CephFS subvolumes and S3 buckets; RBD images
-  can be `rbd rename`d) ride in `<stage>/*.auto.tfvars`. True
-  cross-stage singletons (the Keycloak realm) get their own root with
-  its own state when phase 9 lands.
+  chart's recipe parameterized by `var.namespace`/`var.stage`, folded
+  by the CLI into every stage's working directory — shared code,
+  per-stage state. True cross-stage singletons (the Keycloak realm)
+  get their own root with its own state when phase 9 lands.
 - **Module sources are `./terraform-modules/<name>`** via a symlink the
   CLI plants in each working directory (TF has no import aliases);
   working dirs live under `<repo>/.tf-work/`, not in `configs/`.
-- **Storage sizes live in Terraform only.** The chart-side PVC request
-  is decorative under claimRef pre-binding; the shared helpers default
-  it, and values files carry just `volumeName`.
+- **Storage names: one base name, suffixes appended in code.** The
+  chart-side helpers take a base name (e.g. `mydownloads`) and derive
+  `<base>-pvc` / `<base>-pv`; the TF modules take the same base name
+  and derive identically. No `volumeName` or size plumbing in values —
+  sizes live in Terraform only (the PVC request is decorative under
+  claimRef pre-binding and is defaulted by the helper). Static is the
+  default mode; **dynamic provisioning is dropped** (the legacy
+  imageName/subvolumeName branches stay only until the prd tree
+  migrates). Existing inconsistent claim names (some carry `-pvc`,
+  some don't) are normalized in this pass.
+- **Imported prd objects do NOT keep historical names** (supersedes
+  the "Renames force destroy+recreate / historical names forever"
+  caveat): RBD images are `rbd rename`d to the canonical
+  `<namespace>-<short>` before import; CephFS subvolumes and S3
+  buckets — which cannot be renamed — are created fresh under
+  canonical names and the data is moved by script (rsync via the
+  mount helpers; rclone/s3 sync) inside the release's migration
+  window. No per-stage name-override plumbing.
+- **Repo rules (now in HelmCharts CLAUDE.md):** no tombstone comments;
+  every values attribute a template reads is declared in the chart's
+  values.yaml.
 - **Reattach is explicit in the CLI**: a Released Retain-PV keeps the
   dead PVC's uid in claimRef; deploy clears it (namespace-scoped)
-  before Helm runs, which is what makes uninstall → redeploy actually
-  reattach.
+  before Helm runs — this is what makes uninstall → redeploy reattach.
 - The dev microceph mon address is `10.1.3.3` (the slice's
   192.168.188.17 predates the network change).
-- Migration ordering note learned the hard way: uninstall ESO
-  *consumers* before ESO itself, or their ExternalSecret finalizers
-  deadlock namespace and CRD deletion.
+- **Migration ordering:** uninstall ESO *consumers* before ESO itself —
+  orphaned ExternalSecret finalizers deadlock namespace and CRD
+  deletion (and stale ESO CRDs carry the old release's ownership
+  annotations, blocking reinstall under a new release name).
