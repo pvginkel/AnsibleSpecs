@@ -219,3 +219,33 @@ the credentials exist.
   mid-rebuild of the charts; the cephx caps require the volumes to be on
   `k8s` first, so this rides along with the rename rather than running
   ahead of it.
+
+## Execution status (2026-06-11)
+
+Repo-side work landed in HelmCharts-2 (local commits, nothing pushed):
+
+- **Item 4 done for both clusters** — `configs/{dev,prd}/ceph-csi-{rbd,
+  cephfs}/prd/`: `secret.create: false`, inline keys gone, two
+  ExternalSecrets per driver (driver Secret + static-PV Secret) reading
+  `shared/<env>/ceph-csi`; prd values converge pool/subvolumeGroup on
+  `k8s`.
+- **prd pool decision resolved: converge on `k8s`** (operator).
+  `clusters.yaml` prd carries pool `k8s`; every prd RBD image
+  live-migrates there during the per-release migration
+  (`tools/migrate-release.py` + `tools/migrate/prd-plan.yaml`); the dev
+  volumes were already on `k8s`.
+- **Item 5 folded into the rename pass** as planned — the migration
+  script does rbd migrations / fresh subvolumes / fresh buckets per
+  release. `tools/migrate/dev-plan.yaml` is the dev ceph-csi credential
+  cutover (cutover steps 5–6).
+- **Item 6 done** (Ansible local commit): eso += `shared/prd/*`,
+  eso-dev += `shared/dev/*`, jenkins repointed to the per-cluster
+  leaves it now needs (plus the iac-provisioner token the deploy
+  pipeline's provider reads). Re-apply openbao.yml to converge.
+- **Item 7**: `setup-env.sh` now exports the token under
+  `HOMELAB_ZFS_PROVISIONER_TOKEN` (the name the provider reads).
+
+Remaining: the operator-run cutover itself (mint + vault the users,
+create the prod `k8s` pool/group, run the dev then prd migrations,
+delete the old users/pools/credentials per the script's final
+checklist).

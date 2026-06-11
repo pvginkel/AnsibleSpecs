@@ -747,16 +747,45 @@ test bed throughout.
   design-assistant + guacamole rebound the same PVs (UIDs unchanged)
   with data intact.
 
+- **prd tree restructure landed repo-side (2026-06-11).** All 45
+  release-stages on `configs/prd/<chart>/<stage>/` + chart `_shared/`
+  TF (canonical `<namespace>-<short>` storage names, scoped S3 users,
+  per-stage `sizes.auto.tfvars` for design-assistant, open-webui as the
+  first `disabled: true` release, kubernetes-dashboard's patch on
+  `charts/nginx/post-install.sh`); `*.sh` tree / `args.sh` /
+  `install.sh` retired. Jenkinsfile rewritten on the CLI (diff-based
+  target-state, disabled→uninstall convergence, OpenBao-injected
+  provider creds, TerraformState push); `resolve-helm-args.py` /
+  `collect-version-dependencies.py` / `recommend-resources.py` /
+  `gen-architecture.py` on the new layout. All 45 release-stages render
+  through the CLI with zero dangling claims and `terraform validate`
+  green. The Ceph credential/naming consolidation
+  (helm-tf-deploy-harness-ceph-changes.md) is folded in: pool/group/
+  user converge on `k8s` on both clusters, ceph-csi secrets ESO-fed
+  from `shared/<env>/ceph-csi`.
+- **Live cutover is scripted, not yet run:** `tools/migrate-release.py`
+  (one idempotent release per run, forward-only, done-list in git) with
+  the reviewed old→new mapping in `tools/migrate/prd-plan.yaml` (45
+  entries: rbd live-migrations to pool k8s, fresh cephfs subvolumes +
+  rsync, fresh canonical buckets + rclone, ZFS dataset surgery, ESO CRD
+  re-annotation hook, old ceph-csi namespaces kept until the end) and
+  `tools/migrate/dev-plan.yaml` (the 2-release dev ceph-csi credential
+  cutover that proves the script first).
+
 ### Outstanding
 
-1. **Commit 6+ — prd tree restructure** + Jenkinsfile rewrite +
-   `recommend-resources.py` / `gen-architecture.py` updates (CLI
-   `config` parity), per-chart namespace migrations, prd storage
-   adoption (decision below), `disabled:` pipeline handling.
-2. **God-credential retirement, csi-dev pool/group deletion on prod
-   Ceph, validation-pipeline cutover in the app repos, prod-RGW
-   tf-provider user.**
-3. **Operator/OpenBao staging:** `eso/dev/{telegram-mcp,trello-mcp,
+1. **Operator cutover prerequisites:** prod-Ceph `k8s` pool + subvolume
+   group; `client.k8s` minted + vaulted per cluster
+   (`scripts/make-ceph-csi-user.sh`); per-cluster `tf-provider` RGW
+   users vaulted at `shared/<env>/ceph-rgw/s3`; OpenBao policies
+   re-applied (Ansible commit); `openbao-eso-approle` re-staged in
+   `external-secrets-prd` during its migration window.
+2. **Run the migrations:** `tools/migrate-release.py dev` (ceph-csi
+   credential cutover), then `prd` release by release.
+3. **God-credential retirement, csi-dev + csi-prd pool/group deletion
+   on prod Ceph after the orphan audit, validation-pipeline cutover in
+   the app repos** (printed as the script's final checklist).
+4. **Operator/OpenBao staging:** `eso/dev/{telegram-mcp,trello-mcp,
    media}/...` kv entries (flagged in the dev values headers);
    `kv/shared/validation/<app>/s3` per the `_ci` runbook + jenkins
    policy widening.
