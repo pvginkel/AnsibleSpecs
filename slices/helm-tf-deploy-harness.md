@@ -729,23 +729,34 @@ test bed throughout.
   users.
 - **`configs/dev/_ci`** mints the three validation S3 users/buckets on
   microceph; publish runbook in `configs/dev/_ci/README.md`.
+- **Storage naming cleanup implemented (2026-06-11).** Helpers and the
+  static-PV modules take one base name and derive `<base>-pvc` /
+  `<base>-pv`; static is the default mode; the dynamic branch is gone
+  (prd audit confirmed no release rendered it — every storage-bearing
+  prd values file pins imageName/subvolumeName); `volumeName`/size
+  plumbing removed from all values files; claim names normalized to
+  `<base>-pvc` everywhere. Upstream-fixed PVC names go through a
+  `claim_name`/`claimName` override (grafana = release name, prometheus
+  server + alertmanager ordinal-0, librechat `data-librechat-
+  postgresql-0`); upstream `existingClaim` keys (mosquitto, librechat
+  mongodb/meilisearch, step-ca) renamed to the derived claims. intercom
+  gained `storage.data.enabled` so static mode has a knob once its
+  legacy `subvolumeName` goes. Verified: all 44 dev releases template
+  with zero dangling claimName refs; plans for deployed releases are
+  claimRef-only in-place updates; live uninstall→deploy of
+  design-assistant + guacamole rebound the same PVs (UIDs unchanged)
+  with data intact.
 
 ### Outstanding
 
-1. **Storage naming cleanup (decision below, NOT yet implemented):**
-   helper takes a base name and appends `-pvc`/`-pv` in code; static
-   becomes the default mode; dynamic provisioning is dropped;
-   `volumeName` plumbing and tombstone comments are removed; legacy
-   claim names normalized. Audit for prd releases currently rendering
-   the dynamic branch before flipping the default.
-2. **Commit 6+ — prd tree restructure** + Jenkinsfile rewrite +
+1. **Commit 6+ — prd tree restructure** + Jenkinsfile rewrite +
    `recommend-resources.py` / `gen-architecture.py` updates (CLI
    `config` parity), per-chart namespace migrations, prd storage
    adoption (decision below), `disabled:` pipeline handling.
-3. **God-credential retirement, csi-dev pool/group deletion on prod
+2. **God-credential retirement, csi-dev pool/group deletion on prod
    Ceph, validation-pipeline cutover in the app repos, prod-RGW
    tf-provider user.**
-4. **Operator/OpenBao staging:** `eso/dev/{telegram-mcp,trello-mcp,
+3. **Operator/OpenBao staging:** `eso/dev/{telegram-mcp,trello-mcp,
    media}/...` kv entries (flagged in the dev values headers);
    `kv/shared/validation/<app>/s3` per the `_ci` runbook + jenkins
    policy widening.
