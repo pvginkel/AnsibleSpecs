@@ -689,12 +689,50 @@ grant or the operator running them):
 - **Jenkins**: trigger/observe the HelmCharts pipeline; update the
   validation jobs' credential bindings.
 
-## Execution status (2026-06-11)
+## Execution status (2026-06-12)
 
-Execution runs in the **isolated clone `HelmCharts-2`**; nothing is
-pushed anywhere yet (local commits in HelmCharts-2, Ansible,
-TerraformState, and this repo). The dev cluster (`srvk8sdev`) is the
-test bed throughout.
+Execution runs in the **isolated clone `HelmCharts-2`** (branch
+`restructure`); nothing is pushed anywhere yet (local commits in
+HelmCharts-2, Ansible, TerraformState, and this repo). The dev cluster
+(`srvk8sdev`) is the test bed throughout.
+
+### Resume here
+
+**All repo-side work is done and validated.** The next action is the
+operator-run live cutover: stage the prerequisites (Outstanding item 1
+below), then `python3 tools/migrate-release.py dev` twice (the ceph-csi
+credential cutover that proves the script), then
+`. scripts/setup-env.sh prd` + `python3 tools/migrate-release.py prd`
+release by release — each run migrates exactly one release and commits
+the done-list; failures mark nothing and re-runs resume. Usage and
+semantics: `tools/migrate/README.md` + the script header.
+
+State a fresh session needs that the repo doesn't show:
+
+- HelmCharts-2 commits, in order: `585cf6a` storage naming cleanup,
+  `cc4bbd0` design-assistant dev OpenAI key, `6177bba` setup-env +
+  make-ceph-csi-user scripts (operator), `b9c6f92` ceph credential
+  consolidation, `f47e833` prd tree restructure, `0439e72`
+  migrate-release script, `bb65ccd` Jenkinsfile + tooling, `be7dace`
+  CLAUDE.md. Ansible `a7fcb52` (openbao policies, not yet applied).
+- The old flat prd tree last exists at `cc4bbd0` — `6177bba` already
+  contains the (then-staged) directory moves, and `f47e833` also swept
+  in the operator's unrelated `.llmbox/docker-compose.yml` +
+  `HelmCharts-2.code-workspace` changes. Harmless, local-only.
+- `tools/migrate/prd-plan.yaml` was generated (new names from the
+  `_shared` TF recipes, old names from `cc4bbd0`'s flat values),
+  hand-corrected (grafana/step-ca/prometheus olds lived in post-apply
+  manifests, ZFS entries, special flags), and cross-checked against
+  the TF recipes — treat it as reviewed data, regenerate only if the
+  recipes change.
+- Unverified-against-Jenkins assumptions in the new `Jenkinsfile`: the
+  Vault plugin's `withVault` secret syntax and `poetry` being present
+  on the jenkins-agent image — check both before the first prd
+  pipeline run.
+- The migration script's kube-context safety probe expects node
+  `srvk8s1` (prd) / `srvk8sdev` (dev); Ceph admin access defaults to
+  `ssh -t srvceph1 sudo` / `ssh -t srvk8sdev sudo`
+  (override `MIGRATE_CEPH_SSH`).
 
 ### Done
 
