@@ -23,7 +23,9 @@ secrets source for the IaC agent.
   error handling, and clean diagnostics on miss push the script past
   the point where Python is plainly cleaner. The clone / state-sync /
   exec / state-sync-back surface moves over alongside; one language,
-  one entry point.
+  one entry point. *(Superseded: state-sync was later replaced by the
+  `terraform-backend-git` http backend; `iac-impl` no longer syncs
+  state.)*
 - **`!bao` as a YAML custom tag.** Schema: `!bao
   <mount>/<path>#<key>`, e.g. `!bao kv/iac/git-api-token#token`. Parsed
   via a custom YAML constructor so typos can't accidentally fall through
@@ -108,6 +110,9 @@ behaviour surface as today plus the resolver:
   propagation as today.
 - **State sync**: unchanged — clone `Ansible` + `TerraformState`, copy
   state in, run user command, copy state out, commit + push.
+  *(Superseded: replaced by the `terraform-backend-git` http backend —
+  clone only `Ansible`, state flows through the backend; see
+  `docs/runbooks/iac-agent.md`.)*
 
 ### D. `secrets.example.yaml` rewrite
 

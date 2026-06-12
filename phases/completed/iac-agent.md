@@ -9,6 +9,7 @@ Concrete output, by repo:
 - **`pvginkel/IaCAgent`** (new repo) — host-side glue for srviac.
   - `bin/iac` host shim — acquires `/var/lock/iac.lock` (`flock -w 60`, fail-fast on contention with the holder PID surfaced) and runs `bin/iac-impl` inside the iac container, bind-mounting the shim, impl, and helper scripts (`send_message.py`, `check-protected-vms.sh`, `check-ansible-drift.sh`) from the host.
   - `bin/iac-impl` — in-container entrypoint. Parses `/etc/iac/secrets.yaml`, clones `pvginkel/Ansible` and `pvginkel/TerraformState`, copies state files in, exec's bash (no args) or `sh -c "$2"` (`-c` form), then copies state out and pushes back to TerraformState on exit. `-v / --verbose` opt-in for setup-progress prints; default is silent. Warns loudly when `/work/Ansible/poetry.lock` differs from the iac image's baked `/app/poetry.lock` (image-rebuild lag window).
+    - *Superseded:* the clone-and-sync state dance was replaced by `terraform-backend-git` (an http backend daemon `iac-impl` starts on `127.0.0.1:6061`); state now lives behind the backend, encrypted with sops + age. See `docs/runbooks/iac-agent.md`.
   - `bin/jenkins-agent-launch.sh` + `systemd/jenkins-agent.service` — long-running container for the Jenkins inbound agent. Reads `JENKINS_AGENT_SECRET` from secrets.yaml on the host (root via systemd) and passes it as argv to `jenkins/inbound-agent`. Mounts `iac` + helpers into the agent so pipeline `sh "iac -c '…'"` steps work.
   - `etc/docker/daemon.json` — declares `registry:5000` as an insecure registry (the homelab registry is HTTP-only).
   - `etc/cron.d/iac-prune` — daily `docker image prune -f` (dangling-only).
@@ -16,7 +17,7 @@ Concrete output, by repo:
   - `install.sh` — idempotent installer; the `iac_agent` Ansible role runs it on each apply.
   - `jenkins/iac-on-push/Jenkinsfile`, `jenkins/iac-scheduled-update/Jenkinsfile`, `jenkins/iac-scheduled-drift/Jenkinsfile` — the three pipelines, all on the `iac-controller`-labelled agent.
 
-- **`pvginkel/TerraformState`** (new repo) — file-based tfstate, cloned + committed per `iac terraform` run. `prd/` + `scratch/`, `.gitignore` excludes `*.backup`. Private.
+- **`pvginkel/TerraformState`** (new repo) — file-based tfstate, cloned + committed per `iac terraform` run. `prd/` + `scratch/`, `.gitignore` excludes `*.backup`. Private. *(Superseded: state is now served through the `terraform-backend-git` http backend and sops+age-encrypted at rest — see `docs/runbooks/iac-agent.md`.)*
 
 - **`pvginkel/Ansible`**:
   - `terraform/prd/vms.tf` — new `srviac` entry (VMID 920, `pve`, background, 2 vCPU / 3 GiB / 32 GiB, vmbr0 dynamic via `homelab_dns_reservation`, deterministic MAC `02:A7:F3:03:98:00`).

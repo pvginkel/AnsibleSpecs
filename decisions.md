@@ -113,20 +113,21 @@ Forward-looking; the runtime-secrets-sweep slice does not block on this. It capt
 
 Once OpenBao is up, runtime secrets are resolved at IaC-container startup by an extended `iac-impl`. The pattern lives in one place — the IaC agent — and downstream consumers (Ansible, Terraform, Jenkins agent launcher, `send_message.py`) see exactly the same environment variables and on-disk files as today.
 
-- **`/etc/iac/secrets.yaml` is an override layer over OpenBao.** Each `env:` value and each `files:` `content:` is either a literal or a `!bao <mount>/<path>#<key>` reference. `iac-impl` parses with a custom YAML constructor; literals win unmodified, refs are resolved against OpenBao before any clone / state-sync / user command runs.
+- **`/etc/iac/secrets.yaml` is an override layer over OpenBao.** Each `env:` value and each `files:` `content:` is either a literal or a `!bao <mount>/<path>#<key>` reference. `iac-impl` parses with a custom YAML constructor; literals win unmodified, refs are resolved against OpenBao before any clone / user command runs.
 - **`iac-impl` is rewritten from bash to Python** in `pvginkel/IaCAgent`. Python deps land in `pvginkel/Ansible`'s `pyproject.toml` because the iac container bakes its venv from there. One language, one entry point, room for future drift checks.
 - **AppRole auth.** The IaC container's OpenBao identity is an AppRole named `iac-agent`. `role_id` + `secret_id` live in `secrets.yaml` as literals (the irreducible-literal set). Rotation is operator-driven: generate a fresh `secret_id` in OpenBao, paste into srviac's `secrets.yaml`, restart the container.
 - **Least-privilege policy.** The `iac-agent` AppRole's OpenBao policy grants `read` only on the KV paths `secrets.yaml` references. New refs require both a file edit and a policy widening; mismatches surface as hard-fail at next container start.
 - **Hard-fail on miss.** Unresolvable ref, AppRole rejection, or network failure terminates `iac-impl` before any clone / state / exec runs. The container is short-lived per `iac` invocation; running with stale or missing values is unsafe.
 - **Irreducible literals (the bootstrap-tier secret set):**
   - `OPENBAO_URL`, `OPENBAO_ROLE_ID`, `OPENBAO_SECRET_ID` — gate the path that fetches everything else.
-  - `GIT_API_TOKEN` — needed to clone the Ansible + TerraformState repos before any further resolution can happen.
+  - `GIT_API_TOKEN` — needed to clone Ansible before any further resolution can happen, and (as the `terraform-backend-git` daemon's token) to pull/push `TerraformState`.
   - JWK provisioner password (from the step-ca slice) — stays in ansible-vault, not in `secrets.yaml`, but conceptually the same tier.
   - Static seal key passphrase (ansible-vault) — same tier.
   - Age private key — never in `secrets.yaml`; lives only in Roboform.
 - **Cold boot.** Operator pulls each ref's value from Roboform, substitutes literals into `secrets.yaml`, runs the IaC container until OpenBao is restored, flips refs back. Documented as `docs/runbooks/iac-cold-boot.md`. Same shape and mental model as the wife runbook.
 - **What does *not* get its own AppRole.** Ansible-via-iac-impl consumes env + files materialised by the resolver before it ever runs, so it does not need an AppRole of its own. Jenkins (for pipeline secrets) and ESO (for in-cluster secret sync) each retain their own AppRoles + policies; Ansible does not.
 - **Operational consequence.** OpenBao becomes a hard runtime dependency of every `iac` invocation — Jenkins post-stages, ad-hoc operator runs, scheduled drift. Outages above the seal-key + clone window manifest as IaC-paralysis until OpenBao is back or the operator runs the cold-boot procedure.
+- **Terraform state via `terraform-backend-git`.** `terraform/{prd,scratch}` state is stored through the `terraform-backend-git` http backend over `pvginkel/TerraformState` (the `backend.tf` block in each config points at a daemon `iac-impl` starts on `127.0.0.1:6061`; `wrkdev` runs the same daemon locally via `scripts/tf-backend.sh`). The daemon does the git pull/push itself, commits an `Update <path>` per write, encrypts state at rest with sops + age, and locks per state via `locks/<state-path>` branches. The host `/var/lock/iac.lock` flock stays the coarse IaC mutex; the lock branches are an additional per-state layer. Replaces the old `iac-impl` clone-and-sync-state dance.
 - **TerraformState repository sync.** There's currently a full daily sync of all my GitHub repos into a site that gives unauthenticated access to all my code from my local network. This includes the TerraformState repository. The scripts must be changed to specifically exclude this repository.
 
 ## Internal TLS / homelab CA
@@ -488,8 +489,8 @@ How Terraform and Ansible run in production once Phase 10 lands. The operator wo
 
 - **Dedicated Jenkins agent VM** for Terraform and Ansible runs. Not shared with other build workloads.
 - **All logic lives in a Docker image.** The CI job pulls and runs the container on every execution; the agent VM holds no tool versions, no clone, no credentials cache. VM stays fully stateless and disposable.
-- **tfstate is a local file inside a dedicated Git repo.** The container clones the state repo at job start, runs `terraform`, then commits and pushes any changes before exit. No remote-state backend (S3, Terraform Cloud, etc.).
-- **Concurrency control at the Jenkins level.** A job-level lock prevents two TF/Ansible runs from racing — this is what makes the file-based state safe. No `terraform force-unlock` workflow because there is no remote lock to hold.
+- **tfstate lives in a dedicated Git repo, reached through an http backend.** `terraform-backend-git` (a daemon `iac-impl` starts in the container) serves `terraform/{prd,scratch}` state, pulling/pushing `pvginkel/TerraformState` and encrypting at rest with sops + age. See "Terraform state via `terraform-backend-git`" above. (Originally a plain clone-and-commit of the state repo by `iac-impl`; the backend replaced it.)
+- **Concurrency control: host flock + per-state lock branches.** `/var/lock/iac.lock` (`flock -w 60`) stays the coarse mutex serialising `iac` invocations on srviac. `terraform-backend-git` additionally takes a `locks/<state-path>` branch per state, so a force-unlock now means deleting that branch — unlike the old file-based model, which had no remote lock.
 
 Path split — what runs where:
 
