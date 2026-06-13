@@ -1,5 +1,45 @@
 # Helm + TF deploy harness — finalization (Jenkins-on-iac, cleanup, TODO)
 
+> **STATUS (2026-06-14): Phases 0–2 are CLOSED.** The deploy harness is
+> live — the HelmCharts pipeline runs per-release on the `iac` harness
+> (one `iac -c` per release, stages named `Deploying <chart>@<stage>`,
+> nginx/jenkins last), TF state flows through `terraform-backend-git`
+> (prd state seeded + sops-encrypted), the version-poller works again,
+> and the `tools/` tree is one poetry/uv project. Phases **3–6 remain**
+> (old-world Ceph/S3/cephx cleanup, prd orphan audit, delete
+> `tools/migrate*`, the two `TODO.md` fixes) and are not started. Notable
+> deltas from the plan as written below:
+>
+> - **uv, not poetry, in the pipeline.** Per-release `iac -c` calls
+>   reinstall the deploy project per container, so the Jenkinsfiles use
+>   `uv venv` + `uv pip install -e .` (sub-second) and call the console
+>   scripts by path; poetry stays in the iac image for manual use. uv was
+>   added to the iac image (Ansible) and used in the k8s arch container.
+> - **`chart_tools.deploy_cmd()`** resolves the `deploy` console script
+>   next to the running interpreter (uv / poetry / system), replacing the
+>   hardcoded `poetry run deploy` shell-outs in resolve-helm-args /
+>   gen-architecture.
+> - **version-poller (Phase 2 open decision): kept the no-install shim**,
+>   made self-sufficient — `deploy_cmd` falls back to
+>   `python -m deploy_cli.main` and the shim puts `tools/deploy` on
+>   `PYTHONPATH`, so the poller (bare interpreter) runs untouched.
+> - **secrets.yaml sets `KUBECONFIG`** (not just `KUBE_CONFIG_PATH`) —
+>   helm/kubectl and the standalone `resolve-helm-args` read KUBECONFIG.
+> - **srviac egress**: routed to the Ceph public network
+>   `192.168.188.0/24` (mons **and** OSDs; only the RGW VIP is on 10.1) —
+>   the homelab provider's RBD/S3 ops hung silently without it.
+> - **Jenkinsfile.architecture**: uv + single k8s container (dropped the
+>   python sidecar — arch-validate.py is stdlib-only).
+> - **disabled releases** uninstall when the disable lands (a change),
+>   then their stage stays skipped — not a per-run no-op uninstall.
+> - **Resolved open decisions**: Jenkinsfile stays in HelmCharts; `repos:`
+>   list in secrets.yaml; Phase 2 = option B; poller keeps a no-install
+>   entry path.
+> - **Drive-by fixes**: headlamp's malformed values-comment (broke both
+>   render + deploy); the `design-assistant` Architecture view's release
+>   label (`design-assistant@prd` → `design-assistant`, matching the
+>   bare-prd convention; committed in `pvginkel/Architecture`).
+
 ## Goal
 
 Close out [helm-tf-deploy-harness](helm-tf-deploy-harness.md) +
@@ -24,7 +64,7 @@ After this slice lands:
   `tools/migrate-release.py` + `tools/migrate/` are removed.
 - The two `TODO.md` follow-ups are resolved.
 
-## Where we are (2026-06-13)
+## Where we are (2026-06-13) — pre-execution snapshot, superseded by STATUS above
 
 - Branch `restructure` in `HelmCharts-2`, clean; head
   `5f94522 Migration cutover fixes (prd live-migration complete, 45/45)`.
@@ -46,14 +86,14 @@ After this slice lands:
   the helm-charts state into that backend is an explicit step below — do
   not skip it or prd re-imports/recreates everything.
 
-## Phase 0 — merge to main (operator)
+## Phase 0 — merge to main (operator) — ✅ DONE
 
 Operator merges `restructure` → `main` in `HelmCharts`, pushes Ansible +
 IaCAgent + this AnsibleSpecs commit. Sequenced **before** re-enabling the
 pipeline; the pipeline stays disabled until Phase 1 lands so a push to
 main can't fire the old Jenkinsfile.
 
-## Phase 1 — deploy on the iac harness + HTTP state backend
+## Phase 1 — deploy on the iac harness + HTTP state backend — ✅ DONE
 
 The crux. Today the deploy CLI clones `TerraformState`, writes
 `backend "local" {}` state files under it, and `git add`/`commit`s each
@@ -245,7 +285,7 @@ After 1b's no-op plan is green and a manual `poetry run deploy
 prd/<small-release>` through the daemon succeeds, the operator re-enables
 the HelmCharts Jenkins job and confirms a clean target-state run.
 
-## Phase 2 — `tools/` folder rework (poetry-native)
+## Phase 2 — `tools/` folder rework (poetry-native) — ✅ DONE (option B)
 
 `tools/` is half-mature: the deploy CLI is a proper poetry package
 (`tools/deploy/deploy_cli`, console scripts in the root `pyproject.toml`,
@@ -324,7 +364,7 @@ written once against the final invocation style. Also drop the stray
 `tools/.venv` + `__pycache__` from the working tree and confirm
 `tools/.gitignore` covers them.
 
-## Phase 3 — old-world Ceph / S3 / cephx cleanup
+## Phase 3 — old-world Ceph / S3 / cephx cleanup — ⏳ REMAINING
 
 The checklist `migrate-release.py` prints once the plan is exhausted.
 Operator-run on the prod Ceph admin host; gate every deletion on the
@@ -354,7 +394,7 @@ orphan audit in Phase 4 first.
   (Ansible `group_vars/openbao.yml`); re-apply the policy. The
   per-cluster `kv/shared/<env>/ceph-rgw/s3` leaves stay.
 
-## Phase 4 — full prd cluster scan / orphan audit
+## Phase 4 — full prd cluster scan / orphan audit — ⏳ REMAINING
 
 A deliberate sweep for anything the per-release migration missed. The
 desired-state inventory is the parent slice's "Storage inventory" lists +
@@ -390,7 +430,7 @@ confirmed orphans. Retain + the completed imports mean nothing in the
 desired set is at risk. The csi-prd/csi-dev pool deletions in Phase 3
 happen **after** this audit is clean.
 
-## Phase 5 — delete the migration software
+## Phase 5 — delete the migration software — ⏳ REMAINING
 
 Once Phases 3–4 confirm the cutover is fully settled, remove the
 forward-only migration machinery (operator confirmed it can go entirely):
@@ -405,7 +445,7 @@ forward-only migration machinery (operator confirmed it can go entirely):
   `mount-*`/`rm-*` inspection helpers (still useful); only drop
   migration-only code.
 
-## Phase 6 — TODO.md follow-ups
+## Phase 6 — TODO.md follow-ups — ⏳ REMAINING
 
 Both items in `HelmCharts-2/TODO.md`, neither blocking but both deferred
 through the migration:
@@ -432,6 +472,11 @@ through the migration:
    normal pipeline change, not a flag day.
 
 ## Open decisions
+
+> Most are now resolved (see STATUS): Jenkinsfile stays in HelmCharts;
+> `repos:` list in secrets.yaml; tools = option B; version-poller keeps a
+> no-install entry path. The **S3 orphan scope** is the only one still
+> open — it belongs to Phase 3 (cleanup), not yet started.
 
 - **Jenkinsfile home (1f).** Keep in HelmCharts (SCM-triggered) or move
   under `IaCAgent/jenkins/` like Ansible's. Recommendation: keep in
