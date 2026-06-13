@@ -16,6 +16,7 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [zfs-dataset-provider](zfs-dataset-provider/plan.md) | in progress (code complete; pending deploy + smoke) | supersedes the ZFS mechanism in tf-provider-resource-extensions | phase: storage CSIs (static-PV modules); folder also holds the api + terraform specs |
 | [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
 | [helm-tf-deploy-harness-ceph-changes](helm-tf-deploy-harness-ceph-changes.md) | pending (dev first; behind chart rebuild) | helm-tf-deploy-harness | Ceph cred consolidation (combined cephx + RGW admin per cluster, `shared/<env>/…`) |
+| [helm-tf-deploy-harness-finalize](helm-tf-deploy-harness-finalize.md) | pending (repo + cutover done; finalization) | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, old-world Ceph/S3 cleanup, migration-software removal, TODO follow-ups |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness, backup-collector | phase: helm + tf harness |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 
