@@ -331,11 +331,54 @@ database hasn't been pushed in 25h. PITR/WAL archiving out of scope.
    into the new database (brief read-only window).
 5. `poetry run deploy prd/electronics-inventory --stage=prd` — app comes up
    pointed at `postgres-rw.postgres-pas.svc`.
-6. Soak; verify the backup CronJob picked up the new database.
-7. After soak, remove the old chart-internal Postgres PVC.
+6. **Failover-retry acceptance (required, every chart).** Trigger a switchover
+   (`kubectl cnpg promote` a replica, or delete the primary pod) while the app is
+   serving traffic, and confirm the app recovers — at worst the in-flight request
+   errors once and the next succeeds. An app that wedges or 500s persistently
+   fails this gate and needs a connection-retry/reconnect fix before its
+   migration lands. Charts that don't own their DB layer (Guacamole, Keycloak,
+   and other off-the-shelf images) are the risk cases — verify each explicitly
+   rather than assuming the framework retries; if one can't, decide per-chart
+   whether its rare-switchover blip is acceptable or whether it needs a wrapper.
+7. Soak; verify the backup CronJob picked up the new database.
+8. After soak, remove the old chart-internal Postgres PVC.
 
 Once green, remaining `db-*`-bearing charts get the same mechanical migration,
 one commit each.
+
+## Ephemeral databases for CI (follow-on)
+
+Once the substrate exists, creating a database is `CREATE DATABASE` +
+`CREATE ROLE` — sub-second, versus tens of seconds to pull an image and `initdb`
+a throwaway Postgres pod. So CI/validation flows that currently stand up their
+own Postgres (e.g. DesignAssistant's validation chart) can instead grab an
+ephemeral database on the shared cluster. Attractive, but not free — gate it on
+these guardrails, and treat it as a follow-on, not part of the core migration:
+
+- **Dedicated, bounded CI role.** A `ci_ephemeral` role with `CREATEDB` only
+  (no superuser, no access to app databases), separate from `terraform_admin`.
+  CI self-serves databases under a reserved prefix (`ci_<pipeline>_<build>`).
+- **Guaranteed teardown + a TTL backstop.** The pipeline drops its database on
+  exit (success *or* failure); a small sweeper drops any `ci_*` database older
+  than N hours so leaks can't accumulate. Without this, abandoned DBs pile up.
+- **Bound the blast radius.** CI shares one Postgres server with prod app data —
+  logical isolation only. A pathological test (huge writes, long lock-holding
+  transactions, runaway connections) competes for the same WAL/disk/CPU. Set a
+  per-CI-database disk quota and a conservative `statement_timeout`/connection
+  cap on the `ci_ephemeral` role. Transaction pooling already caps backends.
+- **Fast fixtures via `TEMPLATE`.** `CREATE DATABASE … TEMPLATE <seed>` clones a
+  pre-seeded schema instantly — nicer than re-running migrations per build.
+- **Only on the prd cluster.** srvk8sdev has no substrate (by decision), so
+  srvk8sdev-side CI keeps its hermetic in-chart Postgres. This is a prd-cluster
+  CI convenience, not a universal replacement.
+
+**Tradeoff to weigh per pipeline:** the in-chart validation Postgres is
+*hermetic* — it depends on nothing, can't touch prod, runs anywhere. Moving to
+the shared substrate trades that hermeticity for speed and for not maintaining a
+Postgres pod in the chart. For most validation flows the speed win is worth it
+with the guardrails above; keep the hermetic pod for anything that must run
+isolated or off-cluster. Retire DesignAssistant's validation Postgres as the
+pilot for this pattern once it's proven.
 
 ## Verification
 
