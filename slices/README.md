@@ -23,6 +23,7 @@ what the slice's output feeds.
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | fix landed; pending operator verify | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic) |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness (done), backup-collector (done) | (substrate for stateful releases on the deploy harness) |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
+| [openbao-backup-activation](openbao-backup-activation.md) | pending (pipeline built; never commissioned) | [backup-collector](completed/backup-collector.md) (done), [openbao-static-seal](completed/openbao-static-seal.md) (done) | (gets daily OpenBao backups actually landing in cloud storage; unblocks the Phase 2 recovery drill, card #14) |
 
 ## Completed
 
