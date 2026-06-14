@@ -7,7 +7,7 @@ per k8s node, synchronous-replicated, on **node-local ZFS datasets** — and shi
 application databases off per-chart Postgres Deployments into databases on that
 shared cluster. After this lands:
 
-- One CloudNativePG `Cluster` runs in a `databases` namespace, one replica per
+- One CloudNativePG `Cluster` runs in a `postgres-pas` namespace, one replica per
   k8s node, synchronous commit, automatic failover on primary loss.
 - Each k8s node's replica stores its data on a ZFS dataset, provider-managed via
   `homelab_zfs_dataset` and surfaced to k8s as a static `local` PV through the
@@ -53,9 +53,13 @@ The design reasoning from the original holds, just re-expressed:
   redundancy. A node-local ZFS dataset on a single virtual disk is correct here —
   ZFS contributes checksumming, compression, and cheap snapshots, CNPG
   contributes the replicas.
-- **Node-local, Ceph-decoupled.** The backing virtual disk is on `local-lvm`
-  (PVE-host-local), **not** Ceph RBD. A Ceph incident doesn't become a Postgres
-  incident, and there's no 3×-replication-on-3×-replication amplification.
+- **Node-local for performance.** The backing virtual disk is on `local-lvm`
+  (PVE-host-local), **not** Ceph RBD. Ceph earns its keep for container *mobility*
+  (network-attached volumes follow a pod to any node) and for *replication* —
+  Postgres needs neither: CNPG does its own replication, and the local PV pins
+  each replica to its node anyway. So Ceph would add only its network/latency
+  overhead (plus a redundant second replication layer, 3× on 3×) for no benefit.
+  Local disk is the faster path, and we don't pay the Ceph hit we don't need.
 - **Static local PVs, not hostPath** — CNPG only accepts PVCs; the `local`
   plugin gives node affinity, capacity accounting, and `Retain` semantics.
 - **PgBouncer from day one** — a `Pooler` smooths failovers and caps backend
@@ -63,7 +67,7 @@ The design reasoning from the original holds, just re-expressed:
 
 ## Decisions taken with the operator
 
-- **Operator: CloudNativePG**, Helm-deployed into a new `databases` namespace.
+- **Operator: CloudNativePG**, Helm-deployed into a new `postgres-pas` namespace.
 - **Storage: node-local ZFS, provider-managed.** srvk8s2 + srvk8s3 each get a
   ~40 GB `local-lvm` virtual disk → a ZFS pool created by the `zfs` role from
   `zfs_pools` in host_vars (raw disk declared in `vms.tf`, kept out of
@@ -71,13 +75,15 @@ The design reasoning from the original holds, just re-expressed:
   replica's PV is a `static-zfs-pv` module call (`homelab_zfs_dataset` +
   node-pinned local PV). Pool size ~40 GB, dataset quota ~35 GB, leaving ZFS
   headroom; impl tunes.
-- **Instances: 3, one per node, synchronous** (`synchronous.method: any`,
-  `synchronous.number: 1`). Strict durability — writes block rather than silently
-  downgrade to async. With three instances the cluster tolerates one node loss
-  (and one planned drain in the `serial:1` OS-update cycle) without write impact.
-  **See the instance-count caveat below — dropping to a 2-instance cluster on
-  only srvk8s2/3 is the documented alternative, but it blocks writes on every
-  single-node-down window, including routine drains.**
+- **Instances: 3, one per node (srvk8s1/2/3), synchronous** (`synchronous.method:
+  any`, `synchronous.number: 1`). Strict durability — writes block rather than
+  silently downgrade to async. Three instances means a primary + one sync replica
+  always survive one node being down — a hardware failure *or* a planned drain in
+  the `serial:1` OS-update cycle — so writes keep flowing. srvk8s1 hosts its
+  instance on the existing `zpool2`, so this costs no new hardware over the
+  srvk8s2/3 disks. (A 2-instance cluster on srvk8s2/3 only was considered and
+  rejected: it would block writes on every single-node-down window, including
+  routine reboots.)
 - **Pool→host map in the provider.** The two new pools (names TBD; the scheme is
   `zpool<N>`, so e.g. `zpool3`=srvk8s2, `zpool4`=srvk8s3) plus `zpool2`=srvk8s1
   are registered in the harness `_providers` `zfs_pools` config. srvk8s2/3 are
@@ -111,10 +117,10 @@ The design reasoning from the original holds, just re-expressed:
 | ZFS pool creation (srvk8s2/3) + node label  | `/work/Ansible` (`zfs` role + host_vars; microk8s label) | Ansible |
 | Provider `zfs_pools` map entries            | `/work/HelmCharts` (`_providers`)     | TF      |
 | CNPG operator install                       | `/work/HelmCharts` (new `cloudnative-pg` chart) | Helm |
-| CNPG `Cluster` + `Pooler` CR                | `/work/HelmCharts` (new `databases` chart) | Helm |
-| Per-replica ZFS dataset + static local PV   | `/work/HelmCharts` (`databases/infrastructure.tf`, `static-zfs-pv`) | TF |
+| CNPG `Cluster` + `Pooler` CR                | `/work/HelmCharts` (new `postgres-pas` chart) | Helm |
+| Per-replica ZFS dataset + static local PV   | `/work/HelmCharts` (`postgres-pas/infrastructure.tf`, `static-zfs-pv`) | TF |
 | Per-app DB + role + Secret                  | `/work/HelmCharts/configs/prd/<chart>/<stage>/infrastructure.tf` | TF |
-| `pg_dump` backup CronJob                    | `/work/HelmCharts/configs/prd/databases/prd/` | Helm |
+| `pg_dump` backup CronJob                    | `/work/HelmCharts/configs/prd/postgres-pas/prd/` | Helm |
 
 ## Storage substrate
 
@@ -139,7 +145,7 @@ executes the host `zfs` for the provider — schedules there.
 
 ### Dataset + PV (per replica, via `static-zfs-pv`)
 
-`configs/prd/databases/prd/infrastructure.tf` declares one `static-zfs-pv` per
+`configs/prd/postgres-pas/prd/infrastructure.tf` declares one `static-zfs-pv` per
 node:
 
 ```hcl
@@ -150,7 +156,7 @@ module "pg_srvk8s2" {
   dataset       = "postgres-prd"
   quota         = "35G"
   size          = "35Gi"
-  namespace     = "databases"
+  namespace     = "postgres-pas"
   node_hostname = "srvk8s2"
 }
 # ...srvk8s3 on zpool4, srvk8s1 on zpool2
@@ -181,7 +187,7 @@ dataset (TF provider) and Postgres itself (CNPG):
   we must either **extend `static-zfs-pv`** with a `recordsize` (and
   `compression`) passthrough, or drop to a raw `homelab_zfs_dataset` +
   hand-written PV for the Postgres datasets. Settle this when authoring the
-  `databases` release. If any needed property turns out to be missing from the
+  `postgres-pas` release. If any needed property turns out to be missing from the
   provider resource itself, **extend the TF provider** to add it.
 
 **On Postgres — CNPG `Cluster` `postgresql.parameters`:**
@@ -200,7 +206,7 @@ dataset (TF provider) and Postgres itself (CNPG):
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
-metadata: { name: postgres, namespace: databases }
+metadata: { name: postgres, namespace: postgres-pas }
 spec:
   instances: 3                               # one per srvk8s1/2/3
   primaryUpdateStrategy: unsupervised
@@ -219,7 +225,7 @@ spec:
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
 kind: Pooler
-metadata: { name: postgres-rw, namespace: databases }
+metadata: { name: postgres-rw, namespace: postgres-pas }
 spec:
   cluster: { name: postgres }
   instances: 2
@@ -229,10 +235,45 @@ spec:
     parameters: { max_client_conn: "500", default_pool_size: "25" }
 ```
 
-Apps consume `postgres-rw.databases.svc.cluster.local:5432`. A `terraform_admin`
+Apps consume `postgres-rw.postgres-pas.svc.cluster.local:5432`. A `terraform_admin`
 role (`CREATEDB CREATEROLE`, not superuser) is provisioned at init via
 `bootstrap.initdb.postInitApplicationSQL`; the `cyrilgdn/postgresql` provider
 authenticates as it, password from OpenBao via ESO.
+
+### How the Pooler behaves on a failover (what apps must handle)
+
+The `Pooler` is a CNPG-managed PgBouncer Deployment fronting a Service. CNPG
+keeps PgBouncer's `host` pointed at the cluster's current primary — the
+`postgres-rw` Pooler always targets whoever is primary now, so apps connect to a
+stable name and never chase the primary themselves.
+
+- **`poolMode: transaction`** (chosen): a backend Postgres connection is leased
+  to a client only for the duration of one transaction, then returned to the
+  pool. This is what lets a small backend pool (`default_pool_size: 25`) serve
+  many app connections (`max_client_conn: 500`), but it forbids session-scoped
+  state — no session-level `SET`, advisory locks, `WITH HOLD` cursors, or
+  prepared statements that outlive a transaction. Our apps are vanilla
+  request/response web apps, so this fits; a client needing session state would
+  use a separate session-mode pooler.
+- **On switchover/failover the primary changes.** PgBouncer drops the backend
+  connections to the old primary; **in-flight transactions fail** and the app
+  sees a dropped connection / error on that query. PgBouncer then re-points at
+  the new primary and accepts new connections within seconds. It does **not**
+  transparently replay the failed transaction — the application must retry.
+- **So every app needs connection-error retry.** A failed transaction during the
+  few-second switchover window must be retried by the app (or its framework's
+  DB-retry/reconnect layer). Most ORMs reconnect automatically on the *next*
+  query; the one that errored is lost and must be re-issued. This is the main
+  behavioural change charts inherit from the substrate — call it out in each
+  migration. Idempotent request handlers + a retry-on-`connection`-error wrapper
+  is the standard mitigation.
+- **Planned switchovers are cheaper than they sound.** With `poolMode:
+  transaction` and short transactions, the window where transactions fail is the
+  primary-promotion time (seconds), not a full app restart. Read traffic via a
+  future `ro` Pooler wouldn't even blip.
+- **Connection counts stay off the backends.** Apps can open/hold many
+  connections to PgBouncer cheaply; only ~25 real Postgres backends exist, which
+  keeps `max_connections` pressure and per-connection memory low.
 
 ## Per-app TF shape
 
@@ -256,8 +297,8 @@ resource "postgresql_database" "this" {
 resource "kubernetes_secret" "db" {
   metadata { name = "electronics-inventory-db", namespace = "electronics-inventory-prd" }
   data = {
-    url      = "postgres://${postgresql_role.this.name}:${random_password.db.result}@postgres-rw.databases.svc.cluster.local:5432/${postgresql_database.this.name}?sslmode=require"
-    host     = "postgres-rw.databases.svc.cluster.local"
+    url      = "postgres://${postgresql_role.this.name}:${random_password.db.result}@postgres-rw.postgres-pas.svc.cluster.local:5432/${postgresql_database.this.name}?sslmode=require"
+    host     = "postgres-rw.postgres-pas.svc.cluster.local"
     port     = "5432"
     database = postgresql_database.this.name
     username = postgresql_role.this.name
@@ -271,7 +312,7 @@ Provider block in `_providers/providers.tf` (host = pooler, user =
 
 ## Backups
 
-A CronJob in `configs/prd/databases/prd/`: daily, a read-only `backup_reader`
+A CronJob in `configs/prd/postgres-pas/prd/`: daily, a read-only `backup_reader`
 role (`pg_read_all_data`), per-database `pg_dump --format=custom`, age-encrypted
 with the operator's public key, POSTed to
 `https://backup.home/v1/backup/postgres/<dbname>/<UTC-ISO8601>.age` with a
@@ -289,7 +330,7 @@ database hasn't been pushed in 25h. PITR/WAL archiving out of scope.
 4. With the old chart still running, `pg_dump -F c` from its pod, `pg_restore`
    into the new database (brief read-only window).
 5. `poetry run deploy prd/electronics-inventory --stage=prd` — app comes up
-   pointed at `postgres-rw.databases.svc`.
+   pointed at `postgres-rw.postgres-pas.svc`.
 6. Soak; verify the backup CronJob picked up the new database.
 7. After soak, remove the old chart-internal Postgres PVC.
 
@@ -298,7 +339,7 @@ one commit each.
 
 ## Verification
 
-- **Substrate up**: `kubectl cnpg status postgres -n databases` shows 3 Healthy
+- **Substrate up**: `kubectl cnpg status postgres -n postgres-pas` shows 3 Healthy
   instances, elected primary + two replicas, sync active.
 - **Storage correctness**: `zfs list` on each node shows the `postgres-prd`
   dataset with the expected quota; `kubectl get pv` shows 3 `Bound` local PVs,
@@ -317,15 +358,14 @@ one commit each.
 
 ## Caveats
 
-- **Instance count is the load-bearing decision.** Three instances (one per
-  srvk8s1/2/3) tolerate one node down — failure *or* a planned `serial:1` drain —
-  without blocking writes, because a primary + one sync replica always remain.
-  Dropping srvk8s1 to a **2-instance cluster on srvk8s2/3 only** means *any*
-  single node down blocks writes under strict sync, including every node reboot
-  in the OS-update cycle. The only escapes from that on two nodes are accepting
-  the write-block windows or relaxing to async (the silent-downgrade mode strict
-  sync exists to avoid). Hence the 3-instance default; reusing srvk8s1's existing
-  `zpool2` costs no new hardware.
+- **Three instances is a deliberate availability choice.** One per srvk8s1/2/3,
+  so a primary + one sync replica always survive a single node down — failure
+  *or* a planned `serial:1` drain — and writes keep flowing. A 2-instance cluster
+  on srvk8s2/3 only was rejected: under strict sync *any* single node down blocks
+  writes (including every node reboot in the OS-update cycle), and the only
+  escapes are accepting those write-block windows or relaxing to async — the
+  silent-downgrade mode strict sync exists to avoid. Reusing srvk8s1's existing
+  `zpool2` makes the third instance free of new hardware.
 - **ZFS on a single virtual disk has no disk-level redundancy** — intentional;
   redundancy is CNPG's replicas. ZFS is here for checksumming/compression/
   snapshots, not RAID.
@@ -352,7 +392,7 @@ one commit each.
    `zfs_pools` host_vars + node `homelab.local/storage` label. One commit per
    piece or combined if coupled.
 3. (`/work/HelmCharts`) `cloudnative-pg` operator chart (wrapper around upstream).
-4. (`/work/HelmCharts`) `databases` chart: `Cluster`, `Pooler`, the three
+4. (`/work/HelmCharts`) `postgres-pas` chart: `Cluster`, `Pooler`, the three
    `static-zfs-pv` replica PVs, backup CronJob, `terraform_admin` bootstrap +
    provider `zfs_pools` entries. **Prerequisite:** a `recordsize` (+
    `compression`) passthrough on `static-zfs-pv` (own commit), or a raw
