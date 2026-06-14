@@ -1,14 +1,18 @@
 # Helm + TF deploy harness — finalization (Jenkins-on-iac, cleanup, TODO)
 
-> **STATUS (2026-06-14): Phases 0–2 are CLOSED.** The deploy harness is
-> live — the HelmCharts pipeline runs per-release on the `iac` harness
-> (one `iac -c` per release, stages named `Deploying <chart>@<stage>`,
-> nginx/jenkins last), TF state flows through `terraform-backend-git`
-> (prd state seeded + sops-encrypted), the version-poller works again,
-> and the `tools/` tree is one poetry/uv project. Phases **3–6 remain**
-> (old-world Ceph/S3/cephx cleanup, prd orphan audit, delete
-> `tools/migrate*`, the two `TODO.md` fixes) and are not started. Notable
-> deltas from the plan as written below:
+> **STATUS (2026-06-14): Phases 0–4 are CLOSED** (Phase 3 bar one manual
+> OpenBao step). The deploy harness is live — the HelmCharts pipeline
+> runs per-release on the `iac` harness (one `iac -c` per release, stages
+> named `Deploying <chart>@<stage>`, nginx/jenkins last), TF state flows
+> through `terraform-backend-git` (prd state seeded + sops-encrypted), the
+> version-poller works again, and the `tools/` tree is one poetry/uv
+> project. **Phase 4** (orphan audit) ran clean and is closed; **Phase 3**
+> (Ceph/S3/cephx cleanup) executed against prd — only §5 (retire the
+> OpenBao god-leaf `kv/shared/ceph-rgw/s3`) is left, and it is a manual
+> operator/`bao` step. **Phases 5–6 remain** (delete `tools/migrate*`, the
+> two `TODO.md` fixes) and are not started. See the per-phase notes below
+> for exactly what landed and the few follow-ups. Notable deltas from the
+> plan as written below:
 >
 > - **uv, not poetry, in the pipeline.** Per-release `iac -c` calls
 >   reinstall the deploy project per container, so the Jenkinsfiles use
@@ -39,6 +43,17 @@
 >   render + deploy); the `design-assistant` Architecture view's release
 >   label (`design-assistant@prd` → `design-assistant`, matching the
 >   bare-prd convention; committed in `pvginkel/Architecture`).
+> - **storage chart — Samba shares now on a managed dataset** (HelmCharts
+>   `84f3989`). The `[Software]`/`[Backups]` shares served
+>   `/zpool2/share/{software,backups}` off the `zpool2/share` dataset,
+>   which no TF declared (the one ZFS dataset the storage release used
+>   that wasn't a managed resource — surfaced by the Phase-4 audit).
+>   Declared `homelab_zfs_dataset.share` (prevent_destroy, like
+>   `rclone_backup`) and made every `smb.conf` path render from
+>   `storage.zfs.{pool,dataset,shareDataset}` via `tpl`. **PENDING operator
+>   step before this deploys** (the dataset already exists, so apply would
+>   try to create it): `poetry run deploy import prd/storage
+>   homelab_zfs_dataset.share zpool2/share`.
 
 ## Goal
 
@@ -364,7 +379,38 @@ written once against the final invocation style. Also drop the stray
 `tools/.venv` + `__pycache__` from the working tree and confirm
 `tools/.gitignore` covers them.
 
-## Phase 3 — old-world Ceph / S3 / cephx cleanup — ⏳ REMAINING
+## Phase 3 — old-world Ceph / S3 / cephx cleanup — ✅ DONE (bar §5 OpenBao)
+
+> **DONE (2026-06-14)**, except the manual OpenBao god-leaf retirement
+> (last bullet). Executed via `tools/migrate/phase3-cleanup.sh` (HelmCharts
+> commits `d7fa4c3`, `141f91e`) — a dry-run-by-default, idempotent runbook
+> pinned to the Phase-4 audit that drives srvceph1 + srvk8s1 over SSH. What
+> landed against prd, all verified afterwards (k8s storage intact: 24 RBD,
+> 26 CephFS, 95 workloads; keepers `client.k8s` / RGW `k8s`+`dashboard` /
+> 6 canonical buckets all present):
+>
+> - Deleted the empty `ceph-csi-rbd` + `ceph-csi-cephfs` namespaces.
+> - Deleted the 4 old cephx users `client.csi-{rbd,cephfs}-{dev,prd}`.
+> - Deleted the `csi-prd` + `csi-dev` CephFS subvolume groups **and** RBD
+>   pools wholesale (`mon_allow_pool_delete` was operator-enabled).
+> - Deleted the 19 stale S3 buckets + the legacy owner user
+>   `electronics-inventory-dev`.
+>
+> **Legacy-subvolume gotcha (worth knowing):** many old csi-prd/csi-dev
+> subvolumes store their data in the legacy PARENT dir
+> (`/volumes/<group>/<name>`) while their `.meta` points at a UUID subdir
+> that never existed. `ceph fs subvolume rm` then returns `ENOENT: mount
+> path missing` and `--force` silently no-ops. The script falls back to
+> `rm -rf` via a scoped `/volumes/<group>` admin cephfs mount on srvk8s1
+> (so `/volumes/k8s` is unreachable through it). Spot-checked `jenkins`
+> before bulk delete: the old copy was the frozen pre-migration source;
+> the live `jenkins-prd-home` had diverged forward — confirmed safe.
+>
+> **Still TODO — Phase 3 §5 (manual, operator):** delete the live OpenBao
+> secret `kv/shared/ceph-rgw/s3` (the cluster-agnostic god leaf). No
+> Ansible policy edit needed (`group_vars/openbao.yml` already grants only
+> the per-cluster `shared/prd/...` leaves). Just `bao kv metadata delete
+> kv/shared/ceph-rgw/s3`. Not done here — no `bao` access from the work box.
 
 The checklist `migrate-release.py` prints once the plan is exhausted.
 Operator-run on the prod Ceph admin host; gate every deletion on the
@@ -394,7 +440,24 @@ orphan audit in Phase 4 first.
   (Ansible `group_vars/openbao.yml`); re-apply the policy. The
   per-cluster `kv/shared/<env>/ceph-rgw/s3` leaves stay.
 
-## Phase 4 — full prd cluster scan / orphan audit — ⏳ REMAINING
+## Phase 4 — full prd cluster scan / orphan audit — ✅ DONE
+
+> **DONE (2026-06-14).** Built `poetry run audit-prd-orphans` (HelmCharts
+> `chart_tools/audit_prd_orphans.py`, commit `4418fd1`): derives desired
+> state from `configs/prd` and diffs it against live cluster/Ceph
+> enumerations (`desired` / `collect` / `diff` verbs). Ran it against prd
+> (SSH to srvceph1 = Ceph admin, srvk8s1 = microk8s + zpool2). **Desired
+> state is 100% realized**: RBD pool `k8s` 24/24, CephFS group `k8s`
+> 26/26, helm releases 43/43, all 52 PV claimRefs clean, the 6 canonical
+> S3 buckets present and correctly owned by their scoped users. Orphans
+> found were exactly the old-world objects → handed to Phase 3. Operator
+> dispositions confirmed during the audit: **keep** RGW user `k8s` (the TF
+> bucket-creating admin), RGW user `dashboard` (Ceph Dashboard), and the
+> `development` namespace (holds only a `claude-code-token` SA). The S3
+> "god user" that owned the 19 stale buckets is `electronics-inventory-dev`
+> (not `k8s`). `zpool2/share` first looked like an orphan but is the data
+> the storage chart's Samba serves — fixed by the storage delta above
+> (now a managed dataset), so it is no longer an orphan.
 
 A deliberate sweep for anything the per-release migration missed. The
 desired-state inventory is the parent slice's "Storage inventory" lists +
@@ -473,10 +536,12 @@ through the migration:
 
 ## Open decisions
 
-> Most are now resolved (see STATUS): Jenkinsfile stays in HelmCharts;
-> `repos:` list in secrets.yaml; tools = option B; version-poller keeps a
-> no-install entry path. The **S3 orphan scope** is the only one still
-> open — it belongs to Phase 3 (cleanup), not yet started.
+> **All resolved.** Jenkinsfile stays in HelmCharts; `repos:` list in
+> secrets.yaml; tools = option B; version-poller keeps a no-install entry
+> path. **S3 orphan scope (was the last open one) is now resolved**: the
+> Phase-4 audit showed all 19 stale buckets owned by the legacy user
+> `electronics-inventory-dev` (deleted in Phase 3); the canonical 6
+> buckets + their scoped users and the RGW admin `k8s` are the keepers.
 
 - **Jenkinsfile home (1f).** Keep in HelmCharts (SCM-triggered) or move
   under `IaCAgent/jenkins/` like Ansible's. Recommendation: keep in
@@ -485,9 +550,9 @@ through the migration:
   a fixed two-repo clone vs. a per-invocation repo arg. Recommendation:
   `repos:` list, default `[Ansible]`, so the mechanism is general and
   Ansible's behavior is unchanged.
-- **S3 orphan scope (Phase 3).** Operator confirms the stale source
-  buckets vs. the live canonical ones from the audit before any
-  `radosgw-admin` deletion.
+- **S3 orphan scope (Phase 3).** ✅ Resolved by the Phase-4 audit: 19
+  stale buckets owned by `electronics-inventory-dev` (deleted); canonical
+  6 + scoped users + RGW admin `k8s` kept.
 - **`tools/` rework option (Phase 2).** A / B / C above; recommendation B.
 - **version-poller invocation (Phase 2).** Poller switches to `poetry
   run`, or `collect-versions` keeps a no-install entry path.
