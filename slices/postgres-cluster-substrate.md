@@ -1,139 +1,207 @@
-# 10 — Postgres cluster substrate (CloudNativePG)
+# Postgres cluster substrate (CloudNativePG) on ZFS
 
 ## Goal
 
-Stand up a single in-cluster Postgres substrate — 3-instance synchronous-replicated, on local NVMe per k8s node — and shift application databases off per-chart Postgres Deployments into databases on that shared cluster. After this lands:
+Stand up a single in-cluster Postgres substrate — CloudNativePG, one instance
+per k8s node, synchronous-replicated, on **node-local ZFS datasets** — and shift
+application databases off per-chart Postgres Deployments into databases on that
+shared cluster. After this lands:
 
-- One CloudNativePG `Cluster` runs in a `databases` namespace, 3 replicas spread one-per-k8s-node, synchronous commit to one replica, automatic failover on primary loss.
-- Each k8s node carries a small local NVMe (new TF-declared disk on `local-lvm`) mounted at `/var/lib/k8s-local`, surfaced into k8s as static `local` PVs and consumed by CNPG.
-- A `Pooler` (PgBouncer) sits in front of the cluster as the connection target for apps.
-- Per-app TF in `/work/HelmCharts/<chart>/infrastructure.tf` declares `postgresql_database` + `postgresql_role` + `postgresql_grant` + a `kubernetes_secret` carrying the connection URL. Charts consume the secret; no chart owns its own Postgres.
-- A k8s CronJob runs daily `pg_dump` (per-database) and POSTs each dump to the `backup-collector` from slice 06 — same path OpenBao uses.
-- `electronics-inventory` is the migration pilot. After it lands, the remaining `db-*` templates across `/work/HelmCharts` retire one chart at a time.
+- One CloudNativePG `Cluster` runs in a `databases` namespace, one replica per
+  k8s node, synchronous commit, automatic failover on primary loss.
+- Each k8s node's replica stores its data on a ZFS dataset, provider-managed via
+  `homelab_zfs_dataset` and surfaced to k8s as a static `local` PV through the
+  `static-zfs-pv` module — the same storage-resource pattern the rest of the
+  fleet already uses.
+- A `Pooler` (PgBouncer) sits in front of the cluster as the connection target.
+- Per-app TF in `/work/HelmCharts/configs/prd/<chart>/<stage>/infrastructure.tf`
+  declares `postgresql_database` + `postgresql_role` + a `kubernetes_secret`
+  carrying the connection URL. Charts consume the secret; no chart owns its own
+  Postgres.
+- A k8s CronJob runs daily `pg_dump` (per-database) and POSTs each dump to the
+  `backup-collector` — same path OpenBao uses.
+- `electronics-inventory` is the migration pilot; remaining `db-*` charts retire
+  one at a time.
 
-This slice is consumed by Phase 4 (helm + tf harness): it's the first chart migration that exercises `infrastructure.tf` for a substrate the chart depends on but does not own.
+## Why ZFS, not new disks
 
-## Why this shape
+The earlier draft of this slice provisioned a new ~300 GB NVMe per PVE host and
+ran ext4 on `local-lvm`, explicitly avoiding ZFS. **That is reversed.** The
+homelab's *entire* Postgres footprint is ~0.5 GB across all databases (design-
+assistant, electronics-inventory, iot, keycloak, all stages) — new hardware
+isn't remotely justified. Instead:
 
-Reasoning summary; the live discussion has the long form.
+- **ZFS is now first-class.** `homelab_zfs_dataset` + the `static-zfs-pv` module
+  shipped (the tf-provider-resource-extensions / zfs-dataset-provider slices), so
+  a provider-managed dataset → pinned local PV is a one-module call. No bespoke
+  StatefulSet YAML, no hand-rolled PVs.
+- **Small virtual disks, no procurement.** srvk8s2 and srvk8s3 each gain a
+  ~40 GB virtual disk on their PVE host's `local-lvm`, kept raw and turned into a
+  ZFS pool by the `zfs` role — exactly how srvk8sdev's `zpool1` is built today.
+  40 GB is decades of headroom at this volume.
+- **srvk8s1 already has a pool** (`zpool2`, the NVMe passthrough). Its replica
+  rides a small quota'd dataset on `zpool2` — no new disk there. So "add disks to
+  srvk8s2 and 3" lands all three nodes with a pool and keeps the cluster at three
+  instances.
 
-- **One server, many databases — the Azure SQL "logical server" model.** Apps get full isolation via `CREATE DATABASE` + `CREATE ROLE`, not via separate Postgres instances. Multiple instances earn their keep only when one app's workload would disturb another's; no chart in `/work/HelmCharts` looks like that.
-- **Sync replication at the Postgres layer, not at the storage layer.** CNPG's 3-replica synchronous-commit design already gives three durable copies. Layering that on top of Ceph RBD's own 3× replication means 9 physical copies, two network hops per commit, and Ceph as a coupled failure domain. Local NVMe per replica replaces both.
-- **Postgres on local NVMe decouples it from Ceph as a failure domain.** Today, a Ceph incident eventually becomes a stateful-chart incident. After this lands, Postgres-backed charts (and the upcoming Keycloak migration in Phase 6) ride through Ceph-only outages.
-- **Static local PVs, not `hostPath`.** CNPG only accepts PVCs; the `local` volume plugin gives PV-layer node affinity, capacity accounting, `Retain` reclaim semantics, fail-fast on misconfigured nodes, and matches the static-PV pattern already declared in `decisions.md` for Ceph-backed volumes. `hostPath` would force hand-rolled StatefulSet YAML and bake hardware facts into each chart.
-- **PgBouncer from day one.** A `Pooler` smooths failovers (pool reconnects; most apps don't notice) and keeps connection counts off Postgres backends. Adding it later means re-pointing every app's secret — cheaper to start there.
+The design reasoning from the original holds, just re-expressed:
+
+- **One server, many databases** (the Azure SQL "logical server" model) — apps
+  isolate via `CREATE DATABASE`/`CREATE ROLE`, not separate instances.
+- **Sync replication at the Postgres layer, not the storage layer.** CNPG's
+  per-replica copies are the durability story; the underlying disk needs no
+  redundancy. A node-local ZFS dataset on a single virtual disk is correct here —
+  ZFS contributes checksumming, compression, and cheap snapshots, CNPG
+  contributes the replicas.
+- **Node-local, Ceph-decoupled.** The backing virtual disk is on `local-lvm`
+  (PVE-host-local), **not** Ceph RBD. A Ceph incident doesn't become a Postgres
+  incident, and there's no 3×-replication-on-3×-replication amplification.
+- **Static local PVs, not hostPath** — CNPG only accepts PVCs; the `local`
+  plugin gives node affinity, capacity accounting, and `Retain` semantics.
+- **PgBouncer from day one** — a `Pooler` smooths failovers and caps backend
+  connections; retrofitting it means re-pointing every app secret.
 
 ## Decisions taken with the operator
 
-- **Operator: CloudNativePG**, deployed via Helm into a new `databases` namespace.
-- **Cluster: 3 instances, synchronous replication.** `synchronous.method: any`, `synchronous.number: 1`. The strict-durability default — writes block if no replica can ack — is chosen deliberately. With 3 instances the cluster tolerates one node loss without write impact.
-- **Storage: static local PVs on new per-VM NVMe disks.** Each of `srvk8s1/2/3` gets a new TF-declared managed disk on its PVE host's `local-lvm` datastore, formatted and mounted at `/var/lib/k8s-local` by the baseline role. Sizing TBD at impl time; 200–500 GB is the working range. Each PVE host gets a new NVMe device exposed as `local-lvm` if it doesn't already have one with headroom.
-- **No ZFS for this substrate.** ZFS use is reserved for workloads that want snapshotting or share the bulk-storage pool (download cache, etc.). The Postgres substrate uses plain ext4 on local-LVM.
-- **Pooler: CNPG `Pooler` CRD (PgBouncer).** One pooler in front of the cluster; apps connect to the pooler Service, not directly to `-rw`.
-- **Per-app TF resources via `cyrilgdn/postgresql` provider.** Not a new homelab-provider resource — the community provider is mature and fits exactly. Provider config lives in `_providers/providers.tf` per the harness.
-- **Admin credentials: ansible-vault for v1, OpenBao once Phase 6 lands.** Same pre-OpenBao stopgap pattern as the rest of the harness. The `terraform_admin` Postgres role's password lives in ansible-vault and is exposed to the deploy container via env var.
-- **Per-app secrets: one Kubernetes Secret per database, written by TF.** Contains the JDBC/DSN URL pointing at the pooler. Charts mount it; chart-side templates are unaware of the cluster topology.
-- **TLS: CNPG's self-managed CA for in-cluster client/server.** Automatic rotation, no cert-manager wiring. step-ca + cert-manager is reserved for endpoints exposed outside the cluster, which this one isn't.
-- **Backups: per-database `pg_dump` via a CronJob in the `databases` namespace, POSTed to `backup-collector`.** Same pattern as OpenBao. PITR via WAL archiving is deferred — homelab traffic profile doesn't justify it.
-- **Migration is per-chart, no flag-day.** Each app migrates on its own commit: TF creates the DB + role, `pg_dump` from the chart's old in-cluster Postgres into the new database, flip the chart's connection-secret reference, delete the old `db-*` templates from the chart. Pilot on `electronics-inventory`; remaining charts follow.
+- **Operator: CloudNativePG**, Helm-deployed into a new `databases` namespace.
+- **Storage: node-local ZFS, provider-managed.** srvk8s2 + srvk8s3 each get a
+  ~40 GB `local-lvm` virtual disk → a ZFS pool created by the `zfs` role from
+  `zfs_pools` in host_vars (raw disk declared in `vms.tf`, kept out of
+  `managed_filesystems_volumes`). srvk8s1 reuses its existing `zpool2`. Each
+  replica's PV is a `static-zfs-pv` module call (`homelab_zfs_dataset` +
+  node-pinned local PV). Pool size ~40 GB, dataset quota ~35 GB, leaving ZFS
+  headroom; impl tunes.
+- **Instances: 3, one per node, synchronous** (`synchronous.method: any`,
+  `synchronous.number: 1`). Strict durability — writes block rather than silently
+  downgrade to async. With three instances the cluster tolerates one node loss
+  (and one planned drain in the `serial:1` OS-update cycle) without write impact.
+  **See the instance-count caveat below — dropping to a 2-instance cluster on
+  only srvk8s2/3 is the documented alternative, but it blocks writes on every
+  single-node-down window, including routine drains.**
+- **Pool→host map in the provider.** The two new pools (names TBD; the scheme is
+  `zpool<N>`, so e.g. `zpool3`=srvk8s2, `zpool4`=srvk8s3) plus `zpool2`=srvk8s1
+  are registered in the harness `_providers` `zfs_pools` config. srvk8s2/3 are
+  labelled `homelab.local/storage=<pool>` so the iac-provisioner DaemonSet
+  schedules there (it already runs on srvk8s1 for zpool2).
+- **No ext4-on-local-lvm, no new NVMe.** (Reverses the original slice.)
+- **Pooler: CNPG `Pooler` CRD (PgBouncer).** Apps connect to the pooler Service,
+  not directly to `-rw`.
+- **Per-app TF via `cyrilgdn/postgresql` provider.** Community provider, mature,
+  fits exactly; config in `_providers/providers.tf`.
+- **Admin credentials via OpenBao/ESO from day one.** OpenBao + ESO are live
+  (the original slice's "ansible-vault stopgap until Phase 6" is obsolete — skip
+  it). The CNPG bootstrap superuser secret and the `terraform_admin` password are
+  sourced from OpenBao via ESO, no vault detour, no later migration.
+- **Per-app secrets: one Kubernetes Secret per database, written by TF**, holding
+  the DSN/URL pointing at the pooler. Charts mount it; templates stay topology-
+  unaware.
+- **TLS: CNPG's self-managed CA** for in-cluster client/server. No cert-manager
+  wiring; these endpoints aren't externally exposed.
+- **Backups: per-database `pg_dump` CronJob → `backup-collector`**, same pattern
+  as OpenBao. ZFS snapshots are a bonus local-rollback option, not the backup of
+  record. PITR via WAL archiving stays out of scope.
+- **Migration is per-chart, no flag-day.** Pilot on `electronics-inventory`;
+  remaining charts follow one commit each.
 
 ## What lives where
 
-| Concern                                 | Repo                                  | Owner   |
-|-----------------------------------------|---------------------------------------|---------|
-| Per-VM NVMe disk on `local-lvm`         | `/work/Ansible` (`terraform/prd/`)    | TF      |
-| Mount + directory at `/var/lib/k8s-local` | `/work/Ansible` (baseline / new role) | Ansible |
-| Static-local-PV `StorageClass`          | `/work/HelmCharts` (cluster-core chart, or `databases` chart) | Helm  |
-| Per-node static PVs for the Postgres cluster | `/work/HelmCharts` (`databases/infrastructure.tf`) | TF |
-| CNPG operator install                   | `/work/HelmCharts` (new `cloudnative-pg` chart) | Helm |
-| CNPG `Cluster` CR                       | `/work/HelmCharts` (`databases` chart) | Helm  |
-| CNPG `Pooler` CR                        | same as above                          | Helm  |
-| Per-app DB + role + grant + Secret      | `/work/HelmCharts/configs/prd/<chart>/<stage>/infrastructure.tf` | TF |
-| `pg_dump` backup CronJob                | `/work/HelmCharts/configs/prd/databases/prd/` | Helm |
-| Slice tracking                          | this file                              | -       |
+| Concern                                     | Repo                                  | Owner   |
+|---------------------------------------------|---------------------------------------|---------|
+| ~40 GB raw virtual disk on `local-lvm` (srvk8s2/3) | `/work/Ansible` (`terraform/prd/vms.tf`) | TF      |
+| ZFS pool creation (srvk8s2/3) + node label  | `/work/Ansible` (`zfs` role + host_vars; microk8s label) | Ansible |
+| Provider `zfs_pools` map entries            | `/work/HelmCharts` (`_providers`)     | TF      |
+| CNPG operator install                       | `/work/HelmCharts` (new `cloudnative-pg` chart) | Helm |
+| CNPG `Cluster` + `Pooler` CR                | `/work/HelmCharts` (new `databases` chart) | Helm |
+| Per-replica ZFS dataset + static local PV   | `/work/HelmCharts` (`databases/infrastructure.tf`, `static-zfs-pv`) | TF |
+| Per-app DB + role + Secret                  | `/work/HelmCharts/configs/prd/<chart>/<stage>/infrastructure.tf` | TF |
+| `pg_dump` backup CronJob                    | `/work/HelmCharts/configs/prd/databases/prd/` | Helm |
 
 ## Storage substrate
 
-### Per-VM disk
+### Per-VM disk + pool (Ansible/TF)
 
-In `terraform/prd/vms.tf`, each k8s node gains an entry in its `managed_filesystems` (or equivalent per-VM disk list — settled at impl time against the current `managed_filesystems` shape):
+In `terraform/prd/vms.tf`, srvk8s2 and srvk8s3 each gain a raw virtual disk on
+`local-lvm` — declared like srvk8sdev's `zpool1` backing disk, **kept out of
+`managed_filesystems_volumes`** so the `zfs` role owns it:
 
 ```hcl
-local_storage = {
-  size           = "300G"
-  datastore      = "local-lvm"     # the PVE-host-local NVMe datastore
-  mountpoint     = "/var/lib/k8s-local"
-  filesystem     = "ext4"
-  backup         = false           # local-only; data redundancy is at the Postgres layer
+{ interface = "scsi2", size = 40, datastore_id = "local-lvm" }
+```
+
+Each node's host_vars declares the pool in `zfs_pools`; the `zfs` role runs
+`zpool create` on the raw device on the next converge. The pool mounts at
+`/<pool>` (e.g. `/zpool3`). srvk8s1 needs no disk/pool change — it already
+carries `zpool2`.
+
+The node label `homelab.local/storage=<pool>` is set on srvk8s2/3 (microk8s
+role / capability-label mechanism) so the iac-provisioner DaemonSet — which
+executes the host `zfs` for the provider — schedules there.
+
+### Dataset + PV (per replica, via `static-zfs-pv`)
+
+`configs/prd/databases/prd/infrastructure.tf` declares one `static-zfs-pv` per
+node:
+
+```hcl
+module "pg_srvk8s2" {
+  source        = "../../../../terraform-modules/static-zfs-pv"
+  name          = "postgres-prd-srvk8s2"
+  pool          = "zpool3"
+  dataset       = "postgres-prd"
+  quota         = "35G"
+  size          = "35Gi"
+  namespace     = "databases"
+  node_hostname = "srvk8s2"
 }
+# ...srvk8s3 on zpool4, srvk8s1 on zpool2
 ```
 
-The disk lives on the PVE host's `local-lvm` (not Ceph, not on the rootfs), so the "local PV" is genuinely local. The baseline role mounts it, sets ownership, and ensures the mountpoint exists before microk8s consumes it.
+The module creates the `homelab_zfs_dataset` (with `prevent_destroy`) and a
+`local` PV pinned to that node via `kubernetes.io/hostname` nodeAffinity. The
+StorageClass is `WaitForFirstConsumer` so each CNPG PVC binds to the PV on the
+node its pod scheduled to.
 
-If the PVE host does not yet have a `local-lvm` datastore with headroom on a fast device, that's prerequisite hardware work — one NVMe per PVE host, PVE-side `local-lvm` config. Not specified in this slice; surfaces as a "must-do-first" item when sequencing.
+### ZFS tuning for Postgres (not optional)
 
-### StorageClass and PVs
+ZFS + Postgres is a well-trodden combination, but the defaults are wrong for a
+database and must be set on the data dataset:
 
-One cluster-wide StorageClass, declared once in the cluster-core chart (or wherever the `dnsmasq` / system-tier resources currently live):
+- **`recordsize=8K`** (or 16K) — ZFS defaults to 128K; Postgres reads/writes 8K
+  pages. A 128K record turns every 8K page write into a 128K read-modify-write.
+  This is the single most important knob. WAL is sequential and can keep a larger
+  recordsize, but the simplest correct setup is one dataset at 8K for `pgdata`.
+- **`compression=lz4`** — effectively free, and Postgres data compresses well.
+- **`full_page_writes=off`** in the CNPG `Cluster` `postgresql.parameters` —
+  safe *because* ZFS is copy-on-write (no torn pages), and it cuts WAL volume
+  substantially. This is the ZFS-specific Postgres win.
+- Keep `shared_buffers` modest and rely on ZFS ARC; at this footprint
+  ARC/shared_buffers double-caching is irrelevant.
 
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata: { name: local-storage }
-provisioner: kubernetes.io/no-provisioner
-volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Retain
-```
-
-Per Postgres replica, one static PV declared in `configs/prd/databases/prd/infrastructure.tf` via `kubernetes_persistent_volume`:
-
-- `capacity.storage` matches the cluster's `storage.size`.
-- `accessModes: [ReadWriteOnce]`.
-- `persistentVolumeReclaimPolicy: Retain`.
-- `local.path: /var/lib/k8s-local/postgres-prd-<node>`.
-- `nodeAffinity.required` matches `kubernetes.io/hostname` to the specific node.
-- `storageClassName: local-storage`.
-
-CNPG's `Cluster` `storage.storageClass: local-storage` consumes these. `WaitForFirstConsumer` ensures each PVC binds to the PV on its scheduled node.
-
-Subdirectory layout on each node:
-
-```
-/var/lib/k8s-local/
-└── postgres-prd-<node>/        # one per replica; PV's local.path
-    └── pgdata/                 # CNPG-owned
-```
-
-Future apps that want local PVs (none planned) follow the same pattern with their own subdirectory.
+**Impl note:** `static-zfs-pv` does not currently expose `recordsize` (the
+underlying `homelab_zfs_dataset` resource does). Either add a `recordsize`
+passthrough to the module, or set it via the dataset's `properties` map — settle
+this when authoring the `databases` release.
 
 ## CNPG cluster shape
-
-`Cluster` CR (sketch; impl tunes minor fields):
 
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata: { name: postgres, namespace: databases }
 spec:
-  instances: 3
-  primaryUpdateStrategy: unsupervised        # operator switches over on rolling updates
+  instances: 3                               # one per srvk8s1/2/3
+  primaryUpdateStrategy: unsupervised
   postgresql:
-    synchronous:
-      method: any
-      number: 1
-    parameters:
-      shared_buffers: 1GB                    # tune at impl time
-      max_connections: "200"                 # pooler is the real connection front
+    synchronous: { method: any, number: 1 }
+    parameters: { shared_buffers: 256MB, max_connections: "200" }
   storage:
-    storageClass: local-storage
-    size: 300Gi                              # matches the PV capacity
+    storageClass: <static-zfs-pv StorageClass>
+    size: 35Gi
   monitoring: { enablePodMonitor: true }
   affinity:
     enablePodAntiAffinity: true              # one replica per node
     topologyKey: kubernetes.io/hostname
 ```
-
-`Pooler` CR (sketch):
 
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
@@ -142,22 +210,23 @@ metadata: { name: postgres-rw, namespace: databases }
 spec:
   cluster: { name: postgres }
   instances: 2
-  type: rw                                   # rw and ro poolers can coexist; rw is what apps need today
+  type: rw
   pgbouncer:
     poolMode: transaction
     parameters: { max_client_conn: "500", default_pool_size: "25" }
 ```
 
-Apps consume `postgres-rw.databases.svc.cluster.local:5432` (or whatever the Pooler's Service resolves to).
-
-A `terraform_admin` Postgres role is provisioned at cluster-init via CNPG's `bootstrap.initdb.postInitApplicationSQL`, with `CREATEDB CREATEROLE` and a password sourced from the cluster's bootstrap secret (which itself is `helm`-managed for v1, ESO-from-OpenBao post-Phase-6). The `cyrilgdn/postgresql` provider authenticates as `terraform_admin`.
+Apps consume `postgres-rw.databases.svc.cluster.local:5432`. A `terraform_admin`
+role (`CREATEDB CREATEROLE`, not superuser) is provisioned at init via
+`bootstrap.initdb.postInitApplicationSQL`; the `cyrilgdn/postgresql` provider
+authenticates as it, password from OpenBao via ESO.
 
 ## Per-app TF shape
 
-In `/work/HelmCharts/configs/prd/electronics-inventory/prd/infrastructure.tf`:
+`configs/prd/electronics-inventory/prd/infrastructure.tf`:
 
 ```hcl
-resource "random_password" "db" { length = 32 special = false }
+resource "random_password" "db" { length = 32, special = false }   # URL-safe
 
 resource "postgresql_role" "this" {
   name     = "electronics_inventory"
@@ -166,17 +235,13 @@ resource "postgresql_role" "this" {
 }
 
 resource "postgresql_database" "this" {
-  name              = "electronics_inventory"
-  owner             = postgresql_role.this.name
-  lc_collate        = "en_US.UTF-8"
-  template          = "template0"
+  name     = "electronics_inventory"
+  owner    = postgresql_role.this.name
+  template = "template0"
 }
 
 resource "kubernetes_secret" "db" {
-  metadata {
-    name      = "electronics-inventory-db"
-    namespace = "electronics-inventory-prd"
-  }
+  metadata { name = "electronics-inventory-db", namespace = "electronics-inventory-prd" }
   data = {
     url      = "postgres://${postgresql_role.this.name}:${random_password.db.result}@postgres-rw.databases.svc.cluster.local:5432/${postgresql_database.this.name}?sslmode=require"
     host     = "postgres-rw.databases.svc.cluster.local"
@@ -188,79 +253,95 @@ resource "kubernetes_secret" "db" {
 }
 ```
 
-The chart's Deployment mounts `electronics-inventory-db` and consumes whichever fields its app expects (URL vs split fields).
-
-The provider block lives in `_providers/providers.tf`:
-
-```hcl
-provider "postgresql" {
-  host             = "postgres-rw.databases.svc.cluster.local"
-  port             = 5432
-  username         = "terraform_admin"
-  password         = var.postgres_admin_password
-  superuser        = false        # terraform_admin is not superuser; CREATEDB+CREATEROLE suffice
-  sslmode          = "require"
-  connect_timeout  = 15
-}
-```
+Provider block in `_providers/providers.tf` (host = pooler, user =
+`terraform_admin`, `superuser = false`, `sslmode = require`).
 
 ## Backups
 
-A CronJob in `configs/prd/databases/prd/`:
-
-- Runs daily; uses an in-cluster Service account with read-only access to the Postgres cluster (a dedicated `backup_reader` role with `pg_read_all_data`).
-- For each database, runs `pg_dump --format=custom`, encrypts with the operator's age public key (same key as other backup-collector consumers), POSTs to `https://backup.home/v1/backup/postgres/<dbname>/<UTC-ISO8601>.age` with a per-source bearer token.
-- Retention is on the collector side, per its design.
-- Failure path: alerting fires if a database hasn't been pushed in 25h. Same pattern as OpenBao.
-
-PITR via WAL archiving is explicitly out of scope. Daily logical dumps cover the realistic recovery surface for this fleet; revisit if a chart appears whose loss-of-day cost justifies the operational weight.
-
-## TLS
-
-CNPG manages its own internal CA for client/server certs across the replicas and the pooler. Clients in-cluster connect with `sslmode=require` against the pooler; CNPG's CA cert is mounted into the per-app Secret if a chart wants to pin verification.
-
-step-ca / cert-manager is **not** wired here. The Postgres endpoints are cluster-internal; no external-facing surface justifies the CA dependency, and CNPG's automatic rotation is operationally simpler.
+A CronJob in `configs/prd/databases/prd/`: daily, a read-only `backup_reader`
+role (`pg_read_all_data`), per-database `pg_dump --format=custom`, age-encrypted
+with the operator's public key, POSTed to
+`https://backup.home/v1/backup/postgres/<dbname>/<UTC-ISO8601>.age` with a
+per-source bearer token. Retention is collector-side. Alerting fires if a
+database hasn't been pushed in 25h. PITR/WAL archiving out of scope.
 
 ## Migration pilot — `electronics-inventory`
 
-The first per-chart migration is the proof for the harness's `infrastructure.tf` story applied to a substrate-owning chart.
-
-1. Cluster substrate up and green (CNPG `Cluster` Healthy, Pooler reachable, smoke test from a debug pod).
-2. Branch `electronics-inventory` chart: drop `db-deployment.yaml`, `db-service.yaml`, `db-pvc.yaml`, `backup-pvc.yaml`, `backup-cronjob.yaml`, `setup-job.yaml` (or rewrite the setup job to consume the new Secret).
-3. Add `configs/prd/electronics-inventory/prd/infrastructure.tf` with the four resources above.
-4. Old chart still running; `pg_dump -F c` from the chart's pod, `pg_restore` into the new database. Window: brief read-only period if the data is changing; longer offline window acceptable for this app.
-5. Cut the chart: `poetry run deploy prd/electronics-inventory --stage=prd`. App comes up pointed at `postgres-rw.databases.svc`.
-6. Soak. Verify backup CronJob picked up the new database on its next run.
+1. Substrate up and green (CNPG `Cluster` Healthy, Pooler reachable, smoke from a
+   debug pod).
+2. Branch the chart: drop `db-deployment.yaml`, `db-service.yaml`, `db-pvc.yaml`,
+   `backup-pvc.yaml`, `backup-cronjob.yaml`; rewrite `setup-job.yaml` to consume
+   the new Secret (or drop it).
+3. Add the per-app `infrastructure.tf` (role + database + Secret).
+4. With the old chart still running, `pg_dump -F c` from its pod, `pg_restore`
+   into the new database (brief read-only window).
+5. `poetry run deploy prd/electronics-inventory --stage=prd` — app comes up
+   pointed at `postgres-rw.databases.svc`.
+6. Soak; verify the backup CronJob picked up the new database.
 7. After soak, remove the old chart-internal Postgres PVC.
 
-Once the pilot is green, remaining `db-*`-bearing charts (audit reveals which) get the same mechanical migration, one commit each.
+Once green, remaining `db-*`-bearing charts get the same mechanical migration,
+one commit each.
 
 ## Verification
 
-- **Substrate up**: CNPG `Cluster` reports 3 Healthy replicas. `kubectl cnpg status postgres -n databases` shows the elected primary, two replicas, sync replication active.
-- **Failover drill**: `kubectl delete pod` on the primary. Operator switches over within seconds. App connections (via pooler) reconnect; no data loss verified by a write-test row pre/post failover.
-- **Rolling update drill**: bump the CNPG `Cluster` `imageName` to a patch release. Operator drives a switchover-then-restart per replica with `serial: 1` semantics. Pooler keeps the apps' apparent connection alive; one brief reset on the actual switchover.
-- **Local PV correctness**: `kubectl get pv` shows 3 PVs in `Bound` state, one per node, each pinned via `nodeAffinity`. Delete the `Cluster`, recreate; PVs are reused via `claimRef` reattachment (data survives).
-- **Per-app DB**: `terraform apply` on the electronics-inventory release creates the DB + role + Secret. The app pod starts, reads/writes, queries return data. `psql` as that role can only see that role's database.
-- **Backup round-trip**: the CronJob produces a dump file in cloud storage. Operator decrypts with the age private key, restores into a scratch CNPG cluster on `srvk8sdev`, app starts against the restore and reads its rows.
-- **Strict-sync write-block**: with one replica killed (still degraded — 1 primary + 1 sync replica), writes succeed. Kill the second replica; writes block. Restore one replica; writes resume. Verifies the chosen durability posture works as advertised.
+- **Substrate up**: `kubectl cnpg status postgres -n databases` shows 3 Healthy
+  instances, elected primary + two replicas, sync active.
+- **Storage correctness**: `zfs list` on each node shows the `postgres-prd`
+  dataset with the expected quota; `kubectl get pv` shows 3 `Bound` local PVs,
+  one pinned per node. Delete + recreate the `Cluster`; PVs reattach via
+  `claimRef` (data survives, `prevent_destroy` holds the dataset).
+- **Failover drill**: delete the primary pod; switchover within seconds; pooler
+  reconnects; a write-test row survives pre/post.
+- **Rolling-update drill**: bump the `Cluster` `imageName`; switchover-then-
+  restart per replica; pooler keeps apps' connections alive.
+- **Strict-sync write-block**: with one replica down (3→2), writes succeed; with
+  two down (3→1), writes block; restore one, writes resume.
+- **Per-app DB**: `terraform apply` on the pilot creates DB + role + Secret; the
+  app reads/writes; `psql` as that role sees only its own database.
+- **Backup round-trip**: a dump lands in storage; decrypt with the age key,
+  restore into a scratch CNPG on srvk8sdev, app reads its rows.
 
 ## Caveats
 
-- **Strict synchronous = degraded cluster blocks writes.** Chosen behaviour, not a bug. With 3 instances the operating point is "tolerate one node loss without write impact." Two-node loss is a write outage by design; the cluster keeps a consistent primary and refuses to ack writes that can't be made durable. The alternative (`dataDurability: preferred`) silently downgrades to async — rejected because that's the failure mode we picked sync to avoid.
-- **Local PVs pin pods to nodes.** Loss of a node = loss of one replica until that node is back or rebuilt; CNPG re-streams from a healthy peer to fill the new local disk. This is the CNPG-designed model; the recovery is automatic but it does mean a Phase 4 k8s-node rebuild has a "wait for re-streaming" step before the cluster is back to 3-replica HA.
-- **One operator-managed Postgres major-version upgrade is its own event.** CNPG drives in-place minor upgrades cleanly. Major upgrades (e.g. 16 → 17) are operator-supervised via the CNPG upgrade playbook. Not a v1 concern but worth flagging when picking the initial version — pick the latest LTS-equivalent that has a stable upgrade path.
-- **CNPG's bootstrap secret holds the superuser password.** Pre-OpenBao, this lives in a Helm-managed Secret with the password committed to ansible-vault and rendered by the harness's deploy CLI. Post-Phase-6, it migrates to ESO-from-OpenBao. The chicken-and-egg (Postgres needs a password to bootstrap; the harness needs Postgres to exist before per-app TF works) is one-time and ends after the cluster initializes.
-- **No PITR.** Daily logical dumps cover restore-to-yesterday. Restoring to "15:42 yesterday" is not available. Revisit when a workload justifies it.
-- **Cross-stage isolation is by database, not by cluster.** All four application stages (`dev/test/uat/prd`) share the same Postgres cluster, each with its own database (e.g. `electronics_inventory_dev`, `electronics_inventory_uat`). Same isolation guarantee Postgres `CREATE DATABASE` gives. Separate clusters per stage was rejected as 4× operational weight for no homelab-meaningful gain.
-- **`srvk8sdev` (the chart-development cluster) does not get this substrate.** Helm-chart iteration against `srvk8sdev` continues to use chart-internal Postgres pods for dev simplicity, or points at an out-of-cluster Postgres on the workstation. Substrate-coupled charts that need a real CNPG behave differently in `configs/dev` vs `configs/prd`; this asymmetry is acceptable for chart development and documented when the first such chart migrates.
-- **CNPG version skew across operator upgrades.** The CNPG operator chart and the `Cluster` `imageName` are versioned independently. Pin the operator chart version in the `cloudnative-pg` Helm release; pin the Postgres image tag on the `Cluster`. Don't track `:latest`.
+- **Instance count is the load-bearing decision.** Three instances (one per
+  srvk8s1/2/3) tolerate one node down — failure *or* a planned `serial:1` drain —
+  without blocking writes, because a primary + one sync replica always remain.
+  Dropping srvk8s1 to a **2-instance cluster on srvk8s2/3 only** means *any*
+  single node down blocks writes under strict sync, including every node reboot
+  in the OS-update cycle. The only escapes from that on two nodes are accepting
+  the write-block windows or relaxing to async (the silent-downgrade mode strict
+  sync exists to avoid). Hence the 3-instance default; reusing srvk8s1's existing
+  `zpool2` costs no new hardware.
+- **ZFS on a single virtual disk has no disk-level redundancy** — intentional;
+  redundancy is CNPG's replicas. ZFS is here for checksumming/compression/
+  snapshots, not RAID.
+- **Node rebuild loses that replica's local data**; CNPG re-streams from a
+  healthy peer to refill the dataset. A k8s-node rebuild therefore has a
+  "wait for re-streaming to 3-replica HA" step. The `prevent_destroy` on the
+  dataset guards against accidental TF destroy, not a VM-level disk wipe.
+- **CNPG bootstrap secret holds the superuser password** — sourced from OpenBao
+  via ESO. The chicken-and-egg (cluster must exist before per-app TF runs) is a
+  one-time ordering, not a deadlock.
+- **No PITR** — daily logical dumps cover restore-to-yesterday.
+- **Cross-stage isolation is by database, not cluster** — all stages share one
+  cluster, each with its own database (`electronics_inventory_dev`, …).
+- **srvk8sdev gets no substrate** — chart-dev keeps chart-internal Postgres pods
+  or an out-of-cluster Postgres; the configs/dev vs configs/prd asymmetry is
+  documented when the first substrate-coupled chart migrates.
+- **Version skew** — pin the CNPG operator chart version and the `Cluster`
+  Postgres image tag independently; never `:latest`.
 
 ## Commits
 
-1. This plan, here in `slices/postgres-cluster-substrate.md`. Single commit.
-2. (`/work/Ansible`) TF: add `local_storage` disk to each k8s node in `terraform/prd/vms.tf`. Baseline role: ensure `/var/lib/k8s-local` is present, owned, and mounted from the new disk. One commit per piece if they're independent; one combined commit if not.
-3. (`/work/HelmCharts`) New `cloudnative-pg` operator chart (or wrapper around the upstream chart).
-4. (`/work/HelmCharts`) New `databases` chart carrying the `Cluster`, `Pooler`, the static local PVs (TF), the backup CronJob, and the `terraform_admin` bootstrap.
-5. (`/work/HelmCharts`) Migrate `electronics-inventory` per the pilot above. Single commit.
-6. (`/work/HelmCharts`) Per-chart migration commits for remaining DB-bearing charts. Mechanical, one each.
+1. This rework (here) + `slices/README.md` row. Single commit.
+2. (`/work/Ansible`) TF: raw `local-lvm` disk on srvk8s2/3 in `vms.tf`. Ansible:
+   `zfs_pools` host_vars + node `homelab.local/storage` label. One commit per
+   piece or combined if coupled.
+3. (`/work/HelmCharts`) `cloudnative-pg` operator chart (wrapper around upstream).
+4. (`/work/HelmCharts`) `databases` chart: `Cluster`, `Pooler`, the three
+   `static-zfs-pv` replica PVs, backup CronJob, `terraform_admin` bootstrap +
+   provider `zfs_pools` entries.
+5. (`/work/HelmCharts`) Migrate `electronics-inventory` (pilot). Single commit.
+6. (`/work/HelmCharts`) Per-chart migration commits for remaining DB-bearing
+   charts. Mechanical, one each.
