@@ -7,7 +7,7 @@ The homelab build-out, executed top-down. New phases get inserted into the pendi
 | # | Phase | Status | Notes |
 |---|---|---|---|
 | 1 | (microceph) | planned | (was phase 5). Single-node `microceph` role landed early for dev (`ceph_dev`/srvk8sdev, `squid/stable`, `playbooks/site-ceph.yml`); this phase extends it to the prod fleet — multi-node join, `serial:1` drain, `ceph.home` VIP takeover. |
-| 3 | (helm + tf harness) | planned | depends on slice [helm-tf-deploy-harness](../slices/helm-tf-deploy-harness.md) |
+| 3 | (helm + tf harness) | planned | depends on slice [helm-tf-deploy-harness](../slices/completed/helm-tf-deploy-harness.md) |
 | 4 | (storage CSIs + tf) | planned | (was phase 8) |
 | 5 | (keycloak tf) | planned | (was phase 9) |
 

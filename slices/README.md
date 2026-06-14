@@ -14,9 +14,6 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending (refinement) | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
 | [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
 | [zfs-dataset-provider](zfs-dataset-provider/plan.md) | in progress (code complete; pending deploy + smoke) | supersedes the ZFS mechanism in tf-provider-resource-extensions | phase: storage CSIs (static-PV modules); folder also holds the api + terraform specs |
-| [helm-tf-deploy-harness](helm-tf-deploy-harness.md) | pending | tf-provider-resource-extensions | phase: helm + tf harness |
-| [helm-tf-deploy-harness-ceph-changes](helm-tf-deploy-harness-ceph-changes.md) | pending (dev first; behind chart rebuild) | helm-tf-deploy-harness | Ceph cred consolidation (combined cephx + RGW admin per cluster, `shared/<env>/…`) |
-| [helm-tf-deploy-harness-finalize](helm-tf-deploy-harness-finalize.md) | pending (repo + cutover done; finalization) | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, old-world Ceph/S3 cleanup, migration-software removal, TODO follow-ups |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness, backup-collector | phase: helm + tf harness |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 
@@ -39,6 +36,9 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [internal-ha-vips](completed/internal-ha-vips.md) | — | internal-tls-step-ca | phase: openbao + secrets (`secrets.home` VIP); k8s-api + OpenBao VIPs landed, Ceph VIP manual pending Phase 5 |
 | [internal-tls-nginx-configurator](completed/internal-tls-nginx-configurator.md) | — | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca); cert-expiry metric deferred |
 | [cloud-init-first-boot-only](completed/cloud-init-first-boot-only.md) | — | — | (correctness; stops snippet edits cascading to VM rebuilds) |
+| [helm-tf-deploy-harness](completed/helm-tf-deploy-harness.md) | spec 09 | tf-provider-resource-extensions | phase: helm + tf harness (repo restructure + prd cutover — done) |
+| [helm-tf-deploy-harness-ceph-changes](completed/helm-tf-deploy-harness-ceph-changes.md) | — | helm-tf-deploy-harness | Ceph cred consolidation (combined cephx + RGW admin per cluster) — done |
+| [helm-tf-deploy-harness-finalize](completed/helm-tf-deploy-harness-finalize.md) | — | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, Ceph/S3 cleanup; Phase 5 (migration-software removal) cancelled — tooling retained for a future bulk rename |
 
 ## Deferred / Cancelled
 

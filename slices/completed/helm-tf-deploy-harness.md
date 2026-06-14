@@ -1,5 +1,12 @@
 # 09 — Helm + Terraform deploy harness
 
+> **STATUS: COMPLETED.** The repo restructure and the prd per-release
+> cutover are done; both clusters run on the harness. Wrap-up (Jenkins-on-
+> iac, HTTP TF backend, tools rework, cleanup, TODO) is tracked in
+> [helm-tf-deploy-harness-finalize](helm-tf-deploy-harness-finalize.md);
+> the Ceph cred/naming follow-up is
+> [helm-tf-deploy-harness-ceph-changes](helm-tf-deploy-harness-ceph-changes.md).
+
 ## Goal
 
 Reshape the application monorepo (`/work/HelmCharts`) around the

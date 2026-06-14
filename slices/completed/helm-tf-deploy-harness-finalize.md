@@ -9,10 +9,18 @@
 > project. **Phase 4** (orphan audit) ran clean and is closed; **Phase 3**
 > (Ceph/S3/cephx cleanup) executed against prd — only §5 (retire the
 > OpenBao god-leaf `kv/shared/ceph-rgw/s3`) is left, and it is a manual
-> operator/`bao` step. **Phases 5–6 remain** (delete `tools/migrate*`, the
-> two `TODO.md` fixes) and are not started. See the per-phase notes below
-> for exactly what landed and the few follow-ups. Notable deltas from the
-> plan as written below:
+> operator/`bao` step. **Phase 5 is cancelled; Phase 6 is done.** Phase 5
+> (delete `tools/migrate*`) was **cancelled** — the migration tooling is
+> retained on purpose as the basis for a possible future bulk resource
+> rename. Phase 6 is **done**: 6.1 (the `homelab_zfs_dataset` provider fix)
+> is published (`0.1.25`) and `atime=off` declared on the hostPath
+> datasets; 6.2 (static-PV stage naming) is resolved as **documentation** —
+> the convention + per-chart rework plan live in HelmCharts `CLAUDE.md`
+> rather than a mass rename. The only residual is operator runtime: the §5
+> `bao` god-leaf delete and applying the 6.1 change (`deploy apply
+> prd/media`; `deploy import` + `apply prd/storage`). See the per-phase
+> notes below for exactly what landed and the few follow-ups. Notable
+> deltas from the plan as written below:
 >
 > - **uv, not poetry, in the pipeline.** Per-release `iac -c` calls
 >   reinstall the deploy project per container, so the Jenkinsfiles use
@@ -493,7 +501,17 @@ confirmed orphans. Retain + the completed imports mean nothing in the
 desired set is at risk. The csi-prd/csi-dev pool deletions in Phase 3
 happen **after** this audit is clean.
 
-## Phase 5 — delete the migration software — ⏳ REMAINING
+## Phase 5 — delete the migration software — ❌ CANCELLED
+
+> **CANCELLED (2026-06-14).** The migration tooling is **kept**, not
+> deleted. The operator decided to retain `tools/migrate-release.py` +
+> `tools/migrate/` — especially the old→new name mapping in the
+> `*-plan.yaml` files — as the starting point for a possible future bulk
+> rename of all durable resources to the `<namespace>-<short>` convention
+> (the deferred per-chart rework in HelmCharts `CLAUDE.md`). The folder's
+> intermediate per-run state (`*-done.txt`) was removed and its `README.md`
+> now documents the completed status + retention rationale. The original
+> removal plan is left below for the record.
 
 Once Phases 3–4 confirm the cutover is fully settled, remove the
 forward-only migration machinery (operator confirmed it can go entirely):
@@ -508,7 +526,20 @@ forward-only migration machinery (operator confirmed it can go entirely):
   `mount-*`/`rm-*` inspection helpers (still useful); only drop
   migration-only code.
 
-## Phase 6 — TODO.md follow-ups — ⏳ REMAINING
+## Phase 6 — TODO.md follow-ups — ✅ DONE
+
+> **DONE (2026-06-14).** (1) The provider fix shipped: the static
+> `recordsize`/`compression` defaults were dropped (`pvginkel/homelab`
+> `0.1.25`, published + deployed), so imported datasets stop diffing;
+> `atime=off` is now declared explicitly on the three hostPath datasets
+> (storage `rclone-backup` + `share`, media `downloads`). (2) The static-PV
+> stage-suffix sweep is **not** done as a mass rename — instead the naming
+> convention and a per-chart rework plan (with effort + blast radius) are
+> documented in HelmCharts `CLAUDE.md` (Storage section); single-stage
+> charts get converted to `<namespace>-<short>` only when they first need a
+> second stage. `TODO.md` is closed. Residual operator runtime: apply the
+> 6.1 change (`deploy apply prd/media`; `deploy import` + `apply
+> prd/storage`); optionally `zfs inherit recordsize zpool2/rclone-backup`.
 
 Both items in `HelmCharts-2/TODO.md`, neither blocking but both deferred
 through the migration:

@@ -1,5 +1,12 @@
 # Helm + TF deploy harness — Ceph credential consolidation & naming
 
+> **STATUS: COMPLETED.** One combined cephx user `client.k8s` and one RGW
+> admin per cluster, vaulted per-cluster, naming converged on `k8s` — landed
+> on both clusters. Old-world area-specific users / pools / buckets were
+> retired in Phase 3 of
+> [helm-tf-deploy-harness-finalize](helm-tf-deploy-harness-finalize.md)
+> (bar the manual `kv/shared/ceph-rgw/s3` god-leaf delete).
+
 ## Goal
 
 The deploy harness ([helm-tf-deploy-harness](helm-tf-deploy-harness.md))
