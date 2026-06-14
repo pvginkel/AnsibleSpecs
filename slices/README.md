@@ -1,20 +1,27 @@
 # Slices
 
-Forward-looking design work that threads between phases. Pending slices are at the top of `slices/`; closed work in [`completed/`](completed/), [`deferred/`](deferred/), [`cancelled/`](cancelled/).
+The single tracking unit for homelab work. Pending slices are at the top of
+`slices/`; closed work in [`completed/`](completed/), [`deferred/`](deferred/),
+[`cancelled/`](cancelled/).
 
-The dependency column lists prerequisite slices and (where relevant) the phase that consumes the slice's output.
+> The phased build-out is finished. Its history is archived under
+> [`../phases/`](../phases/) (read-only); all ongoing work is tracked here as
+> slices.
+
+The dependency column lists prerequisite slices; the consumed-by column notes
+what the slice's output feeds.
 
 ## Pending
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
-| [runtime-secrets-sweep](runtime-secrets-sweep.md) | in progress (final polish) | phase: openbao + secrets | (consumer migration — iac/secrets.yaml, Jenkins, HelmCharts via ESO) |
+| [microceph-prod](microceph-prod.md) | placeholder | [pre-drain-readiness-check](pre-drain-readiness-check.md) | (extends the `microceph` role to the prod fleet — the last unmigrated big rock) |
+| [keycloak-tf](keycloak-tf.md) | placeholder | helm-tf-deploy-harness (done) | (Keycloak realm/client config via the harness `configuration.tf` stage) |
+| [runtime-secrets-sweep](runtime-secrets-sweep.md) | in progress (final polish) | openbao + secrets (done) | (consumer migration — iac/secrets.yaml, Jenkins, HelmCharts via ESO) |
 | [metallb-chart-migration](metallb-chart-migration.md) | in progress (prd side) | — | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
 | [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
-| [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending (refinement) | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), microceph |
-| [tf-provider-resource-extensions](tf-provider-resource-extensions.md) | pending | — | phase: helm + tf harness, phase: storage CSIs |
-| [zfs-dataset-provider](zfs-dataset-provider/plan.md) | in progress (code complete; pending deploy + smoke) | supersedes the ZFS mechanism in tf-provider-resource-extensions | phase: storage CSIs (static-PV modules); folder also holds the api + terraform specs |
-| [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness, backup-collector | phase: helm + tf harness |
+| [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending (refinement) | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), [microceph-prod](microceph-prod.md) |
+| [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness (done), backup-collector (done) | (substrate for stateful releases on the deploy harness) |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 
 ## Completed
@@ -33,12 +40,14 @@ The dependency column lists prerequisite slices and (where relevant) the phase t
 | [openbao-static-seal](completed/openbao-static-seal.md) | — | — | phase: openbao + secrets (cluster + seal-key shape; landed) |
 | [backup-collector](completed/backup-collector.md) | — | openbao-static-seal | phase: openbao + secrets (in-cluster collector; OpenBao is its first consumer) |
 | [iac-secrets-resolver](completed/iac-secrets-resolver.md) | — | openbao-static-seal | phase: openbao + secrets (`iac-impl` `!bao` resolver; gates [runtime-secrets-sweep](runtime-secrets-sweep.md)) |
-| [internal-ha-vips](completed/internal-ha-vips.md) | — | internal-tls-step-ca | phase: openbao + secrets (`secrets.home` VIP); k8s-api + OpenBao VIPs landed, Ceph VIP manual pending Phase 5 |
+| [internal-ha-vips](completed/internal-ha-vips.md) | — | internal-tls-step-ca | phase: openbao + secrets (`secrets.home` VIP); k8s-api + OpenBao VIPs landed, Ceph VIP manual pending [microceph-prod](microceph-prod.md) |
 | [internal-tls-nginx-configurator](completed/internal-tls-nginx-configurator.md) | — | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca); cert-expiry metric deferred |
 | [cloud-init-first-boot-only](completed/cloud-init-first-boot-only.md) | — | — | (correctness; stops snippet edits cascading to VM rebuilds) |
 | [helm-tf-deploy-harness](completed/helm-tf-deploy-harness.md) | spec 09 | tf-provider-resource-extensions | phase: helm + tf harness (repo restructure + prd cutover — done) |
 | [helm-tf-deploy-harness-ceph-changes](completed/helm-tf-deploy-harness-ceph-changes.md) | — | helm-tf-deploy-harness | Ceph cred consolidation (combined cephx + RGW admin per cluster) — done |
-| [helm-tf-deploy-harness-finalize](completed/helm-tf-deploy-harness-finalize.md) | — | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, Ceph/S3 cleanup; Phase 5 (migration-software removal) cancelled — tooling retained for a future bulk rename |
+| [helm-tf-deploy-harness-finalize](completed/helm-tf-deploy-harness-finalize.md) | — | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, Ceph/S3 cleanup; migration-software removal cancelled — tooling retained for a future bulk rename |
+| [tf-provider-resource-extensions](completed/tf-provider-resource-extensions.md) | plan 08 | — | `homelab_rbd_image` / `homelab_cephfs_subvolume` / `homelab_zfs_dataset` — all shipped; consumed by the static-PV modules + deploy harness |
+| [zfs-dataset-provider](completed/zfs-dataset-provider/plan.md) | — | tf-provider-resource-extensions (supersedes its ZFS mechanism) | `homelab_zfs_dataset` via the iac-provisioner node agent — shipped; prd `infrastructure.tf` consumes it |
 
 ## Deferred / Cancelled
 

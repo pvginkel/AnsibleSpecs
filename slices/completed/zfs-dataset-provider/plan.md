@@ -1,8 +1,10 @@
 # zfs-dataset-provider — `homelab_zfs_dataset` via the iac-provisioner node agent
 
-> **Status:** chart authored (`HelmCharts/charts/iac-provisioner/`). To build:
-> the `iac-provisioner` app + Dockerfile in DockerImages, and
-> `internal/zfsdataset/` + provider wiring in HomelabTerraformProvider.
+> **STATUS: DELIVERED.** `iac-provisioner` app + Dockerfile shipped in
+> DockerImages; `charts/iac-provisioner/` + `configs/{prd,dev}` overrides in
+> HelmCharts; `internal/zfsdataset/` + provider wiring (config later renamed
+> `iac_provisioner_*`) in HomelabTerraformProvider. prd
+> `infrastructure.tf` consumes `homelab_zfs_dataset`.
 
 ## Goal
 

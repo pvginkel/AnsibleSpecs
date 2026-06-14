@@ -45,7 +45,7 @@ Worked examples:
 
 Why three tiers, not two: Ansible at the resource layer is a thin wrapper around shell-outs with no state model. Terraform's resource graph, plan-time drift detection, and explicit destroy semantics match what Ceph / Kubernetes / Keycloak expose as declarative APIs. Helm's job — application runtime — doesn't change.
 
-**Per-application TF lives in `/work/HelmCharts`.** Each release directory carries an optional `infrastructure.tf` (resources the chart depends on — namespace, PVs, Ceph images, ZFS datasets) and an optional `configuration.tf` (resources that depend on the chart being deployed — Keycloak realm config). The deploy CLI runs `terraform apply infra` → `helm upgrade --install` → `terraform apply config`. Per-release TF state, separate from this repo's VM-tier state. Design: [`docs/plans/09-helm-tf-deploy-harness.md`](plans/09-helm-tf-deploy-harness.md). Provider extensions for Ceph + ZFS resources: [`docs/plans/08-tf-provider-resource-extensions.md`](plans/08-tf-provider-resource-extensions.md).
+**Per-application TF lives in `/work/HelmCharts`.** Each release directory carries an optional `infrastructure.tf` (resources the chart depends on — namespace, PVs, Ceph images, ZFS datasets) and an optional `configuration.tf` (resources that depend on the chart being deployed — Keycloak realm config). The deploy CLI runs `terraform apply infra` → `helm upgrade --install` → `terraform apply config`. Per-release TF state, separate from this repo's VM-tier state. Design: [`slices/completed/helm-tf-deploy-harness.md`](slices/completed/helm-tf-deploy-harness.md). Provider extensions for Ceph + ZFS resources: [`slices/completed/tf-provider-resource-extensions.md`](slices/completed/tf-provider-resource-extensions.md) (+ [`zfs-dataset-provider`](slices/completed/zfs-dataset-provider/plan.md)).
 
 **TODO — chart lifecycle in the HelmCharts refactor.** The refactor must cover the full chart lifecycle, not just updates to existing charts: deploying a brand-new chart and deleting a chart both need first-class support. Today `resolve-helm-args.py` fails for new charts, and deletion isn't handled at all. Mechanism is open — tracked here so the refactor design closes both gaps.
 
@@ -227,7 +227,7 @@ For the three pve hosts, fidelity to the role definitions is the only reachable 
 
 ### Ceph rebuild path
 
-Specifics deferred to Phase 5; the preferred shape is recorded here so the phase doc inherits the constraint:
+Specifics deferred to the [`microceph-prod`](slices/microceph-prod.md) slice; the preferred shape is recorded here so the slice inherits the constraint:
 
 1. **Upgrade first** — bring the cluster to its target microceph LTS channel via `snap refresh`, mons before OSDs, `serial: 1`. Soak under real workload for several days; confirm `HEALTH_OK` and that HelmCharts consumers are unaffected.
 2. **Then rebuild** — drain a node, TF-replace the VM, apply baseline + microceph role, reattach the existing OSD disks (BlueStore OSDs carry their identity on-disk). Repeat one node at a time.
@@ -239,7 +239,7 @@ Sequencing rationale: rebuild has no real rollback (once the rootfs is destroyed
 
 **LTS channels only.** Ceph is infrastructure the operator does not want to think about; chasing latest costs small surprises for negligible benefit on this workload. Track the current Ceph LTS, upgrade when the previous one goes EOL or sooner if a security fix forces it. Phase 5 picks the initial target channel against current state. (microceph snap channels are named after Ceph *releases*, not Ubuntu releases — `reef` = Ceph 18, `squid` = Ceph 19, `tentacle` = Ceph 20. Pin a named channel, never the floating `latest`.)
 
-**Dev runs a release ahead, single-node.** A co-located single-node microceph on `srvk8sdev` (the `ceph_dev` group, converged by `playbooks/site-ceph.yml`) provides isolated dev storage — block (RBD), file (CephFS), and object (RGW/S3) — so HelmCharts and TF-provider iteration stops churning the prod Ceph cluster. It tracks `squid/stable` (Ceph 19), a release ahead of prd's `reef` (Ceph 18), soaking the next Ceph before prd moves — the same dev-ahead pattern as the k8s channel policy. Channel pinned in `group_vars/ceph_dev.yml`; daemon memory caps tuned well below prd since the node carries no persistent load. The `microceph` role is single-node-only today; Phase 5 extends it to the 3-node prd fleet (multi-node join, `serial:1` drain, VIP takeover).
+**Dev runs a release ahead, single-node.** A co-located single-node microceph on `srvk8sdev` (the `ceph_dev` group, converged by `playbooks/site-ceph.yml`) provides isolated dev storage — block (RBD), file (CephFS), and object (RGW/S3) — so HelmCharts and TF-provider iteration stops churning the prod Ceph cluster. It tracks `squid/stable` (Ceph 19), a release ahead of prd's `reef` (Ceph 18), soaking the next Ceph before prd moves — the same dev-ahead pattern as the k8s channel policy. Channel pinned in `group_vars/ceph_dev.yml`; daemon memory caps tuned well below prd since the node carries no persistent load. The `microceph` role is single-node-only today; the [`microceph-prod`](slices/microceph-prod.md) slice extends it to the 3-node prd fleet (multi-node join, `serial:1` drain, VIP takeover).
 
 ### Ceph daemon memory targets
 
@@ -262,7 +262,7 @@ Deferred / revisit:
 
 `ceph.home` (10.1.0.38) is a leader-tracking Keepalived VIP on srvceph1/2/3 — design captured in [`slices/internal-ha-vips.md`](slices/internal-ha-vips.md). Because srvceph1/2/3 are not Ansible-managed today, v1 of that slice configures Keepalived **by hand** on each node, with the exact `keepalived.conf` + mgr-tracking script recorded in `docs/runbooks/ceph-vip.md`.
 
-**When Ceph moves to Ansible (Phase 5 — see [`phases/README.md`](phases/README.md))**, the `microceph` role takes over the VIP: it includes the shared `keepalived` role with the same VRID, VIP, password, and mgr-tracking script, and the hand-rolled config on srvcephN is retired in the same change. The manual runbook becomes a backstop for disaster recovery rather than the day-to-day path. Skipping this step would leave two sources of truth for the Ceph VIP config and silently drift on the next Phase 5 apply.
+**When Ceph moves to Ansible (the [`microceph-prod`](slices/microceph-prod.md) slice)**, the `microceph` role takes over the VIP: it includes the shared `keepalived` role with the same VRID, VIP, password, and mgr-tracking script, and the hand-rolled config on srvcephN is retired in the same change. The manual runbook becomes a backstop for disaster recovery rather than the day-to-day path. Skipping this step would leave two sources of truth for the Ceph VIP config and silently drift on the next prd-Ceph apply.
 
 ### k8s version policy
 

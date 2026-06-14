@@ -1,17 +1,22 @@
-# Phases
+# Phases — retired (archive)
 
-The homelab build-out, executed top-down. New phases get inserted into the pending table; closed phases move to [`completed/`](completed/) and the closed table.
+The phased build-out is **complete and retired**. All ongoing and future work is
+tracked as slices in [`../slices/`](../slices/) — there is no pending phase
+table any more. This folder is a read-only historical record of how the homelab
+was built out; the completed phase docs below are still linked from slices and
+remain useful context.
 
-## Pending
+The two phases that were still open when phases were retired became slices:
 
-| # | Phase | Status | Notes |
-|---|---|---|---|
-| 1 | (microceph) | planned | (was phase 5). Single-node `microceph` role landed early for dev (`ceph_dev`/srvk8sdev, `squid/stable`, `playbooks/site-ceph.yml`); this phase extends it to the prod fleet — multi-node join, `serial:1` drain, `ceph.home` VIP takeover. |
-| 3 | (helm + tf harness) | planned | depends on slice [helm-tf-deploy-harness](../slices/completed/helm-tf-deploy-harness.md) |
-| 4 | (storage CSIs + tf) | planned | (was phase 8) |
-| 5 | (keycloak tf) | planned | (was phase 9) |
+- phase 1 "(microceph)" → [`../slices/microceph-prod.md`](../slices/microceph-prod.md)
+- phase 5 "(keycloak tf)" → [`../slices/keycloak-tf.md`](../slices/keycloak-tf.md)
 
-## Completed
+Phases 3 "(helm + tf harness)" and 4 "(storage CSIs + tf)" were delivered via
+slices ([helm-tf-deploy-harness](../slices/completed/helm-tf-deploy-harness.md),
+[tf-provider-resource-extensions](../slices/completed/tf-provider-resource-extensions.md))
+and the prd cutover — both live.
+
+## Completed (archive)
 
 | Phase | Was |
 |---|---|

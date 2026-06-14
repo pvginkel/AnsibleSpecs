@@ -1,5 +1,14 @@
 # 08 — Add Ceph + ZFS resource types to the homelab provider
 
+> **STATUS: DELIVERED.** All three resources shipped in
+> `pvginkel/HomelabTerraformProvider`: `homelab_rbd_image`,
+> `homelab_cephfs_subvolume` (both via go-ceph cgo, not the shell-out the prose
+> describes), and `homelab_zfs_dataset` (delivered via the node agent in
+> [`zfs-dataset-provider/`](zfs-dataset-provider/plan.md), which superseded the
+> SSH mechanism below). Consumer modules `static-{rbd,cephfs,zfs}-pv` live in
+> HelmCharts and prd `storage`/`media` consume them. Kept for the resource
+> contracts; ignore the SSH/transport specifics.
+
 ## Goal
 
 Extend the `pvginkel/homelab` Terraform provider with three new resource
