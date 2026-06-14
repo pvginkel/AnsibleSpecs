@@ -358,9 +358,22 @@ these guardrails, and treat it as a follow-on, not part of the core migration:
 - **Dedicated, bounded CI role.** A `ci_ephemeral` role with `CREATEDB` only
   (no superuser, no access to app databases), separate from `terraform_admin`.
   CI self-serves databases under a reserved prefix (`ci_<pipeline>_<build>`).
-- **Guaranteed teardown + a TTL backstop.** The pipeline drops its database on
-  exit (success *or* failure); a small sweeper drops any `ci_*` database older
-  than N hours so leaks can't accumulate. Without this, abandoned DBs pile up.
+- **Let Kubernetes own the teardown (preferred), don't hand-roll it.** Model the
+  ephemeral DB as a CNPG **`Database` CRD** with `databaseReclaimPolicy: delete`
+  — creating the object makes the database, deleting it makes CNPG drop the
+  database. Give that object an `ownerReference` to the CI Job and set
+  `ttlSecondsAfterFinished` on the Job: when the Job finishes (or dies — OOM,
+  eviction, hard kill), K8s garbage-collects it and cascades to the owned
+  `Database` object, so the DB can't outlive its Job. A plain in-job `DROP` only
+  covers test *failure*, not `SIGKILL`; GC off the Job object covers both.
+  **Constraint:** ownerRef GC needs owner + dependent in one namespace, and a
+  CNPG `Database` lives in its `Cluster`'s namespace (`postgres-pas`) — so either
+  run the CI Job in `postgres-pas`, or use a small label-driven cleanup
+  controller instead of native ownerRef GC. Confirm the CRD's cross-namespace
+  behaviour at impl time.
+- **TTL sweeper is a backstop, not the mechanism.** With the above, a sweeper
+  that drops `ci_*` databases older than N hours only catches the odd DB created
+  without the owner wiring — cheap insurance, not the primary path.
 - **Bound the blast radius.** CI shares one Postgres server with prod app data —
   logical isolation only. A pathological test (huge writes, long lock-holding
   transactions, runaway connections) competes for the same WAL/disk/CPU. Set a
