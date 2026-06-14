@@ -1,50 +1,47 @@
-# 07 — Pre-drain hand-off readiness check
+# Pre-drain hand-off readiness check
+
+> **Status: fix landed (2026-06-14), pending operator verification.** Awaiting a
+> multi-node run that exercises both Deployment strategies.
 
 ## Symptom
 
 During Phase 4c pre-flight on `srvk8ss2`, the hand-off task
 `Wait for each labeled Deployment to be Ready post-restart`
 (`ansible/playbooks/tasks/pre-drain-handoff.yml`) reported `ok` for both
-`keycloak/keycloak` and `keycloak/keycloak-db` while the Deployments
-were still showing not-Ready — the new pod had not yet passed its
-readiness probe. The play would have proceeded to drain on top of an
-unhealthy surge target if the previous step (the bare-Pod failure) had
-not aborted it first.
+`keycloak/keycloak` and `keycloak/keycloak-db` while the Deployments were still
+not-Ready. It used `microk8s kubectl rollout status deploy/<name> --timeout=5m`,
+which should block until the rollout completes, but returned 0 early — the old
+pod still counted as Available before the new pod passed its readiness probe
+(and the brief `replicas=0` window of a `Recreate` Deployment satisfied the
+criteria too). The play would have drained on top of an unhealthy surge target
+had an unrelated earlier failure not aborted it first.
 
-The task uses `microk8s kubectl rollout status deploy/<name>
---timeout=5m`, which is the Deployment-level check, so in theory it
-should block until the rollout completes. In practice it returned 0
-early. Needs investigation before we trust the hand-off in anger.
+## Fix
 
-## Direction (to flesh out when we pick this up)
+Replaced `rollout status` with an explicit Deployment-state poll: `kubectl get
+deploy -o json` under an `until` loop that blocks until
 
-- Reproduce with verbose output and `kubectl get deploy <name> -o yaml`
-  snapshots taken at the moment `rollout status` returns, to confirm
-  what `observedGeneration`, `replicas`, `updatedReplicas`,
-  `readyReplicas`, and `availableReplicas` look like at exit.
-- Likely candidates: a quirk of `rollout restart` + `RollingUpdate`
-  (`maxSurge: 1, maxUnavailable: 0`) where the old pod still counts as
-  Available and the rollout-status criteria pass before the new pod is
-  Ready; or a quirk of `Recreate` where the brief `replicas=0` window
-  satisfies all the loop's checks.
-- Replace or supplement `rollout status` with an explicit Deployment
-  state check — e.g. poll `kubectl get deploy <name> -o jsonpath` until
-  `.status.observedGeneration == .metadata.generation` AND
-  `.status.readyReplicas == .spec.replicas` AND
-  `.status.updatedReplicas == .spec.replicas`. Same 5-minute timeout,
-  fail-loud on miss.
-- Verify against both strategies (`RollingUpdate maxSurge:1/maxUn:0`
-  for keycloak; `Recreate` for keycloak-db).
+- `status.observedGeneration == metadata.generation` (controller saw the new spec), and
+- `updatedReplicas == readyReplicas == availableReplicas == spec.replicas`.
 
-## Out of scope here
+30 retries × 10s ≈ the same 5-minute cap; exhausted retries fail the play before
+`kubectl drain` runs. Still gated `when: _cluster_peer_count | int > 1`, so
+single-node clusters skip it.
 
-The plan that introduced the hand-off is `03-pre-drain-handoff.md`.
-This is a follow-up: the hand-off itself works, but its readiness gate
-isn't tight enough.
+## Verification (owed)
 
-## Status
+A multi-node run (`update-k8s.yml` or `evict-k8s.yml`) that hands off both
+opt-in workloads, confirming the gate now blocks until genuinely Ready against
+both strategies: `keycloak` (`RollingUpdate maxSurge:1/maxUnavailable:0`) and
+`keycloak-db` (`Recreate`). The only opt-ins today are those two (keycloak chart).
 
-Not a blocker for Phase 4c — the rebuild's own drain step would still
-fail loudly if a surge target were genuinely unhealthy (drain refuses
-PDB-violating evictions; the cordon stays in place). But a tighter
-gate stops us from depending on that fallback.
+## Notes
+
+- Defense-in-depth, not a hard blocker: `kubectl drain` already refuses
+  PDB-violating evictions and the cordon holds, so a genuinely unhealthy target
+  blocks the drain regardless. This tightens the gate so we don't rely on that
+  fallback.
+- The `microceph-prod` linkage is conceptual only — Ceph runs on separate
+  `srvceph` VMs and its `serial:1` drain gates on Ceph health, not this
+  k8s-Deployment hand-off. Shared idea (tight readiness gate before draining),
+  not a literal dependency.

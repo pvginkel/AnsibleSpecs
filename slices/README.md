@@ -20,7 +20,7 @@ what the slice's output feeds.
 | [runtime-secrets-sweep](runtime-secrets-sweep.md) | in progress (migration done; rotation + scrub remaining) | openbao + secrets (done) | (auto-rotation system, HelmCharts publishability, cross-repo secret scan, KubernetesConfig deletion) |
 | [metallb-chart-migration](metallb-chart-migration.md) | pending (dev shipped; prd gated on UDM Pro BGP) | helm-tf-deploy-harness (done) | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
 | [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
-| [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending (refinement) | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), [microceph-prod](microceph-prod.md) |
+| [pre-drain-readiness-check](pre-drain-readiness-check.md) | fix landed; pending operator verify | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic) |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness (done), backup-collector (done) | (substrate for stateful releases on the deploy harness) |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 
