@@ -18,7 +18,7 @@ what the slice's output feeds.
 | [microceph-prod](microceph-prod.md) | placeholder | [pre-drain-readiness-check](pre-drain-readiness-check.md) | (extends the `microceph` role to the prod fleet — the last unmigrated big rock) |
 | [keycloak-tf](keycloak-tf.md) | placeholder | helm-tf-deploy-harness (done) | (Keycloak realm/client config via the harness `configuration.tf` stage) |
 | [runtime-secrets-sweep](runtime-secrets-sweep.md) | in progress (migration done; rotation + scrub remaining) | openbao + secrets (done) | (auto-rotation system, HelmCharts publishability, cross-repo secret scan, KubernetesConfig deletion) |
-| [metallb-chart-migration](metallb-chart-migration.md) | in progress (prd side) | — | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
+| [metallb-chart-migration](metallb-chart-migration.md) | pending (dev shipped; prd gated on UDM Pro BGP) | helm-tf-deploy-harness (done) | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
 | [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | pending (refinement) | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic), [microceph-prod](microceph-prod.md) |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness (done), backup-collector (done) | (substrate for stateful releases on the deploy harness) |
