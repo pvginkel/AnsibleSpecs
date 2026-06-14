@@ -53,7 +53,7 @@ Why three tiers, not two: Ansible at the resource layer is a thin wrapper around
 
 **Operator-runs-TF rule** (CLAUDE.md) governs this repo's `terraform/` (VMs, host wiring) — those applies happen at the operator's keystroke. The application monorepo's per-release TF runs through Jenkins alongside Helm; Jenkins is the orchestrator for the application deploy, just as it has been for `helm upgrade --install`.
 
-The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified bring-up steps (`.microk8s.yaml`, MetalLB IPAddressPools, registry mirror config, procedural install docs) in a third location that today belongs on the Ansible side. Phase 4 absorbs its contents into the `microk8s` role and inventory; after Phase 4 lands, KubernetesConfig is archived. The operator runs their own ingress controller and own container registry from HelmCharts — `core/ingress` and `core/registry` are not enabled.
+The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified bring-up steps (`.microk8s.yaml`, MetalLB IPAddressPools, registry mirror config, procedural install docs) in a third location that today belongs on the Ansible side. The microk8s build-out absorbed its contents into the `microk8s` role and inventory; KubernetesConfig is now **marked for deletion** (it holds secrets) — tracked in [`slices/runtime-secrets-sweep.md`](slices/runtime-secrets-sweep.md) §4. The operator runs their own ingress controller and own container registry from HelmCharts — `core/ingress` and `core/registry` are not enabled.
 
 ## Secrets — OpenBao
 
