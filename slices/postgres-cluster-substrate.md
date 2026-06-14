@@ -161,26 +161,39 @@ The module creates the `homelab_zfs_dataset` (with `prevent_destroy`) and a
 StorageClass is `WaitForFirstConsumer` so each CNPG PVC binds to the PV on the
 node its pod scheduled to.
 
-### ZFS tuning for Postgres (not optional)
+### ZFS + Postgres tuning (must set, may need provider/module work)
 
 ZFS + Postgres is a well-trodden combination, but the defaults are wrong for a
-database and must be set on the data dataset:
+database. These must be set; the work to set them is split between the ZFS
+dataset (TF provider) and Postgres itself (CNPG):
 
-- **`recordsize=8K`** (or 16K) — ZFS defaults to 128K; Postgres reads/writes 8K
-  pages. A 128K record turns every 8K page write into a 128K read-modify-write.
-  This is the single most important knob. WAL is sequential and can keep a larger
-  recordsize, but the simplest correct setup is one dataset at 8K for `pgdata`.
+**On the ZFS dataset — supported by `homelab_zfs_dataset` today:**
+
+- **`recordsize=8K`** (or 16K) — the single most important knob. ZFS defaults to
+  128K; Postgres does 8K page I/O, so a 128K record turns every 8K write into a
+  128K read-modify-write. The simplest correct setup is one dataset at 8K for
+  `pgdata`.
 - **`compression=lz4`** — effectively free, and Postgres data compresses well.
-- **`full_page_writes=off`** in the CNPG `Cluster` `postgresql.parameters` —
-  safe *because* ZFS is copy-on-write (no torn pages), and it cuts WAL volume
-  substantially. This is the ZFS-specific Postgres win.
+
+  Both `recordsize` and `compression` are first-class inputs on the
+  `homelab_zfs_dataset` resource. **The gap is plumbing:** the `static-zfs-pv`
+  module does **not** currently expose `recordsize` (it passes only `quota`). So
+  we must either **extend `static-zfs-pv`** with a `recordsize` (and
+  `compression`) passthrough, or drop to a raw `homelab_zfs_dataset` +
+  hand-written PV for the Postgres datasets. Settle this when authoring the
+  `databases` release. If any needed property turns out to be missing from the
+  provider resource itself, **extend the TF provider** to add it.
+
+**On Postgres — CNPG `Cluster` `postgresql.parameters`:**
+
+- **`full_page_writes=off`** — *not a ZFS setting.* It's a Postgres parameter,
+  set in the CNPG `Cluster` spec, and is the ZFS-specific win: safe because ZFS
+  copy-on-write means no torn pages, and it cuts WAL volume substantially.
+  **Verify before flipping** — confirm against the running Postgres major version
+  + CNPG that ZFS atomic-write guarantees hold for our `recordsize`/page size
+  before turning it off; default-on is the safe fallback if unsure.
 - Keep `shared_buffers` modest and rely on ZFS ARC; at this footprint
   ARC/shared_buffers double-caching is irrelevant.
-
-**Impl note:** `static-zfs-pv` does not currently expose `recordsize` (the
-underlying `homelab_zfs_dataset` resource does). Either add a `recordsize`
-passthrough to the module, or set it via the dataset's `properties` map — settle
-this when authoring the `databases` release.
 
 ## CNPG cluster shape
 
@@ -341,7 +354,10 @@ one commit each.
 3. (`/work/HelmCharts`) `cloudnative-pg` operator chart (wrapper around upstream).
 4. (`/work/HelmCharts`) `databases` chart: `Cluster`, `Pooler`, the three
    `static-zfs-pv` replica PVs, backup CronJob, `terraform_admin` bootstrap +
-   provider `zfs_pools` entries.
+   provider `zfs_pools` entries. **Prerequisite:** a `recordsize` (+
+   `compression`) passthrough on `static-zfs-pv` (own commit), or a raw
+   `homelab_zfs_dataset` + hand-written PV for these datasets; extend the
+   `pvginkel/homelab` provider only if a needed property is missing there.
 5. (`/work/HelmCharts`) Migrate `electronics-inventory` (pilot). Single commit.
 6. (`/work/HelmCharts`) Per-chart migration commits for remaining DB-bearing
    charts. Mechanical, one each.
