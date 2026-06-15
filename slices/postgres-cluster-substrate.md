@@ -59,6 +59,84 @@ throwaway databases on the shared substrate was considered and **rejected** —
 see "Integration testing" below. The substrate is for **persistent application
 databases only**.
 
+## Status — substrate DONE on both clusters; per-app prd cutovers remain (2026-06-15)
+
+The substrate is **built, deployed, and verified on dev and prd**, and the prd
+HA drills passed. Branch: HelmCharts **`postgres-cluster-substrate`** (not yet
+merged). Full working detail (commands, gotchas, per-chart notes) is in the
+transient handoff doc `HelmCharts/POSTGRES-SUBSTRATE-HANDOFF.md` — delete it
+when the branch merges.
+
+**Done & verified:**
+- **cloudnative-pg operator + `postgres-pas` Cluster** on **both** clusters.
+  Dev = 1 instance (validation bed). **Prd = 3 instances, healthy 3/3, one per
+  node** (srvk8s1/2/3), sync quorum (`ANY 1`), pooler 2/2, managed roles
+  reconciled, ESO secrets synced.
+- **Prd hardware:** 40G `local-lvm scsi2` on srvk8s2/3 (TF, hot-added no reboot)
+  → `zpool3`/`zpool4` (zfs role) + `homelab.local/storage` labels; iac-provisioner
+  running on all three nodes.
+- **Prd HA drills PASSED:** failover (primary pod deleted → standby promoted
+  ~6s, `-rw` follows, writes resume, heals 3/3); rolling update (replicas cycled
+  one-at-a-time, 71/71 writes ok); strict-sync write-block (commit 41 ms →
+  3775 ms with both standbys down → blocks on sync ack, no async fallback).
+- **Dev DB-chart migrations done:** electronics-inventory (pilot) + iot,
+  design-assistant, keycloak, guacamole — each on its own `<ns>_<short>` DB,
+  app green, read/write through the pooler. open-webui/terminus/librechat are
+  **disabled** (abandoned), not migrated.
+
+**Implementation deviations that SUPERSEDE the design text below — trust these:**
+- **Namespace `postgres-pas-prd`** (repo's `<chart>-<stage>` rule), not bare
+  `postgres-pas`. Pooler is **`postgres-pooler-rw`** (the slice's `postgres-rw`
+  collides with CNPG's generated `<cluster>-rw` Service); apps use
+  `postgres-pooler-rw.postgres-pas-prd.svc:5432`.
+- **ICU locale provider** (`localeProvider: icu`, `icuLocale: und`, `encoding:
+  UTF8`) as a chart default — design-assistant requires an ICU collation; every
+  TF-created DB inherits it. initdb is bootstrap-only (changing it = rebuild;
+  dev was rebuilt, prd got ICU free at first bootstrap).
+- **ZFS tuning:** `recordsize=16K` (not 8K), quota **dev 5G / prd 10G** (not 35G),
+  PV/`storageSize` match the quota. Dataset name = the namespace
+  (`postgres-pas-prd`), one per pool.
+- **Substrate infra TF lives in `_shared/`** (`configs/<cluster>/postgres-pas/
+  _shared/infrastructure.tf`), not the per-stage `prd/` dir. cloudnative-pg also
+  has a `_shared/infrastructure.tf` (namespace module). dev/prd stay separate
+  per-cluster files (1 vs 3 datasets).
+- **Host-side TF reaches prd via a `tfAccessService` LoadBalancer** on the
+  primary, addressed by `dns.webathome.org/hostname: postgres-pas.home` (MetalLB
+  auto-assigns the IP — no pin; sslmode=require). dev pins `10.1.2.40` (its
+  clusters.yaml hardcodes it). `_providers/clusters.yaml` carries
+  `postgres_admin_host` + `zpool3/zpool4`; `_providers/providers.tf` has the
+  `cyrilgdn/postgresql` + `random` providers (password via setup-env→OpenBao).
+- **Two managed roles:** `terraform_admin` (CREATEDB/CREATEROLE) and
+  `pgadmin_admin` (no privs; gets per-DB access via membership grants the app TF
+  adds). Passwords are ESO leaves `eso/<env>/postgres-pas/{terraform-admin,
+  pgadmin-admin}` (username+password each).
+- **DB/role naming `<namespace>_<short>`** (underscores), e.g.
+  `electronics_inventory_prd_db`. Per-app Secret holds **username/password/
+  database only** + a literal `DB_HOST` chart value (architecture-generator-safe),
+  not a full DSN.
+- **DB setup runs as an initContainer** (substrate is always-on), not a sidecar
+  Job. **guacamole** uses the purpose-built `registry:5000/guacamole-init` image
+  (fresh-init + incremental upgrades + `guacamole_schema_version` tracker).
+- `enablePodMonitor: false` on both clusters (neither prometheus ships the CRD).
+- Gotcha: `cnpg.io/restartedAt` does **not** trigger a rolling restart in CNPG
+  1.29 (no plugin installed) — cycle pods or install the cnpg kubectl plugin.
+
+**Remaining (next conversation = task D + tail):**
+1. **Per-app prd cutovers** — iot, design-assistant, keycloak, guacamole,
+   electronics-inventory. Staged (TF-before-helm deadlocks otherwise): `pg_dump
+   -F c` the live DB → `deploy stop` → delete old PVC → `deploy` (TF destroys old
+   storage + mints the substrate DB; helm points the app at the pooler) →
+   `pg_restore` → verify read/write + the **failover-retry acceptance gate**.
+   **Walk live, not unattended.**
+2. **Deploy pgAdmin on prd** (chart done; prd values already point at the
+   `eso/prd/postgres-pas/pgadmin-admin` leaf) — do it with the cutover.
+3. **Backups** — build on prd (no backup-server on dev): one
+   `homelab_backup_credential` scoped `postgres-pas`, a daily CronJob `pg_dump`s
+   each DB and POSTs raw to the backup-server (server does the age-encrypt).
+4. **Architecture annotations** — run the `update-architecture-generated` agent
+   for cloudnative-pg + postgres-pas (currently unannotated) and the migrated
+   charts (db container removed, substrate dependency added).
+
 ## Why ZFS, not new disks
 
 The homelab's *entire* Postgres footprint is ~0.5 GB across all databases
