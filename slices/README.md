@@ -22,6 +22,7 @@ what the slice's output feeds.
 | [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | fix landed; pending operator verify | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic) |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | pending | helm-tf-deploy-harness (done), backup-collector (done) | (substrate for stateful releases on the deploy harness) |
+| [destroy-release-pipeline](destroy-release-pipeline.md) | placeholder | helm-tf-deploy-harness (done) | (CI-driven TF teardown gated by `disabled`+`destroyed`; teardown path for [postgres-cluster-substrate](postgres-cluster-substrate.md) TF-managed DBs) |
 | [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
 | [openbao-backup-activation](openbao-backup-activation.md) | pending (pipeline built; never commissioned) | [backup-collector](completed/backup-collector.md) (done), [openbao-static-seal](completed/openbao-static-seal.md) (done) | (gets daily OpenBao backups actually landing in cloud storage; unblocks the Phase 2 recovery drill, card #14) |
 
