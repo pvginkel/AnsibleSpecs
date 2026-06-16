@@ -46,31 +46,44 @@ The Ansible side deliberately avoids the runtime-unpin approach
 `terraform/{prd,scratch}`. A filesystem mirror of one version can't give
 that and stay current. A real network registry can.
 
-## Leading approach — network mirror protocol
+## Approach — network mirror served from a baked nginx image
 
-Terraform offers two ways to privately host a provider. The lighter one
-fits best:
+**Decided:** the **Provider Network Mirror protocol**, served as static
+files from an nginx container that bakes the registry tree in. (The
+heavier **Provider Registry protocol** — source address pointed at our
+host, service discovery, mandatory GPG-signed `SHA256SUMS` — was rejected:
+it forces a source-address change across both repos + every module's
+`required_providers` and adds GPG key management, for no homelab benefit
+that TLS + the committed-lock `h1:` hashes don't already give.)
 
-- **Provider Network Mirror protocol** (recommended). Configured via
-  `provider_installation { network_mirror { url = "https://…/" } }` in
-  the CLI config. Keeps the source address `registry.terraform.io/
-  pvginkel/homelab` unchanged, so **no `required_providers` source edits
-  and no lock-address churn**. Serves plain static JSON + zipped binaries
-  (`.../pvginkel/homelab/index.json`, `<version>.json`, the `_<os>_<arch>`
-  zips). **No GPG signing required.** It is the network-served twin of
-  the `filesystem_mirror` we already use — the minimal honest step.
-- **Provider Registry protocol** (heavier alternative). Used when the
-  source address points at our host (`registry.home/pvginkel/homelab`).
-  Adds service discovery (`.well-known/terraform.json`) and **mandatory
-  GPG-signed `SHA256SUMS`**, and forces a source-address change across
-  both repos and every module's `required_providers`. More machinery for
-  no homelab benefit. Capture as the fallback if a network mirror proves
-  insufficient.
+The mirror keeps the source address `registry.terraform.io/pvginkel/homelab`
+unchanged (no `required_providers` edits, no lock-address churn) and is
+selected purely by a `provider_installation { network_mirror }` block in
+each consumer's CLI config. It serves plain static files —
+`.../pvginkel/homelab/index.json`, `<version>.json`, and the
+`_<os>_<arch>.zip`s — i.e. the network-served twin of the
+`filesystem_mirror` we bake today, but multi-version.
 
-Either way the artifact is **static files**, so the in-cluster service is
-trivial: an nginx (or similar) release serving a directory backed by a
-PVC or Ceph S3 (RGW), at a stable internal-TLS hostname (step-ca, e.g.
-`tfmirror.home`). It is a HelmCharts release like any other.
+**Delivery shape (operator's design): a dedicated git repo → nginx
+image → HelmCharts release.**
+
+1. The provider build appends the new version's static files
+   (`index.json` entry, `<version>.json`, the zip) to a **new dedicated
+   registry repo** and pushes. Generation can lean on
+   `terraform providers mirror`, which emits exactly this layout + hashes.
+2. That push triggers the registry repo's pipeline, which **builds an
+   nginx container with the files baked in** and pushes the image.
+3. HelmCharts deploys it on image-digest change, at a stable internal-TLS
+   hostname (step-ca, e.g. `tfmirror.home`), like any other release.
+
+This reuses the existing "push → build container → HelmCharts deploys"
+pattern; the served bytes are immutable and git-audited; the **only**
+writer is the pipeline (via git) — no upload endpoint, no S3 PUT creds, no
+PVC. The cross-repo push survives but is now **benign**: it lands in a
+dedicated repo as purely **additive** content (a new version never breaks
+an in-flight consumer, whose lock still points at a version that stays
+present), and it triggers only the registry image build — never a deploy
+that races it, which was the original P1 failure.
 
 ## Requirements
 
@@ -78,10 +91,22 @@ PVC or Ceph S3 (RGW), at a stable internal-TLS hostname (step-ca, e.g.
   stable homelab hostname; cert via the existing step-ca path so
   `terraform` (which already trusts the homelab root in the `iac` image
   and on managed hosts) validates it with no extra config.
-- **Publish on every provider build.** The provider build pipeline
-  uploads the new `<series>.<build>` version (zipped per platform + the
-  mirror index JSON) to the mirror store. This **replaces** both the
-  Ansible lock-push stage and the `copyArtifacts`-into-the-iac-image bake.
+- **Publish on every provider build.** The provider build appends the
+  new `<series>.<build>` version (zipped per platform + the mirror index
+  JSON) to the registry repo and pushes; the registry pipeline rebuilds
+  the nginx image. This **replaces** both the Ansible lock-push stage and
+  the `copyArtifacts`-into-the-iac-image bake.
+- **No storage dependency for the registry release itself.** Bake the
+  static files into the nginx image (no PVC, no S3), so the registry's
+  own HelmCharts release carries **no `homelab`-provider TF surface** and
+  can deploy even when the provider isn't yet resolvable — this is what
+  makes the bootstrap below tractable. (Verify the deploy harness can
+  `init` a release with an empty `infrastructure.tf` without the shared
+  `_providers` forcing a homelab resolve.)
+- **Retention/pruning.** A ~24 MB binary per build, kept in git *and* the
+  image, grows unbounded. Keep the last N versions (the lock only needs
+  versions something still pins); prune older entries from `index.json`
+  and the repo.
 - **Normal lock discipline restored.** `versions.tf` may carry a real
   `version` constraint; `.terraform.lock.hcl` records real hashes for the
   versions the mirror serves; `terraform init -upgrade` moves versions
@@ -100,9 +125,12 @@ PVC or Ceph S3 (RGW), at a stable internal-TLS hostname (step-ca, e.g.
 ## Bootstrap / cold-start (the chicken-and-egg)
 
 The mirror runs **inside** the cluster that the homelab provider helps
-build, so a cold start or DR can't reach it. Keep the current mechanism,
-demoted to an explicit **break-glass bootstrap** — "just a bootstrap
-solution", per the operator:
+build, so a cold start or DR can't reach it. Because the registry release
+carries no homelab-provider surface (above), the egg can hatch:
+bootstrap the deploy harness far enough to stand up the registry, after
+which everything else resolves normally. Keep the current mechanism for
+that first hop, demoted to an explicit **break-glass bootstrap** — "just
+a bootstrap solution", per the operator:
 
 1. Build the provider binary **locally** (the existing
    `HomelabTerraformProvider` build, run by hand on the workstation).
@@ -132,18 +160,22 @@ is a deliberate config swap, not an always-on fallback.
 
 ## Open questions (defer to detailed design)
 
-- **Network mirror vs. full registry** — confirm the network mirror
-  protocol covers every consumer (CI, operator raw plan, break-glass). If
-  a real source-addressed registry is wanted later, the GPG signing key
-  lives in OpenBao and the public key ships in the registry metadata.
-- **Static store** — PVC-backed nginx vs. Ceph S3 (RGW) static hosting;
-  reuse of an existing chart vs. a small dedicated one.
-- **Publish mechanism** — does the provider build push files directly to
-  the store (S3 PUT / `kubectl cp` / an upload endpoint), or go through
-  the HelmCharts deploy harness?
-- **Pruning** — how many historical versions the mirror retains, and
-  whether old `<series>.<build>`s are garbage-collected (today the
-  filesystem mirror keeps exactly one).
+- **Registry-release independence** — confirm the deploy harness can
+  `init`+apply a release whose `infrastructure.tf` is empty without the
+  shared `_providers` forcing a homelab resolve. This is the linchpin of
+  the bootstrap story; if it doesn't hold, the registry release must be
+  carved out of the normal harness flow.
+- **Registry file generation** — provider build assembles the
+  `index.json`/`<version>.json`/zip layout (via `terraform providers
+  mirror` or a small script) and pushes to the registry repo, vs. the
+  registry repo's pipeline generating the layout from a dropped binary.
+- **Retention policy** — exact N of historical versions kept in the repo
+  + image, and how the prune is driven (today the filesystem mirror keeps
+  exactly one).
+- **Operator CLI config** — the network_mirror block must reach every
+  consumer: the `iac` image `terraform.rc`, the operator's
+  `~/.terraformrc`, and any future raw-plan host. Decide whether the
+  workstation block is managed (e.g. by the baseline/dev role) or manual.
 - **bpg/proxmox and hashicorp/tls** stay on the public registry
   (`direct`); confirm the `provider_installation` include/exclude split
   is clean.
