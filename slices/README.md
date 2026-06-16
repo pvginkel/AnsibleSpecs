@@ -15,6 +15,7 @@ what the slice's output feeds.
 
 | Slice | Status | Depends on | Consumed by |
 |---|---|---|---|
+| [unattended-dev-controller](unattended-dev-controller.md) | design (concept agreed, MVP scoped; two-service API+bot, MCP descoped) | [zfs-dataset-provider](completed/zfs-dataset-provider/plan.md) (done); helm-tf-deploy-harness (done, for `static-cephfs-pv`); openbao + secrets (done); MetalLB + dnsmasq `.home` DNS (for port exposure) | (remote dev-environment controller on K8s — headless controller API + Telegram-bot adapter, Claude/code-tunnel/GitHub modeled as capabilities, controller-owned profiles/presets/secret-catalog/whitelist + repo-tracked config, native-sidecar data services, LB-IP/`.home` port exposure with chat links, two-tier lifecycle with grace/shutdown/delete) |
 | [microceph-prod](microceph-prod.md) | placeholder | [pre-drain-readiness-check](pre-drain-readiness-check.md) | (extends the `microceph` role to the prod fleet — the last unmigrated big rock) |
 | [keycloak-tf](keycloak-tf.md) | placeholder | helm-tf-deploy-harness (done) | (Keycloak realm/client config via the harness `configuration.tf` stage) |
 | [oidc-app-rollout](oidc-app-rollout.md) | pending | helm-tf-deploy-harness (done); soft-related keycloak-tf | (Keycloak OIDC login for Grafana/pgAdmin chart-side; Headlamp gated on apiserver OIDC, Jenkins in-app via oic-auth) |
