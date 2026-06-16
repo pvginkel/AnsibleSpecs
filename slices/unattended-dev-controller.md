@@ -31,7 +31,11 @@ Clean separation of concerns, so adding control surfaces later is cheap:
 1. **Controller API** (headless) — the brain. Owns env state and all k8s
    orchestration: provision/teardown pods, storage subfolders, services,
    capabilities, secret materialization, LB/DNS/ports, and the lifecycle
-   loop (idle detection, grace, reaping). Scoped k8s RBAC (namespaced
+   loop (idle detection, grace, reaping). It drives pods through their
+   **spec, env, and lifecycle hooks — deliberately not `kubectl exec`** —
+   so RBAC stays create/delete/get on pods + secrets with **no
+   `pods/exec`** (which would be code-exec in any reachable pod); exec is
+   reserved for ad-hoc operator actions only. Scoped k8s RBAC (namespaced
    Role/RoleBinding/SA, per the `dnsmasq` DNS-API precedent in
    HelmCharts). Has OpenBao access. **Exposes every feature as an HTTP
    API.** Push notifications leave via **callback URLs configured on the
@@ -40,11 +44,17 @@ Clean separation of concerns, so adding control surfaces later is cheap:
    action, and exposes a callback endpoint the controller POSTs lifecycle
    events to; it renders messages + inline buttons, and button presses
    call back into the API. All Telegram specifics live here.
-3. **Worker agent** (in the worker image) — the in-pod entrypoint the
-   controller drives: clones repos, applies capabilities, launches tmux,
-   runs capability shutdown hooks (e.g. the Claude history sync), and
-   reports activity. Ships inside the image rather than as a standing
-   service, but the controller↔worker contract is a real boundary.
+3. **Worker agent** (in the worker image) — deliberately **thin**: an
+   entrypoint + a `preStop` hook + a small listener for on-request
+   actions (a runner, not a bespoke daemon). It carries almost **no
+   feature logic of its own** — it's a **generic capability runner**:
+   each capability (clone, `claude-code`, `code-tunnel`, `github`, …)
+   supplies the in-pod steps and hooks the agent executes, so the worker
+   stays small even as capabilities grow. Being in-pod (rather than
+   exec-driven) is what makes the `preStop` hook fire on **involuntary**
+   termination too, so the `claude/` → CephFS sync survives evictions.
+   Ships in the image, but the controller↔worker contract is a real
+   boundary.
 
 A future **MCP adapter** is a *sibling of the bot* — another API client —
 which is exactly why the API/bot split is worth doing now. The MCP control
@@ -280,7 +290,8 @@ service presets (OpenSearch/MinIO) beyond the MVP proof; multi-node spread.
   history sink + profiles / service presets / secret catalog / whitelist
   config.
 - **DockerImages**: the worker image (extends `modern-app-dev`) **+ the
-  in-pod worker agent**.
+  thin in-pod worker agent** (entrypoint + `preStop` + listener;
+  capabilities supply the logic).
 - **Each managed project repo**: a small known-location dev-env config
   file.
 
