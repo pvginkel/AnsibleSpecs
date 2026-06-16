@@ -30,8 +30,11 @@ Clean separation of concerns, so adding control surfaces later is cheap:
 
 1. **Controller API** (headless) — the brain. Owns env state and all k8s
    orchestration: provision/teardown pods, storage subfolders, services,
-   capabilities, secret materialization, LB/DNS/ports, and the lifecycle
-   loop (idle detection, grace, reaping). It drives pods through their
+   capabilities, secret materialization, LB/DNS/ports, and lifecycle
+   (manual stop/delete in the MVP — no auto-reaping; see Lifecycle &
+   capacity) plus an **admission gate**. Env state lives in **k8s objects
+   labelled with `env-id`** — those are the source of truth, no separate
+   database. It drives pods through their
    **spec, env, and lifecycle hooks — deliberately not `kubectl exec`** —
    so RBAC stays create/delete/get on pods + secrets with **no
    `pods/exec`** (which would be code-exec in any reachable pod); exec is
@@ -44,23 +47,24 @@ Clean separation of concerns, so adding control surfaces later is cheap:
    action, and exposes a callback endpoint the controller POSTs lifecycle
    events to; it renders messages + inline buttons, and button presses
    call back into the API. All Telegram specifics live here.
-3. **Worker agent** (in the worker image) — deliberately **thin**: an
-   entrypoint + a `preStop` hook + a small listener for on-request
-   actions (a runner, not a bespoke daemon). It carries almost **no
-   feature logic of its own** — it's a **generic capability runner**:
-   each capability (clone, `claude-code`, `code-tunnel`, `github`, …)
-   supplies the in-pod steps and hooks the agent executes, so the worker
-   stays small even as capabilities grow. Being in-pod (rather than
-   exec-driven) is what makes the `preStop` hook fire on **involuntary**
-   termination too, so the `claude/` → CephFS sync survives evictions.
-   Ships in the image, but the controller↔worker contract is a real
-   boundary.
+3. **Worker agent** (in the worker image, in each env pod) — runs the
+   in-pod side of capabilities: applies setup, hosts on-request actions,
+   and owns the `preStop` hooks (the `claude-code` `claude/` → CephFS
+   sync). Being in-pod is deliberate — the `preStop` fires on
+   **involuntary** termination too, so the sync survives evictions, and
+   the controller needs no `pods/exec`. **Its shape is open**: a *thin
+   runner* (logic pushed from the controller; the worker just executes)
+   vs a *smart worker* exposing per-capability HTTP endpoints
+   (`api/claude/…`, `api/github/…`) the controller calls. Either way it
+   avoids exec. The **capability interface and this controller↔worker
+   boundary are a primary spec deliverable** (see Open questions).
 
 A future **MCP adapter** is a *sibling of the bot* — another API client —
 which is exactly why the API/bot split is worth doing now. The MCP control
 plane is **descoped** from the MVP; this split is the seam that keeps
 re-adding it cheap. Two services is the right count; the only other
-genuine seam is the worker agent, and it lives in the image.
+genuine seam is the worker agent (in the image / env pod), whose
+thin-vs-smart shape is still open (above).
 
 ## Control surface — bot over the API
 
@@ -68,15 +72,12 @@ genuine seam is the worker agent, and it lives in the image.
   whitelisted project, list, stop the pod, start/resume, start the editor
   tunnel (returns the link), delete the env — each translated to a
   controller API call. Exact command set TBD.
-- **Push via callbacks**: the controller POSTs lifecycle events to its
-  configured callback URL(s); the bot turns them into messages with
-  inline buttons:
-  - Idle TTL reached → "Env X shuts down in 15 min" + **Cancel** →
-    extends the timeout by another full TTL (API call).
-  - On shutdown → **edit that message in place** → "Env X shut down" +
-    **Delete** → removes the env, storage tier (API call).
-  - Editing one message keeps the thread clean: warning → shutdown →
-    tombstone.
+- **Push via callbacks**: the controller POSTs lifecycle events (env
+  ready with links, create **blocked** by the admission gate, stop /
+  delete done) to its configured callback URL(s); the bot renders them,
+  with inline buttons where useful (e.g. a Delete button on a stopped
+  env). The automatic-idle grace/Cancel notification flow is deferred
+  (see Lifecycle & capacity).
 - On env creation the bot **dumps the exposed-port links** (see below).
 
 ## Configuration model
@@ -117,8 +118,9 @@ is just a capability. Initial set:
 - **`claude-code`** — installs/launches Claude in tmux with
   `--dangerously-skip-permissions`. Owns the rendered preamble
   (`~/.claude/CLAUDE.md`), the `claude/` storage subfolder, the CephFS
-  history sync on shutdown, `--resume` on restart, and the idle signal
-  (session-jsonl mtime).
+  history sync on shutdown, and `--resume` on restart. (If idle detection
+  is ever added, this capability is also the natural source of an activity
+  signal — session-jsonl mtime — but that's deferred.)
 - **`code-tunnel`** — the VSCode remote-tunnel editor attach; started on
   request, returns the link. Separate from application ports.
 - **`github`** (`none | ro | rw`) — token from OpenBao into the pod's git
@@ -184,8 +186,10 @@ They run as **native sidecars in the worker pod** (init-containers with
 lifecycle, and native ordering so a service is ready before the workload
 and shuts down cleanly *after* the `preStop` hooks. Presets **tune
 services for dev use** — small datasets, dev/integration testing only — to
-keep the per-pod footprint low; LRU pod teardown + easy restart is the
-answer to standing cost. Every env runs its **own** throwaway sidecar; the
+keep the per-pod footprint low; memory limits + the admission gate bound
+standing cost, and the operator reclaims memory by manually `/stop`-ping
+an env (easy `--resume` restart). Every env runs its **own** throwaway
+sidecar; the
 shared CNPG Postgres substrate
 ([postgres-cluster-substrate](postgres-cluster-substrate.md)) is
 deliberately **not** used for dev/CI databases. If OpenSearch proves
@@ -206,6 +210,11 @@ which drives the rendered URL scheme. On env creation the bot **dumps the
 links** built from the exposed ports, e.g.
 `http://design-assistant-a3efb1.home:5000` (`https` → `https://…`;
 `other` → bare `host:port`). Each env consumes one LB IP from the pool.
+
+The Service is **env-tier**: created at env creation and kept across pod
+`/stop`+`/start` so the `.home` URL is stable; it (and its LB IP) are
+released only on `/delete`. An existing env therefore holds one LB IP for
+its lifetime, even while stopped.
 
 Reuses the cluster's MetalLB LoadBalancer and the annotation-driven
 `.home` DNS (dnsmasq DNS API / DNS-reservation provider). The
@@ -230,31 +239,40 @@ fine-tune later; the durable content:
 - Its capability/credential scope, including the **GitHub level**
   (`none`/`ro`/`rw`) and what that permits.
 
-## Lifecycle — two tiers
+## Lifecycle & capacity
 
-Pod lifecycle and storage lifecycle are deliberately separate; the
-controller owns the loop.
+**No automatic cleanup in the MVP** — lifecycle is manual, in two
+separable tiers:
 
-- **Pod (short-lived)**: idle is inferred from the `claude-code`
-  capability's signal — the mtime of the session jsonl under
-  `claude/projects/` — falling back to env-creation time before the first
-  connect, so a never-used env still ages out, against a TTL of **at
-  least an hour**. On reaching it the controller fires a callback and the
-  bot renders the **15-minute grace warning** (Cancel extends by a TTL).
-  If not cancelled: `preStop` hooks run (the `claude-code` `claude/` →
-  CephFS sync), the pod is torn down, and the controller fires the
-  shutdown callback (bot edits the message, adds Delete). Restart =
-  recreate the pod against the existing env folder (capabilities re-apply;
-  `claude-code` runs `--resume`). Controller-managed loop for the MVP; a
-  k8s-native scale-to-zero (e.g. KEDA) is a later option.
-- **Storage (long-lived)**: the env folder persists across pod teardowns;
-  removed on the Delete button / `/delete` (optionally a long TTL
-  backstop).
+- **Pod**: `/stop` tears the pod down (a `preStop` hook runs first — the
+  `claude-code` `claude/` → CephFS sync), keeping the env folder.
+  `/start` recreates the pod against the existing folder (capabilities
+  re-apply; `claude-code` runs `--resume`). The `preStop` sync also fires
+  on **involuntary** termination (eviction, node drain), so history isn't
+  lost — this is why it lives in-pod, not in the controller.
+- **Env**: `/delete` removes the whole env — pod, the env-tier Service
+  (LB IP + `.home` DNS), and the storage folder.
+
+Rather than reclaim memory by idling, the MVP **caps** it:
+
+- Every pod carries a **memory limit** (from the profile/config).
+- On a create/start request the controller runs an **admission gate**: if
+  Σ(memory limits of running envs) + the new one would exceed the node's
+  allocatable memory, the request is **blocked** (the bot reports why).
+  The operator frees capacity by `/stop`-ping or `/delete`-ing an env.
+
+Automatic idle teardown (TTL / LRU / grace warning) is **deferred** — the
+callback model already supports the grace/Cancel/Delete notification flow
+for when it's wanted, and a k8s-native scale-to-zero (KEDA) is an option.
+The idle *signal* itself is also unsettled (worker-reported activity, or
+the controller reading `claude/projects/` mtime off the share it mounts —
+or it may not be worth having).
 
 ## MVP cut
 
 - **Two services**: controller API (HTTP — lifecycle, k8s orchestration,
-  callbacks) + Telegram bot (commands + callback sink); namespaced RBAC.
+  callbacks; env state in k8s objects, no DB) + Telegram bot (commands +
+  callback sink); namespaced RBAC.
 - Controller config: profiles (incl. a "Claude dev" profile enabling
   `claude-code` + `code-tunnel`), the **Postgres** service preset, a
   secret catalog, project whitelist (the GitHub namespace).
@@ -264,22 +282,35 @@ controller owns the loop.
   `claude/` synced to CephFS on shutdown.
 - Capabilities: `claude-code`, `code-tunnel`, `github` (`none/ro/rw`),
   named secrets (e.g. `openai-api-key`) — all bao-backed.
-- **Port exposure**: LoadBalancer Service + webathome `.home` DNS + chat
-  links, with `http`/`https`/`other` port types.
-- Idle reaper with the 15-minute grace + Cancel (via callback/API).
+- **Port exposure**: env-tier LoadBalancer Service + webathome `.home`
+  DNS + chat links, with `http`/`https`/`other` port types.
+- **Manual lifecycle** (no auto-cleanup): `/stop` (pod down, history
+  synced, storage kept), `/start` (`--resume`), `/delete` (env + Service
+  + storage).
+- **Memory limits + admission gate**: per-pod limit; block create when
+  Σ(running-env limits) + new > node capacity.
 
 **Descoped**: the MCP adapter (the API/bot split keeps it cheap to add
-later). **Deferred**: dynamic per-env ZFS datasets via the iac-provisioner
-API (isolation/quotas/snapshots); k8s-native idle (KEDA); additional
-service presets (OpenSearch/MinIO) beyond the MVP proof; multi-node spread.
+later). **Deferred**: automatic idle cleanup (TTL/LRU/grace warning; a
+k8s-native scale-to-zero like KEDA); dynamic per-env ZFS datasets via the
+iac-provisioner API (isolation/quotas/snapshots); additional service
+presets (OpenSearch/MinIO) beyond the MVP proof; multi-node spread.
 
 ## Open questions
 
+- **Capability interface + controller/worker boundary** — the contract a
+  capability implements (subfolder, requested secrets, preamble
+  contribution, setup steps, lifecycle hooks) and *where its logic runs*:
+  thin runner vs smart worker exposing `api/<capability>/…`. Primary spec
+  deliverable.
 - Known-location config filename + schema; profile/preset schema; the
   controller API surface + callback contract.
 - Telegram `/command` set specifics.
-- Storage teardown: Delete-button/command only, or also a long TTL
-  backstop.
+- Memory-limit defaults + how node allocatable is measured for the
+  admission gate.
+
+Settled: env state = k8s objects labelled with `env-id` (no DB); Service
+is env-tier; lifecycle is manual (no auto-cleanup) in the MVP.
 
 ## Repos touched
 
@@ -290,8 +321,8 @@ service presets (OpenSearch/MinIO) beyond the MVP proof; multi-node spread.
   history sink + profiles / service presets / secret catalog / whitelist
   config.
 - **DockerImages**: the worker image (extends `modern-app-dev`) **+ the
-  thin in-pod worker agent** (entrypoint + `preStop` + listener;
-  capabilities supply the logic).
+  in-pod worker agent** (shape TBD — thin runner vs smart per-capability
+  API; see Architecture).
 - **Each managed project repo**: a small known-location dev-env config
   file.
 
