@@ -1,15 +1,22 @@
-# IaC pipeline restructure — provider/image ordering + IaCAgent merge
+# IaC pipeline restructure — iac-image rebuild scoping + IaCAgent merge
 
-**Status**: pending. Diagnosis done; migration steps drafted, not implemented.
+**Status**: pending. Diagnosis done; migration steps drafted, not
+implemented. **P1 (the provider bump race) has been handed off to
+[tf-provider-registry](tf-provider-registry.md)** — a private registry
+removes the lock-push and the single-version mirror entirely, which is a
+better fix than the job-sequencing this slice originally proposed. The
+two surviving pillars are the iac-image rebuild scoping (P2) and the
+IaCAgent→Ansible merge.
 
 ## What this slice is
 
 The IaC build/deploy pipelines grew organically across four repos
 (`Ansible`, `IaCAgent`, `HomelabTerraformProvider`, `HelmCharts`). A
-provider bump now reliably breaks the on-push deploy and floods the
-`iac` image build. This slice diagnoses why, fixes the pipeline
-sequencing, and folds the one repo whose split no longer earns its
-keep. It sits in the same "deliberate vs. organic layout" realm as
+provider bump reliably broke the on-push deploy (P1, now owned by
+[tf-provider-registry](tf-provider-registry.md)) and floods the `iac`
+image build (P2). This slice diagnoses both, fixes the rebuild flood,
+and folds the one repo whose split no longer earns its keep. It sits in
+the same "deliberate vs. organic layout" realm as
 [site-yml-layout](site-yml-layout.md), but scoped to **CI topology and
 repo boundaries**, not the playbook layout.
 
@@ -36,15 +43,15 @@ For `terraform` to resolve the provider, **(1) the lock and (2) the
 image mirror must agree**. They are updated by different jobs with no
 sequencing, which produces two failures:
 
-**P1 — the bump race (deploy fails).** Provider build mints `0.1.N` and
-pushes the lock-bump commit to Ansible. That single push fires
-`iac-on-push` (deploy) **and** `iac-image` (rebuild) *in parallel*.
-`iac-on-push` runs `terraform` inside the **current** `iac:latest`,
-whose mirror still has `0.1.(N-1)` while the lock now says `0.1.N` →
-"provider 0.1.N not available in the mirror" → deploy fails. The
-rebuilt image finishes afterward and carries `0.1.N`, but the deploy has
-already failed and nothing re-triggers it; it's picked up only on the
-next unrelated push.
+**P1 — the bump race (deploy fails). → moved to
+[tf-provider-registry](tf-provider-registry.md).** Provider build mints
+`0.1.N` and pushes the lock-bump commit to Ansible; that single push
+fires `iac-on-push` (deploy) **and** `iac-image` (rebuild) *in parallel*,
+and the deploy runs against the still-`0.1.(N-1)` mirror and fails. The
+root cause is the single-version filesystem mirror + cross-repo lock
+push; a private registry dissolves both, so the fix lives in that slice,
+not here. Retained as context because it explains the iac-image's
+provider-bake, which the registry slice removes.
 
 **P2 — the rebuild flood.** `iac-image` rebuilds on *every* Ansible
 push, but its real inputs change on a tiny fraction of them:
@@ -54,45 +61,30 @@ into the image, `ansible/roles/baseline/files/homelab-root.crt`,
 Everything else (roles, playbooks, host_vars, Terraform `.tf`) rebuilds
 the image for nothing.
 
-**Both are pipeline ordering/scoping problems, not repo-boundary
-problems.** Merging repos does not fix them; sequencing the jobs does.
-The repo merge below is a separate, smaller win.
+**Both were pipeline scoping/ordering problems, not repo-boundary
+problems** — merging repos doesn't fix either. P1's fix is now the
+registry slice; what remains here is scoping the rebuild (P2) and the
+repo merge.
 
-## The fix — sequence the chain, scope the rebuild
+## The fix — scope the rebuild
 
-Make the **provider build own a single ordered chain**, and **gate the
-image rebuild on its inputs**.
+**Re-scope `iac-image`'s trigger** (`Ansible/Jenkinsfile.iac-image`):
 
-1. **Provider build becomes the orchestrator**
-   (`HomelabTerraformProvider/Jenkinsfile`):
-   - build binary (as today)
-   - → `build job: 'iac-image', wait: true` — the image build
-     `copyArtifacts` **this upstream build's** binary (pin the
-     triggering build, not `latest`, so a concurrent in-flight provider
-     build can't slip a different binary in), bakes it, pushes
-     `iac:latest`.
-   - → `build job: 'DockerImages'` modern-app-dev with `wait: false` —
-     off the deploy critical path.
-   - → **only then** push the lock-bump commit to Ansible.
+- drop the "every Ansible push" trigger;
+- trigger only when image inputs changed — gate inside the pipeline with
+  the same `utils.hasChanges(...)` / `markStageSkippedForConditional`
+  pattern HelmCharts already uses (`HelmCharts/Jenkinsfile`, `changed()`),
+  watching `support/iac-image/**`, the root `pyproject.toml`/`poetry.lock`,
+  the baseline cert (`ansible/roles/baseline/files/homelab-root.crt`), and
+  the committed `known_hosts` (`ansible/files/known_hosts.d/homelab`).
+  Everything else → skip. P2 gone.
 
-   Because the lock lands *after* `iac:latest` already carries `0.1.N`,
-   the `iac-on-push` it triggers pulls a matching mirror. P1 gone.
-
-2. **Re-scope `iac-image`'s trigger** (`Ansible/Jenkinsfile.iac-image`):
-   - drop the "every Ansible push" trigger;
-   - trigger from (a) the provider build (above), and (b) Ansible pushes
-     **only when image inputs changed** — gate inside the pipeline with
-     the same `utils.hasChanges(...)` / `markStageSkippedForConditional`
-     pattern HelmCharts already uses (`HelmCharts/Jenkinsfile`,
-     `changed()`), watching `support/iac-image/**`, root
-     `pyproject.toml`/`poetry.lock`, the baseline cert, and the
-     committed `known_hosts`. P2 gone.
-
-3. **Belt-and-suspenders (optional).** Have `iac-on-push`'s plan stage
-   assert the locked provider version exists in the mirror and fail with
-   a clear message; and/or extend `bin/iac`'s existing baked-metadata
-   check (`iac-impl`, the `BAKED_LOCK` comparison) to compare
-   locked-vs-baked **provider** version, not just the poetry lock.
+Note the input set **shrinks** once [tf-provider-registry](tf-provider-registry.md)
+lands: the provider binary leaves the image entirely (no more
+`filesystem_mirror` bake, no `copyArtifacts` from the provider build), so
+a provider release no longer rebuilds the `iac` image at all. The two
+slices compose — do whichever is convenient first; this one is a
+standalone Jenkinsfile change with no infra footprint.
 
 ## Repo restructuring — 2 considered, 1 taken
 
@@ -122,34 +114,22 @@ shares the `iac` harness as a runtime. No merge case.
 
 ## Migration steps (bite-sized, reversible)
 
-The pipeline fix and the repo merge are independent; do the pipeline fix
-first — it stops the active pain.
+The two pillars are independent; do either first.
 
 1. **Scope `iac-image` to its inputs** (P2). Add the `hasChanges` gate;
    leave the push trigger but make the build a no-op when no image input
    changed. Verify an unrelated Ansible push skips the image build.
-2. **Sequence the provider chain** (P1). Reorder
-   `HomelabTerraformProvider/Jenkinsfile`: build → `iac-image`
-   (`wait:true`, copyArtifacts the triggering build) → modern-app-dev
-   (`wait:false`) → push lock bump. Verify a provider bump lands the
-   image *before* the lock commit, and the resulting `iac-on-push`
-   succeeds.
-3. **(Optional) Add the mirror-vs-lock assertion** to `iac-on-push`
-   and/or `bin/iac`.
-4. **Merge IaCAgent into Ansible.** Move the tree under the `iac_agent`
+2. **Merge IaCAgent into Ansible.** Move the tree under the `iac_agent`
    role's `files/` (or top-level `iac/`); repoint
    `iac_agent_local_checkout`; fix the README drift; update install/sync
    paths. Apply `iac_agent` once from the operator workstation to prove
    parity, then archive `pvginkel/IaCAgent`.
-5. **Update [decisions.md](../decisions.md)** if the provider-release
-   ordering or the IaCAgent location becomes doctrine, and nudge the
-   `update-architecture` agent (new repo boundary / removed repo).
+3. **Update [decisions.md](../decisions.md)** if the IaCAgent location
+   becomes doctrine, and nudge the `update-architecture` agent (removed
+   repo boundary).
 
 ## What this gives up
 
-- The orchestrated chain makes a provider release **slower end-to-end**
-  (image build now blocks the lock bump instead of racing it) — correct
-  trade: a slower-but-correct release beats a fast-but-failed one.
 - Folding IaCAgent in **couples the srviac host glue's history to the
   Ansible repo**. Acceptable: they are already one deployment unit and
   already share the Jenkinsfiles.
@@ -157,8 +137,5 @@ first — it stops the active pain.
 ## Out of scope
 
 - The `site*.yml` playbook layout — that's [site-yml-layout](site-yml-layout.md).
-- Whether the provider should be baked into the image at all vs.
-  fetched at runtime. Baking keeps the image self-contained and the
-  operator's `iac` working offline (the wrkdev parity requirement);
-  runtime-fetch was considered and rejected as more machinery for no
-  gain once ordering is fixed.
+- Provider version resolution (lock vs. mirror, raw `terraform plan`) —
+  owned by [tf-provider-registry](tf-provider-registry.md).
