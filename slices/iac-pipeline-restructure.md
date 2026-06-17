@@ -2,7 +2,7 @@
 
 **Status**: pending. Diagnosis done; migration steps drafted, not
 implemented. **P1 (the provider bump race) has been handed off to
-[tf-provider-registry](tf-provider-registry.md)** — a private registry
+[tf-provider-registry](completed/tf-provider-registry.md)** — a private registry
 removes the lock-push and the single-version mirror entirely, which is a
 better fix than the job-sequencing this slice originally proposed. The
 two surviving pillars are the iac-image rebuild scoping (P2) and the
@@ -13,7 +13,7 @@ IaCAgent→Ansible merge.
 The IaC build/deploy pipelines grew organically across four repos
 (`Ansible`, `IaCAgent`, `HomelabTerraformProvider`, `HelmCharts`). A
 provider bump reliably broke the on-push deploy (P1, now owned by
-[tf-provider-registry](tf-provider-registry.md)) and floods the `iac`
+[tf-provider-registry](completed/tf-provider-registry.md)) and floods the `iac`
 image build (P2). This slice diagnoses both, fixes the rebuild flood,
 and folds the one repo whose split no longer earns its keep. It sits in
 the same "deliberate vs. organic layout" realm as
@@ -44,7 +44,7 @@ image mirror must agree**. They are updated by different jobs with no
 sequencing, which produces two failures:
 
 **P1 — the bump race (deploy fails). → moved to
-[tf-provider-registry](tf-provider-registry.md).** Provider build mints
+[tf-provider-registry](completed/tf-provider-registry.md).** Provider build mints
 `0.1.N` and pushes the lock-bump commit to Ansible; that single push
 fires `iac-on-push` (deploy) **and** `iac-image` (rebuild) *in parallel*,
 and the deploy runs against the still-`0.1.(N-1)` mirror and fails. The
@@ -79,7 +79,7 @@ repo merge.
   the committed `known_hosts` (`ansible/files/known_hosts.d/homelab`).
   Everything else → skip. P2 gone.
 
-Note the input set **shrinks** once [tf-provider-registry](tf-provider-registry.md)
+Note the input set **shrinks** once [tf-provider-registry](completed/tf-provider-registry.md)
 lands: the provider binary leaves the image entirely (no more
 `filesystem_mirror` bake, no `copyArtifacts` from the provider build), so
 a provider release no longer rebuilds the `iac` image at all. The two
@@ -138,4 +138,4 @@ The two pillars are independent; do either first.
 
 - The `site*.yml` playbook layout — that's [site-yml-layout](site-yml-layout.md).
 - Provider version resolution (lock vs. mirror, raw `terraform plan`) —
-  owned by [tf-provider-registry](tf-provider-registry.md).
+  owned by [tf-provider-registry](completed/tf-provider-registry.md).

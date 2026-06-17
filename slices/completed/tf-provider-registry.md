@@ -1,8 +1,25 @@
 # Private Terraform provider registry for pvginkel/homelab
 
-**Status**: pending. Requirements + leading approach; not yet designed
-in detail. Supersedes the provider-version-resolution half of
-[iac-pipeline-restructure](iac-pipeline-restructure.md) (P1).
+> **STATUS: COMPLETED (2026-06-17).** Shipped end to end. `pvginkel/homelab`
+> is served from a private Provider Network Mirror: the
+> [TerraformRegistry](https://github.com/pvginkel/TerraformRegistry) repo
+> (nginx image baking a `dist/` mirror tree) → HelmCharts `tfmirror` release
+> at `tfmirror.home` (internal TLS via step-ca). The provider build publishes
+> each version (`scripts/registry-publish.sh` + a `Publish to provider
+> registry` Jenkins stage, prune-to-10). Consumers select it via a
+> `network_mirror` block in the `iac` image, `modern-app-dev`, and the
+> operator `~/.terraformrc`. The filesystem-mirror bake, the Ansible
+> lock-push stage, and HelmCharts' `_unpin_homelab_lock` are gone; HelmCharts
+> deploys with `init -upgrade`, the Ansible prd/scratch locks were re-locked
+> once. Verified: a bare `terraform init` installs the provider from the
+> mirror with a verified checksum. Cold start uses the break-glass
+> filesystem-mirror bootstrap (below). Superseded
+> [iac-pipeline-restructure](../iac-pipeline-restructure.md) P1.
+>
+> Gotcha worth keeping: `terraform providers mirror` / `providers lock`
+> ignore the CLI-config `network_mirror` — generation zips the binary and
+> hashes via `providers lock -fs-mirror`; re-locking needs an explicit
+> `-net-mirror=`.
 
 ## Goal
 
@@ -182,12 +199,12 @@ is a deliberate config swap, not an always-on fallback.
 
 ## Consumed by / relationship
 
-- **Supersedes** [iac-pipeline-restructure](iac-pipeline-restructure.md)
+- **Supersedes** [iac-pipeline-restructure](../iac-pipeline-restructure.md)
   P1 (provider→image→lock race): with a registry there is no lock-push
   and no single-version mirror to race. That slice keeps its other two
   pillars (iac-image rebuild scoping; IaCAgent→Ansible merge); this slice
   also shrinks the `iac` image's rebuild-input set by removing the
   provider bake.
 - Touches the same consumers as the deploy harness work
-  ([helm-tf-deploy-harness](completed/helm-tf-deploy-harness.md)) — the
+  ([helm-tf-deploy-harness](helm-tf-deploy-harness.md)) — the
   `_unpin_homelab_lock` removal is the HelmCharts-side cleanup.

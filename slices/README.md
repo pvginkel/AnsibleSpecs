@@ -22,8 +22,7 @@ what the slice's output feeds.
 | [runtime-secrets-sweep](runtime-secrets-sweep.md) | in progress (migration done; rotation + scrub remaining) | openbao + secrets (done) | (auto-rotation system, HelmCharts publishability, cross-repo secret scan, KubernetesConfig deletion) |
 | [metallb-chart-migration](metallb-chart-migration.md) | pending (dev shipped; prd gated on UDM Pro BGP) | helm-tf-deploy-harness (done) | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
 | [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
-| [tf-provider-registry](tf-provider-registry.md) | pending (requirements + leading approach) | helm-tf-deploy-harness (done); k8s cluster | (private network mirror/registry for `pvginkel/homelab` — restores normal lock + raw `terraform plan`; supersedes iac-pipeline-restructure P1) |
-| [iac-pipeline-restructure](iac-pipeline-restructure.md) | pending (P1 handed to tf-provider-registry; P2 + merge remain) | iac-agent (the pipelines it restructures) | (scopes the iac-image rebuild flood; merges IaCAgent into Ansible) |
+| [iac-pipeline-restructure](iac-pipeline-restructure.md) | pending (P1 done via tf-provider-registry; P2 + merge remain) | iac-agent (the pipelines it restructures) | (scopes the iac-image rebuild flood; merges IaCAgent into Ansible) |
 | [pre-drain-readiness-check](pre-drain-readiness-check.md) | fix landed; pending operator verify | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic) |
 | [postgres-cluster-substrate](postgres-cluster-substrate.md) | in progress — substrate live & HA-drilled on dev+prd, dev DB-chart migrations done; **remaining: per-app prd cutovers (task D), pgAdmin prd, backups, arch annotations** | helm-tf-deploy-harness (done), zfs-dataset-provider (done), backup-collector (done) | (shared CNPG Postgres for persistent app DBs — non-HA on dev, 3-instance sync on prd; per-app DB/role/Secret via TF) |
 | [destroy-release-pipeline](destroy-release-pipeline.md) | placeholder | helm-tf-deploy-harness (done) | (CI-driven TF teardown gated by `disabled`+`destroyed`; teardown path for [postgres-cluster-substrate](postgres-cluster-substrate.md) TF-managed DBs) |
@@ -54,6 +53,7 @@ what the slice's output feeds.
 | [helm-tf-deploy-harness-finalize](completed/helm-tf-deploy-harness-finalize.md) | — | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, Ceph/S3 cleanup; migration-software removal cancelled — tooling retained for a future bulk rename |
 | [tf-provider-resource-extensions](completed/tf-provider-resource-extensions.md) | plan 08 | — | `homelab_rbd_image` / `homelab_cephfs_subvolume` / `homelab_zfs_dataset` — all shipped; consumed by the static-PV modules + deploy harness |
 | [zfs-dataset-provider](completed/zfs-dataset-provider/plan.md) | — | tf-provider-resource-extensions (supersedes its ZFS mechanism) | `homelab_zfs_dataset` via the iac-provisioner node agent — shipped; prd `infrastructure.tf` consumes it |
+| [tf-provider-registry](completed/tf-provider-registry.md) | pending (req + approach) | helm-tf-deploy-harness (done); k8s cluster | private network mirror for `pvginkel/homelab` at `tfmirror.home` — restored normal lock + raw `terraform plan`; superseded iac-pipeline-restructure P1 — shipped |
 
 ## Deferred / Cancelled
 
