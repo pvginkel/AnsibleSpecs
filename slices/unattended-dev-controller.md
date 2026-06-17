@@ -177,6 +177,14 @@ Mechanism reuses the established ZFS path (`static-zfs-pv` module +
 [zfs-dataset-provider](completed/zfs-dataset-provider/plan.md)) and the
 `vms.tf` disk-add + `zfs` role pattern to provision the pool.
 
+**Node provisioned (done):** `srvk8s4` — a microk8s worker on `pve` carrying
+`zpool5`, joined worker-only (outside the dqlite quorum). At the operator's call it
+is **taint-dedicated** (`homelab.local/performance=high:NoSchedule`) rather than the
+originally-planned shared "not dedicated" node: only KubeCoder, the infra DaemonSets,
+and opt-in high-performance jobs run there; everything else stays on `srvk8s1`. The
+`microk8s` role gained worker-only-join + `k8s_node_taints` capabilities. Detail in
+KubeCoderSpecs `slices/ansible-node.md`.
+
 ## Services (data sidecars)
 
 Per-config toggles for data services (Postgres, OpenSearch, MinIO), drawn
@@ -314,8 +322,11 @@ is env-tier; lifecycle is manual (no auto-cleanup) in the MVP.
 
 ## Repos touched
 
-- **Ansible**: provision the dedicated node + its dev ZFS pool (disk in
-  `vms.tf` + `zfs_pools` host_var) — the established pattern.
+- **Ansible** (**done**): provisioned `srvk8s4` + `zpool5` (disk in `vms.tf` +
+  `zfs_pools` host_var). Worker-only, taint-dedicated
+  (`homelab.local/performance=high:NoSchedule`); added worker-only-join +
+  `k8s_node_taints` capabilities to the `microk8s` role. See KubeCoderSpecs
+  `slices/ansible-node.md`.
 - **HelmCharts**: controller chart — **two Deployments** (controller API
   + Telegram bot) + RBAC + the ZFS share that drives affinity + the CephFS
   history sink + profiles / service presets / secret catalog / whitelist
