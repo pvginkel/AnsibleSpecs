@@ -285,6 +285,16 @@ Labels are operator intent, not auto-derived from facts. The TF-side facts (`cpu
 
 No taints. Affinity is opt-in: workloads that need a capability declare `requiredDuringSchedulingIgnoredDuringExecution`; everything else schedules freely. The legacy `size=large/small` labels and the `size=large:PreferNoSchedule` taint are removed during Phase 4.
 
+### k8s clusters enforce RBAC
+
+**The apiservers run `--authorization-mode=RBAC,Node`, not microk8s's default `AlwaysAllow`.** Under `AlwaysAllow` every authenticated identity is fully authorized and any `Role`/`RoleBinding` objects are inert — a scoped ServiceAccount can do anything. Enforcement is the precondition that makes per-workload least-privilege (and KubeCoder's per-env exec scoping) real rather than latent.
+
+**Why `RBAC,Node` and why per-node.** `RBAC,Node` is exactly what the `rbac` core addon writes: RBAC for workloads plus the Node authorizer for kubelets (microk8s kubelet certs are in `system:nodes`, so node/pod status and volume mounts keep working — the control plane never loses access). `--authorization-mode` is a **per-node apiserver arg** (in each node's `args/kube-apiserver`), not cluster state in dqlite, so it is applied per-node by the `microk8s` role's `tasks/rbac.yml` — **not** through the primary-only addon list. Enabling it on the primary alone would leave the other control-plane nodes permissive and make enforcement depend on which apiserver the VIP routed a request to. Opt-in per cluster via `microk8s_enable_rbac`; the arg is re-asserted every converge (fail-closed toward enforcement) and the flip lands on the end-of-play `Restart microk8s kubelite` handler, so under `site-k8s.yml`'s `serial: 1` it rolls one node at a time with the VIP covering each gap.
+
+**The deploy/admin identity is unaffected.** The IaC Agent's kubeconfig and the operator's `microk8s config` both authenticate with the microk8s admin client cert (`O=system:masters`), which the apiserver hard-wires to bypass the authorizer — so Helm deploys and operator `kubectl` keep full access, and there is no lock-out path. Reversible: setting the arg back to `AlwaysAllow` (or `microk8s disable rbac`) restores the permissive mode with one more kubelite restart.
+
+**Rollout is dev-first.** `srvk8sdev` runs the same HelmCharts as prd, so a chart whose ServiceAccount relied on `AlwaysAllow` surfaces on the single-node dev cluster first (where the per-node consistency concern is also moot). prd follows once dev is clean and the prd workload/SA audit is done. Tracked on the Ansible Trello board (cards #60/#61).
+
 ### Dashboard tooling
 
 Today: microk8s's `dashboard` addon (the upstream `kubernetes/dashboard` project bundled with the snap). The operator depends on the web UI day-to-day; codified into `microk8s_addons` for prd and dev.
