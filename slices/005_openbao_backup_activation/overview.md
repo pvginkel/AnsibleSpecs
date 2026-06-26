@@ -1,5 +1,9 @@
 # Activate the OpenBao backup pipeline
 
+**Slice 005.** Subsumes Triage source cards #12 (backup pipeline build — done),
+#13 (single-node recovery drill), #14 (whole-cluster restore drill). Live status
+tracks on the Kanban `[005]` card.
+
 ## Goal
 
 Commission the already-built OpenBao backup pipeline so daily `.tgz`

@@ -1,0 +1,34 @@
+{
+  "criteria": [
+    {
+      "id": "MLB-01",
+      "area": "helmcharts",
+      "description": "A prd release configs/prd/metallb-system/prd/ exists mirroring the dev shape: release.yaml points at the upstream metallb/metallb chart (repo https://metallb.github.io/metallb) with post_rollout_manifests: [pools.yaml]; _shared/infrastructure.tf carries the namespace module."
+    },
+    {
+      "id": "MLB-02",
+      "area": "helmcharts",
+      "description": "values.yaml enables FRR mode (speaker.frr.enabled: true) and disables the frr-k8s subchart (frrk8s.enabled: false)."
+    },
+    {
+      "id": "MLB-03",
+      "area": "helmcharts",
+      "description": "pools.yaml in namespace metallb-system-prd defines the IPAddressPool with prd's ranges (10.2.1.1-10.2.1.199 + the v6 /96), a BGPAdvertisement (replacing dev's L2Advertisement), and one BGPPeer per UDM Pro session."
+    },
+    {
+      "id": "MLB-04",
+      "area": "ansible",
+      "description": "The microk8s addon is disabled on each prd node, and the addon-side Ansible config is removed: `metallb` out of microk8s_addons and microk8s_metallb_pool_addresses removed from inventories/prd/group_vars/k8s_prd.yml."
+    },
+    {
+      "id": "MLB-05",
+      "area": "helmcharts",
+      "description": "The release deploys via the harness; the rollout gate blocks on the controller Deployment before pools.yaml is applied; LoadBalancer IPs advertise over BGP and reach the UDM Pro."
+    },
+    {
+      "id": "MLB-06",
+      "area": "scope",
+      "description": "Out of scope (not verified here): the UDM Pro BGP enablement itself, the frr-k8s-vs-FRR-mode decision, and migrating dev back to the addon. Optional final cleanup commit removing the role's metallb addon code may follow once both clusters are off the addon."
+    }
+  ]
+}

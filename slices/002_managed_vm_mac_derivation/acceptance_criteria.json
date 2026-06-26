@@ -1,0 +1,29 @@
+{
+  "criteria": [
+    {
+      "id": "TF-01",
+      "area": "terraform",
+      "description": "The managed-vm module derives a MAC of the form 02:A7:F3:VV:VV:EE (fixed prefix 02:A7:F3, then vm_id as two big-endian bytes, then the NIC index) for any network_devices entry whose mac_address is null/unset."
+    },
+    {
+      "id": "TF-02",
+      "area": "terraform",
+      "description": "network_devices[*].mac_address is optional with a null default; when an explicit literal is supplied it is used verbatim (coalesce(literal, derived)), preserving the BC:24:11:... adoption MACs on srvceph1/2/3."
+    },
+    {
+      "id": "TF-03",
+      "area": "terraform",
+      "description": "The resolved MAC is consumed from a single local by both homelab_dns_reservation (NIC 0) and the bpg proxmox_virtual_environment_vm network_device block."
+    },
+    {
+      "id": "TF-04",
+      "area": "terraform",
+      "description": "`terraform plan` across the prd config is a no-op after the module change but before any call-site cleanup (every existing literal MAC still wins via coalesce)."
+    },
+    {
+      "id": "TF-05",
+      "area": "terraform",
+      "description": "Dropping an 02:A7:F3:... literal (and its inline comment) from a prd VM block yields a zero plan diff for that VM, confirming the derived value matches the historical literal. Adoption MACs (BC:24:11:...) and the terraform/scratch config are untouched."
+    }
+  ]
+}

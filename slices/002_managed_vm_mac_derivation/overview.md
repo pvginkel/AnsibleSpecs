@@ -1,4 +1,6 @@
-# 10 — Auto-derive deterministic MAC in `managed-vm`
+# Auto-derive deterministic MAC in `managed-vm`
+
+**Slice 002.** Live status tracks on the Kanban `[002]` card.
 
 ## Goal
 

@@ -1,0 +1,24 @@
+{
+  "criteria": [
+    {
+      "id": "RE-01",
+      "area": "ansible",
+      "description": "The pre-drain hand-off task (playbooks/tasks/pre-drain-handoff.yml) polls Deployment state with an until-loop that blocks until, for every labeled Deployment, status.observedGeneration == metadata.generation AND updatedReplicas == readyReplicas == availableReplicas == spec.replicas — it MUST NOT use `rollout status`, which returned 0 early."
+    },
+    {
+      "id": "RE-02",
+      "area": "ansible",
+      "description": "The poll is bounded (~30 retries x 10s ≈ 5 min); exhausted retries fail the play before `kubectl drain` runs, so a drain never starts on an unhealthy surge target."
+    },
+    {
+      "id": "RE-03",
+      "area": "ansible",
+      "description": "The gate stays conditioned on `_cluster_peer_count | int > 1`, so single-node clusters skip it."
+    },
+    {
+      "id": "RE-04",
+      "area": "ansible",
+      "description": "Operator verification (owed): a multi-node run (update-k8s.yml or evict-k8s.yml) hands off both opt-in workloads and confirms the gate blocks until genuinely Ready against both Deployment strategies — keycloak (RollingUpdate maxSurge:1/maxUnavailable:0) and keycloak-db (Recreate)."
+    }
+  ]
+}

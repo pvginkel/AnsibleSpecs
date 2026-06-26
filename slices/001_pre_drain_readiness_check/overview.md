@@ -1,7 +1,7 @@
 # Pre-drain hand-off readiness check
 
-> **Status: fix landed (2026-06-14), pending operator verification.** Awaiting a
-> multi-node run that exercises both Deployment strategies.
+**Slice 001.** Fix landed 2026-06-14; a multi-node operator verification run is
+owed (see Verification). Live status tracks on the Kanban `[001]` card.
 
 ## Symptom
 

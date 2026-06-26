@@ -1,0 +1,34 @@
+{
+  "criteria": [
+    {
+      "id": "SH-01",
+      "area": "shared",
+      "description": "For each enabled app a confidential Keycloak client (id = app name) exists in the homelab realm (and homelab-dev on dev), with redirect URIs registered against the app's internal .home host; client_id + client_secret live in OpenBao at eso/<cluster>/<app>/<stage>/oidc and are materialised by ESO. (Hand-created until keycloak-tf lands, which must import — not recreate — these clients.)"
+    },
+    {
+      "id": "GR-01",
+      "area": "helmcharts",
+      "description": "Grafana: configs/<cluster>/grafana/<stage>/values.yaml enables auth.generic_oauth against the homelab realm (client grafana, secret via the grafana-oidc ExternalSecret applied through the release manifests.yaml). The login page offers the Keycloak button and a homelab account completes the round-trip authenticated."
+    },
+    {
+      "id": "PG-01",
+      "area": "helmcharts",
+      "description": "pgAdmin: charts/pgadmin ships files/config_local.py enabling OAuth2 (client pgadmin); the client secret is delivered via the chart's externalSecrets.secrets and injected as OAUTH2_CLIENT_SECRET (env, not in the ConfigMap). Login offers the Keycloak button and completes the round-trip."
+    },
+    {
+      "id": "HL-01",
+      "area": "helmcharts+ansible",
+      "description": "Headlamp: the chart sets config.oidc (client headlamp, issuer homelab realm, secret via ExternalSecret) AND the microk8s apiserver trusts the issuer (--oidc-issuer-url, --oidc-client-id=headlamp, username/groups claim) with RBAC binding the mapped Keycloak group; the forwarded id_token is accepted by the apiserver. If the operator declines apiserver OIDC, Headlamp stays on its static-token login and is dropped from this slice (open question)."
+    },
+    {
+      "id": "JN-01",
+      "area": "in-app",
+      "description": "Jenkins: the oic-auth plugin is installed and an OIDC security realm is configured against the homelab realm (client jenkins) in-app (no chart change); an emergency in-process admin is retained until the realm is verified."
+    },
+    {
+      "id": "FB-01",
+      "area": "verification",
+      "description": "Each app's local-login fallback (Grafana admin, pgAdmin default email, Jenkins emergency admin) remains usable until the OIDC path is verified; role-to-group mapping is decided per app before enabling."
+    }
+  ]
+}

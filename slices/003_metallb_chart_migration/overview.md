@@ -1,5 +1,8 @@
 # MetalLB — addon → HelmCharts migration (prd)
 
+**Slice 003.** Externally gated on the UDM Pro BGP rollout — ships when the
+operator is ready to peer. Live status tracks on the Kanban `[003]` card.
+
 ## Goal
 
 Move the prd k8s cluster's MetalLB off the microk8s `metallb` core addon and onto the upstream Helm chart, deployed through the HelmCharts harness, mirroring the dev migration that already shipped. Unlocks FRR mode (IPv6 BGP) for peering with the UDM Pro and ends the addon-vs-binary CRD drift that broke dev under microk8s 1.36 (controller crash-loop on missing `ConfigurationState` CRD).

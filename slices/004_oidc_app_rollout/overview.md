@@ -1,7 +1,8 @@
-# oidc-app-rollout — turn on Keycloak OIDC login for the apps that can take it
+# Turn on Keycloak OIDC login for the apps that can take it
 
-> **STATUS: pending.** Scope agreed with the operator: **Grafana, pgAdmin,
-> Headlamp, Jenkins**. LibreChat and Terminus were explicitly dropped.
+**Slice 004.** Scope agreed with the operator: **Grafana, pgAdmin, Headlamp,
+Jenkins** (LibreChat and Terminus dropped). Live status tracks on the Kanban
+`[004]` card.
 
 ## Goal
 

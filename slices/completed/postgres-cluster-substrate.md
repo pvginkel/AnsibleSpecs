@@ -1,5 +1,9 @@
 # Postgres cluster substrate (CloudNativePG) on ZFS
 
+> **Completed.** The substrate is live on both clusters and the app databases
+> are migrated. Any residual per-app polish is folded into normal operations;
+> raise a Triage card if something specific surfaces.
+
 ## Goal
 
 Stand up an in-cluster Postgres substrate — CloudNativePG, on **node-local ZFS

@@ -1,33 +1,36 @@
 # Slices
 
-The single tracking unit for homelab work. Pending slices are at the top of
-`slices/`; closed work in [`completed/`](completed/), [`deferred/`](deferred/),
-[`cancelled/`](cancelled/).
+The single tracking unit for homelab work, numbered `NNN_<name>/`. Each active
+slice is a directory holding `overview.md` (what/why/dependencies) plus its
+acceptance criteria and (where they apply) an API contract and per-repo briefs.
+
+**Live status lives on the shared Kanban board**, not here — each active slice
+is a `[NNN]` card flowing **To Do → In Progress → Done** (owner tag `Ansible`).
+This index is a lean catalogue; the per-slice `overview.md` holds the detail.
+
+- **Numbered, active** — directories at the top of `slices/`; tracked on the
+  Kanban board.
+- **Closed** — moved to [`completed/`](completed/), [`deferred/`](deferred/),
+  or [`cancelled/`](cancelled/).
+- **Not yet a slice** — unstructured / placeholder / open-question work lives as
+  a card on the **Triage** board, with any drafted material parked under
+  [`../change_requests/`](../change_requests/) until `/write-slice` turns it into
+  a numbered slice.
+
+Slice numbers are allocated by [`../scripts/allocate-next-slice.sh`](../scripts/allocate-next-slice.sh)
+(concurrency-safe counter). The numbering space is Ansible's own; on the shared
+Kanban the red `Ansible` label disambiguates from other repos' slices.
 
 > The phased build-out is finished. Its history is archived under
-> [`../phases/`](../phases/) (read-only); all ongoing work is tracked here as
-> slices.
-
-The dependency column lists prerequisite slices; the consumed-by column notes
-what the slice's output feeds.
+> [`../phases/`](../phases/) (read-only); all ongoing work is tracked as slices.
 
 ## Pending
 
-| Slice | Status | Depends on | Consumed by |
-|---|---|---|---|
-| [unattended-dev-controller](unattended-dev-controller.md) | design (concept agreed, MVP scoped; two-service API+bot, MCP descoped); **Ansible node `srvk8s4` provisioned** — worker-only, taint-dedicated | [zfs-dataset-provider](completed/zfs-dataset-provider/plan.md) (done); helm-tf-deploy-harness (done, for `static-cephfs-pv`); openbao + secrets (done); MetalLB + dnsmasq `.home` DNS (for port exposure) | (remote dev-environment controller on K8s — headless controller API + Telegram-bot adapter, Claude/code-tunnel/GitHub modeled as capabilities, controller-owned profiles/presets/secret-catalog/whitelist + repo-tracked config, native-sidecar data services, LB-IP/`.home` port exposure with chat links, manual stop/delete lifecycle + memory-limit admission gate) |
-| [microceph-prod](microceph-prod.md) | placeholder | [pre-drain-readiness-check](pre-drain-readiness-check.md) | (extends the `microceph` role to the prod fleet — the last unmigrated big rock) |
-| [keycloak-tf](keycloak-tf.md) | placeholder | helm-tf-deploy-harness (done) | (Keycloak realm/client config via the harness `configuration.tf` stage) |
-| [oidc-app-rollout](oidc-app-rollout.md) | pending | helm-tf-deploy-harness (done); soft-related keycloak-tf | (Keycloak OIDC login for Grafana/pgAdmin chart-side; Headlamp gated on apiserver OIDC, Jenkins in-app via oic-auth) |
-| [runtime-secrets-sweep](runtime-secrets-sweep.md) | in progress (migration done; rotation + scrub remaining) | openbao + secrets (done) | (auto-rotation system, HelmCharts publishability, cross-repo secret scan, KubernetesConfig deletion) |
-| [metallb-chart-migration](metallb-chart-migration.md) | pending (dev shipped; prd gated on UDM Pro BGP) | helm-tf-deploy-harness (done) | (prd-side move off the microk8s addon; unblocks UDM Pro BGP) |
-| [site-yml-layout](site-yml-layout.md) | in progress (design Q open) | iac-agent (for the friction it creates) | (TBD; restructures the playbook layout) |
-| [iac-pipeline-restructure](iac-pipeline-restructure.md) | pending (P1 done via tf-provider-registry; P2 + merge remain) | iac-agent (the pipelines it restructures) | (scopes the iac-image rebuild flood; merges IaCAgent into Ansible) |
-| [pre-drain-readiness-check](pre-drain-readiness-check.md) | fix landed; pending operator verify | (refines pre-drain-handoff) | microk8s-rebuild-completion (opportunistic) |
-| [postgres-cluster-substrate](postgres-cluster-substrate.md) | in progress — substrate live & HA-drilled on dev+prd, dev DB-chart migrations done; **remaining: per-app prd cutovers (task D), pgAdmin prd, backups, arch annotations** | helm-tf-deploy-harness (done), zfs-dataset-provider (done), backup-collector (done) | (shared CNPG Postgres for persistent app DBs — non-HA on dev, 3-instance sync on prd; per-app DB/role/Secret via TF) |
-| [destroy-release-pipeline](destroy-release-pipeline.md) | placeholder | helm-tf-deploy-harness (done) | (CI-driven TF teardown gated by `disabled`+`destroyed`; teardown path for [postgres-cluster-substrate](postgres-cluster-substrate.md) TF-managed DBs) |
-| [managed-vm-mac-derivation](managed-vm-mac-derivation.md) | pending | — | (cleanup; reduces vms.tf boilerplate) |
-| [openbao-backup-activation](openbao-backup-activation.md) | pending (pipeline built; never commissioned) | [backup-collector](completed/backup-collector.md) (done), [openbao-static-seal](completed/openbao-static-seal.md) (done) | (gets daily OpenBao backups actually landing in cloud storage; unblocks the Phase 2 recovery drill, card #14) |
+- **[001](001_pre_drain_readiness_check/overview.md)** — Pre-drain hand-off readiness check: fix a false-Ready in the pre-drain handoff before `kubectl drain` (fix landed; operator verification owed).
+- **[002](002_managed_vm_mac_derivation/overview.md)** — Auto-derive deterministic MAC in the `managed-vm` module: move the MAC convention out of hand-applied `vms.tf`.
+- **[003](003_metallb_chart_migration/overview.md)** — MetalLB addon → HelmCharts chart (prd): move prd MetalLB onto the upstream chart (externally gated on UDM Pro BGP).
+- **[004](004_oidc_app_rollout/overview.md)** — Keycloak OIDC login rollout: Grafana, pgAdmin, Headlamp, Jenkins (`helm-tf-deploy-harness` done; soft-related `keycloak-tf`).
+- **[005](005_openbao_backup_activation/overview.md)** — Activate the OpenBao backup pipeline: daily encrypted bundles to cloud storage + a proven restore round-trip (`backup-collector`, `openbao-static-seal` done).
 
 ## Completed
 
@@ -44,8 +47,8 @@ what the slice's output feeds.
 | [home-dns-routing](completed/home-dns-routing.md) | — | — | (cleanup; removed most `baseline_etc_hosts_entries` pins on cold-boot-independent VMs) |
 | [openbao-static-seal](completed/openbao-static-seal.md) | — | — | phase: openbao + secrets (cluster + seal-key shape; landed) |
 | [backup-collector](completed/backup-collector.md) | — | openbao-static-seal | phase: openbao + secrets (in-cluster collector; OpenBao is its first consumer) |
-| [iac-secrets-resolver](completed/iac-secrets-resolver.md) | — | openbao-static-seal | phase: openbao + secrets (`iac-impl` `!bao` resolver; gates [runtime-secrets-sweep](runtime-secrets-sweep.md)) |
-| [internal-ha-vips](completed/internal-ha-vips.md) | — | internal-tls-step-ca | phase: openbao + secrets (`secrets.home` VIP); k8s-api + OpenBao VIPs landed, Ceph VIP manual pending [microceph-prod](microceph-prod.md) |
+| [iac-secrets-resolver](completed/iac-secrets-resolver.md) | — | openbao-static-seal | phase: openbao + secrets (`iac-impl` `!bao` resolver; gated runtime-secrets-sweep) |
+| [internal-ha-vips](completed/internal-ha-vips.md) | — | internal-tls-step-ca | phase: openbao + secrets (`secrets.home` VIP); k8s-api + OpenBao VIPs landed, Ceph VIP manual pending microceph-prod |
 | [internal-tls-nginx-configurator](completed/internal-tls-nginx-configurator.md) | — | internal-tls-step-ca | phase: internal TLS (in-cluster half — §G of internal-tls-step-ca); cert-expiry metric deferred |
 | [cloud-init-first-boot-only](completed/cloud-init-first-boot-only.md) | — | — | (correctness; stops snippet edits cascading to VM rebuilds) |
 | [helm-tf-deploy-harness](completed/helm-tf-deploy-harness.md) | spec 09 | tf-provider-resource-extensions | phase: helm + tf harness (repo restructure + prd cutover — done) |
@@ -53,7 +56,9 @@ what the slice's output feeds.
 | [helm-tf-deploy-harness-finalize](completed/helm-tf-deploy-harness-finalize.md) | — | helm-tf-deploy-harness, helm-tf-deploy-harness-ceph-changes | Jenkins-on-iac + HTTP TF backend, tools rework, Ceph/S3 cleanup; migration-software removal cancelled — tooling retained for a future bulk rename |
 | [tf-provider-resource-extensions](completed/tf-provider-resource-extensions.md) | plan 08 | — | `homelab_rbd_image` / `homelab_cephfs_subvolume` / `homelab_zfs_dataset` — all shipped; consumed by the static-PV modules + deploy harness |
 | [zfs-dataset-provider](completed/zfs-dataset-provider/plan.md) | — | tf-provider-resource-extensions (supersedes its ZFS mechanism) | `homelab_zfs_dataset` via the iac-provisioner node agent — shipped; prd `infrastructure.tf` consumes it |
-| [tf-provider-registry](completed/tf-provider-registry.md) | pending (req + approach) | helm-tf-deploy-harness (done); k8s cluster | private network mirror for `pvginkel/homelab` at `tfmirror.home` — restored normal lock + raw `terraform plan`; superseded iac-pipeline-restructure P1 — shipped |
+| [tf-provider-registry](completed/tf-provider-registry.md) | pending (req + approach) | helm-tf-deploy-harness (done); k8s cluster | private network mirror for `pvginkel/homelab` at `tfmirror.home` — superseded iac-pipeline-restructure P1 — shipped |
+| [runtime-secrets-sweep](completed/runtime-secrets-sweep.md) | — | openbao + secrets, iac-secrets-resolver | consumer migration into OpenBao — complete (all prod charts on OpenBao); rotation/cleanup tracked on Triage |
+| [postgres-cluster-substrate](completed/postgres-cluster-substrate.md) | — | helm-tf-deploy-harness, zfs-dataset-provider, backup-collector | shared CNPG Postgres on ZFS — substrate live on dev+prd, app DBs migrated |
 
 ## Deferred / Cancelled
 

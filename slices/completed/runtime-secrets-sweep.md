@@ -1,5 +1,10 @@
 # Runtime secrets sweep — consumer migration into OpenBao + rotation
 
+> **Completed.** Consumer migration is done — all production charts read from
+> OpenBao. The remaining rotation + slice-close cleanup is deferred and tracked
+> on the **Triage** board (cards #49 rotate transcript-exposed secrets, #50
+> review/drop unused Jenkins credentials), not here.
+
 ## Goal
 
 Every runtime secret in the homelab lives in OpenBao KV and is read through

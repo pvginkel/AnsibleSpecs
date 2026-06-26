@@ -1,0 +1,39 @@
+{
+  "criteria": [
+    {
+      "id": "OB-01",
+      "area": "prereq",
+      "description": "Backup-server prerequisites confirmed live: the backup-server Deployment is Running and backup-server.home resolves and answers; the backup-server pod itself carries the gdrive-pieter rclone config; and backup_server_token in terraform/prd/terraform.tfvars equals the management_token ESO writes to storage-backup-server (a mismatch 401s the apply)."
+    },
+    {
+      "id": "OB-02",
+      "area": "terraform",
+      "description": "`terraform apply` in terraform/prd mints homelab_backup_credential.openbao (scope = openbao, retention = 14) and lands the openbao_backup_token output in tfstate."
+    },
+    {
+      "id": "OB-03",
+      "area": "ansible",
+      "description": "A site-openbao.yml run with -e openbao_rotate_secret_ids=true stages all three inputs (backup-role-id, backup-secret-id, backup-token under /etc/openbao/); with all three present, the role's backup.yml installs and enables the openbao-backup systemd service + timer on each srvvaultN (and self-skips on followers/missing inputs)."
+    },
+    {
+      "id": "OB-04",
+      "area": "verification",
+      "description": "A manual `systemctl start openbao-backup.service` on the current Raft leader logs the `backup uploaded (snapshot ... bytes, bundle ... bytes)` line, and a <ts>_openbao-backup.tgz.age object lands under the openbao/ scope in gdrive-pieter:Homelab Backups."
+    },
+    {
+      "id": "OB-05",
+      "area": "verification",
+      "description": "Decrypt round-trip: the uploaded .tgz.age decrypts with the Roboform age private key (age -d) and unpacks (tar xzf) to raft.snap, kv.json, policies.json, auth.json, mounts.json, manifest.json."
+    },
+    {
+      "id": "OB-06",
+      "area": "verification",
+      "description": "Left unattended for >=2 daily cycles, the timer produces a fresh dated object each day and server-side retention (retention = 14) keeps the window bounded."
+    },
+    {
+      "id": "OB-07",
+      "area": "drill",
+      "description": "Single-node-loss drill: TF-replace one srvvaultN, let the roles converge, watch the Raft snapshot stream from the leader, and confirm the live cluster's backup keeps flowing throughout; timings captured in docs/runbooks/openbao.md. (Whole-cluster restore — card #14 — is out of scope here unless OB-05 surfaces a snapshot-format problem.)"
+    }
+  ]
+}
