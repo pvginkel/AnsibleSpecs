@@ -28,7 +28,6 @@ Kanban the red `Ansible` label disambiguates from other repos' slices.
 
 - **[001](001_pre_drain_readiness_check/overview.md)** — Pre-drain hand-off readiness check: fix a false-Ready in the pre-drain handoff before `kubectl drain` (fix landed; operator verification owed).
 - **[002](002_managed_vm_mac_derivation/overview.md)** — Auto-derive deterministic MAC in the `managed-vm` module: move the MAC convention out of hand-applied `vms.tf`.
-- **[003](003_metallb_chart_migration/overview.md)** — MetalLB addon → HelmCharts chart (prd): move prd MetalLB onto the upstream chart (externally gated on UDM Pro BGP).
 - **[004](004_oidc_app_rollout/overview.md)** — Keycloak OIDC login rollout: Grafana, pgAdmin, Headlamp, Jenkins (`helm-tf-deploy-harness` done; soft-related `keycloak-tf`).
 - **[005](005_openbao_backup_activation/overview.md)** — Activate the OpenBao backup pipeline: daily encrypted bundles to cloud storage + a proven restore round-trip (`backup-collector`, `openbao-static-seal` done).
 

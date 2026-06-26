@@ -18,3 +18,4 @@ not ready to run. The original docs are parked here verbatim as attachments.
 | `site_yml_layout/` | site-yml-layout | Open design question: does `site.yml` still make sense? |
 | `iac_pipeline_restructure/` | iac-pipeline-restructure | Scope the iac-image rebuild flood (P2) + merge IaCAgent into Ansible. |
 | `unattended_dev_controller/` | unattended-dev-controller | Remote dev-environment controller on K8s (large cross-repo design). |
+| `metallb_chart_migration/` | metallb-chart-migration (prd) | Move prd MetalLB onto the upstream chart (FRR/BGP); authored + dev-proven, deferred to the microk8s 1.36+ prod cutover. |

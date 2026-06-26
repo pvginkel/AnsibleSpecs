@@ -1,7 +1,9 @@
 # MetalLB — addon → HelmCharts migration (prd)
 
-**Slice 003.** Externally gated on the UDM Pro BGP rollout — ships when the
-operator is ready to peer. Live status tracks on the Kanban `[003]` card.
+**Parked (not a numbered slice).** Authored and proven on dev; deferred to the
+prod **microk8s 1.36+ cutover**, when prd MetalLB moves onto the chart (FRR/BGP).
+Tracked as a card on the Triage board until then — `/write-slice` will allocate a
+fresh number when it's time.
 
 ## Goal
 
