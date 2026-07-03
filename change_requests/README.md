@@ -6,16 +6,25 @@ on the **Triage** board. `/write-slice` turns a folder here into a numbered
 slice under [`../slices/`](../slices/) (allocating its number) and then deletes
 the folder, once all its material is absorbed into the slice.
 
-These were seeded by the 2026-06-26 migration off the old per-project Trello
-board: placeholders and open design questions that had slice documents but were
-not ready to run. The original docs are parked here verbatim as attachments.
+Cards on the Triage board carrying the «CR» label have a bundle here.
 
 | Folder | Triage card | What it is |
 |---|---|---|
-| `microceph_prod/` | microceph-prod | Extend the `microceph` role to the prod fleet (placeholder). |
-| `keycloak_tf/` | keycloak-tf | Keycloak realm/client config via the harness `configuration.tf` (placeholder). |
-| `destroy_release_pipeline/` | destroy-release-pipeline | CI-driven TF teardown gated by `disabled`+`destroyed` (subsumes old card #56). |
-| `site_yml_layout/` | site-yml-layout | Open design question: does `site.yml` still make sense? |
-| `iac_pipeline_restructure/` | iac-pipeline-restructure | Scope the iac-image rebuild flood (P2) + merge IaCAgent into Ansible. |
-| `unattended_dev_controller/` | unattended-dev-controller | Remote dev-environment controller on K8s (large cross-repo design). |
-| `metallb_chart_migration/` | metallb-chart-migration (prd) | Move prd MetalLB onto the upstream chart (FRR/BGP); authored + dev-proven, deferred to the microk8s 1.36+ prod cutover. |
+| `microceph_prod/` | #67 | Extend the `microceph` role to the prod fleet (placeholder; urgency evidence from the 2026-07 review appended). |
+| `keycloak_tf/` | #68 | Keycloak realm/client config via the harness `configuration.tf` (placeholder; ArgoCD PostSync interplay appended). |
+| `destroy_release_pipeline/` | #66 | CI-driven TF teardown gated by `disabled`+`destroyed` (ArgoCD interplay appended). |
+| `site_yml_layout/` | #69 | Open design question: does `site.yml` still make sense? (2026-07 review's coverage-invariant finding absorbed). |
+| `iac_pipeline_restructure/` | #70 | Scope the iac-image rebuild flood (P2) + merge IaCAgent into Ansible. |
+| `metallb_chart_migration/` | #130 | Move prd MetalLB onto the upstream chart (FRR/BGP); authored + dev-proven, deferred to the microk8s 1.36+ prod cutover. |
+| `buildkit_daemon/` | #113 | BuildKit daemon on k8s, step-ca mTLS, 40 GB zpool2 cache (design doc attached). |
+| `argocd_migration/` | #124 | Jenkins push → ArgoCD CD per the decided model; gradual per-app migration. *(2026-07 triage)* |
+| `telegram_iac_bot/` | #125 | Cluster messaging hub + dead-man's switch + report rendering; replaces send_message.py. *(2026-07 triage)* |
+| `update_train_system/` | #126 | Cadence-based dependency updates: doctrine, `.kubecoder/config.yaml` contract, scheduler, archive sweep. *(2026-07 triage)* |
+| `tf_safety_rails/` | #127 | Destroy guard fix, prevent_destroy, apply-the-checked-plan (review C1). *(2026-07 triage)* |
+| `secrets_remediation/` | #128 | Rotate/relocate committed secrets, purge TerraformState history, automate rotation (review C2). *(2026-07 triage)* |
+| `internal_tls_registry/` | #47 | Registry TLS + push auth (review C3) + the all-internal-services-HTTPS sweep. *(2026-07 triage)* |
+| `ci_quality_gates/` | #129 | Lint/validate/test gates on every push-to-prod pipeline + trivy. *(2026-07 triage)* |
+| `eso_subpath_mounts/` | #54 #55 #56 | Rotating ESO Secrets still on subPath mounts — pgadmin, mydownloads, kibana. *(2026-07 triage)* |
+| `k8s_roll_pipeline/` | #50 | On-demand Jenkins pipeline for the drain-aware rolling roll, with `--limit`. *(2026-07 triage)* |
+| `s3_ceph_backup/` | #48 | Backup automation for RGW/S3 buckets + Ceph-backed data. *(2026-07 triage)* |
+| `helmcharts_architecture_modeling/` | #80 #104 | Keycloak admin-API interface + upstream-product DB-consumption modeling. *(2026-07 triage)* |

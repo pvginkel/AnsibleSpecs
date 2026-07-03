@@ -28,3 +28,12 @@ of by hand.
 - Which provider, and how its credentials are sourced (OpenBao via the existing
   resolver?).
 - Scope of the first cut: which realm(s)/client(s) move first.
+
+## ArgoCD interplay (2026-07-03 triage)
+
+The ArgoCD migration (`../argocd_migration/`) moves the harness's TF phases into Argo
+PreSync/PostSync hook Jobs — `configuration.tf` (this bundle's stage) becomes a
+**PostSync hook** for migrated apps, with the explicit constraint that PostSync steps be
+idempotent and retry-safe (the app is already live if PostSync fails). Design the
+Keycloak TF work so it runs identically under the current deploy CLI and as a hook Job;
+keep the two bundles aligned on sequencing.

@@ -3,6 +3,17 @@
 *Companion to the July 2026 IaC review. Research verified against mid-2026
 sources (Argo CD 3.4, 3.5 GA expected 2026-08; Flux 2.8/2.9; sources in §9).*
 
+> **Superseded in part (2026-07-03).** The operator decided the target model — see
+> `../../change_requests/argocd_migration/change_request.md`, which is authoritative
+> where it differs from this note. Key deltas: **auto-sync ON + self-heal OFF +
+> webhook** (not CI-triggered sync with auto-sync off — §3's ranking inverted); Jenkins
+> reduces to CI only and holds no cluster credential (this note leans too much on
+> Jenkins); the **dev cluster is excluded** from Argo (it's a chart-debugging setup, not
+> a stage — §4's "manage both clusters" is out); TF phases land as PreSync/PostSync hook
+> Jobs in-cluster; deploy-time digest resolution is removed in favour of CI-committed
+> version pins. The background, the coupling analysis (§5), footprint/costs (§8), and
+> sources remain valid reading.
+
 ## 1. The question
 
 You want Argo CD's capabilities — chiefly **charts living with their app

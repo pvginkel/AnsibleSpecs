@@ -139,3 +139,10 @@ The two pillars are independent; do either first.
 - The `site*.yml` playbook layout — that's [site-yml-layout](site-yml-layout.md).
 - Provider version resolution (lock vs. mirror, raw `terraform plan`) —
   owned by [tf-provider-registry](completed/tf-provider-registry.md).
+- The destroy-guard/prevent_destroy/apply-the-checked-plan fixes in the same
+  Jenkinsfiles — urgent and narrow, split out to
+  [tf_safety_rails](../tf_safety_rails/change_request.md) (2026-07 review C1).
+  Coordinate to avoid colliding edits; the safety rails land first.
+
+Note (2026-07-03 triage): the 2026-07 IaC review independently recommended the
+IaCAgent→Ansible merge (finding S5) — the operator confirmed; this bundle remains its home.

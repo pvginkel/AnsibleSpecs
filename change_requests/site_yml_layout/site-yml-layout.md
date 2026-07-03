@@ -91,3 +91,16 @@ The analyst should feel free to propose the answer is "leave it as a blacklist a
 ## When to do this
 
 After Phase 1 (iac-agent) lands and the operator has lived with the blacklist form for long enough to know whether the friction is real or theoretical. No earlier — the iac-agent phase will produce evidence (or counter-evidence) about how often the exclusion list needs updating.
+
+## Absorbed from the 2026-07 IaC review (2026-07-03 triage)
+
+The review (findings A1/A5, `../../reviews/2026-07-iac-review/findings.md`) supplied the
+live demonstration of friction #1/#2: **the "which playbook converges this host?"
+invariant is enforced nowhere, and `ceph_prd` fell through it** — in `managed` but excluded
+from every convergence path (`site.yml:13` excludes it; `site-ceph.yml` targets only
+`ceph_dev`), so the three prd storage nodes get no baseline, no drift detection, no
+orchestrated patching. The review's suggested mechanism, whatever layout the analysis
+lands on: a machine-checked CI assertion that every `managed` host is matched by exactly
+one site playbook's host pattern — turning the safety contract from tribal knowledge into
+a failing build. The analysis should treat that invariant (or an equivalent) as part of
+"what a good answer looks like".

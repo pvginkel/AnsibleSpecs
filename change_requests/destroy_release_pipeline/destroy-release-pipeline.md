@@ -115,3 +115,14 @@ per-app databases need a real teardown path so deleting a chart/stage
 can actually drop its data on purpose), but this is a general harness
 capability for any release whose durable state is TF-owned with
 `prevent_destroy`.
+
+## ArgoCD interplay (2026-07-03 triage)
+
+Under the decided ArgoCD model (`../argocd_migration/`), routine teardown becomes a
+**cascade delete of the Application** — sync hooks fire on sync, not delete, so TF never
+runs a destroy on teardown and data survives by construction. That makes this bundle's
+capability the complementary, deliberate **data-decommission** path: for a migrated app,
+"fully tear down" likely becomes cascade-delete the Application *then* run this pipeline
+against the release's TF states. Design the two together so the flag interlock
+(`disabled`/`destroyed`) maps cleanly onto the Application-removal flow (ApplicationSet
+list entry removal, if that option wins).
