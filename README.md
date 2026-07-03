@@ -8,6 +8,7 @@ Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmChar
 - [`decisions.md`](decisions.md) — homelab doctrine. Tool split, secrets, networking, MAC scheme, OS update policy. Read this first.
 - [`phases/`](phases/) — the homelab build-out, executed sequentially. See [`phases/README.md`](phases/README.md) for current order and status.
 - [`slices/`](slices/) — forward-looking design work that threads between phases. See [`slices/README.md`](slices/README.md) for the slice index. Pending slices live at the top of `slices/`; closed work in `completed/`, `deferred/`, `cancelled/`.
+- [`reviews/`](reviews/) — point-in-time estate reviews. Latest: [`2026-07-iac-review/`](reviews/2026-07-iac-review/README.md) — full IaC review (findings, GitOps/Argo CD app note, tech radar).
 
 ## Conventions
 
