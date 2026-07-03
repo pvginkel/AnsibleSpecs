@@ -8,22 +8,27 @@ here, per the estate's charter.*
 
 ## Adopt
 
-- **Pin-and-propose for everything that floats** (S–M, ★★). The estate floats
-  at four layers: upstream Helm charts (latest-on-sight), TF providers
-  (`-upgrade` per deploy), galaxy collections (`>=`), and base images
-  (deliberate, poller-managed). Pin the first three; let automation propose
-  bumps. For charts, the **version-poller already has the right shape** — it
-  just auto-applies instead of proposing; flip it to open a commit/PR-style
-  proposal. **Renovate (self-hosted)** is the industry tool for the same job
-  (charts, images, TF providers, Dockerfiles, github-actions) and runs fine
-  as a scheduled Jenkins job; adopting it *for the pinned layers* while
-  keeping the poller's weekly time-driven image rebuilds (which Renovate
-  can't replicate — that redesign doc's insight stands) is a coherent split.
-  Renovate is arguably the single highest industry-relevance-per-effort item
-  on this list.
+- **Update trains for everything that floats onto prd unattended** (S–M, ★★).
+  *(Revised 2026-07 after operator doctrine feedback — supersedes the original
+  "Renovate" entry, now under Hold.)* The estate's update doctrine is
+  cadence-based bulk update → battle-test → push, and most layers already
+  implement it (poetry ranges + lockfile = update-by-train; weekly time-driven
+  image rebuilds = the train for bases; digests pinned at deploy time as
+  rollback anchors). Two layers violate the doctrine today by updating
+  *continuously and unattended*: upstream Helm charts (float to latest, deploy
+  to prd on sight, no soak, CRD skew) and TF providers (`-upgrade` per deploy;
+  bpg at `~> 0.66` can jump 40 minors in one hop). Fix within the doctrine:
+  the version-poller keeps *detecting* but writes chart/provider updates to a
+  **batch report**; the train applies the batch (dev soak → prd). Constraints
+  exist to cap how far one train can jump, not as virtue — majors surface as
+  planned lines. Galaxy collections join the same train (single source of
+  truth first, see findings A3).
 - **Trivy in the DockerImages pipeline** (S, ★★★). One scanner covers images,
   IaC misconfig (tfsec merged in), charts. Warn-only first, fail-on-critical
-  later. Converts "weekly rebuild" from faith into measurement. (Supply-chain
+  later. Converts "weekly rebuild" from faith into measurement — and under the
+  update-train doctrine it's the **interrupt line**: a critical CVE breaks
+  cadence for that one thing; everything else waits for the train. Cadence for
+  currency, scanner for urgency. (Supply-chain
   note: pin the scanner itself by digest/SHA — trivy's own GitHub Action had
   a compromise scare in March 2026.)
 - **Chart CI: `helm lint` + kubeconform + (selectively) helm-unittest**
@@ -96,6 +101,14 @@ here, per the estate's charter.*
 
 ## Hold
 
+- **Renovate / Dependabot** — rejected on doctrine (2026-07). Their default
+  model is a bounded visible PR window over an unbounded arrival stream —
+  progress is structurally illegible, which the operator (correctly)
+  identifies as demoralizing. Teams that thrive with Renovate configure it
+  into batch mode (monthly schedule, group-everything, automerge) — i.e. a
+  worse version-poller for this estate. Keep the literacy (know what it is,
+  how real teams tame it); don't run it. The update-train entry under Adopt
+  is the replacement.
 - **Crossplane** — composes cloud provider APIs; there's no cloud API here.
   Wrapping Proxmox in Crossplane to replace working bpg/TF is complexity
   without a transferable lesson. (Its graduation doesn't change the fit.)

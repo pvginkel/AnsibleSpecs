@@ -68,8 +68,9 @@ to fix:
   Applications — the charts-live-with-their-repos property you're missing.
   It's also the highest-career-value item on the board. Your harness's TF
   substrate phases are *not* replaced and should stay.
-- **The supporting cast is adoptable independently, now:** pin versions and
-  let automation propose bumps (Renovate), trivy scanning, `helm lint` +
+- **The supporting cast is adoptable independently, now:** update-train
+  batching for the layers that today float onto prd unattended (charts, TF
+  providers), trivy scanning as the cadence-interrupt line, `helm lint` +
   kubeconform + ansible-lint gates, a dead-man's switch for scheduled jobs,
   registry TLS/auth (the unauthenticated HTTP registry is the estate's
   weakest security link — it delivers the code that runs with all secrets).
@@ -97,10 +98,11 @@ to fix:
    go strict) + `yamllint` + `--syntax-check`; `terraform fmt -check` +
    `validate`; `helm lint` + kubeconform render pass; `go test` before
    provider publish.
-5. Pin the floating layers: upstream chart versions in `release.yaml`
-   (version-poller proposes bumps instead of auto-applying), TF provider
-   constraints + drop `-upgrade`, exact-pin or de-duplicate the galaxy
-   collections story.
+5. Put the prd-affecting float layers on the update train: upstream chart
+   versions in `release.yaml` bumped as a batch (poller detects and reports;
+   the train applies, dev soak → prd), TF provider constraints + drop
+   `-upgrade`, de-duplicate the galaxy collections story. (Doctrine:
+   cadence-based bulk update, not continuous proposals — see tech-radar.)
 6. HelmCharts pipeline: per-release failure isolation (try/catch) +
    desired-state hash instead of edge-triggered changesets; make `deploy
    wait` failures fail the stage.

@@ -143,9 +143,10 @@ their repos" whether or not Argo lands:
 ## 6. Migration path
 
 - **Phase 0 — prerequisites (do regardless of Argo):** registry TLS via
-  step-ca + push auth (C3); pin upstream chart versions in `release.yaml`
-  with the poller proposing bumps (H3); per-release failure isolation in the
-  Jenkinsfile (H2). Every one of these pays off even if Argo never lands.
+  step-ca + push auth (C3); upstream chart versions onto the update train
+  (poller reports a batch, the train applies it — H3); per-release failure
+  isolation in the Jenkinsfile (H2). Every one of these pays off even if
+  Argo never lands.
 - **Phase 1 — stand it up:** deploy Argo CD via the harness; Keycloak SSO
   (slice 004); register the dev cluster; import **zero** apps. Learn the UI,
   projects, RBAC. Optionally point read-only Applications at 2-3 existing
