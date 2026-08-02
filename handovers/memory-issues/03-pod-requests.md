@@ -119,7 +119,16 @@ affect placement — and treat the DaemonSets as a second, lower-value tranche.
 
 ## Where the recommendation script lives
 
-The commit message references `recommend-resources`. Find the script before re-running it —
-it was not located during this session. Likely in `/work/HelmCharts` tooling or
-`/work/IaCAgent`. Worth checking whether it can be pointed at third-party namespaces too,
-which would make D3 cheap to action.
+`/work/HelmCharts/tools/chart_tools/recommend_resources.py`, exposed as
+`poetry run recommend-resources` (needs `poetry install --with analysis`). It takes memory
+as the p90 of `max by (ns,pod,container)(container_memory_usage_bytes)` over 5 days, in
+MiB, rounded up to the next quarter-power-of-two, and writes **requests only**, never
+lowering an existing value.
+
+It can be pointed at third-party charts, which is how D3 was actioned. Two mechanisms:
+`charts/<chart>/values.yaml` declaring `resources.<workload>.<container>` for first-party
+charts, or `charts/<chart>/resources-entry-map.json` mapping `"<workload>/<container>"` to
+a dotted path into the upstream chart's own values schema. Matching is on the **deployed
+workload name** (the pod name with its controller suffix stripped), so a key that disagrees
+with the live Deployment name is silently skipped — that is exactly what had happened to
+`prometheus` and to `webathome-org`'s architecture-viewer.

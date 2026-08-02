@@ -28,12 +28,22 @@ Evidence that it is nonetheless *tight*:
   committed, and it is the next node to be squeezed by any reservation
 - srvk8s1 had been running on ~1.5 GiB of headroom for 14+ hours *before* the roll, so it
   had no absorption capacity for a shock
-- the whole thing is one PVE host (`pve`, 94 GiB, 24.15 GiB free) — cluster "redundancy"
-  is bounded by a single machine
+- `pve` carries srvk8s1 + srvk8s4 and is the heaviest of the three hosts (an earlier
+  version of this line claimed it carried all four — see Q4)
 
 ## Open questions worth answering
 
-### 1. What raised the load at ~06:05? — unresolved, chase this first
+### 1. ~~What raised the load at ~06:05?~~ — RESOLVED: nothing did
+
+Answered 2026-08-02. srvk8s1's `kubepods` working set climbed smoothly from 6.23 GiB at
+04:00, plateaued at ~7.0 GiB by 05:35, and was **flat through 06:05**. No load arrived.
+The node had been on ~1.4 GiB of headroom for hours and PSI went nonlinear at the cliff —
+PSI measures pain, not load, which is what made the curve look like an event. The
+individual episodes line up with the hourly `storage-refresh-keys-cronjob` at 05:01 and
+06:01: a trigger on a node with no absorption capacity, not a cause. Nothing recurs at
+06:00 and there is nothing left to chase. The original framing is kept below.
+
+### 1a. The original question (premise now known wrong)
 
 Memory PSI on srvk8s1 jumped from 0.012 to 0.175 s/s at ~06:10 after 90 quiet minutes at
 0.69–0.87 GiB MemAvailable with zero restarts. **Something changed at ~06:05** and the
@@ -49,7 +59,15 @@ diagnosis never identified it. Leading candidates:
 Until this is known, "the node was starved" is only the enabling condition, not the whole
 story — and whatever it was will recur at 06:00.
 
-### 2. PDB `postgres-pas-prd/postgres-primary` allows 0 disruptions
+### 2. ~~PDB `postgres-pas-prd/postgres-primary` allows 0 disruptions~~ — RESOLVED
+
+CNPG 1.30.0 runs with `drainTaints: [node.kubernetes.io/unschedulable, …]`, so the cordon
+`pre-drain-handoff.yml` applies makes it switch the primary away; the pod relabels to
+`instanceRole=replica`, leaves that PDB's selector, and the eviction succeeds under the
+replica PDB. Operator log, 04:19:14Z: `currentPrimary=postgres-1 targetPrimary=postgres-2`.
+`drain` uses `--force` (unmanaged pods only, does not bypass PDBs) and not
+`--disable-eviction`, so PDBs are genuinely honoured. It needs a healthy replica to
+promote. Original text below.
 
 Observed with instances on srvk8s1/2/3. A PDB permitting zero disruptions should have
 blocked `kubectl drain` outright. **Understand how the 2026-08-02 roll got past it** before
@@ -95,15 +113,22 @@ just a nudge.
 
 ## Tuning checklist to work through
 
-- [ ] identify the 06:05 load source (Q1) — highest value, unresolved
-- [ ] resolve the postgres PDB question before the next roll (Q2)
-- [ ] survey and relax 1-second liveness probe timeouts (Q3)
+- [x] ~~identify the 06:05 load source (Q1)~~ — there was no load event; premise wrong
+- [x] ~~resolve the postgres PDB question before the next roll (Q2)~~ — CNPG switches the
+      primary off a cordoned node
+- [ ] survey and relax 1-second liveness probe timeouts (Q3) — **surveyed, awaiting an
+      operator yes.** 56 container-kinds at `timeoutSeconds <= 1`; restart leaders metallb
+      speaker 29, node-exporter 16, step-ca 7, headlamp and metrics-server 5. Sharpest is
+      `mosquitto-prd/mosquitto`: TCP probe, `periodSeconds: 1`, `failureThreshold: 3`
 - [ ] confirm cluster-wide request coverage after `03-pod-requests.md` — what fraction of
       actual usage is visible to the scheduler? Target something like >80%; it is currently
-      well under that on srvk8s1
-- [ ] add the PSI alert from `06-eviction.md` Option D regardless of the eviction decision —
-      it is the only signal that tracked this failure
-- [ ] add the reservation-vanished alert from `05-reservations.md`
+      well under that on srvk8s1. **Written but not deployed**: every requestless container
+      is now covered, so this becomes a measurement once Phase B lands
+- [x] ~~add the PSI alert from `06-eviction.md` Option D~~ — written, HelmCharts `97fa810`,
+      awaiting deploy. Caveat: alertmanager's only receiver is empty, so it reaches the UI
+      and nowhere else
+- [x] ~~add the reservation-vanished alert from `05-reservations.md`~~ — written,
+      HelmCharts `9898d0a`, awaiting deploy
 - [x] ~~decide explicitly about single-host topology (Q4)~~ — premise wrong, resolved
 
 ## How to tell whether the work succeeded

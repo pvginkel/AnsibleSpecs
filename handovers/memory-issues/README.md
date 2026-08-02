@@ -6,11 +6,15 @@ or a single sample, it says so.
 
 **Read `01-incident.md` first for what happened, then come back here.**
 
-> **Status 2026-08-02 (evening): decisions D1–D4 are RESOLVED and the execution plan is
-> written — see [`PLAN.md`](PLAN.md). That file is the authoritative work order for the
-> implementing session; the numbered files remain the evidence base.** Note the topology
-> correction in `04-node-sizing.md`: the k8s VMs span three PVE hosts (`pve`/`pve1`/`pve2`),
-> not one as this pack originally claimed.
+> **Status 2026-08-02 (late): the plan is partly executed — start from
+> [`HANDOVER.md`](HANDOVER.md).** Decisions D1–D4 are resolved, phases 0/A/B/D are written
+> and committed across Ansible and HelmCharts, and nothing is deployed. Two items are open
+> with the operator: the `--kube-reserved` value and the 1-second liveness probe timeouts.
+>
+> Reading order is now HANDOVER → [`PLAN.md`](PLAN.md) (the work order) → the numbered
+> files (the evidence base). Two corrections the numbered files predate: the k8s VMs span
+> three PVE hosts (`pve`/`pve1`/`pve2`), not one; and Prometheus retention is bounded by
+> `retentionSize: 2GB`, so the 7-day figures throughout are no longer reproducible.
 
 ---
 
@@ -115,7 +119,8 @@ Claude prepares, the operator runs all `terraform` and `ansible-playbook`.
 
 | file | what's in it |
 |---|---|
-| `PLAN.md` | **The execution plan — decisions record + phased work order (start here to implement)** |
+| `HANDOVER.md` | **Where the work stands: commit state, apply sequence, open decisions (start here)** |
+| `PLAN.md` | The execution plan — decisions record + phased work order, with per-phase status |
 | `01-incident.md` | What happened on 2026-08-02, with verified evidence and the failure mechanism |
 | `02-measurements.md` | Every number, how it was measured, and the queries to re-measure |
 | `03-pod-requests.md` | The HelmCharts commit, the coverage gap, would-it-have-helped |

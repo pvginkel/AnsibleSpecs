@@ -1,74 +1,9 @@
 # Execution plan — cluster memory work
 
-> ## Execution status — 2026-08-02
->
-> Phases 0, A, B and D are **written and committed**. Nothing is deployed: every apply is
-> the operator's keystroke, in the order under "What the operator runs" below. Phase C
-> cannot start until A and B are applied.
->
-> | phase | state | commits |
-> |---|---|---|
-> | 0 — PSI alert | done, awaiting deploy | HelmCharts `97fa810` |
-> | A gate — PDB | **resolved**, see below | — |
-> | A — node resize | written, awaiting apply | Ansible `c7e1f01` |
-> | B — request coverage | written, awaiting deploy | HelmCharts `35e22b0`, `125fe29`; Ansible `1768e0d` |
-> | C — re-baseline | blocked on A + B | — |
-> | D — kubelet args | mechanism written, **value undecided** | Ansible `f10ec4d`, `3b8e7f3`; HelmCharts `9898d0a` |
-> | E — wrap-up | Trello done; docs pending completion | — |
->
-> **A's gate is resolved.** CNPG 1.30.0 runs with
-> `drainTaints: [node.kubernetes.io/unschedulable, …]`, so the cordon that
-> `pre-drain-handoff.yml` applies makes the operator switch the primary off the node.
-> Operator log, 2026-08-02T04:19:14Z: `currentPrimary=postgres-1 targetPrimary=postgres-2`.
-> The pod relabels to `instanceRole=replica`, drops out of the `postgres-primary` PDB's
-> selector, and the eviction succeeds. `drain` passes `--force` (bare pods only) and *not*
-> `--disable-eviction`, so PDBs are honoured; `--timeout=900s` plus `retries: 3` rides out
-> the switchover. It needs a healthy replica to promote.
->
-> **D's value is an open operator decision.** Draining one control-plane node onto the
-> other two is feasible while `reserved ≤ allocatable − (control-plane requests − DaemonSets)/2`
-> — the drained node's own load cancels, so the answer is independent of placement skew.
-> At 16 GiB nodes and the projected 29.2 GiB post-Phase-B load that ceiling is **~1.2 GiB**,
-> while the measured p99 overhead is **2.26 GiB**. The resize did not loosen the constraint
-> `05-reservations.md` expected it to: +8 GiB of RAM against +5.8 GiB of newly-visible
-> requests. Confirm both numbers in Phase C, then pick. `microk8s_manage_kubelet_resources`
-> is `false` until then.
->
-> **`07` Q1 is answered and its premise was wrong.** No load event at 06:05 — srvk8s1's
-> `kubepods` working set was flat at 7.0 GiB from 05:35 through 06:05. The node had been
-> on ~1.4 GiB of headroom for hours and PSI went nonlinear at the cliff. The episodes align
-> with the hourly `storage-refresh-keys-cronjob` at 05:01 and 06:01, which is a trigger,
-> not a cause.
->
-> ### What the operator runs, in order
->
-> **Pushing is applying.** A push to `pvginkel/Ansible` main fires `IaC/Deploy`
-> (`Jenkinsfile.iac-on-push`), which runs `terraform apply -auto-approve` and then
-> `site.yml`, `site-openbao.yml` and `site-k8s.yml --limit k8s_prd`, unattended and
-> fail-fast. A push to HelmCharts deploys through `IaC/HelmCharts` the same way. So a
-> check-mode preflight has to happen *before* the push, from the working tree.
->
-> 1. Preflight the Ansible side from the working tree:
->    `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update --check`
-> 2. Push Ansible. `IaC/Deploy` applies the terraform memory change — which only marks the
->    VMs `[PENDING]`, since the pipeline never drains or reboots a node — and lands Phase B's
->    addon requests (~0.86 GiB across the control-plane trio, which the roll below still
->    clears with ~3 GiB to spare).
-> 3. Roll the fleet **by hand, now**, rather than leaving a pending resize for
->    `IaC/Scheduled Update` to pick up unattended at ~04:00 next Sunday:
->    `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
->    (drop the trailing `--check` to apply). Inventory order already puts srvk8s1 first,
->    which is what the drain arithmetic needs.
-> 4. Push HelmCharts — the alerts and the bulk of the new requests. Holding this until
->    after step 3 is the plan's deliberate ordering: the requests land on 16 GiB nodes and
->    never tighten the roll.
-> 5. Phase C, then decide D's reservation value, then set
->    `microk8s_manage_kubelet_resources: true` in `group_vars/k8s_prd.yml` and push.
->
-> Three things worth knowing before step 4: alertmanager's only receiver is an empty
-> `default-receiver`, so alerts reach the UI and nowhere else; `NodeKubeReservedMissing`
-> fires on all four nodes until Phase D lands; and the CNPG Cluster gaining
-> `spec.resources` rolling-restarts all three postgres instances with a primary switchover.
+> **Partly executed. Read [`HANDOVER.md`](HANDOVER.md) first** — it carries the commit
+> state, the apply sequence, the two open operator decisions, and the four places this
+> plan's assumptions turned out to be wrong. This file remains the work order; the
+> handover is where the work order stands.
 
 Written 2026-08-02 after the decision session with the operator. This is the work order
 for the implementing session. **Read `README.md` and `01-…07-*.md` first** — this file
@@ -118,6 +53,11 @@ request changes deploy via Helm afterwards without any drain.
 
 ## Phase 0 — PSI alert
 
+> **Written — HelmCharts `97fa810`, awaiting deploy.** Replayed as asked: `>0.05` for
+> 10m fires twice inside the incident window and nowhere else. A warning tier at `>0.02`
+> for 15m rides along. The quiet-week replay was really ~2 quiet days — `retentionSize:
+> 2GB` binds long before the `7d` setting.
+
 **What PSI is** (for the record): Linux Pressure Stall Information (`/proc/pressure/*`) —
 the fraction of wall-time tasks spend stalled waiting on a resource instead of running.
 It measures the pain directly, unlike free-memory gauges. It is the only signal that
@@ -138,6 +78,11 @@ barely moved. kubelet cannot evict on it (1.35.6), so it becomes an alert instea
 - A second rule — reservation-vanished — belongs to Phase D; see there.
 
 ## Phase A — node resize
+
+> **Written — Ansible `c7e1f01`, awaiting apply. Step 1's gate is resolved** (see
+> HANDOVER). Step 6 needs nothing: the play sets no `order:`, so inventory order already
+> runs srvk8s1 first. Step 2 re-verified 2026-08-02: `pve` 24542 MB available, `pve1`
+> 6547, `pve2` 5802 — pve2 ~0.6 GiB tighter than this file records.
 
 1. **Gate: resolve the PDB question first** (`07-capacity.md` Q2).
    `postgres-pas-prd/postgres-primary` allowed 0 disruptions yet the 2026-08-02 roll got
@@ -162,6 +107,11 @@ barely moved. kubelet cannot evict on it (1.35.6), so it becomes an alert instea
    surge pod going Ready; verify post-roll capacity via `kube_node_status_capacity`.
 
 ## Phase B — third-party memory requests (D3)
+
+> **Written — HelmCharts `35e22b0` + `125fe29`, Ansible `1768e0d`, awaiting deploy.**
+> All 69 requestless containers covered; the sweep comes back empty modulo the KubeCoder
+> env pods. Done through `resources-entry-map.json` + `recommend-resources` rather than
+> hand-written values, per HelmCharts' "never guess resource values" rule.
 
 Goal: after this phase, **no requestless container on the prd cluster except KubeCoder
 env pods**. Sweep with the script in `02-measurements.md` §"Requestless pods".
@@ -212,6 +162,9 @@ control-plane components already covered by `5abd9d8`.
 
 ## Phase C — re-baseline
 
+> **Blocked on A and B being applied.** HANDOVER lists which measurements actually gate
+> a decision, and the retention caveat that makes the 7-day figures here unreproducible.
+
 Re-run everything in `02-measurements.md` — capacities/allocatable, non-pod overhead via
 the **cgroup method** (avg/p99/max per node), per-node requests, kubelet-signal floors,
 and the N−1 drain arithmetic. Every number in the pack is stale after Phases A+B. The
@@ -219,6 +172,11 @@ queries are the durable part of `02`; use them as written (mind the `instance` l
 quirk and the two-method cross-check).
 
 ## Phase D — kubelet args: reservation + soft eviction (one edit, one roll)
+
+> **Mechanism written and gated off — Ansible `f10ec4d` + `3b8e7f3`, HelmCharts
+> `9898d0a`. The reservation value is an open operator decision**, not the recompute this
+> file expected: measurement wants ~2.5 GiB, the N−1 drain check tolerates ~1.2. See
+> HANDOVER.
 
 Both flags land in the same `args/kubelet` change, same handler, same serial roll.
 
@@ -268,6 +226,9 @@ Both flags land in the same `args/kubelet` change, same handler, same serial rol
      Lands in the same Prometheus rules file as Phase 0's alert.
 
 ## Phase E — wrap-up
+
+> **Trello #412 updated and moved to Operator Actions.** Doc compression, `decisions.md`
+> and the acceptance-criteria check all wait for the applies to land.
 
 - **Trello**: Triage card #412 (`kube-reserved`/`system-reserved`) is superseded by this
   pack — update it with the outcome and close/move it per board convention.

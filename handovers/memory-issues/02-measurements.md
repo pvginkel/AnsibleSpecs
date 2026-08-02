@@ -4,6 +4,13 @@
 Re-run everything here before sizing a reservation or an eviction threshold. The queries
 are the durable part of this file; the numbers are not.
 
+> Fresher figures — same day, ~15:00 UTC, still pre-resize and pre-request-coverage — are
+> at the end of [`HANDOVER.md`](HANDOVER.md), including a per-node p99 of the cgroup-method
+> overhead. Two things to know before re-running anything here: Prometheus keeps about
+> **two days**, not seven (`retentionSize: 2GB` binds before the `7d` setting), so the
+> 7-day samples below cannot be reproduced; and on the `kubernetes-service-endpoints` job
+> the node-exporter series are labelled `node`, while the cadvisor series use `instance`.
+
 Prometheus is reachable in-cluster at:
 
 ```

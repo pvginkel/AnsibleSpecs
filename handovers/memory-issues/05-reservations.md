@@ -67,6 +67,15 @@ kubelite itself.
 
 ## The constraint that capped the value — recompute it
 
+> **Recomputed 2026-08-02, and the expectation below is wrong.** The resize did not loosen
+> this constraint; the request coverage tightened it. Draining one control-plane node onto
+> the other two is feasible while
+> `reserved ≤ allocatable − (control-plane requests − DaemonSet requests)/2` — the drained
+> node's own load cancels, so the answer is independent of placement skew. At 16 GiB nodes
+> and the projected 29.2 GiB post-Phase-B load that ceiling is **~1.2 GiB**, against a
+> measured p99 overhead of 2.26 GiB. The two no longer meet, which makes the value a
+> decision rather than a calculation — see [`HANDOVER.md`](HANDOVER.md).
+
 Draining srvk8s2 requires its requests to fit **concurrently** on srvk8s1 + srvk8s3
 (srvk8s4 is tainted `homelab.local/performance=high:NoSchedule` and cannot absorb general
 workload). Verified 2026-08-02 at current sizes, srvk8s2 needing 10.98 GiB:
