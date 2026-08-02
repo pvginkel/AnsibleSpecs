@@ -42,22 +42,33 @@
 >
 > ### What the operator runs, in order
 >
-> 1. `cd ~/source/Ansible/terraform/prd && terraform apply`
-> 2. `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
->    (drop the trailing `--check` to apply — this is the roll that cold-cycles each VM onto
->    its new size; inventory order already puts srvk8s1 first)
-> 3. Push HelmCharts so Jenkins deploys the alerts and the new requests. Expect
->    `NodeKubeReservedMissing` to fire on all four nodes until Phase D lands.
-> 4. `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --check`
->    (drop `--check` to apply — this is Phase B's addon patches)
-> 5. Phase C, then decide D's reservation value, then set
->    `microk8s_manage_kubelet_resources: true` in `group_vars/k8s_prd.yml` and re-run
->    `site-k8s.yml`.
+> **Pushing is applying.** A push to `pvginkel/Ansible` main fires `IaC/Deploy`
+> (`Jenkinsfile.iac-on-push`), which runs `terraform apply -auto-approve` and then
+> `site.yml`, `site-openbao.yml` and `site-k8s.yml --limit k8s_prd`, unattended and
+> fail-fast. A push to HelmCharts deploys through `IaC/HelmCharts` the same way. So a
+> check-mode preflight has to happen *before* the push, from the working tree.
 >
-> Two things worth knowing before step 3: alertmanager's only receiver is an empty
-> `default-receiver`, so alerts reach the UI and nowhere else; and the CNPG Cluster
-> gaining `spec.resources` rolling-restarts all three postgres instances with a primary
-> switchover.
+> 1. Preflight the Ansible side from the working tree:
+>    `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update --check`
+> 2. Push Ansible. `IaC/Deploy` applies the terraform memory change — which only marks the
+>    VMs `[PENDING]`, since the pipeline never drains or reboots a node — and lands Phase B's
+>    addon requests (~0.86 GiB across the control-plane trio, which the roll below still
+>    clears with ~3 GiB to spare).
+> 3. Roll the fleet **by hand, now**, rather than leaving a pending resize for
+>    `IaC/Scheduled Update` to pick up unattended at ~04:00 next Sunday:
+>    `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
+>    (drop the trailing `--check` to apply). Inventory order already puts srvk8s1 first,
+>    which is what the drain arithmetic needs.
+> 4. Push HelmCharts — the alerts and the bulk of the new requests. Holding this until
+>    after step 3 is the plan's deliberate ordering: the requests land on 16 GiB nodes and
+>    never tighten the roll.
+> 5. Phase C, then decide D's reservation value, then set
+>    `microk8s_manage_kubelet_resources: true` in `group_vars/k8s_prd.yml` and push.
+>
+> Three things worth knowing before step 4: alertmanager's only receiver is an empty
+> `default-receiver`, so alerts reach the UI and nowhere else; `NodeKubeReservedMissing`
+> fires on all four nodes until Phase D lands; and the CNPG Cluster gaining
+> `spec.resources` rolling-restarts all three postgres instances with a primary switchover.
 
 Written 2026-08-02 after the decision session with the operator. This is the work order
 for the implementing session. **Read `README.md` and `01-…07-*.md` first** — this file
