@@ -1,5 +1,64 @@
 # Execution plan — cluster memory work
 
+> ## Execution status — 2026-08-02
+>
+> Phases 0, A, B and D are **written and committed**. Nothing is deployed: every apply is
+> the operator's keystroke, in the order under "What the operator runs" below. Phase C
+> cannot start until A and B are applied.
+>
+> | phase | state | commits |
+> |---|---|---|
+> | 0 — PSI alert | done, awaiting deploy | HelmCharts `97fa810` |
+> | A gate — PDB | **resolved**, see below | — |
+> | A — node resize | written, awaiting apply | Ansible `c7e1f01` |
+> | B — request coverage | written, awaiting deploy | HelmCharts `35e22b0`, `125fe29`; Ansible `1768e0d` |
+> | C — re-baseline | blocked on A + B | — |
+> | D — kubelet args | mechanism written, **value undecided** | Ansible `f10ec4d`, `3b8e7f3`; HelmCharts `9898d0a` |
+> | E — wrap-up | Trello done; docs pending completion | — |
+>
+> **A's gate is resolved.** CNPG 1.30.0 runs with
+> `drainTaints: [node.kubernetes.io/unschedulable, …]`, so the cordon that
+> `pre-drain-handoff.yml` applies makes the operator switch the primary off the node.
+> Operator log, 2026-08-02T04:19:14Z: `currentPrimary=postgres-1 targetPrimary=postgres-2`.
+> The pod relabels to `instanceRole=replica`, drops out of the `postgres-primary` PDB's
+> selector, and the eviction succeeds. `drain` passes `--force` (bare pods only) and *not*
+> `--disable-eviction`, so PDBs are honoured; `--timeout=900s` plus `retries: 3` rides out
+> the switchover. It needs a healthy replica to promote.
+>
+> **D's value is an open operator decision.** Draining one control-plane node onto the
+> other two is feasible while `reserved ≤ allocatable − (control-plane requests − DaemonSets)/2`
+> — the drained node's own load cancels, so the answer is independent of placement skew.
+> At 16 GiB nodes and the projected 29.2 GiB post-Phase-B load that ceiling is **~1.2 GiB**,
+> while the measured p99 overhead is **2.26 GiB**. The resize did not loosen the constraint
+> `05-reservations.md` expected it to: +8 GiB of RAM against +5.8 GiB of newly-visible
+> requests. Confirm both numbers in Phase C, then pick. `microk8s_manage_kubelet_resources`
+> is `false` until then.
+>
+> **`07` Q1 is answered and its premise was wrong.** No load event at 06:05 — srvk8s1's
+> `kubepods` working set was flat at 7.0 GiB from 05:35 through 06:05. The node had been
+> on ~1.4 GiB of headroom for hours and PSI went nonlinear at the cliff. The episodes align
+> with the hourly `storage-refresh-keys-cronjob` at 05:01 and 06:01, which is a trigger,
+> not a cause.
+>
+> ### What the operator runs, in order
+>
+> 1. `cd ~/source/Ansible/terraform/prd && terraform apply`
+> 2. `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
+>    (drop the trailing `--check` to apply — this is the roll that cold-cycles each VM onto
+>    its new size; inventory order already puts srvk8s1 first)
+> 3. Push HelmCharts so Jenkins deploys the alerts and the new requests. Expect
+>    `NodeKubeReservedMissing` to fire on all four nodes until Phase D lands.
+> 4. `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --check`
+>    (drop `--check` to apply — this is Phase B's addon patches)
+> 5. Phase C, then decide D's reservation value, then set
+>    `microk8s_manage_kubelet_resources: true` in `group_vars/k8s_prd.yml` and re-run
+>    `site-k8s.yml`.
+>
+> Two things worth knowing before step 3: alertmanager's only receiver is an empty
+> `default-receiver`, so alerts reach the UI and nowhere else; and the CNPG Cluster
+> gaining `spec.resources` rolling-restarts all three postgres instances with a primary
+> switchover.
+
 Written 2026-08-02 after the decision session with the operator. This is the work order
 for the implementing session. **Read `README.md` and `01-…07-*.md` first** — this file
 assumes their context and does not repeat the evidence. Where this file conflicts with the
