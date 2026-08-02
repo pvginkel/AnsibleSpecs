@@ -1,132 +1,126 @@
-# Handover — cluster memory work, 2026-08-02 evening
+# Handover — cluster memory work, 2026-08-02 late evening
 
-**Start here.** This is the state of the work as of the end of the execution session on
-2026-08-02. [`PLAN.md`](PLAN.md) is still the work order and the numbered files are still
-the evidence base, but where this file disagrees with either, this file wins.
+**Start here.** State as of the end of the second execution session on 2026-08-02.
+[`PLAN.md`](PLAN.md) is still the work order and the numbered files are still the evidence
+base, but where this file disagrees with either, this file wins.
 
 ---
 
 ## Where we are in one paragraph
 
-Every phase of the plan that can be written without touching real infrastructure has been
-written and committed: the PSI alert, the node resize, full memory-request coverage, and
-the kubelet reservation/eviction mechanism. **Nothing is pushed and therefore nothing is
-deployed** — the commits sit locally in three repos. Two things now need the operator: the
-apply sequence, and a decision about the reservation value that the plan assumed would be
-arithmetic and turned out not to be.
-
-## Commit state — all local, none pushed
-
-| repo | commits (oldest first) |
-|---|---|
-| `Ansible` | `c7e1f01` resize · `1768e0d` addon requests · `f10ec4d` kubelet args · `3b8e7f3` the reservation note |
-| `HelmCharts` | `97fa810` PSI alert · `35e22b0` recommender plumbing · `125fe29` recommender output · `9898d0a` reservation alert |
-| `AnsibleSpecs` | `ff8d304`, `fa2b017` (plan status) + this file |
-
-`Ansible` also carries one pre-existing unpushed commit, `a03c797` (CLAUDE.md), which is
-not part of this work but will go out with the same push.
+Phases 0, A and B are **deployed and applied**. All three repos are pushed, CI ran, and the
+control-plane trio was rolled by hand onto 16 GiB. What remains is Phase C (re-measure,
+gated on ~2 days of clean Prometheus history), then the Phase D value decision — which the
+post-roll numbers have narrowed almost to nothing — then Phase E wrap-up.
 
 | phase | state |
 |---|---|
-| 0 — PSI alert | written, validated by replay, awaiting deploy |
-| A gate — postgres PDB | **resolved** |
-| A — node resize | written, awaiting apply |
-| B — request coverage | written, awaiting deploy |
-| C — re-baseline | blocked on A + B |
-| D — kubelet args | mechanism written and gated off; **value is an open decision** |
-| E — wrap-up | Trello #412 done; doc compression waits for completion |
+| 0 — PSI alert | **deployed** |
+| A — node resize | **applied**; trio rolled and rebalanced 2026-08-02 evening |
+| B — request coverage | **deployed** |
+| C — re-baseline | **ready to run from ~2026-08-04 evening** (see the retention caveat) |
+| D — kubelet args | mechanism deployed but gated off; value decision now near-trivial |
+| E — wrap-up | Trello #412 done; doc compression waits for D |
+
+All commits from the previous session are pushed. Nothing is outstanding in any repo.
 
 ---
 
-## Four things the pack got wrong or left open, now settled
+## What the roll actually did
 
-**1. The postgres PDB gate (`07` Q2) — resolved.** CNPG 1.30.0 runs with
-`drainTaints: [node.kubernetes.io/unschedulable, …]`. `pre-drain-handoff.yml` cordons the
-node before draining it, which applies that taint, and CNPG responds by switching the
-primary away. The operator log shows it at 2026-08-02T04:19:14Z:
-`currentPrimary=postgres-1 targetPrimary=postgres-2`. The pod then relabels to
-`cnpg.io/instanceRole=replica`, drops out of the `postgres-primary` PDB's selector, and
-falls under the `postgres` PDB (2 replicas, `minAvailable: 1`, so one disruption allowed) —
-eviction succeeds. `kubectl drain` passes `--force`, which only covers unmanaged pods and
-does **not** bypass PDBs, and does not pass `--disable-eviction`; `--timeout=900s` plus the
-task's `retries: 3` rides out the switchover. The dependency worth remembering: this needs
-a healthy replica to promote.
+`IaC/Deploy` (`Jenkinsfile.iac-on-push`) applied the terraform resize but **did not roll the
+nodes** — by design; its header says it "never drains, upgrades, or reboots a cluster node."
+That left the VMs with PVE `[PENDING]` memory and still running on the old size. The roll is
+`update-k8s.yml`, owned by `Jenkinsfile.iac-scheduled-update` (cron `H 4 * * 0`).
 
-**2. There was no 06:05 load event (`07` Q1).** srvk8s1's `kubepods` working set was flat
-at 7.0 GiB from 05:35 straight through 06:05 — it climbed smoothly from 6.23 GiB at 04:00
-and then plateaued. Nothing arrived. The node had been sitting on ~1.4 GiB of headroom for
-hours and PSI went nonlinear at the cliff, which is what PSI does: it measures pain, not
-load. The individual episodes line up with the hourly `storage-refresh-keys-cronjob` at
-05:01 and 06:01 — a trigger on a node with no absorption capacity, not a cause. There is
-nothing to hunt at 06:00 and no recurring 06:05 threat.
+Run by hand as `--limit 'k8s_prd:!srvk8s4'`, it completed clean on all three
+(`failed=0`), cold-cycling each VM via `qm shutdown`/`qm start` — which is what merges a
+PVE pending change; a guest-side reboot would not.
 
-**3. The reservation ceiling tightened rather than loosening.** `05-reservations.md`
-expected the resize to relax the N−1 drain constraint that capped the value at 1536Mi. It
-did the opposite, because Phase B's newly-visible requests outweighed the extra RAM. See
-the next section.
+**srvk8s1 had to go first, and did.** At pre-roll sizes it was the only feasible starting
+node — draining srvk8s2 or srvk8s3 first did not fit on the survivors. Inventory order
+already puts srvk8s1 first.
 
-**4. Two latent bugs surfaced while wiring Phase B.** `charts/prometheus/resources-entry-map.json`
-still used the pre-`-prd` release names, so the recommender matched nothing in that chart;
-and `configmapReload.resources` in the prd values sat one level above
-`configmapReload.prometheus.resources`, which is the path the chart actually reads — a value
-was set and silently did nothing. Both fixed in `35e22b0`. Worth knowing because the same
-shape of failure is invisible: the values file looks right.
+**srvk8s4 was deliberately excluded** — it hosts the KubeCoder controller and env pods,
+including the pod Claude runs in, so rolling it kills the session mid-playbook. It needed no
+resize (20 GiB, no pending change) but it has therefore **not had its apt/snap updates**;
+the next `IaC/Scheduled Update` will take it.
+
+One transient failure during recovery, self-healed: `iot-prd/iotsupport`'s init container
+crash-looped on `502` from `auth.ginbov.nl` because Keycloak was itself still restarting.
+It cleared on the next backoff retry. Worth recognising rather than chasing next time.
+
+### The roll skewed placement, and the skew was corrected by hand
+
+Drained pods do not return. srvk8s3 rolled last, so it came back nearly empty while the
+other two carried everything — 11.3× spread, against `07-capacity.md`'s ≤1.5× criterion.
+
+Corrected by `rollout restart` on five deployments chosen to move ~8.9 GiB
+(`git-sync-prd/gitblit`, `registry-prd/registry`, `trello-mcp-prd/trello-mcp`,
+`jenkins-prd/jenkins`, `media-prd/media`). `prometheus-prd-server` was a good-sized
+candidate and was deliberately left alone — it is the instrument Phase C measures with.
+
+## Measured state after the roll and rebalance (2026-08-02 ~20:00)
+
+Allocatable is raw, with no `kube-reserved` set. DaemonSet requests are 952 Mi on every node.
+
+| node | allocatable | requests | % | movable |
+|---|---|---|---|---|
+| srvk8s1 | 15870 Mi | 9085 Mi | 57% | 8133 Mi |
+| srvk8s2 | 15872 Mi | 8375 Mi | 53% | 7423 Mi |
+| srvk8s3 | 15872 Mi | 10144 Mi | 64% | 9192 Mi |
+| srvk8s4 | 19878 Mi | 1384 Mi | 7% | 432 Mi |
+
+Trio total: **27604 Mi (26.96 GiB)**. The plan projected 29.2 GiB — the real figure came in
+~2.2 GiB lighter, and that is what moves the Phase D decision below.
 
 ---
 
-## Open decision 1 — the `--kube-reserved` value
+## Open decision 1 — the `--kube-reserved` value (much narrower than recorded)
 
-This is the one blocking Phase D, and it is a judgement call, not a calculation.
-
-Draining one control-plane node onto the other two is feasible while
+The correct drain formula, re-derived from the measured numbers, is
 
 ```
-reserved  ≤  allocatable − (control-plane requests − DaemonSet requests) / 2
+R  ≤  A − (Total − ds_X) / 2
 ```
 
-The drained node's own load appears on both sides and cancels, so **the answer does not
-depend on how skewed the placement is** — only on the total committed across the trio.
-srvk8s4 contributes nothing: it is tainted `homelab.local/performance=high:NoSchedule`.
+where `A` is raw per-node allocatable, `Total` is the trio's total requests, and `ds_X` is
+the DaemonSet requests **on the drained node only** (they don't move; the other nodes' do
+not enter). The drained node's own movable load cancels, so the result is independent of
+placement skew. srvk8s4 contributes nothing — it is tainted
+`homelab.local/performance=high:NoSchedule`.
 
-At 16 GiB nodes (≈15.58 GiB capacity, ≈15.48 after the 100Mi default hard-eviction
-threshold) and the projected 29.2 GiB post-Phase-B control-plane load, that ceiling is
-**≈1.2 GiB**. The measured p99 non-pod overhead is **2.26 GiB**. They do not meet.
+With today's numbers: `15870 − (27604 − 952)/2` = **2544 Mi**.
 
-| reserved | drain margin |
+The measurement-derived value already in `roles/microk8s/defaults/main.yml` is **2560 Mi**.
+The gap is ~16 Mi — checked per node, 2560 Mi misses by ~30 Mi on each. The ~1.3 GiB
+conflict this pack was written around has **essentially dissolved**, because Phase B's real
+requests landed lighter than projected.
+
+| reserved | drain margin (worst node) |
 |---|---|
-| 0 | +2.40 GiB |
-| 1.0 GiB | +0.40 |
-| 1.2 GiB | 0.00 |
-| 1.5 GiB | −0.60 |
-| 2.0 GiB | −1.60 |
-| 2.5 GiB | −2.60 |
+| 2048 Mi | +496 Mi |
+| 2432 Mi | +112 Mi |
+| 2544 Mi | 0 |
+| 2560 Mi | −30 Mi |
 
-A reservation below the real overhead still lets the node overcommit itself, so it buys
-much less than it looks like it does. Options, roughly cheapest first:
+So this is no longer "which risk do I carry" — it is "shave ~100 Mi off the reservation, or
+find ~100 Mi of headroom." **Do not act on this table alone**: it is a snapshot taken ~30
+minutes after a roll, and the 2560 Mi figure is itself a *pre-resize* p99 that Phase C
+re-derives.
 
-- **Reserve ~1024Mi** and accept partial cover. Keeps the roll safe; the `kubepods` cgroup
-  cap still ring-fences kubelite somewhat, which was always the strongest argument for the
-  reservation.
-- **Let general workload tolerate srvk8s4's taint during drains.** It sits at ~1.4 GiB of
-  requests against 19.4 GiB allocatable, so this ends the constraint outright — but it
-  contradicts why the taint exists (it is the KubeCoder high-performance node).
-- **Grow the nodes again.** Only `pve` has room; `pve1`/`pve2` are down to ~3.7 GiB each
-  after this resize.
-- **Accept Pending pods mid-roll.** Cheapest to implement, worst at 04:00 unattended.
-
-`microk8s_manage_kubelet_resources` is `false` until this is settled. The measurement-derived
-values are already in `roles/microk8s/defaults/main.yml`
-(`microk8s_kube_reserved_memory: 2560Mi`, worker `1536Mi`) with the conflict recorded
-alongside them.
+`microk8s_manage_kubelet_resources` remains `false`. When enabling: set it in
+`group_vars/k8s_prd.yml`, adjust `microk8s_kube_reserved_memory`, push. Rollout order per
+node: srvk8s3 → srvk8s1 → srvk8s4 → srvk8s2.
 
 ## Open decision 2 — the 1-second liveness probe timeouts
 
-Still never put to the operator, and still the cheapest resilience win on the table: this
-is the mechanism that converted "slow node" into 46 dead pods. Survey as of 2026-08-02 —
-56 container-kinds carry `timeoutSeconds ≤ 1`. Restart leaders: metallb `speaker` 29,
-`node-exporter` 16, `step-ca` 7, `headlamp` and `metrics-server` 5 each, metallb
-`controller` and `mosquitto` 4 each. The sharpest is `mosquitto-prd/mosquitto` — TCP probe,
-`periodSeconds: 1`, `failureThreshold: 3`, so three seconds of unresponsiveness kills it.
+Unchanged, and still never put to the operator. This is the mechanism that converted "slow
+node" into 46 dead pods. Survey as of 2026-08-02 — 56 container-kinds carry
+`timeoutSeconds ≤ 1`. Restart leaders: metallb `speaker` 29, `node-exporter` 16, `step-ca`
+7, `headlamp` and `metrics-server` 5 each, metallb `controller` and `mosquitto` 4 each. The
+sharpest is `mosquitto-prd/mosquitto` — TCP probe, `periodSeconds: 1`,
+`failureThreshold: 3`, so three seconds of unresponsiveness kills it.
 
 Do not implement without a yes.
 
@@ -134,29 +128,13 @@ Do not implement without a yes.
 
 ## What to do next, in order
 
-**Pushing is applying.** A push to `pvginkel/Ansible` main fires `IaC/Deploy`
-(`Jenkinsfile.iac-on-push`), which runs `terraform apply -auto-approve` and then `site.yml`,
-`site-openbao.yml` and `site-k8s.yml --limit k8s_prd`, unattended and fail-fast. A push to
-HelmCharts deploys through `IaC/HelmCharts` the same way. So every check-mode preflight has
-to happen from the working tree, before the push.
-
-1. **Preflight the Ansible side.**
-   `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update --check`
-2. **Push Ansible.** CI applies the terraform memory change — which only marks the VMs
-   `[PENDING]`, since that pipeline never drains or reboots a node — and lands Phase B's
-   addon requests (~0.86 GiB across the trio; the roll below still clears with ~3 GiB spare).
-3. **Roll by hand, promptly.**
-   `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
-   (drop the trailing `--check` to apply). Do not leave a pending resize for
-   `IaC/Scheduled Update` to pick up unattended at ~04:00 on Sunday. Inventory order already
-   puts srvk8s1 first, which is what the drain arithmetic needs.
-4. **Push HelmCharts.** The alerts plus the bulk of the new requests. Holding this until
-   after step 3 is the plan's deliberate ordering — the requests land on 16 GiB nodes and
-   never tighten the roll.
-5. **Phase C**, below.
-6. **Decide the reservation value**, set `microk8s_manage_kubelet_resources: true` in
-   `group_vars/k8s_prd.yml`, adjust `microk8s_kube_reserved_memory` to match the decision,
-   and push. Rollout order per node: srvk8s3 → srvk8s1 → srvk8s4 → srvk8s2.
+1. **Wait until ~2026-08-04 evening.** Prometheus is bounded by `retentionSize: 2GB`, not
+   the `7d` setting — about two days in practice. Measuring earlier blends pre-roll data
+   into every window.
+2. **Run Phase C** (queries below).
+3. **Decide the reservation value** against those numbers, enable
+   `microk8s_manage_kubelet_resources`, push, roll.
+4. **Phase E** — acceptance checks from `07-capacity.md`, then compress this pack.
 
 ## Phase C — what actually has to be re-measured
 
@@ -171,8 +149,7 @@ to happen from the working tree, before the push.
      - on(instance) container_memory_working_set_bytes{id="/kubepods"})[2d:5m]) /1024/1024/1024
   ```
 
-- **Per-node requests**, and the DaemonSet share of them (DaemonSets do not move on a
-  drain, so they come out of the movable figure):
+- **Per-node requests**, and the DaemonSet share of them:
 
   ```
   sum by (node) (kube_pod_container_resource_requests{resource="memory"}) /1024/1024/1024
@@ -185,46 +162,58 @@ to happen from the working tree, before the push.
   acceptance criterion, not a formality.
 
 - **The kubelet-signal floor per node** — `capacity − root cgroup working set` — to
-  sanity-check the 1536Mi soft-eviction threshold. Normal-state floors on the resized nodes
-  must sit well clear of it. If a node chronically sits below, say so rather than quietly
-  retuning; eviction shedding load is the designed behaviour.
+  sanity-check the 1536Mi soft-eviction threshold. If a node chronically sits below, say so
+  rather than quietly retuning; eviction shedding load is the designed behaviour.
 
 Then the acceptance criteria from `07-capacity.md`: no node below ~20% free on kubelet's
 signal, requests within ~25% of usage, post-roll pod distribution within ~1.5× across
 srvk8s1/2/3, PSI full-stall under 0.02 s/s, N−1 drain fits with margin.
 
-**Retention caveat that will bite you.** Prometheus is bounded by `retentionSize: 2GB`, not
-the `7d` setting — in practice about two days of history. Every "7-day" figure in the
-numbered files is a longer window than you can now reproduce, and the recommender's 5-day
-query silently gets ~2 days.
-
 ---
 
 ## Landmines
 
+- **Every roll re-skews placement.** Drained pods never come back, so the last node rolled
+  ends up empty and the others packed. `IaC/Scheduled Update` runs unattended at
+  `H 4 * * 0` with nothing to correct it. Tonight's fix was manual. A durable fix (a
+  descheduler, or a rebalance pass at the end of `update-k8s.yml`) is a playbook change —
+  slice territory. Carded in Triage.
 - **Alertmanager has no receiver.** Its only route points at an empty `default-receiver`,
-  so every alert added here reaches the Prometheus/Alertmanager UI and nowhere else. Wiring
-  a real notifier is outside this work but worth raising.
-- **`NodeKubeReservedMissing` fires on all four nodes** from the moment the prometheus chart
-  deploys until Phase D lands. That is correct behaviour, not a bug. `for: 30m`.
-- **The CNPG Cluster gaining `spec.resources` rolling-restarts all three postgres
-  instances**, with a primary switchover. Brief, but it is the shared database substrate.
-- **ceph-csi routes several containers through one values path.** `nodeplugin.plugin.resources`
-  feeds the plugin container, the controller container and both `liveness-prometheus`
-  sidecars, so that block carries the largest of their recommendations and over-provisions
-  the small ones — ~386 Mi/node against ~250 actual. Upstream chart limitation, recorded in
-  the values file.
+  so every alert added here reaches the Prometheus/Alertmanager UI and nowhere else.
+- **`NodeKubeReservedMissing` fires on all four nodes** until Phase D lands. Correct
+  behaviour, not a bug. `for: 30m`.
+- **Restarting a `Recreate` singleton costs downtime.** Of the rebalance set, `jenkins` and
+  `media` are `Recreate`; `gitblit`, `registry` and `trello-mcp` are `RollingUpdate` on RWX
+  or PVC-less volumes. Check `strategy` and PVC access mode before moving anything —
+  `RollingUpdate` + RWO deadlocks.
+- **`registry-prd/registry` backs cluster image pulls.** Restarting it blips every pull.
 - **The addon patches are not durable on their own.** Re-enabling an addon, or a snap
   refresh that reinstalls its manifests, reverts them; the role re-asserts on the next
-  `site-k8s.yml` converge, same guarantee as the CoreDNS Corefile and the MetalLB pool.
+  `site-k8s.yml` converge.
 - **`recommend-resources` matches on the deployed workload name**, so a chart whose
-  `resources:` keys disagree with the live Deployment name is silently skipped. That is what
-  had happened to prometheus and to `webathome-org`'s architecture-viewer. If a container
-  shows up requestless again, check the key before adding a value.
+  `resources:` keys disagree with the live Deployment name is silently skipped. If a
+  container shows up requestless again, check the key before adding a value.
+- **ceph-csi routes several containers through one values path.** `nodeplugin.plugin.resources`
+  feeds the plugin container, the controller container and both `liveness-prometheus`
+  sidecars — ~386 Mi/node against ~250 actual. Upstream chart limitation.
 
-## Measurements taken 2026-08-02, for comparison after the roll
+## Settled earlier, kept for reference
 
-Pre-resize, pre-Phase-B, ~15:00 UTC (GiB):
+- **The postgres PDB gate is resolved.** CNPG 1.30.0 runs with `drainTaints`;
+  `pre-drain-handoff.yml` cordons before draining, CNPG switches the primary away, the old
+  primary relabels to `replica` and falls under the 2-replica PDB, and eviction succeeds.
+  Confirmed again by tonight's roll — `postgres-pas-prd` came through 3/3 healthy. Needs a
+  healthy replica to promote.
+- **There was no 06:05 load event.** srvk8s1's `kubepods` working set was flat at 7.0 GiB
+  from 05:35 through 06:05. PSI went nonlinear at the cliff because it measures pain, not
+  load. Nothing to hunt at 06:00.
+- **Two latent bugs fixed while wiring Phase B**: `resources-entry-map.json` used
+  pre-`-prd` release names, and `configmapReload.resources` sat one level above the path
+  the chart reads. Both invisible from the values file.
+
+## Pre-change measurements, for comparison
+
+Pre-resize, pre-Phase-B, 2026-08-02 ~15:00 UTC (GiB):
 
 ```
 node       requests   kubepods ws   kubepods usage   non-pod p99
@@ -234,13 +223,9 @@ srvk8s3       11.21          8.98            10.47          2.26
 srvk8s4        0.71          8.64            10.79          1.16
 ```
 
-PVE headroom immediately before the resize, `free -m` available: `pve` 24542 MB, `pve1`
-6547, `pve2` 5802. ZFS ARC is idle on all three, so those figures are real. srvk8sdev
-confirmed powered off — it staying off is load-bearing for `pve`.
+Immediately post-CI, pre-roll (Mi, on the old node sizes): srvk8s1 7675/9822,
+srvk8s2 9011/13856, srvk8s3 10918/13856 — i.e. Phase B's requests landed on un-resized
+nodes and were absorbed without any pod going Pending.
 
-Phase B's projected additions: 658 Mi/node of DaemonSet requests, ~2540 Mi of singletons,
-~808 Mi of the recommender's drift on workloads that already had requests — 5.84 GiB
-cluster-wide, ~5.2 of it on the control-plane trio.
-
-A 16 GiB VM should report ≈15.58 GiB capacity: guest/firmware overhead measured 318 MiB at
-10 GiB, 379 at 14 and 501 at 20, which interpolates to ~428 MiB at 16.
+PVE headroom before the resize, `free -m` available: `pve` 24542 MB, `pve1` 6547,
+`pve2` 5802. srvk8sdev staying powered off is load-bearing for `pve`.
