@@ -12,7 +12,8 @@ numbered files, this file wins (it post-dates the topology correction).
 
 Standing rules apply throughout: the operator runs every `terraform apply` and
 `ansible-playbook` against real infra; commands handed to the operator use
-`~/source/<repo>` paths and the canonical one-line `cd … && …` shape; check-mode first;
+`/work/<repo>` paths, a `cexec iac` prefix and the canonical one-line `cd … && …` shape
+(terraform excepted — it does not run from this environment); check-mode first;
 commit early and often. HelmCharts deploys go through Jenkins.
 
 ---
@@ -94,10 +95,10 @@ barely moved. kubelet cannot evict on it (1.35.6), so it becomes an alert instea
    operator accepted this; verify nothing has eaten it since. srvk8sdev (12 GiB,
    `on_boot = false`, on `pve`) staying off is load-bearing.
 3. **Edit `terraform/prd/vms.tf`**: `memory_mb` 10→16 for srvk8s1, 14→16 for srvk8s2/3.
-4. **Operator applies**: `cd ~/source/Ansible/terraform/prd && terraform apply`
+4. **Operator applies**: `iac -c 'cd terraform/prd && terraform apply'   # on srviac — see note below`
 5. **Roll to pick up the `[PENDING]` config** (the playbook cold-cycles via `qm
    shutdown`/`qm start` — documented behaviour, no bespoke procedure):
-   `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
+   `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
    (operator drops the trailing `--check` to apply). `serial: 1` is doctrine.
 6. **Order matters**: srvk8s1 must grow **first** so the survivors have slack for the later
    drains (srvk8s2's 10.98 GiB of requests is the tight case). Check how `update-k8s.yml`
@@ -154,7 +155,7 @@ requests only or also limits). Compute per *container*, not per pod.
 control-plane components already covered by `5abd9d8`.
 
 **Deploy**: HelmCharts changes via Jenkins; Ansible changes via
-`cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --check`
+`cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --check`
 (operator drops `--check`). Commit HelmCharts and Ansible changes separately and small.
 
 **Acceptance**: re-run the requestless sweep — empty modulo KubeCoder env pods; per-node

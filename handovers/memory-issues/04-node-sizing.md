@@ -84,16 +84,18 @@ playbook **cold-cycles the VM** via `qm shutdown` + `qm start` from its PVE node
 `shutdown -r` would not power-cycle QEMU and would leave `[PENDING]` unmerged. So the
 standard update play is the correct vehicle; no bespoke procedure needed.
 
-Commands for the operator (they run these, not Claude — and note `~/source`, not `/work`):
+Commands for the operator (they run these, not Claude). Terraform cannot run from the
+KubeCoder environment — its http state backend is only served inside srviac's iac
+container, pending a backend migration — so the apply goes through srviac or CI:
 
 ```
-cd ~/source/Ansible/terraform/prd && terraform apply
+iac -c 'cd terraform/prd && terraform apply'   # on srviac — see note below
 ```
 
 then, to apply the pending VM config with proper drain handling:
 
 ```
-cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check
+cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check
 ```
 
 drop the trailing `--check` to apply. `serial: 1` is non-negotiable per `decisions.md`

@@ -141,12 +141,12 @@ HelmCharts deploys through `IaC/HelmCharts` the same way. So every check-mode pr
 to happen from the working tree, before the push.
 
 1. **Preflight the Ansible side.**
-   `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update --check`
+   `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update --check`
 2. **Push Ansible.** CI applies the terraform memory change — which only marks the VMs
    `[PENDING]`, since that pipeline never drains or reboots a node — and lands Phase B's
    addon requests (~0.86 GiB across the trio; the roll below still clears with ~3 GiB spare).
 3. **Roll by hand, promptly.**
-   `cd ~/source/Ansible/ansible && poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
+   `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/update-k8s.yml --limit k8s_prd --check`
    (drop the trailing `--check` to apply). Do not leave a pending resize for
    `IaC/Scheduled Update` to pick up unattended at ~04:00 on Sunday. Inventory order already
    puts srvk8s1 first, which is what the drain arithmetic needs.

@@ -135,4 +135,4 @@ Claude prepares, the operator runs all `terraform` and `ansible-playbook`.
   (Inbox, `Ansible`). It predates the eviction decision and the three new levers — **this
   pack supersedes it.** Update or close the card as part of the work.
 - Repo conventions that apply: operator runs all terraform/ansible; commands handed to the
-  operator use `~/source/<repo>` paths, never `/work/...`; check-mode first; commit early.
+  operator use `/work/<repo>` paths and run through `cexec iac`; check-mode first; commit early.
