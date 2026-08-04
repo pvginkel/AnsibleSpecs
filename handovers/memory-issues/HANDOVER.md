@@ -1,6 +1,6 @@
-# Handover — cluster memory work, 2026-08-02 late evening
+# Handover — cluster memory work, 2026-08-04
 
-**Start here.** State as of the end of the second execution session on 2026-08-02.
+**Start here.** State as of the Phase C re-baseline on 2026-08-04.
 [`PLAN.md`](PLAN.md) is still the work order and the numbered files are still the evidence
 base, but where this file disagrees with either, this file wins.
 
@@ -8,18 +8,19 @@ base, but where this file disagrees with either, this file wins.
 
 ## Where we are in one paragraph
 
-Phases 0, A and B are **deployed and applied**. All three repos are pushed, CI ran, and the
-control-plane trio was rolled by hand onto 16 GiB. What remains is Phase C (re-measure,
-gated on ~2 days of clean Prometheus history), then the Phase D value decision — which the
-post-roll numbers have narrowed almost to nothing — then Phase E wrap-up.
+Phases 0, A and B are **deployed and applied**, and **Phase C is measured** — results in
+[`08-phase-c-results.md`](08-phase-c-results.md). The cluster is healthy: the incident
+criterion (free memory on kubelet's signal) passes at more than double its target and PSI
+passes by an order of magnitude. What remains is the Phase D value decision, which Phase C
+has reduced to a single number in a 157 Mi window, and Phase E wrap-up.
 
 | phase | state |
 |---|---|
 | 0 — PSI alert | **deployed** |
 | A — node resize | **applied**; trio rolled and rebalanced 2026-08-02 evening |
 | B — request coverage | **deployed** |
-| C — re-baseline | **ready to run from ~2026-08-04 evening** (see the retention caveat) |
-| D — kubelet args | mechanism deployed but gated off; value decision now near-trivial |
+| C — re-baseline | **done 2026-08-04** — [`08-phase-c-results.md`](08-phase-c-results.md) |
+| D — kubelet args | mechanism deployed but gated off; **awaiting the operator's yes on 2432 Mi** |
 | E — wrap-up | Trello #412 done; doc compression waits for D |
 
 All commits from the previous session are pushed. Nothing is outstanding in any repo.
@@ -76,9 +77,9 @@ Trio total: **27604 Mi (26.96 GiB)**. The plan projected 29.2 GiB — the real f
 
 ---
 
-## Open decision 1 — the `--kube-reserved` value (much narrower than recorded)
+## Open decision 1 — the `--kube-reserved` value — **resolved to a recommendation**
 
-The correct drain formula, re-derived from the measured numbers, is
+Phase C re-derived both bounds against 44 h of clean post-roll data. The drain formula is
 
 ```
 R  ≤  A − (Total − ds_X) / 2
@@ -90,28 +91,31 @@ not enter). The drained node's own movable load cancels, so the result is indepe
 placement skew. srvk8s4 contributes nothing — it is tainted
 `homelab.local/performance=high:NoSchedule`.
 
-With today's numbers: `15870 − (27604 − 952)/2` = **2544 Mi**.
+Ceiling: `15870 − (27604 − 952)/2` = **2544 Mi**. Floor (worst-node p99 overhead, srvk8s1):
+**2387 Mi**. The feasible window is 157 Mi wide, and the 2560 Mi currently in
+`roles/microk8s/defaults/main.yml` sits 16 Mi *above* it.
 
-The measurement-derived value already in `roles/microk8s/defaults/main.yml` is **2560 Mi**.
-The gap is ~16 Mi — checked per node, 2560 Mi misses by ~30 Mi on each. The ~1.3 GiB
-conflict this pack was written around has **essentially dissolved**, because Phase B's real
-requests landed lighter than projected.
+**Recommendation: 2432 Mi.** It covers the measured p99 overhead on every trio node with
+45 Mi to spare and leaves 112 Mi/node of drain margin. Applying it evicts nothing — the
+three nodes land at 66 / 62 / 78% committed.
 
-| reserved | drain margin (worst node) |
-|---|---|
-| 2048 Mi | +496 Mi |
-| 2432 Mi | +112 Mi |
-| 2544 Mi | 0 |
-| 2560 Mi | −30 Mi |
+| reserved | drain margin/node | covers srvk8s1 p99 (2387)? |
+|---|---|---|
+| 2048 Mi | +496 Mi | no |
+| **2432 Mi** | **+112 Mi** | **yes** |
+| 2544 Mi | 0 | yes |
+| 2560 Mi | −30 Mi | yes |
 
-So this is no longer "which risk do I carry" — it is "shave ~100 Mi off the reservation, or
-find ~100 Mi of headroom." **Do not act on this table alone**: it is a snapshot taken ~30
-minutes after a roll, and the 2560 Mi figure is itself a *pre-resize* p99 that Phase C
-re-derives.
+The thin drain margin is not a memory problem — it is a request-accounting one. Requests
+overstate real usage by 86%, so the N−1 limit bites as *Pending pods during a roll*, never
+as a starving node; physically the drain fits several times over. Trimming requests is what
+buys the margin back, and it is a separate piece of work. Reasoning in
+[`08-phase-c-results.md`](08-phase-c-results.md).
 
 `microk8s_manage_kubelet_resources` remains `false`. When enabling: set it in
-`group_vars/k8s_prd.yml`, adjust `microk8s_kube_reserved_memory`, push. Rollout order per
-node: srvk8s3 → srvk8s1 → srvk8s4 → srvk8s2.
+`group_vars/k8s_prd.yml`, set `microk8s_kube_reserved_memory: 2432Mi`, push. The worker
+value (1536 Mi) needs no change. Rollout order per node:
+srvk8s3 → srvk8s1 → srvk8s4 → srvk8s2.
 
 ## Open decision 2 — the 1-second liveness probe timeouts
 
@@ -128,15 +132,21 @@ Do not implement without a yes.
 
 ## What to do next, in order
 
-1. **Wait until ~2026-08-04 evening.** Prometheus is bounded by `retentionSize: 2GB`, not
-   the `7d` setting — about two days in practice. Measuring earlier blends pre-roll data
-   into every window.
-2. **Run Phase C** (queries below).
-3. **Decide the reservation value** against those numbers, enable
-   `microk8s_manage_kubelet_resources`, push, roll.
-4. **Phase E** — acceptance checks from `07-capacity.md`, then compress this pack.
+1. ~~Wait until ~2026-08-04 evening, then run Phase C.~~ **Done** —
+   [`08-phase-c-results.md`](08-phase-c-results.md).
+2. **Operator decides the reservation value** (recommendation: 2432 Mi), then enable
+   `microk8s_manage_kubelet_resources`, push, roll in the order above.
+3. **Operator decides on the 1-second liveness probe timeouts** — decision 2 below, still
+   never put to them.
+4. **Card the request trim.** Requests run 86% over actual usage; that is what makes the
+   N−1 drain margin thin, and it is the remaining half of criterion 2. Slice territory —
+   it is a HelmCharts values change across many charts.
+5. **Phase E** — re-check acceptance once D lands, then compress this pack.
 
-## Phase C — what actually has to be re-measured
+## Phase C — the queries, for re-running later
+
+Run with a window that starts *after* the most recent roll — retention reaches further back
+than you expect, and a `[2d:5m]` window silently includes pre-roll samples.
 
 `02-measurements.md` holds the queries; these are the ones that gate a decision.
 
