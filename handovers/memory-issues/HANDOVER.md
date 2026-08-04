@@ -14,7 +14,7 @@ nobody was looking for: `recommend-resources` had been sizing memory from
 `container_memory_usage_bytes`, which counts reclaimable page cache. Every I/O-heavy
 container was over-requested, permanently, because recommendations only ratchet upwards.
 That is now fixed and every prd resource value has been re-derived. **Everything is
-committed and pushed in all three repos; two things are mid-flight.**
+committed and pushed in all three repos; one thing is mid-flight.**
 
 | phase | state |
 |---|---|
@@ -22,32 +22,22 @@ committed and pushed in all three repos; two things are mid-flight.**
 | A — node resize | **applied**; trio rolled and rebalanced 2026-08-02 evening |
 | B — request coverage | **deployed**, then re-derived 2026-08-04 (see below) |
 | C — re-baseline | **done 2026-08-04** — [`08-phase-c-results.md`](08-phase-c-results.md) |
-| D — kubelet args | **committed and pushed, NOT yet on the nodes** — see "in flight" |
-| E — wrap-up | Trello #412 done; doc compression waits for D landing and a re-measure |
+| D — kubelet args | **applied and live on all four prd nodes**, landed via `IaC/Deploy` #123 rather than by hand — see "Settled decision" below |
+| E — wrap-up | Trello #412 done; doc compression waits for a re-measure |
 
-## In flight as of the handover
+## Still outstanding
 
-Two changes are applied-but-not-yet-settled. **Verify both before trusting any number in
+One change is applied-but-not-yet-settled. **Verify it before trusting any number in
 this pack.**
 
-1. **The Helm rollout.** `db8d7d3` (HelmCharts) reset every prd resource value; all charts
-   were rolling when this was written. Until the pods have actually restarted, the live
-   requests are still the old ones.
-2. **The kubelet reservation is not applied.** `d4552dc` (Ansible) is pushed, but srvk8s1's
-   `args/kubelet` still shows only `--eviction-hard`; there is no `--kube-reserved` and no
-   `--eviction-soft`. The operator was going to run the converge by hand once the Helm
-   rollout finished:
+**The Helm rollout.** `db8d7d3` (HelmCharts) reset every prd resource value; all charts
+were rolling when this was written. Until the pods have actually restarted, the live
+requests are still the old ones.
 
-   ```
-   cd ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update --check
-   ```
-
-   Drop the trailing `--check` to apply. Expect four changed lines per node. `serial: 1`
-   restarts kubelite one node at a time; running containers are not stopped, so unlike the
-   08-02 roll this does not disturb workloads (or the KubeCoder pod on srvk8s4).
-
-**First job in the next conversation: check whether both landed**, then re-measure. Every
-request figure in this pack predates the reset and is now wrong in the safe direction.
+Phase D was the other one, and it is **confirmed landed** — see "Verified applied" under
+the settled `--kube-reserved` decision below. **First job in the next conversation: check
+whether the Helm rollout landed**, then re-measure. Every request figure in this pack
+predates the reset and is now wrong in the safe direction.
 
 ## What changed on 2026-08-04 evening
 
@@ -149,7 +139,7 @@ Note also `NUM_DAYS = 5` is hardcoded, so the retention bump only means the scri
 its full intended 5 days rather than ~2. A longer window makes p90 *smoother*, so it
 slightly worsens burst capture rather than improving it.
 
-## Settled decision — the `--kube-reserved` value (2432 Mi, committed)
+## Settled decision — the `--kube-reserved` value (2432 Mi, applied)
 
 Phase C re-derived both bounds against 44 h of clean post-roll data. The drain formula is
 
@@ -167,7 +157,7 @@ Ceiling: `15870 − (27604 − 952)/2` = **2544 Mi**. Floor (worst-node p99 over
 **2387 Mi**. The feasible window is 157 Mi wide, and the 2560 Mi currently in
 `roles/microk8s/defaults/main.yml` sits 16 Mi *above* it.
 
-**Chosen: 2432 Mi**, committed in `d4552dc` with
+**Chosen: 2432 Mi**, set in `d4552dc` with
 `microk8s_manage_kubelet_resources: true` on `k8s_prd`. It covers the measured p99 overhead
 on every trio node with 45 Mi to spare. The worker value (1536 Mi) needed no change.
 
@@ -187,7 +177,58 @@ The thin margin was never a memory problem — it was a request-accounting one. 
 bites as *Pending pods during a roll*, never as a starving node; physically the drain fit
 several times over. Reasoning in [`08-phase-c-results.md`](08-phase-c-results.md).
 
-Rollout order per node if applying by hand: srvk8s3 → srvk8s1 → srvk8s4 → srvk8s2.
+### Verified applied — `IaC/Deploy` #123
+
+**Live on all four prd nodes**, and it landed via CI rather than by hand: Jenkins job
+`IaC/Deploy` build [#123](https://jenkins.webathome.org/job/IaC/job/Deploy/123/) carried
+`d4552dc` in its changeset and ran its `Ansible site-k8s (prd)` stage with exactly the
+command the handover had proposed running manually —
+`ansible-playbook --diff playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update`.
+Play recap, all `failed=0` and `unreachable=0`: srvk8s1 `ok=157 changed=6`, srvk8s2
+`ok=155 changed=5`, srvk8s3 `ok=155 changed=5`, srvk8s4 `ok=122 changed=5`.
+
+The build's overall result is **UNSTABLE**, but not because of anything in prd — every prd
+stage passed. The trailing dev stage found `srvk8sdev` unreachable
+(`ssh: connect to host srvk8sdev port 22: No route to host`), and the pipeline deliberately
+downgrades to UNSTABLE for that, logging `WARNING: srvk8sdev is unreachable — dev
+convergence skipped`. A future reader who looks up build #123, sees UNSTABLE, and doubts
+whether Phase D landed: it landed.
+
+`serial: 1` behaved as designed — kubelite restarted one node at a time, at 21:34:53,
+21:37:07, 21:39:26 and 21:40:30 CEST on 2026-08-04 for srvk8s1, srvk8s2, srvk8s3, srvk8s4
+respectively. CI took them in inventory order rather than the srvk8s3 → srvk8s1 → srvk8s4
+→ srvk8s2 drain-fit order this section used to recommend for a by-hand run. It made no
+difference, because restarting kubelite does not stop running containers or move pods.
+
+`/var/snap/microk8s/current/args/kubelet` on all four nodes now carries
+`--kube-reserved=memory=2432Mi` (`1536Mi` on srvk8s4, the worker),
+`--eviction-soft=memory.available<1536Mi`, `--eviction-soft-grace-period=memory.available=2m`,
+`--eviction-max-pod-grace-period=60`. `--eviction-hard` is unchanged at
+`memory.available<100Mi,nodefs.available<1Gi,imagefs.available<1Gi`, as designed.
+
+Allocatable moved to match: `capacity − allocatable` is 2532Mi on each trio node (the
+2432Mi reservation plus the 100Mi hard-eviction threshold) and 1636Mi on srvk8s4. Trio
+allocatable is now **13438Mi**, exactly the figure the commit message projected. Nothing
+was evicted or disturbed on the way in: all four nodes `Ready`, `MemoryPressure=False`, no
+`Evicted` events. **Prometheus reports zero firing alerts**, so `NodeKubeReservedMissing`
+has cleared on all four nodes — the alert that was expected to clear once Phase D landed.
+
+Measured committed load after the change (requests against the new 13438Mi allocatable):
+
+| node | requests | % of allocatable |
+|---|---|---|
+| srvk8s1 | 7979 Mi | 59% |
+| srvk8s2 | 8515 Mi | 63% |
+| srvk8s3 | 7504 Mi | 55% |
+| srvk8s4 | 1026 Mi | 5% |
+
+The `d4552dc` commit message projected the trio at 66/62/78%; the real figures are
+59/63/55% — more headroom than expected, so the miss is in the safe direction. Trio
+requests now total **23998 Mi**. That sits between the pre-reset 27604 Mi and the ~19000 Mi
+the Helm `--reset` rollout (`db8d7d3`) was projected to settle at, so either that rollout
+has not fully completed or the values-diff estimate was optimistic — check this before the
+Phase C re-measure, since trio requests are an input to it. The Helm rollout itself has
+**not** been verified by this pass — only Phase D has.
 
 ## Open decision 2 — the 1-second liveness probe timeouts
 
@@ -208,11 +249,11 @@ needs a judgement call.
 
 ## What to do next, in order
 
-1. **Confirm the two in-flight changes landed.** Are the pods running on the reset values
-   (`microk8s kubectl describe node`, compare against 27604 Mi)? Does srvk8s1's
-   `args/kubelet` now carry `--kube-reserved` and `--eviction-soft`? If the converge has
-   not been run, the command is in "In flight" above.
-2. **Re-measure once both have settled.** Every request number in this pack is pre-reset.
+1. **Confirm the Helm rollout landed.** Phase D is already confirmed applied and live (see
+   "Settled decision" above). Are the pods running on the reset values
+   (`microk8s kubectl describe node`, compare the measured 23998 Mi against the ~19000 Mi
+   projection)?
+2. **Re-measure once it has settled.** Every request number in this pack is pre-reset.
    Re-derive the drain ceiling and re-check the `07-capacity.md` criteria — criterion 2
    (requests within ~25% of usage) and criterion 5 (N−1 drain with margin) were the two
    that failed, and both should now pass. Give the rollout time to finish first.
@@ -276,8 +317,6 @@ srvk8s1/2/3, PSI full-stall under 0.02 s/s, N−1 drain fits with margin.
   slice territory. Carded in Triage.
 - **Alertmanager has no receiver.** Its only route points at an empty `default-receiver`,
   so every alert added here reaches the Prometheus/Alertmanager UI and nowhere else.
-- **`NodeKubeReservedMissing` fires on all four nodes** until Phase D lands. Correct
-  behaviour, not a bug. `for: 30m`.
 - **Restarting a `Recreate` singleton costs downtime.** Of the rebalance set, `jenkins` and
   `media` are `Recreate`; `gitblit`, `registry` and `trello-mcp` are `RollingUpdate` on RWX
   or PVC-less volumes. Check `strategy` and PVC access mode before moving anything —
