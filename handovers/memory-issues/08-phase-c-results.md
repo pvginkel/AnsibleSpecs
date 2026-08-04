@@ -2,6 +2,12 @@
 
 Measured 2026-08-04 ~18:15 UTC, 46 h after the roll and rebalance.
 
+> **Superseded in part.** Later the same evening, the over-requesting diagnosed here was
+> traced to `recommend-resources` sizing memory from `container_memory_usage_bytes`, and
+> every prd value was re-derived — roughly −8605 Mi net. **The request figures and the
+> drain-margin arithmetic below are pre-reset and no longer describe the cluster.** The
+> overhead measurements and the acceptance-criteria method still stand. See `HANDOVER.md`.
+
 **Window caveat.** Prometheus retention (`retentionSize: 2GB`) reaches back to 2026-08-02
 12:59 UTC — *earlier* than the ~20:00 roll. So a literal `[2d:5m]` window blends pre-roll
 data in exactly the way the plan warned about. Every window below is **`[44h:5m]`**, which
