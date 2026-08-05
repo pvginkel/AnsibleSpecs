@@ -1,12 +1,56 @@
 # BuildKit + forward-compatible service mTLS / authorization
 
-**Status:** Working document (handover). Pre-slice.
+**Status:** **Parked** (Triage *Later*). Pre-slice working document — authoritative
+where it disagrees with the arch-design doc.
 **Driver:** Triage #113 "Setup buildkit" (https://trello.com/c/OtuhDYQS/113-setup-buildkit).
-**Date:** 2026-06-30.
-**Relationship to the arch-design doc:** `../AnsibleSpecs/change_requests/buildkit_daemon/design_buildkit.md`
+**Date:** 2026-06-30. **Reviewed 2026-08-05** (spike run; status + node facts added).
+**Relationship to the arch-design doc:** [`design_buildkit.md`](design_buildkit.md)
 remains the detailed grounding (file:line citations for the storage / ESO / step-ca /
-registry / KubeCoder patterns). Read it alongside this one — but note its **privileged-mode
-assumption is superseded** by Decision 1 below.
+registry / KubeCoder patterns). Read it alongside this one — but note it is superseded
+in **four** places, not just the privileged-mode assumption; the reconciliation table is
+in the banner at the top of that file.
+
+## Status (2026-08-05)
+
+**Parked, and the fallback this document names is live.** Decision 1 says: *"If rootless
+proves infeasible on srvk8s4, we stay on Kaniko."* The gating spike has now been partially
+run and the prerequisite is real (below). Meanwhile Kaniko works in both places images are
+built today — the Jenkins `kaniko` pod template via `helmCharts.kaniko2()`, and the
+KubeCoder `kaniko` sidecar (`charts/kubecoder/files/kaniko/build.sh`) — so there is no
+outage driving this.
+
+**Operator's current lean (2026-08-05): fix Kaniko's rough edges rather than build this.**
+Not a closed decision, but the standing assumption until revisited. Anyone picking the card
+up should re-confirm before authoring a slice, and should weigh the whole cost: the daemon
+is the small half. The client-enablement half spans three out-of-tree pieces
+(JenkinsPipelineUtils helper, the unversioned Jenkins pod template in `JENKINS_HOME`, and
+the KubeCoder controller's cert/endpoint injection) — none of which an in-repo slice can
+land, and without which nothing can actually call the daemon.
+
+### Gating spike — partial result (srvk8s4, 2026-08-05)
+
+Rootless BuildKit needs unprivileged user namespaces with ID mapping. Measured on the node:
+
+```
+kernel.apparmor_restrict_unprivileged_userns     = 1
+kernel.apparmor_restrict_unprivileged_unconfined = 0
+unshare -U    (create userns, no mapping)  → OK
+unshare -Ur   (create + map ids)           → FAIL: write /proc/self/uid_map: EPERM
+/dev/fuse                                   → present
+fuse-overlayfs                              → not installed
+```
+
+Namespace *creation* is permitted; ID *mapping* is denied. So the node-prep task this
+document predicted is real work, not hypothetical — a sysctl
+(`kernel.apparmor_restrict_unprivileged_userns=0`) or an AppArmor profile granting
+`userns create`, plus `fuse-overlayfs` if the kernel cannot do overlayfs-in-userns.
+
+**This is not yet a verdict.** It was measured in a host shell, not in a pod: containers run
+under a different AppArmor profile and containerd sets up mappings differently. The
+definitive test is a rootless `moby/buildkit:*-rootless` pod doing a `buildctl` smoke build
+— cheap, and runnable in the `development` namespace. **Run that before authoring
+anything**; if it fails and node-prep is unwanted, Decision 1 resolves to "stay on Kaniko"
+and this bundle closes.
 
 ## Why this document exists
 
@@ -37,6 +81,13 @@ future service slices can be authored from it. It's written to hand over to a fr
    buildkitd (which only checks cert-chain-to-CA) could be made selective. Rootless removes the
    need: authorization, where required, lives in a *policy layer* (below), not the trust anchor.
    **One homelab CA** for identity.
+   *Clarification (2026-08-05):* this kills the dedicated **CA**, not the dedicated
+   **provisioner**. `design_buildkit.md` Decision 3B — a buildkit-scoped step-ca provisioner,
+   with `ansible-jwk` explicitly not reused — still stands and is still load-bearing: a JWK
+   password must live in-cluster for the cert sidecar, and scoping it is what stops that
+   password minting pve / ceph / kubernetes-api certs. A provisioner was never the rejected
+   "CA hack"; all provisioners sign under the same two-tier chain, so it gives `--tlscacert`
+   nothing distinct to pin — it bounds *issuance*, not *connections*.
 6. **Two slices.** (a) **Daemon slice** — HelmCharts chart + Ansible node-prep + cache PV +
    LB/DNS + rootless config; independently testable via a `buildctl` smoke build. (b)
    **Client-enablement slice** — out-of-tree: the `buildkit()` helper in JenkinsPipelineUtils,
@@ -149,10 +200,10 @@ BuildKit is the **first consumer**, and an `open` one:
   zpool5 PVC. Verify whether seccomp/AppArmor must be `unconfined` or
   `--oci-worker-no-process-sandbox` is required (kernel-dependent).
 - **Node prerequisite (Ansible, srvk8s4) — the gating spike:** unprivileged user namespaces must
-  be usable. Recent Ubuntu ships `kernel.apparmor_restrict_unprivileged_userns=1`, which can
-  block rootless; a node-prep task (sysctl and/or an AppArmor profile, plus `fuse-overlayfs` if
-  the kernel can't do overlayfs-in-userns) is likely needed. **Validate this on srvk8s4 before
-  committing to the slice — it's the gate on "rootless feasible here vs fall back to Kaniko."**
+  be usable. **Measured 2026-08-05 (see Status): creation permitted, ID mapping denied** — so a
+  node-prep task (sysctl and/or an AppArmor profile, plus `fuse-overlayfs`) is confirmed
+  necessary, on the host at least. The pod-level test is still outstanding and is the actual
+  gate on "rootless feasible here vs fall back to Kaniko."
 - **Cache:** `static-zfs-pv`, pool `zpool5` (→ srvk8s4), `quota=60Gi` (grows later; the wanted
   base-image cache shares it), GC `keepstorage` ≈ 45 Gi (below quota). Deployment + `Recreate`,
   PVC-pinned, perf-taint toleration. Memory + CPU limits as the OOM backstop.
@@ -172,12 +223,16 @@ BuildKit is the **first consumer**, and an `open` one:
    not the ExternalSecret.
 3. **Principal scheme:** confirm the `spiffe://homelab/...` SAN convention (or simpler CN-based)
    before issuing the first client certs.
-4. **Rootless feasibility on srvk8s4** — the gating spike (node prereq above).
+4. **Rootless feasibility on srvk8s4** — the gating spike. *Partially answered 2026-08-05
+   (see Status): host-level ID mapping is denied; the pod-level smoke build is the
+   outstanding half and decides whether this bundle lives or closes.*
 
 ## Pointers
 
-- Detailed grounding (file:line): `../AnsibleSpecs/change_requests/buildkit_daemon/design_buildkit.md`
-  (operator: `~/source/AnsibleSpecs/...`) — its privileged assumption is superseded by Decision 1.
+- Detailed grounding (file:line): [`design_buildkit.md`](design_buildkit.md), alongside this
+  file — superseded in four places; see the reconciliation banner at the top of it.
+  *(This doc originated at `Ansible/docs/buildkit-and-mtls-authz.md`, commit 39e6aba, and was
+  later moved here verbatim. The card #113 comment still cites the old path.)*
 - Reference issuance patterns: `ansible/roles/internal_tls/` (JWK split-issuance),
   `ansible/roles/microk8s/tasks/internal_tls.yml` (non-HTTP daemon cert precedent),
   `ansible/roles/baseline/` (root-cert distribution).

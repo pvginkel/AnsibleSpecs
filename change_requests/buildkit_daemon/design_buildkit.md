@@ -1,9 +1,39 @@
 # Design: Shared in-cluster BuildKit daemon (Triage #113)
 
+> **⚠ PARTIALLY SUPERSEDED — read [`buildkit-and-mtls-authz.md`](buildkit-and-mtls-authz.md) first.**
+>
+> That later doc is authoritative where the two disagree. It announces only the
+> privileged→rootless reversal, but it in fact overrides this document in four
+> places. Do not author a slice from the sections below without applying these:
+>
+> | Topic | This doc says | Superseded by |
+> |---|---|---|
+> | Worker mode | Req. #1: privileged OCI worker; Decision 5 `[worker.oci]` privileged, cache at the root path | **Rootless** via `rootlesskit`, non-root `securityContext`, cache at `~/.local/share/buildkit` |
+> | Connection authz | Decision 3A: NetworkPolicy on `buildkit-prd`, "strong preference", the cluster's first | **No NetworkPolicy.** mTLS is the only access control, deliberately — rootless removes the node-escape exposure the policy existed to contain |
+> | Endpoint | ClusterIP + a CoreDNS bare-name pin (an Ansible change) | **LoadBalancer + `buildkit.home`** via the `dns.webathome.org/hostname` annotation, mirroring step-ca. The CoreDNS pin is dropped |
+> | Trust anchor | — | One homelab CA; no per-service CA. **The dedicated buildkit-scoped *provisioner* (Decision 3B) survives** — it bounds issuance blast radius for the in-cluster JWK password and is not the "per-service CA hack" that was rejected |
+>
+> **Consequences not yet written into the body below:**
+> - **The Ansible surface nearly vanishes.** Dropping the CoreDNS pin leaves only
+>   node-prep for rootless userns plus the `decisions.md` correction; the endpoint
+>   is a chart annotation. This may be a HelmCharts-led change, not an Ansible-led one.
+> - **The Risks register is stale.** "Privileged container (HIGH)" is moot under
+>   rootless. "Broad mTLS trust (MEDIUM)" is written as mitigated *by the
+>   NetworkPolicy that no longer exists* — under rootless + open access the residual
+>   risk is different in kind: any homelab participant can saturate the shared cache
+>   dataset and the daemon's memory limit (DoS), but cannot reach the node.
+> - **The resource numbers are stale.** Sizing below assumes srvk8s4 at "~9.3 Gi
+>   allocatable". As of 2026-08-05 the node is 20 GB with ~1.0 Gi *requested* across
+>   14 pods and ~7.7 Gi genuinely free, and `kube-reserved` has since been set to
+>   2432Mi. Re-derive the memory limit against current allocatable.
+>
+> **Status: parked.** See the gating spike and the operator's current lean in the
+> other doc's *Status* section.
+
 Pre-slice design material. This precedes `/write-slice` — it scopes the
 architecture and records the decisions so a slice (or slices) can be authored
 from it. Cross-repo: HelmCharts (new chart + ESO + static-zfs-pv + step-ca
-`ca.json`), Ansible (CoreDNS pin + a stale-doc correction), DockerImages
+`ca.json`), Ansible (node-prep + a stale-doc correction), DockerImages
 (`buildctl` client image), and two **out-of-tree** repos — JenkinsPipelineUtils
 (the client helper) and the KubeCoder controller (env-pod injection + RBAC).
 

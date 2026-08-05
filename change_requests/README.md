@@ -16,7 +16,7 @@ Cards on the Triage board carrying the «CR» label have a bundle here.
 | `site_yml_layout/` | #69 | Open design question: does `site.yml` still make sense? (2026-07 review's coverage-invariant finding absorbed). |
 | `iac_pipeline_restructure/` | #70 | Scope the iac-image rebuild flood (P2) + merge IaCAgent into Ansible. |
 | `metallb_chart_migration/` | #130 | Move prd MetalLB onto the upstream chart (FRR/BGP); authored + dev-proven, deferred to the microk8s 1.36+ prod cutover. |
-| `buildkit_daemon/` | #113 | BuildKit daemon on k8s, step-ca mTLS, 40 GB zpool2 cache (design doc attached). |
+| `buildkit_daemon/` | #113 | Rootless BuildKit daemon on k8s, step-ca mTLS, 60 Gi zpool5 cache. **Parked** — Triage *Later*; blocked on a rootless-feasibility spike, and Kaniko remains the working default. |
 | `argocd_migration/` | #124 | Jenkins push → ArgoCD CD per the decided model; gradual per-app migration. *(2026-07 triage)* |
 | `telegram_iac_bot/` | #125 | Cluster messaging hub + dead-man's switch + report rendering; replaces send_message.py. *(2026-07 triage)* |
 | `update_train_system/` | #126 | Cadence-based dependency updates: doctrine, `.kubecoder/config.yaml` contract, scheduler, archive sweep. *(2026-07 triage)* |
