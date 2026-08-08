@@ -314,8 +314,8 @@ ApplicationSet, the AppProject, and the repository credentials. Add to the verif
 - The post-selector actually filters on `reconciler` / `deployed` as expected, including that
   entries without the key are excluded.
 - A registry push reaches the applicationset-controller receiver and regenerates promptly.
-- `$ARGOCD_APP_REVISION` can be rendered into a hook Job's arguments via `helm.parameters`, if we
-  still want exact-SHA Terraform. (Independent of where Terraform runs — see the srviac Q&A.)
+- `$ARGOCD_APP_REVISION` can be rendered into a hook Job's arguments via `helm.parameters`, which
+  is the mechanism `plan.md`'s exact-SHA Terraform property depends on.
 
 **Phase B** — the pilot's registration is a `release.yaml` rather than a list entry, the
 Terraform stays put so the state work shrinks to `state rm module.namespace`, and the deploy
