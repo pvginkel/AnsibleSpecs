@@ -1,8 +1,8 @@
 # Argo CD adoption — working plan
 
-**Status:** drafting, Q1/Q2/Q5/Q6/Q7/Q8 settled. This folder is the working area while the
-plan is detailed in conversation; it is not a slice. Open questions and their answers live in
-[`qa.md`](qa.md).
+**Status:** drafting; Q1–Q10 all answered. This folder is the working area while the plan is
+detailed in conversation; it is not a slice. The reasoning behind each decision, and the
+questions still worth asking, live in [`qa.md`](qa.md).
 
 **Authoritative inputs**
 
@@ -16,8 +16,8 @@ plan is detailed in conversation; it is not a slice. Open questions and their an
 **Deliverables the operator asked for**
 
 1. KubeCoder migrated to Argo CD, chart and Terraform living in a new `KubeCoderDeploy` repo.
-2. An adoption/migration skill — a **Claude plugin in the Ansible repo** (Q8) — so the next
-   app is a repeatable procedure rather than a fresh design exercise.
+2. An adoption/migration skill — a **Claude plugin in the Ansible repo** (Q8) — so the next app
+   is a repeatable procedure rather than a fresh design exercise.
 
 ---
 
@@ -45,30 +45,43 @@ Consequences:
 
 ## Decisions this plan changes
 
-Two operator decisions moved during planning. Recording them here so the divergence from the
-CR is deliberate and visible; both need to land in `decisions.md` when this is sliced.
+Three things moved during planning. Recorded here so the divergence is deliberate and visible;
+all three need to land in `decisions.md` when this is sliced.
 
-**CR decision 6 — "namespace stays TF-managed" is reversed.** The namespace now belongs to
-Argo (`CreateNamespace=true`). Rationale (Q2): uninstalling an app should remove *everything*
-from Kubernetes and leave only the durable data behind, and a namespace that outlives its app
-is neither. This also dissolves the chicken-and-egg the CR's decision 6 created, where the
-PreSync hook that creates the namespace had to run inside it.
+**CR decision 6 — "namespace stays TF-managed" is reversed** (Q2). The namespace now belongs to
+Argo (`CreateNamespace=true`). Uninstalling an app should remove *everything* from Kubernetes
+and leave only the durable data behind, and a namespace that outlives its app is neither. This
+also dissolves the chicken-and-egg the CR created, where the PreSync hook that made the
+namespace had to run inside it.
 
 This contradicts the tool-split doctrine in `decisions.md`, which places namespaces in the
 Terraform tier because "a namespace outlives any single chart". Under Argo it no longer does —
-the Application is the unit, and the namespace is scoped to it. `decisions.md` needs updating.
+the Application is the unit, and the namespace is scoped to it.
 
-**CR's open question on Application management is answered by the tombstone model** (Q1) —
-see below. HelmCharts keeps ownership of *what is deployed to the cluster* for as long as the
-migration is in flight; the ApplicationSet-vs-TF question is deferred until the last app has
-moved and we know what shape the inventory wants to be.
+**CR decision 4 — Terraform runs on srviac, not in-cluster** (Q3). The PreSync hook is a Job
+that SSHes to srviac under a forced command and drives `iac -c` there. The CR's intent (TF as a
+sync-gated step whose failure aborts the deploy) is preserved exactly; only the execution site
+moves. This keeps the host IaC flock, so KubeCoder's Terraform stays serialised against
+Ansible's, and it removes the CR's per-namespace ESO credential plumbing entirely — the cluster
+holds one restricted SSH key rather than provider credentials.
+
+The cost is a hole in the other direction: `decisions.md` says critical infrastructure sits
+outside the blast radius of what it depends on, citing the Jenkins agent deliberately not
+living in the cluster it deploys to. A cluster pod that can reach srviac widens that. The
+forced command bounds it — a compromised pod gets "run Terraform for a named release", not a
+shell — and that trade is accepted, not overlooked.
+
+**The CR's open question on Application management is answered by a list, not an
+ApplicationSet** (Q1, Q10). The Applications are rendered by the argocd release's own chart
+from a list in its values. ApplicationSet, app-of-apps, and the eventual shape of the
+deployment inventory are deferred until the last app has moved.
 
 ---
 
 ## Current state
 
-**Argo CD does not exist.** No namespace, no CRDs, no chart, no manifests, nothing in any
-repo. Every mention across the estate is planning material. Standing Argo up is step zero.
+**Argo CD does not exist.** No namespace, no CRDs, no chart, no manifests, nothing in any repo.
+Every mention across the estate is planning material. Standing Argo up is step zero.
 
 **How KubeCoder reaches the cluster today** — three paths:
 
@@ -84,18 +97,24 @@ config`, run by `tools/deploy` inside the `iac` container on srviac. Image tags 
 digests at deploy time by a regex scraper (`tools/chart_tools/resolve_helm_args.py`) and passed
 as `--set`; nothing is written back to git.
 
-**KubeCoder's Terraform is small** — `configs/prd/kubecoder/_shared/infrastructure.tf` is two
-modules: a namespace and a static ZFS PV. With the namespace moving out, **only the ZFS PV
-remains**. No Postgres, no S3, no Ceph, no Keycloak, no DNS. There is no `configuration.tf`,
-and no release in the whole repo has one — the config phase is implemented but unused
-estate-wide, so there is no PostSync hook to design.
+**KubeCoder's Terraform is small** — `_shared/infrastructure.tf` is two modules: a namespace and
+a static ZFS PV. With the namespace moving out, **only the ZFS PV remains**. No Postgres, no
+S3, no Ceph, no Keycloak, no DNS. There is no `configuration.tf`, and no release in the whole
+repo has one — the config phase is implemented but unused estate-wide, so there is no PostSync
+hook to design.
 
-**The problem this migration is expected to fix.** `Jenkinsfile`'s `changed()` predicate
-matches `configs/prd/<chart>/.*` — it is not stage-scoped. Editing the dev stage's overlay
-reconciles *both* stages against a *shared* chart. A new required `controllerConfig` key
-therefore reaches the prd stage while prd still runs its older image, and the controller's
-`extra="forbid"` config model refuses to start. Under `Recreate` at `replicas: 1` that is an
-outage, not a degradation, and CI reports success.
+**KubeCoder's chart is clean of the awkward bits.** No `post-render.sh`, no `post-install.sh`,
+no `post-rollout.sh`, and no helm hooks. Estate-wide those exist on `grafana`, `mosquitto`,
+`prometheus`, `external-secrets` and `nginx` — all upstream charts being patched, and all
+arguments for migrating those late (Argo has no `--post-renderer`; the equivalents are a Config
+Management Plugin or Kustomize-with-Helm).
+
+**The problem this migration is expected to fix.** `Jenkinsfile`'s `changed()` predicate matches
+`configs/prd/<chart>/.*` — it is not stage-scoped. Editing the dev stage's overlay reconciles
+*both* stages against a *shared* chart. A new required `controllerConfig` key therefore reaches
+the prd stage while prd still runs its older image, and the controller's `extra="forbid"`
+config model refuses to start. Under `Recreate` at `replicas: 1` that is an outage, not a
+degradation, and CI reports success.
 
 ---
 
@@ -107,54 +126,69 @@ From the CR, as amended above.
   holds no cluster credential.
 - **auto-sync ON, self-heal OFF.** Self-heal off keeps manual `kubectl` edits during debugging
   from being reverted.
-- **Webhook-driven, no polling** (Q6). The operator configures the GitHub push webhook.
+- **Webhook-driven, no polling** (Q6). The operator configures the GitHub push webhook. A
+  dropped webhook is a deploy that silently doesn't happen; manual sync and notifications
+  cover it.
 - **Git equals deployed state.** The deploy-time digest scraper goes away; CI commits explicit
   version tags.
-- **Terraform runs as an Argo PreSync hook Job.** App dependencies, not cluster infrastructure,
-  so no trust inversion. Convergent, so it also reconciles drift. PreSync failure aborts the
-  sync.
-- **State backend unchanged** — terraform-backend-git over the existing HTTP backend.
-- **Namespace belongs to Argo** (amended, above). What stays in Terraform is the durable
-  storage only.
-- **Teardown is a cascade delete of the Application**, which under the tombstone model is
-  driven by HelmCharts' existing `disabled: true` flag. Hooks fire on sync, not delete, so TF
-  never destroys on teardown; the ZFS dataset carries `prevent_destroy` and survives by
-  construction.
+- **Terraform runs as a PreSync hook Job that drives `iac` on srviac** (amended, above).
+  Convergent, so it also reconciles drift. PreSync failure aborts the sync.
+- **State backend unchanged** — terraform-backend-git, reached from srviac exactly as today.
+- **Namespace belongs to Argo** (amended, above). What stays in Terraform is durable storage
+  only.
+- **Teardown is a cascade delete of the Application**, driven by removing its entry from the
+  argocd values list. Hooks fire on sync, not delete, so TF never destroys on teardown; the ZFS
+  dataset carries `prevent_destroy` and survives by construction.
 - **Gradual migration, one app at a time.**
 
-### The tombstone model (Q1)
+### The Application list (Q1, Q10)
 
-`configs/prd/kubecoder/` is **not deleted**. It stays as a tombstone whose chart deploys the
-Argo `Application` resources instead of KubeCoder itself.
+Applications are rendered by the argocd release's own chart, from a list in its values:
 
-What this buys:
+```yaml
+# configs/prd/argocd/prd/values.yaml
+applications:
+  - name: kubecoder-dev
+    repo: https://github.com/pvginkel/KubeCoderDeploy
+    revision: main
+    namespace: kubecoder-dev
+  - name: kubecoder-prd
+    repo: https://github.com/pvginkel/KubeCoderDeploy
+    revision: prd
+    namespace: kubecoder-prd
+```
 
-- HelmCharts remains the single inventory of what is deployed to the cluster, through the
-  migration and regardless of how far it gets.
-- The existing `disabled: true` flag keeps working as the on/off switch, and now means
-  "cascade-delete the Application" — which is exactly CR decision 7. The Application template
-  must therefore carry `resources-finalizer.argocd.argoproj.io`.
-- No new bootstrap repo, no ApplicationSet to learn, during the phase where we are also
-  learning Argo itself.
-- The `recommend-resources` successor (Q3) has a stable place to look for the list of live
-  apps.
+`charts/argocd/templates/applications.yaml` renders one Application per entry, each carrying
+`resources-finalizer.argocd.argoproj.io` so that removing an entry cascades the teardown. The
+list is the inventory and the on/off switch — the role `disabled:` played before.
 
-Mechanically: a small generic chart `charts/argocd-app/` renders one Application per stage;
-each migrated release sets `chart: argocd-app` in its `release.yaml` and supplies repo /
-revision / path / destination in values. The Application object sets `metadata.namespace:
-argocd` explicitly, so it lands in Argo's namespace even though the helm release name and
-namespace stay `kubecoder-<stage>`.
+`configs/prd/kubecoder/` is then **deleted outright**. `discover_releases` walks the config
+tree, so removing the directory takes the release out of discovery without uninstalling
+anything: the running objects stay, and Argo adopts them on first sync. Nothing dangerous sits
+in the critical path.
 
-**One code change is needed.** `resolve_helm_args.get_chart_args` gates the local-chart path on
-`charts/<chart_dir>/Chart.yaml` — keyed on the *config directory* name, not the chart name. A
-release with `chart: argocd-app` under `configs/prd/kubecoder/` fails that test and falls
-through to the upstream path, where `repo_url` is `None` and the request raises. That exception
-is not caught by `process_release` (which only catches `ImageResolutionError`), so it would
-take down discovery for **every** release. It is a latent bug — no release uses `chart:` to
-name a different local chart today — that this change is the first to trip. Fix is one line:
-key the test on `chart_name`.
+### Terraform on srviac (Q3)
 
-### Stage isolation by git revision (Q5 — confirmed)
+The PreSync hook Job carries an SSH client and nothing else. It SSHes to srviac as a dedicated
+principal, passing `(repo, ref, release, stage)` — where `ref` is the SHA Argo resolved, so
+Terraform runs against exactly what is being synced. srviac's `authorized_keys` forces the
+command:
+
+```
+command="/usr/local/bin/argocd-presync",restrict <key>
+```
+
+`restrict` denies port/agent/X11 forwarding, PTY and user-rc. The requested arguments arrive in
+`$SSH_ORIGINAL_COMMAND` and the script validates them against an allowlist rather than
+executing them. The script clones the deploy repo at that SHA and runs the Terraform through
+`iac -c`. The exit code propagates to the Job, so a Terraform failure fails the hook and aborts
+the sync; output streams into the Job log and is readable in the Argo UI.
+
+Hook Jobs run in a **permanent hook namespace** (Q9) holding one ESO-managed Secret with that
+key. App namespaces hold no deploy-time credentials at all. The AppProject must permit that
+namespace as a hook destination.
+
+### Stage isolation by git revision (Q5)
 
 The dev Application tracks `main`; the prd Application tracks a `prd` branch. `Deploy-PRD`
 fast-forwards `prd` to the validated `main` SHA and rewrites the prd pins in the same commit.
@@ -172,20 +206,30 @@ Three slices, sequenced. Each is separately operator-gated.
 ### Phase A — stand up Argo CD
 
 Deployed as an ordinary HelmCharts release through the existing harness — the CR's "blessed
-exception". Zero applications imported.
+exception". Zero applications in the list.
 
-- Chart + `configs/prd/argocd/prd/` release, upstream chart pinned by version.
-- `resourceTrackingMethod: annotation` (the default label method tracks
-  `app.kubernetes.io/instance`, which Helm charts set themselves — a false-adoption trap).
-- Polling disabled; the GitHub webhook is the only trigger. The operator sets up the push
-  webhook and the shared secret.
+- Chart + `configs/prd/argocd/prd/` release, upstream chart pinned by version, plus the
+  `applications:` template that Phase B will populate.
+- `resourceTrackingMethod: annotation` — the default label method tracks
+  `app.kubernetes.io/instance`, which Helm charts set themselves, and that is a false-adoption
+  trap.
+- Polling disabled; the GitHub webhook is the only trigger. Operator sets up the push webhook
+  and shared secret.
+- **Notifications on** (Q6): at minimum `on-sync-failed` and `on-health-degraded`, routed to
+  the same Telegram path the rest of the estate uses. This is also what closes review finding
+  H4 — today's `deploy wait` swallows rollout failures.
+- **`controller.operation.processors` set low** (2–3) so a change touching many apps drains a
+  few at a time instead of stampeding the cluster (Q7).
 - Local admin auth for now; Keycloak SSO folds into slice 004 later.
-- **Verify while here**, because Phase B's design leans on it: that `CreateNamespace=true`
-  creates the destination namespace *before* PreSync hooks run, and that a hook Job's
-  ServiceAccount and ExternalSecret can be brought up in the same PreSync phase via sync waves
-  (Q9).
-- Exit: the UI is reachable, a webhook push visibly triggers a refresh, and an Application
-  pointed read-only at an existing release shows a sensible live-vs-git diff.
+- **Verify while here**, because Phase B leans on all three:
+  - `CreateNamespace=true` creates the destination namespace *before* PreSync hooks run.
+  - A hook Job can be pinned to the permanent hook namespace and the AppProject permits it.
+  - A pod can reach srviac on 22. srviac runs `ufw` and `decisions.md` records it as
+    deliberately narrow, so this likely needs a rule and the pod-network source may not match
+    what existing rules match.
+- Exit: the UI is reachable, a webhook push visibly triggers a refresh, a deliberate failure
+  produces a notification, and an Application pointed read-only at an existing release shows a
+  sensible live-vs-git diff.
 
 ### Phase B — KubeCoderDeploy, and migrate KubeCoder
 
@@ -203,14 +247,16 @@ authored before the first migration would be fiction.
 ### The repo
 
 - [ ] `KubeCoderDeploy` holds the chart, the two stage values files, and the Terraform.
-      Application manifests do **not** live here — they are the HelmCharts tombstone.
-- [ ] Vendor the two shared helpers KubeCoder actually uses — `deployment.timestamp` (which is
-      then deleted, below) and `shared.externalsecrets`. `charts/shared/` in HelmCharts is a
-      bare `_helpers.tpl` with no `Chart.yaml`, consumed by 40 charts through relative
-      symlinks, so "publish it as a library chart" is estate-wide work and explicitly **not**
-      pilot scope.
-- [ ] Add the repo to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own, so it is
-      cloned into the environments that need it.
+      Application manifests do **not** live here — they are entries in the argocd values list.
+- [ ] Vendor the one shared helper KubeCoder keeps — `shared.externalsecrets`.
+      (`deployment.timestamp`, the other one, is deleted rather than vendored — below.)
+      `charts/shared/` in HelmCharts is a bare `_helpers.tpl` with no `Chart.yaml`, consumed by
+      40 charts through relative symlinks, so "publish it as a library chart" is estate-wide
+      work and explicitly **not** pilot scope.
+- [ ] Terraform modules stay in HelmCharts and are consumed by git source pinned to a tag
+      (Q3) — or, since the runner is on srviac and already has HelmCharts cloned, by path.
+      Decide when building the `argocd-presync` script.
+- [ ] Add the repo to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own.
 
 ### The chart
 
@@ -247,23 +293,19 @@ stays floating by operator decision.
       carries an explicit sunset checklist of the removal sites, including the two
       `pullPolicy: Always` lines on the worker/vsix ImageVolume sources.
 
-### Terraform as a PreSync hook
+### The PreSync hook
 
-- [ ] Port the ZFS half of `_shared/infrastructure.tf` into the new repo. The namespace module
-      is dropped (Q2), so `static-zfs-pv` is the only module needed — which shrinks Q3
-      considerably.
+- [ ] Write `argocd-presync` on srviac: validate `$SSH_ORIGINAL_COMMAND` against an allowlist,
+      clone the deploy repo at the given SHA, run the Terraform through `iac -c`.
+- [ ] Provision the restricted key: OpenBao leaf → ESO → Secret in the hook namespace;
+      `command=…,restrict` entry in srviac's `authorized_keys` (an Ansible role change).
+- [ ] Port the ZFS half of `_shared/infrastructure.tf`. The namespace module is dropped (Q2),
+      so `static-zfs-pv` is the only module needed.
 - [ ] The hook must also do what `helmops.reattach_released_pvs` does today: find PVs whose
       `claimRef` names the target namespace and whose phase is `Released`, and null out
       `claimRef.uid`/`resourceVersion`. KubeCoder's ZFS PV is `Retain`, so without this a
-      redeploy after a teardown never rebinds. The hook is TF **plus** this reattach — and with
-      the namespace now being destroyed and recreated on teardown, this path stops being an
-      edge case and becomes the normal spin-up.
-- [ ] Credentials: the `homelab` provider reads `HOMELAB_*` from the environment; the
-      `kubernetes` provider can use the Job's ServiceAccount rather than a kubeconfig. Note the
-      PV is cluster-scoped, so that SA needs cluster-level rights. Where the SA and the
-      credentials live is Q9.
-- [ ] `tfmirror-prd` and `registry-prd` are already in-cluster, so provider download and image
-      pull resolve without leaving the cluster.
+      redeploy after a teardown never rebinds. With the namespace now destroyed and recreated on
+      teardown, this stops being an edge case and becomes the normal spin-up path.
 - [ ] No PostSync hook — KubeCoder has no config phase, and neither does anything else.
 
 ### CI changes
@@ -274,41 +316,25 @@ stays floating by operator decision.
       promotion commit.
 - [ ] Neither job needs a cluster credential afterwards.
 
-### The cutover — and the trap in it
+### Cutover, per stage
 
-Argo CD does not run `helm install`. It renders the chart with `helm template` in its
-repo-server and applies the manifests itself, tracking ownership through its own annotation.
-There is no Helm release object, no `sh.helm.release.v1.*` Secret, no `helm history`, no `helm
-rollback`. Everything Argo manages is invisible to `helm list`.
+Dev end-to-end first. Let it sit. Then prd.
 
-That matters for the cutover, because the tombstone reuses the release name. Turning
-`configs/prd/kubecoder/` from the KubeCoder chart into the Application chart means Jenkins runs
-`helm upgrade --install kubecoder-prd <argocd-app-chart>` against the **existing**
-`kubecoder-prd` release — and Helm will delete every resource in the old release that is absent
-from the new one. That is the entire KubeCoder deployment, at the moment of cutover, before
-Argo has installed anything.
-
-Sequence to avoid it, per stage, operator-run:
-
-- [ ] Land the KubeCoderDeploy repo and confirm `helm template` renders it correctly.
-- [ ] `helm uninstall --keep-resources` the old release. This removes the Helm release record
-      while leaving every object in place. **Dropping `--keep-resources` deletes production** —
-      this is the one command in the migration that has to be typed carefully.
-- [ ] Land the tombstone. Jenkins installs it as a fresh release containing only the
-      Application, and Argo adopts the running objects on first sync.
-- [ ] Verify adoption before touching anything: the Application is Synced/Healthy, the live
-      controller pod is unchanged, and no env pod has restarted.
-
-Do dev first, in full, and let it sit. Only then do prd.
+- [ ] Land KubeCoderDeploy; confirm `helm template` renders it correctly.
+- [ ] Add the stage's entry to the argocd `applications:` list.
+- [ ] Verify adoption before touching anything: Application Synced/Healthy, controller pod
+      unchanged, no env pod restarted.
+- [ ] Delete `configs/prd/kubecoder/<stage>/`. Nothing is uninstalled — the release just leaves
+      discovery.
+- [ ] Later, unhurried: delete the orphaned `sh.helm.release.v1.kubecoder-<stage>.*` Secrets.
 
 ### Ancillary tooling that stops covering KubeCoder
 
 None blocks the migration; all three need a decision so they aren't discovered later. The
-tombstone gives each of them something to enumerate.
+`applications:` list gives each of them something to enumerate.
 
 - `gen-architecture` — the `AaC/HelmCharts` pipeline renders every prd release via
-  `deploy template` to build the architecture model. A tombstone renders an Application, not
-  KubeCoder's workloads.
+  `deploy template` to build the architecture model. A migrated app has no release to render.
 - `recommend-resources` — generated the `resources:` blocks in both stage values files. Becomes
   a tool that clones the app repos, edits, and pushes (Q3); stays in HelmCharts for now.
 - `collect-versions` — feeds the version-poller, whose role the CR is already changing from
@@ -316,20 +342,38 @@ tombstone gives each of them something to enumerate.
 
 ---
 
+## Findings recorded elsewhere, not this slice's work
+
+- **`resolve_helm_args.get_chart_args` has a latent crash.** It gates the local-chart path on
+  `charts/<chart_dir>/Chart.yaml` — the *config directory* name, not the chart name. A release
+  whose `chart:` names a different local chart falls through to the upstream path where
+  `repo_url` is `None` and the request raises; `process_release` catches only
+  `ImageResolutionError`, so that would take down discovery for **every** release. Nothing
+  triggers it today. One-line fix: key the test on `chart_name`.
+- **`gitToken` travels as a helm command-line argument for all 45 releases.** Only
+  `charts/version-poller` consumes it (its CronJob needs a GitHub PAT); the other 44 ignore it.
+  It has to become an ESO leaf when version-poller migrates, since Argo has no such credential
+  to inject. Separately, a PAT on a command line lands in srviac's process table and in any log
+  that echoes the command.
+
 ## Consequences to accept
 
 - **Argo will not touch what it does not track.** Ownership is by tracking annotation, so the
   controller-created env pods and their eight LoadBalancer Services in `kubecoder-prd` are
   outside Argo's reach and cannot be pruned. Self-heal OFF is independently load-bearing here.
 - **A dropped webhook is a missed deploy.** With polling disabled there is no self-correction
-  from the repo side — the app sits OutOfSync until the next push or a manual refresh. Argo
-  still reconciles *cluster* drift on its own timer; it is only repo changes that go unnoticed.
+  from the repo side — the app sits OutOfSync until the next push or a manual sync. Argo still
+  reconciles *cluster* drift on its own timer; it is only repo changes that go unnoticed.
 - **Pinning makes the env-pod roll correct for the first time.** Today a worker rebuild changes
   nothing the chart can see. Once `controllerConfig.images.worker` is pinned, bumping it
   changes `checksum/config`, rolls the controller, and rolls the env pods — which is what the
   upgrade-roll mechanism always intended.
-- **`helm` stops being the way to inspect a migrated app.** `helm list -n kubecoder-prd` will
-  show nothing after cutover. That is correct, not a fault.
+- **`helm` stops being the way to inspect a migrated app.** Argo renders with `helm template`
+  and applies the manifests itself, so there is no Helm release, no `helm history`, no
+  `helm rollback`; `helm list -n kubecoder-prd` will show nothing. Rollback is a git revert or
+  Argo's own history.
+- **The cluster can now reach srviac.** Bounded by a forced command, but it is a widening of
+  the blast radius doctrine and is accepted deliberately.
 
 ## Out of scope
 
@@ -337,7 +381,9 @@ tombstone gives each of them something to enumerate.
 - OCI chart hosting, which would need the internal TLS registry work (Triage #47) first. Git
   path sources need none of it.
 - Migrating any second application. Phase C produces the procedure; running it is later work.
-- ApplicationSet, app-of-apps, and the final shape of the deployment inventory — deferred by
-  the tombstone model until the last app has moved.
+- ApplicationSet, app-of-apps, and the final shape of the deployment inventory — deferred until
+  the last app has moved.
+- The post-render escape hatch (Config Management Plugin or Kustomize-with-Helm) needed by
+  `grafana`, `mosquitto` and `prometheus`. An argument for migrating those late.
 - The destroy/decommission path (#66) and keycloak-tf (#68), which interlock with this but are
   separately tracked.

@@ -129,7 +129,7 @@ leaves the PreSync Job's *identity* unresolved, which is now Q9.
 
 ---
 
-## Q3 — How does KubeCoderDeploy get `terraform-modules/`? — **OPEN**
+## Q3 — How does KubeCoderDeploy get `terraform-modules/`? — **ANSWERED**
 
 KubeCoder's Terraform needs `terraform-modules/namespace` and
 `terraform-modules/static-zfs-pv`, both of which live in `/work/HelmCharts`. Today the deploy
@@ -209,6 +209,61 @@ made it one of its own because it falls out of however this lands.
 **Still open**, then, only on: tags vs folders, and whether the repo is one shared tools repo
 or split (modules vs runner).
 
+### Operator, round 2
+
+> The PreSync hook will absolutely run through iac on srviac. We need to get that to work.
+> SSH would be a fine option for me, as are other options. Is that workable?
+>
+> Tags are fine.
+
+**Claude:** Workable, and it makes the whole thing smaller. It also mostly dissolves this
+question: if Terraform runs on srviac, the modules never have to leave HelmCharts, and the
+"tools repo" shrinks to whatever the srviac-side script needs — which is close to nothing new.
+
+Shape:
+
+- PreSync hook Job runs a minimal image carrying an SSH client and nothing else.
+- It SSHes to srviac as a dedicated principal and passes `(repo, ref, release, stage)`.
+- srviac's `authorized_keys` entry forces the command:
+  `command="/usr/local/bin/argocd-presync",restrict <key>`. `restrict` denies port/agent/X11
+  forwarding, PTY and user-rc; the requested arguments arrive in `$SSH_ORIGINAL_COMMAND` and
+  the script validates them against an allowlist rather than executing them.
+- The script clones the deploy repo **at the SHA Argo passed**, then runs the Terraform through
+  `iac -c` exactly as the pipelines do today.
+- Exit code propagates to the Job, so a Terraform failure fails the hook and aborts the sync,
+  which is CR decision 4's required behaviour. Output streams into the Job log and is readable
+  in the Argo UI.
+
+Why this is better than the in-cluster version the CR assumed:
+
+- **The host IaC flock still applies**, so KubeCoder's Terraform stays serialised against
+  Ansible's. An in-cluster runner would have been outside that lock.
+- **No provider credentials in the cluster.** No `HOMELAB_*` via ESO, no kubeconfig, no
+  ServiceAccount with rights to create PersistentVolumes. The only in-cluster credential is one
+  SSH key that can run one script.
+- **Terraform runs against exactly what Argo is syncing.** `iac-impl` clones `main` today, so a
+  hand-run applies pushed state rather than the working tree; passing Argo's resolved SHA is
+  strictly more precise than the current behaviour.
+
+Two things to settle before this is built:
+
+- **Reachability.** srviac runs `ufw`, and `decisions.md` records it as deliberately narrow
+  (OpenBao's 8200 is allowed from k8s nodes and the Jenkins agent, specifically). Pod → srviac
+  on 22 needs a rule, and the pod network source may not be what the existing rules match.
+  Phase A verification item, not a design question.
+- **Doctrine.** `decisions.md` states that critical infrastructure sits outside the blast
+  radius of what it depends on, and cites the Jenkins agent deliberately not living in the
+  cluster it deploys to. A cluster pod that can reach srviac punches a hole the other way. The
+  forced command is what bounds it — a compromised pod gets "run Terraform for a named
+  release", not a shell — but it is a real widening and it should be written down as accepted
+  rather than discovered later.
+
+**Tags:** settled.
+
+**Consequence for Q9:** the hook Job's needs collapse from "cluster-admin-ish identity plus
+provider credentials" to "one SSH key". The recommendation there still holds, for a smaller
+and cleaner reason.
+
 ---
 
 ## Q4 — Which stages go to Argo? — **ANSWERED**
@@ -277,6 +332,27 @@ sits OutOfSync until the next push or a manual refresh. Argo still reconciles *c
 on its own timer; it is only repo changes that go unnoticed. Argo's OutOfSync status makes it
 visible, which is more than the current pipeline manages.
 
+### Operator, round 2
+
+> Accepted. This happens. If I can kick off a release manually it's enough. I prefer that then
+> "sometimes" having the release delayed by a few minutes. I'd like to know.
+
+**Claude:** Both are available.
+
+**Manual kick:** the Sync button in the UI, or `argocd app sync kubecoder-prd` from the CLI.
+`argocd app get` shows why it thinks it is OutOfSync before you commit to it.
+
+**Knowing:** Argo ships a notifications controller in the same chart (`notifications.enabled`).
+It has triggers for `on-sync-failed`, `on-health-degraded` and `on-sync-succeeded`, and a
+generic webhook service, so it can reach the same Telegram path the rest of the estate uses.
+Phase A should turn on at least sync-failed and health-degraded — those two are also what
+replaces the swallowed-failure behaviour of today's `deploy wait` (review finding H4). I have
+added it to the Phase A checklist.
+
+Worth noting the failure you are accepting here is *silence*, not a wrong state: a missed
+webhook leaves the app OutOfSync, which is visible in the UI and is exactly the condition a
+`on-sync-status-unknown`-style trigger can alert on if you want a belt as well as braces.
+
 ---
 
 ## Q7 — What happens to the orphaned Helm release secrets? — **ANSWERED**
@@ -326,7 +402,72 @@ it.
 
 **Recommendation stands, with a change of timing.** They no longer get cleaned up *after*
 adoption — removing the release record is now step one of the cutover, because the tombstone
-reuses the release name. See Q10.
+reuses the release name. See Q10. *(Superseded — Q10 round 2 removes the collision, so cleanup
+goes back to being unhurried hygiene after adoption is proven.)*
+
+### Operator, round 2
+
+> We're doing Helm shennanigans like using post render hooks. Those still work?
+
+**Claude:** Not directly — Argo has no `--post-renderer`. It renders with `helm template` and
+that flag is not on the path.
+
+For KubeCoder this is a non-issue: `charts/kubecoder/` has no `post-render.sh`, no
+`post-install.sh` and no `post-rollout.sh`. Checked.
+
+Estate-wide it affects **three** charts, and they are all upstream ones being patched:
+`charts/grafana/`, `charts/mosquitto/`, `charts/prometheus/` have `post-render.sh`;
+`external-secrets`, `grafana`, `nginx` and `prometheus` have post-install or post-rollout
+scripts. Two escape hatches exist when their turn comes — a Config Management Plugin (a
+sidecar in the repo-server that runs whatever you like and returns manifests, which is the
+faithful equivalent) or Kustomize-with-Helm (`--enable-helm`, render then patch). Both are more
+machinery than a shell script, which is an argument for migrating those charts late.
+
+> I can survive loosing --wait. […] The reason I was doing this is to prevent a storm. If for
+> some reason I'm making a change that touches a lot of repos (like recommend-resources), I'm
+> kicking off 20 deploys at once. My cluster does not like this. If Argo CD has options for
+> this, to stagger releases or something like that, I would like to know.
+
+**Claude:** It does, and it is a controller setting rather than something you express per app.
+
+`controller.operation.processors` bounds how many sync **operations** run concurrently across
+the whole instance (`controller.status.processors` does the same for status refresh). Twenty
+Applications going OutOfSync at once therefore queue rather than stampede: set
+`operation.processors` to 2 or 3 and the twenty drain a few at a time, with the rest sitting
+visibly OutOfSync in the meantime. That is closer to what you actually want than `--wait` was —
+`--wait` serialised *your pipeline*, whereas this serialises *the cluster's work* regardless of
+what triggered it.
+
+Two adjacent knobs worth knowing about, neither of which is the answer here:
+
+- `AppProject.spec.syncWindows` — time-based allow/deny (e.g. no auto-sync outside a window).
+  Scheduling, not throttling.
+- `syncPolicy.retry` with backoff — bounds retry storms after a failure, not the initial fan-out.
+
+And what replaces `--wait` proper: Argo's health assessment. The app sits Progressing until its
+workloads are actually healthy, then Healthy or Degraded — with a notification on Degraded, per
+Q6. That is the H4 gap closing.
+
+> I'm using --set mostly for image tags (which goes away), for the environment (which I assume
+> you're handling) and a gitToken (HelmCharts/Jenkinsfile:80) altough I don't remember why.
+
+**Claude:** Your inventory is right, and I checked the third one.
+
+- **Image tags** — go away, replaced by pins in the values files.
+- **`global.environment`** — handled: it moves into each stage's values file, with a comment
+  saying it carries the stage. Already on the Phase B checklist.
+- **`gitToken`** — grep says exactly one chart consumes it: `charts/version-poller`
+  (`templates/version-poller-cronjob.yaml` + its values, plus
+  `configs/dev/version-poller/prd/values.yaml`). Its CronJob needs a GitHub PAT to read
+  upstream versions. Jenkins passes it to all 45 releases; 44 ignore it. So it is not
+  KubeCoder's problem, and nothing about this migration has to solve it.
+
+  It does need solving when **version-poller** migrates, because Argo has no such credential to
+  inject — it becomes an ESO leaf like every other secret, which is where it arguably belonged
+  anyway. Noting separately that a GitHub PAT currently travels as a helm command-line argument
+  for every release in the estate, which puts it in the process table on srviac and anywhere
+  that command is echoed. Not urgent, not this slice, but it is the kind of thing that is
+  easier to fix while you are already touching the call site.
 
 ---
 
@@ -355,7 +496,7 @@ falls out of Phase B, so I am not designing it yet.
 
 ---
 
-## Q9 — What identity does the PreSync hook Job run as, and where do its credentials live? — **OPEN**
+## Q9 — What identity does the PreSync hook Job run as, and where do its credentials live? — **ANSWERED**
 
 Falls out of Q2. The namespace is now created and destroyed with the app, so anything the hook
 Job needs must either be created in the same PreSync phase or live somewhere permanent.
@@ -382,11 +523,28 @@ failure that appears once in ten spin-ups and wastes an afternoon, and "which id
 create PersistentVolumes" is a thing worth having exactly one of. It is also the shape the
 adoption plugin will want to describe once — rather than re-deriving per app.
 
-**Answer:**
+**Answer:** *(operator: "I don't know so I'll follow your recommendation.")*
+
+Permanent hook namespace — but Q3's answer shrank what that means considerably, so the
+recommendation is now much cheaper than when I made it.
+
+Because Terraform runs on srviac rather than in-cluster, the Job needs **no** provider
+credentials, **no** kubeconfig, and **no** ServiceAccount with rights over cluster-scoped
+objects. Its entire identity is one SSH key restricted to a single forced command. So:
+
+- A permanent namespace holds one ESO-managed Secret carrying that key.
+- Hook Jobs are created there via an explicit `metadata.namespace`, which the AppProject must
+  permit as a destination.
+- App namespaces hold no deploy-time credentials at all.
+
+The original driver — an ExternalSecret racing the Job it feeds on every spin-up — is gone
+along with the per-namespace secret. What is left is the smaller and more durable argument:
+one place to audit what may reach srviac, and one thing for the adoption plugin to describe
+rather than re-derive per app.
 
 ---
 
-## Q10 — Cutover sequence: confirm the `--keep-resources` step — **OPEN**
+## Q10 — Cutover sequence: confirm the `--keep-resources` step — **ANSWERED**
 
 The tombstone reuses the release name, so turning `configs/prd/kubecoder/` from the KubeCoder
 chart into the Application chart makes Jenkins run `helm upgrade --install kubecoder-prd
@@ -412,4 +570,53 @@ if you would rather accept a controlled outage (plain `helm uninstall`, then let
 back), that is a legitimate and less finger-dependent choice, and on the dev stage it is
 probably the better one.
 
-**Answer:**
+**Answer:** *(operator: "Don't assume a shape. Maybe we just completely delete the kubecoder
+folders and leave a config value or map or whatnot in the Argo chart/config. […] Feel free to
+mold this into any form that you feel makes sense.")*
+
+**Claude:** You were right to reject the shape — it was the source of the problem, not a
+detail of it. The Applications now live in the **argocd release's own values**, and the
+per-app config directories are deleted outright.
+
+```
+configs/prd/argocd/prd/values.yaml
+  applications:
+    - name: kubecoder-dev
+      repo: https://github.com/pvginkel/KubeCoderDeploy
+      revision: main
+      namespace: kubecoder-dev
+    - name: kubecoder-prd
+      repo: https://github.com/pvginkel/KubeCoderDeploy
+      revision: prd
+      namespace: kubecoder-prd
+```
+
+`charts/argocd/templates/applications.yaml` renders one Application per entry. Adding an app is
+a list entry; removing one removes the Application, which with the finalizer cascades the
+teardown — CR decision 7, with the list playing the role the `disabled:` flag used to.
+
+Everything the old shape made awkward falls away:
+
+- **No release-name collision, so no dangerous command in the critical path.** The Applications
+  belong to the `argocd` release, not to `kubecoder-prd`. Deleting `configs/prd/kubecoder/`
+  simply removes it from discovery — `discover_releases` walks the config tree, so the release
+  stops existing without anything being uninstalled. Resources keep running; Argo adopts them
+  on first sync.
+- **`helm uninstall --keep-resources` drops out of the cutover entirely.** The orphaned release
+  records become unhurried hygiene: delete the `sh.helm.release.v1.kubecoder-*` Secrets once
+  adoption is proven, at leisure, with nothing depending on the timing.
+- **The `resolve_helm_args` latent bug is no longer on our path.** It needed a release whose
+  `chart:` names a different local chart; nothing here does that any more. It is still there
+  and still a live hazard for whoever trips it next, but it is now a finding to report rather
+  than work in this slice.
+
+Cutover per stage becomes: land KubeCoderDeploy → confirm `helm template` renders → add the
+list entry → verify the Application reports Synced/Healthy with the controller pod untouched
+and no env pod restarted → delete `configs/prd/kubecoder/<stage>/`. Dev end-to-end first, let
+it sit, then prd.
+
+One thing I did **not** adopt from your sketch: the metadata-file-that-tooling-skips. It keeps
+a directory per app for `gen-architecture` and friends to enumerate, but a list in one values
+file is just as enumerable and there is then only one place that knows what is deployed. If the
+ancillary tooling turns out to want per-app files for another reason, this is easy to revisit —
+it is a values schema, not a commitment.
