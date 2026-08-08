@@ -386,11 +386,15 @@ None blocks the migration; all three need a decision so they aren't discovered l
   Argo's own history.
 - **The cluster can now reach srviac.** Bounded by a forced command, but it is a widening of
   the blast radius doctrine and is accepted deliberately.
-- **Every sync pays for a heavyweight hook.** `iac` does `docker --pull=always`, clones the
-  Ansible repo, starts terraform-backend-git and runs `poetry install --no-root` before the
-  caller's command — so a no-op Terraform apply is a minute-plus hook, and it holds the global
-  IaC lock for the whole time. That entrypoint was built for occasional Jenkins stages, not
-  per-deploy hooks. Acceptable at this volume; worth revisiting if many apps migrate.
+- **A hook that lands during an Ansible run fails rather than queues.** `iac` takes
+  `/var/lock/iac.lock` with `flock -w 60` and holds it for the whole invocation. Serialising
+  KubeCoder's Terraform against Ansible's is the point of running on srviac at all; the
+  60-second ceiling is what that costs. `syncPolicy.retry` with backoff is the mitigation, and
+  it has to be set explicitly.
+
+`iac`'s startup cost (`--pull=always`, the Ansible clone, `poetry install`) is **not** treated
+as a constraint here by operator decision: if it makes hooks slow, the answer is to make `iac`
+start faster, not to design around it.
 
 ## Out of scope
 

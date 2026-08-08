@@ -710,3 +710,40 @@ Jenkins stages as a per-deploy hook.
   it should be a deliberate choice.
 
 **Answer:**
+
+### Operator, round 2
+
+> We'd have to do a clone as part of the "-c" script we give it. Doable but it assumes the
+> credentials work.
+>
+> Don't treat the startup as an issue (--pull=always, or other Docker overhead). I'd rather
+> speed that up then to work around it.
+
+**Claude:** The credential is there — checked rather than assumed.
+
+`iac-impl`'s `main` runs `materialise_env(env_entries)` **before** `clone_repos` and before it
+exec's the caller's command, and `GIT_API_TOKEN` is in `ALWAYS_REQUIRED_ENVS`, so the
+entrypoint hard-fails with `GIT_API_TOKEN missing from /etc/iac/secrets.yaml` if it is absent.
+By the time a `-c` script runs, that variable is exported and is the *same* token
+`clone_repos` uses for Ansible and HelmCharts. So a clone in the `-c` script rides a credential
+path that is already load-bearing today — if it broke, `iac` would already be failing for
+everything.
+
+One residual, and it is the real form of your concern: **token scope**. If `GIT_API_TOKEN` is a
+fine-grained PAT with a repository allowlist rather than a classic or org-wide one,
+`KubeCoderDeploy` has to be added to that allowlist. I can't check — reading the value is a
+credential disclosure and out of bounds — so this is a one-line check for you, and it belongs
+on the Phase B checklist as a prerequisite rather than a discovery.
+
+An option that removes the question entirely: **make `KubeCoderDeploy` public.** It holds a
+chart, two values files and Terraform; every secret in it is an OpenBao *path* consumed by ESO,
+not a value. `decisions.md` already records the Ansible repo as public on a deliberate trade,
+so the estate treats this class of content as publishable. Then the clone needs no credential
+at all, which also drops one thing the PreSync path can fail on. (I tried to confirm the
+current visibility of these repos and could not — github.com egress is blocked from this pod,
+so the check returned "refused" for everything including repos known to be public. You know the
+answer; I don't.)
+
+**Startup cost:** dropped from the plan as a constraint, per your instruction. The consequences
+section now records only the `flock -w 60` contention ceiling, which is a different thing — not
+overhead but contention semantics, and the reason `syncPolicy.retry` needs setting explicitly.
