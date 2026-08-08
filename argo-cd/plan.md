@@ -171,8 +171,10 @@ in the critical path.
 
 The PreSync hook Job carries an SSH client and nothing else. It SSHes to srviac as a dedicated
 principal, passing `(repo, ref, release, stage)` — where `ref` is the SHA Argo resolved, so
-Terraform runs against exactly what is being synced. srviac's `authorized_keys` forces the
-command:
+Terraform runs against exactly what is being synced. **That last property is not free**: today's
+`iac-impl` clones a fixed repo list at `--depth 1` on the default branch, with no ref support,
+so the `prd` branch is unreachable and an arbitrary SHA cannot be checked out. Closing that is
+Phase B work — see Q11. srviac's `authorized_keys` forces the command:
 
 ```
 command="/usr/local/bin/argocd-presync",restrict <key>
@@ -295,10 +297,20 @@ stays floating by operator decision.
 
 ### The PreSync hook
 
-- [ ] Write `argocd-presync` on srviac: validate `$SSH_ORIGINAL_COMMAND` against an allowlist,
-      clone the deploy repo at the given SHA, run the Terraform through `iac -c`.
+- [ ] Write `argocd-presync`: validate `$SSH_ORIGINAL_COMMAND` against an allowlist, clone the
+      deploy repo **at the given SHA into its own scratch directory** (Q11 option B — not via
+      `iac-impl`'s shared `repos:` list, which is default-branch-only and grows globally per
+      migrated app), run the Terraform.
+- [ ] Deliver it via the existing IaCAgent pattern: an `install_file` line in `install.sh` and a
+      `-v` in `bin/iac`'s mount list, the same path `send_message.py` and the two check scripts
+      took. The Ansible `iac_agent` role's handler picks it up. **No new mechanism needed** —
+      this was checked, not assumed.
 - [ ] Provision the restricted key: OpenBao leaf → ESO → Secret in the hook namespace;
       `command=…,restrict` entry in srviac's `authorized_keys` (an Ansible role change).
+- [ ] Set `syncPolicy.retry` with backoff. `iac` takes `/var/lock/iac.lock` with `flock -w 60`,
+      so a hook arriving during a long Ansible convergence **fails after 60 seconds** rather
+      than queuing. Serialising against Ansible is the point; the timeout is its price, and
+      without a retry policy that price is a failed sync someone has to notice.
 - [ ] Port the ZFS half of `_shared/infrastructure.tf`. The namespace module is dropped (Q2),
       so `static-zfs-pv` is the only module needed.
 - [ ] The hook must also do what `helmops.reattach_released_pvs` does today: find PVs whose
@@ -374,6 +386,11 @@ None blocks the migration; all three need a decision so they aren't discovered l
   Argo's own history.
 - **The cluster can now reach srviac.** Bounded by a forced command, but it is a widening of
   the blast radius doctrine and is accepted deliberately.
+- **Every sync pays for a heavyweight hook.** `iac` does `docker --pull=always`, clones the
+  Ansible repo, starts terraform-backend-git and runs `poetry install --no-root` before the
+  caller's command — so a no-op Terraform apply is a minute-plus hook, and it holds the global
+  IaC lock for the whole time. That entrypoint was built for occasional Jenkins stages, not
+  per-deploy hooks. Acceptable at this volume; worth revisiting if many apps migrate.
 
 ## Out of scope
 

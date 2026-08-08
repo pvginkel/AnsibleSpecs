@@ -620,3 +620,93 @@ a directory per app for `gen-architecture` and friends to enumerate, but a list 
 file is just as enumerable and there is then only one place that knows what is deployed. If the
 ancillary tooling turns out to want per-app files for another reason, this is easy to revisit —
 it is a values schema, not a commitment.
+
+---
+
+## Q11 — Getting assets and repos onto srviac for the PreSync hook — **OPEN**
+
+Raised by the operator: *"We may need a way to get assets into srviac. I'm not even sure I'm
+doing any volume mount of the iac container. If it turns out this is a gap, that's in scope."*
+
+Checked. Partly a gap, and the gap is not where it looked.
+
+### What already exists — not a gap
+
+**Bind mounts, yes.** `IaCAgent/bin/iac` runs the container with an explicit `-v` per host
+script:
+
+```
+-v "$IAC_IMPL:/usr/local/bin/iac-impl:ro"
+-v /usr/local/bin/send_message.py:/usr/local/bin/send_message.py:ro
+-v /usr/local/bin/check-protected-vms.sh:/usr/local/bin/check-protected-vms.sh:ro
+-v /usr/local/bin/check-ansible-drift.sh:/usr/local/bin/check-ansible-drift.sh:ro
+```
+
+plus `/etc/iac/secrets.yaml` read-only. `install.sh` puts each of those on the host, and the
+Ansible `iac_agent` role calls `install.sh` from a handler. So delivering `argocd-presync` is
+**one line in `install.sh` and one `-v` in `bin/iac`** — the same path `send_message.py` and the
+two check scripts already took. No new mechanism needed.
+
+**Repo delivery, partly.** `iac-impl` clones a configurable list into `/work/<name>`:
+`parse_repos` reads an optional top-level `repos:` from `/etc/iac/secrets.yaml`, defaulting to
+`("Ansible",)`. That is how HelmCharts gets there today. Adding `KubeCoderDeploy` is a one-line
+edit to that file.
+
+### The actual gap
+
+`clone_repos` is:
+
+```python
+_run("git", "clone", "--quiet", "--depth", "1",
+     f"https://{token}@{GIT_OWNER}/{name}.git", str(WORK / name))
+```
+
+Fixed list, **default branch, depth 1, no ref**. Three consequences:
+
+1. **The `prd` branch is unreachable.** The whole stage-isolation model (Q5) has prd tracking a
+   `prd` branch. `iac-impl` would clone `main` regardless of stage, so the prd PreSync hook
+   would run Terraform from the wrong revision. For KubeCoder specifically the Terraform barely
+   differs between branches, so this would be latent rather than loud — which makes it worse,
+   not better.
+2. **"Terraform runs against exactly what Argo is syncing" is not currently achievable.** I
+   claimed that as a benefit of the srviac design. It needs a clone at a caller-supplied SHA,
+   and `--depth 1` on the default branch cannot check one out. The claim is now marked
+   conditional in the plan.
+3. **The shared `repos:` list does not scale.** It is global to every `iac` invocation, so
+   adding KubeCoderDeploy means every Ansible convergence also clones it. At ten migrated apps,
+   every `iac` call clones ten deploy repos it does not need.
+
+### Options
+
+- **A — extend `iac-impl` with a per-invocation repo+ref**, e.g. `iac --repo
+  KubeCoderDeploy@<sha> -c '…'`. General, but it changes the shared entrypoint every pipeline
+  in the estate goes through, to serve one caller.
+- **B — `argocd-presync` clones its own working copy.** The script already runs inside the
+  container, already has `GIT_API_TOKEN` from the parsed secrets, and can
+  `git clone --depth 1 --branch <ref>` or fetch a specific SHA into a scratch directory.
+  `iac-impl` and the `repos:` list are untouched, and nothing global grows per migrated app.
+- **C — pass the rendered Terraform in over stdin.** Avoids cloning entirely; makes the hook
+  opaque and undebuggable. Not recommended.
+
+**Recommendation: B.** The per-app working copy is per-app machinery and should live in the
+per-app script, not in the entrypoint every Ansible run shares. It also fixes gaps 1–3 at once
+and is the only option that keeps the SHA promise honest.
+
+### Two costs of `iac -c` as a per-sync hook, worth knowing before committing
+
+Neither is a blocker; both are consequences of using an entrypoint designed for occasional
+Jenkins stages as a per-deploy hook.
+
+- **It is heavy.** Every `iac` invocation does `docker --pull=always`, clones the Ansible repo,
+  starts terraform-backend-git, and runs `poetry install --no-root` in
+  `/work/Ansible/ansible/` — all before the caller's command runs. A PreSync hook pays that on
+  every sync. Tolerable, but it makes a trivial no-op Terraform apply into a minute-plus hook.
+- **It takes the global IaC lock.** `flock -w 60` on `/var/lock/iac.lock`, and the lock is held
+  for the whole invocation. So a PreSync hook blocks Ansible convergence and vice versa, and a
+  hook that arrives during a long Ansible run **fails after 60 seconds** rather than queuing.
+  Under auto-sync that is a failed sync needing a retry, which argues for setting
+  `syncPolicy.retry` with backoff explicitly rather than leaving it default. Serialising
+  against Ansible was a stated benefit of this design; the 60-second timeout is the price, and
+  it should be a deliberate choice.
+
+**Answer:**
