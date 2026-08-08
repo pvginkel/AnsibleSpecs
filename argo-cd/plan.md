@@ -65,11 +65,14 @@ moves. This keeps the host IaC flock, so KubeCoder's Terraform stays serialised 
 Ansible's, and it removes the CR's per-namespace ESO credential plumbing entirely — the cluster
 holds one restricted SSH key rather than provider credentials.
 
-The cost is a hole in the other direction: `decisions.md` says critical infrastructure sits
-outside the blast radius of what it depends on, citing the Jenkins agent deliberately not
-living in the cluster it deploys to. A cluster pod that can reach srviac widens that. The
-forced command bounds it — a compromised pod gets "run Terraform for a named release", not a
-shell — and that trade is accepted, not overlooked.
+The cost is a hole in the other direction, though a narrower one than first described. The
+network path is not new: srviac has no firewall and answers on 22 from any pod today. What this
+design adds is a **credential** on that path. And the forced command bounds it less than
+claimed — the key holder chooses the *SHA*, and Terraform executes arbitrary code (`external`
+data sources, `local-exec`), so the true bound is "apply any historical commit of the
+allowlisted repo against a chosen stage", and with repo write access it is code execution on
+srviac as the iac principal. The allowlist must therefore constrain `ref` to commits reachable
+from the named branches, not merely to a repo. Accepted on those terms.
 
 **The CR's open question on Application management is answered by a list, not an
 ApplicationSet** (Q1, Q10). The Applications are rendered by the argocd release's own chart
@@ -192,12 +195,24 @@ namespace as a hook destination.
 
 ### Stage isolation by git revision (Q5)
 
-The dev Application tracks `main`; the prd Application tracks a `prd` branch. `Deploy-PRD`
-fast-forwards `prd` to the validated `main` SHA and rewrites the prd pins in the same commit.
+The dev Application tracks `main`; the prd Application tracks a `prd` branch, which `Deploy-PRD`
+advances to the validated `main` SHA while rewriting the prd pins in the same commit.
+
+**"Fast-forward" was wrong and the mechanics need building.** Promotion commit Cₙ is a child of
+`main@Sₙ`; the previous promotion Cₙ₋₁ is a child of `main@Sₙ₋₁` and is never an ancestor of
+`Sₙ`, so moving `prd` between them is not a fast-forward. Merging instead would make the stated
+rollback ("revert on `prd`") the classic revert-a-merge footgun, where the next promotion
+silently fails to re-apply the reverted work.
+
+The mechanic that works is a **synthetic commit**: `git commit-tree` with the tree taken
+wholesale from `main@S` plus the pin edits, and parents `[prd-tip, S]`. First parent is prd's
+tip, so it is a genuine fast-forward; `S` is recorded for provenance; and because every
+promotion sets the tree to a complete snapshot, git's merge-base reasoning never enters into it
+— which removes the revert footgun rather than documenting it.
 
 A chart change reaches prd only at promotion, atomically with the images it was validated
-against. Rollback is a revert on the `prd` branch. The cost is that `prd` must never be
-hand-edited — a manual commit or force-push there is a production change with no gate.
+against. Rollback is a revert on `prd`. The cost is that `prd` must never be hand-edited — a
+manual commit there is a production change with no gate.
 
 ---
 
@@ -210,25 +225,32 @@ Three slices, sequenced. Each is separately operator-gated.
 Deployed as an ordinary HelmCharts release through the existing harness — the CR's "blessed
 exception". Zero applications in the list.
 
-- Chart + `configs/prd/argocd/prd/` release, upstream chart pinned by version, plus the
-  `applications:` template that Phase B will populate.
+- Chart + `configs/prd/argocd/prd/` release, plus the `applications:` template Phase B
+  populates. **Pinning needs a local wrapper chart with a `dependencies:` entry** — the
+  harness's `upstream:` path cannot pin, because `get_repo_helm_args` always selects
+  `versions[-1]`.
+- Guard the `applications:` template against rendering an empty or truncated list without an
+  explicit opt-in. With the finalizer set, a values slip that drops entries cascade-deletes the
+  Applications and the tracked runtime behind them, PVCs included (R6).
 - `resourceTrackingMethod: annotation` — the default label method tracks
   `app.kubernetes.io/instance`, which Helm charts set themselves, and that is a false-adoption
   trap.
 - Polling disabled; the GitHub webhook is the only trigger. Operator sets up the push webhook
   and shared secret.
 - **Notifications on** (Q6): at minimum `on-sync-failed` and `on-health-degraded`, routed to
-  the same Telegram path the rest of the estate uses. This is also what closes review finding
-  H4 — today's `deploy wait` swallows rollout failures.
+  the same Telegram path the rest of the estate uses. This is what closes review finding H4 —
+  today's `deploy wait` swallows rollout failures. More than a toggle: the chart ships the
+  controller but leaves `triggers` and `templates` empty, so those are authored, and the
+  Telegram token needs an ESO leaf into `argocd-notifications-secret`.
 - **`controller.operation.processors` set low** (2–3) so a change touching many apps drains a
   few at a time instead of stampeding the cluster (Q7).
 - Local admin auth for now; Keycloak SSO folds into slice 004 later.
 - **Verify while here**, because Phase B leans on all three:
   - `CreateNamespace=true` creates the destination namespace *before* PreSync hooks run.
   - A hook Job can be pinned to the permanent hook namespace and the AppProject permits it.
-  - A pod can reach srviac on 22. srviac runs `ufw` and `decisions.md` records it as
-    deliberately narrow, so this likely needs a rule and the pod-network source may not match
-    what existing rules match.
+  *(The srviac reachability item that used to sit here is gone: there is no firewall on srviac
+  — the only `ufw` in the Ansible repo is the `openbao` role, covering the `srvvaultN` nodes —
+  and srviac:22 answers from a pod today. Tested.)*
 - Exit: the UI is reachable, a webhook push visibly triggers a refresh, a deliberate failure
   produces a notification, and an Application pointed read-only at an existing release shows a
   sensible live-vs-git diff.
@@ -262,11 +284,21 @@ authored before the first migration would be fiction.
 
 ### The chart
 
-- [ ] **Delete `deployment.timestamp`.** It renders `now()` into the controller pod template.
-      Argo's repo-server re-renders on every refresh, so the annotation would change every
-      time: permanently OutOfSync, and with auto-sync ON it rolls the controller — and every
-      running env pod with it — on every refresh, forever. The existing `checksum/config`
-      annotation is the correct roll trigger.
+- [ ] **Change what `deployment.timestamp` renders — do not delete the annotation.** It emits
+      `now()`, and Argo's repo-server re-renders on every refresh, so left alone the annotation
+      changes every time: permanently OutOfSync, and with auto-sync ON it rolls the controller
+      and every running env pod on every refresh, forever.
+
+      But the annotation itself is **the controller's deployment identity**, not a roll trigger.
+      `controller-deployment.yaml` reads the same key back through the Downward API as
+      `KUBECODER_DEPLOYMENT_ID` (`fieldRef: metadata.annotations['deployment']`); the controller
+      stamps it onto every env pod and rolls the envs whose stamp differs. Its own comment says
+      a blank id falls back to a per-process id, **rolling every env on every controller
+      start**. Deleting the annotation therefore trades a re-render roll for a permanent
+      restart-roll.
+
+      Keep the key; make the value render-stable and deploy-varying — the controllerConfig
+      checksum, or a digest over the image pins.
 - [ ] **Declare `global.environment` explicitly** in both stage values files. Today the deploy
       CLI injects it as `--set global.environment=<stage>`; it appears in no values file. It
       names the ClusterRole (`kubecoder-<env>-nodes`) and its binding's namespace, so a miss
@@ -309,10 +341,31 @@ stays floating by operator decision.
       `command=…,restrict` entry in srviac's `authorized_keys` (an Ansible role change).
 - [ ] Set `syncPolicy.retry` with backoff. `iac` takes `/var/lock/iac.lock` with `flock -w 60`,
       so a hook arriving during a long Ansible convergence **fails after 60 seconds** rather
-      than queuing. Serialising against Ansible is the point; the timeout is its price, and
-      without a retry policy that price is a failed sync someone has to notice.
+      than queuing. Concurrent dev and prd syncs contend with each other too, not just with
+      Ansible. The 60 seconds is hardcoded in `bin/iac`, so extending it means changing that
+      shim.
+- [ ] Specify the hook Job's own limits: `backoffLimit`, `activeDeadlineSeconds`, and SSH
+      keepalives. Without them a hung SSH wedges the sync indefinitely.
+- [ ] Verify the host key against the homelab SSH CA. `StrictHostKeyChecking=no` would quietly
+      undo the security story this design rests on.
+- [ ] Decide the hook Job's image (it needs an SSH client and nothing else) and where it is
+      built.
+- [ ] **The PV-reattach runs in the srviac script, not the Job** — the Job has no Kubernetes
+      identity at all under Q9. State it in the script's contract.
+- [ ] Create the permanent hook namespace and its ExternalSecret in **Phase A**, since Phase A's
+      verification of hook-namespace targeting needs them to exist.
 - [ ] Port the ZFS half of `_shared/infrastructure.tf`. The namespace module is dropped (Q2),
       so `static-zfs-pv` is the only module needed.
+- [ ] **Migrate the Terraform state deliberately — this is the step that can delete
+      production.** The PV and ZFS dataset live in `helm-charts/prd/kubecoder/<stage>/infra.tfstate`
+      alongside `module.namespace`. Starting from **fresh** state makes the first apply collide
+      with the existing PV and dataset, so every sync fails. **Reusing** the state with the
+      namespace module simply removed makes terraform plan a **destroy of the live namespace** —
+      `terraform-modules/namespace/main.tf` has no `prevent_destroy` — taking every pod,
+      Service, Secret and the PVC with it. Required: name the new state key, decide
+      reuse-vs-import, `terraform state rm module.namespace` so the live namespace is left
+      unmanaged, and `state mv` the `module.zfs` addresses. Prove it with a `plan` showing no
+      destroys before any hook runs for real.
 - [ ] The hook must also do what `helmops.reattach_released_pvs` does today: find PVs whose
       `claimRef` names the target namespace and whose phase is `Released`, and null out
       `claimRef.uid`/`resourceVersion`. KubeCoder's ZFS PV is `Retain`, so without this a
@@ -322,22 +375,43 @@ stays floating by operator decision.
 
 ### CI changes
 
+**Split across the two cutovers** — Build-Main's change lands with the dev cutover, Deploy-PRD's
+with prd, and the old path stays alive in between.
+
 - [ ] `Build-Main`: keep building and pushing `dev-<n>`; replace `cicd.helmDeploy()` with a
       commit to KubeCoderDeploy `main` bumping the dev pins.
-- [ ] `Deploy-PRD`: keep the `crane` retags; replace `cicd.helmDeploy()` with the `prd`-branch
-      promotion commit.
+- [ ] `Deploy-PRD`: keep the `crane` retags; replace `cicd.helmDeploy()` with the synthetic
+      promotion commit onto `prd`.
+- [ ] **Configure the GitHub webhook on KubeCoderDeploy itself.** Phase A's webhook is on a
+      different repo. With polling off, forgetting this means no deploy ever fires and the
+      Application still reads green (see the dropped-webhook consequence).
 - [ ] Neither job needs a cluster credential afterwards.
 
 ### Cutover, per stage
 
 Dev end-to-end first. Let it sit. Then prd.
 
+**The first sync rolls the controller, and that is unavoidable.** The live pod template carries
+digest-resolved images and a timestamp annotation; the KubeCoderDeploy render carries tag pins
+and a stable one. The two cannot be made identical, so adoption is a deliberate deploy, not a
+silent handover. It costs a brief control-plane outage (Recreate, `replicas: 1`) and it
+restarts every running env pod in that stage — **in-flight sessions die, including whichever
+one is driving the migration.** Schedule it; do not discover it.
+
 - [ ] Land KubeCoderDeploy; confirm `helm template` renders it correctly.
-- [ ] Add the stage's entry to the argocd `applications:` list.
-- [ ] Verify adoption before touching anything: Application Synced/Healthy, controller pod
-      unchanged, no env pod restarted.
-- [ ] Delete `configs/prd/kubecoder/<stage>/`. Nothing is uninstalled — the release just leaves
+- [ ] Add the stage's entry with **auto-sync off**, so the Application appears OutOfSync
+      without acting.
+- [ ] Review the diff in the UI. It should show exactly the expected differences — image
+      references, the annotation — and nothing else. Anything unexpected stops the cutover.
+- [ ] Delete `configs/prd/kubecoder/<stage>/` **in the same change**, so Jenkins and Argo are
+      never both live on the release (R4). Nothing is uninstalled — the release just leaves
       discovery.
+- [ ] Sync once, manually, at a chosen moment. Verify: Application Synced/Healthy, controller
+      `1/1 Running`, ConfigMap correct, env pods back up.
+- [ ] Enable auto-sync for that Application.
+- [ ] Expect an unrelated Jenkins prd redeploy when the **dev** directory is deleted —
+      `changed()` matches `configs/prd/kubecoder/.*` and is not stage-scoped (R5). Harmless if
+      the HelmCharts chart is untouched by then, but know it is coming.
 - [ ] Later, unhurried: delete the orphaned `sh.helm.release.v1.kubecoder-<stage>.*` Secrets.
 
 ### Ancillary tooling that stops covering KubeCoder
@@ -371,11 +445,17 @@ None blocks the migration; all three need a decision so they aren't discovered l
 ## Consequences to accept
 
 - **Argo will not touch what it does not track.** Ownership is by tracking annotation, so the
-  controller-created env pods and their eight LoadBalancer Services in `kubecoder-prd` are
-  outside Argo's reach and cannot be pruned. Self-heal OFF is independently load-bearing here.
-- **A dropped webhook is a missed deploy.** With polling disabled there is no self-correction
-  from the repo side — the app sits OutOfSync until the next push or a manual sync. Argo still
-  reconciles *cluster* drift on its own timer; it is only repo changes that go unnoticed.
+  controller-created env pods and their LoadBalancer Services in `kubecoder-prd` (six today;
+  the count floats with env count) are outside Argo's reach. The **tracking marker is the whole
+  protection** — neither prune nor self-heal touches untracked resources, so self-heal OFF is
+  not what saves them. Self-heal OFF earns its place for a different reason: it stops manual
+  `kubectl` edits being reverted mid-debug.
+- **A dropped webhook is worse than a delay.** With polling off, Argo never learns the commit
+  exists, so the app reports **Synced and green against the last-seen revision** — there is no
+  OutOfSync state to notice and nothing to alert on. Meanwhile refreshes still fire on cluster
+  watch events and cache expiry, each re-resolving the branch head, so with auto-sync ON the
+  deploy eventually lands **at an arbitrary moment triggered by something unrelated**. Not
+  "delayed until someone syncs" — stale-but-green, then a surprise. Re-opened as Q12.
 - **Pinning makes the env-pod roll correct for the first time.** Today a worker rebuild changes
   nothing the chart can see. Once `controllerConfig.images.worker` is pinned, bumping it
   changes `checksum/config`, rolls the controller, and rolls the env pods — which is what the

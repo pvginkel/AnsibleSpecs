@@ -747,3 +747,74 @@ answer; I don't.)
 **Startup cost:** dropped from the plan as a constraint, per your instruction. The consequences
 section now records only the `flock -w 60` contention ceiling, which is a different thing — not
 overhead but contention semantics, and the reason `syncPolicy.retry` needs setting explicitly.
+
+---
+
+## Q12 — Reconsider "no poll" now the consequence is known to be different — **OPEN**
+
+You accepted the dropped-webhook risk on my description of it, and my description was wrong.
+Correcting it, because the trade you evaluated is not the trade on offer.
+
+**What I said:** a missed webhook leaves the app visibly OutOfSync until you sync it manually.
+
+**What actually happens** with `timeout.reconciliation: 0`: Argo never learns the commit exists.
+The Application reports **Synced and green** against the last revision it saw. There is no
+OutOfSync state to spot and nothing for a notification trigger to fire on — you cannot alert on
+a change the controller has not observed.
+
+And it does not simply stay there. Refreshes still happen on cluster watch events and cache
+expiry, and each one re-resolves the branch head. So with auto-sync ON, the missed commit
+deploys **at an arbitrary later moment**, triggered by something unrelated — a pod restart, a
+cache timeout.
+
+So the failure mode is not "delayed a few minutes" and not "silence". It is *stale-but-green,
+then a surprise deploy at a time nobody chose* — which is the one property this whole migration
+is meant to remove.
+
+**Option:** keep the webhook as the trigger and set a **slow** fallback poll — an hour, say —
+rather than zero. It does not reintroduce the "sometimes delayed by a few minutes" behaviour you
+rejected: the webhook still fires immediately in the normal case. It only bounds how long a
+dropped webhook can leave git and the cluster disagreeing while claiming they agree.
+
+**Recommendation:** slow fallback poll. The cost is one repo query per app per hour; the benefit
+is that "green" means green.
+
+**Answer:**
+
+---
+
+## Q13 — The namespace does not actually go with the app — **OPEN**
+
+Your Q2 answer set the goal: *"everything should be removed from Kubernetes if we uninstall an
+app, but leave the persistent parts of the app in place. That means the namespace should also
+go."* Right goal. The mechanism I chose does not deliver it.
+
+Argo does **not** delete a namespace it created via `CreateNamespace=true` when the Application
+is deleted. The upstream issue (argoproj/argo-cd#7875) was closed with a
+`managedNamespaceMetadata` workaround that stamps the *label* tracking id — which conflicts with
+the `resourceTrackingMethod: annotation` this plan mandates, and which per that thread does not
+cover **pre-existing** namespaces. `kubecoder-dev` and `kubecoder-prd` both already exist.
+
+So as currently specified, teardown leaves the namespace behind — the same outcome as CR
+decision 6, which is what we reversed the decision to avoid.
+
+Options:
+
+- **A — put a `Namespace` manifest in the chart.** It becomes a tracked resource, so cascade
+  delete removes it. This delivers your goal exactly. It is also the specific thing CR decision
+  6 said not to do — but you already reversed that decision for this goal, so this is following
+  through on it rather than a new departure.
+- **B — accept the orphaned namespace.** Teardown removes the workloads and leaves an empty
+  namespace, which is what the CR originally accepted. Cheapest, but then reversing decision 6
+  bought nothing and the namespace should arguably go back to Terraform.
+- **C — `managedNamespaceMetadata` with label tracking.** Fights the annotation-tracking choice
+  and does not cover the existing namespaces. Not recommended.
+
+**Recommendation: A.** It is the only option that does what you asked for, and it keeps the
+namespace's lifecycle visibly tied to the app rather than split across two tools.
+
+Note the interaction with the Terraform state migration: whichever way this goes,
+`module.namespace` must be `terraform state rm`'d rather than removed from the config, or the
+next apply plans a destroy of the live namespace. That hazard is independent of this choice.
+
+**Answer:**
