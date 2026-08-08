@@ -27,6 +27,10 @@ it means **the deploy happens at an arbitrary later moment**, triggered by somet
 The operator accepted "silence". What was actually on offer was "stale-but-green, then a
 surprise deploy". That is a different trade and it is re-opened as **Q12**.
 
+**Resolved (Q12):** re-accepted on the corrected description — start on the happy flow. The slow
+fallback poll is deferred to Triage **#507** (Later). The plan's consequences section now states
+the real trade rather than the wrong one.
+
 ### H2 — deleting `deployment.timestamp` breaks the controller's identity *(my error)*
 
 **Claimed:** the `now()` annotation is a redundant roll trigger; delete it and let
@@ -98,6 +102,12 @@ As specified, teardown orphans the namespace — the amendment fails its own goa
 that actually delivers it is a Namespace manifest in the chart as a tracked resource, i.e. the
 exact thing CR decision 6 forbade. Raised as **Q13**.
 
+**Resolved (Q13):** option A — the chart carries the `Namespace`, `CreateNamespace` comes off.
+This also converts the review's "prune is never decided anywhere" nit into a required decision,
+guarded by `sync-options: Prune=false` on the Namespace (which leaves the Application-delete
+cascade intact — that runs on the `Delete=false` axis instead). Both the guard and the cascade
+are Phase A verification items.
+
 ### H6 — "srviac runs ufw" was false *(my error)*
 
 Verified: the only `ufw` in the Ansible repo is the `openbao` role (the `srvvaultN` nodes).
@@ -135,6 +145,10 @@ which removes the revert footgun rather than documenting it. Plan corrected.
 - **R1 — the flock times out, it does not queue.** Already recorded, but sharpened: concurrent
   dev and prd syncs contend with *each other*, not just with Ansible, and the 60-second wait is
   hardcoded in `bin/iac` so `argocd-presync` cannot extend it without changing that shim.
+  *Superseded:* Triage **#506** removes the flock outright and names this plan in its scope, so
+  the item becomes a dependency rather than a mitigation. It also retires the plan's claim that
+  running on srviac serialises KubeCoder's Terraform against Ansible's — terraform-backend-git's
+  per-state lock branches are what actually guard the state.
 - **R2 — the forced-command bound was overstated.** The key holder chooses the *SHA*, and
   Terraform executes arbitrary code (`external` data source, `local-exec`). So the true bound is
   "apply any historical commit of the allowlisted repo against a chosen stage", and with repo

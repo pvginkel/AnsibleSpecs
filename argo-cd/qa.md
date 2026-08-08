@@ -623,7 +623,7 @@ it is a values schema, not a commitment.
 
 ---
 
-## Q11 — Getting assets and repos onto srviac for the PreSync hook — **OPEN**
+## Q11 — Getting assets and repos onto srviac for the PreSync hook — **ANSWERED**
 
 Raised by the operator: *"We may need a way to get assets into srviac. I'm not even sure I'm
 doing any volume mount of the iac container. If it turns out this is a gap, that's in scope."*
@@ -711,6 +711,37 @@ Jenkins stages as a per-deploy hook.
 
 **Answer:**
 
+It's not really heavy:
+
+```
+pvginkel@srviac:~$ time iac -c ''
+
+real    0m3.574s
+user    0m0.008s
+sys     0m0.019s
+```
+
+And yes, it takes the hook. That's fine. The biggest risk is something doing a large job,
+causing timeouts for Argo.
+
+The option I wanted isn't in the list. I was suggesting this:
+
+```
+iac -c '
+cd /work
+git clone https://github.com/pvginkel/KubeCoderDeploy.git
+// do the necessary work
+'
+```
+
+In a sense similar to option A, which you advise against. I however have no idea about
+the rest of the plumbing so I can't really comment to whether or not this is smart.
+Likely I'll know better when I've fully read the plan.
+
+I'll go for your option B. I have decided to delete the flock from iac. It was there
+because of a different reason, because I didn't have a storage backend yet that
+supported locking. flock was a replacement. Tracking in #506.
+
 ### Operator, round 2
 
 > We'd have to do a clone as part of the "-c" script we give it. Doable but it assumes the
@@ -748,9 +779,54 @@ answer; I don't.)
 section now records only the `flock -w 60` contention ceiling, which is a different thing — not
 overhead but contention semantics, and the reason `syncPolicy.retry` needs setting explicitly.
 
+**Answer:**
+
+Cloning works fine:
+
+```
+pvginkel@srviac:~$ time iac -c 'git clone https://$GIT_USERNAME:$GIT_API_TOKEN@github.com/pvginkel/KubeCoderDeploy.git'
+Cloning into 'KubeCoderDeploy'...
+warning: You appear to have cloned an empty repository.
+
+real    0m4.029s
+user    0m0.015s
+sys     0m0.011s
+```
+
+**Claude:** That settles the one residual I could not check myself. The PAT reaches
+`KubeCoderDeploy`, so the token-scope prerequisite comes off the Phase B checklist, and the
+"make the repo public to avoid the credential" option is unnecessary — it stays private. It also
+shows `GIT_USERNAME` is exported alongside `GIT_API_TOKEN`; I had only verified the latter.
+
+Two carry-overs into `argocd-presync`, neither a design change:
+
+- **Your test clones the default branch.** The prd Application tracks a `prd` branch and the hook
+  is passed a resolved SHA, so the script needs `--branch <ref>` or a fetch-then-checkout of the
+  SHA. That is option B's job and is why it exists; the credential half is simply now proven.
+- **Don't build the URL with the token in it.** `https://$USER:$TOKEN@…` puts the PAT in
+  srviac's process table for the life of the clone and into any error output that echoes the
+  remote. Fine for a one-off by hand; not for a script that runs on every sync. Use an inline
+  credential helper instead — the same shape KubeCoder's own docs use for pushing:
+
+  ```bash
+  git -c credential.helper= \
+      -c credential.helper='!f(){ echo username=x-access-token; echo "password=$GIT_API_TOKEN"; }; f' \
+      clone --depth 1 --branch "$ref" https://github.com/pvginkel/KubeCoderDeploy.git
+  ```
+
+**On the flock:** your decision to delete it (#506) lands before this hook ships, and it changes
+one thing I had written down as a *benefit*. "The host IaC flock keeps KubeCoder's Terraform
+serialised against Ansible's" stops being true — as #506 records, cross-job serialisation comes
+from the `IaC Agent` node having one executor, and an Argo hook SSHing in does not pass through
+Jenkins at all. What still protects the state is terraform-backend-git's own `locks/<state-path>`
+branches, which is the right guard anyway and is per-state rather than global. So the argument
+for running on srviac rests on its two real legs — no provider credentials in the cluster, and
+Terraform running against exactly the SHA being synced — and the plan no longer claims the third.
+The 60-second contention ceiling and its `syncPolicy.retry` mitigation go away with it.
+
 ---
 
-## Q12 — Reconsider "no poll" now the consequence is known to be different — **OPEN**
+## Q12 — Reconsider "no poll" now the consequence is known to be different — **ANSWERED**
 
 You accepted the dropped-webhook risk on my description of it, and my description was wrong.
 Correcting it, because the trade you evaluated is not the trade on offer.
@@ -781,9 +857,25 @@ is that "green" means green.
 
 **Answer:**
 
+No. Create a card for this though in the Later list on the Triage board so that I look at this
+later when I feel like. I want to start with the happy flow.
+
+**Claude:** Card [#507](https://trello.com/c/FAjRjRDR/507-argo-cd-reconsider-the-disabled-repo-poll-fallback-for-a-dropped-webhook)
+is in Triage → **Later**, tagged `Ansible`, carrying the corrected failure description and the
+slow-fallback-poll option so it does not have to be re-derived.
+
+`timeout.reconciliation: 0` stands. The plan's consequences section now states the trade as it
+actually is — stale-but-green, then a surprise deploy — marked accepted rather than re-opened.
+
+One thing worth doing in Phase A while you are in the webhook config anyway, because it is free
+and it is the only signal this failure mode leaves: GitHub records every webhook delivery and its
+response under the repo's **Settings → Webhooks → Recent Deliveries**, with a redeliver button.
+That is where you look when a deploy did not happen, and redelivering is a second way to kick a
+sync besides `argocd app sync`.
+
 ---
 
-## Q13 — The namespace does not actually go with the app — **OPEN**
+## Q13 — The namespace does not actually go with the app — **ANSWERED**
 
 Your Q2 answer set the goal: *"everything should be removed from Kubernetes if we uninstall an
 app, but leave the persistent parts of the app in place. That means the namespace should also
@@ -818,3 +910,45 @@ Note the interaction with the Terraform state migration: whichever way this goes
 next apply plans a destroy of the live namespace. That hazard is independent of this choice.
 
 **Answer:**
+
+Yes, option A.
+
+**Claude:** Folded in. The mechanics, because "put a Namespace in the chart" hides four decisions:
+
+- **`CreateNamespace=true` comes off.** It would create the namespace *untracked*, and the chart
+  manifest would then adopt it — two mechanisms for one object, and the untracked one wins on a
+  first sync. The tracked manifest alone is the whole story.
+- **The manifest is a faithful replacement.** `terraform-modules/namespace/main.tf` sets nothing
+  but `metadata.name` — no labels, no annotations — so adopting the two live namespaces should
+  diff to nothing but Argo's tracking annotation. Checked, rather than assumed.
+- **Sync ordering.** Argo applies by kind in a fixed order with `Namespace` near the front, so a
+  Namespace and the namespaced resources beside it work in one wave. I would still pin it to
+  `argocd.argoproj.io/sync-wave: "-1"` — the guarantee costs one annotation and the failure it
+  prevents is an unschedulable first sync.
+- **The PreSync ordering worry disappears entirely.** It only ever mattered because the hook Job
+  was going to land in the app's namespace; under Q9 it lands in the permanent hook namespace, so
+  nothing in PreSync depends on the app namespace existing. Phase A's verification item changes
+  accordingly — it was verifying an ordering nothing now relies on.
+
+**The one new hazard this creates, and the guard for it.** The namespace is now a tracked
+resource, so a render that omits it plus prune enabled is Argo deleting the namespace and
+everything in it. Prune was never actually decided anywhere in this plan — that was a gap Fable
+flagged, and Q13 turns it into a real one.
+
+The guard is that Argo's two deletion paths are separate annotations:
+
+- `argocd.argoproj.io/sync-options: Prune=false` — never pruned during a *sync*, i.e. never
+  deleted because it went missing from a render.
+- `argocd.argoproj.io/sync-options: Delete=false` — excluded from the cascade when the
+  *Application* is deleted.
+
+So `Prune=false` on the Namespace gives exactly what you asked for: teardown still takes it,
+because the finalizer's cascade is the other path — while a bad values edit cannot. I am
+confident in that split but it is load-bearing enough to prove rather than trust, so it is a
+Phase A verification item: delete a throwaway Application with a `Prune=false` Namespace and
+confirm the namespace goes.
+
+**Interaction with the Terraform state migration**, which now has a clearer purpose:
+`terraform state rm module.namespace` is no longer "leave it unmanaged", it is "hand it to Argo".
+Do it *before* the first sync adopts the namespace, so the two tools are never both convinced
+they own the object.

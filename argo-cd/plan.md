@@ -1,8 +1,9 @@
 # Argo CD adoption — working plan
 
-**Status:** drafting; Q1–Q10 all answered. This folder is the working area while the plan is
-detailed in conversation; it is not a slice. The reasoning behind each decision, and the
-questions still worth asking, live in [`qa.md`](qa.md).
+**Status:** drafting; Q1–Q13 all answered, and the adversarial review in
+[`review-fable.md`](review-fable.md) is folded in. This folder is the working area while the plan
+is detailed in conversation; it is not a slice. The reasoning behind each decision lives in
+[`qa.md`](qa.md).
 
 **Authoritative inputs**
 
@@ -48,11 +49,17 @@ Consequences:
 Three things moved during planning. Recorded here so the divergence is deliberate and visible;
 all three need to land in `decisions.md` when this is sliced.
 
-**CR decision 6 — "namespace stays TF-managed" is reversed** (Q2). The namespace now belongs to
-Argo (`CreateNamespace=true`). Uninstalling an app should remove *everything* from Kubernetes
-and leave only the durable data behind, and a namespace that outlives its app is neither. This
-also dissolves the chicken-and-egg the CR created, where the PreSync hook that made the
-namespace had to run inside it.
+**CR decision 6 — "namespace stays TF-managed" is reversed** (Q2, Q13). The namespace becomes a
+**`Namespace` manifest in the chart**, tracked by Argo like any other resource. Uninstalling an
+app should remove *everything* from Kubernetes and leave only the durable data behind, and a
+namespace that outlives its app is neither. This also dissolves the chicken-and-egg the CR
+created, where the PreSync hook that made the namespace had to run inside it.
+
+`CreateNamespace=true` was the first attempt and is **not** what ships: Argo does not delete a
+namespace it created that way when the Application is deleted, so it fails the very goal the
+reversal was for. Only a tracked manifest is reached by the finalizer's cascade. That means
+doing the specific thing CR decision 6 forbade — following the reversal through rather than
+half-way.
 
 This contradicts the tool-split doctrine in `decisions.md`, which places namespaces in the
 Terraform tier because "a namespace outlives any single chart". Under Argo it no longer does —
@@ -61,9 +68,14 @@ the Application is the unit, and the namespace is scoped to it.
 **CR decision 4 — Terraform runs on srviac, not in-cluster** (Q3). The PreSync hook is a Job
 that SSHes to srviac under a forced command and drives `iac -c` there. The CR's intent (TF as a
 sync-gated step whose failure aborts the deploy) is preserved exactly; only the execution site
-moves. This keeps the host IaC flock, so KubeCoder's Terraform stays serialised against
-Ansible's, and it removes the CR's per-namespace ESO credential plumbing entirely — the cluster
-holds one restricted SSH key rather than provider credentials.
+moves. It buys two things: the cluster holds **one restricted SSH key rather than provider
+credentials**, and Terraform runs against **exactly the SHA Argo is syncing**.
+
+It does not buy serialisation against Ansible, which an earlier draft claimed. Triage **#506**
+removes `flock` from `bin/iac` — its original job was guarding TerraformState before the backend
+could lock, and terraform-backend-git's `locks/<state-path>` branches now do that properly and
+per-state. Cross-job serialisation comes from the `IaC Agent` Jenkins node having one executor,
+which an Argo hook SSHing in directly does not pass through.
 
 The cost is a hole in the other direction, though a narrower one than first described. The
 network path is not new: srviac has no firewall and answers on 22 from any pod today. What this
@@ -129,19 +141,20 @@ From the CR, as amended above.
   holds no cluster credential.
 - **auto-sync ON, self-heal OFF.** Self-heal off keeps manual `kubectl` edits during debugging
   from being reverted.
-- **Webhook-driven, no polling** (Q6). The operator configures the GitHub push webhook. A
-  dropped webhook is a deploy that silently doesn't happen; manual sync and notifications
-  cover it.
+- **Webhook-driven, no polling** (Q6, Q12). The operator configures the GitHub push webhook.
+  A dropped webhook is worse than a delay — see the consequences section — and that is accepted
+  deliberately to start on the happy flow. Revisiting it is Triage **#507** (Later).
 - **Git equals deployed state.** The deploy-time digest scraper goes away; CI commits explicit
   version tags.
 - **Terraform runs as a PreSync hook Job that drives `iac` on srviac** (amended, above).
   Convergent, so it also reconciles drift. PreSync failure aborts the sync.
 - **State backend unchanged** — terraform-backend-git, reached from srviac exactly as today.
-- **Namespace belongs to Argo** (amended, above). What stays in Terraform is durable storage
-  only.
+- **The namespace is a tracked chart resource** (amended, above). What stays in Terraform is
+  durable storage only.
 - **Teardown is a cascade delete of the Application**, driven by removing its entry from the
   argocd values list. Hooks fire on sync, not delete, so TF never destroys on teardown; the ZFS
-  dataset carries `prevent_destroy` and survives by construction.
+  dataset carries `prevent_destroy` and survives by construction. The namespace goes, and the
+  PVC with it, which leaves the `Retain` PV `Released` — see the reattach item.
 - **Gradual migration, one app at a time.**
 
 ### The Application list (Q1, Q10)
@@ -193,6 +206,29 @@ Hook Jobs run in a **permanent hook namespace** (Q9) holding one ESO-managed Sec
 key. App namespaces hold no deploy-time credentials at all. The AppProject must permit that
 namespace as a hook destination.
 
+### The namespace, and the prune decision it forces (Q13)
+
+The chart carries a `Namespace` manifest, pinned to `argocd.argoproj.io/sync-wave: "-1"`. Argo
+already applies `Namespace` early within a wave, but the guarantee costs one annotation and the
+failure it prevents is an unschedulable first sync. `CreateNamespace` stays **off** — it would
+create the object untracked and put two mechanisms on one resource.
+
+Adoption of the two existing namespaces should be clean: `terraform-modules/namespace/main.tf`
+sets nothing but `metadata.name`, so the only diff is Argo's tracking annotation.
+
+**This forces a prune decision the plan previously never made.** A tracked namespace plus prune
+is one bad render away from deleting everything in it. The two Argo deletion paths are separate,
+which is what makes this tractable:
+
+| Annotation | Blocks | Leaves working |
+| --- | --- | --- |
+| `sync-options: Prune=false` | deletion because a resource vanished from the render | the Application-delete cascade |
+| `sync-options: Delete=false` | the Application-delete cascade | sync-time prune |
+
+So `Prune=false` on the Namespace is the guard: teardown still removes it, because the
+finalizer's cascade is the other path, while a values slip cannot. Load-bearing enough to prove
+rather than trust — it is a Phase A verification item.
+
 ### Stage isolation by git revision (Q5)
 
 The dev Application tracks `main`; the prd Application tracks a `prd` branch, which `Deploy-PRD`
@@ -236,7 +272,9 @@ exception". Zero applications in the list.
   `app.kubernetes.io/instance`, which Helm charts set themselves, and that is a false-adoption
   trap.
 - Polling disabled; the GitHub webhook is the only trigger. Operator sets up the push webhook
-  and shared secret.
+  and shared secret. Note where the evidence lives when a deploy doesn't happen: GitHub's
+  **Settings → Webhooks → Recent Deliveries**, which also has a redeliver button — a second way
+  to kick a sync besides `argocd app sync`.
 - **Notifications on** (Q6): at minimum `on-sync-failed` and `on-health-degraded`, routed to
   the same Telegram path the rest of the estate uses. This is what closes review finding H4 —
   today's `deploy wait` swallows rollout failures. More than a toggle: the chart ships the
@@ -245,12 +283,18 @@ exception". Zero applications in the list.
 - **`controller.operation.processors` set low** (2–3) so a change touching many apps drains a
   few at a time instead of stampeding the cluster (Q7).
 - Local admin auth for now; Keycloak SSO folds into slice 004 later.
-- **Verify while here**, because Phase B leans on all three:
-  - `CreateNamespace=true` creates the destination namespace *before* PreSync hooks run.
+- **Decide prune** and set it deliberately, per Q13 — it is undecided everywhere else in this
+  plan and a tracked namespace makes it consequential.
+- **Verify while here**, because Phase B leans on both:
   - A hook Job can be pinned to the permanent hook namespace and the AppProject permits it.
-  *(The srviac reachability item that used to sit here is gone: there is no firewall on srviac
-  — the only `ufw` in the Ansible repo is the `openbao` role, covering the `srvvaultN` nodes —
-  and srviac:22 answers from a pod today. Tested.)*
+  - Deleting an Application whose chart carries a `Prune=false` Namespace **does** delete that
+    namespace. Use a throwaway app. This is the one claim behind Q13's guard, and if it is
+    wrong the guard has to change rather than the goal.
+  *(Two items that used to sit here are gone. srviac reachability: there is no firewall on
+  srviac — the only `ufw` in the Ansible repo is the `openbao` role, covering the `srvvaultN`
+  nodes — and srviac:22 answers from a pod today, tested. `CreateNamespace=true` ordering
+  before PreSync: nothing depends on it now, because the namespace is a chart manifest and the
+  hook Job runs elsewhere.)*
 - Exit: the UI is reachable, a webhook push visibly triggers a refresh, a deliberate failure
   produces a notification, and an Application pointed read-only at an existing release shows a
   sensible live-vs-git diff.
@@ -304,8 +348,12 @@ authored before the first migration would be fiction.
       names the ClusterRole (`kubecoder-<env>-nodes`) and its binding's namespace, so a miss
       renders `kubecoder--nodes` bound to namespace `kubecoder-`. Comment it: it carries the
       **stage**.
+- [ ] **Add the `Namespace` manifest** (Q13): `sync-wave: "-1"`,
+      `sync-options: Prune=false`, name from the release. It replaces `module.namespace`, which
+      set nothing but the name.
 - [ ] Cluster-scoped resources — that ClusterRole and its binding — need the AppProject to
-      permit them.
+      permit them. They are tracked, so the finalizer's cascade removes them on teardown even
+      though they sit outside the namespace.
 
 ### Image pinning
 
@@ -332,18 +380,23 @@ stays floating by operator decision.
 - [ ] Write `argocd-presync`: validate `$SSH_ORIGINAL_COMMAND` against an allowlist, clone the
       deploy repo **at the given SHA into its own scratch directory** (Q11 option B — not via
       `iac-impl`'s shared `repos:` list, which is default-branch-only and grows globally per
-      migrated app), run the Terraform.
+      migrated app), run the Terraform. The credential is proven: `GIT_USERNAME` and
+      `GIT_API_TOKEN` are exported before a `-c` script runs, and a clone of `KubeCoderDeploy`
+      from inside `iac` was tested. Build the clone with an inline credential helper, **not**
+      `https://$USER:$TOKEN@…` — the URL form puts the PAT in srviac's process table and into
+      any error that echoes the remote.
 - [ ] Deliver it via the existing IaCAgent pattern: an `install_file` line in `install.sh` and a
       `-v` in `bin/iac`'s mount list, the same path `send_message.py` and the two check scripts
       took. The Ansible `iac_agent` role's handler picks it up. **No new mechanism needed** —
       this was checked, not assumed.
 - [ ] Provision the restricted key: OpenBao leaf → ESO → Secret in the hook namespace;
       `command=…,restrict` entry in srviac's `authorized_keys` (an Ansible role change).
-- [ ] Set `syncPolicy.retry` with backoff. `iac` takes `/var/lock/iac.lock` with `flock -w 60`,
-      so a hook arriving during a long Ansible convergence **fails after 60 seconds** rather
-      than queuing. Concurrent dev and prd syncs contend with each other too, not just with
-      Ansible. The 60 seconds is hardcoded in `bin/iac`, so extending it means changing that
-      shim.
+- [ ] **Depends on Triage #506** (remove the flock from `bin/iac`). Until it lands, `iac` takes
+      `/var/lock/iac.lock` with a hardcoded `flock -w 60`, so a hook arriving during a long
+      Ansible convergence — or concurrent dev and prd syncs contending with each other — **fails
+      after 60 seconds** rather than queuing. #506 names this a likely blocker for Argo CD and
+      lists this plan in its scope. Set `syncPolicy.retry` with backoff regardless: it is cheap,
+      and Terraform state locks can still collide.
 - [ ] Specify the hook Job's own limits: `backoffLimit`, `activeDeadlineSeconds`, and SSH
       keepalives. Without them a hung SSH wedges the sync indefinitely.
 - [ ] Verify the host key against the homelab SSH CA. `StrictHostKeyChecking=no` would quietly
@@ -363,9 +416,11 @@ stays floating by operator decision.
       namespace module simply removed makes terraform plan a **destroy of the live namespace** —
       `terraform-modules/namespace/main.tf` has no `prevent_destroy` — taking every pod,
       Service, Secret and the PVC with it. Required: name the new state key, decide
-      reuse-vs-import, `terraform state rm module.namespace` so the live namespace is left
-      unmanaged, and `state mv` the `module.zfs` addresses. Prove it with a `plan` showing no
-      destroys before any hook runs for real.
+      reuse-vs-import, `terraform state rm module.namespace` — which now means *handing the
+      namespace to Argo*, not merely orphaning it (Q13) — and `state mv` the `module.zfs`
+      addresses. Do the `state rm` **before** the first sync adopts the namespace, so the two
+      tools are never both convinced they own it. Prove it with a `plan` showing no destroys
+      before any hook runs for real.
 - [ ] The hook must also do what `helmops.reattach_released_pvs` does today: find PVs whose
       `claimRef` names the target namespace and whose phase is `Released`, and null out
       `claimRef.uid`/`resourceVersion`. KubeCoder's ZFS PV is `Retain`, so without this a
@@ -402,7 +457,8 @@ one is driving the migration.** Schedule it; do not discover it.
 - [ ] Add the stage's entry with **auto-sync off**, so the Application appears OutOfSync
       without acting.
 - [ ] Review the diff in the UI. It should show exactly the expected differences — image
-      references, the annotation — and nothing else. Anything unexpected stops the cutover.
+      references, the deployment annotation, and the Namespace gaining a tracking annotation —
+      and nothing else. Anything unexpected stops the cutover.
 - [ ] Delete `configs/prd/kubecoder/<stage>/` **in the same change**, so Jenkins and Argo are
       never both live on the release (R4). Nothing is uninstalled — the release just leaves
       discovery.
@@ -455,7 +511,9 @@ None blocks the migration; all three need a decision so they aren't discovered l
   OutOfSync state to notice and nothing to alert on. Meanwhile refreshes still fire on cluster
   watch events and cache expiry, each re-resolving the branch head, so with auto-sync ON the
   deploy eventually lands **at an arbitrary moment triggered by something unrelated**. Not
-  "delayed until someone syncs" — stale-but-green, then a surprise. Re-opened as Q12.
+  "delayed until someone syncs" — stale-but-green, then a surprise. **Accepted** to start on the
+  happy flow (Q12); revisiting it with a slow fallback poll is Triage #507. GitHub's Recent
+  Deliveries view is the only place the miss is visible.
 - **Pinning makes the env-pod roll correct for the first time.** Today a worker rebuild changes
   nothing the chart can see. Once `controllerConfig.images.worker` is pinned, bumping it
   changes `checksum/config`, rolls the controller, and rolls the env pods — which is what the
@@ -466,11 +524,16 @@ None blocks the migration; all three need a decision so they aren't discovered l
   Argo's own history.
 - **The cluster can now reach srviac.** Bounded by a forced command, but it is a widening of
   the blast radius doctrine and is accepted deliberately.
-- **A hook that lands during an Ansible run fails rather than queues.** `iac` takes
-  `/var/lock/iac.lock` with `flock -w 60` and holds it for the whole invocation. Serialising
-  KubeCoder's Terraform against Ansible's is the point of running on srviac at all; the
-  60-second ceiling is what that costs. `syncPolicy.retry` with backoff is the mitigation, and
-  it has to be set explicitly.
+- **Nothing serialises a PreSync hook against a hand-run Ansible convergence on srviac.** Once
+  Triage #506 removes the flock, `iac` invocations no longer interlock at the host level; that
+  card records the loss as accepted. Terraform is still protected — terraform-backend-git takes
+  a `locks/<state-path>` branch, which is a better guard than the flock ever was because it is
+  per-state and it also covers wrkdev and this pod, which the flock never saw. Until #506 lands,
+  the opposite problem applies: `flock -w 60` **fails** rather than queues, and #506 calls that
+  a likely blocker for Argo CD.
+- **Teardown deletes the namespace and the PVC in it.** That is the point (Q13), but it means
+  the `Retain` PV is left `Released` on every teardown, and the spin-up path depends on the
+  reattach step. What was an edge case in the old flow is now the normal one.
 
 `iac`'s startup cost (`--pull=always`, the Ansible clone, `poetry install`) is **not** treated
 as a constraint here by operator decision: if it makes hooks slow, the answer is to make `iac`
