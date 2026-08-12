@@ -191,6 +191,14 @@ namespace, while the Application-delete cascade still removes it on teardown. *P
 A, throwaway app):* deleting an Application whose chart carries a `Prune=false` namespace does
 delete that namespace. If that claim is wrong, the guard changes, not the goal.
 
+**D46 — Automated sync prunes.** Decided at design time (flagged for gate-2 review: design.md
+cannot be written without the value, and the old plan explicitly deferred it). 
+`syncPolicy.automated.prune: true` — a manifest that leaves the render leaves the cluster; git
+is the truth, per brief's convention rule. The namespace is the one resource where a bad render
+must not cascade, and D26's `Prune=false` is exactly that guard. Prune touches only *tracked*
+resources, so debug-created objects are safe; debug *edits* to tracked resources are self-heal
+territory, separately off per D5.
+
 **D27 — Lifecycle states, all expressed in git.** Decided (lifecycle). *Registered* (registry
 entry exists) → *deployed* (`deployed: true`) → *undeployed* (`deployed: false`: Application
 deleted, finalizer cascades, namespace and every Kubernetes resource removed;
