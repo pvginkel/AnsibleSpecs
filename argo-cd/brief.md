@@ -13,10 +13,17 @@ Application deployment moves from the Jenkins-driven HelmCharts monorepo — `he
 git — to GitOps on Argo CD: one deploy repo per app, git as the single statement of what runs,
 Argo converging the cluster onto it.
 
-The concrete failure motivating it: HelmCharts' change detection is not stage-scoped, so a config
-change can reach prd paired with an image it was never validated against, and CI reports success
-while the app refuses to start. The general form: deployed state should be readable from git,
-promotion should be an ordinary git operation, and CI should hold no cluster credential.
+**Why.** Learning is the motivation: adopting the technology and the deployment strategy the
+industry has standardised on, first-hand, in a real estate. That is why the project prefers a
+best-practice implementation over one bent to fit the existing workflow (goal post 3) — learning
+what the industry does is the most important goal of this exercise. When a later choice pits
+convention against convenience, convention wins unless the deviation is made visible and decided.
+
+The timing has a concrete trigger, which is not the motivation: HelmCharts' change detection is
+not stage-scoped, so a config change can reach prd paired with an image it was never validated
+against, and CI reports success while the app refuses to start. Fixing that failure class is a
+welcome outcome, as are the general improvements — deployed state readable from git, promotion an
+ordinary git operation, CI holding no cluster credential.
 
 ## Goal posts
 
