@@ -57,6 +57,7 @@ Must land **before** the first `reconciler: argo-cd` entry appears — which is 
       (D4), `controller.operation.processors: 2` (D8), polling disabled (D6).
 - [ ] `terraform/` in ArgoCDDeploy: the Keycloak client (D9). How its secret reaches OpenBao —
       operator writes it, or a public client with PKCE — is decided at implementation.
+      Interlocks with keycloak-tf (Trello **#68**).
 - [ ] Create the hook namespace `argocd-hooks`: ESO leaves for the A.2 credentials, the
       `tf-presync` ServiceAccount and its RBAC (PV get/list/patch), permitted as an AppProject
       destination (D33).
@@ -89,6 +90,11 @@ Use a throwaway app entry + tiny deploy repo; delete both afterwards.
       the homelab CA (D17; fallback plain HTTP).
 - [ ] Boolean `deployed`/`autoSync` behave in selector and templatePatch on the pinned version
       (D23), including the flag-flip generating and removing `syncPolicy.automated`.
+- [ ] Entries **without** the `reconciler:` key — all ~44 unmigrated releases the glob matches —
+      are excluded by the selector. `missingkey=error` means a leak here breaks the whole
+      ApplicationSet, not one app.
+- [ ] Point a no-sync Application at an existing live release and check the live-vs-git diff
+      reads sensibly — diff quality proven before Phase B stakes a cutover on it.
 - [ ] SSO login works; local admin break-glass works (D9).
 
 **Exit:** Argo runs and manages itself; UI reachable via Keycloak; every proof item checked;
@@ -122,7 +128,9 @@ Dev stage end to end first. Let it sit. Then prd. Depends on all of Phase A.
       cascade removes them on teardown).
 - [ ] Terraform **rebuilt** (D12 licence): the ZFS PV is all that remains — inline it, no
       module ceremony. `config/{stage}/*.tfvars` carry the stage differences.
-- [ ] Deploy-repo webhook as a TF resource (D39).
+- [ ] Deploy-repo webhook as a TF resource (D39), with `manage_webhook` true in exactly one
+      stage's tfvars — the resource is repo-scoped, the states per-stage; a second owner
+      collides on GitHub's hook-already-exists.
 - [ ] Add KubeCoderDeploy to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own.
 
 ### B.2 — image pinning
@@ -175,6 +183,9 @@ env pod in the stage restarts — including whichever session is driving the mig
       `chart: null`; delete the stage's `values.yaml` (+ `_shared/` once both stages are over).
       The Jenkins pipeline fires on the path change and now *skips* the release (A.3) —
       Jenkins and Argo are never both live on it.
+- [ ] At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the
+      still-Jenkins-owned **prd** stage — `changed()` matches `configs/prd/kubecoder/.*`, not
+      per stage (review R5). Harmless while the shared chart is untouched; know it is coming.
 - [ ] Review the Application's diff in the UI. Expected: image references, the deployment
       annotation, the namespace gaining a tracking annotation — **anything else stops the
       cutover**.
@@ -205,7 +216,7 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
 
 - **Destroy** (D28): the lifecycle's missing transition — `terraform destroy` from
   *undeployed*, webhook removal, unregistration. No design exists; leaving *undeployed* stays a
-  human decision until this phase is designed and built.
+  human decision until this phase is designed and built. Interlocks: Trello **#66**.
 - **Remaining apps** (O1): gradual vs bulk, decided once the plugin exists. The post-render
   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
 

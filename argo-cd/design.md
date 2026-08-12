@@ -40,7 +40,8 @@ Jenkins builds images and calls `cicd.helmDeploy()`, which triggers the `IaC/Hel
 pipeline; that runs the deploy CLI inside the `iac` container on srviac — `terraform apply` →
 `helm upgrade --install` → config phase (unused estate-wide) — resolving image tags to digests
 at deploy time with nothing written back to git. 45 releases are discovered by walking
-`configs/prd/`. Detail, if ever needed: `archive/plan.md` "Current state".
+`configs/prd/`. Detail, if ever needed: the archived plan's "Current state" chapter — in git
+history once `archive/` is deleted.
 
 ---
 
@@ -123,16 +124,16 @@ chart: null                  # keeps HelmCharts release resolution working (D38)
 ```
 
 ```yaml
-# configs/prd/mosquitto/prd/release.yaml — upstream-chart app (illustrative)
+# configs/prd/headlamp/prd/release.yaml — upstream-chart app (illustrative)
 reconciler: argo-cd
 deployed: true
 autoSync: true
-repo: https://github.com/pvginkel/MosquittoDeploy.git
+repo: https://github.com/pvginkel/HeadlampDeploy.git
 targetRevision: main
 upstream:                    # reuses the existing HelmCharts upstream: convention
   repo: https://...
-  chart: mosquitto
-  version: "2.0.12"          # pinned here (D22)
+  chart: headlamp
+  version: "0.30.1"          # pinned here (D22)
 ```
 
 `deployed` and `autoSync` are plain booleans (D23) and **required in every entry** — the
@@ -241,8 +242,11 @@ The upstream-chart set differs only in the source block — multi-source (D18):
           ref: values
 ```
 
-This covers six of the nine upstream releases; `grafana`, `prometheus` and `external-secrets`
-carry post-render patches, need a CMP or Kustomize-with-Helm, and migrate late (D18).
+This covers six of the nine upstream releases. The late-migration set is five charts with two
+distinct problems (D18): **post-render patching** — `grafana`, `prometheus` and local chart
+`mosquitto` — needing a CMP or Kustomize-with-Helm; and **post-install/post-rollout scripts** —
+`grafana`, `prometheus`, `external-secrets` and local chart `nginx` — run by the deploy CLI's
+`_run_hook` today, a mechanism with no Argo equivalent designed yet.
 
 **The truncation risk, inherited knowingly.** An ApplicationSet that generates a *shorter* list
 cascade-deletes what fell off, tracked runtime included. Mitigations, not solutions: one small
@@ -263,7 +267,10 @@ Polling is off everywhere, including the generator (D6).
 Both share the secret at `webhook.github.secret` in `argocd-secret`. The registry hook is
 created manually, once. Each deploy repo's hook is a `github_repository_webhook` resource in
 that repo's own Terraform (D39), so the PreSync apply creates it on first sync — bootstrap
-rides the registry hook, needing no polling. Whether the two receivers sit behind one fanned-out
+rides the registry hook, needing no polling. The resource is repo-scoped while stages apply
+the same `terraform/` under separate state keys (D32), so **exactly one stage's state owns
+it** — a `manage_webhook` variable in `config/{stage}/*.tfvars`, true once per repo — or the
+second stage's first apply collides with GitHub's hook-already-exists. Whether the two receivers sit behind one fanned-out
 endpoint or two registered hooks is O3, decided at Phase A standup.
 
 **The consequence to respect:** a dropped webhook is not a delay — it is stale-but-green,
@@ -308,7 +315,9 @@ The flow, per sync of an app that has Terraform:
 1. Argo begins the sync and creates the hook Job in `argocd-hooks` (D33), handing it
    `hook.repo`, `hook.revision` (the exact synced SHA), `hook.stage` via chart values.
 2. The pod runs the ArgoCDTools image (D31). The entrypoint clones the deploy repo at that SHA
-   — the only runtime clone; the scripts are already in the image.
+   — the only runtime clone; the scripts are already in the image. The clone authenticates via
+   an inline credential helper, never a token-in-URL remote — the URL form leaks the PAT into
+   the process table and any error that echoes the remote.
 3. It starts terraform-backend-git on `127.0.0.1:6061` inside the pod — the same recipe
    `iac-impl` uses — pointing at the same state repo and keying (D32). Concurrent syncs
    serialise per state through the backend's lock branches.
@@ -362,8 +371,10 @@ Terraform simply don't include the template — no hook, no cost.
 | State encryption key | terraform-backend-git's passphrase, as today |
 | ServiceAccount `tf-presync` | PV get/list/patch, plus whatever the kubernetes provider manages |
 
-No PostSync hook exists anywhere: the config phase is implemented but unused estate-wide, and
-nothing migrating needs it.
+No PostSync hook is designed. The config phase is implemented but unused estate-wide, and
+nothing in the pilot or the early migrations needs one; the post-install/post-rollout scripts
+on the late-migration set are the one future claimant, and they get their design when those
+charts migrate.
 
 ## CI and promotion — the pilot's worked example
 
@@ -424,9 +435,14 @@ None blocks the pilot; each needs its decision by endgame.
 - **A dropped webhook is stale-but-green, then a surprise deploy** — the webhook section above;
   accepted (D6), revisited as Triage #507.
 - **`helm` stops being the way to inspect a migrated app.** No release, no `helm history`, no
-  `helm rollback`; inspection is the Argo UI, rollback is git or Argo's own history.
+  `helm rollback`; inspection is the Argo UI, rollback is git or Argo's own history. (Argo's
+  rollback refuses while auto-sync is on — flip the registry's `autoSync` off first.)
 - **Teardown leaves the `Retain` PV `Released` every time**, and the reattach step is the
   normal path (D29).
+- **A worker/vsix pin bump rolls the controller and every env pod — by design.** Pinning makes
+  the env-pod upgrade roll *correct* for the first time (today a worker rebuild changes nothing
+  the chart sees), and it also makes it *recurring*: the same in-flight-session cost as the
+  cutover roll, on every pin bump. Schedule bumps accordingly.
 - **charts.home is a render-time single point of failure** for every migrated app (D17) —
   frozen deploys, not outages.
 - **The deploy path now lives on the cluster it deploys to.** A cluster-wide outage takes the

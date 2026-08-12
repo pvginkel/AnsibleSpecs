@@ -51,15 +51,16 @@ accepted cost is that a dropped webhook is stale-but-green, not delayed — reco
 Triage **#507** revisits with a slow fallback poll. Registry pushes reach the
 applicationset-controller receiver; deploy-repo pushes reach argocd-server.
 
-**D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes review H4;
-target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
+**D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes the review's
+deploy-wait-swallows-failures notifications gap; target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
 The plan assumes Alertmanager is available as a target — operator decision — and Argo's
 notifications engine supports it natively. Today's `deploy wait` swallows rollout failures;
 this is the replacement signal.
 
 **D8 — `controller.operation.processors` set to 2.** Decided (qa Q7; value pinned 2026-08-12,
 gate-1 review). A change touching many apps drains a few at a time instead of stampeding the
-cluster.
+cluster. Review caveat R3 carried: an operation completes at apply/hook time, not when rollouts
+finish, so image pulls and pod churn still overlap — this throttles, it does not serialise.
 
 **D9 — Keycloak SSO from the start; the local admin account stays as break-glass.** Decided
 2026-08-12 (operator, gate-1 review; reverses "local admin now, SSO later"). Early is cheap: an
@@ -69,7 +70,8 @@ secret arrives as an ESO leaf in a Secret labelled `app.kubernetes.io/part-of: a
 `oidc.config` references as `$<secret>:<key>`. The Keycloak client itself is Terraform in
 ArgoCDDeploy's own repo — the keycloak provider is already in the estate set, and Argo's deploy
 repo managing Argo's infrastructure is goal post 2 applied to itself. Group-claim mapping only
-if RBAC ever needs groups; for one operator, a direct subject mapping suffices.
+if RBAC ever needs groups; for one operator, a direct subject mapping suffices. Interlocks
+with keycloak-tf, Trello **#68**.
 
 **D10 — A dedicated AppProject, not `default`.** Decided (lifecycle). `clusterResourceWhitelist`
 covers `Namespace` plus the cluster-scoped resources migrated charts carry (KubeCoder's
@@ -130,8 +132,11 @@ repository; fallback is plain HTTP (internal-only, tarballs unsigned either way)
 2026-08-12 (notes). Source 0 is the chart from its Helm repo, `targetRevision` carrying the
 chart version; source 1 is the deploy repo with `ref: values` supplying
 `$values/config/{stage}/values.yaml`. Such a repo is `/{terraform,config}` with no `chart/`.
-Covers six of the nine upstream releases; `grafana`, `prometheus` and `external-secrets` carry
-post-render patches, still need a CMP or Kustomize-with-Helm, and migrate late. Wart to
+Covers six of the nine upstream releases. The late-migration set is five: `grafana` and
+`prometheus` (post-render patches — a CMP or Kustomize-with-Helm when they migrate),
+`external-secrets` (post-rollout script), plus local charts `mosquitto` (post-render) and
+`nginx` (post-install) — those scripts run through the deploy CLI's `_run_hook`, a mechanism
+with no Argo equivalent designed yet. Wart to
 document: the two `targetRevision` keys mean different things in one Application — a chart
 version and a git branch. Argo's naming, not fixable here.
 
@@ -207,7 +212,8 @@ Terraform-managed resources untouched) → *unregistered* (entry deleted, only a
 neither — leaving *undeployed* stays a human decision until D28 gets a design.
 
 **D28 — Destroy is a named follow-up phase, with no design yet.** Decided 2026-08-12 (operator,
-restructure session). phases.md names the phase; nobody designs it in this project.
+restructure session). phases.md names the phase; nobody designs it in this project. Interlocks
+with the separately tracked decommission path, Trello **#66**.
 
 **D29 — Teardown never runs `terraform destroy`.** Decided (CR; plan). Hooks fire on sync, not
 delete, so undeploy cannot destroy; the ZFS dataset carries `prevent_destroy` as belt and
@@ -313,7 +319,9 @@ Bootstrap works without generator polling: registration is a registry push, whic
 repo's manually-created webhook delivers to the applicationset-controller; the first sync then
 runs PreSync and creates the deploy repo's hook. Costs: `integrations/github` joins the
 provider set, and the hook's git token needs `admin:repo_hook` — folded into D41's deliberate
-token scoping, not assumed.
+token scoping, not assumed. Where one deploy repo backs several stages, exactly one stage's
+state owns the hook — a `manage_webhook` tfvar, true once per repo — since the resource is
+repo-scoped and the states per-stage (D32).
 
 **D40 — Repository credentials are ESO leaves.** Decided (lifecycle). Argo needs registered
 credentials for the registry repo (the generator reads it) and each deploy repo (the repo-server
@@ -366,7 +374,9 @@ pilot and the adoption plugin exist.
 **O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
 `gen-architecture`'s rendering source, `recommend-resources`, `collect-versions` and the
 version-poller. Decided by endgame time; design.md carries the per-tool notes so the decision
-has an obvious shape when it comes.
+has an obvious shape when it comes. Also in this bucket (qa Q3's caveat): the `configs/dev`
+chart-debugging tree and the ability to hand-run a chart or its Terraform ad hoc — the
+operator's srvk8sdev workflow must survive HelmCharts' deletion in some form.
 
 **O3 — Webhook ingress arrangement** — two hooks registered on the registry repo, or one
 endpoint fanned out to both receivers. A Phase A decision; nothing downstream depends on which.

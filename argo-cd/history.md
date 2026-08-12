@@ -4,8 +4,9 @@
 other documents don't have to carry their own past. Full detail lives in the frozen `archive/`
 folder until its deletion at sign-off, and in git history forever after.
 
-**Timeline of artifacts.** The 2026-07 iac review's gitops note → the change request
-(2026-07-27, `../change_requests/argocd_migration/`) → the Q1–Q13 question-and-answer record
+**Timeline of artifacts.** The 2026-07 iac review's gitops note (whose §5 coupling analysis
+and §6 pilot guidance remain live background) → the change request (2026-07-27,
+`../change_requests/argocd_migration/`; Trello Triage **#124**) → the Q1–Q13 question-and-answer record
 (`archive/qa.md`, 2026-08-08) → the adversarial review (`archive/review-fable.md`) → the working
 plan (`archive/plan.md`) → an external design brief adapted as `archive/app-lifecycle.md`
 (2026-08-11) → the operator's processing notes (`archive/plan-notes.md`, 2026-08-12) → the
