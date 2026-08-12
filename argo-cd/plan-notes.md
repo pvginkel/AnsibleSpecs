@@ -53,11 +53,13 @@
   iac container.
 - Do deployed, autoSync etc need to be string values? Can't they just be
   boolean values?
-
-TODO:
-
-- ### The Application list (Q1, Q10)
-- Reviewed until :237.
+- **"Fast-forward" was wrong, and the mechanic has to be built.** -> This has been
+  fully superseded I believe. Regardless I think the model I prefer is that I'm
+  expected to do the merge myself. For repos that have a single branch in the
+  deploy repo, the merge and push as part of the AI workflow will do the deploy.
+  This is fine.
+- ### The Application list (Q1, Q10) -> This has been superseded by
+  the app-lifecycle.md document.
 
 ## Decisions from the 2026-08-12 session
 
