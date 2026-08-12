@@ -10,9 +10,10 @@ Provenance shorthand: **CR** = `../change_requests/argocd_migration/change_reque
 `archive/app-lifecycle.md`; **notes** = `archive/plan-notes.md`; **review** =
 `archive/review-fable.md`. Entries dated **2026-08-12** came from that day's working sessions.
 
-Three entries amend the CR itself — D25 (namespace), D30 (Terraform execution site), D20
-(ApplicationSet answers the CR's open question). Those graduate to the estate-level
-`/work/AnsibleSpecs/decisions.md` when this is sliced.
+Two entries amend the CR itself — D25 (namespace) and D20 (ApplicationSet answers the CR's open
+question); those graduate to the estate-level `/work/AnsibleSpecs/decisions.md` when this is
+sliced. D30 briefly amended CR decision 4's execution site (Terraform on srviac); the 2026-08-12
+gate-1 review moved execution back in-cluster, dissolving that amendment.
 
 Statuses: **Decided** or **Open**. A Decided entry may still carry a *proof item* — a Phase A/B
 verification that the mechanism works as claimed; failing the proof reopens the mechanism, not
@@ -84,7 +85,7 @@ removes.
 
 **D14 — Terraform lives in the deploy repo, with everything else.** Decided 2026-08-12 (notes;
 reverses lifecycle's "Terraform stays in HelmCharts"). The `*.tfvars` never travel through Argo:
-the PreSync flow clones the deploy repo at the synced SHA on srviac and reads
+the PreSync hook clones the deploy repo at the synced SHA inside its own pod and reads
 `config/{stage}/*.tfvars` off disk. Consequence: the state key changes, and the deliberate state
 migration returns to phases.md (D32).
 
@@ -92,8 +93,8 @@ migration returns to phases.md (D32).
 presync script and the Python/TF support code live there — not in the `iac` container (all
 supporting code in one versioned place) and not in `ArgoCDDeploy` (the tools are estate-wide,
 and co-locating them creates a self-sync loop: editing the presync script would make Argo
-re-sync itself). The presync flow clones ArgoCDTools at a pinned version alongside the deploy
-repo.
+re-sync itself). ArgoCDTools is also what the hook's dedicated image is built from (D31): the
+scripts ship in the image rather than being cloned at runtime.
 
 **D16 — The library chart is in scope; `_helpers.tpl` stays centrally managed.** Decided
 2026-08-12 (notes; deletes plan's out-of-scope line). A requirement, not a nice-to-have. Only
@@ -192,36 +193,49 @@ restructure session). phases.md names the phase; nobody designs it in this proje
 delete, so undeploy cannot destroy; the ZFS dataset carries `prevent_destroy` as belt and
 braces. Consequence: the `Retain` PV goes `Released` on every teardown, and the reattach step
 (null `claimRef.uid`/`resourceVersion`) is the *normal* spin-up path, not an edge case. The
-reattach runs in the srviac script — the hook Job has no Kubernetes identity (D33).
+reattach runs in the hook itself, under its scoped ServiceAccount (D33).
 
 ## Terraform and the PreSync hook
 
-**D30 — Terraform runs as a PreSync hook Job that SSHes to srviac under a forced command.**
-Decided (qa Q3; **amends CR decision 4's execution site**, preserving its intent: Terraform as a
-sync-gated step whose failure aborts the deploy). The cluster holds one restricted SSH key
-rather than provider credentials, and Terraform runs against exactly the SHA Argo is syncing.
-The Job's exit code gates the sync; output streams into the Job log, readable in the Argo UI.
+**D30 — Terraform runs as an in-cluster PreSync hook Job; srviac leaves the deployment path.**
+Decided 2026-08-12 (operator, gate-1 review; supersedes the SSH-to-srviac design and returns to
+CR decision 4's original execution site — the CR's intent, Terraform as a sync-gated step whose
+failure aborts the deploy, was never in question). The Job runs in the hook namespace (D33) on
+the dedicated image (D31), clones the deploy repo at exactly the SHA Argo is syncing, and
+applies; its exit code gates the sync and its log is native in the Argo UI. srviac exists to be
+a Jenkins agent *outside* the cluster, so Ansible can restart infrastructure Jenkins depends on
+— a requirement app-level Terraform (PVs, databases, Keycloak clients, DNS records) does not
+have. Nothing passes through `bin/iac`'s host flock any more, so the old plan's Triage **#506**
+dependency dissolves for this project; serialisation is the backend's per-state lock branches
+(D32), which cover concurrent syncs properly.
 
-**D31 — The presync entry point clones for itself; nothing rides `iac`'s repo mechanism.**
-Decided 2026-08-12 (notes). The script lives in ArgoCDTools (D15); it clones the deploy repo at
-the synced SHA and ArgoCDTools at its pinned version into scratch directories. `iac`'s `repos:`
-list (default-branch-only, global) is not used, and the `iac` container gains no Argo-specific
-command. Supersedes both plan's delivery-via-IaCAgent detail and lifecycle's "PreSync runs
-`deploy apply`" — HelmCharts' deploy CLI is not in the path. The thin bootstrap on srviac (what
-`authorized_keys` actually invokes, and how it fetches ArgoCDTools) is design.md's to specify.
+**D31 — The hook runs a dedicated image built from ArgoCDTools; the `iac` container is not
+reused.** Decided 2026-08-12 (operator, gate-1 review). The image carries exactly the job:
+Terraform, terraform-backend-git, git, and the presync scripts — baked in, since the image is
+dedicated to this one purpose, so nothing is cloned at runtime except the deploy repo at the
+synced SHA. ArgoCDTools (D15) is thus both the source repo and the image build; Argo-specific
+content inside it is fine by definition. The `iac` image stays untouched and gains no
+Argo-specific anything; nothing rides `iac`'s `repos:` mechanism; nothing is installed on any
+host. Supersedes plan's delivery-via-IaCAgent detail and lifecycle's "PreSync runs
+`deploy apply`" — HelmCharts' deploy CLI is not in the path. Image contents, tagging, its build
+pipeline and the Job template's home are design.md's to specify.
 
 **D32 — State backend unchanged; migrated apps get a new state key, moved deliberately.**
 Decided (CR; amended 2026-08-12 — lifecycle's "the state key never changes" died with D14).
-terraform-backend-git, reached from srviac exactly as today. Per migrated app: name the new
-key, `terraform state rm module.namespace` **before** the first sync adopts the namespace (so
+terraform-backend-git starts per-run on `127.0.0.1:6061` *inside the hook pod* — the recipe
+`iac-impl` runs today — against the same state repo and keying; its per-state lock branches
+serialise concurrent syncs. Per migrated app: name the new key, `terraform state rm module.namespace` **before** the first sync adopts the namespace (so
 the two tools are never both convinced they own it), `state mv` the storage addresses, and
 prove with a plan showing no destroys before any hook runs for real. This remains the step that
 can delete production; phases.md carries the checklist.
 
-**D33 — Hook Jobs run in a permanent hook namespace.** Decided (qa Q9). One ESO-managed Secret
-with the SSH key lives there; app namespaces hold no deploy-time credentials. The AppProject
-permits the namespace as a destination (D10). The hook Job has no Kubernetes identity — anything
-needing the cluster API (the PV reattach) runs in the srviac script.
+**D33 — Hook Jobs run in a permanent hook namespace, with scoped credentials and a scoped
+ServiceAccount.** Decided (qa Q9; reworked 2026-08-12, gate-1 review). ESO provisions what a run
+needs: a dedicated OpenBao AppRole minted for app-infra Terraform — not srviac's — plus the git
+token and the state encryption key. The Job runs under a ServiceAccount whose RBAC covers what
+the hook genuinely does: the PV reattach (D29) and whatever the kubernetes provider manages. App
+namespaces still hold no deploy-time credentials; the AppProject permits the hook namespace as a
+destination (D10).
 
 ## Promotion and CI
 
@@ -263,9 +277,9 @@ Decided (lifecycle, bootstrap argument reworked for D6). `github_repository_webh
 the first PreSync apply, surviving undeploy harmlessly, removed when destroy eventually exists.
 Bootstrap works without generator polling: registration is a registry push, which the registry
 repo's manually-created webhook delivers to the applicationset-controller; the first sync then
-runs PreSync and creates the deploy repo's hook. Costs: `integrations/github` joins the shared
-provider set, and the runner needs a token with `admin:repo_hook` — whether `GIT_API_TOKEN`
-carries that scope is a *verify item*, not an assumption.
+runs PreSync and creates the deploy repo's hook. Costs: `integrations/github` joins the
+provider set, and the hook's git token needs `admin:repo_hook` — folded into D41's deliberate
+token scoping, not assumed.
 
 **D40 — Repository credentials are ESO leaves.** Decided (lifecycle). Argo needs registered
 credentials for the registry repo (the generator reads it) and each deploy repo (the repo-server
@@ -275,14 +289,17 @@ anonymous read suffices anywhere before minting tokens.
 
 ## Security
 
-**D41 — The SSH credential is bounded by a forced command, honestly priced.** Decided (qa Q3,
-amended terms in plan). `command="…",restrict` in srviac's `authorized_keys`; arguments arrive
-in `$SSH_ORIGINAL_COMMAND` and are validated, not executed. The allowlist must constrain `ref`
-to commits reachable from the named branches of allowlisted repos — not merely match a repo,
-since Terraform executes arbitrary code and the true bound is otherwise "any historical commit".
-The Job verifies srviac's host key against the homelab SSH CA — no `StrictHostKeyChecking=no`.
-Accepted widening, stated plainly: the cluster gains a credential onto srviac, and with deploy
-repo write access that is code execution as the iac principal.
+**D41 — The hook namespace's credentials are the blast radius, scoped deliberately.** Decided
+2026-08-12 (operator, gate-1 review; replaces the forced-command design, whose bound was
+containment theater — once free-form Terraform runs, "you've lost anyway"). With execution
+in-cluster there is no cluster→srviac path at all: the old accepted widening is gone, and no
+`authorized_keys`, host-key or argument-allowlist machinery exists to maintain. What bounds a
+hook run is exactly what the hook namespace holds (D33): the dedicated AppRole, the git token —
+scoped at minting: state repo read-write, deploy repos read-only, plus `admin:repo_hook` for
+D39 — the state encryption key, and the ServiceAccount's RBAC. Stated plainly: write access to
+a deploy repo branch is arbitrary Terraform execution inside a pod bounded by those
+credentials. Accepted — and strictly smaller than what the same access bought under the srviac
+design, where it was code execution on the estate's IaC control host.
 
 ## Migration and endgame
 
