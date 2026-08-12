@@ -234,21 +234,41 @@ rather than trust — it is a Phase A verification item.
 The dev Application tracks `main`; the prd Application tracks a `prd` branch, which `Deploy-PRD`
 advances to the validated `main` SHA while rewriting the prd pins in the same commit.
 
-**"Fast-forward" was wrong and the mechanics need building.** Promotion commit Cₙ is a child of
-`main@Sₙ`; the previous promotion Cₙ₋₁ is a child of `main@Sₙ₋₁` and is never an ancestor of
-`Sₙ`, so moving `prd` between them is not a fast-forward. Merging instead would make the stated
-rollback ("revert on `prd`") the classic revert-a-merge footgun, where the next promotion
-silently fails to re-apply the reverted work.
+**"Fast-forward" was wrong, and the mechanic has to be built.** Two kinds of commit are in play
+here: **S**, a validated commit on `main`, and **C**, the promotion commit `Deploy-PRD` puts on
+`prd` to publish it — S's content with the prd pins rewritten.
 
-The mechanic that works is a **synthetic commit**: `git commit-tree` with the tree taken
-wholesale from `main@S` plus the pin edits, and parents `[prd-tip, S]`. First parent is prd's
-tip, so it is a genuine fast-forward; `S` is recorded for provenance; and because every
-promotion sets the tree to a complete snapshot, git's merge-base reasoning never enters into it
-— which removes the revert footgun rather than documenting it.
+The plan used to say `Deploy-PRD` fast-forwards `prd`. It can't. Each promotion commit hangs off
+the `main` commit it promotes, so successive promotions sit on separate side branches:
+
+```
+main   ──● S1 ────────● S2 ──────►
+          \            \
+prd        ● C1 ····?···● C2        C1 is not an ancestor of C2
+```
+
+`prd` is at C1 and needs to be at C2, but C1 is nowhere in C2's ancestry, so there is no
+fast-forward to make. The obvious repair — merge `main` into `prd` at each promotion — breaks the
+rollback story instead: reverting on `prd` then becomes the classic revert-a-merge footgun, where
+git still counts the reverted commits as merged and the next promotion silently fails to bring
+that work back.
+
+What works is building the promotion commit by hand, with `git commit-tree`:
+
+- **Tree:** taken wholesale from S, with the pin edits applied on top. The commit's content is a
+  complete snapshot of what was validated — not a diff against whatever `prd` held before.
+- **Parents:** `[prd-tip, S]`. The *first* parent is prd's own tip, which is what makes the branch
+  move a genuine fast-forward. The second records which `main` commit this was, for provenance.
+
+The snapshot is the part that matters: because every promotion sets the tree outright, git never
+has to reason about merge bases to work out prd's content. That removes the revert footgun rather
+than documenting it — a revert on `prd` is just a commit, and the next promotion overwrites the
+tree regardless of what came before.
 
 A chart change reaches prd only at promotion, atomically with the images it was validated
 against. Rollback is a revert on `prd`. The cost is that `prd` must never be hand-edited — a
-manual commit there is a production change with no gate.
+manual commit there is a production change with no gate, and the next promotion silently
+discards it along with everything else the snapshot overwrites.
 
 ---
 
