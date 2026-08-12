@@ -19,12 +19,6 @@ best-practice implementation over one bent to fit the existing workflow (goal po
 what the industry does is the most important goal of this exercise. When a later choice pits
 convention against convenience, convention wins unless the deviation is made visible and decided.
 
-The timing has a concrete trigger, which is not the motivation: HelmCharts' change detection is
-not stage-scoped, so a config change can reach prd paired with an image it was never validated
-against, and CI reports success while the app refuses to start. Fixing that failure class is a
-welcome outcome, as are the general improvements — deployed state readable from git, promotion an
-ordinary git operation, CI holding no cluster credential.
-
 ## Goal posts
 
 1. **An app's complete infrastructure description lives in its own repo** — Terraform and
