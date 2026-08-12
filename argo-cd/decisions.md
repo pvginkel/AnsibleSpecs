@@ -51,15 +51,25 @@ accepted cost is that a dropped webhook is stale-but-green, not delayed — reco
 Triage **#507** revisits with a slow fallback poll. Registry pushes reach the
 applicationset-controller receiver; deploy-repo pushes reach argocd-server.
 
-**D7 — Notifications on from day one.** Decided (qa Q6; closes review H4). At minimum
-`on-sync-failed` and `on-health-degraded`, routed to the estate Telegram path. Today's
-`deploy wait` swallows rollout failures; this is the replacement signal.
+**D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes review H4;
+target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
+The plan assumes Alertmanager is available as a target — operator decision — and Argo's
+notifications engine supports it natively. Today's `deploy wait` swallows rollout failures;
+this is the replacement signal.
 
-**D8 — `controller.operation.processors` set low (2–3).** Decided (qa Q7). A change touching
-many apps drains a few at a time instead of stampeding the cluster.
+**D8 — `controller.operation.processors` set to 2.** Decided (qa Q7; value pinned 2026-08-12,
+gate-1 review). A change touching many apps drains a few at a time instead of stampeding the
+cluster.
 
-**D9 — Local admin auth to start; Keycloak SSO later.** Decided (plan). SSO folds into slice
-004's scope when that work happens.
+**D9 — Keycloak SSO from the start; the local admin account stays as break-glass.** Decided
+2026-08-12 (operator, gate-1 review; reverses "local admin now, SSO later"). Early is cheap: an
+`oidc.config` stanza in `argocd-cm` — issuer, client id, client-secret reference — plus one
+RBAC line in `argocd-rbac-cm` mapping the operator's identity to `role:admin`. The client
+secret arrives as an ESO leaf in a Secret labelled `app.kubernetes.io/part-of: argocd`, which
+`oidc.config` references as `$<secret>:<key>`. The Keycloak client itself is Terraform in
+ArgoCDDeploy's own repo — the keycloak provider is already in the estate set, and Argo's deploy
+repo managing Argo's infrastructure is goal post 2 applied to itself. Group-claim mapping only
+if RBAC ever needs groups; for one operator, a direct subject mapping suffices.
 
 **D10 — A dedicated AppProject, not `default`.** Decided (lifecycle). `clusterResourceWhitelist`
 covers `Namespace` plus the cluster-scoped resources migrated charts carry (KubeCoder's
@@ -78,7 +88,9 @@ over multiple repos, combined-vs-per-repo is the dev's choice per app.
 (notes). `chart/` and `terraform/` do not vary by stage — stage differences come from the
 branch, not a directory. `config/{stage}/{values.yaml,*.tfvars}` holds only what genuinely
 differs per stage. No `_shared/`: it existed for cross-stage TF divergence that branch-per-stage
-removes.
+removes. Explicit rework licence (operator, gate-1 review): the chart moves largely as-is, but
+the Terraform is **rebuilt to fit this layout** — the HelmCharts structure (`_shared`, phase
+files, module plumbing) is not a contract worth preserving.
 
 **D13 — Configuration never lives in the chart.** Decided 2026-08-12 (notes). No
 `chart/values-<stage>.yaml`; stage values sit in `config/{stage}/values.yaml`.
@@ -230,33 +242,47 @@ prove with a plan showing no destroys before any hook runs for real. This remain
 can delete production; phases.md carries the checklist.
 
 **D33 — Hook Jobs run in a permanent hook namespace, with scoped credentials and a scoped
-ServiceAccount.** Decided (qa Q9; reworked 2026-08-12, gate-1 review). ESO provisions what a run
-needs: a dedicated OpenBao AppRole minted for app-infra Terraform — not srviac's — plus the git
-token and the state encryption key. The Job runs under a ServiceAccount whose RBAC covers what
-the hook genuinely does: the PV reattach (D29) and whatever the kubernetes provider manages. App
-namespaces still hold no deploy-time credentials; the AppProject permits the hook namespace as a
-destination (D10).
+ServiceAccount.** Decided (qa Q9; reworked 2026-08-12, gate-1 review). Why a dedicated namespace
+rather than `argocd`: the hook Job manifest is **app-authored chart content**, and the
+AppProject must permit whatever namespace hooks land in as a destination for every app (D10).
+Were that `argocd`, any app chart could place arbitrary resources next to the control plane and
+mount its Secrets — repo credentials (D40), the webhook secret, the OIDC client secret (D9). A
+dedicated namespace bounds what app-authored manifests can reach to exactly the hook
+credentials, which a hook run legitimately gets anyway; app namespaces in turn hold no
+deploy-time credentials at all. ESO provisions what a run needs: a dedicated OpenBao AppRole
+minted for app-infra Terraform — not srviac's — plus the git token and the state encryption
+key. The Job runs under a ServiceAccount whose RBAC covers what the hook genuinely does: the PV
+reattach (D29) and whatever the kubernetes provider manages.
 
 ## Promotion and CI
 
+**Scope note (operator, gate-1 review).** Branch topology, promotion trigger, rollback ritual
+and image-tag scheme are **per-app decisions** — this project does not require them of any app.
+What triggers a production deploy — a manual git merge, or a Jenkins pipeline performing the FF
+merge — is each product's own call. The project supplies mechanism: per-stage `targetRevision`
+in the registry (D20) and the tag-write library call (D45). D34–D37 are the **pilot's**
+(KubeCoder's) choices, recorded as the worked example and sane default, not as requirements.
+
 **D34 — Stage isolation by git revision: dev tracks `main`, prd tracks the `prd` branch.**
-Decided (qa Q5, the surviving half).
+Decided for KubeCoder (qa Q5, the surviving half; per-app scope — other apps pick their own
+branch topology through the registry's per-stage `targetRevision`).
 
 **D35 — Promotion is a branch advance; `prd` never carries a commit `main` doesn't.** Decided
-2026-08-12 (notes; FF model confirmed by operator in the restructure session; supersedes the
-`commit-tree` mechanic, dissolving review H7). `Deploy-PRD` is deleted, not rewritten — no
-`crane`, no retag, no pipeline. The operator does merges themselves; for deploy repos with a
-single branch, the merge and push at the end of the AI workflow *is* the deploy. Atomicity comes
-free: chart, Terraform and image version sit together in a validated `main` tree, so promotion
-moves them as a unit, in a combination dev actually ran.
+for KubeCoder 2026-08-12 (notes; FF model confirmed by operator; supersedes the `commit-tree`
+mechanic, dissolving review H7). `Deploy-PRD` is deleted, not rewritten — no `crane`, no retag.
+What performs the advance is the product's trigger choice (scope note); for a single-branch
+deploy repo, the merge-and-push at the end of a workflow simply *is* the deploy. Atomicity
+comes free: chart, Terraform and image version sit together in a validated `main` tree, so
+promotion moves them as a unit, in a combination dev actually ran.
 
 **D36 — Rollback: revert on `main` and promote; pointer-move as the emergency lever.** Decided
-2026-08-12 (operator, restructure session). The standard move is a revert on the deploy repo's
+for KubeCoder 2026-08-12 (operator; per-app scope). The standard move is a revert on the deploy repo's
 `main`, promoted to `prd` — cheap (a deploy-repo push rebuilds nothing) and dev follows the
 revert, which is accepted. The emergency variant is force-moving `prd` back to the previously
 promoted SHA — loses nothing, since every state `prd` has ever had is a commit on `main`.
 
-**D37 — Image tags are stage-agnostic: `:<n>` and `:latest`.** Decided 2026-08-12 (notes). The
+**D37 — Image tags are stage-agnostic: `:<n>` and `:latest`.** Decided for KubeCoder 2026-08-12
+(notes; per-app scope — an app keeps its scheme until it migrates). The
 `dev-<n>`/`prd-<n>`/`*-latest` scheme goes. The tag is the chart's default in
 `chart/values.yaml`, written by CI on `main`; it does **not** appear in `config/{stage}` — a
 version is not a stage difference (D12). The committed default must be a real `<n>`, never
@@ -286,6 +312,13 @@ credentials for the registry repo (the generator reads it) and each deploy repo 
 renders it): Secrets in the `argocd` namespace labelled
 `argocd.argoproj.io/secret-type: repository`, provisioned via ESO. *Verify at Phase A* whether
 anonymous read suffices anywhere before minting tokens.
+
+**D45 — CI writes image tags through one shared-library call.** Decided 2026-08-12 (operator,
+gate-1 review). The pipeline assembles a dict of `{YAML path in the values file → tag}`; a new
+JenkinsPipelineUtils method takes the deploy repo, the values-file path (defaulting to
+`chart/values.yaml`) and that dict, then clones → updates the file → commits → pushes in one
+call. This is the mechanism behind "git equals deployed state" on the CI side: apps decide what
+goes in the dict and when the call runs (scope note); the library owns the git mechanics.
 
 ## Security
 
