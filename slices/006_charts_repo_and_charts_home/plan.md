@@ -214,7 +214,7 @@ HelmCharts is untouched.
   unprefixed `deployment.timestamp` include must fail to resolve. Both that check and the
   default-pin check were confirmed to bite by mutating the source and re-running.
 
-### P2 — Publishing: package, index, and the chart-repo image
+### P2 — Publishing: package, index, and the chart-repo image ✅ DONE 2026-08-13
 
 Target: `../Charts`
 
@@ -311,8 +311,12 @@ dependency on anything charts.home itself serves. `charts/tfmirror` plus
 
 - **The image P2 publishes, as P3 consumes it.** `registry:5000/charts-home`, tagged `:<build>`
   and `:latest`. It listens on **port 80** (plain HTTP) and serves `/index.yaml` plus the chart
-  tarballs at the root. `/` is a 404 — there is no `index.html` — so any probe must target
-  `/index.yaml`; `charts/tfmirror` declares no probes at all, which is the simpler match.
+  tarballs at the root. `/` is **not** a 404 as P2 shipped the image: `COPY dist/
+  /usr/share/nginx/html/` merges into the `nginx:alpine` base layer's document root, which already
+  carries its stock `index.html` and `50x.html` (verified by build probe, P2 review r1), so `/`
+  and `/index.html` answer with the nginx welcome page. A probe must therefore target
+  `/index.yaml` — the root answers whether or not the repository resolves anything;
+  `charts/tfmirror` declares no probes at all, which is the simpler match.
 - **Directory names are load-bearing.** The config directory name must equal the chart directory
   name — digest resolution keys the chart lookup off the *config* directory, and a lookup that
   misses takes the whole discovery run down rather than skipping one release
