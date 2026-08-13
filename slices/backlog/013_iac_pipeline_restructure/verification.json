@@ -47,6 +47,18 @@
       ]
     },
     {
+      "id": "V17",
+      "area": "Pillar A — the gate's patterns full-match (ruling)",
+      "description": "Every path the gate watches is written so it full-matches: each pattern matches the whole repo-relative path of the input it names — a directory prefix carries an explicit trailing `/.*` — so no image input is silently unwatched and the gate does not skip every build.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "JenkinsPipelineUtils vars/utils.groovy:33-41 via the gitblit mirror (`it.path ==~ pattern`, Groovy full-match)",
+        "HelmCharts/Jenkinsfile:95-98 (trailing /.* on every directory prefix)",
+        "DockerImages/Jenkinsfile:46 (same)"
+      ]
+    },
+    {
       "id": "V05",
       "area": "Pillar A — no escape hatch (ruling)",
       "description": "Gate only: no FORCE or rebuild build parameter is added. To force a rebuild the operator replays the job from a commit that touched an input, or pushes a trivial change to `support/iac-image/`.",
@@ -57,7 +69,7 @@
     {
       "id": "V06",
       "area": "Pillar B — the tree lands in-repo (R3, ruling)",
-      "description": "Every file that was in `pvginkel/IaCAgent` is at `support/iac-agent/<same relative path>` — sibling of `support/iac-image/` — byte-identical, and IaCAgent's root files did not land at the Ansible repo root.",
+      "description": "Every file that was in `pvginkel/IaCAgent` is at `support/iac-agent/<same relative path>` — sibling of `support/iac-image/` — and IaCAgent's root files did not land at the Ansible repo root. The move itself is a pure rename: the commits that land the tree change no file's content. The R4 drift fixes ship separately, on top of it.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -90,15 +102,16 @@
     {
       "id": "V09",
       "area": "Pillar B — the surrounding edits (R4)",
-      "description": "The edits the move implies are done: install/sync paths updated, and the README drift fixed — the tree's README no longer says `iac` runs `modern-app-dev`, and no doc still tells the reader the host glue lives in a separate repo checkout beside Ansible.",
+      "description": "The drift R4 names is fixed inside `support/iac-agent/`, the tree the slice moves: `grep modern-app-dev support/iac-agent/` returns nothing; nothing in the tree still presents itself as a separate repo beside Ansible; its Jenkinsfile list matches the `Jenkinsfile.*` set the repo actually has; and its bind-mount list matches what `bin/iac` actually mounts. Sync and install paths are updated where any exist — the role's (V08); the tree's own installer is self-relative and owes none.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/IaCAgent/README.md:9 (the modern-app-dev claim)",
+        "/work/IaCAgent/README.md:9,10,12 (the modern-app-dev claims) and :21-33 (the separate-repo framing and the stale Jenkinsfile list)",
+        "/work/IaCAgent/etc/cron.d/iac-prune:3-4, /work/IaCAgent/bin/send_message.py:8 (the other modern-app-dev mentions)",
         "/work/IaCAgent/bin/iac:15 (IMAGE defaults to registry:5000/iac:latest)",
-        "/work/IaCAgent/install.sh:24 (REPO_DIR is self-relative — no path edit owed inside the tree)",
-        "ansible/roles/iac_agent/README.md:12,20 (sibling-checkout prose)",
-        "docs/runbooks/iac-agent.md:15,154 (pvginkel/IaCAgent as a separate repo)"
+        "/work/IaCAgent/bin/iac:63-69 (five bind-mounts against the README's two)",
+        "Jenkinsfile.* at the repo root: no iac-dqlite-watchdog; iac-apply, iac-scheduled-calico, iac-scheduled-certs exist",
+        "/work/IaCAgent/install.sh:24 (REPO_DIR is self-relative — no path edit owed inside the tree)"
       ]
     },
     {
@@ -160,7 +173,7 @@
     {
       "id": "V15",
       "area": "N4 — the existing duplicates are left alone",
-      "description": "The merge deduplicates nothing: `tools/ai_workflow/send_message.py` and the tree's `bin/send_message.py` both survive with their content unchanged, and so do the role's inline `/etc/docker/daemon.json` content and the tree's `etc/docker/daemon.json`.",
+      "description": "The merge deduplicates nothing: `tools/ai_workflow/send_message.py` and the tree's `bin/send_message.py` both survive as separate files in their current locations, and so do the role's inline `/etc/docker/daemon.json` content and the tree's `etc/docker/daemon.json`. The only content change to any of the four is the stale `modern-app-dev` docstring line in `bin/send_message.py` that the R4 ruling names — a drift fix, not a dedup.",
       "verdict": null,
       "rationale": "",
       "evidence": [

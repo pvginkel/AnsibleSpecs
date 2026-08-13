@@ -213,11 +213,17 @@ Constraints:
   build, `Utils.markStageSkippedForConditional(<stage name>)` in the else branch, and the
   `org.jenkinsci.plugins.pipeline.modeldefinition.Utils` import that `Jenkinsfile.iac-image` does
   not yet carry — `HelmCharts/Jenkinsfile:1,84,93-99`, `DockerImages/Jenkinsfile:1,46,111`.
+- **The gate's patterns must full-match** (ruling, with the library source quoted there):
+  `utils.hasChanges` tests its argument against each changed file's whole repo-relative path with
+  Groovy's `==~`, so a watched path has to be written as a regex that matches that path end to
+  end. A directory prefix therefore needs an explicit trailing `/.*` — which is exactly why both
+  sibling call sites carry one (`HelmCharts/Jenkinsfile:95-98`, `DockerImages/Jenkinsfile:46`) —
+  while a glob (`support/iac-image/**`) or a bare prefix (`support/iac-image`) matches nothing and
+  would make *every* build skip, including the image-input pushes that must not.
 - `utils.hasChanges` reads the build's own SCM changeset, so the `Cloning repo` stage's
   `checkout scm` has to stay (`Jenkinsfile.iac-image:5-7`; the same dependency is spelled out at
-  `HelmCharts/Jenkinsfile:48-50`). The shared library is not checked out in this environment — its
-  argument is a path regex on the evidence of both call sites, and the ruling already records that
-  the operator accepts the retry hole this implies.
+  `HelmCharts/Jenkinsfile:48-50`). The ruling records that the operator accepts the retry hole
+  this implies.
 - No escape hatch: no build parameter, no force flag (ruling).
 - PB's `support/iac-agent/` is **not** an image input. Whichever pillar lands first, the gate must
   not sweep the whole of `support/`.
@@ -226,11 +232,11 @@ Constraints:
 
 Target: ansible
 
-Everything now in `pvginkel/IaCAgent` lives at `support/iac-agent/<same relative path>`,
-byte-identical, with its commit history part of this repo's; and the `iac_agent` role syncs and
-installs from there, so applying it needs the Ansible checkout and nothing beside it. The bulk of
-the diff is a tree landing at the repo root, but the change that can actually break is the role's,
-which is what the target's gate covers.
+Everything now in `pvginkel/IaCAgent` lives at `support/iac-agent/<same relative path>` with its
+content untouched by this phase and its commit history part of this repo's; and the `iac_agent`
+role syncs and installs from there, so applying it needs the Ansible checkout and nothing beside
+it. The bulk of the diff is a tree landing at the repo root, but the change that can actually
+break is the role's, which is what the target's gate covers.
 
 - **History (R5).** A plain copy that starts the tree's history at this slice does not satisfy R5:
   every IaCAgent commit must be present in this repo with its original author, date and message,
@@ -242,8 +248,8 @@ which is what the target's gate covers.
 - **The tree lands prefixed, not at the root.** IaCAgent's root files (`README.md`, `.gitignore`,
   `install.sh`) must arrive under `support/iac-agent/` — landing them unprefixed would clobber
   this repo's own `README.md`.
-- **Move only (ruling, N4).** All four files of the two duplicate pairs keep their content and
-  location. Nothing inside the tree needs a path edit: `install.sh` resolves every source from its
+- **Move only (ruling, N4).** All four files of the two duplicate pairs survive as separate files;
+  nothing is deduplicated, here or later. Nothing inside the tree needs a path edit: `install.sh` resolves every source from its
   own directory (`/work/IaCAgent/install.sh:24`), and the tree's only `/work/...` strings are
   comments about the clone `iac-impl` makes inside the container, not about the controller's
   checkout.
@@ -264,11 +270,43 @@ which is what the target's gate covers.
   proven parity and archived the repo.
 - **Both `--limit "!iac_agent"` lines stay untouched** — `Jenkinsfile.iac-apply:94` and
   `Jenkinsfile.iac-scheduled-drift:86`.
-- **Prose the move makes untrue is the doc phase's**, from this diff: the moved tree's own README
-  (which still describes `iac` running `modern-app-dev` while `bin/iac:15` runs
-  `registry:5000/iac:latest`), the role README, `docs/runbooks/iac-agent.md`, and `decisions.md`
-  + the architecture nudge R7 asks for. Leaving the tree byte-identical is what makes this diff a
-  reviewable rename.
+- **The move is a pure rename.** Nothing inside the tree changes content in this phase; the drift
+  R4 names is real and ships in PC, on top. Keeping the two apart is what makes this diff — a
+  history-carrying merge of 28 foreign commits — reviewable at all.
+
+### PC — the moved tree stops describing itself as a separate repo running `modern-app-dev`
+
+Target: root
+
+`support/iac-agent/` describes what it now is and what actually runs it. The ruling's own test is
+the bar: `grep modern-app-dev support/iac-agent/` returns nothing, and nothing in the tree still
+tells a reader it lives in its own repo beside Ansible.
+
+The drift the ruling names — all of it inside the moved tree, all verified this pass, paths below
+relative to `support/iac-agent/`:
+
+- **The container.** `README.md:9,10,12` say the shim runs `iac-impl` inside `modern-app-dev`;
+  `bin/iac:15` runs `registry:5000/iac:latest`. The same stale name is in
+  `etc/cron.d/iac-prune:3-4` and `bin/send_message.py:8`.
+- **The repo framing.** `README.md:21-33` presents the Jenkins pipelines as having moved *out of
+  this repo* into Ansible — after PB that is one repo, and `README.md:1-3` still frames the tree
+  as a standalone project.
+- **The Jenkinsfile list.** `README.md:28-31` names `Jenkinsfile.iac-dqlite-watchdog`, which no
+  longer exists, and misses `Jenkinsfile.iac-apply`, `Jenkinsfile.iac-scheduled-calico` and
+  `Jenkinsfile.iac-scheduled-certs` (the repo root's `Jenkinsfile.*` set is authoritative).
+- **The bind-mount list.** `README.md:9` names two mounts; `bin/iac:63-69` mounts five —
+  `iac-impl`, the secrets file, `send_message.py`, `check-protected-vms.sh`,
+  `check-ansible-drift.sh`.
+
+Constraints:
+
+- **Prose and comments only, inside `support/iac-agent/`.** No behaviour changes: the shim, the
+  installer and the cron schedule keep working exactly as they do after PB. Prose outside the tree
+  is not this phase's.
+- **This is not the dedup N4 forbids.** `bin/send_message.py` is one of N4's four held-out files;
+  the R4 ruling names its `modern-app-dev` docstring line specifically. Fixing that line is a
+  drift fix — the two `send_message.py` copies both stay, as separate files in their current
+  locations.
 
 ## Not in scope
 
