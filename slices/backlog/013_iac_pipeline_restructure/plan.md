@@ -36,9 +36,30 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   > commit that touched an input, or push a trivial change to `support/iac-image/`.
 
   Raised and declined: a `FORCE` build parameter on the DockerImages precedent. `utils.hasChanges`
-  reads the build's own SCM changeset (the shared library source is not checked out in this
-  environment, so its exact semantics are unverified), which means a build that fails on an
-  image-input push is not retried by the next unrelated push. The operator accepts that hole.
+  reads the build's own SCM changeset, which means a build that fails on an image-input push is not
+  retried by the next unrelated push. The operator accepts that hole.
+
+- **Ruling (2026-08-13) — the `hasChanges` contract is verified, and patterns must full-match.**
+  The shared library is not checked out in this environment but is readable through the gitblit
+  mirror; `pvginkel/JenkinsPipelineUtils.git`, `vars/utils.groovy:33-41`:
+
+  ```groovy
+  def hasChanges(pattern) {
+      return currentBuild.changeSets.any { changeSet ->
+          changeSet.items.any { item ->
+              item.affectedFiles.any { it.path ==~ pattern }
+          }
+      }
+  }
+  ```
+
+  Two consequences the plan must carry rather than infer. The source is `currentBuild.changeSets`
+  — the build's own changeset — which is what makes the accepted retry hole above real. And `==~`
+  is Groovy's **full-match** operator, not a find: a pattern must match the entire repo-relative
+  path. That is why `HelmCharts/Jenkinsfile:95-98` and `DockerImages/Jenkinsfile:46` both carry a
+  trailing `/.*`. A glob-shaped pattern (`support/iac-image/**`) or a bare prefix
+  (`support/iac-image`) full-matches nothing, which would make `iac-image` skip *every* build
+  including real image-input pushes.
 
 #### Pillar B — merge `IaCAgent` into `Ansible`
 
@@ -67,6 +88,25 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   > Move the tree […]; repoint `iac_agent_local_checkout`; fix the README drift; update
   > install/sync paths.
 
+- **Ruling (2026-08-13) — R4's README fix ships in this slice, and reads "the drift" broadly.**
+  R4 is a numbered requirement; a phase must own it. It is **not** the doc phase's — that phase's
+  charter (`docs/slice-doc-plan.md`) reaches `decisions.md`, `docs/runbooks/`, the specs README,
+  role/module interface docs and `CLAUDE.md`, none of which is a tree README under `support/`.
+
+  > FIX: `modern-app-dev` → `registry:5000/iac:latest` and the "separate repo" framing → lives in
+  > Ansible at `support/iac-agent/`; the stale Jenkinsfile list (drop
+  > `Jenkinsfile.iac-dqlite-watchdog`, which does not exist; add `iac-apply`,
+  > `iac-scheduled-calico`, `iac-scheduled-certs`); the bind-mount list (names 2, `bin/iac` mounts
+  > 5); plus the stale `modern-app-dev` mentions in `etc/cron.d/iac-prune:3-4` and
+  > `bin/send_message.py:8`.
+  >
+  > → `grep modern-app-dev support/iac-agent/` returns nothing.
+
+  This supersedes any reading of the move's byte-identical property as forbidding the edits: the
+  tree moves byte-identical **first**, so the history-preserving move stays a reviewable pure
+  rename, and the drift fixes land as a separate, separately-reviewable change on top. A criterion
+  asserting byte-identity must be scoped to the move, not to slice end.
+
 - **R5.** Preserve the IaCAgent commit history in the move.
 
 - **R6.** Prove parity, then retire the repo.
@@ -94,6 +134,14 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   > `update-architecture` agent (removed repo boundary).
 
 #### Rulings that bound both pillars
+
+- **Ruling (2026-08-13) — no criterion may assert a doc-truth universal.** An acceptance criterion
+  of the form "no doc still says X" is unbounded and, here, wrong: because the slice deliberately
+  leaves `.kubecoder/config.yaml` declaring IaCAgent and `/work/IaCAgent` on disk (the R6 ruling),
+  `CLAUDE.md`'s "Related repos on this machine … `IaCAgent`" is **still accurate** at slice end.
+  The specs repo also holds historical records naming IaCAgent — completed slices, the 2026-07
+  review findings — which are provenance and must not be rewritten. Criteria about prose are
+  bounded to the files the slice's own diff touches, and say which.
 
 - **Ruling (2026-08-13) — both `--limit "!iac_agent"` exclusions stay untouched.** The slice's N1
   named only `Jenkinsfile.iac-apply`; the exclusion is in fact in two files.
