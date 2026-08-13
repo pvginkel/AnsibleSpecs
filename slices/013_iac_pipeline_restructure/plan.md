@@ -228,6 +228,31 @@ Constraints:
 - PB's `support/iac-agent/` is **not** an image input. Whichever pillar lands first, the gate must
   not sweep the whole of `support/`.
 
+**Done.** `Jenkinsfile.iac-image` now imports `org.jenkinsci.plugins.pipeline.modeldefinition.Utils`,
+guards the `Building iac image` stage with a script-level `imageInputChanged()` (HelmCharts'
+`changed(entry)` shape, defined after the `podTemplate` block), and calls
+`Utils.markStageSkippedForConditional('Building iac image')` in the else branch. `checkout scm`,
+the Dockerfile path, the context and both tags are untouched; no build parameter was added.
+
+Settled beyond the plan's text:
+
+- The five watched patterns are `support/iac-image/.*`, `pyproject\.toml`, `poetry\.lock`,
+  `ansible/roles/baseline/files/homelab-root\.crt`, `ansible/files/known_hosts\.d/homelab` —
+  written as Groovy single-quoted strings, so `\\.` in the source is a literal-dot regex. Neither
+  sibling call site had a literal dot to escape; escaping keeps the full-match exact. All five
+  paths were re-checked against the working tree, and `support/iac-image/` holds exactly the three
+  files the Dockerfile reads (`Dockerfile`, `smallstep.sources`, `terraform.rc`).
+- This is the repo's first `utils.hasChanges` use — no in-repo precedent existed to follow, hence
+  the sibling-repo shape verbatim.
+- No Groovy or Java toolchain exists in this container or the `iac` sidecar, so the file gets no
+  local syntax check; the first real proof is the next `IaC/iac-image` build. The test phase should
+  treat V01/V02 as pipeline-observed, not locally reproducible.
+- `kc project test --project root` reports "no test statements — skipped": root declares only
+  `setup`. Ran `kc project lint` as well (ansible + terraform) — green, and untouched by this diff.
+
+Nothing here changes PB or PC. The gate watches `support/iac-image/.*`, never `support/.*`, so
+PB's tree landing at `support/iac-agent/` does not trip it.
+
 ### PB — the IaCAgent tree becomes `support/iac-agent/`, and the role installs from it
 
 Target: ansible
