@@ -229,24 +229,36 @@ Constraints:
   not sweep the whole of `support/`.
 
 **Done.** `Jenkinsfile.iac-image` now imports `org.jenkinsci.plugins.pipeline.modeldefinition.Utils`,
-guards the `Building iac image` stage with a script-level `imageInputChanged()` (HelmCharts'
+guards the `Building iac image` stage with a script-level `imageBuildRequired()` (HelmCharts'
 `changed(entry)` shape, defined after the `podTemplate` block), and calls
 `Utils.markStageSkippedForConditional('Building iac image')` in the else branch. `checkout scm`,
 the Dockerfile path, the context and both tags are untouched; no build parameter was added.
 
 Settled beyond the plan's text:
 
-- The five watched patterns are `support/iac-image/.*`, `pyproject\.toml`, `poetry\.lock`,
-  `ansible/roles/baseline/files/homelab-root\.crt`, `ansible/files/known_hosts\.d/homelab` —
-  written as Groovy single-quoted strings, so `\\.` in the source is a literal-dot regex. Neither
-  sibling call site had a literal dot to escape; escaping keeps the full-match exact. All five
-  paths were re-checked against the working tree, and `support/iac-image/` holds exactly the three
-  files the Dockerfile reads (`Dockerfile`, `smallstep.sources`, `terraform.rc`).
+- **A build whose changeset holds no file at all builds** (`!utils.hasChanges('.*')`, r2).
+  `helmCharts.kaniko` delegates to `kaniko2`, which stamps `org.webathome.poller.*` on every image
+  it pushes; the version poller reads those off `registry:5000/iac:latest` and triggers `IaC/IaC
+  Docker Image` weekly with no commits and no parameters — the positional `kaniko` cannot stamp the
+  `params` label DockerImages replays (`JenkinsPipelineUtils vars/helmCharts.groovy:52-59,96-108`;
+  `DockerImages/Jenkinsfile:46,103`). A changeset-only gate skips that rebuild, so `rebuild-at`
+  never advances, and the poller — which does not re-fire while that value is unchanged and drops
+  the image as orphaned once it is stale — stops patching the image's floating
+  `ubuntu:questing`/apt/helm layers. Not the `FORCE` parameter the ruling declined: no parameter
+  exists, and every push still gates on its own changeset.
+- The six watched patterns are `Jenkinsfile\.iac-image`, `support/iac-image/.*`, `pyproject\.toml`,
+  `poetry\.lock`, `ansible/roles/baseline/files/homelab-root\.crt`,
+  `ansible/files/known_hosts\.d/homelab` — written as Groovy single-quoted strings, so `\\.` in the
+  source is a literal-dot regex, which keeps the full-match exact. The Jenkinsfile watches itself
+  because it carries the Dockerfile path, the context and both tags (r2); the rest were re-checked
+  against the working tree, and `support/iac-image/` holds exactly the three files the Dockerfile
+  reads (`Dockerfile`, `smallstep.sources`, `terraform.rc`).
 - This is the repo's first `utils.hasChanges` use — no in-repo precedent existed to follow, hence
   the sibling-repo shape verbatim.
 - No Groovy or Java toolchain exists in this container or the `iac` sidecar, so the file gets no
-  local syntax check; the first real proof is the next `IaC/iac-image` build. The test phase should
-  treat V01/V02 as pipeline-observed, not locally reproducible.
+  local syntax check; the first real proof is the next `IaC/iac-image` build — and since the
+  Jenkinsfile is itself a watched input, the push that lands this phase is that build. The test
+  phase should treat V01/V02 as pipeline-observed, not locally reproducible.
 - `kc project test --project root` reports "no test statements — skipped": root declares only
   `setup`. Ran `kc project lint` as well (ansible + terraform) — green, and untouched by this diff.
 
