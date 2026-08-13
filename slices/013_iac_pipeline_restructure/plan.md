@@ -387,6 +387,46 @@ Constraints:
   drift fix — the two `send_message.py` copies both stay, as separate files in their current
   locations.
 
+**Done.** Four files edited, prose and comments only: `README.md`, `bin/iac`,
+`bin/send_message.py`, `etc/cron.d/iac-prune`. `grep modern-app-dev support/iac-agent/` returns
+nothing; the README's title, lede, Jenkinsfile list and bind-mount list are correct against the
+working tree; no executable line changed.
+
+Settled beyond the plan's text:
+
+- **The container is named as `registry:5000/iac:latest`, sourced.** Everywhere the old name
+  appeared it becomes the `iac` container with the tag spelled out once (README:9), plus where it
+  is built from — `support/iac-image/`, this repo. `iac-prune`'s comment also gained *why* the
+  untagged layers accumulate: `bin/iac` runs `--pull=always` on every call (`bin/iac:40`).
+- **The Jenkinsfile list is the root's `Jenkinsfile.*` set, split by agent.** Six `iac-controller`
+  jobs (on-push, apply, scheduled-{update,drift,calico,certs}) listed with a one-line charter each,
+  taken from each file's own header; `iac-image` and `architecture` are named in a following
+  paragraph as root-level but Kubernetes-pod-agent jobs that use none of the tree's helpers — they
+  hold no IaC mutex and bind-mount nothing. "The Ansible repo holds the authoritative per-stage
+  breakdown" became "each Jenkinsfile's header comment", which is where it actually is.
+- **Two drift fixes past the ruling's four bullets**, both the same staleness in the same table:
+  `check-protected-vms.sh` is used by three jobs, not two (`iac-apply` too, from the on-push/apply
+  split), and the design-doc link resolved to `AnsibleSpecs/phases/iac-agent.md`, which is now
+  under `phases/completed/`.
+- **`bin/iac`'s missing-`iac-impl` error** said "run IaCAgent's install.sh" — a repo pointer with
+  no repo. Now `/opt/IaCAgent/install.sh`, the path the role syncs it to and the one an operator on
+  srviac can actually run. Message text only.
+- **Left alone deliberately:** `bin/iac:4` and `bin/iac-impl:6` cite `/work/AnsibleSpecs/phases/
+  {iac-agent,openbao}.md`, both now under `phases/completed/`. Same dead-pointer class as the
+  README link but outside the ruling's list and outside the files this phase otherwise touches —
+  carded, not fixed. The N4 duplicates are untouched: `bin/send_message.py` changed one docstring
+  line, `tools/ai_workflow/send_message.py` and both `daemon.json`s not at all.
+- Gate: `kc project test --project root` → "no test statements — skipped" (root declares only
+  `setup`, as PA recorded). `kc project lint` green. `python3 -m py_compile` on `send_message.py`
+  and `bash -n` on `bin/iac` both clean.
+
+For the doc phase: prose *outside* the tree is still owed — `ansible/roles/iac_agent/README.md:12,20`,
+`docs/runbooks/iac-agent.md:15,154`, `ansible-architecture.yaml:338` (per PB). Three
+`modern-app-dev` mentions also survive outside the tree, where PC's bar does not reach:
+`docs/runbooks/iac-agent.md:12` and `docs/runbooks/operator-workstation.md:90` (runbooks — the doc
+phase's charter), and `terraform/modules/managed-vm/versions.tf:9`, which additionally predates
+`tf-provider-registry` (no repo-wide `grep modern-app-dev` will come back empty at slice end).
+
 ## Not in scope
 
 - **N1. Removing `--limit "!iac_agent"` from anywhere.** The merge makes CI application of the role
