@@ -389,7 +389,7 @@ exactly the Service and the Deployment. **Not pushed** — that keystroke is the
   `resolve-helm-args prd/charts .`, and `terraform fmt -check` (clean). All run from the repo root
   through `cexec iac`.
 
-### P4 — Close the gaps the two gate scripts leave
+### P4 — Close the gaps the two gate scripts leave ✅ DONE 2026-08-13
 
 Target: `../Charts`
 
