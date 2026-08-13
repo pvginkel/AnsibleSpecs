@@ -44,6 +44,26 @@ not quoted.
   HelmCharts — it raises an operator question instead; the operator pushes and the run resumes.
   This keeps the first deploy of a new namespace, and the Terraform apply behind it, on the
   operator's keystroke, per this repo's doctrine.
+- Ruling (2026-08-13) — **the `Charts` Jenkins job path.** `IaC/Charts` — *"I don't know why you
+  wouldn't see it. IaC/Charts is correct."* That is the value for `project.yaml`'s `jenkins:` key
+  and what `track_build.py` keys off. The operator creates the job by hand.
+- Ruling (2026-08-13) — **how the chart repo keeps earlier library versions resolvable.** Packaged
+  charts live in a committed `dist/` in the `Charts` repo; CI runs `helm repo index` over it and
+  bakes the result into the image. Deterministic, works on the very first build, no dependency on
+  charts.home being up, and version history is in git. Cost accepted: chart tarballs (a few KB
+  each) are committed artifacts. This is what makes D17's `dependencies:` version pins worth
+  anything — publishing `0.2.0` leaves `0.1.0` fetchable. It also removes the need for
+  `helm repo index --merge`, and with it the Helm 3.9.1-vs-4 `--merge` hazard P2 flags. Because
+  the store is the checkout rather than a live service, the additivity property is provable
+  **without a second Jenkins build**: package two versions into a scratch `dist/`, index it, and
+  confirm the index carries both entries. That is real execution rather than a green gate, so the
+  criterion covering it stays in `verification.json` instead of being owed or dropped.
+- Ruling (2026-08-13) — **R4 does not forbid HelmCharts' `charts/shared` symlink.** D17's trap is
+  about not consuming the library charts.home *serves* (`homelab-shared`). HelmCharts'
+  `charts/shared/_helpers.tpl` is a different file that charts.home does not serve, and
+  `/work/HelmCharts/CLAUDE.md:111` says every chart is expected to have the symlink — it supplies
+  `deployment.timestamp`. The charts.home chart therefore looks like every other chart in that
+  repo: it keeps the symlink, and R4 bars only a `homelab-shared` dependency.
 - Ruling (2026-08-13) — **the `Charts` repo bootstrap.** `Charts` had zero commits, so its `main`
   did not exist as a ref and the driver's `git checkout <base>` at merge would have failed. A
   minimal `README.md` initial commit was seeded on `main` during refinement (`68ffae3`) and left
@@ -61,7 +81,7 @@ assumed — verify before relying on them.
   `certbot` sidecars (`/work/HelmCharts/charts/nginx/templates/nginxmanager-deployment.yaml`).
 - **R3 needs no DNS file edit and no Ansible change.** `nginx.webathome.org/enable-ssl: "yes"`
   with `nginx.webathome.org/is-public: "no"` requests a homelab-CA leaf from step-ca's ACME
-  provisioner (`/work/HelmCharts/charts/nginx/values.yaml:9` —
+  provisioner (`/work/HelmCharts/charts/nginx/values.yaml:10` —
   `internalCaUrl: https://ca.home/acme/acme/directory`), and `dnsmasq-config-generator`
   synthesises the A record from `nginx.webathome.org/server-name`
   (`/work/DockerImages/dnsmasq-config-generator/app/service_watch.py:142-157`).
@@ -86,14 +106,19 @@ assumed — verify before relying on them.
   precedent to copy. The `iac` sidecar carries **Helm v4.2.3**, and both `helm package` and
   `helm repo index` (including `--merge` and `--url`) exist there.
 - **Jenkins jobs are hand-wired in the UI** — no JCasC, job-DSL or seed job exists anywhere
-  (`/work/Ansible/docs/runbooks/iac-agent.md:129` documents job creation as a manual step). The
-  observed convention for a per-repo build pipeline is `<Repo>/<branch>`, e.g.
-  `DockerImages/master`, `HelmCharts/master`.
-- **HelmCharts carries no `.kubecoder/project.yaml`** (never has), and neither does any other
-  sibling. A `../HelmCharts` phase therefore has **no deterministic gate** and its reviewer is
-  told the state is unverified. `/work/Ansible/.kubecoder/project.yaml` is the only real example
-  of the format. Giving `Charts` its own `project.yaml` is in scope — it is what earns the
-  `../Charts` phases a gate; onboarding HelmCharts is not.
+  (`/work/Ansible/docs/runbooks/iac-agent.md:129` documents job creation as a manual step), and
+  there are no multibranch jobs. `DockerImages`, `HelmCharts`, `Ansible` and `Architecture` are
+  root-level jobs; `KubeCoder` and `DesignAssistant` are folders with a `Build-`/`Deploy-` split.
+  There is **no `<Repo>/<branch>` convention** — an earlier claim to that effect was wrong. The
+  job path is the operator's to choose and is ruled above (`IaC/Charts`).
+- **HelmCharts carries no `.kubecoder/project.yaml`** (never has). A `../HelmCharts` phase
+  therefore has **no deterministic gate** and its reviewer is told the state is unverified. Two
+  worked examples of the format exist: `/work/Ansible/.kubecoder/project.yaml` (an infra-repo
+  shape — yamllint / ansible-lint / `terraform fmt -check` behind `cexec iac poetry run`) and
+  `/work/KubeCoder/.kubecoder/project.yaml` (the **build-repo** shape — four components with
+  per-component `setup`/`lint`/`build`/`test`, a `cwd:` override, and `jenkins: KubeCoder/Build-Main`).
+  The latter is the closer model for `Charts`. Giving `Charts` its own `project.yaml` is in
+  scope — it is what earns the `../Charts` phases a gate; onboarding HelmCharts is not.
 
 ## Ordering constraints
 
@@ -105,9 +130,16 @@ assumed — verify before relying on them.
   quiet, not loud: `resolve-helm-args` drops a release from its JSON entirely when it cannot
   resolve a digest, so the release gets no Jenkins stage at all rather than a red one
   (`/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:204-221`).
-- **The `Charts` Jenkins job must be hand-wired by the operator** before the publishing pipeline
-  can produce that image. Jobs cannot be declared in code (grounding above); `project.yaml`'s
-  `jenkins:` key only records the path.
+- **The `Charts` Jenkins job (`IaC/Charts`) must be hand-wired by the operator** before the
+  publishing pipeline can produce that image. Jobs cannot be declared in code (grounding above);
+  `project.yaml`'s `jenkins:` key only records the path.
+- **The slice needs two operator keystrokes, and the run does not pause for the first.** Creating
+  the `IaC/Charts` job must happen *before the test phase pushes `Charts`* — otherwise the push
+  triggers nothing, no image is built, and every criterion resting on the live endpoint is
+  unverifiable. Only the second keystroke (the HelmCharts push) surfaces through the loop, and it
+  presents as a driver `unpushed` bail rather than a clean handoff: `_assert_pushed` re-fetches
+  every touched root after a clean test verdict, nudges, then bails with "Push it … then resume"
+  (`run_loop.py:2395-2424`). Both are expected, neither is an error.
 
 ### P1 — The `homelab-shared` library chart
 
