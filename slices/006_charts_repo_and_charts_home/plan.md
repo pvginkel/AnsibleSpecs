@@ -182,6 +182,38 @@ phase lands when a consumer chart renders both surfaces from a dependency on the
   and the `jenkins:` key on the component (`:33`). `/work/Ansible/.kubecoder/project.yaml` is the
   infra-repo shape and a poorer model for this repo.
 
+**Done (2026-08-13).** Landed on `phase/006-P1`: `charts/homelab-shared/` (`type: library`,
+`version: 0.1.0`) with the eight helpers copied verbatim into `templates/_helpers.tpl` under the
+`homelab-shared.*` prefix (internal cross-includes and the externalsecrets doc-comment updated with
+them), and the hook Job as `homelab-shared.tf-presync-hook` in `templates/_tf-presync-hook.tpl`,
+matching design.md's skeleton field for field. `hook.repo`/`revision`/`stage` are `required`-guarded.
+HelmCharts is untouched.
+
+- **How R5's default pin actually reaches a consumer — verified by execution, not assumed.** Helm
+  coalesces a *library* dependency's `values.yaml` under the dependency's own name, not into the
+  parent root: the library default reads as `.Values["homelab-shared"].hook.imageTag` while the
+  app's own override stays at `.Values.hook.imageTag`. The template resolves
+  `$hook.imageTag | default $lib.imageTag` accordingly. Any later library value has to be read the
+  same way — a plain `.Values.<key>` in a library template is the app's, never the library's.
+- **The pin is `hook.imageTag: "1"`, quoted** — an unquoted tag would float to a number the moment
+  someone pins `1.2` or `latest`.
+- **The gate** is `.kubecoder/project.yaml`, one component under the reserved `root` key (repo
+  root, no `cwd:` needed), `jenkins: IaC/Charts`, `lint: cexec iac helm lint charts/homelab-shared`,
+  `test: cexec iac tests/render-consumer.sh`. Both green from the repo root. `helm lint` on a
+  library chart passes, so P2 can keep it.
+- **The gate's consumer is `tests/consumer/`** — a fixture, never published — taking the library as
+  one `dependencies:` entry via `file://../../charts/homelab-shared` and rendering all nine
+  surfaces. Its version constraint is `>=0.1.0`, deliberately not an exact pin, so P2's version
+  bumps do not have to touch it. `tests/` is not chart content: P2's `dist/` holds library tarballs
+  only.
+- **`/tmp` is not shared with the `iac` sidecar** (`cexec` reports `cwd … not present in container`
+  and falls back to `/home/ubuntu`). Any scratch tree a verb builds must live under the repo;
+  `tests/render-consumer.sh` mkdtemps `.render-gate.*` beside the checkout and `.gitignore` covers
+  it. `helm dependency update --skip-refresh` keeps the gate off the network.
+- The script asserts on the rendered YAML and additionally proves the prefix is real — an
+  unprefixed `deployment.timestamp` include must fail to resolve. Both that check and the
+  default-pin check were confirmed to bite by mutating the source and re-running.
+
 ### P2 — Publishing: package, index, and the chart-repo image
 
 Target: `../Charts`
@@ -214,7 +246,9 @@ image P3 needs exists.
 - **The additivity property is provable in this phase, without a second Jenkins build** (ruling) —
   package two versions into a scratch `dist/`, index it, and confirm the index carries both
   entries. Do it for real rather than resting on a green gate; the criterion covering it is in
-  `verification.json`, not owed.
+  `verification.json`, not owed. That scratch `dist/` must live **under the repo**, not in `/tmp` —
+  `/tmp` is not shared with the `iac` sidecar (P1's done-record); `.gitignore` already ignores
+  `/.render-gate.*` and wants a sibling entry for whatever this phase names.
 - **This is new ground with no in-repo precedent** — nothing in the estate runs `helm package` or
   `helm repo index` today (grounding above), and the pipeline containers differ in what Helm they
   carry: `containerTemplates.helm` is `alpine/helm:3.9.1`, `containerTemplates.modern_app_dev`
