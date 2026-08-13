@@ -267,6 +267,38 @@ image P3 needs exists.
   create at that path, against which SCM and branch (`pvginkel/Charts`, `*/main`), and that it
   must exist and have run once before the test phase pushes `Charts`.
 
+**Done (2026-08-13).** Landed on `phase/006-P2`. `dist/homelab-shared-0.1.0.tgz` is committed;
+`Dockerfile` + `nginx/default.conf` bake it and the index into `nginx:alpine`; `Jenkinsfile`
+indexes, builds and calls `cicd.helmDeploy()`.
+
+- **`index.yaml` is a build artifact, not repo content** — `/dist/index.yaml` is gitignored. Only
+  tarballs are committed, so a stale committed index is impossible. A publish is: bump
+  `Chart.yaml`, run `tools/package-chart.sh`, commit both.
+- **`tools/build-index.sh` is POSIX `sh`, not bash** — CI runs it inside `containerTemplates.helm`
+  (`alpine/helm:3.9.1`), which has busybox and no bash. Verified under `dash`. It takes the store
+  dir as an optional argument purely so the gate exercises the real script rather than a copy.
+- **Helm-version gap, deliberately narrowed not closed.** CI indexes on 3.9.1, the gate on the
+  sidecar's 4.2.3. Only `helm repo index <dir> --url` is used — never `--merge`, which is the part
+  whose semantics differ — so the property under test is version-stable. The gap is untested until
+  the first real build.
+- **`tests/publish.sh`** gates what inspection cannot: (1) `dist/` is the sources packaged, by
+  repacking and `diff -r` — a chart edited without a version bump is a red gate, because a
+  published version is immutable; (2) every tarball gets an absolute `https://charts.home` URL;
+  (3) V07's additivity, run as the real sequence — index one version (the first-build case), add a
+  second, re-index whole, both survive. All three confirmed to bite by mutation.
+- **The Dockerfile carries the build's only other guard**, `test -f …/index.yaml && nginx -t` —
+  both confirmed to bite. Nothing downstream gates the vhost, so a broken one would otherwise
+  deploy and crashloop.
+- **Manifest.** `test:` is now a two-statement list; a `build:` verb was added
+  (`tools/build-index.sh`, then `kaniko … --no-push`) — the two steps CI runs, in CI's order.
+  `kaniko` is in this container, not the sidecar, so only the first verb carries `cexec`.
+- **What the operator must create, before the test phase pushes `Charts`:** a Pipeline job at
+  `IaC/Charts`, *Pipeline script from SCM* → `https://github.com/pvginkel/Charts.git`, branch
+  `*/main`, credentials `5f6fbd66-b41c-405f-b107-85ba6fd97f10`, script path `Jenkinsfile`. It must
+  also **have run once** — the Jenkinsfile declares `githubPush()` and `disableConcurrentBuilds()`,
+  but `properties()` only takes effect after a first build, so a job that has never run ignores the
+  push that would otherwise trigger it.
+
 ### P3 — charts.home as an ordinary HelmCharts release
 
 Target: `../HelmCharts`
@@ -277,6 +309,10 @@ dependency on anything charts.home itself serves. `charts/tfmirror` plus
 `configs/prd/tfmirror/` is the working model end to end: static nginx, namespace-only
 `_shared/infrastructure.tf`, routing and TLS from Service annotations.
 
+- **The image P2 publishes, as P3 consumes it.** `registry:5000/charts-home`, tagged `:<build>`
+  and `:latest`. It listens on **port 80** (plain HTTP) and serves `/index.yaml` plus the chart
+  tarballs at the root. `/` is a 404 — there is no `index.html` — so any probe must target
+  `/index.yaml`; `charts/tfmirror` declares no probes at all, which is the simpler match.
 - **Directory names are load-bearing.** The config directory name must equal the chart directory
   name — digest resolution keys the chart lookup off the *config* directory, and a lookup that
   misses takes the whole discovery run down rather than skipping one release
