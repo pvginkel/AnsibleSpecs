@@ -4,25 +4,34 @@
       "id": "V01",
       "area": "Charts repo — library chart source (R1)",
       "description": "The `Charts` repo carries the library chart source: the shared `_helpers.tpl` content plus the hook Job named template, per design.md.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Both surfaces are present and both render: `templates/_helpers.tpl` carries all eight named templates (deployment.timestamp, node-affinity x2, ceph x4, externalsecrets) and `templates/_tf-presync-hook.tpl` carries the hook Job. Re-ran the consumer gate myself (not just trusted the sweep log): `cexec iac tests/render-consumer.sh` -> `consumer renders every homelab-shared surface`, exit 0.",
+      "evidence": [
+        "/work/Charts/charts/homelab-shared/templates/_helpers.tpl:1-236",
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:1-48",
+        "/work/Charts/tests/render-consumer.sh:53-101"
+      ]
     },
     {
       "id": "V02",
       "area": "Charts repo — library chart source (R1)",
       "description": "The library chart is consumable as a single `Chart.yaml` `dependencies:` entry: a consumer chart renders both the shared helpers and the hook Job from that one line, with the named templates carrying the `homelab-shared.*` prefix.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`tests/consumer/Chart.yaml` takes homelab-shared as its one `dependencies:` entry; `tests/consumer/templates/tf-presync-hook.yaml` is a one-line include. Re-ran the gate myself: it also proves the prefix is load-bearing — a fixture with an unprefixed `deployment.timestamp` include fails to resolve (tests/render-consumer.sh:109-117), confirmed still failing (helm errors as expected) in my own run.",
+      "evidence": [
+        "/work/Charts/tests/consumer/Chart.yaml:8-13",
+        "/work/Charts/tests/consumer/templates/tf-presync-hook.yaml:1",
+        "/work/Charts/tests/render-consumer.sh:109-117"
+      ]
     },
     {
       "id": "V03",
       "area": "Charts repo — library chart source (R1)",
       "description": "The hook Job the library chart renders matches design.md's skeleton — PreSync hook annotations, `BeforeHookCreation` delete policy, `backoffLimit: 0`, `activeDeadlineSeconds`, the `tf-presync` ServiceAccount, and `hook.repo`/`hook.revision`/`hook.stage` supplied by the consuming app.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Read `_tf-presync-hook.tpl` side by side with design.md's quoted skeleton: generateName `tf-presync-`, namespace `argocd-hooks`, `argocd.argoproj.io/hook: PreSync`, `hook-delete-policy: BeforeHookCreation`, `backoffLimit: 0`, `activeDeadlineSeconds: 1800`, `serviceAccountName: tf-presync`, `restartPolicy: Never`, `envFrom` secretRef `argocd-hook-credentials` — every field matches. `hook.repo`/`hook.revision`/`hook.stage` are `required`-guarded template args, confirmed rendering correctly in the consumer gate output.",
       "evidence": [
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:17-48",
         "/work/AnsibleSpecs/argo-cd/design.md:331-357"
       ]
     },
@@ -30,8 +39,8 @@
       "id": "V04",
       "area": "Charts repo — library chart source (R1, ruling)",
       "description": "HelmCharts' `charts/shared/_helpers.tpl` and every chart's symlink to it are unchanged — un-migrated charts keep consuming it exactly as today, and the two trees diverge deliberately.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "The slice's only HelmCharts commit (053ddab, P3) touches exactly 7 files, none under `charts/shared/` — confirmed via `git show --stat`. `charts/tfmirror/templates/_helpers.tpl` and the new `charts/charts/templates/_helpers.tpl` both still symlink to `../../shared/_helpers.tpl`, mode 120000, untouched.",
       "evidence": [
         "/work/HelmCharts/charts/shared/_helpers.tpl:1-236",
         "/work/HelmCharts/CLAUDE.md:111"
@@ -41,25 +50,34 @@
       "id": "V05",
       "area": "Charts repo — publishing pipeline (R1)",
       "description": "The publishing pipeline packages the library chart, regenerates `index.yaml`, and builds the NGINX image carrying both — served at the repository root over plain HTTP inside the pod.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Read Jenkinsfile (indexes via tools/build-index.sh, then kaniko2 build), Dockerfile (COPY dist/ into nginx:alpine's docroot, RUN test -f index.yaml && nginx -t), and nginx/default.conf (listen 80, serves root + tarballs by absolute path, /index.yaml no-cache). The build verb actually ran a real kaniko build (not a dry lint) — `kaniko --context . --destination registry:5000/charts-home:local --no-push` — GREEN in the established sweep, proving the image builds. Packaging/indexing correctness is proven by execution, not just the green gate: re-ran `cexec iac tests/publish.sh` myself, exit 0.",
+      "evidence": [
+        "/work/Charts/Jenkinsfile:26-43",
+        "/work/Charts/Dockerfile:1-15",
+        "/work/Charts/nginx/default.conf:1-27"
+      ]
     },
     {
       "id": "V06",
       "area": "Charts repo — publishing pipeline (R1)",
       "description": "Every tarball the published `index.yaml` names is fetchable by a client that has added the repository — the entry URLs resolve against `https://charts.home` and the files they point at are actually served.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Proven by execution, not inspection alone. `tests/publish.sh`'s \"index names every committed tarball, absolutely\" block builds a real index over dist/ and greps, for every `.tgz` actually in dist/, an entry `https://charts.home/<name>` — I re-ran this myself (exit 0). Combined with the Dockerfile's `COPY dist/ /usr/share/nginx/html/` at the repo root and nginx's `try_files $uri =404`, every URL the index names is a real path the image serves. The live fetch itself needs the deployed endpoint — see V14 (owed).",
+      "evidence": [
+        "/work/Charts/tests/publish.sh:125-134",
+        "/work/Charts/Dockerfile:6-8",
+        "/work/Charts/nginx/default.conf:12-14"
+      ]
     },
     {
       "id": "V07",
       "area": "Charts repo — publishing pipeline (R1, D17)",
       "description": "Publishing a new library version leaves previously published versions resolvable — a chart pinned to an earlier version still renders after a later version publishes — and the mechanism works on the first build, when nothing has been published yet. Demonstrated by execution rather than inspection: two versions packaged into the repository's `dist/` store, indexed, and the resulting index carries an entry for each.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Re-ran `tests/publish.sh` myself (not relying on the established GREEN sweep alone). Its additivity block packages homelab-shared into a scratch store (the first-build case, nothing published yet), indexes it, confirms the entry; packages a second version (`--version 9.9.9`) into the same store, re-indexes the whole directory, and confirms BOTH entries survive. Exit 0 on this run.",
       "evidence": [
+        "/work/Charts/tests/publish.sh:136-154",
         "/work/AnsibleSpecs/argo-cd/decisions.md:117-129"
       ]
     },
@@ -67,9 +85,10 @@
       "id": "V08",
       "area": "Charts repo — publishing pipeline (R1)",
       "description": "The build pushes `registry:5000/charts-home` under both a build-number tag and `:latest`, so HelmCharts resolves it to a live digest at deploy time and a republished image reaches charts.home without a HelmCharts commit.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Charts' Jenkinsfile pushes exactly `registry:5000/charts-home:${currentBuild.number}` and `registry:5000/charts-home:latest` — the same two-destination shape as DockerImages' non-matrix build. `helmCharts.resolveTrackingTag` (called by kaniko2) enforces exactly this scheme (single tag, or `latest`+`<digits>`) and throws otherwise, so the pipeline cannot silently drift off it. On the HelmCharts side, `values.yaml` reads `images.charts: :latest`, and I personally ran `resolve-helm-args prd/charts .`, which attempted to resolve `registry:5000/charts-home:latest` to a live digest exactly as it would at deploy time (it 404s today only because no image has been published yet — see V11).",
       "evidence": [
+        "/work/Charts/Jenkinsfile:32-43",
         "/work/JenkinsPipelineUtils/vars/helmCharts.groovy:144-165",
         "/work/DockerImages/Jenkinsfile:98-106",
         "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:118-135"
@@ -79,29 +98,30 @@
       "id": "V09",
       "area": "charts.home release (R2)",
       "description": "charts.home is deployed as an ordinary HelmCharts release through the existing harness — a `configs/prd/` release directory the existing pipeline discovers and deploys, with no new pipeline machinery and no storage.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`configs/prd/charts/{_shared,prd}/` is an ordinary release directory under `discover_releases()`'s walk of `configs/prd/`. Ran `poetry run deploy config prd/charts` myself: `phases.infra: true, phases.config: false` — infra-only (namespace), no storage phase. HelmCharts' P3 commit touches only the chart + this config tree — no change to `tools/deploy/` or the Jenkinsfile.",
       "evidence": [
         "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:190-202",
-        "/work/HelmCharts/configs/prd/tfmirror/_shared/infrastructure.tf:6-9"
+        "/work/HelmCharts/configs/prd/charts/_shared/infrastructure.tf:1-9"
       ]
     },
     {
       "id": "V10",
       "area": "charts.home release (R2, ruling)",
       "description": "The release lands in namespace `charts-prd`, created by its own `_shared/infrastructure.tf` namespace module — matching the short DNS name `charts`.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`poetry run deploy config prd/charts` (run myself) reports `namespace: charts-prd`, `release_name: charts-prd`. `release.py`'s `namespace = f\"{namespace_base}-{stage}\"` with `namespace_base = cfg.get('namespace') or chart_dir` confirms the derivation (config dir `charts` + stage `prd`). `_shared/infrastructure.tf` creates exactly the namespace module, matching the `charts` short DNS name.",
       "evidence": [
-        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:186-187"
+        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:186-187",
+        "/work/HelmCharts/configs/prd/charts/_shared/infrastructure.tf:1-9"
       ]
     },
     {
       "id": "V11",
       "area": "charts.home release (R2, ordering)",
       "description": "The chart-repo image exists in `registry:5000` before the HelmCharts release deploys — otherwise the release is silently absent from the pipeline's stage list rather than failing visibly.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Demonstrated by execution, both directions. Ran `resolve-helm-args prd/charts .` myself: it 404s resolving `registry:5000/charts-home:latest` (image genuinely does not exist yet — correct pre-image state). Read `process_release()` (repo-root/JSON mode): it catches exactly `ImageResolutionError`, prints `Skipping <release> (stage <stage>): ...` to stderr, and returns `None` — the release is dropped from the result list, not surfaced as a failure. This is the ordering hazard the plan calls out, and it is real: confirmed both that the image is absent and that the code path drops rather than fails.",
       "evidence": [
         "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:204-221"
       ]
@@ -110,40 +130,40 @@
       "id": "V12",
       "area": "DNS and TLS (R3)",
       "description": "`https://charts.home` resolves and serves over TLS from the homelab CA, same pattern as the estate's other internal endpoints — Service annotations only, no DNS file edit and no Ansible change.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "The \"no DNS file edit, no Ansible change\" half is verified now: the slice's only Ansible commit (7db7610) touches `.kubecoder/config.yaml` and `Ansible.code-workspace` only. The Service-annotation mechanism matches the tfmirror pattern exactly (see V13's citation). But `https://charts.home` cannot resolve or serve TLS until the release actually deploys, which needs both operator keystrokes (Jenkins job + HelmCharts push) — neither has happened. Confirmed unresolved right now: `host charts.home` -> NXDOMAIN. Owed to the operator; command below.",
       "evidence": [
-        "/work/HelmCharts/charts/tfmirror/templates/tfmirror-service.yaml:5-13",
-        "/work/HelmCharts/charts/nginx/values.yaml:10",
-        "/work/DockerImages/dnsmasq-config-generator/app/service_watch.py:145-157"
+        "/work/HelmCharts/charts/charts/templates/charts-service.yaml:5-13",
+        "/work/HelmCharts/charts/nginx/values.yaml:10"
       ]
     },
     {
       "id": "V13",
       "area": "DNS and TLS (R3)",
       "description": "Both the fully-qualified and short names answer, and the certificate is issued for the longest server name with the others as SANs — the estate's `<name>.home, <name>` convention.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Static shape is correct: `configs/prd/charts/prd/values.yaml` sets `service.serverName: charts.home, charts` (comma list), and `nginx-configurator`'s `parse_server_names` sorts by `-len(v)` — longest first becomes the cert directory / primary name, matching the convention. Actual issuance needs the live release. Owed.",
       "evidence": [
         "/work/DockerImages/nginx-configurator/app/annotations.py:169-174",
-        "/work/HelmCharts/configs/prd/tfmirror/prd/values.yaml:1-2"
+        "/work/HelmCharts/configs/prd/charts/prd/values.yaml:1-2"
       ]
     },
     {
       "id": "V14",
       "area": "End-to-end (R1 + R2 + R3)",
       "description": "A Helm client can add `https://charts.home` as a chart repository and resolve the published library chart version from it. (Proving Argo's repo-server does the same with homelab-CA trust is slice 009's A.5 item, not this one.)",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Blocked on both operator keystrokes: the `IaC/Charts` Jenkins job does not exist yet (confirmed via the Jenkins API — no job at that path), so pushing `Charts` (done this pass) triggers no build and no image; and HelmCharts is deliberately left unpushed per the ruling. Cannot be verified from this pod until both land. Owed.",
       "evidence": []
     },
     {
       "id": "V15",
       "area": "D17's trap (R4)",
       "description": "The charts.home chart itself is library-free: it takes no dependency on `homelab-shared` and renders nothing sourced from what charts.home serves, so what deploys charts.home cannot depend on charts.home being up.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Read `charts/charts/Chart.yaml` directly: `type: application`, no `dependencies:` block at all. The chart's two templates (Deployment, Service) render only from its own values — nothing pulled from a `homelab-shared` include.",
       "evidence": [
+        "/work/HelmCharts/charts/charts/Chart.yaml:1-4",
         "/work/AnsibleSpecs/argo-cd/decisions.md:125-126"
       ]
     },
@@ -151,9 +171,11 @@
       "id": "V16",
       "area": "Hook image tag pin (R5)",
       "description": "The default `registry:5000/argocd-hook:<n>` tag pin lives in the library chart's values — one bump point for the whole estate — and an app can override it while debugging.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`charts/homelab-shared/values.yaml` sets `hook.imageTag: \"1\"` (quoted, so it can't float to a number). The template resolves `$hook.imageTag | default $lib.imageTag`, reading the library's own value from the coalesced `homelab-shared` key. Re-ran the override assertion in render-consumer.sh myself: `helm template consumer ... --set hook.imageTag=42` renders `image: registry:5000/argocd-hook:42` — confirmed live in my own run, not just the log.",
       "evidence": [
+        "/work/Charts/charts/homelab-shared/values.yaml:1-7",
+        "/work/Charts/tests/render-consumer.sh:103-107",
         "/work/AnsibleSpecs/argo-cd/design.md:90-93"
       ]
     },
@@ -161,18 +183,18 @@
       "id": "V17",
       "area": "Repo gate (grounding: in scope)",
       "description": "`Charts` has its own `.kubecoder/project.yaml` — carrying the ruled job path `IaC/Charts` under `jenkins:`, which is what `track_build.py` keys off — and its curated gate is green from the repo root, so the `../Charts` phases after the first are deterministically gated.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`.kubecoder/project.yaml` declares `jenkins: IaC/Charts` on the `root` component, with `lint`/`test`/`build` verbs. Re-ran lint and both test steps myself from the repo root (not just trusting the established GREEN sweep): all green.",
       "evidence": [
-        "/home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.4.1/tools/run_loop.py:1436-1442"
+        "/work/Charts/.kubecoder/project.yaml:1-23"
       ]
     },
     {
       "id": "V18",
       "area": "Operator authority (ruling)",
       "description": "The first deploy of the new namespace, and the Terraform apply behind it, happened on the operator's keystroke: no agent pushed HelmCharts, and the run handed back the exact command and what it would do.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "This test phase pushed only `Charts` (dev-tier, pre-authorized under the devlock). HelmCharts commit 053ddab remains local-only — confirmed still ahead of `origin/main` by exactly that one commit after this session's work, nothing pushed by me. The exact operator command is handed back below.",
       "evidence": [
         "/work/HelmCharts/Jenkinsfile:27-30"
       ]
@@ -181,8 +203,8 @@
       "id": "V19",
       "area": "charts.home release (R4, ruling)",
       "description": "The charts.home chart is an ordinary chart of that repo in every respect R4 does not bar — it keeps the `templates/_helpers.tpl` symlink every chart there is expected to have, and differs only in taking no `homelab-shared` dependency.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`git ls-files -s charts/charts/templates/_helpers.tpl` shows mode 120000 (a real symlink), target `../../shared/_helpers.tpl` — same as `charts/tfmirror/templates/_helpers.tpl`. Rendered via `deploy template prd/charts` myself: the Deployment carries `deployment: \"<timestamp>\"` from that include, proving it resolves, not just that the link exists.",
       "evidence": [
         "/work/HelmCharts/CLAUDE.md:111",
         "/work/HelmCharts/charts/tfmirror/templates/_helpers.tpl"
