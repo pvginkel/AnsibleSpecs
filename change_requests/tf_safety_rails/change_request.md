@@ -51,9 +51,9 @@ artifact. Shamir keys unlock nothing without Raft data.
 
 - **Slice 005** (commission the OpenBao backup pipeline) is the other half of C1 and is
   already authored — run it, don't re-bundle it.
-- `../iac_pipeline_restructure/` (#70) touches the same Jenkinsfiles (iac-image rebuild
-  scoping + IaCAgent merge) — cross-reference so the two changes don't collide; this
-  bundle is the urgent, narrow one.
+- `../../slices/backlog/013_iac_pipeline_restructure/` (#70, triaged 2026-08-13) touches the
+  same Jenkinsfiles (iac-image rebuild scoping + IaCAgent merge) — cross-reference so the two
+  changes don't collide; this bundle is the urgent, narrow one.
 - Operator dispositions recorded for adjacent review items: T4 (root@pam stays — PVE
   limitation, CPU pinning requires it), T10 (terraform-backend-git stays; stale lock
   branches are a trivial manual delete), I5 (no pull-fallback needed — workstation is the

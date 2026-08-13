@@ -30,6 +30,7 @@ the detail.
 - **[002](slices/002_managed_vm_mac_derivation/overview.md)** — Auto-derive deterministic MAC in the `managed-vm` module: move the MAC convention out of hand-applied `vms.tf`.
 - **[004](slices/004_oidc_app_rollout/overview.md)** — Keycloak OIDC login rollout: Grafana, pgAdmin, Headlamp, Jenkins (`helm-tf-deploy-harness` done; soft-related `keycloak-tf`).
 - **[005](slices/005_openbao_backup_activation/overview.md)** — Activate the OpenBao backup pipeline: daily encrypted bundles to cloud storage + a proven restore round-trip (`backup-collector`, `openbao-static-seal` done).
+- **[013](slices/backlog/013_iac_pipeline_restructure/slice.md)** — IaC pipeline restructure: gate the `iac-image` rebuild on its real inputs and fold `IaCAgent` into Ansible, history preserved (#70; backlog — awaiting `/dev:plan-slice`).
 
 Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B):
 
