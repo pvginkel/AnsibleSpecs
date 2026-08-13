@@ -411,14 +411,12 @@ Settled beyond the plan's text:
 - **`bin/iac`'s missing-`iac-impl` error** said "run IaCAgent's install.sh" — a repo pointer with
   no repo. Now `/opt/IaCAgent/install.sh`, the path the role syncs it to and the one an operator on
   srviac can actually run. Message text only.
-- **Left alone deliberately:** `bin/iac:4` and `bin/iac-impl:6` cite `/work/AnsibleSpecs/phases/
-  {iac-agent,openbao}.md`, both now under `phases/completed/`. Same dead-pointer class as the
-  README link but outside the ruling's list and outside the files this phase otherwise touches —
-  carded, not fixed. The N4 duplicates are untouched: `bin/send_message.py` changed one docstring
-  line, `tools/ai_workflow/send_message.py` and both `daemon.json`s not at all.
+- **The N4 duplicates are untouched:** `bin/send_message.py` changed one docstring line,
+  `tools/ai_workflow/send_message.py` and both `daemon.json`s not at all.
 - Gate: `kc project test --project root` → "no test statements — skipped" (root declares only
-  `setup`, as PA recorded). `kc project lint` green. `python3 -m py_compile` on `send_message.py`
-  and `bash -n` on `bin/iac` both clean.
+  `setup`, as PA recorded). `kc project lint` green. Syntax checks are artifact-free — `bash -n`
+  on `bin/iac`, `ast.parse` on the two Python files; **never `py_compile`**, which writes
+  `__pycache__/` into a tree the role rsyncs (r1).
 
 For the doc phase: prose *outside* the tree is still owed — `ansible/roles/iac_agent/README.md:12,20`,
 `docs/runbooks/iac-agent.md:15,154`, `ansible-architecture.yaml:338` (per PB). Three
@@ -426,6 +424,29 @@ For the doc phase: prose *outside* the tree is still owed — `ansible/roles/iac
 `docs/runbooks/iac-agent.md:12` and `docs/runbooks/operator-workstation.md:90` (runbooks — the doc
 phase's charter), and `terraform/modules/managed-vm/versions.tf:9`, which additionally predates
 `tf-provider-registry` (no repo-wide `grep modern-app-dev` will come back empty at slice end).
+
+Review-settled (r1):
+
+- **The gate's `py_compile` run left `bin/__pycache__/send_message.cpython-313.pyc` in the tree** —
+  gitignored, so invisible to `git status`, but the role's rsync excludes only `.git`, so R6's
+  parity apply would have shipped it to `/opt/IaCAgent/bin/`. Deleted; the gate bullet above now
+  pins artifact-free syntax checks.
+- **The R6 parity itemization is no longer timestamp-only, and that is expected.** PB's rule was
+  written before PC edited content. `/opt/IaCAgent` holds IaCAgent `main`'s bytes, so the apply
+  transfers exactly the five files PC edited (`README.md`, `bin/iac`, `bin/iac-impl`,
+  `bin/send_message.py`, `etc/cron.d/iac-prune`) with content flags; every other entry stays
+  timestamp-only, and any entry outside that five carrying a content or size flag is not parity.
+  `install.sh` reinstalls four of them (README is sync-only), prints `installed …` per file, and
+  does not restart `jenkins-agent` — the unit is unchanged (`install.sh:58-69,84-87`).
+- **The two dead spec pointers are fixed, not carded** (superseding r1's card): `bin/iac:4` and
+  `bin/iac-impl:6-7` now cite `phases/completed/{iac-agent,openbao}.md` and
+  `slices/completed/iac-secrets-resolver.md`. Comment-only, inside the tree, same class as the
+  README link PC already fixed.
+- `etc/cron.d/iac-prune` cited `docker pull`, which `iac` never runs; it now cites the
+  `docker run --pull=always` that actually moves the tag (`bin/iac:40`).
+- `bin/iac`'s missing-`iac-impl` hint is location-agnostic again ("run install.sh from the
+  iac-agent tree"): `/opt/IaCAgent` exists only where the role syncs, and `README.md:63-65`
+  documents the `wrkdev` context where it does not.
 
 ## Not in scope
 
