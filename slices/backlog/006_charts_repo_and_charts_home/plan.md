@@ -22,7 +22,7 @@ The authoritative model is the `argo-cd/` document set in the spec repo — `bri
 `slice.md` quotes the load-bearing extracts, and the documents stay authoritative for anything
 not quoted.
 
-### Rulings
+#### Rulings
 
 - Ruling (2026-08-13) — **the library chart's name.** `homelab-shared`. It appears in the
   `dependencies:` block of every chart that ever migrates and in charts.home's `index.yaml`, so
@@ -50,7 +50,7 @@ not quoted.
   **unpushed**; `Charts` is now in `/work/Ansible/.kubecoder/config.yaml`. Executors build on
   that base.
 
-### Grounding established during refinement (verified 2026-08-13)
+#### Grounding established during refinement (verified 2026-08-13)
 
 Facts that pin the shape of R1–R3 and would otherwise be guessed wrong. They are cited, not
 assumed — verify before relying on them.
@@ -101,10 +101,143 @@ assumed — verify before relying on them.
   charts.home release that serves the resulting image.
 - **The chart-repo image must exist in `registry:5000` before the HelmCharts release is
   deployed** — otherwise Jenkins deploys a release whose image cannot be pulled. The operator's
-  HelmCharts push (ruling above) is therefore the last step of the slice.
+  HelmCharts push (ruling above) is therefore the last step of the slice. The failure mode is
+  quiet, not loud: `resolve-helm-args` drops a release from its JSON entirely when it cannot
+  resolve a digest, so the release gets no Jenkins stage at all rather than a red one
+  (`/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:204-221`).
 - **The `Charts` Jenkins job must be hand-wired by the operator** before the publishing pipeline
   can produce that image. Jobs cannot be declared in code (grounding above); `project.yaml`'s
   `jenkins:` key only records the path.
+
+### P1 — The `homelab-shared` library chart
+
+Target: `../Charts`
+
+`Charts` gains the source of a Helm **library** chart, `homelab-shared`, that a migrated app chart
+takes as one `Chart.yaml` `dependencies:` entry and gets both shared surfaces from — the estate's
+template helpers, and the Terraform PreSync hook Job. Nothing is published yet (that is P2), so the
+phase lands when a consumer chart renders both surfaces from a dependency on the source tree.
+
+- **The helpers are copied, not moved** (ruling). The source is
+  `/work/HelmCharts/charts/shared/_helpers.tpl` — eight named templates: `deployment.timestamp`
+  (`:1`), `node-affinity.require-storage-zpool2` (`:5`),
+  `node-affinity.require-performance-high` (`:17`), `ceph.cephfs-pv` (`:29`), `ceph.cephfs-pvc`
+  (`:60`), `ceph.rbd-pv` (`:98`), `ceph.rbd-pvc` (`:129`), `shared.externalsecrets` (`:204`),
+  verified this pass. HelmCharts keeps that file and every chart's
+  `templates/_helpers.tpl -> ../../shared/_helpers.tpl` symlink untouched; the two trees
+  deliberately diverge for the migration era. The `homelab-shared.*` prefix (ruling) is what keeps
+  a consumer from resolving one and believing it got the other.
+- **The hook Job template.** `/work/AnsibleSpecs/argo-cd/design.md:331-357` is authoritative for the
+  Job's skeleton and `:313-329` for the flow that explains why each field is what it is.
+  `hook.repo`, `hook.revision` and `hook.stage` are supplied by the consuming app per sync
+  (`design.md:315-316`); `hook.imageTag` defaults to `1` here (ruling) and is overridable per app,
+  which is R5.
+- **Only the template lands.** The image it names, the `argocd-hooks` namespace, the `tf-presync`
+  ServiceAccount and the `argocd-hook-credentials` Secret belong to slices 007 and 009. A library
+  chart that renders a Job referencing things nothing has created yet is correct here.
+- **The repo earns its gate in this phase.** `Charts` has no `.kubecoder/project.yaml`, so the
+  driver resolves this phase's target with no deterministic gate and tells the reviewer the state
+  is unverified (`run_loop.py:1436-1442`); from P2 onward the gate exists. Land the manifest here
+  and leave it green when run by hand at the end of the phase. What it has to prove is that a
+  **consumer** renders: a library chart emits nothing on its own, so a check that only lints the
+  library would pass a chart no one can actually use — and the interesting failures (values
+  merging under a hyphenated dependency name, a helper that assumed the old prefix) only appear
+  from the consumer side. Helm lives in the `iac` sidecar (`cexec iac helm`, v4.2.3, verified this
+  pass); `/work/Ansible/.kubecoder/project.yaml` is the estate's only worked example of the
+  manifest format.
+
+### P2 — Publishing: package, index, and the chart-repo image
+
+Target: `../Charts`
+
+A build of `Charts` packages the library chart, produces a Helm repository `index.yaml` whose entry
+URLs are absolute under `https://charts.home`, and pushes an NGINX image to `registry:5000` serving
+both at the repository root. After this phase the operator can wire the job, run it once, and the
+image P3 needs exists.
+
+- **The published image reference is the interface P3 consumes: `registry:5000/charts-home`.**
+  Pinning it here is what lets P3 be written without waiting on this phase's outcome.
+- **The tag scheme is enforced, not conventional.** `helmCharts.kaniko2` throws unless the
+  destinations are a single tag, or `latest` plus `<digits>`
+  (`/work/JenkinsPipelineUtils/vars/helmCharts.groovy:144-165`); estate builds push
+  `:<build number>` **and** `:latest` (`/work/DockerImages/Jenkinsfile:98-106`). HelmCharts pins
+  `:latest` to a digest at deploy time, so a republished image reaches charts.home with no
+  HelmCharts commit (grounding above) — that property is what P3 rests on, and it dies the moment
+  the build stops pushing `:latest`. The build should also trigger the HelmCharts deploy job so the
+  new digest is picked up rather than waiting for an unrelated commit (`cicd.helmDeploy()`,
+  `/work/JenkinsPipelineUtils/vars/cicd.groovy:1-3`).
+- **Publishing a new library version must not unpublish an older one.** An app pinned to a version
+  charts.home has already served keeps rendering after a later version publishes — that is the only
+  thing that makes D17's `dependencies:` pins worth anything. The build has no persistent
+  workspace, so "regenerate the index from whatever is in the checkout" silently drops every
+  earlier version; whatever mechanism is chosen must also behave on the very first build, when
+  nothing has been published at all.
+- **This is new ground with no in-repo precedent** — nothing in the estate runs `helm package` or
+  `helm repo index` today (grounding above), and the pipeline containers differ sharply in what
+  Helm they carry: `containerTemplates.helm` is `alpine/helm:3.9.1`,
+  `containerTemplates.modern_app_dev` carries Helm 4
+  (`/work/JenkinsPipelineUtils/vars/containerTemplates.groovy:10-14`, `:65-68`). Pick deliberately;
+  `helm repo index --merge`/`--url` semantics are not stable across that gap.
+- **Serving is plain HTTP inside the pod.** TLS is terminated by the estate's nginx layer through
+  the Service annotations P3 sets, never by this image. The closest working model in the estate is
+  the `pvginkel/TerraformRegistry` repo — the same "bake static files into nginx, push to
+  `registry:5000`, trigger the HelmCharts deploy" shape, and the repo that builds the `tfmirror`
+  image whose chart P3 copies. It is not checked out here; read it through the gitblit mirror.
+- **The Jenkins job is the operator's keystroke.** Nothing in code creates Jenkins jobs (grounding
+  above), so this phase cannot prove itself end to end. Record the job path in the repo's manifest
+  and put what the operator must create in the phase's done-record.
+
+### P3 — charts.home as an ordinary HelmCharts release
+
+Target: `../HelmCharts`
+
+`https://charts.home` serves the chart repository from the `charts` release in namespace
+`charts-prd`, deployed by the existing harness — no new pipeline machinery, no storage, and no
+dependency on anything charts.home itself serves. `charts/tfmirror` plus
+`configs/prd/tfmirror/` is the working model end to end: static nginx, namespace-only
+`_shared/infrastructure.tf`, routing and TLS from Service annotations.
+
+- **Directory names are load-bearing.** The config directory name must equal the chart directory
+  name — digest resolution keys the chart lookup off the *config* directory, and a lookup that
+  misses takes the whole discovery run down rather than skipping one release
+  (`/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:172`, `:137-158`). The namespace is
+  derived, never declared: `<config-dir>-<stage>`
+  (`/work/HelmCharts/tools/deploy/deploy_cli/release.py:186-187`), which is what makes the ruling's
+  `charts` directory give `charts-prd`.
+- **A namespace exists only because `_shared/infrastructure.tf` creates it** — the deploy CLI never
+  passes `--create-namespace`, so a release without that file fails its first `helm upgrade
+  --install`. `configs/prd/tfmirror/_shared/infrastructure.tf` is the entire model.
+- **Library-free (R4), read strictly**: the chart renders from its own templates alone — no
+  `dependencies:` on `homelab-shared`, and no `templates/_helpers.tpl -> ../../shared/_helpers.tpl`
+  symlink either, though `/work/HelmCharts/CLAUDE.md:111` says every chart is expected to have one.
+  The symlink is not the library D17's trap names, but this chart moves to `ChartsDeploy` in the
+  endgame where no such file exists, and a static-nginx chart needs nothing from it — so the
+  departure costs nothing and makes the later move a copy instead of a vendoring exercise. Say so
+  in the done-record; a reviewer will otherwise read a missing symlink as an oversight.
+- **The digest pin is a regex, not a convention** —
+  `/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:43` matches
+  `image: <token>{{ .Values.<path> }}` across the chart's `templates/**/*.yaml` and appends the
+  values string to the token, so the values entry must be a `:`-prefixed tag and nothing may sit
+  between the token and the expression.
+- **DNS and TLS are annotations on a plain Service** (grounding above), and their semantics are
+  sharper than they look: `server-name` is a comma-separated list whose **longest** entry becomes
+  the certificate's directory and the DNS A record, `enable-ssl` is only consulted when `is-public`
+  is falsy, and issuance is eventually consistent — the vhost serves plain HTTP until the ACME
+  retry succeeds (`/work/DockerImages/nginx-configurator/app/annotations.py:169-174`,
+  `/work/DockerImages/nginx-configurator/app/nginxconfigurator.py:137-153`,
+  `/work/DockerImages/dnsmasq-config-generator/app/service_watch.py:145-157`).
+  `charts/tfmirror/templates/tfmirror-service.yaml:5-13` is the exact shape to follow, and
+  `configs/prd/tfmirror/prd/values.yaml:1-2` shows the whole routing surface is one values line.
+  Nothing outside this chart changes — no DNS file, no Ansible.
+- **Do not write `charts/charts/architecture.yaml`.** The repo's standing instruction is to leave
+  the annotation absent and let the architecture agent author it (`/work/HelmCharts/CLAUDE.md:164`);
+  a missing file is a reported gap, not a pipeline failure. Do declare the container port matching
+  the Service's target port, or the generator reports an exposure it cannot resolve.
+- **No gate, and no push.** HelmCharts has no `.kubecoder/project.yaml` and onboarding it is out of
+  scope, so the driver runs this phase unverified. Render the release through the repo's own deploy
+  CLI — never bare `helm`, per `/work/HelmCharts/CLAUDE.md` — and read the manifests; that is the
+  whole static proof available here. The commit stays local: a push to HelmCharts `main` deploys
+  straight to prd, and that keystroke is the operator's (ruling above).
 
 ## Not in scope
 
@@ -119,3 +252,10 @@ assumed — verify before relying on them.
   006 lands only the values pin and the Job named template that consumes it.
 - Onboarding HelmCharts onto the KubeCoder dev pipeline (giving it a `.kubecoder/project.yaml`).
 - cert-manager, `Ingress` objects, or a shared Ingress-emitting helper — the estate has none.
+- Making `deployment.timestamp` render-stable. It is copied into the library chart exactly as it
+  is today; the rework belongs to the first chart that actually migrates (phases.md B.1), where
+  the Argo re-render behaviour that motivates it exists.
+- Authoring the new HelmCharts chart's `architecture.yaml` — the repo's standing instruction is to
+  leave it absent for the architecture agent (`/work/HelmCharts/CLAUDE.md:164`).
+- Creating the `Charts` Jenkins job, and pushing HelmCharts — both operator keystrokes (ordering
+  constraints and rulings above).

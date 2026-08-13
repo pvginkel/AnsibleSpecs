@@ -1,0 +1,179 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "Charts repo — library chart source (R1)",
+      "description": "The `Charts` repo carries the library chart source: the shared `_helpers.tpl` content plus the hook Job named template, per design.md.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "Charts repo — library chart source (R1)",
+      "description": "The library chart is consumable as a single `Chart.yaml` `dependencies:` entry: a consumer chart renders both the shared helpers and the hook Job from that one line, with the named templates carrying the `homelab-shared.*` prefix.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "Charts repo — library chart source (R1)",
+      "description": "The hook Job the library chart renders matches design.md's skeleton — PreSync hook annotations, `BeforeHookCreation` delete policy, `backoffLimit: 0`, `activeDeadlineSeconds`, the `tf-presync` ServiceAccount, and `hook.repo`/`hook.revision`/`hook.stage` supplied by the consuming app.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:331-357"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "Charts repo — library chart source (R1, ruling)",
+      "description": "HelmCharts' `charts/shared/_helpers.tpl` and every chart's symlink to it are unchanged — un-migrated charts keep consuming it exactly as today, and the two trees diverge deliberately.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/shared/_helpers.tpl:1-236",
+        "/work/HelmCharts/CLAUDE.md:111"
+      ]
+    },
+    {
+      "id": "V05",
+      "area": "Charts repo — publishing pipeline (R1)",
+      "description": "The publishing pipeline packages the library chart, regenerates `index.yaml`, and builds the NGINX image carrying both — served at the repository root over plain HTTP inside the pod.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "Charts repo — publishing pipeline (R1)",
+      "description": "The `index.yaml` entry URLs are absolute under `https://charts.home`, so a client that adds the repository can fetch the tarballs it names.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "Charts repo — publishing pipeline (R1, D17)",
+      "description": "Publishing a new library version leaves previously published versions resolvable — a chart pinned to an earlier version still renders after a later version publishes — and the mechanism works on the first build, when nothing has been published yet.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "Charts repo — publishing pipeline (R1)",
+      "description": "The build pushes `registry:5000/charts-home` under both a build-number tag and `:latest`, so HelmCharts resolves it to a live digest at deploy time and a republished image reaches charts.home without a HelmCharts commit.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/JenkinsPipelineUtils/vars/helmCharts.groovy:144-165",
+        "/work/DockerImages/Jenkinsfile:98-106",
+        "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:118-135"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "charts.home release (R2)",
+      "description": "charts.home is deployed as an ordinary HelmCharts release through the existing harness — a `configs/prd/` release directory the existing pipeline discovers and deploys, with no new pipeline machinery and no storage.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:190-202",
+        "/work/HelmCharts/configs/prd/tfmirror/_shared/infrastructure.tf:6-9"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "charts.home release (R2, ruling)",
+      "description": "The release lands in namespace `charts-prd`, created by its own `_shared/infrastructure.tf` namespace module — matching the short DNS name `charts`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:186-187"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "charts.home release (R2, ordering)",
+      "description": "The chart-repo image exists in `registry:5000` before the HelmCharts release deploys — otherwise the release is silently absent from the pipeline's stage list rather than failing visibly.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:204-221"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "DNS and TLS (R3)",
+      "description": "`https://charts.home` resolves and serves over TLS from the homelab CA, same pattern as the estate's other internal endpoints — Service annotations only, no DNS file edit and no Ansible change.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/tfmirror/templates/tfmirror-service.yaml:5-13",
+        "/work/HelmCharts/charts/nginx/values.yaml:10",
+        "/work/DockerImages/dnsmasq-config-generator/app/service_watch.py:145-157"
+      ]
+    },
+    {
+      "id": "V13",
+      "area": "DNS and TLS (R3)",
+      "description": "Both the fully-qualified and short names answer, and the certificate is issued for the longest server name with the others as SANs — the estate's `<name>.home, <name>` convention.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/DockerImages/nginx-configurator/app/annotations.py:169-174",
+        "/work/HelmCharts/configs/prd/tfmirror/prd/values.yaml:1-2"
+      ]
+    },
+    {
+      "id": "V14",
+      "area": "End-to-end (R1 + R2 + R3)",
+      "description": "A Helm client can add `https://charts.home` as a chart repository and resolve the published library chart version from it. (Proving Argo's repo-server does the same with homelab-CA trust is slice 009's A.5 item, not this one.)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "D17's trap (R4)",
+      "description": "The charts.home chart itself is library-free: it takes no dependency on `homelab-shared` and renders nothing sourced from what charts.home serves, so what deploys charts.home cannot depend on charts.home being up.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:125-126"
+      ]
+    },
+    {
+      "id": "V16",
+      "area": "Hook image tag pin (R5)",
+      "description": "The default `registry:5000/argocd-hook:<n>` tag pin lives in the library chart's values — one bump point for the whole estate — and an app can override it while debugging.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:90-93"
+      ]
+    },
+    {
+      "id": "V17",
+      "area": "Repo gate",
+      "description": "`Charts` has its own `.kubecoder/project.yaml` and its curated gate is green from the repo root, so the `../Charts` phases after the first are deterministically gated.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.4.1/tools/run_loop.py:1436-1442"
+      ]
+    },
+    {
+      "id": "V18",
+      "area": "Operator authority (ruling)",
+      "description": "The first deploy of the new namespace, and the Terraform apply behind it, happened on the operator's keystroke: no agent pushed HelmCharts, and the run handed back the exact command and what it would do.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/Jenkinsfile:27-30"
+      ]
+    }
+  ]
+}
