@@ -389,6 +389,59 @@ exactly the Service and the Deployment. **Not pushed** — that keystroke is the
   `resolve-helm-args prd/charts .`, and `terraform fmt -check` (clean). All run from the repo root
   through `cexec iac`.
 
+### P4 — Close the gaps the two gate scripts leave
+
+Target: `../Charts`
+
+Four gaps the merged slice exposed, every one of them inside the gate scripts this slice itself
+wrote, and every one named by a phase review as an advisory Minor. Each is a few lines; none of them
+changes what the repo publishes, and `dist/`, the image, the `Jenkinsfile` and HelmCharts are all
+untouched. Land the phase with `kc project lint`, `test` and `build` green from the repo root, and
+confirm each new assertion bites by mutating the thing it defends — the standard P1 and P2 held
+themselves to.
+
+- **The gate claims published-version immutability and does not enforce it** (P2 review finding 2).
+  `tests/publish.sh:5-8` opens with *"A published version is immutable"*, but check 1 proves only
+  that `dist/` matches the **current** sources — repacking an edited chart at the same version is
+  green. The reviewer's demonstrated sequence against `6da54f8`: append a line to
+  `charts/homelab-shared/values.yaml`, run `tools/package-chart.sh`, run the gate → exit 0, with
+  ` M dist/homelab-shared-0.1.0.tgz` the only trace. Version `0.1.0` then has different bytes and a
+  different `digest:` in the index under the same version number — the exact thing D17's
+  `dependencies:` pins and a consumer's `Chart.lock` rest on
+  (`/work/AnsibleSpecs/argo-cd/decisions.md:117-129`), and the property this whole slice exists to
+  make true. Enforce it against git: a tarball once committed under `dist/` never changes bytes.
+  Cover both halves — a tracked tarball modified in the working tree, **and** a commit that modified
+  rather than added one; the working-tree check alone goes quiet the moment the rewrite is
+  committed. Grounding, verified this pass: `git` 2.51.0 is on the `iac` sidecar's PATH and works
+  against this checkout (`cexec iac sh -c 'cd /work/Charts && git status --porcelain'`), and
+  `git log --diff-filter=M --name-only -- 'dist/*.tgz'` is empty on the current history, so the
+  check starts green. A legitimate publish only ever *adds* an untracked tarball — it must stay
+  green through one.
+- **`tools/package-chart.sh` is the one new executable nothing runs** (P2 review finding 3).
+  `tests/publish.sh:45` re-implements it with a direct `helm package … --destination`, and no
+  `.kubecoder/project.yaml` verb invokes it — the opposite of the deliberate choice made for
+  `tools/build-index.sh`, which takes its store directory as an optional argument
+  (`tools/build-index.sh:23`) precisely so the gate exercises the real script. Give
+  `package-chart.sh` the same shape and repack through it in check 1, so the packaging the gate
+  simulates is the packaging a publish performs. The additivity block's second package
+  (`tests/publish.sh:81`) passes `--version 9.9.9`, which the script has no equivalent for — leave
+  that call on direct `helm package` rather than contorting either side.
+- **The ceph PVC helpers are rendered on their legacy branch only** (P1 review finding 2).
+  `tests/consumer/values.yaml:1-9` sets `subvolumeName` and `imageName`, taking the
+  `{{- if .subvolumeName }}` / `{{- if .imageName }}` inline-PV branch at
+  `charts/homelab-shared/templates/_helpers.tpl:78` and `:147`. The TF-owned-PV branch — what a
+  migrated chart actually renders — and the `claimName` override are never rendered. Cover both
+  branches from the fixture. Today's risk is nil and the reviewer says so (neither untaken branch
+  contains an `include`, so no missed prefix rename can hide there); it is worth closing because the
+  migrations from phases.md B.1 onward render exactly that branch, and every later edit to these
+  helpers inherits the blind spot.
+- **A hand-run `helm dependency update tests/consumer` litters the tree** (P1 review finding 1).
+  `.gitignore` covers `/.render-gate.*` because the gate copies both trees out to scratch, but
+  poking at the fixture in place — the obvious move when a helper misbehaves — writes
+  `tests/consumer/Chart.lock` and `tests/consumer/charts/homelab-shared-0.1.0.tgz`, neither tracked
+  nor ignored. Committed by accident they pin the fixture to a stale copy of the library, which
+  diverges silently at the next version bump. Ignore them.
+
 ## Not in scope
 
 - Backporting the library chart to the ~40 un-migrated HelmCharts charts, or migrating any app
