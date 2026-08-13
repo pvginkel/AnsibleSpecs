@@ -179,7 +179,7 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   Also considered and not taken: waiting for #127, and splitting Pillar A out to ship ahead of the
   merge (which would have reversed triage Q1's single-bundle decision).
 
-### PA — `iac-image` builds only when an image input changed
+### PA — `iac-image` builds only when an image input changed ✅ DONE 2026-08-13
 
 Target: root
 
