@@ -1,0 +1,8 @@
+{
+  "outcome": "done",
+  "summary": "All four r1 findings resolved in commit 60ca07b. Deleted the py_compile residue (support/iac-agent/bin/__pycache__/) that the gate step wrote into the rsynced tree, and pinned artifact-free syntax checks (bash -n, ast.parse) in the done-record; corrected etc/cron.d/iac-prune to cite `docker run --pull=always` instead of a `docker pull` iac never runs; fixed the two dead spec pointers (bin/iac:4, bin/iac-impl:6-7 -> phases/completed/, slices/completed/) rather than leaving them carded; made bin/iac's missing-iac-impl hint location-agnostic again. Re-ran the reviewer's rsync simulation against PB's tree: exactly the five files PC edits carry content flags, the other eight are timestamp-only, no new entries — recorded in the done-record as the R6 parity rule for slice end. `kc project test --project root` (no test statements) and `kc project lint` green.",
+  "cards": [
+    "terraform/modules/managed-vm/versions.tf:9 still says the provider binary is baked into the modern-app-dev container image — stale twice over, since tf-provider-registry replaced the bake with the tfmirror.home network mirror. (Carried over from PC r1; outside PC's tree.)",
+    "ansible/roles/iac_agent/tasks/main.yml:88-95 rsyncs support/iac-agent with delete:true and only --exclude=.git, so any gitignored build artifact in the operator's workstation checkout (e.g. __pycache__/) ships to /opt/IaCAgent and re-ships on every apply. Consider --filter=':- .gitignore' or an explicit __pycache__ exclude."
+  ]
+}

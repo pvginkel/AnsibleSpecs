@@ -1,0 +1,470 @@
+{
+  "slice": "013_iac_pipeline_restructure",
+  "created_at": "2026-08-13T19:38:26.128080+02:00",
+  "orchestrator": {
+    "session": "24bb2afb-f116-4e9d-955b-cf158bbb15e7",
+    "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/24bb2afb-f116-4e9d-955b-cf158bbb15e7.jsonl"
+  },
+  "run_phase": "done",
+  "bases": {
+    "/work/Ansible": "main"
+  },
+  "slice_base": {
+    "/work/Ansible": "a8506f53b57cb64c6b2b20c8507eecfe6851591e"
+  },
+  "known_phases": [
+    "A",
+    "B",
+    "C"
+  ],
+  "phases": {
+    "A": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/013-PA",
+      "target": "root",
+      "executor_rounds": 2,
+      "gate_fix_rounds": 0,
+      "review_rounds": 2,
+      "gate_runs": 3,
+      "gate_green_commit": "3e3aa33102f9ff4958ea538bd3bb06a1537554fb",
+      "gate_green_log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/phases/PA/gate_r3.log",
+      "reviewed_head": "600edf76f12fb56eaa3d6538c4c2fb686d9365e8"
+    },
+    "B": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/013-PB",
+      "target": "ansible",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "8eba51a4a5e88ab5c49a06eaa58241c7bcb68a80",
+      "gate_green_log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/phases/PB/gate_r1.log",
+      "reviewed_head": "8eba51a4a5e88ab5c49a06eaa58241c7bcb68a80"
+    },
+    "C": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/013-PC",
+      "target": "root",
+      "executor_rounds": 2,
+      "gate_fix_rounds": 0,
+      "review_rounds": 2,
+      "gate_runs": 2,
+      "gate_green_commit": "60ca07b73552dbfcbd26df9b882b8089f651eb1d",
+      "gate_green_log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/phases/PC/gate_r2.log",
+      "reviewed_head": "60ca07b73552dbfcbd26df9b882b8089f651eb1d"
+    }
+  },
+  "generation": 0,
+  "test_rounds": 1,
+  "sweep_runs": 2,
+  "gate_sweep": {
+    "run": 2,
+    "commits": {
+      "/work/Ansible": "d1005fa41d52e3f2c3e6c581e9405463b6b641d4"
+    },
+    "green": true,
+    "ran_at": "2026-08-13T20:42:47.264687+02:00",
+    "results": [
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_root_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_root_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_root_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_ansible_lint.log",
+        "duration_s": 18
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_ansible_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_ansible_test.log",
+        "duration_s": 19
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_terraform_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_terraform_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_terraform_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_architecture_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_architecture_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/013_iac_pipeline_restructure/sweeps/r2/Ansible_architecture_test.log",
+        "duration_s": 0
+      }
+    ]
+  },
+  "consult_seq": 1,
+  "in_flight": null,
+  "cards": [
+    {
+      "source": "code-writer PA",
+      "text": "Local `main` in /work/Ansible moved to 15a6fa6 (k8s-upgrade runbook edit) at 19:51 while phase/013-PA was checked out and based on a8506f5 \u2014 the phase branch will not ff-merge without a rebase; the runbook content itself is safe on main.",
+      "ts": "2026-08-13T19:54:26.599899+02:00"
+    },
+    {
+      "source": "code-writer PC",
+      "text": "support/iac-agent/bin/iac:4 and bin/iac-impl:6 cite /work/AnsibleSpecs/phases/{iac-agent,openbao}.md, both of which now live under phases/completed/ \u2014 dead doc pointers, same class as the README link PC fixed but outside its scope.",
+      "ts": "2026-08-13T20:24:14.631185+02:00"
+    },
+    {
+      "source": "code-writer PC",
+      "text": "terraform/modules/managed-vm/versions.tf:9 still says the provider binary is baked into the modern-app-dev container image \u2014 stale twice over, since tf-provider-registry replaced the bake with the tfmirror.home network mirror.",
+      "ts": "2026-08-13T20:24:14.631202+02:00"
+    },
+    {
+      "source": "code-writer PC",
+      "text": "terraform/modules/managed-vm/versions.tf:9 still says the provider binary is baked into the modern-app-dev container image \u2014 stale twice over, since tf-provider-registry replaced the bake with the tfmirror.home network mirror. (Carried over from PC r1; outside PC's tree.)",
+      "ts": "2026-08-13T20:32:36.045806+02:00"
+    },
+    {
+      "source": "code-writer PC",
+      "text": "ansible/roles/iac_agent/tasks/main.yml:88-95 rsyncs support/iac-agent with delete:true and only --exclude=.git, so any gitignored build artifact in the operator's workstation checkout (e.g. __pycache__/) ships to /opt/IaCAgent and re-ships on every apply. Consider --filter=':- .gitignore' or an explicit __pycache__ exclude.",
+      "ts": "2026-08-13T20:32:36.045816+02:00"
+    },
+    {
+      "source": "consult",
+      "text": "verification.json has no criterion covering Jenkinsfile.iac-image:37-39, the empty-changeset branch that keeps the version poller's weekly rebuild building \u2014 the one piece of PA's gate the test phase has nothing to check off (PA reviewer r2, advisory).",
+      "ts": "2026-08-13T20:42:08.960553+02:00"
+    },
+    {
+      "source": "consult",
+      "text": "PA's poller fix infers 'the poller triggered' from an empty changeset, so a poller-triggered build that happens to absorb commits touching no image input is still skipped, and per the poller's bookkeeping that weekly rebuild is never retried. Narrower than the r1 blocker but the same failure mode; closing it needs an operator ruling, since the 'no escape hatch' ruling weighed manual forcing, not the poller.",
+      "ts": "2026-08-13T20:42:08.960566+02:00"
+    },
+    {
+      "source": "consult",
+      "text": "tools/ai_workflow/send_message.py:6 still cites /work/IaCAgent/bin/send_message.py as its source; that file now lives in-repo at support/iac-agent/bin/send_message.py. Left untouched on purpose \u2014 N4/V15 hold all four duplicate files move-only, and V15 names the single content change allowed \u2014 so correcting the provenance pointer is the operator's call.",
+      "ts": "2026-08-13T20:42:08.960569+02:00"
+    },
+    {
+      "source": "doc-writer",
+      "text": "Doc debt from `tf-provider-registry`, not 013: `terraform/modules/managed-vm/versions.tf:9-11` still says the `homelab` provider binary is \"baked into the modern-app-dev image, which is the version source of truth\" and cites `slices/completed/embed-homelab-provider.md`. Verified false \u2014 neither `support/iac-image/Dockerfile` nor `/work/DockerImages/modern-app-dev/Dockerfile` bakes a provider or a filesystem mirror; both resolve `registry.terraform.io/pvginkel/*` from the `tfmirror.home` network mirror via `/etc/terraform.rc`. The twin claim in `docs/runbooks/operator-workstation.md` was fixed in this phase (runbooks are the doc phase's charter); this one is a code comment in a Terraform module, outside the diff's work list. One-line fix: point it at `slices/completed/tf-provider-registry.md`.",
+      "ts": "2026-08-13T21:05:29.568290+02:00"
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-08-13T19:41:01.618734+02:00",
+      "phase": "A",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Jenkinsfile.iac-image now guards its build stage with utils.hasChanges over the five image inputs the Dockerfile actually reads (support/iac-image/.*, pyproject.toml, poetry.lock, homelab-root.crt, known_hosts.d/homelab), marking the stage skipped for conditional otherwise; import, checkout scm, Dockerfile path, context and both tags follow the HelmCharts/DockerImages pattern with no escape hatch added. Gate `kc project test --project root` reports no test statements; `kc project lint` runs green. No Groovy/Java toolchain exists here, so the pipeline's own next build is the first syntax proof \u2014 flagged in the done-record for the test phase.",
+      "session": "6e4e24a7-3718-48b2-bdf2-f3daf879b1aa",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/6e4e24a7-3718-48b2-bdf2-f3daf879b1aa.jsonl",
+      "duration_s": 155
+    },
+    {
+      "ts": "2026-08-13T19:41:01.631110+02:00",
+      "phase": "A",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-08-13T19:48:03.269324+02:00",
+      "phase": "A",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "issues",
+      "summary": "The gate itself is right \u2014 input set complete against the Dockerfile, patterns full-match, PB-safe, no escape hatch, tags and context untouched. But it silently kills the version-poller's weekly rebuild of registry:5000/iac: helmCharts.kaniko stamps the poller labels (verified live on iac:latest \u2014 rebuild-at 2026-08-19, pipeline 'IaC/IaC Docker Image', no params), and a poller-triggered build carries an empty changeset, so the stage skips, rebuild-at never advances, and after STALE_GRACE the poller stops triggering and reports the image orphaned. DockerImages' params-driven force path is the half of the sibling pattern PA left behind. Resolving it likely needs an operator ruling: the 'no escape hatch' ruling weighed manual forcing, not the poller.",
+      "session": "158d4c92-2efb-4574-ae36-fd6dc91bcd50",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/158d4c92-2efb-4574-ae36-fd6dc91bcd50.jsonl",
+      "duration_s": 421
+    },
+    {
+      "ts": "2026-08-13T19:54:26.599349+02:00",
+      "phase": "A",
+      "role": "code-writer",
+      "round": 2,
+      "outcome": "done",
+      "summary": "Blocker 1 fixed without a build parameter (V05 holds): imageBuildRequired() now returns true when the build's changeset holds no file at all (`!utils.hasChanges('.*')`) \u2014 that is the version poller's weekly rebuild, which triggers the job with no commits and, because the positional helmCharts.kaniko cannot stamp the params label DockerImages replays, no parameters either; confirmed against Jenkins that such a build carries an empty changeset and an indistinguishable user cause, so the changeset is the only available signal. Minor 1 resolved by watching `Jenkinsfile\\.iac-image` as a sixth pattern, so a change to the Dockerfile path, context or tags builds itself \u2014 the push landing this phase is therefore also the first pipeline proof of the build path. Gate `kc project test --project root` (no test statements) and `kc project lint` both green; done-record updated, Jenkinsfile committed on phase/013-PA, plan.md committed in AnsibleSpecs.",
+      "session": "883ee1c8-868a-4751-9581-52b1fd34a62e",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/883ee1c8-868a-4751-9581-52b1fd34a62e.jsonl",
+      "duration_s": 383
+    },
+    {
+      "ts": "2026-08-13T19:54:26.620553+02:00",
+      "phase": "A",
+      "role": "gate",
+      "round": 2,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-08-13T20:02:15.266394+02:00",
+      "phase": "A",
+      "role": "code-reviewer",
+      "round": 2,
+      "outcome": "signoff",
+      "summary": "Both r1 findings are genuinely resolved: the commit-less bypass at Jenkinsfile.iac-image:37-39 keeps the version poller's weekly rebuild building (premise re-verified live \u2014 the iac:latest labels still name this job with rebuild-at 2026-08-19 and no params), and the Jenkinsfile is now its own watched input, with everything else byte-identical. Three findings remain, all tagged advisory and none demanding a fix round: one Major \u2014 the fix infers 'the poller triggered' from an empty changeset, so a poller build that absorbs un-changelogged commits is still skipped and, per poller.py:165-176 and :157-164, lost permanently \u2014 plus the comment's claim that a commit-less build is always the poller's (job history #117 is a manual build with no changeset, which now force-rebuilds) and the absence of any acceptance criterion covering the new branch.",
+      "session": "d7016dc2-a214-494a-a6b4-7d48477bc66d",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/d7016dc2-a214-494a-a6b4-7d48477bc66d.jsonl",
+      "duration_s": 468
+    },
+    {
+      "ts": "2026-08-13T20:03:18.378787+02:00",
+      "phase": "A",
+      "role": "gate",
+      "round": 3,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-08-13T20:08:50.795820+02:00",
+      "phase": "B",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "All 28 pvginkel/IaCAgent commits are now in the Ansible repo, path-prefixed to support/iac-agent/ with their original author, date and message, merged on phase/013-PB; the landed tree is byte-identical to IaCAgent main at 973d330, modes included. A separate commit repoints iac_agent_local_checkout to {{ playbook_dir }}/../../support/iac-agent, so the role installs from the in-repo tree and needs no sibling checkout. kc project test --project ansible and kc project lint are green.",
+      "session": "0d273e66-bf6e-40e0-ad58-b00c14b5277a",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/0d273e66-bf6e-40e0-ad58-b00c14b5277a.jsonl",
+      "duration_s": 331
+    },
+    {
+      "ts": "2026-08-13T20:09:09.712205+02:00",
+      "phase": "B",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "ansible: cexec iac poetry run ansible-lint    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 18
+    },
+    {
+      "ts": "2026-08-13T20:17:48.039584+02:00",
+      "phase": "B",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "History, tree and repoint all verified directly: 28 commits with identical metadata and prefix-stripped-identical trees, zero root-level paths, byte- and mode-identical tree, and the repointed iac_agent_local_checkout resolved and stat'd offline. No Blockers or Majors; two advisory Minors \u2014 the first parity apply will report the sync changed on timestamp-only differences (recorded in plan.md for the test phase), and tools/ai_workflow/send_message.py:6 keeps a provenance pointer at the retiring checkout that no phase owns.",
+      "session": "ad4b19f1-601c-40e3-8435-a973e8f971f2",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/ad4b19f1-601c-40e3-8435-a973e8f971f2.jsonl",
+      "duration_s": 518
+    },
+    {
+      "ts": "2026-08-13T20:24:14.630821+02:00",
+      "phase": "C",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Fixed the moved tree's stale self-description in four files under support/iac-agent/ (README.md, bin/iac, bin/send_message.py, etc/cron.d/iac-prune): the container is now named registry:5000/iac:latest everywhere, the repo framing says the tree lives in Ansible at support/iac-agent/, the Jenkinsfile list matches the root's actual Jenkinsfile.* set (six iac-controller jobs plus iac-image and architecture on pod agents), and the bind-mount list names all five mounts. `grep modern-app-dev support/iac-agent/` returns nothing; prose and comments only, no executable line changed. `kc project test --project root` reports no test statements; `kc project lint` green.",
+      "session": "99bcb606-a612-4505-984f-4f18dd1fd5fc",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/99bcb606-a612-4505-984f-4f18dd1fd5fc.jsonl",
+      "duration_s": 267
+    },
+    {
+      "ts": "2026-08-13T20:24:14.643369+02:00",
+      "phase": "C",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-08-13T20:29:07.599668+02:00",
+      "phase": "C",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "issues",
+      "summary": "The prose fixes themselves are correct and complete: the modern-app-dev bar is met, and every rewritten README claim (five bind-mounts, six iac-controller jobs and their charters, the pod-agent split, the corrected design link) verifies against the working tree, with no executable line changed. One Major: the phase's own py_compile gate step left support/iac-agent/bin/__pycache__/send_message.cpython-313.pyc in the tree \u2014 gitignored, so invisible to git status \u2014 and the role's synchronize excludes only .git with delete:true, so the operator's R6 parity apply itemizes a brand-new dir plus file (reproduced) instead of PB's timestamp-only signal, and drops a stale .pyc on srviac. Three Minor advisories: an iac-prune comment citing a docker pull iac never runs, two surviving dead AnsibleSpecs pointers (one in a file this commit edited), and an error message naming an srviac-only path the README's documented wrkdev parity case lacks.",
+      "session": "cc7e8681-0629-4f11-a943-cb1a00c86765",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/cc7e8681-0629-4f11-a943-cb1a00c86765.jsonl",
+      "duration_s": 292
+    },
+    {
+      "ts": "2026-08-13T20:32:36.045492+02:00",
+      "phase": "C",
+      "role": "code-writer",
+      "round": 2,
+      "outcome": "done",
+      "summary": "All four r1 findings resolved in commit 60ca07b. Deleted the py_compile residue (support/iac-agent/bin/__pycache__/) that the gate step wrote into the rsynced tree, and pinned artifact-free syntax checks (bash -n, ast.parse) in the done-record; corrected etc/cron.d/iac-prune to cite `docker run --pull=always` instead of a `docker pull` iac never runs; fixed the two dead spec pointers (bin/iac:4, bin/iac-impl:6-7 -> phases/completed/, slices/completed/) rather than leaving them carded; made bin/iac's missing-iac-impl hint location-agnostic again. Re-ran the reviewer's rsync simulation against PB's tree: exactly the five files PC edits carry content flags, the other eight are timestamp-only, no new entries \u2014 recorded in the done-record as the R6 parity rule for slice end. `kc project test --project root` (no test statements) and `kc project lint` green.",
+      "session": "a07accf1-ee1a-4f6a-a5eb-f7943bd84920",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/a07accf1-ee1a-4f6a-a5eb-f7943bd84920.jsonl",
+      "duration_s": 208
+    },
+    {
+      "ts": "2026-08-13T20:32:36.055798+02:00",
+      "phase": "C",
+      "role": "gate",
+      "round": 2,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-08-13T20:36:04.440295+02:00",
+      "phase": "C",
+      "role": "code-reviewer",
+      "round": 2,
+      "outcome": "signoff",
+      "summary": "All four r1 findings verified resolved at the code: the py_compile artifact is gone from the synced tree (find + git status --ignored both clean), the iac-prune comment now cites the docker run --pull=always that bin/iac:40,63 actually runs, both spec pointers resolve to files present on AnsibleSpecs origin/main, and the install.sh hint is location-agnostic again. The fix commit introduces no behaviour change and interacts correctly with install.sh (no unit change, so no daemon-reload or agent restart), and the plan's amended R6 parity rule matches the five files the branch actually edits. Two Minor advisories only: bin/iac-impl:6 keeps a section anchor that commit 648d922 deleted from the file it now correctly points at, and plan.md:411-413's done-record bullet still describes the pre-fix error text.",
+      "session": "40eae6df-0a4d-49bf-b83a-02da07e3f202",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/40eae6df-0a4d-49bf-b83a-02da07e3f202.jsonl",
+      "duration_s": 208
+    },
+    {
+      "ts": "2026-08-13T20:36:44.671422+02:00",
+      "phase": null,
+      "role": "sweep",
+      "round": 1,
+      "outcome": "green",
+      "summary": "12 command(s)",
+      "session": null,
+      "transcript": null,
+      "duration_s": 40
+    },
+    {
+      "ts": "2026-08-13T20:42:08.960152+02:00",
+      "phase": null,
+      "role": "consult",
+      "round": 1,
+      "outcome": "complete",
+      "summary": "Every requirement has delivering work I can point at: R1/R2 and the full-match ruling in PA's gate (Jenkinsfile.iac-image:28-56, input set re-verified against the Dockerfile's seven COPYs \u2014 nothing unwatched), R3/R5 in PB (28 prefixed commits plus the repoint to {{ playbook_dir }}/../../support/iac-agent), R4's in-tree drift in PC (grep modern-app-dev returns nothing; the README's five bind-mounts and six iac-controller jobs check out against the working tree). The three ACs no code phase owns are owned by the driver's own post-consult phases, not unassigned: V11's parity hand-back is the test phase's deploy-owed close-out (docs/slice-testing-strategy.md:63-75, command already recorded in PB's done-record and --limit iac_agent is a real inventory group), and V13 plus the outside-tree prose PB/PC explicitly deferred (role README, iac-agent runbook, the architecture nudge) are the doc phase's charter. The held-out lines are held out on purpose and verified so: both --limit \"!iac_agent\" exclusions intact, .kubecoder/config.yaml and Ansible.code-workspace still declaring IaCAgent, all four N4 duplicate files unchanged beyond the one docstring line V15 permits. Mechanical residue fixed in-session and committed (Ansible d1005fa, AnsibleSpecs cee6c05): bin/iac-impl:6 cited an openbao.md section anchor that file no longer has, Jenkinsfile.iac-image's empty-changeset comment claimed such a build is always the poller's when a hand-started build with no new commits takes the same branch, and PC's done-record still described the pre-fix install.sh hint; kc project lint is green over the result. What is left is advisory or needs an operator ruling, so it is carded rather than absorbed.",
+      "session": "9546fa73-47aa-4366-99fc-2452c01ac8f6",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/9546fa73-47aa-4366-99fc-2452c01ac8f6.jsonl",
+      "duration_s": 324
+    },
+    {
+      "ts": "2026-08-13T20:42:47.264715+02:00",
+      "phase": null,
+      "role": "sweep",
+      "round": 2,
+      "outcome": "green",
+      "summary": "12 command(s)",
+      "session": null,
+      "transcript": null,
+      "duration_s": 38
+    },
+    {
+      "ts": "2026-08-13T20:55:21.440502+02:00",
+      "phase": null,
+      "role": "test-agent",
+      "round": 1,
+      "outcome": "clean",
+      "summary": "Ran the slice-testing-strategy procedure for 013 against d1005fa (main): static review of the full diff (Jenkinsfile.iac-image gate logic checked against gitblit's JenkinsPipelineUtils source and diffed live against /work/HelmCharts and /work/DockerImages; the support/iac-agent/ move verified byte-identical except PC's 5 documented drift edits; history preserved for all 28 IaCAgent commits; blast radius is a single host (srviac, iac_agent group only, no cluster-serial concern); check-mode is honest on every touched task). Pushed to origin/main under the devlock hold and watched the three push-triggered Jenkins jobs land green for this commit: IaC/Build-Main #128 (iac-on-push), AaC/Ansible #80 (architecture), and IaC/IaC Docker Image #122 (a real kaniko build+push, 209s \u2014 proof the gate correctly builds when its own Jenkinsfile is the watched input; the pure-skip path is unobservable from inside this slice and lands with the next unrelated push). All 17 verification.json items are checked off: 15 verified, V11 (iac_agent parity apply) and V13 (decisions.md/architecture nudge) correctly left owed to the operator and the doc phase respectively \u2014 deploy-owed command: `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site.yml --limit iac_agent --check` (delete the trailing --check to apply; expect the sync task to report changed once \u2014 content, not just timestamps, since PC edited 5 of the tree's files \u2014 then a clean second run).",
+      "session": "9d241fb4-de62-495d-9e15-354f4ae8e554",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/9d241fb4-de62-495d-9e15-354f4ae8e554.jsonl",
+      "duration_s": 753
+    },
+    {
+      "ts": "2026-08-13T21:05:29.567778+02:00",
+      "phase": null,
+      "role": "doc-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Updated every doc surface the slice's behavior touches: the `iac_agent` role README (installs from `support/iac-agent/`, no sibling checkout \u2014 the contradiction with defaults/main.yml is gone), `docs/runbooks/iac-agent.md` (image row is now `registry:5000/iac` built by this repo's `iac-image` job with the venv baked at build time; the IaCAgent-repo row folded into the this-repo row; job inventory corrected to six `iac-controller` jobs plus the pod-agent `iac-image`/`architecture`; DR no longer says clone IaCAgent; new 'the `iac` image rebuild' section covering the six watched inputs, the skipped-for-conditional path, the changeset-scoped retry hole and the two ways to force a rebuild), `docs/runbooks/operator-workstation.md` (the `pvginkel/homelab` section described a filesystem-mirror bake that no image has \u2014 corrected to the `tfmirror.home` network mirror, verified in both `support/iac-image/terraform.rc` and `/work/DockerImages/modern-app-dev/terraform.rc`), the repo README layout, `CLAUDE.md`'s related-repos line (IaCAgent marked superseded, `support/iac-agent/` named as the copy to edit; the clone stays per N5), and `tools/ai_workflow/send_message.py`'s provenance comment. `AnsibleSpecs/decisions.md:117` now places `iac-impl` in `pvginkel/Ansible` at `support/iac-agent/bin/iac-impl` \u2014 edited in place, no second entry; the move needed no new doctrine (it lands under the existing `support/` convention, and no standing rule in decisions.md placed the host glue in its own repo). Behavioral claims grounded in source, not the plan: the gate logic in `Jenkinsfile.iac-image`, `utils.hasChanges`'s `currentBuild.changeSets` + `==~` full-match read from `pvginkel/JenkinsPipelineUtils.git vars/utils.groovy:33-41` via gitblit, `iac-impl`'s default repo set and baked-venv warning, `support/iac-image/Dockerfile`'s COPY set, and `install.sh`'s materialized targets. Untouched by charter: `docs/architecture/ansible-architecture.yaml` (nudge below), `.kubecoder/config.yaml` + `Ansible.code-workspace` (N5/N7), the AnsibleSpecs historical records naming IaCAgent, and `AnsibleSpecs/README.md`'s slice line (close_slice.py's). V13 is satisfied: decisions.md updated, architecture nudge raised. Gates run on branch phase/013-docs: `kc project lint`, `kc project test`, `kc project build` \u2014 all green (ansible yamllint + ansible-lint, terraform fmt, arch-validate). Committed as 014d7ac (Ansible) and f5d496e (AnsibleSpecs, decisions.md staged by name). ARCHITECTURE NUDGE \u2014 worth running the `update-architecture` agent: the slice removed a repo boundary. `docs/architecture/ansible-architecture.yaml:338` still gives the `ss:iac` (iac shim) element `sourceRepository: git:pvginkel/IaCAgent`; that tree is now `support/iac-agent/` inside `git:pvginkel/Ansible`, so an external source repository disappeared from the model. Nothing else in the model moved \u2014 no new host, daemon or service. OPERATOR-OWED, unchanged by this phase (R6 ruling): the parity apply `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site.yml --limit iac_agent --check` (delete `--check` to apply), then removing IaCAgent from `.kubecoder/config.yaml` + `Ansible.code-workspace` and archiving `pvginkel/IaCAgent`. No runbook was created for it \u2014 it is a one-off migration, and the doc plan reserves runbooks for recurring procedures.",
+      "session": "8c495e04-33f1-479e-a7d9-6bb9fc3b8071",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/8c495e04-33f1-479e-a7d9-6bb9fc3b8071.jsonl",
+      "duration_s": 607
+    },
+    {
+      "ts": "2026-08-13T21:06:07.505176+02:00",
+      "phase": null,
+      "role": "doc-gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "architecture: cexec iac ./scripts/arch-validate.py docs/architecture/ansible-architecture.yaml    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 37
+    }
+  ],
+  "updated_at": "2026-08-13T21:06:09.439291+02:00",
+  "doc_phase": {
+    "stage": "done",
+    "gate_runs": 1,
+    "nudges": 0,
+    "session": "8c495e04-33f1-479e-a7d9-6bb9fc3b8071"
+  }
+}

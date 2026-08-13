@@ -26,8 +26,6 @@ the detail.
 
 ## Pending
 
-- **[013](slices/013_iac_pipeline_restructure/plan.md)** — IaC pipeline restructure: gate the `iac-image` rebuild on its real inputs and fold `IaCAgent` into Ansible, history preserved (#70; planned — 3 phases).
-
 Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B):
 
 - **[006](slices/backlog/006_charts_repo_and_charts_home/slice.md)** — Charts repo and charts.home: library chart source, publishing pipeline and the `https://charts.home` static chart repo (phases.md A.1; #124).
@@ -66,6 +64,7 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 | [runtime-secrets-sweep](slices/completed/runtime-secrets-sweep.md) | — | openbao + secrets, iac-secrets-resolver | consumer migration into OpenBao — complete (all prod charts on OpenBao); rotation/cleanup tracked on Triage |
 | [postgres-cluster-substrate](slices/completed/postgres-cluster-substrate.md) | — | helm-tf-deploy-harness, zfs-dataset-provider, backup-collector | shared CNPG Postgres on ZFS — substrate live on dev+prd, app DBs migrated |
 | [001 pre-drain-readiness-check](slices/completed/001_pre_drain_readiness_check/overview.md) | — | pre-drain-handoff | tightened the pre-drain readiness gate — fix landed 2026-06-14; the owed multi-node verification moved to the k8s-upgrade runbook |
+| [013 iac-pipeline-restructure](slices/completed/013_iac_pipeline_restructure/plan.md) | `iac-pipeline-restructure.md` (P1 superseded by tf-provider-registry) | tf-provider-registry | gated the `iac-image` rebuild on its real image inputs and folded the `IaCAgent` tree into `support/iac-agent/` with its 28 commits preserved — shipped 2026-08-13 (#70) |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

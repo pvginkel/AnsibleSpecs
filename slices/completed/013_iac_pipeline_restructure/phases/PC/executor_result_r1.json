@@ -1,0 +1,8 @@
+{
+  "outcome": "done",
+  "summary": "Fixed the moved tree's stale self-description in four files under support/iac-agent/ (README.md, bin/iac, bin/send_message.py, etc/cron.d/iac-prune): the container is now named registry:5000/iac:latest everywhere, the repo framing says the tree lives in Ansible at support/iac-agent/, the Jenkinsfile list matches the root's actual Jenkinsfile.* set (six iac-controller jobs plus iac-image and architecture on pod agents), and the bind-mount list names all five mounts. `grep modern-app-dev support/iac-agent/` returns nothing; prose and comments only, no executable line changed. `kc project test --project root` reports no test statements; `kc project lint` green.",
+  "cards": [
+    "support/iac-agent/bin/iac:4 and bin/iac-impl:6 cite /work/AnsibleSpecs/phases/{iac-agent,openbao}.md, both of which now live under phases/completed/ — dead doc pointers, same class as the README link PC fixed but outside its scope.",
+    "terraform/modules/managed-vm/versions.tf:9 still says the provider binary is baked into the modern-app-dev container image — stale twice over, since tf-provider-registry replaced the bake with the tfmirror.home network mirror."
+  ]
+}
