@@ -48,7 +48,7 @@
     {
       "id": "V06",
       "area": "Charts repo — publishing pipeline (R1)",
-      "description": "The `index.yaml` entry URLs are absolute under `https://charts.home`, so a client that adds the repository can fetch the tarballs it names.",
+      "description": "Every tarball the published `index.yaml` names is fetchable by a client that has added the repository — the entry URLs resolve against `https://charts.home` and the files they point at are actually served.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -56,10 +56,12 @@
     {
       "id": "V07",
       "area": "Charts repo — publishing pipeline (R1, D17)",
-      "description": "Publishing a new library version leaves previously published versions resolvable — a chart pinned to an earlier version still renders after a later version publishes — and the mechanism works on the first build, when nothing has been published yet.",
+      "description": "Publishing a new library version leaves previously published versions resolvable — a chart pinned to an earlier version still renders after a later version publishes — and the mechanism works on the first build, when nothing has been published yet. Demonstrated by execution rather than inspection: two versions packaged into the repository's `dist/` store, indexed, and the resulting index carries an entry for each.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:117-129"
+      ]
     },
     {
       "id": "V08",
@@ -157,8 +159,8 @@
     },
     {
       "id": "V17",
-      "area": "Repo gate",
-      "description": "`Charts` has its own `.kubecoder/project.yaml` and its curated gate is green from the repo root, so the `../Charts` phases after the first are deterministically gated.",
+      "area": "Repo gate (grounding: in scope)",
+      "description": "`Charts` has its own `.kubecoder/project.yaml` — carrying the ruled job path `IaC/Charts` under `jenkins:`, which is what `track_build.py` keys off — and its curated gate is green from the repo root, so the `../Charts` phases after the first are deterministically gated.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -173,6 +175,17 @@
       "rationale": "",
       "evidence": [
         "/work/HelmCharts/Jenkinsfile:27-30"
+      ]
+    },
+    {
+      "id": "V19",
+      "area": "charts.home release (R4, ruling)",
+      "description": "The charts.home chart is an ordinary chart of that repo in every respect R4 does not bar — it keeps the `templates/_helpers.tpl` symlink every chart there is expected to have, and differs only in taking no `homelab-shared` dependency.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/CLAUDE.md:111",
+        "/work/HelmCharts/charts/tfmirror/templates/_helpers.tpl"
       ]
     }
   ]

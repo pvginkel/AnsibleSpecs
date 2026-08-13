@@ -170,21 +170,26 @@ phase lands when a consumer chart renders both surfaces from a dependency on the
 - **The repo earns its gate in this phase.** `Charts` has no `.kubecoder/project.yaml`, so the
   driver resolves this phase's target with no deterministic gate and tells the reviewer the state
   is unverified (`run_loop.py:1436-1442`); from P2 onward the gate exists. Land the manifest here
-  and leave it green when run by hand at the end of the phase. What it has to prove is that a
+  — including the ruled `jenkins: IaC/Charts` key, which is what `track_build.py` keys off — and
+  leave it green when run by hand at the end of the phase. What it has to prove is that a
   **consumer** renders: a library chart emits nothing on its own, so a check that only lints the
   library would pass a chart no one can actually use — and the interesting failures (values
   merging under a hyphenated dependency name, a helper that assumed the old prefix) only appear
   from the consumer side. Helm lives in the `iac` sidecar (`cexec iac helm`, v4.2.3, verified this
-  pass); `/work/Ansible/.kubecoder/project.yaml` is the estate's only worked example of the
-  manifest format.
+  pass), so manifest verbs carry a `cexec` prefix.
+  `/work/KubeCoder/.kubecoder/project.yaml` is the closer of the estate's two worked examples —
+  the build-repo shape, per-component `setup`/`lint`/`build`/`test` with `cexec`-prefixed verbs
+  and the `jenkins:` key on the component (`:33`). `/work/Ansible/.kubecoder/project.yaml` is the
+  infra-repo shape and a poorer model for this repo.
 
 ### P2 — Publishing: package, index, and the chart-repo image
 
 Target: `../Charts`
 
-A build of `Charts` packages the library chart, produces a Helm repository `index.yaml` whose entry
-URLs are absolute under `https://charts.home`, and pushes an NGINX image to `registry:5000` serving
-both at the repository root. After this phase the operator can wire the job, run it once, and the
+The library chart is packaged into the repo's committed `dist/` store (ruling), and a build of
+`Charts` produces a Helm repository `index.yaml` over that store whose entry URLs are absolute
+under `https://charts.home`, then pushes an NGINX image to `registry:5000` serving tarballs and
+index at the repository root. After this phase the operator can wire the job, run it once, and the
 image P3 needs exists.
 
 - **The published image reference is the interface P3 consumes: `registry:5000/charts-home`.**
@@ -200,24 +205,33 @@ image P3 needs exists.
   `/work/JenkinsPipelineUtils/vars/cicd.groovy:1-3`).
 - **Publishing a new library version must not unpublish an older one.** An app pinned to a version
   charts.home has already served keeps rendering after a later version publishes — that is the only
-  thing that makes D17's `dependencies:` pins worth anything. The build has no persistent
-  workspace, so "regenerate the index from whatever is in the checkout" silently drops every
-  earlier version; whatever mechanism is chosen must also behave on the very first build, when
-  nothing has been published at all.
+  thing that makes D17's `dependencies:` pins worth anything (`decisions.md:117-129`). The store is
+  a committed `dist/` in the `Charts` repo (ruling): packaged tarballs are repo content, the build
+  indexes that directory and bakes tarballs and index together into the image. The build therefore
+  needs no persistent workspace, no live charts.home to read back, and no special first-build case
+  — the version history is git's. A publish is a version bump plus the new tarball landing in
+  `dist/`; nothing removes what is already there.
+- **The additivity property is provable in this phase, without a second Jenkins build** (ruling) —
+  package two versions into a scratch `dist/`, index it, and confirm the index carries both
+  entries. Do it for real rather than resting on a green gate; the criterion covering it is in
+  `verification.json`, not owed.
 - **This is new ground with no in-repo precedent** — nothing in the estate runs `helm package` or
-  `helm repo index` today (grounding above), and the pipeline containers differ sharply in what
-  Helm they carry: `containerTemplates.helm` is `alpine/helm:3.9.1`,
-  `containerTemplates.modern_app_dev` carries Helm 4
-  (`/work/JenkinsPipelineUtils/vars/containerTemplates.groovy:10-14`, `:65-68`). Pick deliberately;
-  `helm repo index --merge`/`--url` semantics are not stable across that gap.
+  `helm repo index` today (grounding above), and the pipeline containers differ in what Helm they
+  carry: `containerTemplates.helm` is `alpine/helm:3.9.1`, `containerTemplates.modern_app_dev`
+  carries Helm 4 (`/work/JenkinsPipelineUtils/vars/containerTemplates.groovy:10-14`, `:65-68`).
+  Choose deliberately and make the build work on the version it actually gets. The `dist/` store
+  keeps this cheap: it needs only `helm package` and a plain full-directory `helm repo index`, and
+  never `--merge`, whose semantics are the unstable part across that gap.
 - **Serving is plain HTTP inside the pod.** TLS is terminated by the estate's nginx layer through
   the Service annotations P3 sets, never by this image. The closest working model in the estate is
   the `pvginkel/TerraformRegistry` repo — the same "bake static files into nginx, push to
   `registry:5000`, trigger the HelmCharts deploy" shape, and the repo that builds the `tfmirror`
   image whose chart P3 copies. It is not checked out here; read it through the gitblit mirror.
 - **The Jenkins job is the operator's keystroke.** Nothing in code creates Jenkins jobs (grounding
-  above), so this phase cannot prove itself end to end. Record the job path in the repo's manifest
-  and put what the operator must create in the phase's done-record.
+  above), so this phase cannot prove itself end to end. The path is ruled — `IaC/Charts`, already
+  in the manifest from P1 — so what this phase owes is the done-record: what the operator must
+  create at that path, against which SCM and branch (`pvginkel/Charts`, `*/main`), and that it
+  must exist and have run once before the test phase pushes `Charts`.
 
 ### P3 — charts.home as an ordinary HelmCharts release
 
@@ -239,13 +253,13 @@ dependency on anything charts.home itself serves. `charts/tfmirror` plus
 - **A namespace exists only because `_shared/infrastructure.tf` creates it** — the deploy CLI never
   passes `--create-namespace`, so a release without that file fails its first `helm upgrade
   --install`. `configs/prd/tfmirror/_shared/infrastructure.tf` is the entire model.
-- **Library-free (R4), read strictly**: the chart renders from its own templates alone — no
-  `dependencies:` on `homelab-shared`, and no `templates/_helpers.tpl -> ../../shared/_helpers.tpl`
-  symlink either, though `/work/HelmCharts/CLAUDE.md:111` says every chart is expected to have one.
-  The symlink is not the library D17's trap names, but this chart moves to `ChartsDeploy` in the
-  endgame where no such file exists, and a static-nginx chart needs nothing from it — so the
-  departure costs nothing and makes the later move a copy instead of a vendoring exercise. Say so
-  in the done-record; a reviewer will otherwise read a missing symlink as an oversight.
+- **Library-free (R4)**: no `dependencies:` on `homelab-shared`, and nothing the chart renders is
+  sourced from what charts.home serves — so what deploys charts.home cannot depend on charts.home
+  being up. R4 bars that and only that (ruling). In every other respect this is an ordinary chart
+  in that repo, **symlink included**: `templates/_helpers.tpl -> ../../shared/_helpers.tpl` is a
+  different file that charts.home does not serve, `/work/HelmCharts/CLAUDE.md:111` expects every
+  chart to have it, and the model chart does
+  (`/work/HelmCharts/charts/tfmirror/templates/_helpers.tpl`, verified this pass).
 - **The digest pin is a regex, not a convention** —
   `/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:43` matches
   `image: <token>{{ .Values.<path> }}` across the chart's `templates/**/*.yaml` and appends the
