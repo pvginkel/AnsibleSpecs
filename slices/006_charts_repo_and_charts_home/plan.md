@@ -299,7 +299,7 @@ indexes, builds and calls `cicd.helmDeploy()`.
   but `properties()` only takes effect after a first build, so a job that has never run ignores the
   push that would otherwise trigger it.
 
-### P3 — charts.home as an ordinary HelmCharts release
+### P3 — charts.home as an ordinary HelmCharts release ✅ DONE 2026-08-13
 
 Target: `../HelmCharts`
 
