@@ -409,8 +409,8 @@ Settled beyond the plan's text:
   split), and the design-doc link resolved to `AnsibleSpecs/phases/iac-agent.md`, which is now
   under `phases/completed/`.
 - **`bin/iac`'s missing-`iac-impl` error** said "run IaCAgent's install.sh" — a repo pointer with
-  no repo. Now `/opt/IaCAgent/install.sh`, the path the role syncs it to and the one an operator on
-  srviac can actually run. Message text only.
+  no repo. Now "run install.sh from the iac-agent tree" (see the r1 note below, which settled the
+  final wording). Message text only.
 - **The N4 duplicates are untouched:** `bin/send_message.py` changed one docstring line,
   `tools/ai_workflow/send_message.py` and both `daemon.json`s not at all.
 - Gate: `kc project test --project root` → "no test statements — skipped" (root declares only
