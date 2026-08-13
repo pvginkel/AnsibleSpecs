@@ -265,7 +265,7 @@ Settled beyond the plan's text:
 Nothing here changes PB or PC. The gate watches `support/iac-image/.*`, never `support/.*`, so
 PB's tree landing at `support/iac-agent/` does not trip it.
 
-### PB — the IaCAgent tree becomes `support/iac-agent/`, and the role installs from it
+### PB — the IaCAgent tree becomes `support/iac-agent/`, and the role installs from it ✅ DONE 2026-08-13
 
 Target: ansible
 
@@ -342,6 +342,16 @@ comment, so the doc phase still owns `ansible/roles/iac_agent/README.md:12,20` (
 sibling checkout), `docs/runbooks/iac-agent.md:15,154` and `ansible-architecture.yaml:338`. V11's
 parity command, check-mode first (delete the trailing flag to apply): `cd /work/Ansible/ansible &&
 cexec iac poetry run ansible-playbook playbooks/site.yml --limit iac_agent --check`
+
+Review-settled (r1) — **the parity apply reports the sync task `changed`, once, and that is expected.**
+rsync's quick check is size+mtime, and `/opt/IaCAgent`'s mtimes came from `/work/IaCAgent`'s working
+tree while the repointed source's came from this branch's checkout. Reproduced locally: rsyncing the
+old source into a simulated `/opt/IaCAgent` itemizes nothing; the new source itemizes `>f..t......`
+for all 13 files and `.d..t......` for 7 directories — timestamp-only, no `c`/`s` flags, content and
+modes identical. So the check run shows the sync changed (the handler is skipped: `command` has no
+check mode), a real apply re-transfers identical bytes, fires `install.sh`, which `cmp`s and prints
+`install.sh: nothing to do.` without restarting `jenkins-agent`, and the second apply is clean. Read
+a timestamp-only itemization as parity; anything carrying a content or size flag is not.
 
 ### PC — the moved tree stops describing itself as a separate repo running `modern-app-dev`
 
