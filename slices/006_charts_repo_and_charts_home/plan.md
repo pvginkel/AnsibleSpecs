@@ -445,7 +445,7 @@ themselves to.
 **Done (2026-08-13).** Landed on `phase/006-P4`. Four gate fixes and nothing else: `dist/`, the
 `Dockerfile`, the `Jenkinsfile`, the manifest and HelmCharts are untouched, and both operator
 keystrokes stand exactly as P2 and P3 recorded them. `lint`, `test` and `build` green from the
-repo root; every new assertion confirmed to bite by mutation.
+repo root; every new assertion confirmed to bite by mutation, bar the one exception recorded below.
 
 - **Immutability is two checks, not one, and they are independent.** `tests/publish.sh` now runs
   `git status --porcelain -- 'dist/*.tgz'` (anything but `??` or `A ` fails) and
@@ -453,12 +453,27 @@ repo root; every new assertion confirmed to bite by mutation.
   sequence against `6da54f8` is now red. Committing that rewrite makes the tree clean and only the
   history check fires — the case the working-tree half alone would go quiet on. A real publish
   stays green in both of its forms, untracked tarball and staged `A ` tarball, both exercised.
+  Neither check can go vacuously green: each `git` runs outside the `|| true` that absorbs `grep`'s
+  no-match, so a git that cannot answer aborts the gate under `set -e` rather than printing the
+  success line. That is not hypothetical — the gate runs through `cexec iac`, in a different
+  container from the checkout, where an ownership mismatch is a `fatal` exit and not a warning.
+  Verified with `.git` removed: exit 128, no success line.
 - **`--diff-filter` is `MDR`, not `M`.** A tarball removed or renamed in a commit unpublishes a
   version as surely as a rewritten one does. Both are empty on the current history, so the check
-  starts green on the wider filter too.
-- **`tools/package-chart.sh` takes the destination store as an optional argument**, `mkdir -p`
-  included so a fresh scratch dir works, and check 1 calls it **once for all charts** rather than
-  per chart. Confirmed the gate flows through it by mutating the script and watching check 1 go
+  starts green on the wider filter too. The history half has no forward fix by construction — the
+  failure text says to amend or drop the offending commit, because a restoring commit is itself an
+  `M`.
+- **`tools/package-chart.sh` never repacks a version the store already holds.** `helm package`
+  stamps packaging time into the tarball, so repacking even an unchanged chart rewrites published
+  bytes; the script looped over *every* chart, which made the repo's own publish command trip the
+  new immutability check the moment a second chart existed. It now skips a chart whose
+  `<name>-<version>.tgz` is already in the destination. Verified: a bare run leaves `dist/` clean;
+  publishing a second chart adds only that chart's tarball and stays green through the commit; a
+  source edit without a bump is caught by check 1 with the bump remedy, not by the immutability
+  check with a spurious one.
+- **The destination store is an optional argument**, `mkdir -p` included, and check 1 calls the
+  script **once for all charts** into an empty scratch store — which is what still makes it pack
+  everything. Confirmed the gate flows through it by mutating the script and watching check 1 go
   red. The additivity block's `--version 9.9.9` call stays on direct `helm package`, per the plan.
 - **The TF-owned-PV fixture is two claims that differ deliberately.**
   `tests/consumer/templates/tf-owned-pvc.yaml` renders both ceph helpers on that branch;
@@ -467,7 +482,11 @@ repo root; every new assertion confirmed to bite by mutation.
   did **not** bite while both claims were sizeless, because either one satisfied it. Anchor any
   later assertion here to a claim only one of them can produce.
 - **`refute` joins `expect` in `tests/render-consumer.sh`** — anchored EREs (`^  name: …$`), so
-  `volumeName: <name>-pv` cannot satisfy a check that the inline PV is absent.
+  `volumeName: <name>-pv` cannot satisfy a check that the inline PV is absent. The exception to
+  "confirmed to bite": `refute 'TF-owned rbd branch emits no PV'` cannot be tripped by forcing the
+  branch it guards, because `rbd-pv` splits `.imageName` and the TF-owned claim passes none — the
+  mutation makes `helm template` error at `:30`, before any refute runs. The regression is still
+  caught, just as a red render rather than by that line; its cephfs twin does bite.
 - `.gitignore` covers `/tests/consumer/Chart.lock` and `/tests/consumer/charts/`; verified by
   running `helm dependency update tests/consumer` in place and reading a clean `git status`.
 
