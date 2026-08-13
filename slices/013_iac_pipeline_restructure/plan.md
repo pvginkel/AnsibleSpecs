@@ -353,7 +353,7 @@ check mode), a real apply re-transfers identical bytes, fires `install.sh`, whic
 `install.sh: nothing to do.` without restarting `jenkins-agent`, and the second apply is clean. Read
 a timestamp-only itemization as parity; anything carrying a content or size flag is not.
 
-### PC — the moved tree stops describing itself as a separate repo running `modern-app-dev`
+### PC — the moved tree stops describing itself as a separate repo running `modern-app-dev` ✅ DONE 2026-08-13
 
 Target: root
 
