@@ -31,6 +31,16 @@ the detail.
 - **[004](slices/004_oidc_app_rollout/overview.md)** — Keycloak OIDC login rollout: Grafana, pgAdmin, Headlamp, Jenkins (`helm-tf-deploy-harness` done; soft-related `keycloak-tf`).
 - **[005](slices/005_openbao_backup_activation/overview.md)** — Activate the OpenBao backup pipeline: daily encrypted bundles to cloud storage + a proven restore round-trip (`backup-collector`, `openbao-static-seal` done).
 
+Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B):
+
+- **[006](slices/backlog/006_charts_repo_and_charts_home/slice.md)** — Charts repo and charts.home: library chart source, publishing pipeline and the `https://charts.home` static chart repo (phases.md A.1; #124).
+- **[007](slices/backlog/007_argocd_tools_presync_hook/slice.md)** — ArgoCDTools and the PreSync hook image: the Terraform hook entrypoint, `registry:5000/argocd-hook:<n>`, and its OpenBao credentials (phases.md A.2; #124).
+- **[008](slices/backlog/008_helmcharts_argo_coexistence/slice.md)** — HelmCharts coexistence with the `argo-cd` reconciler: the deploy CLI honours the ownership key so Jenkins and Argo are never both live (phases.md A.3; gates 009; #124).
+- **[009](slices/backlog/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
+- **[010](slices/backlog/010_kubecoder_deploy_repo/slice.md)** — KubeCoderDeploy repo and image pinning: the pilot's chart, rebuilt Terraform and stage config, plus the seven `Build-Main` pins (phases.md B.1+B.2; #124).
+- **[011](slices/backlog/011_kubecoder_ci_version_pins/slice.md)** — KubeCoder CI: version-pin commits instead of deploys, via a new JenkinsPipelineUtils method (phases.md B.3; #124).
+- **[012](slices/backlog/012_kubecoder_argo_cutover/slice.md)** — KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124).
+
 ## Completed
 
 | Slice | Was | Depends on | Consumed by |
