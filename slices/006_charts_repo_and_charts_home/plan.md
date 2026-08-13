@@ -141,7 +141,7 @@ assumed — verify before relying on them.
   every touched root after a clean test verdict, nudges, then bails with "Push it … then resume"
   (`run_loop.py:2395-2424`). Both are expected, neither is an error.
 
-### P1 — The `homelab-shared` library chart
+### P1 — The `homelab-shared` library chart ✅ DONE 2026-08-13
 
 Target: `../Charts`
 
