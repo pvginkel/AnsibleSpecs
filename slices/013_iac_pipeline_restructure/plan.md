@@ -311,6 +311,38 @@ break is the role's, which is what the target's gate covers.
   R4 names is real and ships in PC, on top. Keeping the two apart is what makes this diff — a
   history-carrying merge of 28 foreign commits — reviewable at all.
 
+**Done.** All 28 IaCAgent commits are in this repo, path-prefixed to `support/iac-agent/` and merged
+on the phase branch; the tree is byte-identical to IaCAgent `main` at `973d330` (`diff -r`), file
+modes included. `iac_agent_local_checkout` is `{{ playbook_dir }}/../../support/iac-agent`, in its
+own commit on top, so the move itself stays a pure rename.
+
+Settled beyond the plan's text:
+
+- **Prefix-rewrite, not a subtree merge.** `git filter-branch --index-filter` (filter-repo absent,
+  as the plan records) rewrote every commit's paths, then `git merge --allow-unrelated-histories
+  --no-ff`. SHAs are new; author, email, author-date, committer, committer-date and subject are
+  identical for all 28 (verified by hashing both formatted logs). Chosen over `git subtree` /
+  `-s ours`, which keeps the original SHAs but leaves the history's paths unprefixed — `git log
+  support/iac-agent/…` would walk nothing, and commits carrying a root-level `README.md` would be
+  reachable from `main`. Temp branch, `refs/original/` and the local `iacagent` remote are deleted,
+  so the unprefixed history is unreachable and unpushable.
+- **`--exclude=.git` in the role's `synchronize` stays** (`tasks/main.yml:94`). It now excludes
+  nothing, but dropping it would let `delete: true` remove a receiver-side `/opt/IaCAgent/.git`, and
+  R6's parity apply has to be a strict no-op. Deliberately not a PB edit.
+- **Nothing under `support/` is linted.** Both ansible gates run with cwd `ansible/`, so
+  `secrets.example.yaml`'s `!bao` tags and the tree's six shell scripts get no gate here — same as
+  `support/iac-image/` today. `kc project test --project ansible` and `kc project lint` are green.
+- **PA is not tripped**: its gate watches `support/iac-image/.*` (`Jenkinsfile.iac-image:50`). The
+  tree does join `iac-image`'s kaniko context (root `.`, no `.dockerignore`) — ~60 KB, no `COPY`
+  reaches it.
+
+For later phases: PC's drift files are live at `support/iac-agent/{README.md, bin/iac,
+etc/cron.d/iac-prune, bin/send_message.py}`. PB touched no prose beyond the role's `defaults/`
+comment, so the doc phase still owns `ansible/roles/iac_agent/README.md:12,20` (both still describe a
+sibling checkout), `docs/runbooks/iac-agent.md:15,154` and `ansible-architecture.yaml:338`. V11's
+parity command, check-mode first (delete the trailing flag to apply): `cd /work/Ansible/ansible &&
+cexec iac poetry run ansible-playbook playbooks/site.yml --limit iac_agent --check`
+
 ### PC — the moved tree stops describing itself as a separate repo running `modern-app-dev`
 
 Target: root

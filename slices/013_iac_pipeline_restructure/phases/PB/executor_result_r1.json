@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "All 28 pvginkel/IaCAgent commits are now in the Ansible repo, path-prefixed to support/iac-agent/ with their original author, date and message, merged on phase/013-PB; the landed tree is byte-identical to IaCAgent main at 973d330, modes included. A separate commit repoints iac_agent_local_checkout to {{ playbook_dir }}/../../support/iac-agent, so the role installs from the in-repo tree and needs no sibling checkout. kc project test --project ansible and kc project lint are green.",
+  "cards": []
+}
