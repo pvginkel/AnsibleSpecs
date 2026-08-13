@@ -1,8 +1,24 @@
 # Turn on Keycloak OIDC login for the apps that can take it
 
-**Slice 004.** Scope agreed with the operator: **Grafana, pgAdmin, Headlamp,
-Jenkins** (LibreChat and Terminus dropped). Live status tracks on the Kanban
-`[004]` card.
+**Parked 2026-08-13 — was slice 004, now split across three Triage cards.**
+Slice number 004 is retired (gap, never reused); the Kanban card is archived.
+This doc predates the current pipeline and the `acceptance_criteria.json`
+beside it is a dead format.
+
+The four apps were never one piece of work — they have three different homes,
+so they re-enter as three cards:
+
+- **#575** — Grafana + pgAdmin, the genuine chart-side wins.
+- **#576** — a doctrine decision on OIDC for the microk8s apiserver, which is
+  what actually gates Headlamp. Belongs in `decisions.md`.
+- **#577** — Jenkins via the in-app `oic-auth` plugin; no chart change.
+
+Nothing here is known-stale — as of 2026-08-13 no OIDC config exists in any of
+the four charts. The three open questions at the end were never answered and
+are refinement material. The per-app design below stands as written.
+
+Original scope, agreed with the operator: **Grafana, pgAdmin, Headlamp,
+Jenkins** (LibreChat and Terminus dropped).
 
 ## Goal
 

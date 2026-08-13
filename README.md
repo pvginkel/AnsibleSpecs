@@ -26,10 +26,6 @@ the detail.
 
 ## Pending
 
-- **[001](slices/001_pre_drain_readiness_check/overview.md)** — Pre-drain hand-off readiness check: fix a false-Ready in the pre-drain handoff before `kubectl drain` (fix landed; operator verification owed).
-- **[002](slices/002_managed_vm_mac_derivation/overview.md)** — Auto-derive deterministic MAC in the `managed-vm` module: move the MAC convention out of hand-applied `vms.tf`.
-- **[004](slices/004_oidc_app_rollout/overview.md)** — Keycloak OIDC login rollout: Grafana, pgAdmin, Headlamp, Jenkins (`helm-tf-deploy-harness` done; soft-related `keycloak-tf`).
-- **[005](slices/005_openbao_backup_activation/overview.md)** — Activate the OpenBao backup pipeline: daily encrypted bundles to cloud storage + a proven restore round-trip (`backup-collector`, `openbao-static-seal` done).
 - **[013](slices/013_iac_pipeline_restructure/plan.md)** — IaC pipeline restructure: gate the `iac-image` rebuild on its real inputs and fold `IaCAgent` into Ansible, history preserved (#70; planned — 3 phases).
 
 Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B):
@@ -69,6 +65,13 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 | [tf-provider-registry](slices/completed/tf-provider-registry.md) | pending (req + approach) | helm-tf-deploy-harness (done); k8s cluster | private network mirror for `pvginkel/homelab` at `tfmirror.home` — superseded iac-pipeline-restructure P1 — shipped |
 | [runtime-secrets-sweep](slices/completed/runtime-secrets-sweep.md) | — | openbao + secrets, iac-secrets-resolver | consumer migration into OpenBao — complete (all prod charts on OpenBao); rotation/cleanup tracked on Triage |
 | [postgres-cluster-substrate](slices/completed/postgres-cluster-substrate.md) | — | helm-tf-deploy-harness, zfs-dataset-provider, backup-collector | shared CNPG Postgres on ZFS — substrate live on dev+prd, app DBs migrated |
+| [001 pre-drain-readiness-check](slices/completed/001_pre_drain_readiness_check/overview.md) | — | pre-drain-handoff | tightened the pre-drain readiness gate — fix landed 2026-06-14; the owed multi-node verification moved to the k8s-upgrade runbook |
+
+**Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
+(above). 002, 004 and 005 predated the current pipeline, were closed on
+2026-08-13 without running, and re-entered as Triage cards; their material sits
+in [`change_requests/`](change_requests/). 003 (MetalLB) was parked the same way
+on 2026-06-26.
 
 ## Deferred / Cancelled
 

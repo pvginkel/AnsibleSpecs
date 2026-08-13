@@ -1,8 +1,27 @@
 # Activate the OpenBao backup pipeline
 
-**Slice 005.** Subsumes Triage source cards #12 (backup pipeline build — done),
-#13 (single-node recovery drill), #14 (whole-cluster restore drill). Live status
-tracks on the Kanban `[005]` card.
+**Parked 2026-08-13 — was slice 005, now Triage cards #573 and #578.** Slice
+number 005 is retired (gap, never reused); the Kanban card is archived. This
+doc predates the current pipeline and the `acceptance_criteria.json` beside it
+is a dead format. It subsumed Triage source cards #12 (backup pipeline build —
+done), #13 (single-node recovery drill), #14 (whole-cluster restore drill).
+
+**The premise below is wrong, and that is the finding.** This slice says the
+role self-skips and no timer is installed. In fact activation steps 1-4
+happened: the three inputs have been staged under `/etc/openbao/` on every
+srvvault since 2026-05-23, `openbao-backup.timer` is enabled fleet-wide, and it
+fires daily. What never worked is the upload. On the Raft leader (srvvault2 as
+of 2026-08-13) every run dies with `curl: (22) The requested URL returned error:
+400` from the `backup-server` POST — 29 consecutive failures back to at least
+2026-05-30, where journal retention ends, and **zero successful uploads ever**.
+Followers log "not the Raft leader; nothing to do" and exit 0, so the fleet
+looks healthy unless you check the leader.
+
+So the remaining work is a bug hunt on the upload leg (**#573**), carrying
+steps 5-6 below as its acceptance, not the commissioning sequence described
+here. The two drills are deferred behind it (**#578**). Steps 1-3 are history;
+the inventory of what is built, the gating chain, and the caveats are all still
+accurate and worth reading.
 
 ## Goal
 

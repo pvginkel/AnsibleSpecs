@@ -1,7 +1,14 @@
 # Pre-drain hand-off readiness check
 
-**Slice 001.** Fix landed 2026-06-14; a multi-node operator verification run is
-owed (see Verification). Live status tracks on the Kanban `[001]` card.
+**Slice 001 — closed 2026-08-13.** The fix landed 2026-06-14 and is live in
+`ansible/playbooks/tasks/pre-drain-handoff.yml`. The only outstanding item was
+an operator verification on a real multi-node roll, which is not slice work: it
+moved to
+[`docs/runbooks/k8s-upgrade.md`](../../../../Ansible/docs/runbooks/k8s-upgrade.md)
+as a one-time check under "Verify", to be deleted once seen. Slice number 001
+is retired (gap, never reused) and the Kanban card is archived. This doc
+predates the current pipeline — the `acceptance_criteria.json` beside it is a
+dead format. Kept for provenance.
 
 ## Symptom
 

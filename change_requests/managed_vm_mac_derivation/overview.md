@@ -1,6 +1,21 @@
 # Auto-derive deterministic MAC in `managed-vm`
 
-**Slice 002.** Live status tracks on the Kanban `[002]` card.
+**Parked 2026-08-13 — was slice 002, now Triage card #574.** Slice number 002
+is retired (gap, never reused); the Kanban card is archived. This doc predates
+the current pipeline and the `acceptance_criteria.json` beside it is a dead
+format, so it re-enters as a fresh triage item rather than as a slice.
+
+**Read the implementation sections below as history, not as a plan.** They were
+written when every NIC's `mac_address` lived in `terraform/prd/vms.tf`. The
+completed `network-devices-host-vars-sot` slice has since moved
+`network_devices` out to `ansible/inventories/prd/host_vars/<name>.yml` as the
+single source of truth, which `vms.tf` reads back with `yamldecode`, and
+Ansible matches netplan interfaces on that same MAC. So the "drop the literals
+from vms.tf" half of this plan is void, and "derive inside the `managed-vm`
+module" now sits on the wrong side of the SoT — where the derivation belongs is
+an open question for refinement. What survives intact: the convention itself,
+the legacy-adoption-MAC rule, and the caveats at the end (bpg case
+normalisation, light validation).
 
 ## Goal
 
