@@ -442,6 +442,35 @@ themselves to.
   nor ignored. Committed by accident they pin the fixture to a stale copy of the library, which
   diverges silently at the next version bump. Ignore them.
 
+**Done (2026-08-13).** Landed on `phase/006-P4`. Four gate fixes and nothing else: `dist/`, the
+`Dockerfile`, the `Jenkinsfile`, the manifest and HelmCharts are untouched, and both operator
+keystrokes stand exactly as P2 and P3 recorded them. `lint`, `test` and `build` green from the
+repo root; every new assertion confirmed to bite by mutation.
+
+- **Immutability is two checks, not one, and they are independent.** `tests/publish.sh` now runs
+  `git status --porcelain -- 'dist/*.tgz'` (anything but `??` or `A ` fails) and
+  `git log --diff-filter=MDR --name-only -- 'dist/*.tgz'` (must be empty). The reviewer's exact
+  sequence against `6da54f8` is now red. Committing that rewrite makes the tree clean and only the
+  history check fires — the case the working-tree half alone would go quiet on. A real publish
+  stays green in both of its forms, untracked tarball and staged `A ` tarball, both exercised.
+- **`--diff-filter` is `MDR`, not `M`.** A tarball removed or renamed in a commit unpublishes a
+  version as surely as a rewritten one does. Both are empty on the current history, so the check
+  starts green on the wider filter too.
+- **`tools/package-chart.sh` takes the destination store as an optional argument**, `mkdir -p`
+  included so a fresh scratch dir works, and check 1 calls it **once for all charts** rather than
+  per chart. Confirmed the gate flows through it by mutating the script and watching check 1 go
+  red. The additivity block's `--version 9.9.9` call stays on direct `helm package`, per the plan.
+- **The TF-owned-PV fixture is two claims that differ deliberately.**
+  `tests/consumer/templates/tf-owned-pvc.yaml` renders both ceph helpers on that branch;
+  `consumer-shared` takes the derived name and the defaulted `1Mi`, `consumer-state` overrides
+  both (`claimName`, `size: 3Gi`). That asymmetry is load-bearing: a bare `storage: 1Mi` expect
+  did **not** bite while both claims were sizeless, because either one satisfied it. Anchor any
+  later assertion here to a claim only one of them can produce.
+- **`refute` joins `expect` in `tests/render-consumer.sh`** — anchored EREs (`^  name: …$`), so
+  `volumeName: <name>-pv` cannot satisfy a check that the inline PV is absent.
+- `.gitignore` covers `/tests/consumer/Chart.lock` and `/tests/consumer/charts/`; verified by
+  running `helm dependency update tests/consumer` in place and reading a clean `git status`.
+
 ## Not in scope
 
 - Backporting the library chart to the ~40 un-migrated HelmCharts charts, or migrating any app
