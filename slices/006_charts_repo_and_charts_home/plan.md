@@ -463,14 +463,29 @@ repo root; every new assertion confirmed to bite by mutation, bar the one except
   starts green on the wider filter too. The history half has no forward fix by construction — the
   failure text says to amend or drop the offending commit, because a restoring commit is itself an
   `M`.
-- **`tools/package-chart.sh` never repacks a version the store already holds.** `helm package`
-  stamps packaging time into the tarball, so repacking even an unchanged chart rewrites published
-  bytes; the script looped over *every* chart, which made the repo's own publish command trip the
-  new immutability check the moment a second chart existed. It now skips a chart whose
-  `<name>-<version>.tgz` is already in the destination. Verified: a bare run leaves `dist/` clean;
-  publishing a second chart adds only that chart's tarball and stays green through the commit; a
-  source edit without a bump is caught by check 1 with the bump remedy, not by the immutability
-  check with a spurious one.
+- **`tools/package-chart.sh` never repacks a version git carries, and always repacks one it does
+  not.** `helm package` stamps packaging time into the tarball, so repacking even an unchanged
+  chart rewrites published bytes; the script looped over *every* chart, which made the repo's own
+  publish command trip the new immutability check the moment a second chart existed. It skips a
+  chart whose `<name>-<version>.tgz` `HEAD` carries **at the destination's own path** —
+  `git -C "$DEST" ls-tree --name-only HEAD -- …`, so a scratch store answers empty and packs
+  everything, and a git that cannot answer aborts (exit 128) rather than reading as "not
+  published" and rewriting served bytes. Mere existence is the wrong test: it dead-ends the
+  package → spot the mistake → fix → repack loop on a tarball that has never been served, and
+  check 1's bump remedy then publishes a version matching no committed source. The line drawn is
+  exactly check 2's — `??` and `A[ M]` are unpublished — so a staged tarball is still
+  correctable. Verified: bare run leaves `dist/` clean; a second chart adds only its own tarball
+  and stays green through the commit; an edit without a bump is caught by check 1, not by the
+  immutability check with a spurious remedy.
+- **Both halves of that skip are gated.** The published half is only reachable through the real
+  `dist/` — published-ness is a property of a path in git — so the gate runs the bare command and
+  puts `dist/` back byte for byte either way, deleting what the run created. The unpublished half
+  truncates the scratch store's tarballs and requires the next run to refill them. Deleting the
+  skip reddens the first; reverting it to `[ -e ]` reddens the second.
+- **Both remedy strings say what actually clears the failure.** Check 1 names re-running the
+  script while git does not carry the tarball, and a version bump once it does. The rewritten-
+  tarball remedy is `git checkout HEAD -- dist/`: the bare `git checkout -- dist/` restores the
+  worktree from the index, which is where a staged rewrite (`M `) lives, so the check stayed red.
 - **The destination store is an optional argument**, `mkdir -p` included, and check 1 calls the
   script **once for all charts** into an empty scratch store — which is what still makes it pack
   everything. Confirmed the gate flows through it by mutating the script and watching check 1 go
