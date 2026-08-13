@@ -359,6 +359,36 @@ dependency on anything charts.home itself serves. `charts/tfmirror` plus
   whole static proof available here. The commit stays local: a push to HelmCharts `main` deploys
   straight to prd, and that keystroke is the operator's (ruling above).
 
+**Done (2026-08-13).** Landed on `phase/006-P3`: chart `charts/charts/` plus release
+`configs/prd/charts/{_shared,prd}/`, modelled field for field on `tfmirror`. `deploy config`
+confirms release and namespace `charts-prd` with `phases.infra: true`; `deploy template` renders
+exactly the Service and the Deployment. **Not pushed** — that keystroke is the operator's.
+
+- **Names settled**: workload `charts`, container `charts-app`, image values key `images.charts` —
+  *not* `charts-home`. The digest regex only matches a dotted `{{ .Values.<path> }}`, so a
+  hyphenated key needing `index` would never resolve and the release would silently vanish from the
+  stage list. Confirmed by execution: `resolve-helm-args prd/charts .` builds
+  `registry:5000/charts-home:latest`.
+- **The image does not exist yet, and that is the correct pre-image state.** That same command ends
+  in a 404 from `registry:5000` — exactly V11's quiet failure. `IaC/Charts` must be wired *and have
+  built once* before the operator pushes HelmCharts.
+- **That ordering is sharper than the constraint above states.** `collect-versions` raises rather
+  than skips when `helm get values` fails for any discovered release
+  (`tools/chart_tools/collect_version_dependencies.py:26-31`), so a HelmCharts push landing before
+  the image exists breaks the **version-poller repo-wide**, not just charts.home. Read from the
+  code; not runnable here — the read-only kubeconfig cannot list Secrets in any namespace.
+- **No stage-level `resources:` scaffold.** The chart's `values.yaml` declares
+  `resources.charts.charts-app`, which is the only thing `recommend-resources` checks before
+  creating the key in the stage file (`recommend_resources.py:193-200`, `:273-274`). The stage
+  values file is the one routing line, as tfmirror's is.
+- `_helpers.tpl` is committed as a real symlink (mode `120000`), like every chart there (V19); the
+  chart carries no `dependencies:` at all (V15); `charts/shared/` and `charts/tfmirror/` are
+  untouched (V04). No `architecture.yaml`, per the standing instruction — `containerPort: 80`
+  matches `targetPort: 80` so the generator can resolve the exposure.
+- **Gate**, HelmCharts having no manifest: `deploy template` + `deploy config`,
+  `resolve-helm-args prd/charts .`, and `terraform fmt -check` (clean). All run from the repo root
+  through `cexec iac`.
+
 ## Not in scope
 
 - Backporting the library chart to the ~40 un-migrated HelmCharts charts, or migrating any app

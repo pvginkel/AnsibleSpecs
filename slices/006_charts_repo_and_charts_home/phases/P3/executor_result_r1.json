@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "charts.home lands as an ordinary HelmCharts release on phase/006-P3: chart charts/charts/ (static nginx on registry:5000/charts-home, port 80, helpers symlink, no homelab-shared dependency) plus configs/prd/charts/{_shared/infrastructure.tf,prd/values.yaml}, modelled on tfmirror. Proven through the repo's own deploy CLI — deploy config derives release/namespace charts-prd with phases.infra true, deploy template renders the Service and Deployment, resolve-helm-args builds registry:5000/charts-home:latest (404 until the operator's IaC/Charts build publishes it, which is V11's expected pre-image state), terraform fmt -check clean. Commit is local: pushing HelmCharts deploys straight to prd and is the operator's keystroke.",
+  "cards": []
+}
