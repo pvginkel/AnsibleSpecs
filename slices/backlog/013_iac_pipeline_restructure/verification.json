@@ -1,0 +1,184 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "Pillar A — iac-image rebuild scoping (R1)",
+      "description": "`iac-image` no longer rebuilds on pushes that cannot change the image: a push touching only roles, playbooks, host_vars or Terraform `.tf` leaves the build a no-op — the stage reports skipped for conditional and no `registry:5000/iac` tag is pushed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "Pillar A — the input set (R1, ruling)",
+      "description": "A push touching any real image input still rebuilds and pushes both tags exactly as before. The input set is the one the Dockerfile as it stands defines — `support/iac-image/**`, the root `pyproject.toml`/`poetry.lock`, `ansible/roles/baseline/files/homelab-root.crt`, `ansible/files/known_hosts.d/homelab` — and nothing outside it reaches the image.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "support/iac-image/Dockerfile:11 (pyproject.toml + poetry.lock)",
+        "support/iac-image/Dockerfile:72 (homelab-root.crt)",
+        "support/iac-image/Dockerfile:85 (smallstep.sources)",
+        "support/iac-image/Dockerfile:121 (terraform.rc)",
+        "support/iac-image/Dockerfile:142 (known_hosts.d/homelab)",
+        "Jenkinsfile.iac-image:11-14 (Dockerfile path, context, both tags)"
+      ]
+    },
+    {
+      "id": "V03",
+      "area": "Pillar A — the provider is not an input (ruling)",
+      "description": "The provider drops off the input list: no provider artifact is baked into or copied into the image, and a provider release alone does not rebuild it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "support/iac-image/terraform.rc:1-9 (network_mirror at tfmirror.home; no filesystem_mirror)",
+        "Jenkinsfile.iac-image:1-16 (no copyArtifacts)"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "Pillar A — gate inside the pipeline (R2)",
+      "description": "The gate is inside the pipeline, not in the job's trigger: the push trigger is left alone and the build is made a no-op when no image input changed, using the same `utils.hasChanges(...)` / `markStageSkippedForConditional` pattern HelmCharts already uses.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "HelmCharts/Jenkinsfile:1,84,93-99 (the pattern being followed)",
+        "DockerImages/Jenkinsfile:1,46,111 (same pattern)",
+        "Jenkinsfile.iac-image:5-7 (checkout scm, which the changeset read depends on)"
+      ]
+    },
+    {
+      "id": "V05",
+      "area": "Pillar A — no escape hatch (ruling)",
+      "description": "Gate only: no FORCE or rebuild build parameter is added. To force a rebuild the operator replays the job from a commit that touched an input, or pushes a trivial change to `support/iac-image/`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "Pillar B — the tree lands in-repo (R3, ruling)",
+      "description": "Every file that was in `pvginkel/IaCAgent` is at `support/iac-agent/<same relative path>` — sibling of `support/iac-image/` — byte-identical, and IaCAgent's root files did not land at the Ansible repo root.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/IaCAgent tree at 973d330: 13 files (bin/, etc/, systemd/, install.sh, README.md, .gitignore)"
+      ]
+    },
+    {
+      "id": "V07",
+      "area": "Pillar B — history preserved (R5)",
+      "description": "The IaCAgent commit history is preserved in the move: every IaCAgent commit is present in the Ansible repo with its original author, date and message and is reachable from `main`. A tree whose history starts at this slice does not satisfy this.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/IaCAgent main tip 973d330, in sync with origin/main",
+        "run_loop.py:1949 (phase branches merge --ff-only, so a merge commit survives)"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "Pillar B — the role reads it in place (R3, R4)",
+      "description": "The `iac_agent` role reads the tree in place: `iac_agent_local_checkout` points at the in-repo path, no sibling checkout is consulted, and the role resolves correctly both from the operator's `/work/Ansible` and from the fresh clone `iac-impl` makes inside the container.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "ansible/roles/iac_agent/defaults/main.yml:7 (the sibling-checkout default being replaced)",
+        "ansible/roles/iac_agent/tasks/main.yml:68 (secrets.example.yaml src)",
+        "ansible/roles/iac_agent/tasks/main.yml:89 (synchronize src)"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "Pillar B — the surrounding edits (R4)",
+      "description": "The edits the move implies are done: install/sync paths updated, and the README drift fixed — the tree's README no longer says `iac` runs `modern-app-dev`, and no doc still tells the reader the host glue lives in a separate repo checkout beside Ansible.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/IaCAgent/README.md:9 (the modern-app-dev claim)",
+        "/work/IaCAgent/bin/iac:15 (IMAGE defaults to registry:5000/iac:latest)",
+        "/work/IaCAgent/install.sh:24 (REPO_DIR is self-relative — no path edit owed inside the tree)",
+        "ansible/roles/iac_agent/README.md:12,20 (sibling-checkout prose)",
+        "docs/runbooks/iac-agent.md:15,154 (pvginkel/IaCAgent as a separate repo)"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "Pillar B — no host-side regression (R6 precondition)",
+      "description": "The host-side layout is unchanged, so the merge is provable by a near-no-op apply: `install.sh` still materializes the same files at the same paths, and everything `bin/iac` bind-mounts into the container still resolves.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/IaCAgent/install.sh:47-65 (materialized targets)",
+        "/work/IaCAgent/bin/iac:63-69 (bind-mounts of iac-impl, send_message.py, check-protected-vms.sh, check-ansible-drift.sh)",
+        "ansible/roles/iac_agent/defaults/main.yml:10 (iac_agent_install_dir /opt/IaCAgent)"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "Pillar B — parity handed to the operator (R6, ruling)",
+      "description": "The slice hands the operator the exact parity-apply command for `iac_agent` — check-mode first, then the same command with the trailing `--check` deleted — and records it where they will find it, rather than running it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "docs/live-infra-access.md:62-66 (canonical command shape, --check last)",
+        "docs/slice-testing-strategy.md:63-75 (deploy-owed hand-back)"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "Pillar B — the slice stops before the fallback removal (ruling, N5)",
+      "description": "The slice stops before `.kubecoder/config.yaml`: it still declares IaCAgent, `/work/IaCAgent` is still on disk, and the parity apply, the config removal and archiving `pvginkel/IaCAgent` are recorded as operator-owed rather than done.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        ".kubecoder/config.yaml:12",
+        "Ansible.code-workspace:16"
+      ]
+    },
+    {
+      "id": "V13",
+      "area": "R7 — the removed repo boundary followed through",
+      "description": "`decisions.md` is updated if the IaCAgent location became doctrine, and the `update-architecture` agent is nudged for the removed repo boundary — the model still names `git:pvginkel/IaCAgent` as the `iac shim`'s source repository.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "docs/architecture/ansible-architecture.yaml:338 (sourceRepository: git:pvginkel/IaCAgent)",
+        "docs/slice-doc-plan.md:46-55 (the model is a nudge, not an edit)"
+      ]
+    },
+    {
+      "id": "V14",
+      "area": "N1 — the exclusions stay",
+      "description": "Neither `--limit \"!iac_agent\"` line is touched: CI still neither applies nor drift-checks the role, even though the merge makes it possible.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "Jenkinsfile.iac-apply:94 (site.yml stage)",
+        "Jenkinsfile.iac-scheduled-drift:86 (daily drift check)"
+      ]
+    },
+    {
+      "id": "V15",
+      "area": "N4 — the existing duplicates are left alone",
+      "description": "The merge deduplicates nothing: `tools/ai_workflow/send_message.py` and the tree's `bin/send_message.py` both survive with their content unchanged, and so do the role's inline `/etc/docker/daemon.json` content and the tree's `etc/docker/daemon.json`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "tools/ai_workflow/send_message.py:6 (copied from the tree's bin/send_message.py)",
+        "ansible/roles/iac_agent/tasks/main.yml:33-41 (inline daemon.json)",
+        "/work/IaCAgent/etc/docker/daemon.json"
+      ]
+    },
+    {
+      "id": "V16",
+      "area": "Both pillars — no collateral",
+      "description": "Nothing else in the pipelines changes: the `IaC/*` jobs that call the moved helpers (`check-protected-vms.sh`, `check-ansible-drift.sh`, `send_message.py`) still work, and the image gate does not treat `support/iac-agent/` as an image input.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "Jenkinsfile.iac-apply:69,183 (check-protected-vms.sh, send_message.py)",
+        "Jenkinsfile.iac-scheduled-drift:64,86 (check-protected-vms.sh, check-ansible-drift.sh)"
+      ]
+    }
+  ]
+}

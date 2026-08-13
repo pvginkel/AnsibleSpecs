@@ -5,7 +5,7 @@
 Numbered requirements are `slice.md`'s, in the source's words. Rulings are the operator's, from
 the 2026-08-13 refinement session; a ruling that contradicts a requirement's wording governs.
 
-### Pillar A — scope the `iac-image` rebuild
+#### Pillar A — scope the `iac-image` rebuild
 
 - **R1.** Stop `iac-image` rebuilding on pushes that cannot change the image.
 
@@ -40,7 +40,7 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   environment, so its exact semantics are unverified), which means a build that fails on an
   image-input push is not retried by the next unrelated push. The operator accepts that hole.
 
-### Pillar B — merge `IaCAgent` into `Ansible`
+#### Pillar B — merge `IaCAgent` into `Ansible`
 
 - **R3.** Fold the IaCAgent tree into the Ansible repo and make the `iac_agent` role read it in
   place.
@@ -93,7 +93,7 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   > **Update decisions.md** if the IaCAgent location becomes doctrine, and nudge the
   > `update-architecture` agent (removed repo boundary).
 
-### Rulings that bound both pillars
+#### Rulings that bound both pillars
 
 - **Ruling (2026-08-13) — both `--limit "!iac_agent"` exclusions stay untouched.** The slice's N1
   named only `Jenkinsfile.iac-apply`; the exclusion is in fact in two files.
@@ -131,6 +131,97 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
   Also considered and not taken: waiting for #127, and splitting Pillar A out to ship ahead of the
   merge (which would have reversed triage Q1's single-bundle decision).
 
+### PA — `iac-image` builds only when an image input changed
+
+Target: root
+
+An Ansible push whose changeset touches nothing the image is built from leaves
+`registry:5000/iac` alone: the build stage reports *skipped for conditional*, and no tag is
+pushed. A push that does touch an image input builds and pushes exactly as it does today — same
+Dockerfile, same context, same two tags (`Jenkinsfile.iac-image:8-15`). The job's push trigger is
+not touched; the gate lives inside the pipeline (R2).
+
+**The image's inputs, established from the Dockerfile as it stands this pass** — the ruling asks
+for this set to be verified rather than inherited from R1's wording:
+
+- `support/iac-image/**` — the Dockerfile itself (`Jenkinsfile.iac-image:11`),
+  `smallstep.sources` (`support/iac-image/Dockerfile:85`), `terraform.rc` (`:121`)
+- the root `pyproject.toml` and `poetry.lock` (`support/iac-image/Dockerfile:11`)
+- `ansible/roles/baseline/files/homelab-root.crt` (`:72`)
+- `ansible/files/known_hosts.d/homelab` (`:142`)
+
+Nothing else in the repo reaches the image: the only other `COPY`s come from the build stage
+(`:25`) and from a pinned external image (`:129`). The provider is not an input —
+`support/iac-image/terraform.rc:1-9` resolves `registry.terraform.io/pvginkel/*` from the
+`tfmirror.home` network mirror, so there is no filesystem-mirror bake and no `copyArtifacts` left
+to watch. That confirms the ruling. The set matters beyond build time: `iac-impl` warns at runtime
+when the cloned `Ansible/poetry.lock` differs from the one baked into the image
+(`/work/IaCAgent/bin/iac-impl:388-409`, `support/iac-agent/bin/iac-impl` once PB lands), so a lock
+change that skipped the rebuild would surface as a live warning on every `iac` call.
+
+Constraints:
+
+- The pattern is the one both sibling repos already use: `utils.hasChanges(...)` guarding the
+  build, `Utils.markStageSkippedForConditional(<stage name>)` in the else branch, and the
+  `org.jenkinsci.plugins.pipeline.modeldefinition.Utils` import that `Jenkinsfile.iac-image` does
+  not yet carry — `HelmCharts/Jenkinsfile:1,84,93-99`, `DockerImages/Jenkinsfile:1,46,111`.
+- `utils.hasChanges` reads the build's own SCM changeset, so the `Cloning repo` stage's
+  `checkout scm` has to stay (`Jenkinsfile.iac-image:5-7`; the same dependency is spelled out at
+  `HelmCharts/Jenkinsfile:48-50`). The shared library is not checked out in this environment — its
+  argument is a path regex on the evidence of both call sites, and the ruling already records that
+  the operator accepts the retry hole this implies.
+- No escape hatch: no build parameter, no force flag (ruling).
+- PB's `support/iac-agent/` is **not** an image input. Whichever pillar lands first, the gate must
+  not sweep the whole of `support/`.
+
+### PB — the IaCAgent tree becomes `support/iac-agent/`, and the role installs from it
+
+Target: ansible
+
+Everything now in `pvginkel/IaCAgent` lives at `support/iac-agent/<same relative path>`,
+byte-identical, with its commit history part of this repo's; and the `iac_agent` role syncs and
+installs from there, so applying it needs the Ansible checkout and nothing beside it. The bulk of
+the diff is a tree landing at the repo root, but the change that can actually break is the role's,
+which is what the target's gate covers.
+
+- **History (R5).** A plain copy that starts the tree's history at this slice does not satisfy R5:
+  every IaCAgent commit must be present in this repo with its original author, date and message,
+  reachable from `main`. Three facts the executor would otherwise have to discover: the driver
+  merges each phase branch `--ff-only` (`run_loop.py:1949`), so a merge commit created on the
+  phase branch survives into `main` intact; `/work/IaCAgent` holds the whole history locally
+  (`main` at `973d330`, in sync with `origin/main`), so no network fetch is needed; and
+  `git-filter-repo` is **not** installed in this environment (git is 2.51).
+- **The tree lands prefixed, not at the root.** IaCAgent's root files (`README.md`, `.gitignore`,
+  `install.sh`) must arrive under `support/iac-agent/` — landing them unprefixed would clobber
+  this repo's own `README.md`.
+- **Move only (ruling, N4).** All four files of the two duplicate pairs keep their content and
+  location. Nothing inside the tree needs a path edit: `install.sh` resolves every source from its
+  own directory (`/work/IaCAgent/install.sh:24`), and the tree's only `/work/...` strings are
+  comments about the clone `iac-impl` makes inside the container, not about the controller's
+  checkout.
+- **The repoint** is `iac_agent_local_checkout` (`ansible/roles/iac_agent/defaults/main.yml:7`),
+  which feeds both the `secrets.example.yaml` source and the rsync src
+  (`ansible/roles/iac_agent/tasks/main.yml:68,89`). It has to resolve from the repo root for both
+  controllers that matter: the operator's `/work/Ansible`, and the fresh clone `iac-impl` makes in
+  the container. A `defaults/` variable is the role's interface — its comment must stop describing
+  a sibling checkout.
+- **The host-side layout does not move.** `iac_agent_install_dir` stays `/opt/IaCAgent`, and
+  `install.sh` keeps materializing `/usr/local/bin/*`, `/etc/docker/daemon.json`,
+  `/etc/cron.d/iac-prune` and the systemd unit (`/work/IaCAgent/install.sh:47-65`). That is what
+  makes R6's parity apply a proof rather than a migration: the operator's run should converge with
+  the host's materialized files untouched, and the shim's bind-mounts (`/work/IaCAgent/bin/iac:63-69`)
+  keep resolving.
+- **The fallback stays declared (N5).** `.kubecoder/config.yaml:12` and `Ansible.code-workspace:16`
+  keep their `IaCAgent` entries and `/work/IaCAgent` stays on disk — those go once the operator has
+  proven parity and archived the repo.
+- **Both `--limit "!iac_agent"` lines stay untouched** — `Jenkinsfile.iac-apply:94` and
+  `Jenkinsfile.iac-scheduled-drift:86`.
+- **Prose the move makes untrue is the doc phase's**, from this diff: the moved tree's own README
+  (which still describes `iac` running `modern-app-dev` while `bin/iac:15` runs
+  `registry:5000/iac:latest`), the role README, `docs/runbooks/iac-agent.md`, and `decisions.md`
+  + the architecture nudge R7 asks for. Leaving the tree byte-identical is what makes this diff a
+  reviewable rename.
+
 ## Not in scope
 
 - **N1. Removing `--limit "!iac_agent"` from anywhere.** The merge makes CI application of the role
@@ -156,3 +247,6 @@ the 2026-08-13 refinement session; a ruling that contradicts a requirement's wor
 - **N6. Triage cards #327 (`bin/iac` `--pull=always`) and #506 (drop the `/var/lock/iac.lock`
   flock).** Both edit files inside the tree this slice relocates. The operator's decision is to
   leave them queued and rebase them onto the new paths afterwards; they are not requirements here.
+
+- **N7. Removing the `../IaCAgent` folder entry from `Ansible.code-workspace`** — the same
+  fallback as N5, and it goes the same way: when the operator archives the repo, not before.
