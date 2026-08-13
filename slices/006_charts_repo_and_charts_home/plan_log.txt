@@ -277,3 +277,7 @@
     [plan-writer r2] [0s] [init] Session started (claude-opus-5)
     [plan-writer r2] [11s] [tool_use: Bash] Check spec repo status
     [plan-writer r2] [18s] [tool_use: Bash] Commit slice 006 verdict and loop artifacts
+    [plan-writer r2] [21s] [text] Committed as `234f0f9` — the round-2 verdict file plus the loop's `plan_log.txt…
+    [plan-writer r2] [21s] [result] Done (20.2s)
+[19:34:10] [plan-writer r2] → done: Applied every ruling the phase queue did not yet reflect: P2 now carries the committed `dist/` publishing store (settling F2's open mechanism, removing the `--m
+[19:34:10] plan complete: 2 writer pass(es), review on file
