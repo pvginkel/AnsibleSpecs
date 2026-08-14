@@ -57,11 +57,23 @@ quoted.
   live under a `kv/eso/prd/...` path — otherwise the ESO leaves slice 009 writes cannot read them
   without a policy change.
 
-- Ruling (2026-08-14) — **the dedicated AppRole's policy paths.** Mirror the shape of
-  `openbao_iac_agent_kv_paths`: a `kv/argocd-hooks/*` prefix glob for the hook's own namespace —
-  so a new per-app credential is a `bao kv put` with no policy change, the rationale already
-  written at `ansible/inventories/prd/group_vars/openbao.yml:107-117` — plus the enumerated
-  `kv/shared/prd/*` leaves the homelab provider needs. Not srviac's `iac-agent` role (D33).
+- Ruling (2026-08-14) — **the dedicated AppRole's policy paths, and what the baseline resolves.**
+  The policy mirrors `openbao_iac_agent_kv_paths` **exactly**, plus a `kv/argocd-hooks/*` prefix
+  glob for the hook's own namespace — so a new per-app credential is a `bao kv put` with no policy
+  change and no re-run of `site-openbao.yml`, the rationale already written at
+  `ansible/inventories/prd/group_vars/openbao.yml:107-117`. That means all six of
+  `kv/argocd-hooks/*`, `shared/prd/ceph-csi`, `shared/prd/ceph-rgw/s3`,
+  `eso/prd/iac-provisioner/api/token`, `eso/prd/postgres-pas/terraform-admin` and
+  `eso/prd/storage/prd/backup-server`. Not srviac's `iac-agent` role (D33).
+
+  **The baseline manifest resolves less than the policy grants.** The last two leaves —
+  `TF_VAR_postgres_admin_password` and `HOMELAB_BACKUP_SERVER_TOKEN` — stay out of the image
+  baseline; an app that needs one declares it in its own `config/<stage>/secrets.yaml` overlay.
+  This splits D41's blast radius (no hook run carries a credential it does not need) from the
+  policy's churn (no live-OpenBao keystroke when the first postgres-using app migrates). The
+  attachment's binding rule therefore becomes *the policy grants a superset of what the baseline
+  resolves, and the overlay closes the gap* — the criterion asserting an estate-wide baseline must
+  be worded to that, not to "the policy grants exactly what the baseline resolves".
 
 - Ruling (2026-08-14) — **the state key, and who owns the backend address.** The hook derives it.
   Deploy repos carry `backend "http" {}` and the entrypoint passes `address`, `lock_address` and
@@ -80,12 +92,41 @@ quoted.
   keep D12's clean `/{chart,terraform,config}` layout. The bump costs no re-pinning — nothing
   consumes `homelab-shared` 0.1.0 yet, and the first consumer (B.1) pins whatever is current.
 
+  **The `argo-cd/` document set is updated in this slice to match.** design.md states three
+  arguments in four places — flow step 1 (`:321`), the Job skeleton's args block (`:361-363`), the
+  explicit *"The three arguments are `required`-guarded"* sentence (`:372`), and the ApplicationSet
+  `parameters:` block (`:190-199`) — and D29/D33 describe the reattach's namespace as something the
+  hook finds rather than is handed. All of it changes to four, the ApplicationSet gains
+  `hook.namespace` with the same `<app>-<stage>` expression it already uses for
+  `destination.namespace`, and D29/D33 gain a note that the namespace filter is passed, not
+  derived. Without this, slice 009's planner reads design.md, builds a three-parameter
+  ApplicationSet, and every migrated app fails to render against a `required`-guarded argument
+  nothing supplies — a failure landing in the wrong slice with nothing pointing back here. This
+  repo's standing rule applies: update the document rather than leave a stale note elsewhere.
+
 - Ruling (2026-08-14) — **Terraform's version in the hook image: unpinned, exactly as `iac` does
   it.** Install from the hashicorp `noble` suite with no version constraint, mirroring
   `support/iac-image/Dockerfile:87-95`; `terraform-backend-git` stays pinned to **v0.1.11** as
   `iac` pins it (`support/iac-image/Dockerfile:123-130`). Flagged and accepted: nothing enforces
   that the two images rebuild at similar times, so a hook apply could upgrade a state format the
   `iac` container still has to read — the hazard lands on phases.md B.4's state surgery.
+
+- Ruling (2026-08-14) — **how Terraform's `kubernetes` provider is credentialed: the entrypoint
+  synthesises a kubeconfig from the pod's ServiceAccount.** Build it from the projected SA token,
+  the CA cert and `KUBERNETES_SERVICE_HOST`/`_PORT`, write it to a run-local path, and export
+  `KUBE_CONFIG_PATH` **and** `KUBECONFIG` at it before `terraform init` — the same two variables
+  `iac` sets (`support/iac-agent/etc/iac/secrets.example.yaml:122-125`). Deploy-repo Terraform then
+  keeps HelmCharts' bare `provider "kubernetes" {}` verbatim
+  (`/work/HelmCharts/_providers/providers.tf:98`, whose header states the provider follows
+  `KUBE_CONFIG_PATH`), which is what makes B.1 a lift rather than a rewrite. The PV reattach uses
+  the same file, so there is one identity in the pod, not two.
+
+  Grounds and the hazard it closes: the pilot's Terraform is kubernetes-provider work from its
+  first module (`configs/prd/kubecoder/_shared/infrastructure.tf`), and without this the first
+  migrated app's hook fails to configure the provider on every sync. **The proof must not rest on
+  this pod's ambient `~/.kube/config`** — that would resolve through the kubeconfig fallback and
+  prove nothing about the in-cluster path. The synthesis and the selection of it over any ambient
+  kubeconfig are what gets asserted, the same distinction P4 already draws for the reattach.
 
 - Ruling (2026-08-14) — **the proof bar for this slice.** Gates and unit tests, plus a real
   entrypoint run from this pod: clone-at-SHA → backend → `init`/`apply` → exit code, against a
