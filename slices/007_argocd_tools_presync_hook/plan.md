@@ -631,7 +631,7 @@ project lint|test` green.
   0.2.0 tarball is published and immutable from this commit on, so the `imageTag: "1"` pin is fixed
   until a 0.3.0 — the ruling's accepted cost, now real.
 
-### P6 — The state encryption key becomes ESO-readable
+### P6 — The state encryption key becomes ESO-readable ✅ DONE 2026-08-14
 
 Target: `ansible`
 
