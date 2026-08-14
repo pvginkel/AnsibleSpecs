@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "A hook run now exports TF_VAR_stage and TF_VAR_namespace from the Job's own arguments before init, so a deploy repo's per-stage Terraform names resources off the stage and namespace Argo is syncing rather than the empty-string defaults; a -var-file still outranks them, proven against real Terraform 1.15.8. The three advisory seams close with it: the clone's credential-helper chain is reset so no HOME-configured helper can answer the fetch (V02's from-this-pod re-proof is no longer false-green), the reattach fixture carries two matching volumes, and the two assertions that could not fail now can. kc project lint|test green from /work/ArgoCDTools, 58 tests, all five fixes mutation-confirmed.",
+  "cards": []
+}

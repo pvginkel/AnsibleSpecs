@@ -852,6 +852,33 @@ later phase owning them:
 Gate: the repo's own manifest verbs from `/work/ArgoCDTools`. Nothing here changes what the
 Dockerfile copies, so the image's contract is untouched.
 
+**Done (2026-08-14).** Landed on `phase/007-P9`: `terraform.release_identity()` called from
+`cli.py` before the clone, the credential-chain reset in `git.py`, and the three test seams.
+`kc project lint|test` green, 58 tests.
+
+- **The export sits beside `kubeconfig.provide()`'s**, in `os.environ`, so `init` and `apply`
+  inherit it alike — asserted by counting the fake terraform's record of each call, not inferred.
+  `TF_VAR_cluster` is asserted **absent**: the omission is deliberate and a later reader would
+  otherwise read it as an oversight.
+- **The precedence claim is proven against real Terraform 1.15.8**, not documented —
+  `ReleaseIdentityTests` runs `init`/`apply` on a two-variable fixture and reads the output back:
+  the export decides when the clone carries no tfvars, the `-var-file` decides when it does. This
+  makes `terraform` a dependency of the suite; it is on PATH in the image and in the `iac`
+  toolchain the gate runs in. Terraform writes to fd 1, past unittest's `-b`, so `support.quiet()`
+  keeps a passing gate silent — this repo's convention.
+- **The credential chain is reset with an empty `-c credential.helper=` ahead of ours.** The test
+  is a local HTTP remote that 401s and records the `Authorization` it is retried with, against a
+  `HOME` carrying a helper of its own: with the reset it sees only `GIT_USERNAME`/`GITHUB_TOKEN`,
+  without it only the ambient helper's. **V02's from-this-pod re-proof is no longer false-green.**
+- **All five fixes are mutation-confirmed**: dropping the reset, moving the export after `init`,
+  patching only the first matched volume, moving the credential check after the clone (the run dir
+  then holds the kubeconfig and the clone, which is what its emptiness now asserts), and stripping
+  argv from `proc.run`'s error (the *"says why"* half now reads the run's last line, not the
+  progress line printed before the apply ran).
+- **For P11**: the shipped names are `TF_VAR_stage` and `TF_VAR_namespace`, exported before `init`,
+  and no `TF_VAR_cluster` — what the phase's design.md sentence and the attachment's release-identity
+  bullet describe. Nothing else in the plan changes.
+
 ### P10 — The render gate asserts the argument *sequence*, not the set
 
 Target: `../Charts`
