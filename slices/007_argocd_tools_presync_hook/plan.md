@@ -659,6 +659,27 @@ changes about who reads what.
   `site-openbao.yml` run, the `bao kv put` of the git token, and the GitHub PAT mint are the
   operator's, with the exact commands in the attachment.
 
+**Done (2026-08-14).** Landed on `phase/007-P6`: one entry — `iac/tf-backend` — appended to
+`openbao_eso_kv_paths` in `ansible/inventories/prd/group_vars/openbao.yml`, with its own paragraph
+in the block comment. `kc project test --project ansible` green (yamllint + ansible-lint; that
+component has no runnable suite).
+
+- **The entry is a leaf, not `iac/*`.** The comment states the least-privilege line the block's
+  other entries state: it is the one grant outside ESO's own subtrees, it is the age keypair
+  `terraform-backend-git` encrypts state with, and one keypair in two leaves is what a rotation
+  can split — which is why the leaf is shared rather than copied to `eso/prd/`.
+- **`policy.hcl.j2` needs nothing.** A plain path renders `read` on `kv/data/iac/tf-backend` and
+  `read`+`list` on `kv/metadata/iac/tf-backend`, exactly like the block's other single leaves; the
+  glob entries are the only ones whose `*` does any work.
+- **Confirmed against `iac`'s own read:** `support/iac-agent/etc/iac/secrets.example.yaml:165`
+  resolves `!bao kv/iac/tf-backend#age_secret_key` — the same leaf and the same property name the
+  attachment lists as `SOPS_AGE_KEY`'s source, so the two consumers read one value.
+- **No other inventory change.** `eso/prd/*` already covers `eso/prd/argocd-hooks/git`, and every
+  other row of the inventory sits under `shared/prd/*` or `eso/prd/*`.
+- **Still owed by the operator, unchanged by this phase**: the `site-openbao.yml` run that
+  converges the policy, the `bao kv put` of the git token, and the PAT mint — attachment
+  §"The operator's keystrokes".
+
 ### P7 — The `argo-cd` document set states the contract this slice shipped
 
 Target: `../AnsibleSpecs`
