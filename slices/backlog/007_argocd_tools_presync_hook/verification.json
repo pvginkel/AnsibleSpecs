@@ -140,20 +140,23 @@
     {
       "id": "V14",
       "area": "R3 — credential delivery",
-      "description": "The hook's credentials are its own, minted deliberately, and delivered as plain environment variables: the container knows nothing about OpenBao, AppRoles or any credential provider. **No AppRole is minted** — no hvac, no `!bao` resolver, no secrets manifest in the image.",
+      "description": "The hook's credentials are its own, minted deliberately, and delivered as plain environment variables: the container knows nothing about OpenBao, AppRoles or any credential provider. **No AppRole is minted** — no hvac, no `!bao` resolver, no secrets manifest in the image. Configuration arrives the same way: `ArgoCDTools` commits no estate facts — no copy of `clusters.yaml`, no Ceph mon host, S3 endpoint, `zfs_pools` map or age recipient anywhere in the repo — and a value the run needs but did not get fails the run by name rather than reaching Terraform as an empty string.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "/work/HelmCharts/_providers/clusters.yaml:12-42"
+      ]
     },
     {
       "id": "V15",
       "area": "R3 — the credential inventory",
-      "description": "The inventory is complete against the estate's Terraform capabilities and settled to the key name: every key the container reads, the OpenBao leaf and property behind it, and which values are non-secret configuration rather than credentials. It is what slice 009 authors the ExternalSecret from, so the names are unambiguous.",
+      "description": "The inventory is complete against the estate's Terraform capabilities and settled to the key name: every key the container reads, the OpenBao leaf and property behind each secret, and — for the non-secret per-cluster facts the same ExternalSecret carries as `template` literals — the `clusters.yaml` value each one is copied from. It is what slice 009 authors the ExternalSecret from, so the names are unambiguous and nothing the run needs is missing from the one object that composes its environment.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "/work/HelmCharts/_providers/providers.tf:19-35",
-        "/work/HelmCharts/scripts/setup-env.sh:53-101"
+        "/work/HelmCharts/scripts/setup-env.sh:53-101",
+        "/work/HelmCharts/_providers/clusters.yaml:12-42"
       ]
     },
     {
@@ -170,7 +173,7 @@
     {
       "id": "V17",
       "area": "R3 — the state encryption key",
-      "description": "The state encryption key is `iac`'s existing age keypair, readable by the prd `eso` AppRole — one keypair in one leaf, so no rotation can leave state that one side of the same state repo cannot decrypt. The Ansible change granting it is the only OpenBao policy change the slice makes; every other leaf in the inventory is already covered.",
+      "description": "The state encryption key is `iac`'s existing age keypair, readable by the prd `eso` AppRole — one keypair in one leaf, so no rotation can leave state that one side of the same state repo cannot decrypt. The private half is fetched from that leaf and the public half is a `template` literal, so the leaf is written to by nobody and the operator's handover carries no conditional. The Ansible change granting the read is the only OpenBao policy change the slice makes; every other leaf in the inventory is already covered.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -194,6 +197,45 @@
       "verdict": null,
       "rationale": "",
       "evidence": []
+    },
+    {
+      "id": "V20",
+      "area": "The cross-slice export — the four-argument contract in the documents",
+      "description": "The `argo-cd` document set states the four-argument contract everywhere it stated three, so a planner reading only that set builds slice 009's ApplicationSet with four parameters: design.md's flow step, its Job skeleton, the sentence naming the arguments and the ApplicationSet `parameters:` block, with the namespace carrying the same `<app>-<stage>` expression the set already computes for `destination.namespace`; and D29/D33 say the reattach's namespace is passed rather than derived. Written as if it had always been true — no supersession notices in the register.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:321",
+        "/work/AnsibleSpecs/argo-cd/design.md:361-363",
+        "/work/AnsibleSpecs/argo-cd/design.md:372",
+        "/work/AnsibleSpecs/argo-cd/design.md:190-199",
+        "/work/AnsibleSpecs/argo-cd/design.md:200-202",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:218-222",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:258-269"
+      ]
+    },
+    {
+      "id": "V21",
+      "area": "The cross-slice export — the credential model in the documents",
+      "description": "The `argo-cd` set states the enumerated-leaves credential model wherever it named the dedicated AppRole: phases.md A.2's own credential line, D33's list of what ESO provisions, and D41's account of what bounds a hook run. D41's blast radius is stated as what it now is — exactly the enumerated provider credentials, not a KV prefix spanning every app — and says that it is tighter than what it replaced. The set also says that the same Secret carries the run's non-secret per-cluster configuration, so a planner authoring the ExternalSecret from it and from this slice's inventory produces the whole of what a run receives.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/phases.md:39-41",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:258-269",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:341-351",
+        "/work/AnsibleSpecs/argo-cd/design.md:329-330"
+      ]
+    },
+    {
+      "id": "V22",
+      "area": "The root cause — the doc plan names the set",
+      "description": "`slice-doc-plan.md` carries the `argo-cd` document set as a surface, distinguished from the homelab `decisions.md` it is easily confused with, so slices 008–012 inherit the fix instead of each rediscovering the ambiguity.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Ansible/docs/slice-doc-plan.md:9-44"
+      ]
     }
   ]
 }

@@ -243,10 +243,16 @@ is the estate-wide pattern every migrated app will render against.
   unverifiable. Same shape as slice 006's `IaC/Charts` constraint, and the run does not pause for
   it.
 - The entrypoint's argument contract and the library chart's fourth argument are one decision:
-  whichever lands first, they must agree. The Charts 0.2.0 bump must also update the two gate
-  scripts that assert the rendered strings
-  (`/work/Charts/tests/render-consumer.sh:62-68`, `:104-106`) and package a new tarball into the
-  committed `dist/`, per that repo's README — published tarballs are immutable.
+  whichever lands first, they must agree. The Charts 0.2.0 bump also has to carry
+  `/work/Charts/tests/render-consumer.sh` **and its fixture**: `:63-65` asserts the three rendered
+  argument lines and earns a fourth, while `:104-106` — which asserts only the image line, under
+  `--set hook.imageTag=42` — re-renders that same consumer chart, so a `required`-guarded fourth
+  argument breaks *it* too until `tests/consumer/values.yaml:37-40` carries `hook.namespace`. And a
+  new tarball is packaged into the committed `dist/`, per that repo's README — published tarballs
+  are immutable.
+- The `argo-cd` document set states the contract as it shipped, so its phase comes after the
+  entrypoint's arguments (P1) and the chart's (P5) are real. It is the slice's one cross-slice
+  export and slice 009 plans from it, not from this plan.md.
 - The git token is a GitHub PAT the operator mints in GitHub before it can be written to OpenBao.
   This slice specifies the required permissions (state repo read-write, deploy repos read-only,
   `admin:repo_hook` per D39/D41); it cannot create the token.
@@ -316,14 +322,17 @@ code that means what D30 says it means.
   follows `KUBE_CONFIG_PATH`). The ruling is explicit that the proof must not rest on this pod's
   ambient `~/.kube/config` — what gets asserted is the synthesis and its selection *over* any
   ambient kubeconfig.
-- **The rest of the environment is `attachments/credential-inventory.md`** — which keys are
-  Secret-borne, which are the prd cluster's non-secret provider configuration committed in this
-  repo, and why the split falls there. That non-secret half is the one input `design.md`'s two named
-  sources (the clone's tfvars, the ESO Secret) do not cover: today the deploy CLI injects it from
-  `/work/HelmCharts/_providers/clusters.yaml:12-42`, and in the hook path there is no CLI. Putting
-  it in this repo keeps it estate-wide with one bump point (D15); duplicating it into 45 deploy
-  repos' tfvars would make cluster facts drift, and routing it through OpenBao would mint leaves for
-  values that are not secrets.
+- **The rest of the environment arrives through `envFrom`, and this repo commits none of it** (the
+  configuration ruling). `attachments/credential-inventory.md` is the whole inventory: the values
+  ESO fetches from enumerated leaves, and the non-secret per-cluster facts the same ExternalSecret
+  carries as `template` literals — each with its source. That non-secret half is the one input
+  `design.md`'s two named sources (the clone's tfvars, the ESO Secret) do not cover today, because
+  the deploy CLI injects it from `/work/HelmCharts/_providers/clusters.yaml:12-42` and in the hook
+  path there is no CLI. **What must not happen is that file, or any part of it, being copied into
+  `ArgoCDTools`** — the image carries no estate facts, and the phase is reviewable on exactly that:
+  a search of the repo for a Ceph mon host, the S3 endpoint or a `zfs_pools` map turns up nothing.
+  A value the run needs and did not get fails the run by name rather than reaching Terraform as an
+  empty string.
 - **Exit-code discipline** (D30, `decisions.md:226-236`): non-zero fails the PreSync hook and
   nothing is applied. Both paths are exercised — a clean apply and a deliberate failure — because a
   hook that swallows a failure is indistinguishable from one that works until the day it matters.
@@ -403,16 +412,22 @@ The library chart's hook Job template hands the entrypoint four arguments instea
   the already-published `0.1.0` tarball both in the working tree and anywhere in history. The
   procedure is `README.md:50-67`.
 - **The render gate will not notice a fourth argument on its own.** `tests/render-consumer.sh:63-65`
-  expects the three rendered arg lines and `:68` the default pin, fed by the fixture at
-  `tests/consumer/values.yaml:35-40`. The new argument earns its own assertion and its own fixture
-  value, and — as P4 of slice 006 established for the others — the `required` guard has to be shown
-  to bite rather than assumed to.
+  expects the three rendered arg lines and `:68` the default pin, fed by the fixture's `hook:` block
+  at `tests/consumer/values.yaml:37-40`. The new argument earns its own assertion and its own
+  fixture value — and that same fixture feeds the pin-override re-render at `:104-106`, which fails
+  on a `required` guard the fixture does not satisfy. As P4 of slice 006 established for the other
+  three, the guard has to be shown to bite rather than assumed to.
 - **What the bump does not cost**: the fixture's dependency range is `>=0.1.0`
   (`tests/consumer/Chart.yaml:12`) so it resolves 0.2.0 untouched, and nothing outside `Charts`
   consumes `homelab-shared` yet, so no consumer re-pins. `README.md:36`'s consumer snippet does name
   `0.1.0` — a version in prose that the bump makes wrong.
-- **The pin number** stays the first `IaC/ArgoCDTools` build (the inherited ruling); if that build is
-  not `1`, the correction rides this same bump rather than earning a 0.3.0.
+- **The pin number is already right and this phase does not touch it.** `values.yaml:7` carries
+  `imageTag: "1"` from slice 006, and the ruling keeps it: a hand-created job's first build is `#1`.
+  **There is no ride-along correction** — once `dist/homelab-shared-0.2.0.tgz` is committed,
+  `tests/publish.sh:111-123` refuses any modification to it in the tree or anywhere in history, so
+  the pin cannot be edited on this bump after the fact. If the first build turns out not to be `1`,
+  the correction is a 0.3.0 publish. That is the ruling's named, accepted cost, not a hazard for
+  this phase to design around.
 
 ### P6 — The state encryption key becomes ESO-readable
 
@@ -442,11 +457,69 @@ changes about who reads what.
   `site-openbao.yml` run, the `bao kv put` of the git token, and the GitHub PAT mint are the
   operator's, with the exact commands in the attachment.
 
+### P7 — The `argo-cd` document set states the contract this slice shipped
+
+Target: `../AnsibleSpecs`
+
+The authoritative set describes the hook as it now is, so a planner reading only `argo-cd/` —
+with no access to this plan.md — builds slice 009's ApplicationSet with **four** parameters and
+provisions the hook's credentials as **enumerated ESO leaves**. Two rulings above are the content;
+this phase is where they land in the documents, as a diff someone can review.
+
+- **The fourth argument.** `design.md` says three arguments in four places — the flow's step 1
+  (`:321`), the Job skeleton's `args` block (`:361-363`), the sentence naming them (`:372`), and the
+  ApplicationSet's `parameters:` block (`:190-199`, whose last entry is `hook.stage`). The value the
+  new parameter carries is the `<app>-<stage>` expression the same ApplicationSet already computes
+  for `destination.namespace` (`design.md:200-202`) — one expression, written twice, not a second
+  derivation. `decisions.md` D29 (`:218-222`) and D33 (`:258-269`) describe the reattach's namespace
+  as something the hook finds; it is handed to it.
+- **The credential model.** `phases.md:39-41` is R3's own text, naming the **dedicated AppRole**;
+  D33's list of what ESO provisions names it too (`decisions.md:258-269`); D41 names it first among
+  what bounds a hook run (`:341-351`). All three become the enumerated-leaves model. D33's own
+  sentence — *"ESO provisions what a run needs"* — is what that model implements rather than
+  contradicts, and D41's blast-radius statement gets **tighter** and should say so: what a
+  compromised deploy repo branch reaches is exactly the enumerated provider credentials, not a KV
+  prefix spanning every app.
+- **What the Secret holds.** The same reasoning reaches one more sentence: design.md's flow step 4
+  (`:329-330`) has the run taking tfvars from the clone and *credentials* from the namespace's ESO
+  Secrets. Under the configuration ruling that Secret also carries the run's non-secret per-cluster
+  provider facts, and the container holds none of its own. Left unsaid, slice 009 authors an
+  ExternalSecret with the leaves and no literals, and the first migrated app applies against an
+  environment missing its Ceph, S3 and backup endpoints — the same class of failure landing in the
+  same wrong slice as the fourth argument.
+- **Written as if it had always been true.** No supersession notices and no stale-note-plus-pointer
+  — this repo's standing rule, and the reason the amendment is worth a phase at all. `history.md` is
+  the set's own record of how positions moved and takes whatever its conventions call for; the
+  register entries themselves carry no history.
+- **The boundary.** This phase changes documents only. It adds no ApplicationSet parameter to any
+  live manifest (slice 009's A.4), and the slice's own records under `slices/` are not its diff.
+
+### P8 — `slice-doc-plan.md` names the `argo-cd` document set as a surface
+
+Target: `root`
+
+The doc phase of every argo-cd slice — 008 through 012, all of which touch the set — knows the set
+is a surface it owns, so the ambiguity P7 exists to work around cannot recur slice by slice.
+
+- **The gap.** `/work/Ansible/docs/slice-doc-plan.md:9-44` enumerates five surfaces and the
+  `argo-cd/` set is not among them. Its surface 1 is `/work/AnsibleSpecs/decisions.md`, homelab
+  doctrine — a **different file** from `/work/AnsibleSpecs/argo-cd/decisions.md`, which holds the
+  D-register; a doc-writer reading surface 1 and finding a `decisions.md` has no reason to look
+  further.
+- **What the entry owes**: which documents the set is (`brief.md`, `decisions.md`, `design.md`,
+  `phases.md`, `history.md` under `/work/AnsibleSpecs/argo-cd/`), that it is authoritative for the
+  Argo CD migration until the migration completes, when a slice owes it an edit, and how it differs
+  from surface 1. In that doc's voice and at its altitude — it is a page of judgement calls, not a
+  checklist.
+- **Docs-only, in this repo**, gated by `root`.
+
 ## Not in scope
 
 - The `argocd-hooks` namespace, the `tf-presync` ServiceAccount and its RBAC, and the
   **ExternalSecret** that materialises `argocd-hook-credentials` in-cluster — slice 009
-  (phases.md A.4). This slice inventories the leaves and specifies the Secret's key names.
+  (phases.md A.4), including the non-secret `template` literals it carries alongside the leaves it
+  fetches. This slice inventories what the Secret must hold, secret and non-secret alike, and
+  specifies the key names.
 - Running the hook as a real Job under Argo, `$ARGOCD_APP_REVISION` reaching the args, and the
   exit code gating a real sync — slice 009's A.5 proof items.
 - The ApplicationSet that supplies `hook.namespace` — slice 009 (A.4). This slice lands only the
@@ -471,5 +544,5 @@ changes about who reads what.
   deliberate.
 - The **dev** cluster. The hook is prd-only — the ApplicationSet globs `configs/prd/` and
   `configs/dev/` is a different cluster (`design.md:220-221`) — so only `prd`'s half of
-  `_providers/clusters.yaml` has a carrier here. The dev-cluster PV used to prove the reattach (P3)
+  `_providers/clusters.yaml` is inventoried here. The dev-cluster PV used to prove the reattach (P3)
   is a test fixture, not a deployment target.
