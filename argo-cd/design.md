@@ -401,7 +401,7 @@ Terraform simply don't include the template — no hook, no cost.
 
 | Item | Scope |
 | --- | --- |
-| Secret `argocd-hook-credentials` | The whole of a run's environment: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
+| Secret `argocd-hook-credentials` | Everything a run's environment carries beyond its own Job arguments: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
 | Git token | State repo read-write; deploy repos read-only; `admin:repo_hook` (D39) |
 | State encryption key | terraform-backend-git's age keypair — `iac`'s own, read from the one leaf holding it, because both sides write the same state repo (D32) |
 | ServiceAccount `tf-presync` | PV get/list/patch, plus whatever the kubernetes provider manages — it is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
