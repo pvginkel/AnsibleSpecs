@@ -797,7 +797,7 @@ document set as **surface 2**, with the old surfaces 2–5 renumbered 3–6.
   reconciled it against everything 007 shipped, so what remains is checking the rest of the slice's
   diff against the set rather than a fresh pass.
 
-### P9 — The run hands Terraform the release identity it was handed
+### P9 — The run hands Terraform the release identity it was handed ✅ DONE 2026-08-14
 
 Target: `../ArgoCDTools`
 
