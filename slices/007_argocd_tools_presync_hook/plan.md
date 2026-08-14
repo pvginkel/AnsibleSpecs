@@ -335,7 +335,7 @@ state backend up and reports the `-backend-config` flags `terraform init` takes.
   6061 — clone at SHA plus the resolved state URL on the success path, exit 1 with a named cause on a
   missing credential and on an unknown revision.
 
-### P2 — The apply: the provider environment, `terraform init/apply`, and exit-code discipline
+### P2 — The apply: the provider environment, `terraform init/apply`, and exit-code discipline ✅ DONE 2026-08-14
 
 Target: `../ArgoCDTools`
 
@@ -467,6 +467,16 @@ first release.
 - **The image cannot be run in this pod** — there is no container runtime here, only a build
   service. What this phase's gate can prove is that the image builds and carries what D31 names; the
   entrypoint's live proof (the ruling's proof bar) runs the scripts directly in the `iac` sidecar.
+- **Review-settled fact (P2 r1) — `terraform init` cannot resolve `pvginkel/homelab` without a
+  provider-installation CLI config.** The provider is never served by the public registry: the
+  estate's `provider_installation` block routes `registry.terraform.io/pvginkel/*` to a mirror and
+  **excludes** it from `direct` (`support/iac-image/terraform.rc:1-9`;
+  `/work/HomelabTerraformProvider/README.md:15-32,50-60`), with
+  `TF_CLI_CONFIG_FILE=/etc/terraform.rc` (`support/iac-image/Dockerfile:29`) as how the `iac` image
+  points Terraform at it. Every deploy repo's Terraform declares that provider
+  (`/work/HelmCharts/_providers/providers.tf:20-22`). Nothing in the slice has exercised provider
+  resolution in the hook image: P2's live proof ran in the `iac` sidecar, where the variable is
+  already set, against a fixture declaring no providers.
 
 ### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin
 
