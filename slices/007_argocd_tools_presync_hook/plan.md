@@ -429,6 +429,30 @@ that was there before (`design.md:331-333`).
   slice 009's (phases.md A.4), so what runs here runs under an operator kubeconfig; that is the
   proof of the reattach logic, not of the in-cluster identity.
 
+**Landed (2026-08-14), and the dev-cluster proof is owed.** On `phase/007-P3`: `presync/kube.py`,
+`presync/reattach.py`, their tests, and `cli.py` calling the reattach after the apply. The gate is
+green. **V06's live half did not run: `srvk8sdev` (10.1.3.3) is off the wire** — its LAN neighbour
+10.1.3.5 answers `Destination Host Unreachable` for it (failed ARP) while 10.1.3.5 and 10.1.0.27
+both ping, so no route from this pod, no `kubectl`, no PV.
+
+- **The bound is `status.phase == Released` and `spec.claimRef.namespace` *equal to* the argument.**
+  A sibling namespace that merely shares a prefix (`<ns>-dev`) is not matched, and neither is a
+  `Bound` volume of the run's own namespace; both are asserted. `claimRef` itself is kept, so the
+  volume stays reserved for the same PVC in the same namespace while it is `Available`.
+- **The apiserver is reached over stdlib `urllib` + `ssl`, never kubectl** (D31). `Api` takes the
+  `Identity` P2 already mints, verifies TLS against the ServiceAccount's `ca.crt` and **re-reads the
+  token file per request** — kubelet rotates it in place. `merge_patch` sends
+  `{"spec":{"claimRef":{"uid":null,"resourceVersion":null}}}` as `application/merge-patch+json`.
+- **A refusal fails the run.** A 403 (which is what a run without slice 009's PV RBAC gets) and an
+  apiserver the run cannot verify against its own CA both raise, rather than reattaching nothing and
+  letting the sync proceed onto empty volumes.
+- **Order is apply → reattach**, so volumes the apply just declared are reattachable too; a failed
+  apply reattaches nothing, asserted by the apiserver receiving no request at all.
+- **The tests run against a real apiserver double**, `tests/support.py`'s `FakeApiserver`: TLS with
+  an openssl-generated cert that doubles as the fixture's `ca.crt`, so the CLI flow tests exercise
+  the reattach end to end instead of mocking it. openssl is a test-only dependency — **the image's
+  python still needs nothing installed** (P4 unchanged).
+
 ### P4 — The hook image and the `IaC/ArgoCDTools` pipeline
 
 Target: `../ArgoCDTools`
