@@ -680,7 +680,7 @@ component has no runnable suite).
   converges the policy, the `bao kv put` of the git token, and the PAT mint — attachment
   §"The operator's keystrokes".
 
-### P7 — The `argo-cd` document set states the contract this slice shipped
+### P7 — The `argo-cd` document set states the contract this slice shipped ✅ DONE 2026-08-14
 
 Target: `../AnsibleSpecs`
 
