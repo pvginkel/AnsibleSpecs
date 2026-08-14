@@ -770,6 +770,32 @@ is a surface it owns, so the ambiguity P7 exists to work around cannot recur sli
   checklist.
 - **Docs-only, in this repo**, gated by `root`.
 
+**Done (2026-08-14).** Landed on `phase/007-P8`: `docs/slice-doc-plan.md` carries the `argo-cd`
+document set as **surface 2**, with the old surfaces 2–5 renumbered 3–6.
+
+- **Placed directly after surface 1, not appended last.** The gap this phase closes is that a
+  doc-writer who reads surface 1, finds a `decisions.md` and stops never reaches the set; an entry
+  at the bottom of the list is reached by exactly the reader who did not need it. Adjacency is the
+  fix, so the distinction lands where the confusion happens — the entry says outright that its
+  `decisions.md` **is not surface 1**, and that a slice can owe an edit to either, both or neither.
+- **The trigger is a judgement, not a checklist** — the doc's own altitude. What a slice owes is
+  keyed on *what the next planner would build from the set as it stands*: if that is the wrong
+  thing, the set owes an edit. This is the same test P7 was created to satisfy, now standing.
+- **No slice numbers in the entry.** 008–012 all touch the set, but naming them dates the doc the
+  moment the migration cuts another slice; "authoritative until the migration completes" carries
+  the same instruction and expires on its own.
+- **Two conventions from the set itself are stated, because they are not derivable from the other
+  surfaces**: the register is written as if the new position had always been true (edit the entry,
+  no supersession notice) and `history.md` is the only file in the set that carries a narrative.
+  Both are what P7 executed; a future doc phase would otherwise re-derive or miss them.
+- **Gate**: `kc project test --project root` — "no test statements — skipped", this component's
+  deterministic result. Wrapping verified under 100 columns, this repo's docs convention; no
+  reference to a surface *number* exists outside historical slice records, so the renumber breaks
+  no live citation (`CLAUDE.md` cites the file, not a surface).
+- **For this slice's own doc phase**: it now reads surface 2 and owns the `argo-cd` set. P7 already
+  reconciled it against everything 007 shipped, so what remains is checking the rest of the slice's
+  diff against the set rather than a fresh pass.
+
 ## Not in scope
 
 - The `argocd-hooks` namespace, the `tf-presync` ServiceAccount and its RBAC, and the
