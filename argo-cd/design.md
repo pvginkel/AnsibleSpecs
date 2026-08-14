@@ -95,14 +95,19 @@ re-renders, which is the GitOps-consistent behaviour.
 ### Charts and charts.home
 
 A plain NGINX container serving `index.yaml` and chart tarballs over HTTP at
-`https://charts.home` (D17). The library chart's source lives in the `Charts` repo; migrated
-charts consume it through `Chart.yaml` `dependencies:` with a version pin, and Argo's
-repo-server runs `helm dependency build` at render time. Deployed from HelmCharts for the whole
-migration — deliberately, since charts.home is a render-time prerequisite for every migrated
-app and must not depend on anything that depends on it.
+`https://charts.home` (D17). The library chart is `homelab-shared`, source in the `Charts` repo;
+migrated charts consume it through `Chart.yaml` `dependencies:` — a version pin against
+`repository: https://charts.home` — and Argo's repo-server runs `helm dependency build` at
+render time. Deployed from HelmCharts for the whole migration — deliberately, since charts.home
+is a render-time prerequisite for every migrated app and must not depend on anything that
+depends on it.
 
-The library chart carries the shared `_helpers.tpl` content (D16) **and the hook Job template**
-(below), so a migrated chart gets both from a single dependency line.
+The library chart carries the shared `_helpers.tpl` content (D16), prefixed `homelab-shared.*`,
+**and the hook Job template** (below), so a migrated chart gets both from a single dependency
+line. What makes the version pin worth anything: the packaged versions are a committed store in
+the `Charts` repo, published bytes are immutable and re-indexing is additive, so a chart pinned
+to a version charts.home has served keeps rendering after a later version publishes. That repo's
+README carries the publish procedure.
 
 **Estate-wide dependency, stated plainly** (D17): charts.home down means no new syncs for any
 migrated app. Running workloads are untouched — the failure mode is frozen deploys, not an
@@ -328,10 +333,12 @@ The flow, per sync of an app that has Terraform:
    deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
 6. The exit code gates the sync (D30): non-zero fails the PreSync hook and nothing is applied.
 
-The Job template lives in the **library chart** as a named template — a migrated local chart
-includes it in one line. Its skeleton:
+The Job template lives in the **library chart** as `homelab-shared.tf-presync-hook` — a migrated
+local chart includes it in one line, with the root context. Its skeleton:
 
 ```yaml
+{{- $hook := .Values.hook | default dict -}}
+{{- $lib := (index .Values "homelab-shared" | default dict).hook | default dict -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -349,12 +356,21 @@ spec:
       restartPolicy: Never
       containers:
         - name: terraform
-          image: registry:5000/argocd-hook:{{ .Values.hook.imageTag | default $libraryPin }}
-          args: ["{{ .Values.hook.repo }}", "{{ .Values.hook.revision }}",
-                 "{{ .Values.hook.stage }}"]
+          image: registry:5000/argocd-hook:{{ $hook.imageTag | default $lib.imageTag }}
+          args:                            # each `required`-guarded in the template
+            - {{ $hook.repo | quote }}
+            - {{ $hook.revision | quote }}
+            - {{ $hook.stage | quote }}
           envFrom:
             - secretRef: { name: argocd-hook-credentials }
 ```
+
+The two bindings at the top are load-bearing. Helm coalesces a library dependency's own
+`values.yaml` under the dependency's name, so the estate-wide pin is `$lib` —
+`.Values["homelab-shared"].hook.imageTag` — while `.Values.hook.imageTag` is the app's override,
+which wins. Any later library default has to be read the same way; a plain `.Values.<key>` in a
+library template is always the app's value. The three arguments are `required`-guarded, so a
+chart that forgets one fails to render rather than passing an empty argument.
 
 **Upstream-chart apps with Terraform** have no local chart to include the template, so their
 deploy repo carries the rendered Job manifest in a `hook/` directory added as a third
