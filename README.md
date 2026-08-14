@@ -28,7 +28,7 @@ the detail.
 
 Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B):
 
-- **[007](slices/backlog/007_argocd_tools_presync_hook/slice.md)** — ArgoCDTools and the PreSync hook image: the Terraform hook entrypoint, `registry:5000/argocd-hook:<n>`, and its OpenBao credentials (phases.md A.2; #124).
+- **[007](slices/007_argocd_tools_presync_hook/plan.md)** — ArgoCDTools and the PreSync hook image: the Terraform hook entrypoint, `registry:5000/argocd-hook:<n>`, and its OpenBao credentials (phases.md A.2; #124). **Planned** — seven phases.
 - **[008](slices/backlog/008_helmcharts_argo_coexistence/slice.md)** — HelmCharts coexistence with the `argo-cd` reconciler: the deploy CLI honours the ownership key so Jenkins and Argo are never both live (phases.md A.3; gates 009; #124).
 - **[009](slices/backlog/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
 - **[010](slices/backlog/010_kubecoder_deploy_repo/slice.md)** — KubeCoderDeploy repo and image pinning: the pilot's chart, rebuilt Terraform and stage config, plus the seven `Build-Main` pins (phases.md B.1+B.2; #124).
