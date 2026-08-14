@@ -573,7 +573,7 @@ green from this pod — the kaniko build resolves terraform 1.15.8-1 from the no
   `terraform version` passes in an image no provider can start in — mutation-confirmed to fail the
   build when either package is dropped.
 
-### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin
+### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin ✅ DONE 2026-08-14
 
 Target: `../Charts`
 
