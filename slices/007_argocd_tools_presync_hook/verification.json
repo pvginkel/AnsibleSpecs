@@ -116,12 +116,12 @@
     {
       "id": "V12",
       "area": "R2 — the argument contract",
-      "description": "The entrypoint's argument contract and the library chart's Job template agree on four arguments — repo, revision, stage, namespace — each `required`-guarded in the template, so a chart that forgets one fails to render rather than passing an empty argument. The guard is shown to bite, not assumed to.",
+      "description": "The entrypoint's argument contract and the library chart's Job template agree on four arguments — repo, revision, stage, namespace — each `required`-guarded in the template, so a chart that forgets one fails to render rather than passing an empty argument, and in that order, since the entrypoint takes them positionally. The guard and the order assertion are shown to bite, not assumed to.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:41-44",
-        "/work/Charts/tests/render-consumer.sh:63-65"
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48",
+        "/work/Charts/tests/render-consumer.sh:67-89"
       ]
     },
     {

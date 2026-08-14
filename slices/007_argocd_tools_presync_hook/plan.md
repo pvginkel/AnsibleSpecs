@@ -901,6 +901,27 @@ correct-looking lines the entrypoint reads in the wrong order.
 
 Gate: `kc project lint` and `kc project test` in `/work/Charts`.
 
+**Done (2026-08-14).** Landed on `phase/007-P10`: `tests/render-consumer.sh` reads the rendered
+`args:` block whole and compares it against the four values in order. `kc project lint|test` green;
+no chart file touched, so `dist/homelab-shared-0.2.0.tgz` is byte-identical and `tests/publish.sh`
+stays green — no 0.3.0.
+
+- **The four per-line `expect`s are gone, not kept beside the new check.** The sequence assertion
+  strictly subsumes them — a changed value fails both, a swapped pair fails only the new one — and
+  their literal greps were unanchored: `- "prd"` matched that line anywhere in the render, while the
+  new check reads the block it is about. Keeping both would have left four assertions that cannot
+  fail independently.
+- **The block is located indentation-agnostically** (awk: any-whitespace `args:`, then its `- `
+  items until the first line that is not one), so a template re-indent does not false-fail a gate
+  about argument order. It asserts the block's **length** as well as its order: a dropped argument
+  is a mismatch, not a shorter pass.
+- **Both mutations bite, run rather than reasoned about**: swapping the template's `hook.stage` and
+  `hook.namespace` lines, and deleting the `hook.namespace` line. Each fails the gate with the
+  expected and rendered blocks printed side by side; neither would have failed the assertions this
+  phase removed.
+- **For the test phase**: V12's evidence pointer is corrected in place — the render gate's argument
+  check is `tests/render-consumer.sh:67-89`, and V12's description now carries the order half.
+
 ### P11 — The `argo-cd` set states what the image carries and what an apply is given
 
 Target: `../AnsibleSpecs`

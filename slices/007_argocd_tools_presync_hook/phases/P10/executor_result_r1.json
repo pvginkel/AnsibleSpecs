@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "tests/render-consumer.sh now asserts the hook Job's rendered args: block as an ordered sequence, replacing the four order-blind per-line expects it strictly subsumes; two mutations (swapping stage/namespace, dropping namespace) were run and both fail the gate. No chart file changed, so dist/homelab-shared-0.2.0.tgz is byte-identical and publish.sh stays green — no 0.3.0. kc project lint|test green in /work/Charts.",
+  "cards": []
+}
