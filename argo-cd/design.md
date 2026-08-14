@@ -345,7 +345,13 @@ The flow, per sync of an app that has Terraform:
    derives resource names from what Argo is syncing rather than from the empty-string defaults
    `_providers/providers.tf` declares. A `-var-file` outranks a `TF_VAR_*`, so a deploy repo
    carrying its own stage or namespace tfvars still wins. `var.cluster` is deliberately left
-   unset: nothing in the estate reads it, and the hook is prd-only.
+   unset: nothing in the estate reads it, and the hook is prd-only. The kubernetes provider
+   takes no configuration either: the entrypoint synthesises a kubeconfig from the pod's own
+   ServiceAccount — the projected token, the cluster CA, the in-cluster apiserver address — and
+   points both `KUBE_CONFIG_PATH` and `KUBECONFIG` at it before `init`, which is what lets a
+   deploy repo keep HelmCharts' bare `provider "kubernetes" {}` verbatim. It is minted rather
+   than defaulted to: a run with no ServiceAccount fails by name instead of falling through to
+   whatever kubeconfig its environment happens to carry.
 5. The PV reattach (D29): find `Released` PVs whose `claimRef` names the namespace the Job was
    handed, null out `claimRef.uid`/`resourceVersion` — under the Job's own ServiceAccount. With
    teardown deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
