@@ -922,7 +922,7 @@ stays green — no 0.3.0.
 - **For the test phase**: V12's evidence pointer is corrected in place — the render gate's argument
   check is `tests/render-consumer.sh:67-89`, and V12's description now carries the order half.
 
-### P11 — The `argo-cd` set states what the image carries and what an apply is given
+### P11 — The `argo-cd` set states what the image carries and what an apply is given ✅ DONE 2026-08-14
 
 Target: `../AnsibleSpecs`
 
