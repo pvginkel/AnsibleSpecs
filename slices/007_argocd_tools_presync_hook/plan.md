@@ -610,6 +610,27 @@ The library chart's hook Job template hands the entrypoint four arguments instea
   the correction is a 0.3.0 publish. That is the ruling's named, accepted cost, not a hazard for
   this phase to design around.
 
+**Done (2026-08-14).** Landed on `phase/007-P5`: the template's fourth argument, `Chart.yaml` at
+0.2.0, `dist/homelab-shared-0.2.0.tgz`, the fixture's value and the render gate's assertion. `kc
+project lint|test` green.
+
+- **The argument is appended last**, matching the entrypoint's positional contract — P1's
+  `python3 -m presync <repo> <revision> <stage> <namespace>`. Rendered order is therefore
+  repo, revision, stage, namespace, and **P7 documents the args block in that order**.
+- **The fixture's value is `consumer-prd`** — `<app>-<stage>`, the form slice 009's ApplicationSet
+  computes for `destination.namespace`. Nothing in `Charts` derives it; the template quotes what it
+  is handed.
+- **Three mutations confirm the phase's gates bite**: dropping the fixture's `hook.namespace` fails
+  the *first* render on the `required` guard (so the pin-override re-render at `:104-106` never even
+  runs — the fixture value is what keeps both renders alive); dropping the template's arg line fails
+  the new `expect`; moving the 0.2.0 tarball out of `dist/` fails `tests/publish.sh`.
+- **`README.md:36`'s consumer snippet now names 0.2.0** — the version the bump made wrong, per this
+  phase's own bullet. No other prose touched; the doc phase owns the rest.
+- **For slice 009 and anything downstream**: `homelab-shared` 0.2.0 is what a migrated chart pins,
+  and an Application that does not supply `hook.namespace` fails at render rather than at sync. The
+  0.2.0 tarball is published and immutable from this commit on, so the `imageTag: "1"` pin is fixed
+  until a 0.3.0 — the ruling's accepted cost, now real.
+
 ### P6 — The state encryption key becomes ESO-readable
 
 Target: `ansible`
