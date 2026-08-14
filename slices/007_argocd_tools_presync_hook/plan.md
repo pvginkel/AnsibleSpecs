@@ -879,7 +879,7 @@ Dockerfile copies, so the image's contract is untouched.
   and no `TF_VAR_cluster` — what the phase's design.md sentence and the attachment's release-identity
   bullet describe. Nothing else in the plan changes.
 
-### P10 — The render gate asserts the argument *sequence*, not the set
+### P10 — The render gate asserts the argument *sequence*, not the set ✅ DONE 2026-08-14
 
 Target: `../Charts`
 
