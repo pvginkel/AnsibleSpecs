@@ -371,6 +371,40 @@ code that means what D30 says it means.
 - **What must not appear:** no `bao` call, no hvac, no `!bao` resolver, no secrets manifest in the
   image (the credential-delivery ruling). The container reads plain environment variables.
 
+**Done (2026-08-14).** Landed on `phase/007-P2`: `presync/kubeconfig.py` and `presync/terraform.py`,
+their tests, and `cli.py`'s flow — run dir → kubeconfig → clone → backend → `init` → `apply`.
+
+- **The kubeconfig is minted, never defaulted to.** `kubeconfig.identity()` reads `token` and
+  `ca.crt` out of the projected SA directory plus `KUBERNETES_SERVICE_HOST`/`_PORT`; `provide()`
+  writes a one-cluster/one-user/one-context file and sets **both** `KUBE_CONFIG_PATH` and
+  `KUBECONFIG` in `os.environ`, which every child process inherits. No SA ⇒ the run fails by name,
+  with no fall-through to an ambient kubeconfig. The file carries `tokenFile` and
+  `certificate-authority` **paths**, so the run keeps no second copy of the rotating token.
+  `PRESYNC_SERVICE_ACCOUNT_DIR` overrides the directory — how a run outside Kubernetes is exercised
+  at all, never set in the Job, the shape P1 set with `PRESYNC_TF_BACKEND`.
+- **The apply** is `terraform -chdir=<clone>/terraform init -input=false <the three backend flags>`
+  then `apply -input=false -auto-approve` with a `-var-file` per `config/<stage>/*.tfvars`, sorted,
+  **absolute** because `-var-file` resolves against `-chdir`. No `-upgrade`/`-reconfigure`: the
+  clone is fresh every run, so a lock file a deploy repo commits is its own deliberate pin.
+- **A missing `terraform/` or `config/<stage>/` fails the run** — a wrong `hook.stage` must not
+  silently apply another stage's defaults.
+- **Provider credentials pass through untouched**, because the homelab provider's attributes are
+  required only by the resources that use them; requiring the whole `HOMELAB_*`/`TF_VAR_*` set
+  would fail runs whose Terraform legitimately needs none of it. What `backend.provide()` does now
+  require by name, on the path where it starts the daemon, is
+  `TF_BACKEND_HTTP_ENCRYPTION_PROVIDER`, `TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS` and `SOPS_AGE_KEY`:
+  absent, the daemon pushes plaintext tfstate to a shared repo and every later step still succeeds.
+- **Proven live from this pod** with real Terraform 1.15.8: clone-at-SHA → `init` against the pod's
+  own terraform-backend-git, which resolved and served the run's state URL; then apply → exit 0
+  with the tfvars value in the written state, a precondition-failure commit → exit 1 naming the
+  cause, and no SA directory → exit 1. `kubectl --kubeconfig <the minted file> get ns` reached
+  `https://172.17.0.1:443`, TLS-verified against the SA CA and was refused on the placeholder token
+  — where the ambient `~/.kube/config` would have listed namespaces.
+- **For P4 and the test phase:** this pod's backend sidecar answers `LOCK` with 500 (`user: unknown
+  userid 1000` — its image has no passwd entry for the uid it runs as), so no apply can complete
+  through it and P2's live apply ran against a throwaway in-memory HTTP backend instead. P4's
+  bullets now carry what that costs the image.
+
 ### P3 — The PV reattach
 
 Target: `../ArgoCDTools`
@@ -383,8 +417,9 @@ that was there before (`design.md:331-333`).
   never destroys, so every teardown leaves `Retain` PVs `Released`, and every re-deploy needs this.
 - **The namespace filter is the fourth argument, used as given** (the ruling) — the hook derives
   nothing from repo, stage or anything else.
-- **It runs under the pod's own identity** — the same synthesised kubeconfig P2 builds, so there is
-  one identity in the pod and not two.
+- **It runs under the pod's own identity** — the same one P2 synthesises the kubeconfig from, so
+  there is one identity in the pod and not two. The image carries no kubectl (D31), so the reattach
+  reaches the API itself: `kubeconfig.identity()` hands it the server, the token file and the CA.
 - **It is its own phase because of what it can reach.** A reattach that matched too widely would
   null the `claimRef` of a PV another namespace still owns; `Released` **and** a `claimRef`
   namespace equal to the argument is the whole of the bound, and the phase is reviewable precisely
@@ -407,6 +442,11 @@ first release.
   terraform-backend-git is pinned to **v0.1.11** (the ruling); the two precedents are
   `support/iac-image/Dockerfile:100-115` and `:122-130`, the latter showing the `COPY --from` of the
   pinned upstream image that is how the estate obtains that binary at all.
+- **The image's runtime user has to resolve in `/etc/passwd`.** terraform-backend-git's `LOCK`
+  handler calls `user.Current()`; run under a uid the image has no passwd entry for, it answers 500
+  and every apply dies at the state lock. This pod's own backend sidecar does exactly that (`user:
+  unknown userid 1000`, witnessed in P2), which is why P2's live apply ran against a double rather
+  than through it.
 - **The image's python is the distro's, and nothing is installed for it.** P1's entrypoint is
   standard-library Python 3 run as `python3 -m presync`, so `python3` from noble joins Terraform, the
   backend binary and git; `presync/` is what gets copied and `tests/`, `ruff.toml` and the manifest
