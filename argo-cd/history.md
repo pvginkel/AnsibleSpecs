@@ -81,8 +81,8 @@ ExternalSecret, rather than an `approle.yml` edit plus a live OpenBao run plus a
 The same argument then reached configuration. The per-cluster provider facts the deploy CLI
 injects from `clusters.yaml` have no CLI in the hook path, and a copy of that file inside
 ArgoCDTools would be production fact duplicated into a repo whose CI cannot bind the copies — so
-the ExternalSecret carries them as template literals beside the leaves it fetches, and the
-container carries no estate facts at all. Costs named rather than designed around: rotation
+the ExternalSecret carries them as template literals beside the leaves it fetches, and no
+cluster fact is committed in ArgoCDTools. Costs named rather than designed around: rotation
 propagates on ESO's refresh interval, and `envFrom` is all-or-nothing.
 
 The PV reattach's namespace moved the same way in the same session — from something the hook

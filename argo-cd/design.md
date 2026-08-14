@@ -87,13 +87,10 @@ flag the cutover flow needs anyway (D5) provides this for free.
 
 One repo carrying the presync entrypoint, its Python/Terraform support code, and the Dockerfile
 that bakes them into the dedicated hook image: Terraform, terraform-backend-git, git, the
-scripts — nothing else (D31). The image carries no credential material and no estate facts:
-everything a run needs beyond its own clone arrives as plain environment variables from the hook
-namespace's Secret (D33), so the container knows nothing of OpenBao, ESO or any cluster's
-endpoints. CI publishes `registry:5000/argocd-hook:<n>`. The **default tag pin lives in the
-library chart** — one bump point for the whole estate — with the option to override per app
-while debugging. A tools release therefore reaches each app as it next re-renders, which is the
-GitOps-consistent behaviour.
+scripts — nothing else (D31). CI publishes `registry:5000/argocd-hook:<n>`. The **default tag
+pin lives in the library chart** — one bump point for the whole estate — with the option to
+override per app while debugging. A tools release therefore reaches each app as it next
+re-renders, which is the GitOps-consistent behaviour.
 
 ### Charts and charts.home
 

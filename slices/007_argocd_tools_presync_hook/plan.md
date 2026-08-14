@@ -742,6 +742,11 @@ whole environment.
 - **history.md gained one arc**, "What a hook run is handed", covering the AppRole → leaves move,
   the configuration half and the namespace becoming an argument; the stale "with a dedicated
   AppRole" clause in the in-cluster arc is gone. The register reads as if it had always been true.
+- **r1 F1**: nothing in the set claims the image carries no estate facts — it bakes
+  `image/terraform.rc` and the step-ca root, without which `terraform init` cannot resolve
+  `pvginkel/homelab` (P4). The credential half is stated where it belongs — D33 and design.md's
+  identity table — and history.md's arc claims only that no cluster fact is committed in
+  `ArgoCDTools`, which is what the configuration ruling actually decided.
 - **Gate**: this repo has no tooling (plain Markdown, README's convention). Verified by reading
   the diff: no non-table line past 100 columns, links untouched, and the argument text checked
   against the shipped chart template and `presync/cli.py`, which agree on order.
