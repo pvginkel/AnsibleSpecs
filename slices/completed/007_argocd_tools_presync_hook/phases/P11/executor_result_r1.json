@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "The `argo-cd` set's two remaining descriptions of the shipped hook now match it: D31 and design.md's ArgoCDTools section enumerate the image's contents with each item's reason (distro python3, librados2/librbd1 for the cgo pvginkel/homelab binary, the Terraform CLI config routing that provider to the estate's mirror, the step-ca root its chain needs) with D31's claim unchanged; design.md's flow step 4 and the attachment's release-identity bullet state P9's TF_VAR_stage/TF_VAR_namespace export, the -var-file precedence and the deliberately absent TF_VAR_cluster. history.md's in-cluster arc dropped its stale image inventory for the claim it illustrates, and verification.json's V09 description plus the design.md/decisions.md line pointers this and P7's edits moved were corrected in place. Gate: this repo has no tooling — the diff was read, added lines are under 100 columns, verification.json parses, and every claim was checked against /work/ArgoCDTools/Dockerfile, presync/cli.py, terraform.release_identity() and /work/HelmCharts/_providers/providers.tf:76-92.",
+  "cards": []
+}

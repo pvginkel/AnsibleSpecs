@@ -1,0 +1,31 @@
+{
+  "outcome": "signoff",
+  "summary": "P3's reattach meets its outcome: the bound is Released AND claimRef.namespace equal to the argument, the namespace is used as given, the patch keeps the claim while clearing the binding, and a failed apply reattaches nothing — each asserted, not assumed. The VERIFY_X509_STRICT relaxation is load-bearing and mutation-confirmed (removing it fails 8 of 52 tests on the gate's Python 3.13), and the apply-then-reattach order is safe against what the estate's Terraform actually declares. Three advisory findings: one regression-coverage gap on multi-volume namespaces, and two places where the words are wrong.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "No fixture ever produces more than one matching volume, so an implementation patching only the first match passes the whole suite — while postgres-pas-prd's three PVs in one namespace are the estate's normal re-deploy case."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "cli.py:46-47 justifies reattaching after the apply by volumes Terraform just declared, which can never be Released and so can never match the reattach's own bound."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "A present-but-unparseable ServiceAccount ca.crt raises ssl.SSLError from Api's context construction, escaping __main__'s PresyncError handler — the run still exits non-zero but reports a traceback instead of a named cause."
+    }
+  ]
+}

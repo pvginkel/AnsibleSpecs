@@ -1,0 +1,4 @@
+{
+  "outcome": "blocked",
+  "summary": "The reattach is implemented, gated and committed on phase/007-P3 (presync/kube.py, presync/reattach.py, cli.py calling it after the apply; `kc project test` and lint green, 52 tests including a real-TLS apiserver double). But P3's named proof — a deliberately-Released PV on the dev cluster — cannot run: srvk8sdev (10.1.3.3) is off the wire, its LAN neighbour 10.1.3.5 answering Destination Host Unreachable (failed ARP) while 10.1.3.5 and 10.1.0.27 both ping, so there is no route from this pod, no kubectl and no PV to release. Operator's call: power srvk8sdev on and I re-run the proof in a fix round, or authorise the same throwaway fixture (two namespaces, two hostPath PVs, storageClassName presync-proof) on prd via ~/.kube/config-prd-write, which the plan deliberately did not scope."
+}

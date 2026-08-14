@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "The argo-cd document set now states the contract slice 007 shipped: four Job arguments wherever design.md said three (flow step, Job skeleton, required-guard sentence, ApplicationSet parameters, plus D29's reattach namespace), and the enumerated-ESO-leaves credential model in D33, D41, design.md's identity table and phases.md A.2/A.4 — including that the same Secret carries the run's non-secret per-cluster configuration. One settlement beyond the plan's bullets: D32 and phases.md B.4 now carry the entrypoint-derived state key `argocd/<repo>/<stage>/terraform.tfstate` instead of 'name the new key', so the state surgery cannot target a key nothing reads. history.md gained one arc for the moves; the register is written as if it had always been true.",
+  "cards": []
+}

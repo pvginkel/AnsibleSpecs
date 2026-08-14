@@ -1,0 +1,7 @@
+{"outcome": "signoff", "summary": "Round 1's blocking F1 is resolved by deleting the false sentence outright — nothing in argo-cd/ now claims the image is estate-fact-free, and the credential and Secret-composition halves the phase owed still land in D33, design.md's flow step 4 and its identity table. history.md's narrowed claim ('no cluster fact is committed in ArgoCDTools') verifies true against the repo. One advisory Minor filed so the pre-existing D31 image-contents staleness, which round 1 carried inside F1's body, survives F1's closure as a card.",
+ "details": "code_review_r2.md",
+ "findings": [{"id": "F3", "severity": "Minor",
+               "impact": "advisory",
+               "category": "comment-prose",
+               "anchor": "none",
+               "summary": "D31 and design.md:88-90 are now the set's only image-contents statement and both omit librados2/librbd1, terraform.rc and the step-ca root — pre-existing text, outside P7's mandate, filed once so it is not lost when F1 closes."}]}

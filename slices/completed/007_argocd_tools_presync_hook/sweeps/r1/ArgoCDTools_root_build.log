@@ -1,0 +1,1 @@
+root: kaniko --context . --destination registry:5000/argocd-hook:local --no-push    [  OK  ]

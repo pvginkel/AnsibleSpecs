@@ -1,0 +1,15 @@
+{
+  "outcome": "issues",
+  "summary": "The image, pipeline, .dockerignore and build verb land what P4's bullets name, and I re-ran `kc project build` green. One blocker: the image installs no librados2/librbd1, and the `pvginkel/homelab` provider every deploy repo declares is a cgo binary with DT_NEEDED librados.so.2/librbd.so.1, so Terraform cannot execute it — the phase's proof stopped at `terraform init`, which never launches a plugin.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Blocker",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "Dockerfile:23-28 omits librados2/librbd1, so the cgo-linked pvginkel/homelab provider (DT_NEEDED librados.so.2, librbd.so.1) fails to exec at terraform apply in the hook image."
+    }
+  ]
+}

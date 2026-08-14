@@ -1,0 +1,7 @@
+{"outcome": "signoff", "summary": "The phase lands exactly its outcome: one mount-relative `iac/tf-backend` entry in `openbao_eso_kv_paths` plus the least-privilege paragraph the plan required, rendering read on kv/data|metadata/iac/tf-backend through the unchanged policy template. Leaf spelling is grounded twice outside the plan, no other inventory or doc surface drifts, and the widened ESO reach is the plan's deliberated trade-off. One advisory comment-precision finding.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor",
+               "impact": "advisory",
+               "category": "comment-prose",
+               "anchor": "none",
+               "summary": "Comment calls kv/iac/tf-backend \"the one grant outside ESO's own subtrees\", but four shared/* entries in the same list are outside kv/eso too."}]}

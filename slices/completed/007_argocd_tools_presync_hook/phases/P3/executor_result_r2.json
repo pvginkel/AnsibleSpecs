@@ -1,0 +1,12 @@
+{
+  "outcome": "done",
+  "summary": "V06's live half now ran: against a throwaway three-PV `presync-proof` fixture on prd, the reattach matched exactly the Released volume claimed by the argument namespace — leaving the prefix-sibling's Released volume and the target namespace's Bound volume alone — and a fresh PVC then rebound to it, with all 47 pre-existing PVs unchanged by resourceVersion and the fixture deleted. The run found a fatal defect the test double was hiding: the estate's cluster CA carries no keyUsage extension and Python 3.13 enables VERIFY_X509_STRICT by default, so the reattach could not open a connection to prd at all; `Api` now clears that one flag (chain, expiry and hostname verification stay on, unknown CAs still refused) and the double was reshaped into a keyUsage-less CA signing a separate leaf, mutation-confirmed to fail without the fix. Gate green (52 tests, ruff), committed on phase/007-P3.",
+  "cards": [
+    {
+      "text": "The mounted ~/.kube/config-prd-write is `kubecoder-rw`, a namespaced-edit identity with no cluster-scoped verb at all — it cannot get/list/patch PVs or create namespaces on prd. docs/live-infra-access.md documents this only for the `nodes` resource ('the mounted kubeconfigs have no rights on the cluster-scoped nodes resource'); the limit is in fact every cluster-scoped resource. Worth generalising that sentence so the next slice does not plan a proof around a write path that cannot do the job."
+    },
+    {
+      "text": "Slice 009's `tf-presync` ServiceAccount needs PV get/list/patch cluster-wide for the reattach to work; a run without it gets a 403 that fails the hook (verified behaviour, not speculation). Considered narrowing it with resourceNames, as this proof's throwaway SA did, but the real hook cannot enumerate volume names in advance."
+    }
+  ]
+}

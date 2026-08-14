@@ -1,0 +1,31 @@
+{
+  "outcome": "signoff",
+  "summary": "P2's outcome holds: the kubeconfig is minted from the pod's ServiceAccount and selected over any ambient one, the clone's terraform/ is applied with every stage tfvars named absolutely, and the process exit code is the apply's, proven on both paths by a real subprocess run. Nothing is blocking. Three advisory findings ride along: two cross-phase hazards this diff makes visible but does not own (release identity never reaching Terraform as TF_VAR_*; no provider-installation config for the mirror-only pvginkel/homelab provider) and one vacuous half of a failure-path assertion.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The run exports no TF_VAR_cluster/stage/namespace, so a deploy repo keeping the pilot's var.stage/var.namespace expressions applies with empty strings and silently wrong resource names."
+    },
+    {
+      "id": "F2",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "terraform init runs with no provider-installation CLI config, and pvginkel/homelab is served only from the estate's mirror — the hook image as P4 describes it cannot resolve it; recorded as a fact under P4 in plan.md."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "test_a_run_whose_apply_failed_exits_non_zero_and_says_why's assertIn(\"apply\", stderr) is satisfied by the two progress lines printed before the command runs, so the 'says why' half cannot fail."
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "outcome": "issues",
+  "summary": "The fourth argument and the enumerated-leaves credential model land correctly and completely across design.md, decisions.md, phases.md and history.md, matching the shipped chart template and entrypoint, with no supersession notices in the register. One blocking finding: a sentence this diff added to design.md declares the hook image free of estate facts and fully environment-driven, which the image P4 shipped contradicts — it bakes the tfmirror.home CLI config and the homelab root CA.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "contradiction",
+      "summary": "design.md:90-93 claims the image carries no estate facts and that everything a run needs arrives as env vars; the shipped image bakes image/terraform.rc (tfmirror.home) and homelab-root.crt."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "phases.md A.2/A.4 owe and consume 'the inventory' but the argo-cd set cites no path to the credential-inventory attachment slice 009 must author the ExternalSecret from."
+    }
+  ]
+}

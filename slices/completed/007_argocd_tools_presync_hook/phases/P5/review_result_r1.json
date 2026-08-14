@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "P5 lands exactly its section: the fourth required-guarded positional argument, Chart.yaml at 0.2.0, the committed 0.2.0 tarball matching source, the fixture value and the render assertion, plus the README version prose the bump made wrong. Verified independently that the guard bites by mutation, that the rendered arg order matches presync/cli.py's positional contract, and that the published 0.1.0 tarball is unmodified in tree and history. One advisory finding: the render gate checks the four arguments as a set, not as a sequence.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "tests/render-consumer.sh:63-66 asserts each hook argument's rendered line independently, so a reordering of the positional args block passes the gate while the entrypoint receives them mismatched."
+    }
+  ]
+}

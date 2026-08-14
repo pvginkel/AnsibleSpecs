@@ -1,0 +1,7 @@
+{
+  "outcome": "done",
+  "summary": "A run now mints a kubeconfig from the pod's ServiceAccount (both KUBE_CONFIG_PATH and KUBECONFIG, no fall-through to an ambient one), runs terraform init in the clone's terraform/ against the run's state backend and applies with every config/<stage>/*.tfvars by absolute path, with terraform's exit code as the run's. Gate green (44 tests, ruff); proven live from this pod with real Terraform on all three paths — apply exit 0 with the tfvars value in the written state, a precondition failure exit 1, no ServiceAccount exit 1 — and the minted kubeconfig verified against the in-cluster apiserver with kubectl.",
+  "cards": [
+    "This environment's terraform-backend-git sidecar cannot serve LOCK: it answers 500 with `user: unknown userid 1000`, because its image has no /etc/passwd entry for the uid it runs as. No terraform apply can complete against it from this pod (the deploy CLI included). Fix belongs in the KubeCoder sidecar image."
+  ]
+}

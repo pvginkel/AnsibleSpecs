@@ -1,0 +1,31 @@
+{
+  "outcome": "signoff",
+  "summary": "P1's outcome is met: the four-argument contract matches design.md's Job skeleton and the ApplicationSet's clone-URL `hook.repo`, the clone is at exactly the SHA it was handed with `rev-parse` re-asserting it, and the backend URL and its three `-backend-config` flags are `deploy_cli/tf.py`'s shape under the ruled `argocd/<repo>/<stage>/terraform.tfstate` key. No gate was recorded, so I ran it: `kc project lint` and `kc project test` are green (22 cases), and `python3 -m presync` exits 1 with a named cause. Three advisory findings, none blocking merge; F1 matters before the test phase runs the live proof, because this pod's ambient git credential helper shadows presync's and can make V02 check off falsely.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "`git -c credential.helper=` appends to the chain, so this pod's ambient `store` helper answers the clone instead of GITHUB_TOKEN — harmless in the image, but it makes any from-this-pod proof of V02's inline-helper authentication false-green."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "`provide()` starts terraform-backend-git and probes the port without requiring the daemon's own environment (SOPS_AGE_KEY, TF_BACKEND_HTTP_ENCRYPTION_PROVIDER, TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS), so a Secret missing them fails inside a state request rather than by name; these three sit on the P1/P2 seam."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "tests/test_cli.py:74's `run_dir` emptiness assertion is true by construction because `tempfile.mkdtemp` is unpatched in that test; mutation-confirmed — moving the clone ahead of the credential checks leaves all 22 tests green."
+    }
+  ]
+}

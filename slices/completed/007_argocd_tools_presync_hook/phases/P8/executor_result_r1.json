@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "`docs/slice-doc-plan.md` now carries the `/work/AnsibleSpecs/argo-cd/` document set as surface 2 — placed directly after the homelab `decisions.md` it is confused with, stating outright that its `decisions.md` is not surface 1, when a slice owes it an edit (keyed on what the next planner would build from the set as it stands), and the set's own register/history conventions; old surfaces 2–5 renumbered 3–6. Gate `kc project test --project root` is green (\"no test statements — skipped\", this component's deterministic result); no live citation of a surface number exists outside historical slice records, so the renumber breaks nothing.",
+  "cards": []
+}

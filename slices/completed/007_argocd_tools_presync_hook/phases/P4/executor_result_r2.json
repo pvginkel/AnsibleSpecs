@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "F1 confirmed and fixed: the published pvginkel/homelab provider names librados.so.2 and librbd.so.1 in DT_NEEDED, and on bare ubuntu:noble it exits 127 — witnessed by executing the mirror's 0.1.28 artefact in a throwaway kaniko build, where the same image with librados2/librbd1 installed instead reaches the plugin's own guard (so noble's Ceph 19.2 satisfies its LIBRADOS_14.2.0 requirement). The Dockerfile's apt set now carries both packages and the build assertion CDLLs both sonames, closing the blind spot the hand-written binary checks had; mutation-confirmed to fail the build when either package is dropped, with terraform version and git --version still passing right before it. kc project lint|test|build all green.",
+  "cards": []
+}

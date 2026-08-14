@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "homelab-shared's PreSync hook Job template now hands the entrypoint a fourth `required`-guarded argument, `hook.namespace`, appended last to match P1's positional contract; the chart is at 0.2.0 with dist/homelab-shared-0.2.0.tgz committed, the consumer fixture supplies `consumer-prd` and the render gate asserts the new arg line. `kc project lint|test` green, and three mutations confirm the guard, the new assertion and the publish gate each bite. The estate-wide `imageTag: \"1\"` pin is untouched and now immutable.",
+  "cards": []
+}

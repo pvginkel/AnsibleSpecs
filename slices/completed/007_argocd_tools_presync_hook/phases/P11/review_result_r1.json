@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "The phase's outcome holds: D31 and design.md now name exactly what /work/ArgoCDTools/Dockerfile bakes, with each reason matching the Dockerfile's own, and the release-identity sentence matches presync/cli.py:36 and terraform.py:56-57 — TF_VAR_stage/TF_VAR_namespace before init, no TF_VAR_cluster, var.cluster read by nothing under configs/. The renumbered verification.json pointers land on the right passages and V09's in-place correction keeps the criterion's bar. Two Minor advisory items: the set still says in two places that the Secret is the whole of a run's environment, and V20's renumbered pointer stops one line short of the expression it cites.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "design.md:340 (\"the whole of the rest of its environment\" from the Secret) and the table row at :404 (\"The whole of a run's environment\") are contradicted by presync/terraform.py:56-57, which injects TF_VAR_stage/TF_VAR_namespace from argv — the first is corrected by the sentence this phase added right after it, the second is not."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "V20's renumbered evidence pointer design.md:196-203 (verification.json:211) excludes line 204, the '{{ .path.segments 2 }}-{{ .path.segments 3 }}' value the criterion is about; the parameters block runs 196-204."
+    }
+  ]
+}
