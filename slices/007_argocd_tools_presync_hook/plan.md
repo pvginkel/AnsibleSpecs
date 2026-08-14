@@ -452,31 +452,39 @@ that was there before (`design.md:331-333`).
   slice 009's (phases.md A.4), so what runs here runs under an operator kubeconfig; that is the
   proof of the reattach logic, not of the in-cluster identity.
 
-**Landed (2026-08-14), and the live proof is owed against the prd fixture.** On `phase/007-P3`:
-`presync/kube.py`, `presync/reattach.py`, their tests, and `cli.py` calling the reattach after the
-apply. The gate is green. **V06's live half did not run** on the round that landed the code:
-`srvk8sdev` (10.1.3.3) was off the wire — its LAN neighbour 10.1.3.5 answered `Destination Host
-Unreachable` for it (failed ARP) while 10.1.3.5 and 10.1.0.27 both pinged, so no route from this
-pod, no `kubectl`, no PV. The operator's amendment moves the venue to prd rather than waiting on
-that host; the proof runs there.
+**Done (2026-08-14).** Landed on `phase/007-P3`: `presync/kube.py`, `presync/reattach.py`, their
+tests, and `cli.py` calling the reattach after the apply. Gate green (52 tests); V06's live half ran
+on prd against the fixture the operator's amendment scopes.
 
 - **The bound is `status.phase == Released` and `spec.claimRef.namespace` *equal to* the argument.**
-  A sibling namespace that merely shares a prefix (`<ns>-dev`) is not matched, and neither is a
-  `Bound` volume of the run's own namespace; both are asserted. `claimRef` itself is kept, so the
-  volume stays reserved for the same PVC in the same namespace while it is `Available`.
+  A prefix-sharing sibling (`<ns>-dev`) is not matched, nor is a `Bound` volume of the run's own
+  namespace — asserted in tests and exercised live. `claimRef` itself is kept, so the volume stays
+  reserved for the same PVC while it is `Available`. **Order is apply → reattach**; a failed apply
+  reattaches nothing.
 - **The apiserver is reached over stdlib `urllib` + `ssl`, never kubectl** (D31). `Api` takes the
-  `Identity` P2 already mints, verifies TLS against the ServiceAccount's `ca.crt` and **re-reads the
-  token file per request** — kubelet rotates it in place. `merge_patch` sends
-  `{"spec":{"claimRef":{"uid":null,"resourceVersion":null}}}` as `application/merge-patch+json`.
-- **A refusal fails the run.** A 403 (which is what a run without slice 009's PV RBAC gets) and an
-  apiserver the run cannot verify against its own CA both raise, rather than reattaching nothing and
-  letting the sync proceed onto empty volumes.
-- **Order is apply → reattach**, so volumes the apply just declared are reattachable too; a failed
-  apply reattaches nothing, asserted by the apiserver receiving no request at all.
-- **The tests run against a real apiserver double**, `tests/support.py`'s `FakeApiserver`: TLS with
-  an openssl-generated cert that doubles as the fixture's `ca.crt`, so the CLI flow tests exercise
-  the reattach end to end instead of mocking it. openssl is a test-only dependency — **the image's
-  python still needs nothing installed** (P4 unchanged).
+  `Identity` P2 mints, verifies TLS against the ServiceAccount's `ca.crt`, **re-reads the token file
+  per request** (kubelet rotates it in place) and sends
+  `{"spec":{"claimRef":{"uid":null,"resourceVersion":null}}}` as `application/merge-patch+json`. A
+  403 — what a run without slice 009's PV RBAC gets — and an unverifiable apiserver both fail the
+  run rather than letting the sync proceed onto empty volumes.
+- **The live run found a fatal defect the test double was hiding.** The estate's cluster CA — what a
+  pod's projected `ca.crt` holds — carries no `keyUsage` extension, and `VERIFY_X509_STRICT`
+  (default since Python 3.13) rejects a CA without one, so the reattach could not open a connection
+  to prd at all. `Api` clears that one flag; chain, expiry and hostname verification stay on and an
+  unknown CA is still refused. The double hid it by being one self-signed certificate trusted
+  directly, so nothing ever acted as a CA; it is now a keyUsage-less CA signing a separate leaf,
+  mutation-confirmed to fail without the fix. openssl stays test-only — **P4 unchanged**.
+- **`~/.kube/config-prd-write` cannot create the fixture** — `kubecoder-rw` is namespaced-edit only,
+  with no cluster-scoped verb at all. Cluster-scoped work on prd goes over SSH as
+  `docs/live-infra-access.md` documents (`sudo microk8s kubectl` on `srvk8s1`). V06's mechanism
+  clause is corrected to match, substance unchanged — **this reaches the test phase**, which
+  re-checks V06.
+- **The proof and its cleanup.** Three throwaway `presync-proof` hostPath PVs, no pods: `Released`
+  in the target namespace, `Released` in sibling `presync-proof-dev`, `Bound` in the target — plus a
+  ServiceAccount whose patch rights were pinned by `resourceNames` to those three, so a matcher bug
+  could not have reached a real volume. Exactly the first was reattached and a fresh PVC then
+  rebound to it (D29's point); all 47 pre-existing PVs unchanged by `resourceVersion`, the 8 real
+  `Released` ones included; fixture deleted.
 
 ### P4 — The hook image and the `IaC/ArgoCDTools` pipeline
 

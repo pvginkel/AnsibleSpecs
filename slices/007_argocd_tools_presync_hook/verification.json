@@ -56,7 +56,7 @@
     {
       "id": "V06",
       "area": "R1 — the flow: PV reattach",
-      "description": "The reattach finds `Released` PVs whose `claimRef` names the run's target namespace and nulls `claimRef.uid`/`resourceVersion`, leaving PVs outside that namespace untouched. The namespace is the fourth Job argument, used as given — the hook derives it from nothing. Exercised against a deliberately-`Released` PV on the prd cluster (the operator's 2026-08-14 amendment), inside the throwaway `presync-proof` fixture the ruling scopes — two namespaces and two hostPath PVs the proof creates and deletes, reached via `~/.kube/config-prd-write`, with no PV outside the fixture touched.",
+      "description": "The reattach finds `Released` PVs whose `claimRef` names the run's target namespace and nulls `claimRef.uid`/`resourceVersion`, leaving PVs outside that namespace untouched. The namespace is the fourth Job argument, used as given — the hook derives it from nothing. Exercised against a deliberately-`Released` PV on the prd cluster (the operator's 2026-08-14 amendment), inside the throwaway `presync-proof` fixture the ruling scopes — two namespaces and hostPath PVs the proof creates and deletes, with no PV outside the fixture touched. The fixture's cluster-scoped objects are created over SSH (`sudo microk8s kubectl` on `srvk8s1`, per `docs/live-infra-access.md`), because the mounted `~/.kube/config-prd-write` is namespaced-edit only and can create neither a PV nor a namespace.",
       "verdict": null,
       "rationale": "",
       "evidence": [
