@@ -487,9 +487,12 @@ repo root; every new assertion confirmed to bite by mutation, bar the one except
   tarball remedy is `git checkout HEAD -- dist/`: the bare `git checkout -- dist/` restores the
   worktree from the index, which is where a staged rewrite (`M `) lives, so the check stayed red.
 - **The destination store is an optional argument**, `mkdir -p` included, and check 1 calls the
-  script **once for all charts** into an empty scratch store — which is what still makes it pack
-  everything. Confirmed the gate flows through it by mutating the script and watching check 1 go
-  red. The additivity block's `--version 9.9.9` call stays on direct `helm package`, per the plan.
+  script **once for all charts** into a scratch store — which packs everything because git carries
+  nothing at that path, not because the store is empty (`tests/publish.sh:92-93` deliberately runs
+  the script against a scratch store whose tarballs are truncated rather than absent, and requires
+  it to refill them). Confirmed the gate flows through it by mutating the script and watching check
+  1 go red. The additivity block's `--version 9.9.9` call stays on direct `helm package`, per the
+  plan.
 - **The TF-owned-PV fixture is two claims that differ deliberately.**
   `tests/consumer/templates/tf-owned-pvc.yaml` renders both ceph helpers on that branch;
   `consumer-shared` takes the derived name and the defaulted `1Mi`, `consumer-state` overrides

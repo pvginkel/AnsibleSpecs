@@ -130,8 +130,8 @@
       "id": "V12",
       "area": "DNS and TLS (R3)",
       "description": "`https://charts.home` resolves and serves over TLS from the homelab CA, same pattern as the estate's other internal endpoints — Service annotations only, no DNS file edit and no Ansible change.",
-      "verdict": "owed",
-      "rationale": "The \"no DNS file edit, no Ansible change\" half is verified now: the slice's only Ansible commit (7db7610) touches `.kubecoder/config.yaml` and `Ansible.code-workspace` only. The Service-annotation mechanism matches the tfmirror pattern exactly (see V13's citation). But `https://charts.home` cannot resolve or serve TLS until the release actually deploys, which needs both operator keystrokes (Jenkins job + HelmCharts push) — neither has happened. Confirmed unresolved right now: `host charts.home` -> NXDOMAIN. Owed to the operator; command below.",
+      "verdict": "verified",
+      "rationale": "Settled live at consult round 4, after both operator keystrokes landed (IaC/Charts #1 SUCCESS, image pushed; HelmCharts pushed as 3770fdf and deployed by IaC/HelmCharts #5773 SUCCESS). `host charts.home` -> 10.2.1.7, and `curl https://charts.home/index.yaml` **without** `-k` returns 200, so the chain validates against this pod's trust store; the leaf's issuer is `O=homelab-ca, CN=homelab-ca Intermediate CA`, valid Aug 14 06:41:02 - Sep 30 2026. The release runs in `charts-prd` (`deployment.apps/charts` 1/1). The \"no DNS file edit, no Ansible change\" half was already verified: the slice's only Ansible commit touches `.kubecoder/config.yaml` and `Ansible.code-workspace` only.",
       "evidence": [
         "/work/HelmCharts/charts/charts/templates/charts-service.yaml:5-13",
         "/work/HelmCharts/charts/nginx/values.yaml:10"
@@ -141,8 +141,8 @@
       "id": "V13",
       "area": "DNS and TLS (R3)",
       "description": "Both the fully-qualified and short names answer, and the certificate is issued for the longest server name with the others as SANs — the estate's `<name>.home, <name>` convention.",
-      "verdict": "owed",
-      "rationale": "Static shape is correct: `configs/prd/charts/prd/values.yaml` sets `service.serverName: charts.home, charts` (comma list), and `nginx-configurator`'s `parse_server_names` sorts by `-len(v)` — longest first becomes the cert directory / primary name, matching the convention. Actual issuance needs the live release. Owed.",
+      "verdict": "verified",
+      "rationale": "Static shape was already correct: `configs/prd/charts/prd/values.yaml` sets `service.serverName: charts.home, charts` (comma list), and `nginx-configurator`'s `parse_server_names` sorts by `-len(v)` — longest first becomes the cert directory / primary name. Issuance settled live at consult round 4: the served leaf carries `X509v3 Subject Alternative Name: critical DNS:charts, DNS:charts.home` (read with `openssl s_client -connect charts.home:443`), and both names answer — `host charts.home` and `host charts` each resolve to 10.2.1.7.",
       "evidence": [
         "/work/DockerImages/nginx-configurator/app/annotations.py:169-174",
         "/work/HelmCharts/configs/prd/charts/prd/values.yaml:1-2"
@@ -152,9 +152,12 @@
       "id": "V14",
       "area": "End-to-end (R1 + R2 + R3)",
       "description": "A Helm client can add `https://charts.home` as a chart repository and resolve the published library chart version from it. (Proving Argo's repo-server does the same with homelab-CA trust is slice 009's A.5 item, not this one.)",
-      "verdict": "owed",
-      "rationale": "Blocked on both operator keystrokes: the `IaC/Charts` Jenkins job does not exist yet (confirmed via the Jenkins API — no job at that path), so pushing `Charts` (done this pass) triggers no build and no image; and HelmCharts is deliberately left unpushed per the ruling. Cannot be verified from this pod until both land. Owed.",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Settled live at consult round 4, both keystrokes having landed. Ran the real client sequence from the `iac` sidecar: `helm repo add homelab-test https://charts.home` -> `helm repo update` -> `helm search repo homelab-test -l` lists `homelab-test/homelab-shared 0.1.0`, exit 0 (repo removed again afterwards). The bytes are the published ones, not merely something served: `https://charts.home/homelab-shared-0.1.0.tgz` returns 200 and its sha256 is `5405a96d4495721b1e9d487253922bc8bf8008aeb9128ae0eb395071a354f50d` — identical to the committed `dist/homelab-shared-0.1.0.tgz` and to the `digest:` the served `index.yaml` names. Argo's repo-server doing the same under homelab-CA trust remains slice 009's A.5 item.",
+      "evidence": [
+        "/work/Charts/dist/homelab-shared-0.1.0.tgz",
+        "/work/Charts/nginx/default.conf:24-28"
+      ]
     },
     {
       "id": "V15",
