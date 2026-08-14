@@ -195,10 +195,31 @@ quoted, except where a ruling below amends them.
   entrypoint run from this pod: clone-at-SHA → backend → `init`/`apply` → exit code, against a
   throwaway deploy repo and a scratch state key, exercising both the success and the
   deliberate-failure path; and the PV reattach exercised against a deliberately-`Released` PV on
-  the **dev** cluster. No Argo CD and no `argocd-hooks` namespace are needed for any of it. Under
-  the ESO model the run needs no OpenBao credentials either — the container takes environment
-  variables, so the proof sets them directly. Running the image as a Job under Argo stays slice
-  009's A.5 work.
+  the **prd** cluster, inside a throwaway fixture that exists only for the proof. No Argo CD and no
+  `argocd-hooks` namespace are needed for any of it. Under the ESO model the run needs no OpenBao
+  credentials either — the container takes environment variables, so the proof sets them directly.
+  Running the image as a Job under Argo stays slice 009's A.5 work.
+
+  **The reattach's venue is prd, not dev (operator, 2026-08-14).** *"Please don't depend on the dev
+  cluster. I'm ok with you using the prd cluster for a limited scoped test."* `srvk8sdev` (10.1.3.3)
+  was off the wire when P3 came to run its proof — no ping, failed ARP from its LAN neighbour,
+  `kubectl --context dev` refused with `no route to host` — and the slice does not wait on it. This
+  replaces the dev venue outright: **no phase of this slice depends on the dev cluster.** What
+  "limited scoped" means here, and what makes it safe on a production cluster:
+
+  - The write path is `cexec iac kubectl --kubeconfig ~/.kube/config-prd-write --context prd`.
+  - The fixture is created by the proof and deleted by it: two throwaway namespaces — the run's
+    target namespace and a prefix-sibling for the negative case — and two hostPath PVs carrying
+    `storageClassName: presync-proof` and `persistentVolumeReclaimPolicy: Retain`, driven to
+    `Released` by binding a PVC and deleting it. **No pods**, so nothing is ever mounted on a prd
+    node and the hostPath is never written to.
+  - **The blast radius is bounded by the reattach's own contract, not by care.** It patches only PVs
+    that are `Released` *and* whose `claimRef.namespace` equals the namespace argument, and the
+    argument the proof passes is the fixture namespace — so no real prd volume is in scope by
+    construction. The proof creates, patches and deletes nothing that pre-existed it, and asserts
+    that no PV outside the fixture changed.
+  - This is a test fixture, not a deploy. Nothing is promoted, no chart is synced, and the
+    production-gated paths this repo reserves to the operator are untouched.
 
 - Ruling (2026-08-14) — **the Jenkins job path.** `IaC/ArgoCDTools`, matching the `IaC/Charts`
   precedent. That is the value for `project.yaml`'s `jenkins:` key and what `track_build.py` keys
@@ -424,16 +445,20 @@ that was there before (`design.md:331-333`).
   null the `claimRef` of a PV another namespace still owns; `Released` **and** a `claimRef`
   namespace equal to the argument is the whole of the bound, and the phase is reviewable precisely
   on whether that bound holds.
-- **Proof is a deliberately-`Released` PV on the dev cluster** (the ruling) — `~/.kube/config-dev-write`
-  is this pod's write path there. The `tf-presync` ServiceAccount and its PV get/list/patch RBAC are
+- **Proof is a deliberately-`Released` PV on the prd cluster** (the ruling, amended by the operator
+  2026-08-14) — `~/.kube/config-prd-write` is this pod's write path there, and the fixture is the
+  throwaway one the ruling scopes: two namespaces, two `presync-proof` hostPath PVs, created and
+  deleted by the proof. The `tf-presync` ServiceAccount and its PV get/list/patch RBAC are
   slice 009's (phases.md A.4), so what runs here runs under an operator kubeconfig; that is the
   proof of the reattach logic, not of the in-cluster identity.
 
-**Landed (2026-08-14), and the dev-cluster proof is owed.** On `phase/007-P3`: `presync/kube.py`,
-`presync/reattach.py`, their tests, and `cli.py` calling the reattach after the apply. The gate is
-green. **V06's live half did not run: `srvk8sdev` (10.1.3.3) is off the wire** — its LAN neighbour
-10.1.3.5 answers `Destination Host Unreachable` for it (failed ARP) while 10.1.3.5 and 10.1.0.27
-both ping, so no route from this pod, no `kubectl`, no PV.
+**Landed (2026-08-14), and the live proof is owed against the prd fixture.** On `phase/007-P3`:
+`presync/kube.py`, `presync/reattach.py`, their tests, and `cli.py` calling the reattach after the
+apply. The gate is green. **V06's live half did not run** on the round that landed the code:
+`srvk8sdev` (10.1.3.3) was off the wire — its LAN neighbour 10.1.3.5 answered `Destination Host
+Unreachable` for it (failed ARP) while 10.1.3.5 and 10.1.0.27 both pinged, so no route from this
+pod, no `kubectl`, no PV. The operator's amendment moves the venue to prd rather than waiting on
+that host; the proof runs there.
 
 - **The bound is `status.phase == Released` and `spec.claimRef.namespace` *equal to* the argument.**
   A sibling namespace that merely shares a prefix (`<ns>-dev`) is not matched, and neither is a

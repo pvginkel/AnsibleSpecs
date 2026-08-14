@@ -56,7 +56,7 @@
     {
       "id": "V06",
       "area": "R1 — the flow: PV reattach",
-      "description": "The reattach finds `Released` PVs whose `claimRef` names the run's target namespace and nulls `claimRef.uid`/`resourceVersion`, leaving PVs outside that namespace untouched. The namespace is the fourth Job argument, used as given — the hook derives it from nothing. Exercised against a deliberately-`Released` PV on the dev cluster.",
+      "description": "The reattach finds `Released` PVs whose `claimRef` names the run's target namespace and nulls `claimRef.uid`/`resourceVersion`, leaving PVs outside that namespace untouched. The namespace is the fourth Job argument, used as given — the hook derives it from nothing. Exercised against a deliberately-`Released` PV on the prd cluster (the operator's 2026-08-14 amendment), inside the throwaway `presync-proof` fixture the ruling scopes — two namespaces and two hostPath PVs the proof creates and deletes, reached via `~/.kube/config-prd-write`, with no PV outside the fixture touched.",
       "verdict": null,
       "rationale": "",
       "evidence": [
