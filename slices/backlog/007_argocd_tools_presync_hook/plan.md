@@ -188,6 +188,13 @@ quoted, except where a ruling below amends them.
   any Ansible change, the paths, the required GitHub PAT permissions and the exact `bao` commands;
   the operator's keystroke writes them.
 
+## Task shape
+
+**cross-cutting.** slice.md's R1 stands up a repo that does not yet exist (`/work/ArgoCDTools` has
+no commits), R2 lands the image's tag pin in a second repo's library chart, and R3 mints credentials
+that a third component (Ansible's OpenBao configuration) governs; the entrypoint's argument contract
+is the estate-wide pattern every migrated app will render against.
+
 ## Ordering constraints
 
 - The `IaC/ArgoCDTools` Jenkins job must be hand-wired by the operator **before the test phase
@@ -205,6 +212,194 @@ quoted, except where a ruling below amends them.
 - The credential inventory this slice produces is slice 009's input for authoring the
   ExternalSecret. Key names must be settled here, because 009's ESO leaves and the container's
   reads are two halves of one contract that no single phase verifies end to end before A.5.
+
+### P1 — `ArgoCDTools` becomes a repo: the argument contract, the clone, and the state backend
+
+Target: `../ArgoCDTools`
+
+`/work/ArgoCDTools` is an empty repo with no commits. It becomes a working repo with its own gate,
+carrying a presync entrypoint that gets a run as far as: four arguments accepted, the deploy repo
+checked out at exactly the SHA it was handed, and terraform-backend-git listening with the run's
+state URL resolved. Terraform itself is P2 — this phase lands when a run reaches the point where
+`terraform init` would be called and can show what it would be called with.
+
+- **The flow this implements is `design.md:318-334`**, and `design.md:339-366` is the Job skeleton
+  that invokes it — the contract the arguments have to match. The four arguments are `hook.repo`,
+  `hook.revision`, `hook.stage`, `hook.namespace` (the ruling); the fourth is used as given and
+  nothing is derived from it.
+- **The clone authenticates through an inline credential helper, never a token-in-URL remote**
+  (`design.md:322-325` states the reason: the URL form leaks the PAT into the process table and into
+  any error that echoes the remote). Its credentials are `GIT_USERNAME` and `GITHUB_TOKEN` per
+  `attachments/credential-inventory.md`.
+- **The state backend is the recipe `iac-impl` runs**, `support/iac-agent/bin/iac-impl:309-349` —
+  the daemon inherits the process environment and is started in the background, with a bounded wait
+  for the port to accept before anything downstream runs. One difference: `iac-impl:322` maps
+  `GITHUB_TOKEN` from its own `GIT_API_TOKEN`; here `GITHUB_TOKEN` is the name the environment
+  already carries.
+- **The state key is `argocd/<repo>/<stage>/terraform.tfstate`** (the ruling). The backend URL's
+  shape — the `type=git&repository=…&ref=…&state=…` query the daemon reads — is
+  `/work/HelmCharts/tools/deploy/deploy_cli/tf.py:59-68`, and the three `-backend-config` flags that
+  carry it into `init` are `:139-151`.
+- **The backend's listen address has to be overridable, and that is not a nicety.** Port 6061 is
+  already bound pod-wide by this environment's own `terraform-backend-git` sidecar (`kc env
+  describe`; verified reachable on 127.0.0.1:6061 from both this container and `cexec iac` this
+  pass), and the binary itself is *not* on PATH in the `iac` sidecar — only `terraform` v1.15.8 is,
+  verified this pass. Without an override the slice's own proof bar cannot run from this pod at all.
+  `deploy_cli/tf.py:47`'s `DEPLOY_TF_BACKEND` is the estate's precedent for exactly this.
+- **The repo earns its gate in this phase.** Until `.kubecoder/project.yaml` exists the driver
+  resolves the target with no deterministic gate and tells the reviewer the state is unverified.
+  `jenkins: IaC/ArgoCDTools` is the ruled value and what `track_build.py` keys off.
+  `/work/Charts/.kubecoder/project.yaml:5-23` is the closest worked example — one component under
+  the reserved `root` key, verbs carrying their `cexec` prefix because the toolchain lives in a
+  sidecar. This environment offers `iac` and `go` only (`/work/Ansible/.kubecoder/config.yaml:57-63`);
+  `iac` carries python3, poetry, ruff and uv (verified this pass), so a `cexec python …` verb would
+  not resolve here.
+- `ArgoCDTools` is **already** at `/work/Ansible/.kubecoder/config.yaml:16` — no manifest edit.
+
+### P2 — The apply: the provider environment, `terraform init/apply`, and exit-code discipline
+
+Target: `../ArgoCDTools`
+
+A run now reaches a real `terraform apply` against the clone's `terraform/` and ends with an exit
+code that means what D30 says it means.
+
+- **The tfvars come from the clone, and never through Argo** (D14, `decisions.md:100-104`;
+  `design.md:329-330`). They live in `config/<stage>/` while Terraform runs in `terraform/`, so they
+  are outside the working directory and Terraform's auto-loading does not reach them — every one of
+  them still has to arrive at the apply.
+- **The kubernetes provider is credentialed from a kubeconfig the entrypoint synthesises in-pod**
+  (the ruling), exported as both `KUBE_CONFIG_PATH` and `KUBECONFIG` before `init` — the pair `iac`
+  sets at `support/iac-agent/etc/iac/secrets.example.yaml:122-125`. This is what lets deploy-repo
+  Terraform keep HelmCharts' bare `provider "kubernetes" {}` verbatim
+  (`/work/HelmCharts/_providers/providers.tf:98`, whose header at `:13-17` states the provider
+  follows `KUBE_CONFIG_PATH`). The ruling is explicit that the proof must not rest on this pod's
+  ambient `~/.kube/config` — what gets asserted is the synthesis and its selection *over* any
+  ambient kubeconfig.
+- **The rest of the environment is `attachments/credential-inventory.md`** — which keys are
+  Secret-borne, which are the prd cluster's non-secret provider configuration committed in this
+  repo, and why the split falls there. That non-secret half is the one input `design.md`'s two named
+  sources (the clone's tfvars, the ESO Secret) do not cover: today the deploy CLI injects it from
+  `/work/HelmCharts/_providers/clusters.yaml:12-42`, and in the hook path there is no CLI. Putting
+  it in this repo keeps it estate-wide with one bump point (D15); duplicating it into 45 deploy
+  repos' tfvars would make cluster facts drift, and routing it through OpenBao would mint leaves for
+  values that are not secrets.
+- **Exit-code discipline** (D30, `decisions.md:226-236`): non-zero fails the PreSync hook and
+  nothing is applied. Both paths are exercised — a clean apply and a deliberate failure — because a
+  hook that swallows a failure is indistinguishable from one that works until the day it matters.
+- **What must not appear:** no `bao` call, no hvac, no `!bao` resolver, no secrets manifest in the
+  image (the credential-delivery ruling). The container reads plain environment variables.
+
+### P3 — The PV reattach
+
+Target: `../ArgoCDTools`
+
+After the apply, `Released` PVs whose `claimRef` names the run's target namespace become bindable
+again — `claimRef.uid` and `claimRef.resourceVersion` nulled — so the chart's PVCs bind the data
+that was there before (`design.md:331-333`).
+
+- **This is the normal spin-up path, not an edge case** (D29, `decisions.md:218-222`): teardown
+  never destroys, so every teardown leaves `Retain` PVs `Released`, and every re-deploy needs this.
+- **The namespace filter is the fourth argument, used as given** (the ruling) — the hook derives
+  nothing from repo, stage or anything else.
+- **It runs under the pod's own identity** — the same synthesised kubeconfig P2 builds, so there is
+  one identity in the pod and not two.
+- **It is its own phase because of what it can reach.** A reattach that matched too widely would
+  null the `claimRef` of a PV another namespace still owns; `Released` **and** a `claimRef`
+  namespace equal to the argument is the whole of the bound, and the phase is reviewable precisely
+  on whether that bound holds.
+- **Proof is a deliberately-`Released` PV on the dev cluster** (the ruling) — `~/.kube/config-dev-write`
+  is this pod's write path there. The `tf-presync` ServiceAccount and its PV get/list/patch RBAC are
+  slice 009's (phases.md A.4), so what runs here runs under an operator kubeconfig; that is the
+  proof of the reattach logic, not of the in-cluster identity.
+
+### P4 — The hook image and the `IaC/ArgoCDTools` pipeline
+
+Target: `../ArgoCDTools`
+
+A build of `ArgoCDTools` publishes `registry:5000/argocd-hook:<n>` — R2's half of the coordinated
+first release.
+
+- **The image carries exactly the job** (D31, `decisions.md:238-247`): Terraform,
+  terraform-backend-git, git, and the presync scripts baked in — nothing else, and nothing cloned at
+  runtime except the deploy repo. Terraform installs unpinned from the hashicorp `noble` suite and
+  terraform-backend-git is pinned to **v0.1.11** (the ruling); the two precedents are
+  `support/iac-image/Dockerfile:100-115` and `:122-130`, the latter showing the `COPY --from` of the
+  pinned upstream image that is how the estate obtains that binary at all.
+- **The `iac` image is not touched** and gains no Argo-specific anything (D31, explicit).
+- **The pipeline is the estate's single-image shape**: `podTemplate(inheritFrom: 'jenkins-agent
+  kaniko')` → `container('kaniko')` → `helmCharts.kaniko2(destinations: […])`, worked out at
+  `/work/Charts/Jenkinsfile:16-43`. The tag scheme is **enforced, not conventional** —
+  `/work/JenkinsPipelineUtils/vars/helmCharts.groovy:143-165` throws unless the destination list is
+  one ref or a `latest`/`<digits>` pair. There is no deploy stage: Charts ends with
+  `cicd.helmDeploy()` (`Jenkinsfile:46`) because charts.home is a HelmCharts release, whereas this
+  image is pulled by a Job and deployed by nobody.
+- **The build context is streamed, so a `.dockerignore` is load-bearing** — kaniko here tars the
+  context in this container and sends it to a builder that mounts nothing else.
+  `/work/Charts/.dockerignore` is the precedent, written as an exclusion list of everything the
+  Dockerfile does not read. The local build verb belongs in the manifest the same way
+  `/work/Charts/.kubecoder/project.yaml:23` has it — `--no-push` against a `:local` tag.
+- **The image cannot be run in this pod** — there is no container runtime here, only a build
+  service. What this phase's gate can prove is that the image builds and carries what D31 names; the
+  entrypoint's live proof (the ruling's proof bar) runs the scripts directly in the `iac` sidecar.
+
+### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin
+
+Target: `../Charts`
+
+The library chart's hook Job template hands the entrypoint four arguments instead of three, and
+0.2.0 is published into the repo's committed store.
+
+- **What exists today**: `/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:40-48`,
+  with three `required`-guarded args at `:42-44` and the estate-wide pin read as
+  `$hook.imageTag | default $lib.imageTag` at `:40`; the pin itself is
+  `charts/homelab-shared/values.yaml:7` (`imageTag: "1"`). `hook.namespace` appears nowhere in the
+  repo. Its value is the `<app>-<stage>` expression the ApplicationSet already computes for
+  `destination.namespace` (`design.md:200-202`), but supplying it is slice 009's — this phase lands
+  only the template argument and its guard.
+- **A version bump has a fixed cost in this repo, and its own gates enforce it.** `Chart.yaml:7`
+  bumps; `tools/package-chart.sh` produces `dist/homelab-shared-0.2.0.tgz` and that tarball is
+  committed — `tests/publish.sh:50-51` fails without it, and `:111-123` refuses any modification to
+  the already-published `0.1.0` tarball both in the working tree and anywhere in history. The
+  procedure is `README.md:50-67`.
+- **The render gate will not notice a fourth argument on its own.** `tests/render-consumer.sh:63-65`
+  expects the three rendered arg lines and `:68` the default pin, fed by the fixture at
+  `tests/consumer/values.yaml:35-40`. The new argument earns its own assertion and its own fixture
+  value, and — as P4 of slice 006 established for the others — the `required` guard has to be shown
+  to bite rather than assumed to.
+- **What the bump does not cost**: the fixture's dependency range is `>=0.1.0`
+  (`tests/consumer/Chart.yaml:12`) so it resolves 0.2.0 untouched, and nothing outside `Charts`
+  consumes `homelab-shared` yet, so no consumer re-pins. `README.md:36`'s consumer snippet does name
+  `0.1.0` — a version in prose that the bump makes wrong.
+- **The pin number** stays the first `IaC/ArgoCDTools` build (the inherited ruling); if that build is
+  not `1`, the correction rides this same bump rather than earning a 0.3.0.
+
+### P6 — The state encryption key becomes ESO-readable
+
+Target: `ansible`
+
+The prd `eso` AppRole can read the one leaf holding the state encryption keypair, and nothing else
+changes about who reads what.
+
+- **One leaf, not a copy** — the ruling leaves this to the plan. `iac/tf-backend` joins
+  `openbao_eso_kv_paths` (`ansible/inventories/prd/group_vars/openbao.yml:91-96`), a list that
+  already enumerates single leaves beside its globs (`shared/samba/users`,
+  `shared/jenkins/admin-password`). The alternative — copying the pair to an `eso/prd/argocd-hooks/…`
+  leaf — needs no policy change at all, but leaves two leaves holding one keypair; D32 has the hook
+  and `iac` writing into the same state repo under the same keying, so a rotation that reached one
+  leaf and not the other leaves state that one side cannot decrypt. That hazard is worse than the
+  narrow cross-consumer read, which is deliberate rather than incidental: both consumers hold the
+  same key *because* they share the state repo.
+- **The mechanism**: `ansible/roles/openbao/tasks/approle.yml:167-170` renders the `eso` policy from
+  that list through `templates/policy.hcl.j2`, which grants read on `kv/data/<path>` and read+list
+  on `kv/metadata/<path>` per entry. The surrounding block comment is where the list explains its
+  own least-privilege lines; a new entry that does not say why ESO reaches into `iac/` is an
+  incomplete change.
+- **Nothing else in the inventory needs a policy change** — `shared/prd/*` and `eso/prd/*` already
+  cover every other leaf `attachments/credential-inventory.md` names, including the new git token
+  under `eso/prd/argocd-hooks/`, verified this pass.
+- **Convergence is the operator's keystroke.** This phase lands the change and its gate; the
+  `site-openbao.yml` run, the `bao kv put` of the git token, and the GitHub PAT mint are the
+  operator's, with the exact commands in the attachment.
 
 ## Not in scope
 
@@ -228,3 +423,12 @@ quoted, except where a ruling below amends them.
 - Adding `ArgoCDTools` to `.kubecoder/config.yaml` — already present at line 16.
 - Creating the `IaC/ArgoCDTools` Jenkins job, minting the GitHub PAT, and writing the OpenBao
   secret values — all operator keystrokes.
+- The `keycloak` provider's Terraform credentials. `provider "keycloak" {}` is declared and bare
+  (`/work/HelmCharts/_providers/providers.tf:100`), nothing in the estate sets `KEYCLOAK_*` today,
+  and no leaf exists — the capability itself arrives with A.4's Keycloak client and keycloak-tf
+  (Trello **#68**). `attachments/credential-inventory.md` records the gap so its absence reads as
+  deliberate.
+- The **dev** cluster. The hook is prd-only — the ApplicationSet globs `configs/prd/` and
+  `configs/dev/` is a different cluster (`design.md:220-221`) — so only `prd`'s half of
+  `_providers/clusters.yaml` has a carrier here. The dev-cluster PV used to prove the reattach (P3)
+  is a test fixture, not a deployment target.

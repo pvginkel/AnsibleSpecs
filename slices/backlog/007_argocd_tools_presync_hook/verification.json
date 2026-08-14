@@ -1,0 +1,199 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — the repo",
+      "description": "The `ArgoCDTools` repo exists with the presync entrypoint, its support code and the Dockerfile — and it is a working repo of this estate: its own `.kubecoder/project.yaml` with `jenkins: IaC/ArgoCDTools`, whose lint and test verbs are green from the repo root.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — the flow: clone at SHA",
+      "description": "The entrypoint clones the deploy repo at exactly the SHA it was handed, and that is the run's only clone. The clone authenticates via an inline credential helper, never a token-in-URL remote.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:322-325"
+      ]
+    },
+    {
+      "id": "V03",
+      "area": "R1 — the flow: the state backend",
+      "description": "The entrypoint starts terraform-backend-git on localhost inside its own process space, waits for it to accept, and points Terraform at it through `-backend-config` address/lock_address/unlock_address at init — pointed at the same state repo and keying as `iac`. The state key is `argocd/<repo>/<stage>/terraform.tfstate`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Ansible/support/iac-agent/bin/iac-impl:309-349",
+        "/work/HelmCharts/tools/deploy/deploy_cli/tf.py:59-68",
+        "/work/HelmCharts/tools/deploy/deploy_cli/tf.py:139-151"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "R1 — the flow: terraform init/apply with the stage tfvars",
+      "description": "`terraform init && terraform apply` runs in the clone's `terraform/`, and every `config/<stage>/*.tfvars` in the clone reaches that apply — the tfvars come off the hook's own disk and never travel through Argo (D14).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:100-104",
+        "/work/AnsibleSpecs/argo-cd/design.md:329-330"
+      ]
+    },
+    {
+      "id": "V05",
+      "area": "R1 — the kubernetes provider's identity",
+      "description": "The entrypoint synthesises a kubeconfig from the pod's own ServiceAccount and exports both `KUBE_CONFIG_PATH` and `KUBECONFIG` at it before `terraform init`, so a bare `provider \"kubernetes\" {}` configures itself from that file. The proof asserts the synthesis and its selection over any ambient kubeconfig — a result that would also hold via this pod's `~/.kube/config` proves nothing.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/_providers/providers.tf:98",
+        "/work/HelmCharts/_providers/providers.tf:13-17",
+        "/work/Ansible/support/iac-agent/etc/iac/secrets.example.yaml:122-125"
+      ]
+    },
+    {
+      "id": "V06",
+      "area": "R1 — the flow: PV reattach",
+      "description": "The reattach finds `Released` PVs whose `claimRef` names the run's target namespace and nulls `claimRef.uid`/`resourceVersion`, leaving PVs outside that namespace untouched. The namespace is the fourth Job argument, used as given — the hook derives it from nothing. Exercised against a deliberately-`Released` PV on the dev cluster.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:218-222",
+        "/work/AnsibleSpecs/argo-cd/design.md:331-333"
+      ]
+    },
+    {
+      "id": "V07",
+      "area": "R1 — the flow: exit-code discipline",
+      "description": "The entrypoint exits non-zero when any step of the flow fails and zero only when the apply succeeded — proven on both paths, including a deliberate failure, so a swallowed failure could not pass.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:226-236"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "R1 — the proof bar",
+      "description": "A real entrypoint run from this pod exercises clone-at-SHA → backend → `init`/`apply` → exit code against a throwaway deploy repo and a scratch state key, on both the success and the deliberate-failure path. No Argo CD, no `argocd-hooks` namespace and no OpenBao credentials are needed for it — the run sets the environment variables directly.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "R1 — the image",
+      "description": "The Dockerfile bakes exactly the job: Terraform, terraform-backend-git, git and the presync scripts — nothing else, and nothing cloned at runtime except the deploy repo. Terraform is unpinned from the hashicorp `noble` suite and terraform-backend-git is pinned to v0.1.11, as `iac` does both. `support/iac-image/` and the `iac` image are untouched.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:238-247",
+        "/work/Ansible/support/iac-image/Dockerfile:100-115",
+        "/work/Ansible/support/iac-image/Dockerfile:122-130"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "R2 — CI publishes the image",
+      "description": "CI publishes `registry:5000/argocd-hook:<n>` — a push to `ArgoCDTools` triggers `IaC/ArgoCDTools`, the build succeeds, and the numbered tag is in the registry.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "R2 — the default pin lands in the library chart",
+      "description": "The library chart's values carry the default hook image pin and it names the actual first `IaC/ArgoCDTools` build — the two repos' first releases coordinated, per the inherited ruling that 007 owns confirming or correcting the number.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Charts/charts/homelab-shared/values.yaml:7",
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:40"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "R2 — the argument contract",
+      "description": "The entrypoint's argument contract and the library chart's Job template agree on four arguments — repo, revision, stage, namespace — each `required`-guarded in the template, so a chart that forgets one fails to render rather than passing an empty argument. The guard is shown to bite, not assumed to.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:41-44",
+        "/work/Charts/tests/render-consumer.sh:63-65"
+      ]
+    },
+    {
+      "id": "V13",
+      "area": "R2 — the chart release",
+      "description": "`homelab-shared` publishes as 0.2.0: the version bumped, the new tarball committed to `dist/`, the already-published 0.1.0 tarball unmodified in tree and history, and the repo's own publish and render gates green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Charts/charts/homelab-shared/Chart.yaml:7",
+        "/work/Charts/tests/publish.sh:50-51",
+        "/work/Charts/tests/publish.sh:111-123",
+        "/work/Charts/README.md:50-67"
+      ]
+    },
+    {
+      "id": "V14",
+      "area": "R3 — credential delivery",
+      "description": "The hook's credentials are its own, minted deliberately, and delivered as plain environment variables: the container knows nothing about OpenBao, AppRoles or any credential provider. **No AppRole is minted** — no hvac, no `!bao` resolver, no secrets manifest in the image.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "R3 — the credential inventory",
+      "description": "The inventory is complete against the estate's Terraform capabilities and settled to the key name: every key the container reads, the OpenBao leaf and property behind it, and which values are non-secret configuration rather than credentials. It is what slice 009 authors the ExternalSecret from, so the names are unambiguous.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/_providers/providers.tf:19-35",
+        "/work/HelmCharts/scripts/setup-env.sh:53-101"
+      ]
+    },
+    {
+      "id": "V16",
+      "area": "R3 — the scoped git token",
+      "description": "The git token's required permissions are stated precisely enough for the operator to mint it: state repo read-write, deploy repos read-only, plus `admin:repo_hook` per D39/D41.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:315-324",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:341-351"
+      ]
+    },
+    {
+      "id": "V17",
+      "area": "R3 — the state encryption key",
+      "description": "The state encryption key is `iac`'s existing age keypair, readable by the prd `eso` AppRole — one keypair in one leaf, so no rotation can leave state that one side of the same state repo cannot decrypt. The Ansible change granting it is the only OpenBao policy change the slice makes; every other leaf in the inventory is already covered.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Ansible/ansible/inventories/prd/group_vars/openbao.yml:91-96",
+        "/work/Ansible/ansible/roles/openbao/tasks/approle.yml:167-170",
+        "/work/Ansible/support/iac-agent/etc/iac/secrets.example.yaml:164-165"
+      ]
+    },
+    {
+      "id": "V18",
+      "area": "R3 — the operator boundary",
+      "description": "The operator writes the secret values: the slice hands over the exact `bao` commands, the paths and the PAT permissions, and no agent runs `ansible-playbook`, writes an OpenBao value, or mints a token.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "Scope boundaries",
+      "description": "Nothing in slice 009's half is built here: no `argocd-hooks` namespace, no `tf-presync` ServiceAccount or RBAC, no ExternalSecret, no ApplicationSet parameter. And nothing touches `support/iac-image/`, srviac's `iac-agent` AppRole or its `/etc/iac/secrets.yaml`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
