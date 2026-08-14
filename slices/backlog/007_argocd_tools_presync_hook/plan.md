@@ -91,10 +91,29 @@ quoted, except where a ruling below amends them.
 - Ruling (2026-08-14) — **the state encryption key is `iac`'s existing age keypair, not a new
   one.** `iac` and the hook write into the same `pvginkel/TerraformState` repository (D32) and
   phases.md B.4 moves existing state into the hook's key scheme, so a second keypair would leave
-  state written by one side undecryptable by the other. Whether the existing leaf becomes
-  ESO-readable by adding it to `openbao_eso_kv_paths` or by copying the pair to an
-  `eso/prd/argocd-hooks/...` leaf is the plan's to settle; if it is a copy, the rotation
-  consequence of two leaves holding one keypair is recorded rather than discovered later.
+  state written by one side undecryptable by the other. **It reaches the hook by one enumerated
+  grant, not a copy**: the existing `kv/iac/tf-backend` leaf is added to `openbao_eso_kv_paths`,
+  so one leaf holds the keypair and there is no rotation split-brain. The **private** half is
+  fetched from that leaf; the **public** half — the recipient, not a secret — is a literal in the
+  ExternalSecret's template per the configuration ruling below, so the operator's keystroke list
+  carries no conditional.
+
+- Ruling (2026-08-14) — **configuration arrives the same way credentials do: through the Secret,
+  authored in `ArgoCDDeploy`.** The non-secret per-cluster provider facts — the `HOMELAB_*`
+  endpoints, the `TF_VAR_*` inputs, `GIT_USERNAME`, `TF_BACKEND_HTTP_ENCRYPTION_PROVIDER` and the
+  age recipient — do **not** ship committed in `ArgoCDTools`. ESO's ExternalSecret carries them as
+  literal `template` data alongside the leaves it fetches, so one object in one GitOps-managed
+  repo is the whole of what a hook run receives.
+
+  Grounds: the same principle as the credential-delivery ruling, applied to configuration. A copy
+  of `/work/HelmCharts/_providers/clusters.yaml` inside `ArgoCDTools` is production cluster fact
+  duplicated into a second repo with **no test that can bind the copies** — `ArgoCDTools`' CI has
+  no HelmCharts checkout — so a later `clusters.yaml` edit would leave the hook applying against
+  stale Ceph, S3 or backup endpoints, discovered at sync time by whichever app syncs first. The
+  container stays agnostic to configuration exactly as it is to credentials: it reads environment
+  variables and carries no estate facts. This slice still owes the **inventory** of what the
+  Secret must carry, secret and non-secret alike, with each value's source; slice 009 authors the
+  ExternalSecret from it.
 
 - Ruling (2026-08-14) — **the state key, and who owns the backend address.** The hook derives it.
   Deploy repos carry `backend "http" {}` and the entrypoint passes `address`, `lock_address` and
@@ -135,6 +154,18 @@ quoted, except where a ruling below amends them.
   what a compromised deploy repo branch reaches is exactly the enumerated provider credentials, not
   a KV prefix spanning every app.
 
+- Ruling (2026-08-14) — **the `argo-cd` amendments are their own phase, verified, and
+  `slice-doc-plan.md` gains the document set.** The amendments are this slice's one cross-slice
+  export, so they land as an explicit phase targeting `../AnsibleSpecs` — a reviewable diff — and
+  `verification.json` carries a criterion asserting them. Leaving them to the doc phase is not
+  enough on its own: `/work/Ansible/docs/slice-doc-plan.md` enumerates five surfaces and the
+  `argo-cd` set is not among them, and its surface 1 is the *homelab* `decisions.md`, a different
+  file from `argo-cd/decisions.md`.
+
+  **Fix the root cause too**: `slice-doc-plan.md` gains the `argo-cd` document set as a surface,
+  so slices 008–012 — every one of which touches it — inherit the fix instead of each
+  rediscovering the ambiguity. That is a phase targeting `root`.
+
 - Ruling (2026-08-14) — **how Terraform's `kubernetes` provider is credentialed: the entrypoint
   synthesises a kubeconfig from the pod's ServiceAccount.** Build it from the projected SA token,
   the CA cert and `KUBERNETES_SERVICE_HOST`/`_PORT`, write it to a run-local path, and export
@@ -173,10 +204,20 @@ quoted, except where a ruling below amends them.
   precedent. That is the value for `project.yaml`'s `jenkins:` key and what `track_build.py` keys
   off. The operator creates the job by hand; jobs cannot be declared in code.
 
-- Ruling (2026-08-14) — **the hook image tag pin, inherited from slice 006.** 006 landed
-  `hook.imageTag: "1"` as the library default with 007 owning *"confirming/correcting the number
-  to its actual first build"* (006 plan.md, rulings). Charts is being reopened for 0.2.0 anyway,
-  so any correction rides that same bump.
+- Ruling (2026-08-14) — **the hook image tag pin: assume `1`, and name what a wrong guess costs.**
+  006 landed `hook.imageTag: "1"` as the library default with 007 owning *"confirming/correcting
+  the number to its actual first build"* (006 plan.md, rulings). The first build number does not
+  exist until the test phase pushes `ArgoCDTools`, so the pin is set before it is knowable. Keep
+  `"1"` — a hand-created job's first build is `#1`, which is what slice 006's own record shows for
+  `IaC/Charts`.
+
+  **There is no ride-along correction, and the plan must not claim one.** Once
+  `dist/homelab-shared-0.2.0.tgz` is committed the tarball is immutable and `tests/publish.sh`
+  fails any modification to it, so correcting the pin means publishing **0.3.0**. That is the
+  accepted cost if the number turns out wrong — the likeliest cause being a stray operator
+  test-run of the job before it is wired. Restructuring the queue to set the pin after the first
+  build was considered and rejected: it needs an operator keystroke mid-run for a number that is
+  almost certainly `1`.
 
 - Ruling (2026-08-13, from triage) — **who creates the repos.** *"The repos are there already in
   /work. Tell me if you're missing any. They're not in .kubecoder/config.yaml. I'll add some, but
