@@ -260,7 +260,7 @@ is the estate-wide pattern every migrated app will render against.
   ExternalSecret. Key names must be settled here, because 009's ESO leaves and the container's
   reads are two halves of one contract that no single phase verifies end to end before A.5.
 
-### P1 — `ArgoCDTools` becomes a repo: the argument contract, the clone, and the state backend
+### P1 — `ArgoCDTools` becomes a repo: the argument contract, the clone, and the state backend ✅ DONE 2026-08-14
 
 Target: `../ArgoCDTools`
 
