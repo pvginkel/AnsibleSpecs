@@ -33,9 +33,17 @@
       "evidence": []
     },
     {
+      "id": "V19",
+      "area": "R1 — the kubernetes provider's identity",
+      "description": "Terraform's `kubernetes` provider is credentialed in-cluster from the hook pod's own ServiceAccount: the entrypoint synthesises a kubeconfig from the projected SA credentials and exports `KUBE_CONFIG_PATH` and `KUBECONFIG` at it before `init`, and that file is selected over any ambient kubeconfig present in the environment. Deploy-repo Terraform keeps HelmCharts' bare `provider \"kubernetes\" {}` unchanged, which follows `KUBE_CONFIG_PATH` (`/work/HelmCharts/_providers/providers.tf:13-16`, `:98`). Where no SA credentials exist — a run from this pod — the ambient kubeconfig is what remains, and both paths work.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
       "id": "V05",
       "area": "R1 — the flow",
-      "description": "The PV reattach (D29) finds `Released` PVs whose `claimRef` names the destination namespace it was handed — and only that namespace — and nulls out `claimRef.uid` and `resourceVersion` so they return to `Available` pre-bound, the same fix as `/work/HelmCharts/tools/deploy/deploy_cli/helmops.py:117-153`. Exercised against a deliberately-`Released` PV on the dev cluster (ruled proof bar), and written to work under the Job's own ServiceAccount in-cluster as well as from this pod.",
+      "description": "The PV reattach (D29) finds `Released` PVs whose `claimRef` names the destination namespace it was handed — and only that namespace — and nulls out `claimRef.uid` and `resourceVersion` so they return to `Available` pre-bound, the same fix as `/work/HelmCharts/tools/deploy/deploy_cli/helmops.py:117-153`. Exercised against a deliberately-`Released` PV on the dev cluster (ruled proof bar), and reaching the cluster through the same single identity the rest of the flow uses (V19) — the Job's own ServiceAccount in-cluster, the ambient kubeconfig when run from this pod.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,7 +67,7 @@
     {
       "id": "V08",
       "area": "R1 — secrets manifest",
-      "description": "The estate-wide baseline manifest ships in the image, declared as `support/iac-agent/etc/iac/secrets.example.yaml` declares its entries, and a deploy repo's optional `config/<stage>/secrets.yaml` merges over it. Because the baseline is committed repo content — unlike `iac`'s never-committed `/etc/iac/secrets.yaml` — nothing unsafe in git is a literal in it, including the age recipient.",
+      "description": "The estate-wide baseline manifest ships in the image, declared as `support/iac-agent/etc/iac/secrets.example.yaml` declares its entries, and a deploy repo's optional `config/<stage>/secrets.yaml` merges over it. The baseline resolves what every migrated app's Terraform needs — the age keys, `TF_BACKEND_*` and the homelab provider's credentials — and deliberately not the two leaves the hook's policy grants for apps that provision a database or a backup credential, which an app declares in its own overlay (`attachments/credential-map.md`). Because the baseline is committed repo content — unlike `iac`'s never-committed `/etc/iac/secrets.yaml` — nothing unsafe in git is a literal in it, including the age recipient.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -75,7 +83,7 @@
     {
       "id": "V10",
       "area": "R2 — CI publishes",
-      "description": "CI publishes `registry:5000/argocd-hook:<n>` from a push to `main` on the `IaC/ArgoCDTools` job, and a build has actually run and produced an image.",
+      "description": "CI publishes `registry:5000/argocd-hook:<n>` from a push to `main` on the `IaC/ArgoCDTools` job, and a build has actually run and produced an image — or, where the operator has not yet hand-wired the job (an ordering constraint the run does not pause for), the `Jenkinsfile` and the `build` verb are proven here and the first build is recorded as owed rather than counted as done.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -97,9 +105,17 @@
       "evidence": []
     },
     {
+      "id": "V20",
+      "area": "R2 — the model the next slice plans from",
+      "description": "The `argo-cd/` document set states the four-argument contract wherever it states the contract — the flow's step 1, the Job skeleton's args block, the sentence naming the count, and the ApplicationSet's `parameters:` block, which supplies the destination namespace from the same `<app>-<stage>` expression `destination.namespace` already carries (D24) — and D29/D33 say the reattach's namespace is handed to the hook rather than found by it. Slice 009 therefore builds an ApplicationSet that satisfies a `required`-guarded argument it would otherwise never have been told about.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
       "id": "V13",
       "area": "R3 — the dedicated AppRole",
-      "description": "OpenBao gains a dedicated AppRole for app-infra Terraform, not srviac's `iac-agent` (D33). Its policy grants the `argocd-hooks/*` prefix glob for the hook's own namespace plus explicit enumeration of every leaf outside it that the baseline manifest resolves — the shape of `openbao_iac_agent_kv_paths` at `ansible/inventories/prd/group_vars/openbao.yml:118-124`. The new consumer joins every place the openbao role enumerates consumers by name, including the rotation-run credential staging at `ansible/roles/openbao/tasks/approle.yml:408-455`.",
+      "description": "OpenBao gains a dedicated AppRole for app-infra Terraform, not srviac's `iac-agent` (D33). Its policy grants the `argocd-hooks/*` prefix glob for the hook's own namespace plus the leaves outside it that `attachments/credential-map.md` pins — a superset of what the image baseline resolves, so a per-app credential is a `bao kv put` and an overlay rather than a policy change — the shape of `openbao_iac_agent_kv_paths` at `ansible/inventories/prd/group_vars/openbao.yml:118-124`. The new consumer joins every place the openbao role enumerates consumers by name, including the role_id and secret_id reads (`ansible/roles/openbao/tasks/approle.yml:311-317`, `:339-345`) that the rotation-run credential staging reads back from (`:428-435`, `:446-451`), and carries its own token-TTL defaults.",
       "verdict": null,
       "rationale": "",
       "evidence": []

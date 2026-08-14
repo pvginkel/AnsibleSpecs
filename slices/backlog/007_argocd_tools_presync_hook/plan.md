@@ -195,21 +195,39 @@ OpenBao gains an AppRole for app-infra Terraform running under the Argo CD hook 
 that the hook actually resolves. The change is inert until the operator runs
 `playbooks/site-openbao.yml`; the slice ends deploy-owed on that and on the value writes.
 
-- **The role enumerates its consumers by name in five places**, and a new one that joins only some
-  of them half-exists: the policy render (`ansible/roles/openbao/tasks/approle.yml:152-180`), the
-  consolidated policy-text dict (`:184-192`), the AppRole read and write loops (`:231-296`), and —
-  easiest to miss, and the only way the operator ever sees the credentials — the rotation-run
-  staging loops (`:408-455`). Its path list is a new `openbao_*_kv_paths` variable, defaulted empty
-  in `defaults/main.yml:107-117` and filled in `inventories/prd/group_vars/openbao.yml`.
+- **A consumer must join every place the role names one, and there are ten.**
+  `ansible/roles/openbao/tasks/approle.yml` enumerates its consumers by name in the
+  existing-policy read (`:109-115`), the per-consumer policy renders (`:148-182`), the
+  consolidated policy-text dict (`:184-192`), the policy write (`:204-210`), the AppRole read and
+  write loops (`:230-256`, `:273-299`), the role_id read (`:311-317`), the secret_id mint
+  (`:339-345`), and both operator-capture staging loops (`:428-435`, `:446-451`) — plus the
+  operator-facing hand-off message that lists the staged files and their capture targets
+  (`:456-490`). **Read the file end to end rather than working from that list**; it is a count of
+  what is there today, not a checklist that stays true.
+- **A half-joined consumer fails on an operator keystroke, not in lint.** The staging tasks read
+  back by name from the role_id and secret_id loops — `selectattr('item', 'equalto', approle) |
+  first` at `:424-426` and `:442-444` — so a consumer present in the write loops but absent from
+  those two reads runs `first` over an empty sequence and errors out mid-play, during the
+  operator's own `playbooks/site-openbao.yml -e openbao_rotate_secret_ids=true` run against live
+  OpenBao. That run is how the role_id and secret_id reach the operator at all
+  (`attachments/credential-map.md`).
+- **Its defaults are three variables, not one.** The AppRole loops template
+  `openbao_<consumer>_token_ttl` and `openbao_<consumer>_token_max_ttl` (`:266-267`) as well as
+  the policy's `openbao_*_kv_paths` list; the TTL siblings live at `defaults/main.yml:89-105` and
+  the path lists at `:107-117` (defaulted empty there, filled in
+  `inventories/prd/group_vars/openbao.yml`). An undefined one fails the same play. The
+  `openbao_rotate_secret_ids` comment at `:83-87` names the AppRole set too.
 - **The path list's shape is ruled**: the `argocd-hooks/*` prefix glob, carrying the same rationale
   the `iac-agent` block already states at `inventories/prd/group_vars/openbao.yml:106-117`, plus
-  explicit enumeration of every leaf outside that namespace. Which leaves those are, and the
-  notation difference between a policy entry and a `!bao` ref, are in
-  `attachments/credential-map.md`.
+  explicit enumeration of every leaf outside that namespace. Which leaves those are, the
+  notation difference between a policy entry and a `!bao` ref, and why the grant is deliberately
+  wider than what the image's baseline manifest resolves, are in `attachments/credential-map.md`.
 - **This phase mints no values.** It creates the identity and the grant; what gets written where is
   the map, and the writing is the operator's keystroke.
-- `openbao_iac_agent_kv_paths:118-124` is the closest working model for both the variable and its
-  comment; the new block is not a copy of it — the hook reads a different set.
+- `openbao_iac_agent_kv_paths` (`inventories/prd/group_vars/openbao.yml:118-124`) is the working
+  model for both the variable and its comment — and, per the ruling, the outside-`iac/` half of
+  its list is exactly what the hook grants too, with `argocd-hooks/*` standing where `iac/*`
+  stands for srviac. Same leaves, different namespace, separate identity (D33).
 
 ### P2 — `ArgoCDTools`: the repo, its gate, and the credential layer
 
@@ -236,8 +254,9 @@ environment, hard-failing on any miss.
 - **The baseline is committed repo content**, unlike `iac`'s hand-edited, never-committed
   `/etc/iac/secrets.yaml`. Everything not safe in git is a `!bao` ref — including the age
   *recipient*, which `iac` keeps as a literal. `support/iac-agent/etc/iac/secrets.example.yaml` is
-  the declaration form to follow; `attachments/credential-map.md` is what the baseline declares, and
-  names the two entries of `iac`'s that must not be copied across.
+  the declaration form to follow; `attachments/credential-map.md` is what the baseline declares —
+  including which of `iac`'s entries do not survive the move, and why the baseline deliberately
+  resolves less than the hook's policy grants.
 - **The repo earns its gate here.** `.kubecoder/project.yaml` with `jenkins: IaC/ArgoCDTools`
   (ruling) — until it exists the driver resolves this target with no deterministic gate, the same
   state slice 006's P1 handled for `Charts`. `/work/Charts/.kubecoder/project.yaml` is the closest
@@ -269,6 +288,23 @@ steps 1–4 and 6) is the specification.
   `state mv` has a predictable target.
 - **`apply` runs in the clone's `terraform/`, with every `config/<stage>/*.tfvars` from that same
   clone** (D14). Nothing tfvars-shaped travels through Argo, ever.
+- **Terraform's `kubernetes` provider is credentialed from the pod's own ServiceAccount** (ruling),
+  by synthesising a kubeconfig from the projected SA credentials and the in-cluster apiserver
+  environment, and exporting both `KUBE_CONFIG_PATH` and `KUBECONFIG` at it before `init` — the
+  two variables `iac` sets for the same purpose against a file materialised on srviac
+  (`support/iac-agent/etc/iac/secrets.example.yaml:122-125`). It is not a `!bao` ref and not a
+  baseline-manifest entry; it is produced at run time. What this buys: deploy-repo Terraform keeps
+  HelmCharts' bare `provider "kubernetes" {}` verbatim, whose own header states the provider
+  follows `KUBE_CONFIG_PATH` (`/work/HelmCharts/_providers/providers.tf:13-16`, `:98`), which is
+  what makes B.1 a lift rather than a rewrite. Without it the first migrated app's hook — whose
+  Terraform is kubernetes-provider work from its first module,
+  `/work/HelmCharts/configs/prd/kubecoder/_shared/infrastructure.tf` — fails to configure the
+  provider on every sync.
+- **The synthesised file winning over any ambient kubeconfig is the assertion** — not that the
+  apply succeeded. This pod has `~/.kube/config` mounted, so a proof run from here reaches a
+  cluster either way and says nothing about the in-cluster path. Where SA credentials are absent
+  the ambient kubeconfig is what remains, which is the only reason the ruled proof bar can run at
+  all: both paths work, and the selection between them is what gets shown.
 - **Exit-code discipline is the deliverable, not a detail** (D30): any failure anywhere in the flow
   exits non-zero, and no partial success may exit zero. A hook that fails silently is a sync that
   applies against un-applied infrastructure.
@@ -291,10 +327,11 @@ PVCs bind the data that was already there.
   fix. Terraform is not involved.
 - **The namespace filter is the destination namespace argument**, not something derived. Touching a
   PV claiming into another namespace is a cross-app data incident.
-- **Identity is the Job's own ServiceAccount** in-cluster (slice 009 creates it and its RBAC), so
-  this must not be written to require a kubeconfig — but the ruled proof for it is a run **from this
-  pod against a deliberately-`Released` PV on the dev cluster**, which does use one. It has to work
-  under both.
+- **Identity is the Job's own ServiceAccount** in-cluster (slice 009 creates it and its RBAC) —
+  reached through the same kubeconfig P3 synthesises from it, so there is one identity in the pod
+  and not two. The ruled proof for this step is a run **from this pod against a
+  deliberately-`Released` PV on the dev cluster**, where no SA credentials exist and the ambient
+  kubeconfig is what remains. It has to work under both.
 
 ### P5 — The hook image and its CI
 
@@ -342,7 +379,8 @@ phase and P3 are one contract in two repos.
 - **The gates assert the rendered strings and will not notice a fourth argument on their own** —
   `/work/Charts/tests/render-consumer.sh:62-68` and `:104-106`, fed by
   `/work/Charts/tests/consumer/values.yaml:37-40`. The fixture and the assertions move with the
-  template or the gate passes a chart no one can use.
+  template or the gate passes a chart no one can use. The template's own header comment names the
+  three per-sync inputs as well.
 - **The image pin** (ruling): `hook.imageTag` is `"1"` today
   (`/work/Charts/charts/homelab-shared/values.yaml`), landed by slice 006 with this slice owning the
   confirmation. Set it to the tag CI actually publishes on the first successful `IaC/ArgoCDTools`
@@ -350,7 +388,41 @@ phase and P3 are one contract in two repos.
   the first build happens at test time — leave `"1"`, say so, and let the test phase confirm it;
   because published tarballs are immutable, a correction afterwards costs a 0.2.1 bump rather than
   an edit.
+- **Changing the pin is a two-file change: the gate hard-codes the tag literal too.**
+  `render-consumer.sh:68` asserts `image: registry:5000/argocd-hook:1` — and the helper matches a
+  fixed *substring*, so the assertion is both brittle and blind in the one phase whose job is
+  confirming that number: a pin of `"2"` reds the gate for a reason nothing predicts, and a pin of
+  `"12"` leaves it green against the wrong image. Whoever moves the pin — here or in the test
+  phase's correction — owes the gate an assertion that actually distinguishes the tag it names.
+  The per-app override assertion at `:104-106` has the same shape.
 - Nothing consumes `homelab-shared` 0.1.0 yet, so the bump costs no re-pinning anywhere.
+
+### P7 — The `argo-cd/` model states the four-argument hook contract
+
+Target: ../AnsibleSpecs
+
+The authoritative design documents say what P3 and P6 shipped: the hook Job is handed four
+`required`-guarded arguments, the fourth being the destination namespace, and the ApplicationSet
+slice 009 builds is the thing that supplies it (ruling).
+
+- **Why this is a phase and not a closing remark.** Slice 009's planner works from `phases.md` and
+  `design.md`, not from this plan.md, and both say three. A `homelab-shared` 0.2.0 that
+  `required`-guards an argument nothing supplies means every migrated app fails to render at 009's
+  standup — a render-time failure by design, but one landing in the wrong slice with nothing
+  pointing back here. The `argo-cd/` set is also **not** one of the loop's doc-phase surfaces
+  (`/work/Ansible/docs/slice-doc-plan.md` enumerates those; this is not among them), so no later
+  phase of this run would pick it up. Precedent for the shape: slice 006's `a75dda6`, *"docs
+  (argo-cd): the library chart as it shipped"*.
+- **Where the contract is stated today**, all in `/work/AnsibleSpecs/argo-cd/design.md`: the flow's
+  step 1 (`:321`), the Job skeleton's args block (`:361-363`), the sentence that names the count
+  (`:372`), and the ApplicationSet's `parameters:` block (`:190-199`). The value to supply is the
+  one the `destination:` block immediately below already carries (`:200-202`) — D24's
+  `<app>-<stage>` expression, the same source, not a second derivation.
+- **Two decisions describe the reattach's namespace as something the hook finds** — D29
+  (`/work/AnsibleSpecs/argo-cd/decisions.md:218-222`) and D33 (`:258-269`). It is handed over now,
+  and they should say so.
+- **Reconcile what states the contract; do not sweep.** `phases.md` and `brief.md` don't name the
+  argument set, and `history.md` records past arcs and stays as it is.
 
 ## Not in scope
 
@@ -359,8 +431,9 @@ phase and P3 are one contract in two repos.
   mints the values in OpenBao and specifies the Secret's key names.
 - Running the hook as a real Job under Argo, `$ARGOCD_APP_REVISION` reaching the args, and the
   exit code gating a real sync — slice 009's A.5 proof items.
-- The ApplicationSet that supplies `hook.namespace` — slice 009 (A.4). This slice lands only the
-  template argument in `Charts`.
+- Building the ApplicationSet that supplies `hook.namespace` — slice 009 (A.4). This slice lands
+  the template's argument in `Charts` and writes the contract into the `argo-cd/` model so 009
+  builds against four parameters.
 - Any PostSync hook — explicitly not designed (design.md, "The Terraform PreSync hook").
 - Creating any deploy repo, and KubeCoderDeploy's chart, Terraform or CI — Phase B.
 - The B.4 Terraform state surgery (`state rm module.namespace`, `state mv` per app) — phases.md

@@ -71,20 +71,33 @@ is committed repo content. **Anything not safe in git is a ref.**
 
 ## Leaves outside the hook's namespace
 
-The homelab provider's credentials, which app Terraform needs and which live in shared space. They
-are enumerated in the hook's policy, exactly as `openbao_iac_agent_kv_paths:118-124` enumerates
-them for `iac`. The working set, from the same provider's entries in
-`support/iac-agent/etc/iac/secrets.example.yaml`:
+The credentials the deploy providers read, which live in shared space and so are enumerated in the
+hook's policy leaf by leaf. **The authority for what app Terraform needs is the provider set it
+runs against** — `/work/HelmCharts/_providers/providers.tf` and the script that credentials it,
+`/work/HelmCharts/scripts/setup-env.sh` — not `iac`'s hand-edited `secrets.example.yaml`, which
+states what one container happens to carry. Derived from those two, the set is the same five
+`openbao_iac_agent_kv_paths` grants (`ansible/inventories/prd/group_vars/openbao.yml:118-124`),
+which is unsurprising: the hook runs the same providers against the same estate.
 
-| Leaf | Becomes |
-| --- | --- |
-| `kv/shared/prd/ceph-csi` | `HOMELAB_CEPH_USER`, `HOMELAB_CEPH_KEY` |
-| `kv/shared/prd/ceph-rgw/s3` | `HOMELAB_S3_ADMIN_ACCESS_KEY`, `HOMELAB_S3_ADMIN_SECRET_KEY` |
-| `kv/eso/prd/iac-provisioner/api/token` | `HOMELAB_IAC_PROVISIONER_TOKEN` |
+| Leaf | Becomes | Read by | In the image baseline |
+| --- | --- | --- | --- |
+| `kv/shared/prd/ceph-csi` | `HOMELAB_CEPH_USER`, `HOMELAB_CEPH_KEY` (`setup-env.sh:54-55`) | `provider "homelab"` | yes |
+| `kv/shared/prd/ceph-rgw/s3` | `HOMELAB_S3_ADMIN_ACCESS_KEY`, `HOMELAB_S3_ADMIN_SECRET_KEY` (`:56-57`) | `provider "homelab"` | yes |
+| `kv/eso/prd/iac-provisioner/api/token` | `HOMELAB_IAC_PROVISIONER_TOKEN` (`:58`) | `provider "homelab"` | yes |
+| `kv/eso/prd/postgres-pas/terraform-admin` | `TF_VAR_postgres_admin_password` (`:81-85`) | `provider "postgresql"` (`providers.tf:108-115`) | no — per-app overlay |
+| `kv/eso/prd/storage/prd/backup-server` | `HOMELAB_BACKUP_SERVER_TOKEN` (`:91-99`) | `homelab_backup_credential` | no — per-app overlay |
 
-The binding rule, not the list, is what matters: **the policy grants exactly what the baseline
-manifest resolves.** A leaf the manifest stops referencing leaves the policy; one it adds outside
-`argocd-hooks/` joins the enumeration.
+**The binding rule, not the list, is what matters (ruled): the policy grants a superset of what the
+baseline manifest resolves, and a deploy repo's overlay closes the gap.** The last two leaves are
+granted but not baseline-resolved — an app that provisions a database or a backup credential
+declares them in its own `config/<stage>/secrets.yaml`, and needs no live-OpenBao keystroke to do
+it. That split is deliberate: D41's blast radius says no hook run carries a credential it does not
+need, while the policy's shape says no `site-openbao.yml` re-run when the first postgres-using app
+migrates. A leaf outside `argocd-hooks/` that no overlay and no baseline can reference has no
+business in the policy either; one that any of them adds joins the enumeration.
+
+Impact today is nil either way — only `configs/prd/postgres-pas` uses either provider, and the
+pilot (B.1 KubeCoder) uses neither.
 
 Note the two notations differ. A `!bao` ref names the mount: `kv/shared/prd/ceph-csi#user_id`. A
 policy path list entry is relative to the mount: `shared/prd/ceph-csi`, which the policy template
@@ -96,10 +109,20 @@ expands to both `kv/data/…` and `kv/metadata/…`
 `TF_BACKEND_HTTP_ENCRYPTION_PROVIDER=sops`, `GIT_USERNAME=x-access-token`, and any non-secret URL —
 the estate's standing "URLs never enter Vault" rule.
 
-**What must *not* be copied across from `iac`'s manifest:** `KUBE_CONFIG_PATH` / `KUBECONFIG`.
-They name a kubeconfig file materialised on srviac. In the hook pod the identity is the Job's own
-ServiceAccount (design.md, flow step 5), and a pointer to a file that does not exist is a failure
-mode that only shows up on the first app whose Terraform touches Kubernetes.
+## The one pair that is neither — `KUBE_CONFIG_PATH` / `KUBECONFIG`
+
+`iac` declares both in its manifest as literals (`support/iac-agent/etc/iac/secrets.example.yaml:122-125`),
+pointing at a kubeconfig materialised on srviac. **Neither the literal nor the file survives the
+move**, but the two variable names do: the entrypoint synthesises a kubeconfig from the pod's own
+ServiceAccount at run time and exports both at it before `terraform init` (ruled). So they are not
+manifest entries at all — nothing in OpenBao backs them, and nothing declares them.
+
+Getting this wrong is invisible until it is expensive. The `kubernetes` provider takes no
+credentials in code — `/work/HelmCharts/_providers/providers.tf:98` is a bare
+`provider "kubernetes" {}`, and its header (`:13-16`) states that it follows `KUBE_CONFIG_PATH`.
+Unset, the first migrated app's hook fails to configure the provider on every sync; set to a path
+this image never materialises, the same. And a proof run from this pod resolves it through the
+ambient `~/.kube/config` and shows nothing either way.
 
 ## The GitHub token
 
