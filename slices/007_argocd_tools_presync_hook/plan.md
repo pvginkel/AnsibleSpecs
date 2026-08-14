@@ -958,6 +958,37 @@ and what reaches a run's Terraform.
   notices in the register, `history.md` per its own conventions. No live manifest, chart or
   entrypoint is touched.
 
+**Done (2026-08-14).** Landed on `phase/007-P11`: D31, design.md's ArgoCDTools section and its flow
+step 4, `history.md`'s one stale parenthetical, and the attachment's release-identity bullet.
+
+- **D31 and design.md name each addition with its reason, not a longer list**: the distro `python3`
+  the entrypoint runs under; `librados2`/`librbd1`, because the cgo `pvginkel/homelab` binary names
+  those sonames and without them Terraform resolves every provider and executes none (at `apply`,
+  never at `init`); the CLI config at `TF_CLI_CONFIG_FILE`, because that provider is served only
+  from the estate's mirror; and the step-ca root the mirror's chain needs. D31's claim is unchanged
+  — exactly what the job needs, nothing general-purpose, nothing cloned at runtime but the deploy
+  repo — so a maintainer trimming the image reads why each item is there.
+- **The release identity is one addition to flow step 4**, stating what P9 shipped: `TF_VAR_stage`
+  and `TF_VAR_namespace` exported before `init`, a `-var-file` outranking them so a deploy repo's
+  own tfvars still win, and `var.cluster` deliberately unset. The attachment's bullet says the same
+  — its old *"reach the run as Job arguments, not Secret keys"* was the reading that produced P9's
+  gap.
+- **`history.md` gained no arc.** No position moved here: D31's decision stands and the release
+  identity is a gap closed, not a reversal. What it did carry was an image inventory in the
+  in-cluster arc's parenthetical, whose point is the contrast with the `iac` container; it now
+  states the claim rather than a list the Dockerfile contradicts.
+- **`verification.json` is corrected in place, as P3 and P10 corrected theirs.** V09's description
+  said *"nothing else"* and is checked against D31's text, so it would have contradicted the doc
+  this phase exists to fix; it now names the same set. Its evidence pointer, and the design.md and
+  decisions.md pointers V02/V04/V06/V16/V20/V21 carry, are renumbered — P7's edits and this one
+  moved the passages they name. No criterion's substance changed and none was added.
+- **Gate**: this repo has no tooling. Verified by reading the diff — no added non-table line past
+  100 columns, `verification.json` parses, and every claim checked against the shipped repos:
+  `/work/ArgoCDTools/Dockerfile` for the image's contents, `presync/cli.py` and
+  `terraform.release_identity()` for the exports and the absent `TF_VAR_cluster`,
+  `/work/HelmCharts/_providers/providers.tf:76-92` for the empty-string defaults, and
+  design.md's own `configs/prd/` bullet (now `:227-228`) for the prd-only claim.
+
 ## Not in scope
 
 - The `argocd-hooks` namespace, the `tf-presync` ServiceAccount and its RBAC, and the

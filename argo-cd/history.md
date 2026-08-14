@@ -57,8 +57,8 @@ anyway". And srviac's reason to exist — a Jenkins agent *outside* the cluster 
 restart what Jenkins depends on — was never a requirement app-level Terraform has.
 
 So execution came back in-cluster, better than it left: a dedicated image built from
-ArgoCDTools (Terraform + terraform-backend-git + the scripts; explicitly **not** the `iac`
-container), the backend started per-run in-pod exactly as `iac-impl` does, credentials as
+ArgoCDTools (exactly what the job needs and nothing general-purpose; explicitly **not** the
+`iac` container), the backend started per-run in-pod exactly as `iac-impl` does, credentials as
 scoped ESO leaves, and a ServiceAccount that let the PV reattach stop being smuggled through
 srviac's kubeconfig. Side effects: CR decision 4 un-amended, the Triage #506 flock blocker
 dissolved, and the `iac` startup-cost concern mooted. The grounding fact that unlocked it:

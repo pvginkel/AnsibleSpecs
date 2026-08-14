@@ -238,15 +238,23 @@ dependency dissolves for this project; serialisation is the backend's per-state 
 (D32), which cover concurrent syncs properly.
 
 **D31 — The hook runs a dedicated image built from ArgoCDTools; the `iac` container is not
-reused.** Decided 2026-08-12 (operator, gate-1 review). The image carries exactly the job:
-Terraform, terraform-backend-git, git, and the presync scripts — baked in, since the image is
-dedicated to this one purpose, so nothing is cloned at runtime except the deploy repo at the
-synced SHA. ArgoCDTools (D15) is thus both the source repo and the image build; Argo-specific
-content inside it is fine by definition. The `iac` image stays untouched and gains no
-Argo-specific anything; nothing rides `iac`'s `repos:` mechanism; nothing is installed on any
-host. Supersedes plan's delivery-via-IaCAgent detail and lifecycle's "PreSync runs
-`deploy apply`" — HelmCharts' deploy CLI is not in the path. Image contents, tagging, its build
-pipeline and the Job template's home are design.md's to specify.
+reused.** Decided 2026-08-12 (operator, gate-1 review). The image carries exactly what the job
+needs to run and nothing general-purpose: Terraform, terraform-backend-git, git, the presync
+scripts and the distro `python3` they run under, plus the three things without which
+`terraform init`/`apply` cannot touch the estate's own provider — `librados2`/`librbd1`, since
+`pvginkel/homelab` is cgo and its binary names `librados.so.2`/`librbd.so.1`, so where they are
+absent Terraform resolves every provider and can execute none (the failure lands at `apply`,
+never at `init`, which checksums a plugin without running it); a Terraform CLI config at
+`TF_CLI_CONFIG_FILE`, since that provider is served only from the estate's mirror and never the
+public registry; and the homelab step-ca root the mirror's chain needs, which no default trust
+store carries. All of it is baked in, since the image is dedicated to this one purpose, so
+nothing is cloned at runtime except the deploy repo at the synced SHA. ArgoCDTools (D15) is thus
+both the source repo and the image build; Argo-specific content inside it is fine by definition.
+The `iac` image stays untouched and gains no Argo-specific anything; nothing rides `iac`'s
+`repos:` mechanism; nothing is installed on any host. Supersedes plan's delivery-via-IaCAgent
+detail and lifecycle's "PreSync runs `deploy apply`" — HelmCharts' deploy CLI is not in the
+path. Image contents, tagging, its build pipeline and the Job template's home are design.md's to
+specify.
 
 **D32 — State backend unchanged; migrated apps get a new state key, moved deliberately.**
 Decided (CR; amended 2026-08-12 — lifecycle's "the state key never changes" died with D14).

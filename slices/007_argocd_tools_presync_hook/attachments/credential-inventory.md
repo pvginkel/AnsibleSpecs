@@ -67,9 +67,13 @@ to it is a change slice 009's object has to follow:
 - Terraform inputs, from `clusters.yaml`'s `prd.tf_vars`, exported `TF_VAR_*` as the CLI does:
   `ceph_cluster_id`, `ceph_pool`, `csi_rbd_secret_namespace`, `csi_cephfs_secret_namespace`,
   `zfs_pools` (JSON-encoded — it is a map), `postgres_admin_host`.
-- Release identity: `stage` and `namespace` reach the run as Job **arguments**, not Secret keys, and
-  the cluster is always `prd` — the ApplicationSet globs `configs/prd/` only (design.md:220-221), so
-  nothing has to name it.
+- Release identity: `stage` and `namespace` are not Secret keys — they reach the run as Job
+  **arguments**, and the entrypoint exports them as `TF_VAR_stage` and `TF_VAR_namespace` before
+  `init`, so `var.stage`/`var.namespace` carry what Argo is syncing rather than the empty-string
+  defaults `_providers/providers.tf:76-92` declares. A `-var-file` outranks a `TF_VAR_*`, so a
+  deploy repo's own tfvars still win. **`TF_VAR_cluster` is deliberately not exported**:
+  `var.cluster` is read by nothing under `configs/`, and the cluster is always `prd` — the
+  ApplicationSet globs `configs/prd/` only (design.md:227-228), so nothing has to name it.
 - The backend's non-secret settings: `GIT_USERNAME` (any non-empty string GitHub accepts beside a
   PAT; `x-access-token` is what `iac` uses) and `TF_BACKEND_HTTP_ENCRYPTION_PROVIDER=sops`.
 - `TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS` — the age **public** key, a literal in the `template` like

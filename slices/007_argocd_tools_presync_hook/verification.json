@@ -15,7 +15,7 @@
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/AnsibleSpecs/argo-cd/design.md:322-325"
+        "/work/AnsibleSpecs/argo-cd/design.md:331-334"
       ]
     },
     {
@@ -38,7 +38,7 @@
       "rationale": "",
       "evidence": [
         "/work/AnsibleSpecs/argo-cd/decisions.md:100-104",
-        "/work/AnsibleSpecs/argo-cd/design.md:329-330"
+        "/work/AnsibleSpecs/argo-cd/design.md:339-340"
       ]
     },
     {
@@ -61,7 +61,7 @@
       "rationale": "",
       "evidence": [
         "/work/AnsibleSpecs/argo-cd/decisions.md:218-222",
-        "/work/AnsibleSpecs/argo-cd/design.md:331-333"
+        "/work/AnsibleSpecs/argo-cd/design.md:349-351"
       ]
     },
     {
@@ -85,11 +85,11 @@
     {
       "id": "V09",
       "area": "R1 — the image",
-      "description": "The Dockerfile bakes exactly the job: Terraform, terraform-backend-git, git and the presync scripts — nothing else, and nothing cloned at runtime except the deploy repo. Terraform is unpinned from the hashicorp `noble` suite and terraform-backend-git is pinned to v0.1.11, as `iac` does both. `support/iac-image/` and the `iac` image are untouched.",
+      "description": "The Dockerfile bakes exactly what the job needs to run and nothing general-purpose — the four D31 names plus the distro `python3` the entrypoint runs under, `librados2`/`librbd1` for the cgo `pvginkel/homelab` binary, the Terraform CLI config routing that provider to the estate's mirror, and the step-ca root the mirror's chain needs — and nothing is cloned at runtime except the deploy repo. Terraform is unpinned from the hashicorp `noble` suite and terraform-backend-git is pinned to v0.1.11, as `iac` does both. `support/iac-image/` and the `iac` image are untouched.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/AnsibleSpecs/argo-cd/decisions.md:238-247",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:240-257",
         "/work/Ansible/support/iac-image/Dockerfile:100-115",
         "/work/Ansible/support/iac-image/Dockerfile:122-130"
       ]
@@ -166,8 +166,8 @@
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/AnsibleSpecs/argo-cd/decisions.md:315-324",
-        "/work/AnsibleSpecs/argo-cd/decisions.md:341-351"
+        "/work/AnsibleSpecs/argo-cd/decisions.md:334-343",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:360-377"
       ]
     },
     {
@@ -205,13 +205,13 @@
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/AnsibleSpecs/argo-cd/design.md:321",
-        "/work/AnsibleSpecs/argo-cd/design.md:361-363",
-        "/work/AnsibleSpecs/argo-cd/design.md:372",
-        "/work/AnsibleSpecs/argo-cd/design.md:190-199",
-        "/work/AnsibleSpecs/argo-cd/design.md:200-202",
+        "/work/AnsibleSpecs/argo-cd/design.md:327-330",
+        "/work/AnsibleSpecs/argo-cd/design.md:378-382",
+        "/work/AnsibleSpecs/argo-cd/design.md:391",
+        "/work/AnsibleSpecs/argo-cd/design.md:196-203",
+        "/work/AnsibleSpecs/argo-cd/design.md:205-207",
         "/work/AnsibleSpecs/argo-cd/decisions.md:218-222",
-        "/work/AnsibleSpecs/argo-cd/decisions.md:258-269"
+        "/work/AnsibleSpecs/argo-cd/decisions.md:271-288"
       ]
     },
     {
@@ -222,9 +222,9 @@
       "rationale": "",
       "evidence": [
         "/work/AnsibleSpecs/argo-cd/phases.md:39-41",
-        "/work/AnsibleSpecs/argo-cd/decisions.md:258-269",
-        "/work/AnsibleSpecs/argo-cd/decisions.md:341-351",
-        "/work/AnsibleSpecs/argo-cd/design.md:329-330"
+        "/work/AnsibleSpecs/argo-cd/decisions.md:271-288",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:360-377",
+        "/work/AnsibleSpecs/argo-cd/design.md:339-340"
       ]
     },
     {

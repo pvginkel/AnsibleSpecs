@@ -87,9 +87,12 @@ flag the cutover flow needs anyway (D5) provides this for free.
 
 One repo carrying the presync entrypoint, its Python/Terraform support code, and the Dockerfile
 that bakes them into the dedicated hook image: Terraform, terraform-backend-git, git, the
-scripts — nothing else (D31). CI publishes `registry:5000/argocd-hook:<n>`. The **default tag
-pin lives in the library chart** — one bump point for the whole estate — with the option to
-override per app while debugging. A tools release therefore reaches each app as it next
+scripts and the distro `python3` they run under, plus what Terraform cannot resolve or execute
+the estate's own provider without — `librados2`/`librbd1` for the cgo `pvginkel/homelab` binary,
+the CLI config routing that provider to the private mirror, and the step-ca root the mirror's
+chain needs; nothing general-purpose (D31). CI publishes `registry:5000/argocd-hook:<n>`. The
+**default tag pin lives in the library chart** — one bump point for the whole estate — with the
+option to override per app while debugging. A tools release therefore reaches each app as it next
 re-renders, which is the GitOps-consistent behaviour.
 
 ### Charts and charts.home
@@ -336,7 +339,13 @@ The flow, per sync of an app that has Terraform:
 4. `terraform init && terraform apply` in `terraform/`, with `config/<stage>/*.tfvars` from the
    clone (D14) and the whole of the rest of its environment — the provider credentials **and**
    the non-secret per-cluster provider configuration alike — from the single
-   `argocd-hook-credentials` Secret the Job takes through `envFrom` (D33).
+   `argocd-hook-credentials` Secret the Job takes through `envFrom` (D33). The run's own
+   identity comes from neither: the entrypoint exports its `hook.stage` and `hook.namespace`
+   arguments as `TF_VAR_stage` and `TF_VAR_namespace` before `init`, so per-stage Terraform
+   derives resource names from what Argo is syncing rather than from the empty-string defaults
+   `_providers/providers.tf` declares. A `-var-file` outranks a `TF_VAR_*`, so a deploy repo
+   carrying its own stage or namespace tfvars still wins. `var.cluster` is deliberately left
+   unset: nothing in the estate reads it, and the hook is prd-only.
 5. The PV reattach (D29): find `Released` PVs whose `claimRef` names the namespace the Job was
    handed, null out `claimRef.uid`/`resourceVersion` — under the Job's own ServiceAccount. With
    teardown deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
