@@ -571,7 +571,8 @@ green from this pod — the kaniko build resolves terraform 1.15.8-1 from the no
   base, and with the pair installed reaches its own plugin guard, so noble's Ceph 19.2 satisfies the
   binary's `LIBRADOS_14.2.0` symbol requirement. The build assertion now `CDLL`s both sonames —
   `terraform version` passes in an image no provider can start in — mutation-confirmed to fail the
-  build when either package is dropped.
+  build when `librbd1` is dropped. (P4 r2 F1, corrected here: dropping `librados2` alone leaves the
+  build green, because on noble `librbd1` depends on it and apt reinstalls it either way.)
 
 ### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin ✅ DONE 2026-08-14
 
@@ -796,6 +797,119 @@ document set as **surface 2**, with the old surfaces 2–5 renumbered 3–6.
   reconciled it against everything 007 shipped, so what remains is checking the rest of the slice's
   diff against the set rather than a fresh pass.
 
+### P9 — The run hands Terraform the release identity it was handed
+
+Target: `../ArgoCDTools`
+
+A hook run passes on the two identity values it already holds, so a deploy repo's Terraform derives
+its resource names from the stage and namespace Argo is syncing rather than from empty strings.
+
+- **The gap, and why it is silent.** `presync/cli.py:38-44` is the whole of what the run gives
+  Terraform: the backend flags and the `-var-file` list. The deploy CLI this hook replaces exports
+  three more per invocation — `/work/HelmCharts/tools/deploy/deploy_cli/release.py:236-239`,
+  commented *"so per-stage .tf files can derive names from var.namespace / var.stage"* — and
+  `/work/HelmCharts/_providers/providers.tf:76-91` declares all three with `default = ""`, so their
+  absence is not an error. The pilot's Terraform, the one B.1 lifts, reads them:
+  `/work/HelmCharts/configs/prd/kubecoder/_shared/infrastructure.tf:8,19-25` renders
+  `name = "${var.namespace}-zfs"` as `-zfs` and takes the *non-prd* branch of
+  `var.stage == "prd" ? "kubecoder" : "kubecoder-${var.stage}"`, a 20G dataset named `kubecoder-`
+  where 80G named `kubecoder` was meant. The apply succeeds and the hook exits 0 (P2 r1 F1).
+- **Which values, and from where**: `TF_VAR_stage` and `TF_VAR_namespace`, forwarded from the
+  arguments the run already parses — never re-derived, exactly as the fourth-argument ruling has the
+  namespace used as given. That ruling's own grounds decide this one layer down: a copy in the
+  clone's tfvars would re-derive what the ApplicationSet computed and could drift from the namespace
+  Argo is actually syncing into.
+- **`TF_VAR_cluster` is deliberately not exported.** `var.cluster` is declared
+  (`providers.tf:79-82`) and read by nothing under `/work/HelmCharts/configs/`; the hook is prd-only
+  (`design.md:220-221`); and a cluster identity baked into the container is the one estate fact the
+  configuration ruling keeps out of the image. The decision is recorded, not left implicit — P11
+  puts it where a B.1 author reads it.
+- **The export is a floor, not an override.** `-var-file` outranks a `TF_VAR_*` environment
+  variable, so a deploy repo that carries its own `stage`/`namespace` tfvars still wins. Worth an
+  assertion, because the opposite precedence would make this phase a trap for Phase B.
+- **Where it lands**: visible to both `init` and `apply` — the `os.environ` shape
+  `kubeconfig.provide()` already uses for `KUBE_CONFIG_PATH`/`KUBECONFIG` — and asserted in tests
+  rather than inferred from the code.
+
+Three smaller seams in the same repo, all from phase reviews that filed them as advisory with no
+later phase owning them:
+
+- **The clone's credential-helper chain** (P1 r1 F1). `presync/git.py:26-35` passes
+  `-c credential.helper=<ours>` without first emptying the list, so any helper configured in the
+  run's `HOME` is consulted as well. The image has none, so this is not a production defect — but
+  the test phase re-proves V02 *from this pod*, where the ambient `store` helper answers the fetch
+  and V02 checks off false-green. An empty `-c credential.helper=` ahead of ours resets the chain
+  and makes the run's authentication independent of whatever `HOME` it lands in.
+- **No fixture ever produces two matching volumes** (P3 r1 F1), so an implementation patching only
+  the first match passes the whole suite — while `postgres-pas-prd`'s three PVs in one namespace are
+  the estate's ordinary re-deploy case. `reattach.claimed_by` does return them all; the coverage is
+  what is missing.
+- **Two assertions that cannot fail**: `tests/test_cli.py:74`'s run-dir emptiness is true by
+  construction (P1 r1 F3), and `test_a_run_whose_apply_failed_exits_non_zero_and_says_why`'s
+  `assertIn("apply", stderr)` is satisfied by the progress lines printed before the command runs, so
+  the *"says why"* half is vacuous (P2 r1 F3).
+
+Gate: the repo's own manifest verbs from `/work/ArgoCDTools`. Nothing here changes what the
+Dockerfile copies, so the image's contract is untouched.
+
+### P10 — The render gate asserts the argument *sequence*, not the set
+
+Target: `../Charts`
+
+A reordering of the hook Job's `args:` block fails the chart's own gate, instead of rendering four
+correct-looking lines the entrypoint reads in the wrong order.
+
+- **What the gate checks today**: `tests/render-consumer.sh:63-66` asserts each rendered argument
+  line independently — repo, revision, stage and namespace each matched on its own. The entrypoint
+  takes them **positionally** (`presync/cli.py`'s `parse_args`), and P5's done-record makes the
+  rendered order load-bearing: *"Rendered order is therefore repo, revision, stage, namespace"*.
+  Swap two lines in `_tf-presync-hook.tpl:45-48` and every existing `expect` still passes (P5 r1 F1).
+- **What lands**: one assertion over the rendered `args:` block as a sequence — the existing
+  `expect` helper matches a single line, so this needs its own check — plus the mutation that proves
+  it bites: swapping two argument lines in the template must fail the gate.
+- **No chart file changes, so no version bump.** `dist/homelab-shared-0.2.0.tgz` stays byte-identical
+  and `tests/publish.sh:111-123`'s immutability check stays green. If the assertion turns out to be
+  impossible without editing a packaged chart file, the phase stops and says so rather than
+  publishing 0.3.0 for a test.
+
+Gate: `kc project lint` and `kc project test` in `/work/Charts`.
+
+### P11 — The `argo-cd` set states what the image carries and what an apply is given
+
+Target: `../AnsibleSpecs`
+
+The authoritative set's two remaining descriptions of the shipped hook match it: the image's contents
+and what reaches a run's Terraform.
+
+- **The image's contents.** D31 (`argo-cd/decisions.md:240-243`) and design.md's `:89-90` both
+  enumerate *"Terraform, terraform-backend-git, git, the scripts — nothing else"*. The image P4
+  shipped also carries the distro `python3` the entrypoint runs under, `librados2`/`librbd1` (the
+  `pvginkel/homelab` provider is cgo and names `librados.so.2`/`librbd.so.1` in DT_NEEDED, so
+  without them Terraform resolves every provider and can execute none), `image/terraform.rc` with
+  `TF_CLI_CONFIG_FILE` (that provider is served only from the estate's mirror, never the public
+  registry) and `image/homelab-root.crt` (the mirror's chain is a step-ca leaf no default trust
+  store verifies). Every one of them is what the job needs to run at all — which is what D31
+  decided; the **list** is what is stale. Both statements say what the image carries and why, so a
+  maintainer trimming it has the reasons rather than a list the Dockerfile contradicts. D31's claim
+  itself is unchanged: nothing general-purpose, and nothing cloned at runtime except the deploy
+  repo. (P7 r2 F3, absorbed here rather than left as a card — the set is a doc surface as of P8, and
+  V09 is checked against this text.)
+- **What an apply is given.** design.md's flow step 4 (`:336-338`) names two sources: the clone's
+  tfvars and the namespace's ESO Secret. With P9 there is a third and smaller one — the release
+  identity the Job arguments carry, exported as `TF_VAR_stage` and `TF_VAR_namespace`, with
+  `var.cluster` deliberately left unset because nothing in the estate reads it. One sentence in the
+  flow, because Phase B's rebuilt deploy repos are written against it: a B.1 author carrying
+  `var.namespace` across needs to know it arrives.
+- **`attachments/credential-inventory.md` says the same.** Its "Release identity" bullet
+  (`:70-72`) currently says `stage` and `namespace` *"reach the run as Job arguments, not Secret
+  keys"*, which reads as *Terraform sees them* — the reading that produced the gap P9 closes. It
+  becomes explicit about the export and about `cluster`. The attachment is this slice's contract
+  artifact — what V15 verifies and what slice 009 authors the ExternalSecret from — so it is part of
+  this phase's diff, unlike the slice's other records under `slices/`.
+- **Boundary and voice**: documents only, written as if it had always been true — no supersession
+  notices in the register, `history.md` per its own conventions. No live manifest, chart or
+  entrypoint is touched.
+
 ## Not in scope
 
 - The `argocd-hooks` namespace, the `tf-presync` ServiceAccount and its RBAC, and the
@@ -827,5 +941,6 @@ document set as **surface 2**, with the old surfaces 2–5 renumbered 3–6.
   deliberate.
 - The **dev** cluster. The hook is prd-only — the ApplicationSet globs `configs/prd/` and
   `configs/dev/` is a different cluster (`design.md:220-221`) — so only `prd`'s half of
-  `_providers/clusters.yaml` is inventoried here. The dev-cluster PV used to prove the reattach (P3)
-  is a test fixture, not a deployment target.
+  `_providers/clusters.yaml` is inventoried here. The `presync-proof` PVs used to prove the reattach
+  (P3) are a throwaway prd fixture, not a deployment target — the venue moved to prd with the
+  operator's 2026-08-14 amendment, and no phase of this slice depends on the dev cluster.
