@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "All three findings resolved on phase/006-P4 (6fbfbbe). tools/package-chart.sh now skips a version the destination store already holds, so the repo's own publish command no longer rewrites published tarballs and no longer condemns itself through the new immutability check — verified across a bare run, a second-chart publish (green through commit) and a legitimate version bump. tests/publish.sh runs each git command outside the `|| true` that absorbs grep's no-match, so a git that cannot answer aborts the gate under set -e instead of printing the success line (verified: .git removed → exit 128, no success line), and the rewritten-tarball remedy now names restoring rather than a spurious bump. Finding 3 was prose: the done-record's blanket \"every new assertion confirmed to bite\" is narrowed to record that the TF-owned rbd refute cannot be tripped by its branch mutation (helm errors first) — confirmed by execution. lint, test and build green from the repo root.",
+  "cards": []
+}

@@ -1,0 +1,7 @@
+{
+  "outcome": "done",
+  "summary": "Charts now publishes: dist/ is the committed store (homelab-shared-0.1.0.tgz), tools/build-index.sh regenerates the Helm index over it with absolute https://charts.home URLs, and the Dockerfile bakes tarballs plus index into nginx:alpine; the Jenkinsfile indexes in containerTemplates.helm, pushes registry:5000/charts-home under :<build> and :latest, and calls cicd.helmDeploy(). tests/publish.sh gates that dist/ is the sources packaged and that re-indexing is additive (V07, proven by execution) — all its checks and both Dockerfile guards confirmed to bite by mutation; kc project lint/test/build all green.",
+  "cards": [
+    "Charts: no shellcheck in the gate. Four shell scripts now carry the repo's real logic, one of them constrained to POSIX sh for the alpine/helm CI container, and nothing enforces that constraint automatically — the dash check was manual."
+  ]
+}

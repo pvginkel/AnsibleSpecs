@@ -1,0 +1,8 @@
+{
+  "outcome": "fix_round",
+  "summary": "Finding 1 is blocking on the review's own evidence and I re-derived its premise from the code: tools/package-chart.sh:32-36 skips on mere existence ([ -e ]), while tests/publish.sh:80 deliberately exempts '??' and 'A[ M]' because a tarball git does not yet carry has never been served and is free to change. The skip is broader than the property it defends, it is new in 6fbfbbe (git diff a2e4304..6fbfbbe confirms the block did not exist before), and check 1's remedy text then names the one action that cannot work — walking a developer into committing a permanently-published, immutable-by-the-new-check chart version whose bytes match no committed source state. That is a wire-contract artifact a consumer pins against via index.yaml and Chart.lock, which is squarely the round-2 bar. Finding 2's missing coverage rides along as part of landing the fix — the phase set its own mutation bar at plan.md:399-400 and the new conditional is exactly the assertion-free behaviour change that bar exists to catch; Finding 3 is one string in a file the executor is already editing, so take it if trivial, otherwise it cards.",
+  "cards": [
+    "Charts: tests/publish.sh check 1's stale-tarball remedy only names 'bump the version in Chart.yaml' — carded only if the fix round does not reword it alongside the package-chart.sh skip.",
+    "Charts: tests/publish.sh:82's rewritten-tarball remedy names `git checkout -- dist/`, which does not clear a staged rewrite (`M `) — the same check flags it, the remedy leaves status unchanged, and the gate stays red. Minor, self-limiting; carded if not taken in passing."
+  ]
+}

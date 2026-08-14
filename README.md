@@ -28,7 +28,6 @@ the detail.
 
 Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B):
 
-- **[006](slices/backlog/006_charts_repo_and_charts_home/slice.md)** — Charts repo and charts.home: library chart source, publishing pipeline and the `https://charts.home` static chart repo (phases.md A.1; #124).
 - **[007](slices/backlog/007_argocd_tools_presync_hook/slice.md)** — ArgoCDTools and the PreSync hook image: the Terraform hook entrypoint, `registry:5000/argocd-hook:<n>`, and its OpenBao credentials (phases.md A.2; #124).
 - **[008](slices/backlog/008_helmcharts_argo_coexistence/slice.md)** — HelmCharts coexistence with the `argo-cd` reconciler: the deploy CLI honours the ownership key so Jenkins and Argo are never both live (phases.md A.3; gates 009; #124).
 - **[009](slices/backlog/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
@@ -65,6 +64,7 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 | [postgres-cluster-substrate](slices/completed/postgres-cluster-substrate.md) | — | helm-tf-deploy-harness, zfs-dataset-provider, backup-collector | shared CNPG Postgres on ZFS — substrate live on dev+prd, app DBs migrated |
 | [001 pre-drain-readiness-check](slices/completed/001_pre_drain_readiness_check/overview.md) | — | pre-drain-handoff | tightened the pre-drain readiness gate — fix landed 2026-06-14; the owed multi-node verification moved to the k8s-upgrade runbook |
 | [013 iac-pipeline-restructure](slices/completed/013_iac_pipeline_restructure/plan.md) | `iac-pipeline-restructure.md` (P1 superseded by tf-provider-registry) | tf-provider-registry | gated the `iac-image` rebuild on its real image inputs and folded the `IaCAgent` tree into `support/iac-agent/` with its 28 commits preserved — shipped 2026-08-13 (#70) |
+| [006 charts-repo-and-charts-home](slices/completed/006_charts_repo_and_charts_home/plan.md) | `argo-cd/phases.md` A.1 | — | the `Charts` repo (`homelab-shared` library chart + packaging pipeline) and `charts.home` as an ordinary HelmCharts release — live, `homelab-shared 0.1.0` published and resolvable over TLS — shipped 2026-08-14 (#124) |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

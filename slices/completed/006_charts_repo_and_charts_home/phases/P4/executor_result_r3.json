@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "All three r2 findings resolved on phase/006-P4 (012a266). tools/package-chart.sh now skips only a version HEAD carries at the destination's own path (git -C \"$DEST\" ls-tree), so an untracked tarball repacks — the reviewer's package-then-edit sequence is green at every step and the committed 0.1.0 tarball stays byte-identical — while a git that cannot answer aborts the run instead of rewriting served bytes. tests/publish.sh gates both halves of that skip (bare run against the real dist/, restored byte for byte either way; truncated scratch store that must refill), each confirmed to bite: deleting the skip reddens the first, reverting it to [ -e ] reddens the second. Check 1's stale remedy and the rewritten-tarball remedy (git checkout HEAD -- dist/, verified to clear a staged M ) both name a fix that works. kc project lint, test and build green from /work/Charts; done-record updated.",
+  "cards": []
+}
