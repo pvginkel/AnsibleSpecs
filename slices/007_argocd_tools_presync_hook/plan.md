@@ -303,6 +303,38 @@ state URL resolved. Terraform itself is P2 — this phase lands when a run reach
   not resolve here.
 - `ArgoCDTools` is **already** at `/work/Ansible/.kubecoder/config.yaml:16` — no manifest edit.
 
+**Done (2026-08-14).** Landed on `phase/007-P1`: `presync/` — a standard-library Python 3 package run
+as `python3 -m presync <repo> <revision> <stage> <namespace>` — with its `tests/` and the repo's gate.
+A run parses the four arguments, requires `GIT_USERNAME`/`GITHUB_TOKEN` by name, clones, brings the
+state backend up and reports the `-backend-config` flags `terraform init` takes. `__main__.py` turns a
+`PresyncError` into exit 1 — where D30's discipline hangs from P2 on.
+
+- **The gate** is `.kubecoder/project.yaml`, one component under `root`, `jenkins: IaC/ArgoCDTools`:
+  `lint` is `cexec iac ruff check .` plus `ruff format --check .` (`ruff.toml`, py312, line-length
+  100), `test` is `cexec iac python3 -m unittest discover -b -s tests -t .`. **No `setup` verb and no
+  dependency file** — nothing outside the standard library is imported, which is also why the image
+  needs no pip step.
+- **The clone is `init` + `remote add` + `fetch --depth 1 origin <sha>` + `checkout --detach
+  FETCH_HEAD`, and then `rev-parse HEAD` must equal the argument** — a branch or tag handed as
+  `hook.revision` fails the run rather than applying a moving target. Fetching a SHA that is not a
+  branch tip needs the serving side's `uploadpack.allowReachableSHA1InWant`; GitHub grants it and
+  `tests/support.py`'s fixture repo sets it, so the test exercises the real case.
+- **The credential helper is passed per command with `git -c`** and reads `$GIT_USERNAME` /
+  `$GITHUB_TOKEN` inside the helper: the clone's own config keeps no helper and `origin` keeps exactly
+  the URL it was handed, both asserted.
+- **`PRESYNC_TF_BACKEND` is one knob with one meaning** — set to `host:port`, the run uses the backend
+  already listening there and starts none; unset, it spawns `terraform-backend-git --access-logs` on
+  `127.0.0.1:6061`, inheriting the environment, writing into the Job log and reaped with the pod.
+  Either way it waits up to 10s for the port and fails by address.
+- **The state repo and ref are constants in `presync/backend.py`**, not Secret keys — the inventory
+  carries neither and D32 fixes both estate-wide. `<repo>` in the key is the clone URL's last segment
+  minus `.git`.
+- **For P2 and P3**: `namespace` is accepted and carried but used by nothing yet;
+  `environment.require()` is what each provider variable is read through, and `backend.config_flags`
+  yields the three flags `init` takes. Verified from this pod against the environment's own backend on
+  6061 — clone at SHA plus the resolved state URL on the success path, exit 1 with a named cause on a
+  missing credential and on an unknown revision.
+
 ### P2 — The apply: the provider environment, `terraform init/apply`, and exit-code discipline
 
 Target: `../ArgoCDTools`
@@ -375,6 +407,10 @@ first release.
   terraform-backend-git is pinned to **v0.1.11** (the ruling); the two precedents are
   `support/iac-image/Dockerfile:100-115` and `:122-130`, the latter showing the `COPY --from` of the
   pinned upstream image that is how the estate obtains that binary at all.
+- **The image's python is the distro's, and nothing is installed for it.** P1's entrypoint is
+  standard-library Python 3 run as `python3 -m presync`, so `python3` from noble joins Terraform, the
+  backend binary and git; `presync/` is what gets copied and `tests/`, `ruff.toml` and the manifest
+  are what `.dockerignore` keeps out of the context.
 - **The `iac` image is not touched** and gains no Argo-specific anything (D31, explicit).
 - **The pipeline is the estate's single-image shape**: `podTemplate(inheritFrom: 'jenkins-agent
   kaniko')` → `container('kaniko')` → `helmCharts.kaniko2(destinations: […])`, worked out at
