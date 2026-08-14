@@ -751,7 +751,7 @@ whole environment.
   the diff: no non-table line past 100 columns, links untouched, and the argument text checked
   against the shipped chart template and `presync/cli.py`, which agree on order.
 
-### P8 — `slice-doc-plan.md` names the `argo-cd` document set as a surface
+### P8 — `slice-doc-plan.md` names the `argo-cd` document set as a surface ✅ DONE 2026-08-14
 
 Target: `root`
 
