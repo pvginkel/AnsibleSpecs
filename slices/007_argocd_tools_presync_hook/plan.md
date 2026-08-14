@@ -486,7 +486,7 @@ on prd against the fixture the operator's amendment scopes.
   rebound to it (D29's point); all 47 pre-existing PVs unchanged by `resourceVersion`, the 8 real
   `Released` ones included; fixture deleted.
 
-### P4 — The hook image and the `IaC/ArgoCDTools` pipeline
+### P4 — The hook image and the `IaC/ArgoCDTools` pipeline ✅ DONE 2026-08-14
 
 Target: `../ArgoCDTools`
 
