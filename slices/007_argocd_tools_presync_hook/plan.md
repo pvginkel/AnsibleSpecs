@@ -564,6 +564,14 @@ green from this pod — the kaniko build resolves terraform 1.15.8-1 from the no
   cannot silently enter the streamed context.
 - **`tests/test_image.py`** asserts `presync` imports only the standard library — the one thing the
   image's "distro python3, no install step" contract rests on that a build cannot catch.
+- **`librados2`/`librbd1` ride beyond D31's list too** (r1 F1). `pvginkel/homelab` is cgo: the
+  released binary names `librados.so.2` and `librbd.so.1` in DT_NEEDED, so the image resolved every
+  provider and could execute none — a failure at `apply`, never at `init`, which checksums a plugin
+  without running it. Witnessed on `ubuntu:noble` itself: published 0.1.28 exits 127 on the bare
+  base, and with the pair installed reaches its own plugin guard, so noble's Ceph 19.2 satisfies the
+  binary's `LIBRADOS_14.2.0` symbol requirement. The build assertion now `CDLL`s both sonames —
+  `terraform version` passes in an image no provider can start in — mutation-confirmed to fail the
+  build when either package is dropped.
 
 ### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin
 
