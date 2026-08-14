@@ -535,6 +535,36 @@ first release.
   resolution in the hook image: P2's live proof ran in the `iac` sidecar, where the variable is
   already set, against a fixture declaring no providers.
 
+**Done (2026-08-14).** Landed on `phase/007-P4`: `Dockerfile`, `.dockerignore`, `Jenkinsfile`,
+`image/`, `tests/test_image.py`, and the manifest's `build` verb. `kc project lint|test|build` are
+green from this pod — the kaniko build resolves terraform 1.15.8-1 from the noble suite.
+
+- **`ubuntu:noble`** — the runtime P1's `ruff.toml` already targets. `terraform` unpinned from the
+  hashicorp `noble` suite (pinned literally, not derived from the base), `terraform-backend-git`
+  v0.1.11 by `COPY --from` of the upstream image, git, the distro `python3`. `presync/` at `/app`
+  with `PYTHONPATH=/app`, so the entrypoint is cwd-independent; `ENTRYPOINT ["python3", "-m",
+  "presync"]`, because the Job template supplies `args:` and no `command:`.
+- **`USER ubuntu`** — noble's own uid-1000 passwd entry, which is what terraform-backend-git's
+  `LOCK` handler resolves. A build-time `RUN` asserts `getent passwd "$(id -u)"` plus terraform,
+  the backend binary, git and `import presync.cli`: what D31 names is a build failure when absent
+  rather than a failed sync. **For slice 009**: the Job sets no `runAsUser`, and one added there
+  must stay a uid this image's `/etc/passwd` carries.
+- **Two files ride beyond D31's list, both because `terraform init` cannot work without them** —
+  `image/terraform.rc` (with `TF_CLI_CONFIG_FILE`, the review-settled fact) and
+  `image/homelab-root.crt`, since `tfmirror.home` serves a step-ca leaf no default trust store
+  verifies. Proven, not assumed: with the committed rc a fixture declaring `pvginkel/homelab`
+  initialises; with none it fails exactly as the fact predicts; and the committed root **alone**
+  verifies the mirror's chain (`Verify return code: 0`). Neither is per-cluster fact — no
+  `clusters.yaml` value is anywhere in the repo, and the cert is byte-identical to the two copies
+  the estate already keeps.
+- **The pipeline** publishes `registry:5000/argocd-hook:<n>` **and** `:latest` — `kaniko2` enforces
+  that pair or a single ref, and `latest` is the tracking tag the version poller rebuilds on; a
+  lone numbered tag would have the poller re-push a build number. `disableConcurrentBuilds()`,
+  `githubPush()`, no deploy stage. `.dockerignore` excludes `*.md`, so the doc phase's README
+  cannot silently enter the streamed context.
+- **`tests/test_image.py`** asserts `presync` imports only the standard library — the one thing the
+  image's "distro python3, no install step" contract rests on that a build cannot catch.
+
 ### P5 — `homelab-shared` 0.2.0: the fourth argument and the tag pin
 
 Target: `../Charts`
