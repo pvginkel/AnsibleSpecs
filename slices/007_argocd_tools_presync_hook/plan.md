@@ -426,7 +426,7 @@ their tests, and `cli.py`'s flow — run dir → kubeconfig → clone → backen
   through it and P2's live apply ran against a throwaway in-memory HTTP backend instead. P4's
   bullets now carry what that costs the image.
 
-### P3 — The PV reattach
+### P3 — The PV reattach ✅ DONE 2026-08-14
 
 Target: `../ArgoCDTools`
 
