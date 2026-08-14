@@ -59,11 +59,37 @@ restart what Jenkins depends on — was never a requirement app-level Terraform 
 So execution came back in-cluster, better than it left: a dedicated image built from
 ArgoCDTools (Terraform + terraform-backend-git + the scripts; explicitly **not** the `iac`
 container), the backend started per-run in-pod exactly as `iac-impl` does, credentials as
-scoped ESO leaves with a dedicated AppRole, and a ServiceAccount that let the PV reattach stop
-being smuggled through srviac's kubeconfig. Side effects: CR decision 4 un-amended, the Triage
-#506 flock blocker dissolved, and the `iac` startup-cost concern mooted. The grounding fact
-that unlocked it: terraform-backend-git was never a service — it is a per-invocation recipe,
-and the recipe fits in a pod.
+scoped ESO leaves, and a ServiceAccount that let the PV reattach stop being smuggled through
+srviac's kubeconfig. Side effects: CR decision 4 un-amended, the Triage #506 flock blocker
+dissolved, and the `iac` startup-cost concern mooted. The grounding fact that unlocked it:
+terraform-backend-git was never a service — it is a per-invocation recipe, and the recipe fits
+in a pod.
+
+## What a hook run is handed: a provider in the pod → one composed Secret (D29, D33, D41)
+
+That in-cluster design still had the hook holding a dedicated OpenBao AppRole and resolving its
+own leaves — `iac`'s shape, since `iac`'s recipe is what it borrowed. Building the hook
+(2026-08-14) met the operator's challenge: shouldn't Argo CD provide the credentials, and
+shouldn't the container be agnostic to the provider? Three grounds carried it. It is *tighter* on
+D41's own terms — a resolver's AppRole grants a KV prefix spanning every app's hook secrets,
+where an enumerated Secret grants what it names. "Follow the established patterns in `iac`" does
+not reach it: `iac-impl` self-resolves because srviac is a VM with no ESO, a constraint absent
+in-cluster, and carrying a mechanism across without its reason is cargo-culting. And the central
+point that must change to add a shared credential moves somewhere cheaper — a commit to the
+ExternalSecret, rather than an `approle.yml` edit plus a live OpenBao run plus a tools release.
+
+The same argument then reached configuration. The per-cluster provider facts the deploy CLI
+injects from `clusters.yaml` have no CLI in the hook path, and a copy of that file inside
+ArgoCDTools would be production fact duplicated into a repo whose CI cannot bind the copies — so
+the ExternalSecret carries them as template literals beside the leaves it fetches, and the
+container carries no estate facts at all. Costs named rather than designed around: rotation
+propagates on ESO's refresh interval, and `envFrom` is all-or-nothing.
+
+The PV reattach's namespace moved the same way in the same session — from something the hook
+finds to something it is handed. The ApplicationSet already computes `<app>-<stage>` for the
+destination; a hook re-deriving it would be a second expression free to drift, and the failure
+would surface at sync time rather than render time. It became a fourth `required`-guarded Job
+argument, which took the library chart to 0.2.0.
 
 ## Application management: hand list → ApplicationSet → two of them (D20–D24)
 

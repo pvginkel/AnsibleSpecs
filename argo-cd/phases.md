@@ -36,9 +36,15 @@ Four tracks, ordered by dependency; 1 and 2 can run in parallel.
       reattach, exit-code discipline — the design.md flow), support code, Dockerfile.
 - [ ] CI publishes `registry:5000/argocd-hook:<n>`; the default pin lands in the library
       chart's values (A.1 consumes it — coordinate the two repos' first releases).
-- [ ] Mint the hook's credentials in OpenBao: the **dedicated AppRole** for app-infra Terraform
-      (not srviac's), the scoped git token (state repo rw, deploy repos ro, `admin:repo_hook`
-      per D39/D41), the state encryption key. Operator writes the secret values.
+- [ ] Mint the hook's credentials in OpenBao as **enumerated leaves the `eso` AppRole reads**:
+      the provider credentials for app-infra Terraform (not srviac's), the scoped git token
+      (state repo rw, deploy repos ro, `admin:repo_hook` per D39/D41), the state encryption key.
+      No AppRole is minted for the hook — it never talks to OpenBao (D33, D41). Operator writes
+      the secret values.
+- [ ] Settle the inventory of a run's whole environment: every key the container reads, the leaf
+      and property behind each secret, and the non-secret per-cluster provider facts that ride
+      the same Secret. A.4 authors the ExternalSecret from it, and no phase before A.5 exercises
+      both halves together.
 
 ### A.3 — HelmCharts coexistence code (D38)
 
@@ -58,9 +64,11 @@ Must land **before** the first `reconciler: argo-cd` entry appears — which is 
 - [ ] `terraform/` in ArgoCDDeploy: the Keycloak client (D9). How its secret reaches OpenBao —
       operator writes it, or a public client with PKCE — is decided at implementation.
       Interlocks with keycloak-tf (Trello **#68**).
-- [ ] Create the hook namespace `argocd-hooks`: ESO leaves for the A.2 credentials, the
-      `tf-presync` ServiceAccount and its RBAC (PV get/list/patch), permitted as an AppProject
-      destination (D33).
+- [ ] Create the hook namespace `argocd-hooks`: the ExternalSecret materialising
+      `argocd-hook-credentials` from A.2's enumerated leaves **plus the non-secret per-cluster
+      provider configuration as `template` literals** — one object composes a run's whole
+      environment — the `tf-presync` ServiceAccount and its RBAC (PV get/list/patch), permitted
+      as an AppProject destination (D33).
 - [ ] Repository credential Secrets via ESO (D40) — after checking whether anonymous read
       suffices anywhere.
 - [ ] Expose argocd-server behind the estate ingress with homelab TLS; decide **O3** (one
@@ -164,7 +172,9 @@ already exist — this is deleting `-latest`, not a new scheme.
 
 Operator keystrokes throughout; per stage:
 
-- [ ] Name the new state key for KubeCoderDeploy's Terraform.
+- [ ] Read the new state key off the hook's scheme —
+      `argocd/<repo>/<stage>/terraform.tfstate` (D32), derived by the entrypoint, not chosen
+      per app — and target the `state mv` at it.
 - [ ] `terraform state rm module.namespace` **before** the first sync adopts the namespace —
       the rm now means *handing it to Argo*, and the two tools must never both believe they
       own it.

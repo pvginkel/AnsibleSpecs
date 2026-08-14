@@ -717,6 +717,35 @@ this phase is where they land in the documents, as a diff someone can review.
 - **The boundary.** This phase changes documents only. It adds no ApplicationSet parameter to any
   live manifest (slice 009's A.4), and the slice's own records under `slices/` are not its diff.
 
+**Done (2026-08-14).** Landed on `phase/007-P7`: `argo-cd/{design,decisions,phases,history}.md`
+state the hook as it shipped — four arguments, enumerated ESO leaves, one Secret composing a run's
+whole environment.
+
+- **The fourth argument, in all four places it said three**: design.md's flow step 1, the Job
+  skeleton's `args` (order repo, revision, stage, namespace — what the shipped
+  `_tf-presync-hook.tpl` and `python3 -m presync` both take), the `required`-guard sentence, and
+  the ApplicationSet's `parameters:` block, carrying the same `<app>-<stage>` expression already
+  written for `destination.namespace`. D29 and the "one expression" bullet now say the reattach
+  filters on the namespace it is handed.
+- **The credential model**: D33's provisioning sentence, D41's blast radius, phases.md A.2's
+  checkbox and design.md's identity table are the enumerated-leaves model — no AppRole for the
+  hook, `envFrom` the whole of delivery. D41 gained a paragraph naming what it is tighter than (a
+  run-time credential-provider identity bounds a run by a KV prefix spanning every app), written
+  as a live comparison, not a supersession notice.
+- **What the Secret holds** reached design.md flow step 4, the identity table, and phases.md
+  **A.4** — the ExternalSecret materialises the leaves **plus** the non-secret per-cluster
+  configuration as `template` literals — with a new A.2 checkbox owing the inventory A.4 reads.
+- **One settlement beyond the plan's bullets.** D32 said "name the new key" per app; the
+  entrypoint derives `argocd/<repo>/<stage>/terraform.tfstate` (the state-key ruling), so D32
+  states the scheme and phases.md **B.4** reads the key off it. Unamended, the state surgery —
+  "the step that can delete production" — would `state mv` to a key nothing reads.
+- **history.md gained one arc**, "What a hook run is handed", covering the AppRole → leaves move,
+  the configuration half and the namespace becoming an argument; the stale "with a dedicated
+  AppRole" clause in the in-cluster arc is gone. The register reads as if it had always been true.
+- **Gate**: this repo has no tooling (plain Markdown, README's convention). Verified by reading
+  the diff: no non-table line past 100 columns, links untouched, and the argument text checked
+  against the shipped chart template and `presync/cli.py`, which agree on order.
+
 ### P8 — `slice-doc-plan.md` names the `argo-cd` document set as a surface
 
 Target: `root`

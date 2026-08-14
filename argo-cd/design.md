@@ -87,10 +87,13 @@ flag the cutover flow needs anyway (D5) provides this for free.
 
 One repo carrying the presync entrypoint, its Python/Terraform support code, and the Dockerfile
 that bakes them into the dedicated hook image: Terraform, terraform-backend-git, git, the
-scripts — nothing else (D31). CI publishes `registry:5000/argocd-hook:<n>`. The **default tag
-pin lives in the library chart** — one bump point for the whole estate — with the option to
-override per app while debugging. A tools release therefore reaches each app as it next
-re-renders, which is the GitOps-consistent behaviour.
+scripts — nothing else (D31). The image carries no credential material and no estate facts:
+everything a run needs beyond its own clone arrives as plain environment variables from the hook
+namespace's Secret (D33), so the container knows nothing of OpenBao, ESO or any cluster's
+endpoints. CI publishes `registry:5000/argocd-hook:<n>`. The **default tag pin lives in the
+library chart** — one bump point for the whole estate — with the option to override per app
+while debugging. A tools release therefore reaches each app as it next re-renders, which is the
+GitOps-consistent behaviour.
 
 ### Charts and charts.home
 
@@ -197,6 +200,8 @@ spec:
               value: '$ARGOCD_APP_REVISION'
             - name: hook.stage
               value: '{{ index .path.segments 3 }}'
+            - name: hook.namespace
+              value: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
       destination:
         name: in-cluster
         namespace: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
@@ -216,7 +221,9 @@ spec:
 Load-bearing details:
 
 - **Name and namespace derive from one expression** — `<app>-<stage>` from the path segments —
-  reproducing the existing convention for all 45 apps, so they cannot drift (D24).
+  reproducing the existing convention for all 45 apps, so they cannot drift (D24). The
+  `hook.namespace` parameter carries that same expression, so the hook's PV reattach filters on
+  the namespace Argo is syncing into rather than deriving one of its own (D29, D33).
 - **The glob is scoped to `configs/prd/`**: `configs/dev/` is the srvk8sdev tree, a different
   cluster, and 40 of its app-stage pairs would collide with prd names.
 - **`goTemplate: true` is required** for the path-segment syntax, for boolean-typed parameters,
@@ -318,19 +325,24 @@ poll; GitHub's *Recent Deliveries* page is where a miss is visible and redeliver
 The flow, per sync of an app that has Terraform:
 
 1. Argo begins the sync and creates the hook Job in `argocd-hooks` (D33), handing it
-   `hook.repo`, `hook.revision` (the exact synced SHA), `hook.stage` via chart values.
+   `hook.repo`, `hook.revision` (the exact synced SHA), `hook.stage` and `hook.namespace` — the
+   destination namespace, the same `<app>-<stage>` expression the ApplicationSet computes for
+   `destination.namespace` — via chart values.
 2. The pod runs the ArgoCDTools image (D31). The entrypoint clones the deploy repo at that SHA
    — the only runtime clone; the scripts are already in the image. The clone authenticates via
    an inline credential helper, never a token-in-URL remote — the URL form leaks the PAT into
    the process table and any error that echoes the remote.
 3. It starts terraform-backend-git on `127.0.0.1:6061` inside the pod — the same recipe
-   `iac-impl` uses — pointing at the same state repo and keying (D32). Concurrent syncs
-   serialise per state through the backend's lock branches.
+   `iac-impl` uses — pointing at the same state repo, under the key
+   `argocd/<repo>/<stage>/terraform.tfstate` the entrypoint derives from its own arguments
+   (D32). Concurrent syncs serialise per state through the backend's lock branches.
 4. `terraform init && terraform apply` in `terraform/`, with `config/<stage>/*.tfvars` from the
-   clone (D14) and credentials from the namespace's ESO Secrets.
-5. The PV reattach (D29): find `Released` PVs whose `claimRef` names the target namespace, null
-   out `claimRef.uid`/`resourceVersion` — under the Job's own ServiceAccount. With teardown
-   deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
+   clone (D14) and the whole of the rest of its environment — the provider credentials **and**
+   the non-secret per-cluster provider configuration alike — from the single
+   `argocd-hook-credentials` Secret the Job takes through `envFrom` (D33).
+5. The PV reattach (D29): find `Released` PVs whose `claimRef` names the namespace the Job was
+   handed, null out `claimRef.uid`/`resourceVersion` — under the Job's own ServiceAccount. With
+   teardown deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
 6. The exit code gates the sync (D30): non-zero fails the PreSync hook and nothing is applied.
 
 The Job template lives in the **library chart** as `homelab-shared.tf-presync-hook` — a migrated
@@ -361,6 +373,7 @@ spec:
             - {{ $hook.repo | quote }}
             - {{ $hook.revision | quote }}
             - {{ $hook.stage | quote }}
+            - {{ $hook.namespace | quote }}
           envFrom:
             - secretRef: { name: argocd-hook-credentials }
 ```
@@ -369,7 +382,7 @@ The two bindings at the top are load-bearing. Helm coalesces a library dependenc
 `values.yaml` under the dependency's name, so the estate-wide pin is `$lib` —
 `.Values["homelab-shared"].hook.imageTag` — while `.Values.hook.imageTag` is the app's override,
 which wins. Any later library default has to be read the same way; a plain `.Values.<key>` in a
-library template is always the app's value. The three arguments are `required`-guarded, so a
+library template is always the app's value. The four arguments are `required`-guarded, so a
 chart that forgets one fails to render rather than passing an empty argument.
 
 **Upstream-chart apps with Terraform** have no local chart to include the template, so their
@@ -382,10 +395,18 @@ Terraform simply don't include the template — no hook, no cost.
 
 | Item | Scope |
 | --- | --- |
-| OpenBao AppRole | Minted for app-infra Terraform — not srviac's role |
+| Secret `argocd-hook-credentials` | The whole of a run's environment: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
 | Git token | State repo read-write; deploy repos read-only; `admin:repo_hook` (D39) |
-| State encryption key | terraform-backend-git's passphrase, as today |
-| ServiceAccount `tf-presync` | PV get/list/patch, plus whatever the kubernetes provider manages |
+| State encryption key | terraform-backend-git's age keypair — `iac`'s own, read from the one leaf holding it, because both sides write the same state repo (D32) |
+| ServiceAccount `tf-presync` | PV get/list/patch, plus whatever the kubernetes provider manages — it is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
+
+The hook itself holds no OpenBao credential and never authenticates to OpenBao. ESO resolves the
+leaves, the ExternalSecret composes them with the configuration literals, and the container reads
+plain environment variables — knowing nothing about where they came from. Adding a shared
+credential is therefore an edit to that one object in ArgoCDDeploy, which Argo syncs; the cost
+accepted for it is that rotation propagates on ESO's refresh interval, and that `envFrom` is
+all-or-nothing, so every run's environment carries every shared credential even when its Terraform
+uses none of them.
 
 No PostSync hook is designed. The config phase is implemented but unused estate-wide, and
 nothing in the pilot or the early migrations needs one; the post-install/post-rollout scripts

@@ -219,7 +219,9 @@ with the separately tracked decommission path, Trello **#66**.
 delete, so undeploy cannot destroy; the ZFS dataset carries `prevent_destroy` as belt and
 braces. Consequence: the `Retain` PV goes `Released` on every teardown, and the reattach step
 (null `claimRef.uid`/`resourceVersion`) is the *normal* spin-up path, not an edge case. The
-reattach runs in the hook itself, under its scoped ServiceAccount (D33).
+reattach runs in the hook itself, under its scoped ServiceAccount (D33), against the namespace
+the Job is handed as an argument — the same `<app>-<stage>` expression Argo computes for the
+Application's destination, so the filter is the sync's own namespace and nothing is re-derived.
 
 ## Terraform and the PreSync hook
 
@@ -249,8 +251,11 @@ pipeline and the Job template's home are design.md's to specify.
 **D32 — State backend unchanged; migrated apps get a new state key, moved deliberately.**
 Decided (CR; amended 2026-08-12 — lifecycle's "the state key never changes" died with D14).
 terraform-backend-git starts per-run on `127.0.0.1:6061` *inside the hook pod* — the recipe
-`iac-impl` runs today — against the same state repo and keying; its per-state lock branches
-serialise concurrent syncs. Per migrated app: name the new key, `terraform state rm module.namespace` **before** the first sync adopts the namespace (so
+`iac-impl` runs today — against the same state repo; its per-state lock branches serialise
+concurrent syncs. The key is `argocd/<repo>/<stage>/terraform.tfstate` — `<repo>` the deploy
+repo's own name — derived by the entrypoint from its arguments: one scheme for the estate, so a
+migrated app's new key is read off its deploy repo and stage rather than chosen. Per migrated
+app: `terraform state rm module.namespace` **before** the first sync adopts the namespace (so
 the two tools are never both convinced they own it), `state mv` the storage addresses, and
 prove with a plan showing no destroys before any hook runs for real. This remains the step that
 can delete production; phases.md carries the checklist.
@@ -263,10 +268,16 @@ Were that `argocd`, any app chart could place arbitrary resources next to the co
 mount its Secrets — repo credentials (D40), the webhook secret, the OIDC client secret (D9). A
 dedicated namespace bounds what app-authored manifests can reach to exactly the hook
 credentials, which a hook run legitimately gets anyway; app namespaces in turn hold no
-deploy-time credentials at all. ESO provisions what a run needs: a dedicated OpenBao AppRole
-minted for app-infra Terraform — not srviac's — plus the git token and the state encryption
-key. The Job runs under a ServiceAccount whose RBAC covers what the hook genuinely does: the PV
-reattach (D29) and whatever the kubernetes provider manages.
+deploy-time credentials at all. ESO provisions what a run needs, leaf by enumerated leaf, into
+one Secret — `argocd-hook-credentials` — which the Job takes wholesale through `envFrom`: the
+provider credentials for app-infra Terraform (not srviac's), the git token and the state
+encryption key, alongside the non-secret per-cluster provider configuration the same object
+carries as `template` literals. The hook authenticates to nothing to obtain them — it reads
+plain environment variables and is agnostic to the provider behind them — so what a run holds is
+exactly the leaves that one object names (D41). The Job runs under a ServiceAccount whose RBAC
+covers what the hook genuinely does: the PV reattach (D29), whose target namespace it is handed
+as an argument, and whatever the kubernetes provider manages — the same identity the entrypoint
+builds the run's kubeconfig from.
 
 ## Promotion and CI
 
@@ -343,12 +354,19 @@ goes in the dict and when the call runs (scope note); the library owns the git m
 containment theater — once free-form Terraform runs, "you've lost anyway"). With execution
 in-cluster there is no cluster→srviac path at all: the old accepted widening is gone, and no
 `authorized_keys`, host-key or argument-allowlist machinery exists to maintain. What bounds a
-hook run is exactly what the hook namespace holds (D33): the dedicated AppRole, the git token —
-scoped at minting: state repo read-write, deploy repos read-only, plus `admin:repo_hook` for
-D39 — the state encryption key, and the ServiceAccount's RBAC. Stated plainly: write access to
-a deploy repo branch is arbitrary Terraform execution inside a pod bounded by those
-credentials. Accepted — and strictly smaller than what the same access bought under the srviac
-design, where it was code execution on the estate's IaC control host.
+hook run is exactly what the hook namespace holds (D33): the enumerated provider credentials in
+`argocd-hook-credentials`, the git token — scoped at minting: state repo read-write, deploy
+repos read-only, plus `admin:repo_hook` for D39 — the state encryption key, and the
+ServiceAccount's RBAC. Stated plainly: write access to a deploy repo branch is arbitrary
+Terraform execution inside a pod bounded by those credentials.
+
+**Enumeration is what keeps that bound narrow.** A run's environment is precisely the leaves one
+ExternalSecret names, so a compromised deploy repo branch reaches those and nothing else. Handing
+the pod a credential-provider identity instead — an AppRole it authenticates with at run time —
+would bound a run by the KV prefix that role can read, which spans every app's hook secrets; the
+enumerated Secret is the tighter of the two, on D33's own terms. Accepted — and strictly smaller
+again than what the same access bought under the srviac design, where it was code execution on
+the estate's IaC control host.
 
 ## Migration and endgame
 
