@@ -1,0 +1,142 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — release.yaml schema",
+      "description": "`_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision`: a release.yaml carrying all five is accepted by every verb, while any other key still fails loud.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — prd enumeration",
+      "description": "`discover_releases` skips non-`jenkins` reconcilers by direct file read — no `deploy config` subprocess per release and no chart-existence trip.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — verb refusal",
+      "description": "Helm-bearing verbs (`deploy`, `template`, `stop`, `uninstall`) refuse `argo-cd` releases with a clear message and a non-zero exit.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "Ruling — the refusal set",
+      "description": "The state-mutating Terraform verbs `apply`, `destroy` and `import` refuse an `argo-cd` release too, so nothing writes against the old, emptied HelmCharts Terraform state key (D32).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "Ruling — the refusal set",
+      "description": "The inspection verbs — `plan`, `output`, `config`, `wait`, `refresh-secrets` — stay usable against a migrated release; being able to look at one is worth keeping.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R1/R2 — default ownership",
+      "description": "`reconciler:` defaults to `jenkins` when absent: both a missing key and a missing release.yaml resolve and enumerate as Jenkins-owned, and every release that exists today behaves exactly as it does now.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R3 — infra-only resolution",
+      "description": "`chart: null` keeps HelmCharts release resolution working once `charts/<app>/` is deleted, using the existing infra-only value and no new mechanism.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "tools/deploy/deploy_cli/release.py:155-162",
+        "tools/deploy/deploy_cli/release.py:74-82",
+        "configs/dev/_ci/prd/release.yaml"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "Ruling — prove no breakage",
+      "description": "A registered `reconciler: argo-cd` entry does not break `gen-architecture`: the run completes and the migrated app drops out of the model, rather than failing `Jenkinsfile.architecture` and losing the whole artifact. Silent non-coverage is the accepted outcome; a failure is not.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "tools/chart_tools/gen_architecture.py:578-581",
+        "tools/chart_tools/gen_architecture.py:149-158"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "Ruling — prove no breakage",
+      "description": "A registered `reconciler: argo-cd` entry does not break `audit-prd-orphans` or `recommend-resources` — each still runs to completion over `configs/prd/`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "Ruling — prove no breakage",
+      "description": "The Jenkins deploy pipeline's release list and `collect-versions` survive a registered entry: both produce their output without a traceback, and the migrated release simply gets no deploy stage.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "Jenkinsfile:55-57",
+        "tools/chart_tools/resolve_helm_args.py:204-221",
+        "tools/chart_tools/collect_version_dependencies.py:18-21"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "Derived guard — typo'd ownership",
+      "description": "An unrecognised `reconciler:` value fails loud rather than silently dropping a release out of both reconcilers (skipped by Jenkins, unmatched by Argo's exact-match selector).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Ruling — how this slice is proven",
+      "description": "`kc project test`, run from the HelmCharts repo root, runs the new unit tests and is green; the repo carries a `.kubecoder/project.yaml` declaring the curated entry points and **no** `.kubecoder/config.yaml`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Ruling — how this slice is proven",
+      "description": "pytest arrives as a Poetry dependency group in HelmCharts' own pyproject.toml and the container needs nothing new: a `poetry install --only main` — what the iac image and CI use — installs no test dependency, and the Jenkinsfile is unchanged.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "pyproject.toml:5-9",
+        "pyproject.toml:42-48"
+      ]
+    },
+    {
+      "id": "V14",
+      "area": "Ruling — the latent get_chart_args crash",
+      "description": "A release whose `chart:` overrides the config-directory name resolves through the local-chart path instead of falling through to the upstream-repo path and raising; the fix is provably inert for every current release, none of which sets `chart:`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "tools/chart_tools/resolve_helm_args.py:172",
+        "tools/chart_tools/resolve_helm_args.py:36-37",
+        "tools/chart_tools/resolve_helm_args.py:47"
+      ]
+    },
+    {
+      "id": "V15",
+      "area": "Test coverage",
+      "description": "Every behaviour this slice adds is covered by unit tests that ride their own phase and stay hermetic — no cluster, no network, no helm/kubectl/terraform subprocess, no writes into the real configs/ tree.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
