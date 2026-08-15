@@ -347,6 +347,16 @@ Verbatim from `phases.md`. These are the slice's outcome-level acceptance, not e
 Slice 007 mints these values in OpenBao; this slice creates the namespace, the ESO leaves, the
 ServiceAccount and its RBAC.
 
+**The quoted table is a triage-time snapshot — read `design.md`'s current one at plan time.**
+Three of its four rows moved while 007 shipped: there is **no OpenBao AppRole** for the hook (it
+never authenticates to OpenBao — D33/D41); the state encryption key is `iac`'s **age keypair**
+read from `kv/iac/tf-backend`, not a passphrase (D32); and the git token as actually minted
+(2026-08-15) is a **classic PAT with `repo` on every private repo**, not the per-repo scoping
+shown — fine-grained tokens do not cross resource owners (D41's amendment, **O4**). None of this
+changes what this slice builds: the ExternalSecret carries `GITHUB_TOKEN` from
+`kv/eso/prd/argocd-hooks/git` either way. The authoritative inventory of every key, leaf and
+non-secret literal is slice 007's `attachments/credential-inventory.md`.
+
 ### design.md — vocabulary, because it is the easiest thing to misread
 
 > | Term | Meaning here | KubeCoder's instance |

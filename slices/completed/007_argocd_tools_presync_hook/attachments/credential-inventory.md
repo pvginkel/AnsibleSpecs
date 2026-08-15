@@ -83,23 +83,36 @@ to it is a change slice 009's object has to follow:
 
 ## The GitHub PAT
 
-Stated as effective permissions, because the mint is the operator's:
+**Minted 2026-08-15 as a classic PAT with `repo` on every private repository the operator owns.**
+This section originally specified a fine-grained token, and the mint went the other way for a
+reason that is worth keeping: **a fine-grained PAT is scoped to a single resource owner**, and the
+estate's repositories do not all sit under one, so the intended scoping is not expressible in one
+token. D41 carries the amendment and the blast-radius consequence; **O4** holds the GitHub App
+option that would restore it.
+
+What that means for anything reading this file: **the token is read-write on the state repo and
+every deploy repo alike**, and it needs no per-repo selection revisited as Phase B adds deploy
+repos — `repo` already covers them on creation. Nothing else here changes; the leaf, the key name
+and the ExternalSecret are unaffected.
+
+The scoping this section asked for, kept as the statement of intent behind O4:
 
 - `pvginkel/TerraformState` — **read-write** on contents. terraform-backend-git pushes state commits
   and per-state lock branches through it.
 - Every deploy repo — **read-only** on contents. The run's only clone (D14/D41).
 - Every deploy repo — **`admin:repo_hook`**, i.e. read-write on webhooks. D39 makes each deploy
-  repo's webhook a Terraform resource created on the first PreSync apply.
-
-Only a fine-grained PAT expresses this — a classic `repo` scope is read-write on everything it
-touches, which would give a deploy-repo branch write access to every deploy repo. Operational
-consequence to expect: the deploy repos do not all exist yet (Phase B creates them one at a time),
-so the token's repository selection is revisited as each is added.
+  repo's webhook a Terraform resource created on the first PreSync apply. Granted separately under
+  a fine-grained token; under the classic `repo` scope actually minted it is not, so **D39's
+  `github_repository_webhook` is confirmed on the first PreSync apply** rather than assumed.
 
 ## The operator's keystrokes
 
+**Status:** both OpenBao writes are done (2026-08-15, Trello #621). The age **public** key handoff
+below is still owed — it is an input to slice 009, not to 007.
+
 The git token — a new leaf under `eso/prd/`, which the `eso` grant's `eso/prd/*` glob already
-covers, so it needs no policy change:
+covers, so it needed no policy change. **Written:** `kv/eso/prd/argocd-hooks/git` exists,
+version 1, 2026-08-15T13:56Z.
 
 ```
 cd /work/Ansible && cexec iac bao kv put -mount=kv eso/prd/argocd-hooks/git token=<the PAT>
@@ -113,6 +126,10 @@ is the Ansible change this slice makes, applied by:
 ```
 cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml
 ```
+
+**Converged:** the live prd `eso` policy carries `kv/data/iac/tf-backend` and
+`kv/metadata/iac/tf-backend` read. A re-run reports no change by design — the role PUTs a policy
+only when the rendered text differs from what is live (`roles/openbao/tasks/approle.yml:211`).
 
 The recipient — the public half — needs no OpenBao work at all: it is a `template` literal, exactly
 as `iac` carries it in srviac's `/etc/iac/secrets.yaml` rather than in a leaf

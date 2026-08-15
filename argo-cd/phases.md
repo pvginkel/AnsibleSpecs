@@ -37,10 +37,11 @@ Four tracks, ordered by dependency; 1 and 2 can run in parallel.
 - [ ] CI publishes `registry:5000/argocd-hook:<n>`; the default pin lands in the library
       chart's values (A.1 consumes it — coordinate the two repos' first releases).
 - [ ] Mint the hook's credentials in OpenBao as **enumerated leaves the `eso` AppRole reads**:
-      the provider credentials for app-infra Terraform (not srviac's), the scoped git token
-      (state repo rw, deploy repos ro, `admin:repo_hook` per D39/D41), the state encryption key.
-      No AppRole is minted for the hook — it never talks to OpenBao (D33, D41). Operator writes
-      the secret values.
+      the provider credentials for app-infra Terraform (not srviac's), the git token, the state
+      encryption key. No AppRole is minted for the hook — it never talks to OpenBao (D33, D41).
+      Operator writes the secret values. The git token minted 2026-08-15 is a classic PAT with
+      `repo` on every private repo, not the per-repo scoping D41 first specified — fine-grained
+      tokens do not cross resource owners (D41's amendment, **O4**).
 - [ ] Settle the inventory of a run's whole environment: every key the container reads, the leaf
       and property behind each secret, and the non-secret per-cluster provider facts that ride
       the same Secret. A.4 authors the ExternalSecret from it, and no phase before A.5 exercises

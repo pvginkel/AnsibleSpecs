@@ -357,16 +357,36 @@ goes in the dict and when the call runs (scope note); the library owns the git m
 
 ## Security
 
-**D41 — The hook namespace's credentials are the blast radius, scoped deliberately.** Decided
-2026-08-12 (operator, gate-1 review; replaces the forced-command design, whose bound was
-containment theater — once free-form Terraform runs, "you've lost anyway"). With execution
+**D41 — The hook namespace's credentials are the blast radius; every one but the git token is
+scoped deliberately.** Decided 2026-08-12 (operator, gate-1 review; replaces the forced-command
+design, whose bound was containment theater — once free-form Terraform runs, "you've lost
+anyway"); the git token's scope **amended 2026-08-15** (operator, at minting). With execution
 in-cluster there is no cluster→srviac path at all: the old accepted widening is gone, and no
 `authorized_keys`, host-key or argument-allowlist machinery exists to maintain. What bounds a
 hook run is exactly what the hook namespace holds (D33): the enumerated provider credentials in
-`argocd-hook-credentials`, the git token — scoped at minting: state repo read-write, deploy
-repos read-only, plus `admin:repo_hook` for D39 — the state encryption key, and the
-ServiceAccount's RBAC. Stated plainly: write access to a deploy repo branch is arbitrary
-Terraform execution inside a pod bounded by those credentials.
+`argocd-hook-credentials`, the git token, the state encryption key, and the ServiceAccount's
+RBAC. Stated plainly: write access to a deploy repo branch is arbitrary Terraform execution
+inside a pod bounded by those credentials.
+
+**The git token is a classic PAT carrying `repo` on every private repository the operator owns.**
+This decision originally specified a fine-grained token — state repo read-write, deploy repos
+read-only, plus `admin:repo_hook` for D39 — and that is not what was minted. The reason is a
+GitHub constraint rather than a shortcut: **a fine-grained PAT is scoped to a single resource
+owner**, and the estate's repositories do not all sit under one. Expressing the intended scoping
+would take one token per owner plus a hook that selects between them; one classic token is what
+covers the set in a single credential.
+
+The cost, recorded so it is not rediscovered from an incident: **the "deploy repos read-only"
+half of the bound above is gone.** A compromised deploy repo branch reaches a token that can
+write every private repository in the estate — the other deploy repos, HelmCharts, Ansible and
+the state repo — where the intended scoping would have let it only read its siblings. The
+enumeration argument below is unaffected and still holds for every other leaf; the git token is
+simply no longer one of the narrow ones, and it is now the dominant term in a hook run's blast
+radius. Two consequences follow for Phase A: `admin:repo_hook` is no longer separately granted,
+so **D39's `github_repository_webhook` must be confirmed to work under a classic `repo` scope on
+the first PreSync apply**, and a GitHub App — installations cross owners and carry
+per-repository, per-permission grants, which both consumers (the deploy-repo clone and
+terraform-backend-git) accept — is the standing way back to the intended scoping. **O4.**
 
 **Enumeration is what keeps that bound narrow.** A run's environment is precisely the leaves one
 ExternalSecret names, so a compromised deploy repo branch reaches those and nothing else. Handing
@@ -406,3 +426,9 @@ operator's srvk8sdev workflow must survive HelmCharts' deletion in some form.
 
 **O3 — Webhook ingress arrangement** — two hooks registered on the registry repo, or one
 endpoint fanned out to both receivers. A Phase A decision; nothing downstream depends on which.
+
+**O4 — Whether a GitHub App replaces the hook's classic PAT** (D41). The PAT is `repo` on every
+private repository because fine-grained tokens do not cross resource owners; an App installation
+does, with per-repository and per-permission grants. Not urgent — nothing in Phase A or B is
+blocked on it — but it is the one change that would restore D41's intended git-token bound, and
+it is worth revisiting once the deploy repos exist and their real set is known.

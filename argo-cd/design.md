@@ -408,7 +408,7 @@ Terraform simply don't include the template — no hook, no cost.
 | Item | Scope |
 | --- | --- |
 | Secret `argocd-hook-credentials` | Everything a run's environment carries beyond its own Job arguments: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
-| Git token | State repo read-write; deploy repos read-only; `admin:repo_hook` (D39) |
+| Git token | A classic PAT with `repo` on every private repository the operator owns — read-write on the state repo and the deploy repos alike. Not the per-repo scoping D41 first specified: fine-grained tokens do not cross resource owners and the estate's repos do not sit under one. It is the dominant term in a hook run's blast radius (D41), and D39's webhook creation rides the same scope |
 | State encryption key | terraform-backend-git's age keypair — `iac`'s own, read from the one leaf holding it, because both sides write the same state repo (D32) |
 | ServiceAccount `tf-presync` | PV get/list/patch, plus whatever the kubernetes provider manages — it is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
 

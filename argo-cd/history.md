@@ -91,6 +91,23 @@ destination; a hook re-deriving it would be a second expression free to drift, a
 would surface at sync time rather than render time. It became a fourth `required`-guarded Job
 argument, which took the library chart to 0.2.0.
 
+## The git token: per-repo scoping → one classic PAT (D41)
+
+D41 bounded a hook run partly on the git token being narrow — state repo read-write, deploy repos
+read-only, `admin:repo_hook` for D39 — and that was written as a minting instruction because the
+mint is the operator's. Minting it (2026-08-15, closing slice 007) met the constraint that made
+it unbuildable as specified: **a fine-grained PAT is scoped to one resource owner**, and the
+estate's repositories are not all under one. The intended scoping would have taken a token per
+owner plus selection logic in the hook; what was minted is a single classic PAT with `repo` on
+every private repository.
+
+Recorded as a widening, not a detail. The enumerated-Secret argument above is untouched — it was
+always about *which leaves* a run can reach — but the git token is no longer one of the narrow
+things it reaches, so a compromised deploy repo branch now writes the estate's repos rather than
+reading its siblings. The escape hatch, left open rather than taken: a GitHub App installation
+crosses owners and grants per repository and per permission, and both consumers accept an
+installation token (**O4**).
+
 ## Application management: hand list → ApplicationSet → two of them (D20–D24)
 
 Q1/Q10 answered the CR's open question with a hand-maintained `applications:` list in the
