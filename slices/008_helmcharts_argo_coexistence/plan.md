@@ -282,7 +282,8 @@ what routes them to the repo path in the first place.
 - **Migrated apps keeping their place in the federated architecture model.** A migrated app's
   entry carries `chart: null`, and `gen_architecture` skips falsy `chart_name`, so each app
   silently drops out of the model as it migrates — starting with the KubeCoder pilot, not at
-  endgame. Real, and outside this slice; the operator is filing it separately.
+  endgame. Real, and outside this slice: it is now **slice 014** (architecture producers for the
+  deploy repos). V08 deliberately accepts that drop-out as the correct outcome here.
 - **Any registry entry.** This slice ships the code that honours `reconciler:`; it registers
   nothing. The first entry is slice 009's.
 - **Changes to the `iac` image.** pytest arrives as a Poetry dependency group in HelmCharts' own
