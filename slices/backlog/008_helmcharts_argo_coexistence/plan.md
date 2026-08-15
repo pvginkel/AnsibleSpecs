@@ -40,14 +40,21 @@ machinery here.
   only its own project manifest. This is test tooling for code being changed, not a new product
   surface, so it is the deliberate exception to D43 — and slices 011 and 012 edit this same code
   and inherit the gate.
-- Ruling (2026-08-15) — **the refusal set: "Four + mutating TF verbs."** R3's four named verbs
-  (`deploy`, `template`, `stop`, `uninstall`) refuse an `argo-cd` release, **plus** the
-  state-mutating Terraform verbs `apply`, `destroy` and `import`. Grounds: D32 moves a migrated
-  app's Terraform state to a new key (`argocd/<repo>/<stage>/terraform.tfstate`), so those verbs
-  would write against the old, emptied HelmCharts key — `deploy apply` there could recreate infra
-  under a state nothing owns. This deliberately widens R3, which named only the four. The
-  inspection verbs — `plan`, `output`, `config`, `wait`, `refresh-secrets` — stay usable against a
-  migrated release; being able to look at one is worth keeping.
+- Ruling (2026-08-15) — **the refusal set: "Four + mutating TF verbs," plus `refresh-secrets`.**
+  R3's four named verbs (`deploy`, `template`, `stop`, `uninstall`) refuse an `argo-cd` release,
+  **plus** the state-mutating Terraform verbs `apply`, `destroy` and `import`, **plus**
+  `refresh-secrets` — eight in all. Grounds for the Terraform three: D32 moves a migrated app's
+  state to a new key (`argocd/<repo>/<stage>/terraform.tfstate`), so those verbs would write
+  against the old, emptied HelmCharts key — `deploy apply` there could recreate infra under a
+  state nothing owns. Grounds for `refresh-secrets`: **"Move it to the refusal set."** It is not
+  an inspection verb — `helmops.refresh_secrets` annotates the namespace's ExternalSecrets and
+  then runs `kubectl rollout restart` on its workloads, which in a migrated namespace are
+  Argo-owned, so it writes into pod templates Argo will fight or revert under selfHeal. This
+  deliberately widens R3, which named only the four. The genuinely read-only inspection verbs —
+  `plan`, `output`, `config`, `wait` — stay usable against a migrated release; being able to look
+  at one is worth keeping. Refusal (8) and inspection (4) partition `main.py`'s twelve verbs
+  exhaustively. **`config` MUST NOT ever join the refusal set** — `gen_architecture` calls it for
+  every prd stage and does not catch a non-zero exit.
 - Ruling (2026-08-15) — **the latent `get_chart_args` crash: "Fix it here."** The bug is confirmed
   at `tools/chart_tools/resolve_helm_args.py` — the local-chart test keys on the config-directory
   name (`chart_dir`) instead of the resolved chart name (`chart_name`), so a release whose
@@ -63,6 +70,38 @@ machinery here.
   not *break* them: `Jenkinsfile.architecture` runs `gen-architecture` on every push, and a crash
   there would be discovered the hard way during slice 009. Silent non-coverage is the accepted
   outcome; a failure is not.
+- Ruling (2026-08-15) — **how the no-breakage guarantee is actually made good: "Make `resolve()`
+  reconciler-aware."** When `reconciler:` names anything other than `jenkins`, `resolve()`
+  validates the top-level `_RELEASE_KEYS` allowlist and stops there — skipping the chart-existence
+  check and the nested `upstream:` validation. Grounds: an Argo registry entry is not a HelmCharts
+  release, and validating it as one is the category error behind both ways the guarantee was
+  breaking. Absent `chart:` on slice 009's `configs/prd/argocd/prd/release.yaml` (`charts/argocd`
+  does not exist) raised `no chart at charts/argocd`; and `design.md`'s upstream-chart entry shape
+  `upstream: {repo, chart, version}` fails the second, stricter `_UPSTREAM_KEYS =
+  {repo_name, repo_url, chart}` allowlist underneath. Either exits `deploy config` non-zero and
+  takes down the whole architecture artifact. This is ~2 lines, because R3's refusal already
+  forces `resolve()` to read the reconciler. **`_UPSTREAM_KEYS` MUST NOT be widened** — that would
+  merge two different schemas into one allowlist and weaken a check protecting the nine live
+  upstream releases. The ~44 `jenkins` releases keep every check exactly as strict as today, and
+  V08 becomes true of *any* entry shape rather than true-if-someone-remembers `chart: null`. It is
+  also the choice that minimises future edits to a repo D43 deletes: the Argo entry schema can
+  evolve through Phases B and C without anyone touching HelmCharts again.
+- Ruling (2026-08-15) — **the derived reconciler-value typo guard (V11): "Strike the guard because
+  of the same reason as the previous one. HelmCharts will go. We can manage in the mean time."**
+  Any value other than `jenkins` is treated as "not ours, skip"; no unrecognised-value check is
+  added anywhere. Accepted cost, stated plainly: a typo such as `reconciler: jenkis` makes that
+  release silently stop deploying rather than failing loud. Strike V11 from `verification.json`
+  and remove the guard from the phases.
+- Ruling (2026-08-15) — **plan review round 1, the non-operator findings: accepted, apply them
+  all.** F4: V01 is a **schema-acceptance** criterion, not a verb-behaviour one — reword it so it
+  claims only that a `release.yaml` carrying all five new keys passes the allowlist while any
+  other key still fails loud, removing the "accepted by every verb" contradiction with V03/V04.
+  Advisories: correct the stage-directory count (51, not 46 — the 15 `release.yaml` files are
+  right); correct the P3 citation to `resolve_helm_args.py:35`; and rewrite V15, which is not
+  outcome-level and not independently checkable. On gate durability — P1's claim that 011 and 012
+  "inherit" the gate is weaker than it reads, since the loop's sweep runs `lint`/`build`/`test`
+  but never `kc project setup`, so nothing reinstalls the test group after an environment rebuild.
+  State that limitation in P1 rather than overclaiming.
 
 ## Task shape
 
