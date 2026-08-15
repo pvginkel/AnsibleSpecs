@@ -135,10 +135,16 @@ The recipient — the public half — needs no OpenBao work at all: it is a `tem
 as `iac` carries it in srviac's `/etc/iac/secrets.yaml` rather than in a leaf
 (`support/iac-agent/etc/iac/secrets.example.yaml:126-133` shows the shape, with the real `age1…`
 string standing where the example's placeholder does). What the operator hands over is that one
-non-secret string, for slice 009 to place in the ExternalSecret's `template`; it can equally be
-derived from the private half with `age-keygen -y`, which is a read of the secret and therefore also
-the operator's. No `kv put` or `kv patch` on `iac/tf-backend` is involved either way — the leaf is
-left exactly as it is.
+non-secret string, for slice 009 to place in the ExternalSecret's `template`. No `kv put` or
+`kv patch` on `iac/tf-backend` is involved — the leaf is left exactly as it is.
+
+**Read it off srviac, don't derive it.** `age-keygen -y` over the private half was named here as an
+equal alternative and isn't one: `age`, `age-keygen` and `sops` are installed on none of `srviac`,
+the KubeCoder `iac` sidecar or the dev container (terraform-backend-git bundles them in its own
+image), so deriving means fetching a binary and handling the private key to recover a string that
+is already plaintext. Procedure, both paths:
+[`/work/Ansible/docs/runbooks/iac-agent.md`](/work/Ansible/docs/runbooks/iac-agent.md) §"State
+encryption keypair (SOPS/age)".
 
 Nothing else is minted. **No AppRole is created for the hook** (the credential-delivery ruling) —
 the hook never authenticates to OpenBao.
