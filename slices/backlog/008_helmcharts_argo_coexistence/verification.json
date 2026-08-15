@@ -3,10 +3,13 @@
     {
       "id": "V01",
       "area": "R1 — release.yaml schema",
-      "description": "`_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision`: a release.yaml carrying all five is accepted by every verb, while any other key still fails loud.",
+      "description": "`_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision`: a release.yaml carrying all five passes the allowlist check, while any other key still fails loud with a non-zero exit.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "tools/deploy/deploy_cli/release.py:12-20",
+        "tools/deploy/deploy_cli/release.py:142-144"
+      ]
     },
     {
       "id": "V02",
@@ -14,7 +17,9 @@
       "description": "`discover_releases` skips non-`jenkins` reconcilers by direct file read — no `deploy config` subprocess per release and no chart-existence trip.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "tools/chart_tools/resolve_helm_args.py:190-202"
+      ]
     },
     {
       "id": "V03",
@@ -35,10 +40,14 @@
     {
       "id": "V05",
       "area": "Ruling — the refusal set",
-      "description": "The inspection verbs — `plan`, `output`, `config`, `wait`, `refresh-secrets` — stay usable against a migrated release; being able to look at one is worth keeping.",
+      "description": "The genuinely read-only inspection verbs — `plan`, `output`, `config`, `wait` — stay usable against a migrated release; being able to look at one is worth keeping. `config` in particular never refuses, since `gen_architecture` calls it for every prd stage and does not catch a non-zero exit.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "tools/deploy/deploy_cli/main.py:28-41",
+        "tools/chart_tools/gen_architecture.py:578-580",
+        "tools/chart_tools/gen_architecture.py:149-158"
+      ]
     },
     {
       "id": "V06",
@@ -63,10 +72,12 @@
     {
       "id": "V08",
       "area": "Ruling — prove no breakage",
-      "description": "A registered `reconciler: argo-cd` entry does not break `gen-architecture`: the run completes and the migrated app drops out of the model, rather than failing `Jenkinsfile.architecture` and losing the whole artifact. Silent non-coverage is the accepted outcome; a failure is not.",
+      "description": "A registered `reconciler: argo-cd` entry does not break `gen-architecture`, whatever shape the entry takes — `chart:` omitted, `chart: null`, or an `upstream: {repo, chart, version}` block: the run completes and the migrated app drops out of the model, rather than failing `Jenkinsfile.architecture` and losing the whole artifact. Silent non-coverage is the accepted outcome; a failure is not.",
       "verdict": null,
       "rationale": "",
       "evidence": [
+        "tools/deploy/deploy_cli/release.py:146-153",
+        "tools/deploy/deploy_cli/release.py:156-162",
         "tools/chart_tools/gen_architecture.py:578-581",
         "tools/chart_tools/gen_architecture.py:149-158"
       ]
@@ -92,14 +103,6 @@
       ]
     },
     {
-      "id": "V11",
-      "area": "Derived guard — typo'd ownership",
-      "description": "An unrecognised `reconciler:` value fails loud rather than silently dropping a release out of both reconcilers (skipped by Jenkins, unmatched by Argo's exact-match selector).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
-    },
-    {
       "id": "V12",
       "area": "Ruling — how this slice is proven",
       "description": "`kc project test`, run from the HelmCharts repo root, runs the new unit tests and is green; the repo carries a `.kubecoder/project.yaml` declaring the curated entry points and **no** `.kubecoder/config.yaml`.",
@@ -121,22 +124,45 @@
     {
       "id": "V14",
       "area": "Ruling — the latent get_chart_args crash",
-      "description": "A release whose `chart:` overrides the config-directory name resolves through the local-chart path instead of falling through to the upstream-repo path and raising; the fix is provably inert for every current release, none of which sets `chart:`.",
+      "description": "A release whose `chart:` overrides the config-directory name resolves through the local-chart path instead of falling through to the upstream-repo path and raising; the fix is provably inert for every current release, none of which sets a top-level `chart:`.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "tools/chart_tools/resolve_helm_args.py:172",
-        "tools/chart_tools/resolve_helm_args.py:36-37",
+        "tools/chart_tools/resolve_helm_args.py:35",
         "tools/chart_tools/resolve_helm_args.py:47"
       ]
     },
     {
       "id": "V15",
-      "area": "Test coverage",
-      "description": "Every behaviour this slice adds is covered by unit tests that ride their own phase and stay hermetic — no cluster, no network, no helm/kubectl/terraform subprocess, no writes into the real configs/ tree.",
+      "area": "Ruling — how this slice is proven",
+      "description": "The suite is hermetic: `kc project test` is green with no cluster, no network and no `helm`/`kubectl`/`terraform` subprocess, and leaves the repo's real `configs/` tree unmodified.",
       "verdict": null,
       "rationale": "",
       "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "Ruling — the refusal set",
+      "description": "`refresh-secrets` refuses an `argo-cd` release: it is not an inspection verb — it annotates the namespace's ExternalSecrets and then rolls their consumers, which in a migrated namespace are Argo-owned pod templates.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "tools/deploy/deploy_cli/helmops.py:373-376",
+        "tools/deploy/deploy_cli/helmops.py:393"
+      ]
+    },
+    {
+      "id": "V17",
+      "area": "Ruling — resolve() is reconciler-aware",
+      "description": "`_UPSTREAM_KEYS` is not widened and every `jenkins`-owned release keeps every check exactly as strict as today — the chart-existence check and the `upstream:` block's exactly-{repo_name, repo_url, chart} check both still fire for them; only an entry that names a non-`jenkins` reconciler is exempt.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "tools/deploy/deploy_cli/release.py:21",
+        "tools/deploy/deploy_cli/release.py:146-153",
+        "tools/deploy/deploy_cli/release.py:156-162"
+      ]
     }
   ]
 }

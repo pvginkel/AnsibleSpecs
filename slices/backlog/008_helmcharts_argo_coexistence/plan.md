@@ -126,10 +126,15 @@ Target: ../HelmCharts
 **Outcome.** `kc project test`, run from the root of `/work/HelmCharts`, executes a real unit-test
 suite over the repo's Python tools and is green. That is the gate the run loop picks for a
 `../HelmCharts` target, so P2 and P3 are reviewable against a verified state instead of an
-unverified one — and slices 011 and 012, which edit this same code, inherit it. This phase is
-therefore the one that runs with no deterministic gate of its own (`run_loop.py … --dry-run`
-reports exactly that until the manifest lands); it earns its own green by running
-`kc project test` by hand at the end.
+unverified one. This phase is therefore the one that runs with no deterministic gate of its own
+(`run_loop.py … --dry-run` reports exactly that until the manifest lands); it earns its own green
+by running `kc project test` by hand at the end.
+
+Slices 011 and 012 edit this same code and will pick the same gate, but the inheritance is weaker
+than it sounds and the limitation belongs here rather than in an overclaim: the loop's sweep runs
+`kc project lint` + `build` + `test` and never `kc project setup`, so nothing reinstalls the test
+dependency group after an environment rebuild. A later slice can meet a red gate that a hand-run
+`kc project setup` fixes — diagnosable, but nobody has budgeted for it.
 
 The suite that ships here pins **today's** behaviour of the two functions the next phases change —
 release resolution (`tools/deploy/deploy_cli/release.py:105`) and prd enumeration
@@ -173,24 +178,42 @@ Target: ../HelmCharts
   acts on `reconciler` alone; the other four are Argo's, allowlisted so the check stays a real
   typo-catcher instead of something a migrated entry has to work around.
 - **Absent means `jenkins`** — an absent key *and* an absent file. `release.yaml` is optional here:
-  15 of the 46 `configs/prd/**` stage directories have one, none names a reconciler, and none sets
-  `chart:` at all.
+  15 of the 51 `configs/prd/**` stage directories have one, none names a reconciler, and none sets
+  a top-level `chart:` at all.
+- **A non-`jenkins` entry is no longer validated as a HelmCharts release.** `resolve()`
+  (`release.py:105-204`) checks the top-level allowlist and stops there — no chart-existence trip
+  (`:156-162`), no nested `upstream:` validation (`:146-153`). It still yields a well-formed record
+  (identity and namespace resolve as always) but with no chart, so `deploy config` succeeds and
+  reports a falsy `chart_name` for **every** entry shape `design.md` specifies: one that omits
+  `chart:` (slice 009's `configs/prd/argocd/prd/release.yaml` — `charts/argocd` does not exist, and
+  `release.py:157-162` would raise `no chart at charts/argocd`), one that carries `chart: null`,
+  and one carrying an `upstream: {repo, chart, version}` block. That last shape is why the
+  short-circuit is the mechanism and not a widened allowlist: **`_UPSTREAM_KEYS` (`release.py:21`)
+  must not be widened.** It is a second, stricter allowlist — unknown *or missing* keys raise
+  (`:146-153`) — guarding the nine live upstream releases, and folding Argo's different schema into
+  it would weaken a check the `jenkins` releases still depend on. Every release that exists today
+  keeps every check exactly as strict as today — all 51 prd stages are `jenkins`-owned; only an
+  entry that declares itself someone else's is skipped.
 - `discover_releases` (`resolve_helm_args.py:190-202`) drops any stage whose `release.yaml` names a
   non-`jenkins` reconciler, reading the file itself — no `deploy config` subprocess and no
   chart-existence trip, both of which a migrated entry would otherwise have to survive.
   `process_release`, the Jenkins release list and `collect-versions` all inherit the skip.
-- The CLI refuses `deploy`, `template`, `stop`, `uninstall`, `apply`, `destroy` and `import` on a
-  non-`jenkins` release, with a message naming the release and its reconciler; `plan`, `output`,
-  `config`, `wait` and `refresh-secrets` keep working (verbs at `main.py:28-41`, dispatch at
-  `:116-161`).
+- The CLI refuses `deploy`, `template`, `stop`, `uninstall`, `apply`, `destroy`, `import` **and
+  `refresh-secrets`** on a non-`jenkins` release, with a message naming the release and its
+  reconciler; the read-only inspection verbs — `plan`, `output`, `config`, `wait` — keep working
+  (verbs at `main.py:28-41`, dispatch at `:116-161`). Refusal (8) and inspection (4) partition
+  `_VERBS` exhaustively. `refresh-secrets` sits with the refusals because it does not look: it
+  annotates the namespace's ExternalSecrets and then `kubectl rollout restart`s their consumers
+  (`helmops.py:346`, `:373-376`, `:393`), which in a migrated namespace are Argo-owned pod
+  templates Argo will fight or revert under selfHeal.
 
 **The constraint that is easy to get wrong, and expensive if you do:** `config` must **not** join
-the refusal set, and R1 must genuinely land — because both Jenkins pipelines walk *every* prd stage
-through the CLI before they can know a release is Argo's.
+the refusal set, and R1 and the short-circuit must genuinely land — because both Jenkins pipelines
+walk *every* prd stage through the CLI before they can know a release is Argo's.
 
 - `gen_architecture.releases()` is its own walker (`gen_architecture.py:200-210`),
-  reconciler-blind, and calls `deploy config` at `:578` — one line **before** the falsy-`chart_name`
-  skip at `:581` that drops a migrated app out of the model. Its `run()` helper calls
+  reconciler-blind, and calls `deploy config` at `:578-580` — three lines **before** the
+  falsy-`chart_name` skip at `:581` that drops a migrated app out of the model. Its `run()` helper calls
   `check_returncode()` (`:149-158`) and `main()` catches nothing, so a `config` that exits non-zero
   takes down `Jenkinsfile.architecture:32` and with it the whole artifact, not one release's slice.
 - `deploy config` exits 1 on an unknown key today: the allowlist check (`release.py:142`) runs
@@ -200,9 +223,12 @@ through the CLI before they can know a release is Argo's.
   (`Jenkinsfile:55-57` → `resolve_helm_args.py:204-221`, which catches only `ImageResolutionError`).
 
 That is the rulings' "prove no breakage" obligation, and the survey settles how it is discharged:
-**R1 is the cure and R2 is the belt.** With the keys allowlisted, `config` succeeds and reports
-`chart_name: null`, and each of those walkers takes its existing falsy-chart skip; with R2, the
-Jenkins-side ones never call it at all. Nothing in `gen_architecture`, `audit_prd_orphans` or
+**R1 plus the reconciler-aware short-circuit are the cure, and R2 is the belt.** With the five keys
+allowlisted *and* a non-`jenkins` entry no longer validated as a release, `config` succeeds and
+reports `chart_name: null` whatever the entry carries — so the guarantee holds for any registry
+entry rather than only for one that remembered `chart: null` — and each of those walkers takes its
+existing falsy-chart skip; with R2, the Jenkins-side ones never call it at all. Nothing in
+`gen_architecture`, `audit_prd_orphans` or
 `recommend_resources` needs a change — the last two never call the CLI and never had an allowlist.
 **Nothing in the `Jenkinsfile` needs a change either**: a release absent from the JSON list simply
 never gets a stage (`Jenkinsfile:60`, `:93-100`).
@@ -212,13 +238,12 @@ never gets a stage (`Jenkinsfile:60`, `:93-100`).
 - `chart: null` needs no new mechanism (`release.py:155-162`, `chart_ref` at `:74-82`,
   `main.py:107`) — it is already live at `configs/dev/_ci/prd/release.yaml`. Worth pinning with a
   test even so, since it is what keeps resolution working once `charts/<app>/` is deleted.
-- An unrecognised `reconciler:` value must not silently drop a release out of **both** reconcilers.
-  R2 taken literally skips `reconciler: argocd` (a typo) from Jenkins, while Argo's selector —
-  matching `argo-cd` exactly — never picks it up: a production release deployed by nobody, with no
-  signal anywhere. The recognised values are `jenkins` and `argo-cd`; anything else fails loud,
-  which is what `release.py:11` already promises about this file. This is a **derived guard, not a
-  requirement** — the one place this phase goes past what the rulings state, called out so it can
-  be struck if unwanted.
+- **Any value other than `jenkins` means "not ours, skip" — no unrecognised-value check anywhere**,
+  by ruling. The cost is recorded here so nobody re-derives the guard and adds it back: a typo such
+  as `reconciler: jenkis` drops that release from the Jenkins list while Argo's exact-match selector
+  never picks it up, so it silently stops deploying instead of failing loud. Accepted — a loud
+  version of this check is a `config` that exits non-zero, which is the failure mode the paragraph
+  above spends its length preventing, and HelmCharts is deleted at the end of the migration.
 - Every release that exists today must enumerate and resolve exactly as it does now. Tests ride the
   phase.
 
@@ -233,8 +258,8 @@ that exists: no `release.yaml` under `configs/prd/` sets `chart:` at all, so `ch
 
 **Constraint.** The ruling calls this a one-line fix and names the site — the local-chart test at
 `resolve_helm_args.py:172` keys on `config["chart_dir"]` rather than `config["chart_name"]`. The
-same mis-keying repeats immediately downstream in `get_helm_images` (`resolve_helm_args.py:36-37`
-and `:47`), which reads `charts/<chart_dir>/values.yaml` and `charts/<chart_dir>/templates/`, so
+same mis-keying repeats immediately downstream in `get_helm_images` (`resolve_helm_args.py:35`,
+read at `:37` and `:47`), which reads `charts/<chart_dir>/values.yaml` and `charts/<chart_dir>/templates/`, so
 fixing only the test *moves* the crash rather than removing it — from a request against an empty
 `repo_url` to a missing file. The outcome is that the local-chart path resolves through the
 resolved chart name throughout. Upstream releases are unaffected either way: their `chart_name`
@@ -243,6 +268,11 @@ what routes them to the repo path in the first place.
 
 ## Not in scope
 
+- **Validating an `argo-cd` entry's contents.** Past the five allowlisted top-level keys, HelmCharts
+  does not check what a migrated entry says — no `_UPSTREAM_KEYS` widening, no schema for `repo` /
+  `targetRevision` / `deployed` / `autoSync`, no recognised-value check on `reconciler` itself. That
+  is what lets the Argo entry schema evolve through Phases B and C without anyone editing a repo
+  D43 deletes.
 - **Teaching the other `configs/prd/` walkers about `reconciler:`** — `gen-architecture`,
   `audit-prd-orphans`, `recommend-resources`. O2 work, per the ruling above; this slice only
   proves they do not break.
