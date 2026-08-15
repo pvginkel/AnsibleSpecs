@@ -139,10 +139,10 @@ non-secret string, for slice 009 to place in the ExternalSecret's `template`. No
 `kv patch` on `iac/tf-backend` is involved — the leaf is left exactly as it is.
 
 **Read it off srviac, don't derive it.** `age-keygen -y` over the private half was named here as an
-equal alternative and isn't one: `age`, `age-keygen` and `sops` are installed on none of `srviac`,
-the KubeCoder `iac` sidecar or the dev container (terraform-backend-git bundles them in its own
-image), so deriving means fetching a binary and handling the private key to recover a string that
-is already plaintext. Procedure, both paths:
+equal alternative and isn't one — deriving means a credential read to recover a string already
+sitting in plaintext in srviac's `/etc/iac/secrets.yaml`. (The tools themselves are no longer the
+obstacle: `sops` and `age` joined the `iac` image on 2026-08-15, having previously been installed
+nowhere in the estate. That fixed the friction, not the credential handling.) Procedure:
 [`/work/Ansible/docs/runbooks/iac-agent.md`](/work/Ansible/docs/runbooks/iac-agent.md) §"State
 encryption keypair (SOPS/age)".
 
