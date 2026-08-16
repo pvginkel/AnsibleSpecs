@@ -494,7 +494,9 @@ The `reconciler:` key is the single ownership fact (D38):
 
 **Ancillary tooling** that stops covering a migrated app enumerates the same key (O2):
 `gen-architecture` (renders via `deploy template` today; a migrated app has no release to
-render), `recommend-resources` (becomes clone-edit-push against deploy repos),
+render), `recommend-resources` (becomes clone-edit-push against deploy repos, spanning them and
+the config tree at once, and stops keying the chart source on the config directory name —
+phases.md's named follow-up),
 `collect-versions`/version-poller (its role already changing to proposing pin-bump commits).
 None blocks the pilot; each needs its decision by endgame.
 

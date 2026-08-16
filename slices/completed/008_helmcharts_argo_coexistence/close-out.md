@@ -176,7 +176,11 @@ config values file (`:271-278`). Out of P3's scope for the same reason as the Gr
 ruling fixed P3 to `resolve_helm_args.py` and the plan lists `recommend-resources` under "Not in
 scope" — and inert for the same reason: no `release.yaml` sets a top-level `chart:` today.
 
-Disposition:
+Disposition: B5 needs a different solution. We need to rework recommend-resources in the Argo CD
+plan, because it needs to look at other deploy repos also. Can you add this to the Argo CD plan.
+
+Done: added as a named follow-up in `argo-cd/phases.md`, with a pointer from `design.md`'s
+ancillary-tooling paragraph. No in-place fix in HelmCharts.
 
 ## Open questions and rulings
 

@@ -241,6 +241,22 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
   human decision until this phase is designed and built. Interlocks: Trello **#66**.
 - **Remaining apps** (O1): gradual vs bulk, decided once the plugin exists. The post-render
   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
+- **`recommend-resources` reworked to span deploy repos** (O2; from slice 008's close-out, B5).
+  It walks `configs/prd/` and binds each release's chart source to the *config directory* name
+  (`tools/chart_tools/recommend_resources.py:168-176`), then reads `charts/<that name>/values.yaml`
+  (`:185`) and `charts/<that name>/resources-entry-map.json` (`:210`) — its docstring states the
+  assumption outright (`:163-165`). Two things break it. A release with an overriding `chart:` is
+  skipped without a word today, or — where a same-named chart directory happens to exist — has a
+  recommendation derived from the *wrong* chart's values written into the real config values file
+  (`:265-278`). And from the first cutover the migrated app's chart is not under `charts/` at all,
+  so the tool goes blind to exactly the apps this project moves. The rework: enumerate the deploy
+  repos **as well as** the config tree — HelmCharts still holds every unmigrated release for the
+  whole of Phase B — take the chart from the resolved chart rather than the directory the entry
+  was found in, and write recommendations back clone-edit-push (design.md's tooling note). Fixing
+  the mis-keying in place in HelmCharts was declined at close-out: the rework subsumes it, and
+  D43 argues against adding to HelmCharts meanwhile. The same mis-keying survives in
+  `Jenkinsfile:93-100`'s `changed(entry)`, which is Jenkins-side and outlives nothing here — a
+  separate fix, not this one.
 
 ## Endgame — the target shape, so the intermediates stay visibly intermediate (D43)
 
