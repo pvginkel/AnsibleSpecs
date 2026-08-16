@@ -309,7 +309,7 @@ never gets a stage (`Jenkinsfile:60`, `:93-100`).
 - P3 is unaffected: its citations (`resolve_helm_args.py:35`, `:172`) sit above this phase's
   insertion at `:190` and did not shift.
 
-### P3 — The latent `get_chart_args` fall-through
+### P3 — The latent `get_chart_args` fall-through ✅ DONE 2026-08-16
 
 Target: ../HelmCharts
 
