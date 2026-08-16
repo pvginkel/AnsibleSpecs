@@ -119,7 +119,7 @@ this slice prove — went to a research sub-agent and is settled in P2 below.
   `configs/prd/`. That entry is Argo's own, registered by **slice 009** (phases.md A.4), which
   makes 008 a hard prerequisite of 009.
 
-### P1 — A deterministic gate for HelmCharts' Python tools
+### P1 — A deterministic gate for HelmCharts' Python tools ✅ DONE 2026-08-16
 
 Target: ../HelmCharts
 
