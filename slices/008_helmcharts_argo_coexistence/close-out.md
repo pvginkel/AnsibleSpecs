@@ -39,13 +39,6 @@ ORPHAN CANDIDATE (`:360-361`) — a false positive, printed, never raised. It do
 which is why this slice's acceptance is unaffected. Worth knowing before slice 009: an operator
 acting on that report would delete a healthy, Argo-owned release.
 
-**cosmetic — the deploy CLI's module docstring lists nine of its twelve verbs.**
-`tools/deploy/deploy_cli/main.py:6-9` names deploy, template, plan, stop, uninstall, destroy, wait,
-refresh-secrets and config, omitting `apply`, `output` and `import` — all three of which `_VERBS`
-has carried for a while. Noticed in P2 while adding the refusal set beside it; already stale before
-this slice, and correcting a docstring's verb list is not P2's scope. Only worth knowing because
-that docstring is the natural source for anyone documenting the CLI.
-
 **nit — `migrate-release.py` calls a script that no longer exists.** `tools/migrate-release.py:382`
 shells out to `tools/resolve-helm-args.py`, which is gone (the tools were unified under
 `poetry run resolve-helm-args`). The path already degrades gracefully to
@@ -71,6 +64,21 @@ deploys triggers no stage (`:73`). Out of P3's scope, which the ruling fixed to
 `chart:`. The JSON already carries the resolved name — `process_release` emits both
 `chart` (`chart_name`) and `chart_dir` (`resolve_helm_args.py:223-224`) — so whoever introduces the
 first overriding `chart:` has what a fix needs; nothing in this slice does.
+
+**minor — `recommend-resources` repeats the same mis-keying a third time, and silently.** Found in
+P3 review r1 (F1); the Groovy entry above is not the only survivor. `recommend_resources.get_stages()`
+binds its `chart_name` to the *config directory* name by walking `configs/prd/`
+(`tools/chart_tools/recommend_resources.py:168-176`, `VALUES_DIR` at `:22`), and that value is then
+used as the chart source: `is_resource_defined` reads `charts/<chart_name>/values.yaml` (`:185`) and
+`get_resources_path` reads `charts/<chart_name>/resources-entry-map.json` (`:210`). Its docstring
+states the assumption `chart:` exists to break — "the chart source lives at `charts/<chart>/`"
+(`:163-165`). A release with an overriding `chart:` is then skipped without a word: the directory
+need not exist, so `:186-187` and `:211-212` return falsy and `update_values_file` logs at debug and
+returns (`:265-270`) — no recommendation, no error. Where a same-named chart directory happens to
+exist, the recommendation is derived from the wrong chart's `values.yaml` and written into the real
+config values file (`:271-278`). Out of P3's scope for the same reason as the Groovy one — the
+ruling fixed P3 to `resolve_helm_args.py` and the plan lists `recommend-resources` under "Not in
+scope" — and inert for the same reason: no `release.yaml` sets a top-level `chart:` today.
 
 ## Open questions and rulings
 
