@@ -121,6 +121,40 @@ strings-vs-booleans question by reading the controller source: parameters flatte
 `fmt.Sprintf("%v")`, so booleans work. The registry itself is migration-era only — HelmCharts
 is deleted at endgame.
 
+## Coexistence: four refusing verbs → eight, and an entry HelmCharts stops validating (D38)
+
+D38 named the Helm-bearing verbs — `deploy`, `template`, `stop`, `uninstall` — and leaned on
+`chart: null` to keep release resolution working once an app's chart moved out. Building it
+(2026-08-16, closing slice 008) widened both halves. The refusal set took the state-mutating
+Terraform verbs `apply`, `destroy` and `import`, because D14 moved an app's Terraform into its
+deploy repo and D32 moved its state to a new key: run against a migrated release they write the
+old HelmCharts key the app has been moved off, and once D32's `state rm`/`state mv` has emptied
+that key, `deploy apply` against it could recreate infrastructure the deploy repo's Terraform
+now owns. It also took `refresh-secrets`, which is not the inspection verb its name
+suggests — it annotates the namespace's ExternalSecrets and then restarts their consumers,
+which in a migrated namespace are Argo-owned pod templates. Eight refuse, four look; `config`
+is the one that must never join them, since `gen-architecture` calls it for every prd stage and
+does not catch a non-zero exit.
+
+`chart: null` stopped being the mechanism in the same slice. It only ever covered one entry
+shape and design.md specifies three: an entry omitting `chart:` (Argo's own — `charts/argocd/`
+does not exist), one carrying `chart: null`, and one carrying an upstream block whose
+`{repo, chart, version}` keys are not the `{repo_name, repo_url, chart}` HelmCharts validates.
+Two of the three exited `deploy config` non-zero, and that call sits immediately above the skip
+that drops a migrated app out of the architecture model — so a registry entry of the wrong
+shape would have taken down the whole artifact rather than one release's slice of it. Making
+`resolve()` reconciler-aware covers all three at once: an entry another reconciler owns is not
+a HelmCharts release, so nothing past the top-level allowlist applies to it. The alternative —
+widening `_UPSTREAM_KEYS` — was rejected for merging two schemas into one allowlist and
+weakening a check the unmigrated releases still rely on.
+
+A guard on the reconciler *value* was considered in the same session and struck. Any value but
+`jenkins` means "not ours, skip", so `reconciler: jenkis` drops a release from the Jenkins list
+while Argo's exact-match selector never picks it up — it silently stops deploying instead of
+failing loud. The loud version of that check is a `config` that exits non-zero, which is what
+the paragraph above spends its length preventing, and HelmCharts is deleted at the end of the
+migration anyway (D43).
+
 ## Terraform placement: HelmCharts → the deploy repo (D14)
 
 The brief left TF placement open; `app-lifecycle.md` kept it in HelmCharts, chiefly because the

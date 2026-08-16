@@ -5,19 +5,47 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 008 taught the HelmCharts deploy CLI the `reconciler:` ownership key, so a release Argo CD
+owns and a release Jenkins owns can sit in the same config tree without either tool acting on the
+other's. `release.yaml` may now carry `reconciler`, `deployed`, `autoSync`, `repo` and
+`targetRevision`; absent — the key or the whole file — still means `jenkins`.
+
+A stage another reconciler owns drops out of `discover_releases`, so the Jenkins pipeline's
+release list and `collect-versions` never see it and it gets no deploy stage. It also stops being
+validated as a HelmCharts release at all — no chart-existence check, no `upstream:` check, no
+chart in the resolved record — so `deploy config` exits 0 with a falsy chart whatever shape the
+entry takes, which is what keeps `gen-architecture` from failing the whole architecture artifact
+on the first registered entry. Eight verbs refuse such a release (`deploy`, `template`, `stop`,
+`uninstall`, `apply`, `destroy`, `import`, `refresh-secrets`); the four read-only ones (`plan`,
+`output`, `config`, `wait`) still work. A latent `get_chart_args` fall-through was fixed
+alongside: the local-chart path now resolves through the resolved chart name rather than the
+config-directory name, at all three sites that mis-keyed it.
+
+The repo also gained its first deterministic gate — a `.kubecoder/project.yaml` and a hermetic
+53-test pytest suite under `tests/` — which is what let the later phases be reviewed against a
+verified state instead of an unverified one. Nothing is registered yet: this slice ships the code
+that honours `reconciler:`, and the first `reconciler: argo-cd` entry is slice 009's.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: two doc commits are unpushed and only the operator can decide to push them — that is the
+whole of this section; everything below it is informational.
+
+**The doc phase's commits are not pushed.** `/work/HelmCharts` carries a commit on `main`
+(CLAUDE.md + `tools/deploy/README.md`) and `/work/AnsibleSpecs` one on `main` (the `argo-cd/` set
+plus this report). The doc writer never pushes. The HelmCharts one is deploy-inert by the same
+argument the test phase used for the code push — none of its paths match the Jenkinsfile's
+`changed()` globs (`charts/`, `configs/prd/`, `terraform-modules/`, `_providers/`) — but the
+keystroke is the operator's.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: an uneventful run — three planned phases, no bail-out, no appended phase, no generation
+bump. The one entry below is the test phase's own; read its last bullet first, the live check
+this pod's read scope cannot reproduce, so nobody re-files it as a regression.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow. What
      happened, when, how it resolved, what it says. The driver appends refuted findings and
@@ -64,7 +92,11 @@ surviving `verification.json` items against the merged tree:
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->
+Focus: all five are in `/work/HelmCharts`, none elsewhere, and none blocks this slice. Start with
+the first — the `audit-prd-orphans` false positive is the only one that stops being inert the
+moment slice 009 registers an entry, and an operator acting on that report would delete a healthy,
+Argo-owned release. The last two are P3's mis-keying surviving in Groovy and in
+`recommend-resources`: same bug, same inertness argument, outside the site the ruling fixed.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -121,7 +153,9 @@ scope" — and inert for the same reason: no `release.yaml` sets a top-level `ch
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer -->
+Focus: empty. Every question this slice raised was settled by a ruling in `plan.md` before
+execution — the refusal set, the struck typo guard, the reconciler-aware `resolve()` — and
+nothing was left hanging for the operator.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -129,9 +163,29 @@ Focus: <!-- doc-writer -->
 
 ## Suggestions
 
-Focus: <!-- doc-writer -->
+Focus: the first two are inputs to slice 009 and should be read before it is planned — both
+change what its author would otherwise build from the documents as they stand.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+**Three backlog `slice.md` files quote a registry-entry line the shipped code retired.** Slices
+009, 010 and 012 each quote `argo-cd/design.md`'s registry example verbatim, including
+`chart: null   # keeps HelmCharts release resolution working (D38)`. That is no longer why it
+works: `resolve()` stops validating an entry another reconciler owns as a HelmCharts release at
+all, so a migrated entry needs no `chart:` key of any kind — `charts/argocd/` not existing is
+exactly the case that used to raise. The `argo-cd/` set now says so (`design.md`, D38 in
+`decisions.md`, `phases.md` A.3 and B.5); the three `slice.md` quotes were left alone as triage
+records of what was asked. Whoever plans 009 should take the `argo-cd/` set as authoritative
+where they differ, which is what `slice-doc-plan.md` already instructs.
+
+**Slice 009's `~44 unmigrated releases` proof item rests on a count that does not hold.**
+`phases.md` A.5 asks that entries without the `reconciler:` key — "all ~44 unmigrated releases the
+glob matches" — be excluded by the selector. The ApplicationSet's git files generator globs
+`configs/prd/*/*/release.yaml`, and only 15 of the 51 prd stage directories carry a `release.yaml`
+at all (verified 2026-08-16; none of the 15 names a reconciler). So the generator's input today is
+15 entries, not ~44 — the remaining releases are not excluded by the selector, they are never
+generated. The proof item is still worth running; its framing is what is off. Left unedited by the
+doc phase because it describes Argo-side behaviour this slice cannot verify.
 
 **HelmCharts still carries the retired `.llmbox/docker-compose.yml`.** Noticed in P1 while adding
 `.kubecoder/project.yaml`: the repo now has both the pre-KubeCoder setup and the new manifest side

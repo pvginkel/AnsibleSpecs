@@ -128,7 +128,6 @@ deployed: true               # false = undeploy: cascade delete (D27)
 autoSync: true               # false during cutover and for argocd itself (D5, D3)
 repo: https://github.com/pvginkel/KubeCoderDeploy.git
 targetRevision: main         # this stage's branch — the prd entry says prd
-chart: null                  # keeps HelmCharts release resolution working (D38)
 ```
 
 ```yaml
@@ -146,6 +145,12 @@ upstream:                    # reuses the existing HelmCharts upstream: conventi
 
 `deployed` and `autoSync` are plain booleans (D23) and **required in every entry** — the
 templates run with `missingkey=error`, so an absent key is a generation failure, not a default.
+
+Of the five keys, HelmCharts acts on `reconciler:` alone; the other four are Argo's, allowlisted
+so its unknown-key check stays a real typo-catcher. It also stops applying its own chart and
+`upstream:` schema checks to an entry another reconciler owns (D38) — which is why the upstream
+entry above can carry Argo's `{repo, chart, version}` block rather than HelmCharts' own
+`upstream:` shape, and why neither entry needs a `chart:` key.
 
 ## Generating Applications
 
@@ -460,12 +465,29 @@ Undeploy never destroys data — hooks fire on sync, not delete, and the ZFS dat
 The `reconciler:` key is the single ownership fact (D38):
 
 - `_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision` — the
-  allowlist fails loud, which is what catches a typo'd registry entry.
+  allowlist fails loud, which is what catches a typo'd registry *key*. A typo'd reconciler
+  *value* is caught nowhere: anything but `jenkins` means "not ours, skip", so
+  `reconciler: jenkis` silently stops deploying rather than failing loud. Accepted — a loud
+  version of that check would be a `config` that exits non-zero on a registered entry, which is
+  exactly the failure mode the rest of this list is built to avoid.
 - `discover_releases` skips any stage whose `release.yaml` names a non-`jenkins` reconciler,
-  reading the file directly (no per-release subprocess, no chart-existence trip).
-- The Helm-bearing deploy-CLI verbs (`deploy`, `template`, `stop`, `uninstall`) refuse an
-  `argo-cd` release with a clear message; `chart: null` keeps resolution working once
-  `charts/<app>/` is deleted.
+  reading the file directly (no per-release subprocess, no chart-existence trip). The Jenkins
+  pipeline's release list and `collect-versions` both call it, so both inherit the skip, and a
+  skipped release gets no pipeline stage at all.
+- `resolve()` stops validating a non-`jenkins` entry as a HelmCharts release: past the top-level
+  allowlist it runs neither the chart-existence check nor the stricter `upstream:` one, and
+  carries no chart and no `upstream` into the resolved record. So `deploy config` exits 0 with a
+  falsy chart whatever the entry carries — `chart:` omitted, `chart: null`, or an Argo
+  `upstream: {repo, chart, version}` block — which is what keeps `gen-architecture` running
+  across a registered entry rather than failing the whole artifact on it. The migrated app then
+  drops out of the model on the falsy chart, as below.
+- Eight deploy-CLI verbs refuse an `argo-cd` release, with a message naming the release, its
+  reconciler and the verb: the Helm-bearing `deploy`, `template`, `stop`, `uninstall`; the
+  state-mutating `apply`, `destroy`, `import`, which would otherwise write against the old
+  HelmCharts state key the app has moved off (D32); and `refresh-secrets`, which rolls the
+  namespace's workloads and so writes into pod templates Argo owns. The four read-only verbs —
+  `plan`, `output`, `config`, `wait` — stay usable, and `config` must never join the refusal
+  set: `gen-architecture` runs it for every prd stage and does not catch a non-zero exit.
 - Cutover is two registry commits — register with `autoSync: false`, review the live diff, sync
   manually, flip to `true` (D5). The full per-stage procedure, including the Terraform state
   surgery (D32) and the KubeCoder-specific values work, is phases.md's.

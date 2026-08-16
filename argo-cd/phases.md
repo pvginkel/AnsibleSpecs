@@ -53,7 +53,17 @@ Must land **before** the first `reconciler: argo-cd` entry appears — which is 
 
 - [ ] `_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision`.
 - [ ] `discover_releases` skips non-`jenkins` reconcilers by direct file read.
-- [ ] Helm-bearing verbs (`deploy`, `template`, `stop`, `uninstall`) refuse `argo-cd` releases.
+- [ ] `resolve()` stops validating a non-`jenkins` entry as a HelmCharts release, so
+      `deploy config` exits 0 with a falsy chart on any entry shape and `gen-architecture`
+      survives a registered entry.
+- [ ] Eight verbs refuse an `argo-cd` release — `deploy`, `template`, `stop`, `uninstall`,
+      `apply`, `destroy`, `import`, `refresh-secrets`; `plan`, `output`, `config` and `wait`
+      stay usable.
+
+HelmCharts' Python tools gained a `.kubecoder/project.yaml` and a `tests/` suite here, so later
+phases editing the same code have a deterministic gate — `kc project test` from the repo root.
+Nothing in the loop re-runs `kc project setup`, so after an environment rebuild the suite is red
+until someone installs the optional `test` dependency group by hand.
 
 ### A.4 — Argo CD standup (D3, and most of the register)
 
@@ -190,8 +200,9 @@ pins and a stable value. Recreate at `replicas: 1` means a brief control-plane o
 env pod in the stage restarts — including whichever session is driving the migration.
 
 - [ ] Land KubeCoderDeploy; `helm template` renders clean with the library dependency.
-- [ ] One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`,
-      `chart: null`; delete the stage's `values.yaml` (+ `_shared/` once both stages are over).
+- [ ] One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus
+      `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's
+      `values.yaml` (+ `_shared/` once both stages are over).
       The Jenkins pipeline fires on the path change and now *skips* the release (A.3) —
       Jenkins and Argo are never both live on it.
 - [ ] At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the

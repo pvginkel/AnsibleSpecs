@@ -325,11 +325,20 @@ tag prefix gets repointed — registry retention/GC, `collect-versions`, the ver
 
 **D38 — Migration-era coexistence is driven by the `reconciler:` key.** Decided (lifecycle,
 minus the `deploy apply` exemption D31 removed). `_RELEASE_KEYS` gains the new keys — the
-allowlist fails loud, which is what catches registry typos. `discover_releases` skips stages
-whose `release.yaml` names a non-`jenkins` reconciler, by reading the file directly. The
-Helm-bearing deploy-CLI verbs refuse an `argo-cd` release with a clear message. `chart: null`
-keeps release resolution working once the chart moves out — the existing infra-only value, not a
-new concept.
+allowlist fails loud, which is what catches a typo'd registry *key*. `discover_releases` skips
+stages whose `release.yaml` names a non-`jenkins` reconciler, by reading the file directly, and
+`resolve()` stops validating such an entry as a HelmCharts release at all: no chart-existence
+check, no `upstream:` check, no chart in the resolved record. That is what lets `deploy config`
+exit 0 on any entry shape — so `gen-architecture` survives a registered entry instead of losing
+the whole artifact to it — and it means a registry entry needs no `chart:` key. `_UPSTREAM_KEYS`
+stays as it is: it guards a different schema, and widening it to admit Argo's would weaken a
+check the unmigrated releases still depend on. Eight verbs refuse an `argo-cd` release with a
+message naming the release and its reconciler — `deploy`, `template`, `stop`, `uninstall`,
+`apply`, `destroy`, `import` (D32 moved the state key out from under the last three) and
+`refresh-secrets` (it rolls Argo-owned workloads); `plan`, `output`, `config` and `wait` only
+look and stay usable. Accepted cost: a typo'd reconciler *value* is caught nowhere — anything
+but `jenkins` means "not ours, skip", so `reconciler: jenkis` silently stops deploying instead
+of failing loud.
 
 **D39 — Each deploy repo's webhook is a Terraform resource in that repo's own Terraform.**
 Decided (lifecycle, bootstrap argument reworked for D6). `github_repository_webhook`, created on
