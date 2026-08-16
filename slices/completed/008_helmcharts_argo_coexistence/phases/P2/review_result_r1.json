@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "R1, R2 and R3 land together with the mechanism the rulings settled: resolve() gates both the upstream: validation and the chart-existence trip on the reconciler, _UPSTREAM_KEYS is untouched, and discover_releases skips by direct file read. The two 'prove no breakage' claims hold structurally — gen_architecture's deploy template call sits after its falsy-chart_name skip, and only the refused terraform verbs reach a state-writing command. Both findings are advisory; nothing blocks the merge.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The refusal's stated ordering before apply_cluster_environment is untested — moving the guard after it leaves all 14 test_main_verbs.py tests green."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "A `reconciler:` key written with an empty value parses to None, so the refusal message reads 'is deployed by None' and the `reconciler: str` annotation is false for that input."
+    }
+  ]
+}

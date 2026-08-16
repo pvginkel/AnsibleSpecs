@@ -1,0 +1,15 @@
+{
+  "outcome": "issues",
+  "summary": "P1's outcome holds: `kc project test` is green (24 tests, 0.12s) from a `.kubecoder/project.yaml` the run loop will pick as the gate, the lint/build sweep is a clean no-op, `poetry install --only main` stays pytest-free, and four mutations of the guards P2 must preserve each turned the intended test red. One blocking finding: the real-tree discovery test asserts that every on-disk prd stage directory is enumerated, which is the negation of R2/V02, so the gate goes red the moment slice 009 registers the first `reconciler: argo-cd` entry.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "tests/test_prd_tree.py:27 asserts every on-disk prd stage directory is discovered — the negation of R2/V02 — so the gate this phase ships goes red on slice 009's first `reconciler: argo-cd` entry."
+    }
+  ]
+}

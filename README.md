@@ -28,7 +28,6 @@ the detail.
 
 Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered:
 
-- **[008](slices/backlog/008_helmcharts_argo_coexistence/slice.md)** — HelmCharts coexistence with the `argo-cd` reconciler: the deploy CLI honours the ownership key so Jenkins and Argo are never both live (phases.md A.3; gates 009; #124).
 - **[009](slices/backlog/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
 - **[010](slices/backlog/010_kubecoder_deploy_repo/slice.md)** — KubeCoderDeploy repo and image pinning: the pilot's chart, rebuilt Terraform and stage config, plus the seven `Build-Main` pins (phases.md B.1+B.2; #124).
 - **[011](slices/backlog/011_kubecoder_ci_version_pins/slice.md)** — KubeCoder CI: version-pin commits instead of deploys, via a new JenkinsPipelineUtils method (phases.md B.3; #124).
@@ -66,6 +65,7 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 | [013 iac-pipeline-restructure](slices/completed/013_iac_pipeline_restructure/plan.md) | `iac-pipeline-restructure.md` (P1 superseded by tf-provider-registry) | tf-provider-registry | gated the `iac-image` rebuild on its real image inputs and folded the `IaCAgent` tree into `support/iac-agent/` with its 28 commits preserved — shipped 2026-08-13 (#70) |
 | [006 charts-repo-and-charts-home](slices/completed/006_charts_repo_and_charts_home/plan.md) | `argo-cd/phases.md` A.1 | — | the `Charts` repo (`homelab-shared` library chart + packaging pipeline) and `charts.home` as an ordinary HelmCharts release — live, `homelab-shared 0.1.0` published and resolvable over TLS — shipped 2026-08-14 (#124) |
 | [007 argocd-tools-presync-hook](slices/completed/007_argocd_tools_presync_hook/plan.md) | `argo-cd/phases.md` A.2 | 006 | the `ArgoCDTools` repo and the PreSync hook image — clone-at-SHA, terraform-backend-git, `init`/`apply` on the stage tfvars, the PV reattach and D30's exit codes; `homelab-shared 0.2.0` carries the fourth argument and the image pin — shipped 2026-08-14, with the Jenkins job, the git PAT and the OpenBao writes owed to the operator; feeds 009 (#124) |
+| [008 helmcharts-argo-coexistence](slices/completed/008_helmcharts_argo_coexistence/plan.md) | `argo-cd/phases.md` A.3 | — | the HelmCharts deploy CLI honours `reconciler:`, so a release Argo owns drops out of `discover_releases` and eight verbs refuse it; the repo also gained its first gate (`.kubecoder/project.yaml` + a hermetic 53-test suite) — shipped 2026-08-16, nothing registered yet; hard prerequisite of 009 (#124) |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

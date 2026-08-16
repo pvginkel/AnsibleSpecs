@@ -1,0 +1,1 @@
+root: cexec iac poetry run pytest    [  OK  ]

@@ -1,7 +1,8 @@
 # Close-out — slice 008 helmcharts_argo_coexistence
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-08-16 09:01 → 10:16 · 3 phases · 0 bail-outs · 1 test round · doc phase done · $38.84
+(planner 20 %, research 2 %, rework 9 %)
 
 ## Summary
 
@@ -31,12 +32,16 @@ that honours `reconciler:`, and the first `reconciler: argo-cd` entry is slice 0
 Focus: two doc commits are unpushed and only the operator can decide to push them — that is the
 whole of this section; everything below it is informational.
 
-**The doc phase's commits are not pushed.** `/work/HelmCharts` carries a commit on `main`
+### A1 — The doc phase's commits are not pushed
+
+`/work/HelmCharts` carries a commit on `main`
 (CLAUDE.md + `tools/deploy/README.md`) and `/work/AnsibleSpecs` one on `main` (the `argo-cd/` set
 plus this report). The doc writer never pushes. The HelmCharts one is deploy-inert by the same
 argument the test phase used for the code push — none of its paths match the Jenkinsfile's
 `changed()` globs (`charts/`, `configs/prd/`, `terraform-modules/`, `_providers/`) — but the
 keystroke is the operator's.
+
+Disposition:
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -51,7 +56,9 @@ this pod's read scope cannot reproduce, so nobody re-files it as a regression.
      happened, when, how it resolved, what it says. The driver appends refuted findings and
      funding-consult merges here itself. -->
 
-**Test phase (2026-08-16).** No findings cleared the generation bar; every existing close-out
+### N1 — Test phase (2026-08-16)
+
+No findings cleared the generation bar; every existing close-out
 entry below was already recorded by phase review and stands unchanged. Beyond the established-green
 gate sweep (not rerun, per the driver's dispatch), the test phase independently re-verified all 16
 surviving `verification.json` items against the merged tree:
@@ -90,6 +97,8 @@ surviving `verification.json` items against the merged tree:
   The narrower, code-level checks above (`discover_releases()` called directly, `deploy config`)
   avoid this path and are what `verification.json` cites.
 
+Disposition:
+
 ## Bugs
 
 Focus: all five are in `/work/HelmCharts`, none elsewhere, and none blocks this slice. Start with
@@ -100,8 +109,9 @@ Argo-owned release. The last two are P3's mis-keying surviving in Groovy and in
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-**minor — `audit-prd-orphans` will report every migrated app's Helm release as an orphan
-candidate.** Found while discharging the plan's "prove no breakage" ruling; out of scope here (the
+### B1 — `audit-prd-orphans` will report every migrated app's Helm release as an orphan candidate · minor · HelmCharts
+
+Found while discharging the plan's "prove no breakage" ruling; out of scope here (the
 other `configs/prd/` walkers stay unfixed — O2). A migrated entry carries `chart: null`, and
 `audit_prd_orphans.py:149-151` drops a null-chart release from the *desired* `helm_releases` set
 while still desiring its namespace (`:144`). Argo, meanwhile, really does install a Helm release
@@ -110,14 +120,21 @@ ORPHAN CANDIDATE (`:360-361`) — a false positive, printed, never raised. It do
 which is why this slice's acceptance is unaffected. Worth knowing before slice 009: an operator
 acting on that report would delete a healthy, Argo-owned release.
 
-**nit — `migrate-release.py` calls a script that no longer exists.** `tools/migrate-release.py:382`
+Disposition:
+
+### B2 — `migrate-release.py` calls a script that no longer exists · nit · HelmCharts
+
+`tools/migrate-release.py:382`
 shells out to `tools/resolve-helm-args.py`, which is gone (the tools were unified under
 `poetry run resolve-helm-args`). The path already degrades gracefully to
 `log("digest pinning unavailable ...")` at `:386`, so nothing breaks. Noted only because the
 migration tooling is deliberately retained as the basis for a possible future bulk resource
 rename, and this would bite whoever picks it up.
 
-**nit — a half-written `reconciler:` key makes the refusal message say "deployed by None".**
+Disposition:
+
+### B3 — a half-written `reconciler:` key makes the refusal message say "deployed by None" · nit · HelmCharts
+
 Found in P2 review r1 (F2). `reconciler:` with nothing after the colon is valid YAML for `None`, and
 `cfg.get("reconciler", "jenkins")` (`tools/deploy/deploy_cli/release.py:161`) only defaults on an
 *absent* key — so the record carries `None` on a field annotated `reconciler: str` (`:53`), and the
@@ -126,7 +143,11 @@ by None, not jenkins — refusing to deploy.` The skip itself is exactly what th
 accepted; what the ruling did not cover is that a half-written key reaches the operator as an
 unreadable message rather than a nameable one.
 
-**minor — the deploy pipeline's change detection repeats P3's mis-keying, in Groovy.** Found in P3
+Disposition:
+
+### B4 — the deploy pipeline's change detection repeats P3's mis-keying, in Groovy · minor · HelmCharts
+
+Found in P3
 while fixing the Python side. `Jenkinsfile:93-100`'s `changed(entry)` watches
 `charts/${entry['chart_dir']}/.*`, the config directory name — so a release whose `chart:` names a
 different chart watches a directory that need not exist, and an edit to the chart it actually
@@ -136,7 +157,11 @@ deploys triggers no stage (`:73`). Out of P3's scope, which the ruling fixed to
 `chart` (`chart_name`) and `chart_dir` (`resolve_helm_args.py:223-224`) — so whoever introduces the
 first overriding `chart:` has what a fix needs; nothing in this slice does.
 
-**minor — `recommend-resources` repeats the same mis-keying a third time, and silently.** Found in
+Disposition:
+
+### B5 — `recommend-resources` repeats the same mis-keying a third time, and silently · minor · HelmCharts
+
+Found in
 P3 review r1 (F1); the Groovy entry above is not the only survivor. `recommend_resources.get_stages()`
 binds its `chart_name` to the *config directory* name by walking `configs/prd/`
 (`tools/chart_tools/recommend_resources.py:168-176`, `VALUES_DIR` at `:22`), and that value is then
@@ -150,6 +175,8 @@ exist, the recommendation is derived from the wrong chart's `values.yaml` and wr
 config values file (`:271-278`). Out of P3's scope for the same reason as the Groovy one — the
 ruling fixed P3 to `resolve_helm_args.py` and the plan lists `recommend-resources` under "Not in
 scope" — and inert for the same reason: no `release.yaml` sets a top-level `chart:` today.
+
+Disposition:
 
 ## Open questions and rulings
 
@@ -168,7 +195,9 @@ change what its author would otherwise build from the documents as they stand.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-**Three backlog `slice.md` files quote a registry-entry line the shipped code retired.** Slices
+### S1 — Three backlog `slice.md` files quote a registry-entry line the shipped code retired
+
+Slices
 009, 010 and 012 each quote `argo-cd/design.md`'s registry example verbatim, including
 `chart: null   # keeps HelmCharts release resolution working (D38)`. That is no longer why it
 works: `resolve()` stops validating an entry another reconciler owns as a HelmCharts release at
@@ -178,7 +207,10 @@ exactly the case that used to raise. The `argo-cd/` set now says so (`design.md`
 records of what was asked. Whoever plans 009 should take the `argo-cd/` set as authoritative
 where they differ, which is what `slice-doc-plan.md` already instructs.
 
-**Slice 009's `~44 unmigrated releases` proof item rests on a count that does not hold.**
+Disposition:
+
+### S2 — Slice 009's `~44 unmigrated releases` proof item rests on a count that does not hold
+
 `phases.md` A.5 asks that entries without the `reconciler:` key — "all ~44 unmigrated releases the
 glob matches" — be excluded by the selector. The ApplicationSet's git files generator globs
 `configs/prd/*/*/release.yaml`, and only 15 of the 51 prd stage directories carry a `release.yaml`
@@ -187,7 +219,11 @@ at all (verified 2026-08-16; none of the 15 names a reconciler). So the generato
 generated. The proof item is still worth running; its framing is what is off. Left unedited by the
 doc phase because it describes Argo-side behaviour this slice cannot verify.
 
-**HelmCharts still carries the retired `.llmbox/docker-compose.yml`.** Noticed in P1 while adding
+Disposition:
+
+### S3 — HelmCharts still carries the retired `.llmbox/docker-compose.yml`
+
+Noticed in P1 while adding
 `.kubecoder/project.yaml`: the repo now has both the pre-KubeCoder setup and the new manifest side
 by side. Nothing reads `.llmbox/` any more — the environment is declared in
 `/work/Ansible/.kubecoder/config.yaml` — so it is dead weight, not a conflict. Deleting it was
@@ -195,7 +231,11 @@ outside P1's scope (D43 also argues against touching this repo more than needed)
 thing `/kubecoder:onboard` would retire here if the operator ever wants HelmCharts onboarded
 properly rather than gate-only, which is what P1 deliberately delivered.
 
-**Slices 011 and 012 inherit a gate that cannot see the refusal's ordering.** Found in P2 review r1
+Disposition:
+
+### S4 — Slices 011 and 012 inherit a gate that cannot see the refusal's ordering
+
+Found in P2 review r1
 (F1). The refusal is raised before `apply_cluster_environment` on purpose
 (`tools/deploy/deploy_cli/main.py:131-138`) — nothing is injected into the environment for a refused
 verb — but every test in `tests/test_main_verbs.py` stubs that call out via the `no_cluster_env`
@@ -205,3 +245,5 @@ exits immediately after), but a later reordering would surface the *cluster's* e
 'x'`, or a missing `clusters.yaml` — in place of the refusal message the acceptance criteria
 describe. Both 011 and 012 edit this file against this gate; a single unstubbed test asserting the
 call is never reached for a refused verb would close it.
+
+Disposition:

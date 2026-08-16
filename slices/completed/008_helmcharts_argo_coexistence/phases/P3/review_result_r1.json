@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "P3 lands its outcome completely: the routing test and both get_helm_images reads now key on the resolved chart_name, so the local-chart path no longer depends on the config directory name. I verified inertness independently (the only top-level `chart:` in the tree is `chart: null`) and mutation-checked all three sites individually — each is caught by a test on its own. One advisory finding: a third, unrecorded site in recommend_resources.py carries the same config-directory keying.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "recommend_resources.py keys the chart source on the config directory name (:168-176, :185, :210) — a third instance of P3's mis-keying that the close-out's P3 entry omits, naming only the Groovy sibling."
+    }
+  ]
+}
