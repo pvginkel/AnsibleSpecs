@@ -103,10 +103,21 @@ Facts established at planning time, so they are not rediscovered:
   whether anonymous read suffices anywhere" is answered — it suffices nowhere.
 - **The estate has no `Ingress` objects, no ingress-nginx and no cert-manager.** Exposure is
   annotations on a workload's own `Service`, read by the in-house `nginx-configurator`:
-  `nginx.webathome.org/server-name`, `/is-public`, `/target-port`, `/enable-ssl`. `is-public: no`
-  gets a step-ca leaf via `https://ca.home/acme/acme/directory` and an `allow 192.168.0.0/16`
-  block; `is-public: yes` gets Let's Encrypt and faces the internet. `*.home` resolves to the
-  shared nginx LB at `10.2.1.7` through a dnsmasq sidecar watching the same annotations.
+  `nginx.webathome.org/server-name`, `/is-public`, `/target-port`, `/enable-ssl`. `*.home` resolves
+  to the shared nginx LB at `10.2.1.7` through a dnsmasq sidecar watching the same annotations.
+- **Certificate issuance and the RFC1918 allow block are two independent switches, and `is-public`
+  drives only the second.** `is-public: "yes"` → Let's Encrypt and internet-facing.
+  `is-public: "no"` **alone** → one `listen 80` server with the allow block and **no certificate at
+  all**; the step-ca leaf is the `elif entry.enable_ssl` branch, so internal TLS requires
+  **`enable-ssl: "yes"` alongside it**
+  (`/work/DockerImages/nginx-configurator/app/nginxconfigurator.py:137-146,182`;
+  `app/annotations.py:145` defaults it to `False` when absent). The estate's internal-TLS shape is
+  therefore both annotations together — as carried by charts.home's own Service from slice 006
+  (`/work/HelmCharts/charts/charts/templates/charts-service.yaml`) and by
+  `charts/kubecoder/templates/controller-service.yaml:10-13`. The ACME directory
+  `https://ca.home/acme/acme/directory` belongs to the certbot image
+  (`/work/DockerImages/certbot/app/certutils.py`, value from `charts/nginx/values.yaml:10`), not to
+  the configurator.
 - **Keycloak clients in this estate are hand-created today.** `provider "keycloak" {}` is declared
   bare in `/work/HelmCharts/_providers/providers.tf` and no `keycloak_*` resource exists anywhere;
   `keycloak-tf` (Trello #68) is an explicit unbuilt placeholder. The estate convention for an OIDC
@@ -188,6 +199,43 @@ Facts established at planning time, so they are not rediscovered:
   repo needs it — it is not in `/work/HelmCharts/_providers/providers.tf` today. This keeps the
   PreSync path out of this slice's bootstrap; the hook path is still proven end to end by the
   throwaway app (R12).
+- Ruling (2026-08-16, review r1 F1) — **the A.5 throwaway deploy repo gets its own phase.**
+  Operator: *"Give it its own phase."* The reviewer is right that A.5's *"use a throwaway app entry
+  + tiny deploy repo"* is build work, not an acceptance statement, and that nine criteria hang off
+  it: it needs a chart carrying `homelab-shared.tf-presync-hook` and the `Prune=false` Namespace, a
+  **real** `terraform/` (V17 is clone → backend → apply → exit code, which an empty directory
+  proves nothing about), `config/{stage}/values.yaml` reached by `../`, a `Chart.yaml` dependency
+  on `homelab-shared` from `https://charts.home`, and a `configs/prd/<app>/<stage>/release.yaml`
+  added to `HelmCharts` `main` and removed afterwards. So a phase authors it, with a gate and a
+  code reviewer like any other work — `/work/Charts/tests/consumer/` is **not** the worked example
+  the plan claimed: it has no `terraform/` and is a render fixture only. **Operator input before
+  the run:** create the disposable repo (e.g. `pvginkel/ProofDeploy`), add it to
+  `/work/Ansible/.kubecoder/config.yaml` and `kc env sync`, so the phase has a resolvable `Target:`
+  — the same precedent as `Charts` and `ArgoCDTools`. Repo and manifest entry are both deleted when
+  the proof is done, per A.5's *"delete both afterwards"*.
+- Ruling (2026-08-16, review r1 F2) — **internal TLS needs `enable-ssl: "yes"`, not just
+  `is-public: "no"`.** The finding is confirmed against the configurator source (see the
+  certificate-issuance fact above, corrected in place). Every phase and criterion touching
+  argocd-server's exposure carries **both** annotations, and R5's *"with homelab TLS"* is satisfied
+  only when a 443 listener with a step-ca leaf actually exists — V10 must check that, not merely
+  that the annotation the plan named is present, or the failure stays invisible to its own
+  acceptance check and lands on the operator at bootstrap. The relay's Service is unaffected:
+  `is-public: "yes"` takes the other branch and needs nothing extra.
+- Ruling (2026-08-16, review r1 F3) — **the repo-server's homelab-CA trust is the upstream
+  subchart's pod, not the wrapper chart's.** All four patterns P1 offered are for a chart that
+  templates its own pod; the repo-server comes from the pinned `argo-cd` dependency, so a
+  ConfigMap alone produces an object that reaches nothing, and "bake it into an image" is not
+  available. Wire it through the upstream chart's **own** values (its repo-server volume/volumeMount
+  and initContainer surfaces), and make the phase's success condition the trust actually reaching
+  the repo-server container — `helm template` rendering a ConfigMap is not evidence for R14.
+  R14 exists precisely to answer whether `helm dependency build`, a subprocess with its own trust
+  store rather than Argo's HTTP client, consults it at all; D17's plain-HTTP fallback bounds the
+  damage if it does not.
+- Ruling (2026-08-16, review r1 F4) — **the bootstrap ordering bullet means P6.** The registry
+  entry is committed by P6 as a code phase *before* the operator installs anything; the ordering
+  bullet's "then the registry entry" describes the same end state from the operator's side and
+  reads as a contradiction. Reword the bullet to point at P6 explicitly. Wording, not mechanism —
+  nothing serves the entry until the ApplicationSets exist either way.
 
 ## Task shape
 
