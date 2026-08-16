@@ -1,0 +1,261 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — the wrapper chart",
+      "description": "ArgoCDDeploy is a deploy repo whose chart/ pins the upstream argo-cd chart in Chart.yaml dependencies: and renders a complete Argo CD install into namespace argocd-prd, with resourceTrackingMethod: annotation (D4), controller.operation.processors: 2 (D8) and polling disabled everywhere including the ApplicationSet git generator (D6).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — the AppProject",
+      "description": "The AppProject `releases` (D10) exists and permits everything Argo's own Application needs to sync: argocd-prd and argocd-hooks as destinations alongside the <app>-<stage> app namespaces, a clusterResourceWhitelist covering Namespace plus every cluster-scoped kind the upstream argo-cd chart carries and migrated charts' own, and sourceRepos covering the registry repo, the deploy repos and the upstream chart repos.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R1 — both ApplicationSets",
+      "description": "Both ApplicationSets render per design.md's templates — goTemplate with missingkey=error, the glob scoped to configs/prd/, the local/upstream split on upstream.chart, the finalizer, and the templatePatch that is the conditional-autoSync mechanism — and the local-chart set passes all four hook helm parameters, hook.namespace included.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:201-209 — the four helm parameters; slice.md's quote of the same template omits hook.namespace",
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48 — all four Job arguments are `required`-guarded, so three parameters fails the render"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "R1 — notifications",
+      "description": "Notifications config for Alertmanager with on-sync-failed + on-health-degraded authored (D7) — triggers, templates and a subscription that reaches every generated app, against prometheus-prd-alertmanager.prometheus-prd:9093.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R1 — SSO wiring",
+      "description": "SSO wiring (D9) ships in the chart: an oidc.config stanza naming issuer, client id and a client-secret reference, plus the argocd-rbac-cm line mapping the operator's identity to role:admin, with the local admin account left in place as break-glass.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R1 — webhook secret reference",
+      "description": "The webhook secret reference is wired, and the shared secret is one value with two readers — Argo's webhook.github.secret and the relay — from one OpenBao leaf, never two.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R2 — the Keycloak client",
+      "description": "Argo's Keycloak client exists and is recorded so keycloak-tf (Trello #68) can import rather than recreate it. Per the 2026-08-16 ruling the client is hand-created and ArgoCDDeploy ships no terraform/ and no Keycloak provider credential; the client secret reaches Argo as an ESO leaf exactly as D9 specifies.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/_providers/providers.tf — `provider \"keycloak\" {}` is bare and no keycloak_* resource exists in the estate; slice 007's credential-inventory.md:48-52 records the absent leaf as deliberate"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "R3 — the hook namespace",
+      "description": "The hook namespace argocd-hooks exists with the ExternalSecret materialising argocd-hook-credentials from A.2's enumerated leaves plus the non-secret per-cluster provider configuration as template literals — one object composing a run's whole environment — the tf-presync ServiceAccount and its RBAC (PV get/list/patch), permitted as an AppProject destination (D33).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md:32-82 — the authoritative key-by-key contract this object fills",
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:27,39,51 — the Job hard-codes namespace argocd-hooks, serviceAccountName tf-presync and secret argocd-hook-credentials"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "R4 — repository credentials",
+      "description": "Repository credential Secrets via ESO (D40), after checking whether anonymous read suffices anywhere — it suffices nowhere, so per the 2026-08-16 ruling one repo-creds Secret matching the https://github.com/pvginkel/ prefix covers the registry repo and every deploy repo, on Argo's own token rather than the hook's.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R5 — exposure and O3",
+      "description": "argocd-server is reachable behind the estate's exposure mechanism with homelab TLS and is-public: no, and O3 is settled in favour of one fanned-out webhook endpoint: the relay at deploy-hooks.webathome.org is the only internet-facing surface, and Argo CD is not exposed to the internet.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/DockerImages/nginx-configurator/app/annotations.py:7-35 — exposure is nginx.webathome.org/* annotations on a Service; is-public is one flag per Service, so the relay needs its own"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "R6 — bootstrap",
+      "description": "Bootstrap happened once, by hand (operator): clone, helm dependency build, helm install; configs/prd/argocd/prd/release.yaml carries deployed: true, autoSync: false — autoSync stays false permanently for Argo itself (D3 sharp edge) — and Argo adopted itself on first generation.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "kubectl get ns (2026-08-16) — no argocd* namespace exists; nothing here describes running infrastructure"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "R7 — the registry webhook",
+      "description": "The operator created the registry webhook on HelmCharts (manual, one-off) with the shared secret, pointing at the relay's public URL.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "R8 — both receivers",
+      "description": "A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo push visibly refreshes (argocd-server receiver).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "R9 — notification on failure",
+      "description": "A deliberate sync failure produces an Alertmanager notification. Read at Alertmanager's own API: its live config is the chart's stock null sink — one empty default-receiver, no route tree — so an alert lands there and goes no further, and it carries no server-name annotation either.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/configs/prd/prometheus/prd/values.yaml:120-130 — alertmanager config sets persistence and resources only; no receivers, no route"
+      ]
+    },
+    {
+      "id": "V15",
+      "area": "R10 — relative value files",
+      "description": "`../config/{stage}/values.yaml` renders on the deployed Argo version (D19; fallback $values, template-only change).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "R11 — the synced SHA",
+      "description": "$ARGOCD_APP_REVISION reaches a hook Job's args via helm parameters (D30).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "R12 — the hook end to end",
+      "description": "The hook Job runs in argocd-hooks, under the AppProject, end to end: clone → backend → apply → exit code gates the sync.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "R13 — the namespace guard",
+      "description": "Deleting an Application whose chart carries the Prune=false Namespace does delete that namespace (D26 — if wrong, the guard changes, not the goal).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "R14 — charts.home from the repo-server",
+      "description": "The repo-server performs helm dependency build against https://charts.home trusting the homelab CA (D17; fallback plain HTTP).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Ansible/ansible/roles/baseline/files/homelab-root.crt — the source-of-truth artefact; nothing in this cluster inherits homelab CA trust, so the repo-server is wired explicitly",
+        "/work/Charts/charts/homelab-shared/Chart.yaml — homelab-shared 0.2.0 is what a consumer chart pins from https://charts.home"
+      ]
+    },
+    {
+      "id": "V20",
+      "area": "R15 — the boolean flags",
+      "description": "Boolean deployed/autoSync behave in selector and templatePatch on the pinned version (D23), including the flag-flip generating and removing syncPolicy.automated.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V21",
+      "area": "R16 — the selector excludes unmigrated entries",
+      "description": "Entries without the reconciler: key — every unmigrated release the glob matches — are excluded by the selector. missingkey=error means a leak here breaks the whole ApplicationSet, not one app.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "ls /work/HelmCharts/configs/prd/*/*/release.yaml → 15 files (2026-08-16); grep -rn reconciler /work/HelmCharts/configs/ → empty. Local-chart releases carry no release.yaml at all, so the glob matches 15 entries, not the register's ~44 — the failure mode is unchanged"
+      ]
+    },
+    {
+      "id": "V22",
+      "area": "R17 — diff quality",
+      "description": "Point a no-sync Application at an existing live release and check the live-vs-git diff reads sensibly — diff quality proven before Phase B stakes a cutover on it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V23",
+      "area": "R18 — login",
+      "description": "SSO login works; local admin break-glass works (D9).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V24",
+      "area": "Relay proof (a) — the ruling's added item",
+      "description": "A real GitHub delivery through the public URL lands 200 with both legs green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V25",
+      "area": "Relay proof (b) — the ruling's added item",
+      "description": "The partial-failure drill: scale one receiver to zero, redeliver, see red in GitHub's Recent Deliveries naming the dead leg, restore, redeliver green — proving that a missed delivery is always visible where it can be redelivered.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V26",
+      "area": "Exit criterion",
+      "description": "Argo runs and manages itself; the UI is reachable via Keycloak; every proof item is checked.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V27",
+      "area": "Exit criterion — the throwaway app",
+      "description": "The throwaway app demonstrated register → deploy → undeploy → unregister with the namespace cascade (D27), and both the entry and the disposable deploy repo were deleted afterwards.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V28",
+      "area": "Gates",
+      "description": "Every repo this slice touched has a green gate: ArgoCDDeploy earns a deterministic one in its first phase — a render of the wrapper chart, not a lint of it — and HelmCharts' existing suite stays green with the estate's first reconciler: argo-cd entry present.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/.kubecoder/project.yaml — setup: poetry install --with test, test: pytest; no lint verb",
+        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:15-28,161-171 — _RELEASE_KEYS admits the Argo keys and resolve() stops validating a non-jenkins entry as a HelmCharts release"
+      ]
+    },
+    {
+      "id": "V29",
+      "area": "Secrets discipline",
+      "description": "No secret value is committed anywhere this slice touches: every credential Argo or the hook reads arrives from a named OpenBao leaf through the openbao-prd ClusterSecretStore, and the new leaves sit inside the eso AppRole's existing grant so no policy change is owed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "kubectl get clustersecretstore (2026-08-16) — openbao-prd is Valid and Ready",
+        "/work/Ansible/ansible/inventories/prd/group_vars/openbao.yml:91-96 — the eso grant's eso/prd/* glob already covers kv/eso/prd/argocd/prd/*"
+      ]
+    }
+  ]
+}

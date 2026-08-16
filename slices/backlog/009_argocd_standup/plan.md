@@ -5,7 +5,7 @@
 Verbatim from `phases.md` §"A.4 — Argo CD standup (D3, and most of the register)" and
 §"A.5 — verification (the proof items, consolidated)".
 
-### A.4 — the standup
+#### A.4 — the standup
 
 - R1. > Create `ArgoCDDeploy`: wrapper chart pinning the upstream `argo-cd` chart, plus the
   > AppProject `releases` (D10), both ApplicationSets (design.md templates), notifications
@@ -38,7 +38,7 @@ set as authoritative. The authoritative key-by-key inventory — every env key, 
 property, and every non-secret `template` literal — is slice 007's
 [`attachments/credential-inventory.md`](../../completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md).
 
-### A.5 — the proof items (outcome-level acceptance, not extra build work)
+#### A.5 — the proof items (outcome-level acceptance, not extra build work)
 
 > Use a throwaway app entry + tiny deploy repo; delete both afterwards.
 
@@ -63,7 +63,7 @@ property, and every non-secret `template` literal — is slice 007's
   > reads sensibly — diff quality proven before Phase B stakes a cutover on it.
 - R18. > SSO login works; local admin break-glass works (D9).
 
-### Exit criterion
+#### Exit criterion
 
 > **Exit:** Argo runs and manages itself; UI reachable via Keycloak; every proof item checked;
 > the throwaway app demonstrated register → deploy → undeploy → unregister with the namespace
@@ -189,6 +189,12 @@ Facts established at planning time, so they are not rediscovered:
   PreSync path out of this slice's bootstrap; the hook path is still proven end to end by the
   throwaway app (R12).
 
+## Task shape
+
+cross-cutting — the requirements land in three repos (a brand-new `ArgoCDDeploy` with no commits,
+a registry entry in `HelmCharts`, a chart pin on `DockerImages`' relay image) and R1's
+ApplicationSets set the pattern every Phase B deploy repo inherits.
+
 ## Ordering constraints
 
 - **Slice 015 ships its image before this slice's bootstrap.** The wrapper chart pins
@@ -203,6 +209,206 @@ Facts established at planning time, so they are not rediscovered:
 - **Bootstrap is one operator keystroke sequence, and the run does not pause for it** — clone,
   `helm dependency build`, `helm install`, then the registry entry. Everything downstream of it in
   A.5 is live verification the operator executes and hands back.
+- **`ArgoCDDeploy` had no commit on `main` and no `origin/main`**, so the driver's merge-time
+  `git checkout main` would have failed before P1 ever landed. A minimal `README.md` root commit
+  was seeded this pass (`e8cb797`) and left **unpushed**, exactly as slice 006 did for `Charts`
+  (`slices/completed/006_charts_repo_and_charts_home/plan.md:67-71`). Executors build on it.
+- **A.5 needs the disposable repo before the drill, not before any phase.** No phase targets it:
+  the slice states the proof items are acceptance, not build work, so the throwaway app's tiny
+  chart and Terraform are the test phase's to materialise into the repo the operator creates.
+  `/work/Charts/tests/consumer/` is the worked example — a consumer chart that already includes
+  `homelab-shared.tf-presync-hook` and depends on the library, which is what makes R11, R12 and
+  R14 observable at once.
+
+## Phases
+
+### P1 — `ArgoCDDeploy` becomes a repo: the wrapper chart renders a complete Argo CD
+
+Target: `../ArgoCDDeploy`
+
+`/work/ArgoCDDeploy` becomes a working deploy repo whose `chart/` pins the upstream `argo-cd`
+chart as a `Chart.yaml` `dependencies:` entry and whose `config/prd/values.yaml` carries the
+configuration the decision register fixes. The phase lands when `helm dependency build` followed by
+`helm template` against the prd values renders a complete Argo CD install into namespace
+`argocd-prd` — and when that render is the repo's gate.
+
+- **The repo earns its gate here.** Until `.kubecoder/project.yaml` exists the driver resolves the
+  target with no deterministic gate and tells the reviewer so. `/work/ArgoCDTools/.kubecoder/project.yaml`
+  and `/work/Charts/.kubecoder/project.yaml:1-23` are the two worked examples for a new repo; helm
+  lives in the `iac` sidecar, so verbs carry `cexec iac` in the manifest and only there. The run
+  loop gates on `test`, not `lint`, so whatever proves the chart renders belongs under `test`.
+- **Nothing Jenkins-side.** A deploy repo publishes no image, and Argo — not Jenkins — deploys this
+  one, permanently by manual sync (D3). No Jenkinsfile, no `jenkins:` key, no job for the test
+  phase's push to track. This is the first repo in the estate with that shape; say so in the
+  manifest's description rather than leaving the omission to be read as a gap.
+- **The layout is D12's**, top-level `chart/` and `config/{stage}/` — and no `terraform/` at all
+  (ruled out above). Stage differences come from the branch, never a directory (D12, D13).
+- **The values the register fixes**: `resourceTrackingMethod: annotation` (D4),
+  `controller.operation.processors: 2` (D8), polling off everywhere including the ApplicationSet
+  git generator (D6), and the webhook payload cap bounded well below its 50 MB default — the
+  consult's §2 argues why (`015_webhook_relay/attachments/webhook-relay-consult.md:78`).
+- **The chart carries its own `Namespace` manifest for `argocd-prd`**, `sync-wave: "-1"` and
+  `Prune=false` (D25, D26). `CreateNamespace` stays off: an untracked namespace is not deleted, and
+  Argo's self-managed Application has to find its own namespace as a tracked resource like any
+  other app's.
+- **argocd-server is exposed internally only.** There are no `Ingress` objects in this estate —
+  exposure is `nginx.webathome.org/*` annotations on the workload's own `Service`, and `is-public`
+  is one flag per Service (`/work/DockerImages/nginx-configurator/app/annotations.py:7-35`;
+  `/work/HelmCharts/charts/kubecoder/templates/controller-service.yaml:1-25` is the internal shape).
+  argocd-server gets `is-public: "no"`, a `.home` server name and a step-ca leaf. The internet-facing
+  Service is P5's relay and nothing else.
+- **The repo-server has to reach `https://charts.home` over the homelab CA** (D17) for every
+  migrated app's `helm dependency build`. Nothing in this cluster inherits that trust: the estate
+  wires it per workload from one committed artefact — `/work/Ansible/ansible/roles/baseline/files/homelab-root.crt`
+  is the source of truth, copied to `/work/HelmCharts/homelab-root.crt` and baked into the hook
+  image. Four existing patterns to choose from — a ConfigMap built by a deploy hook, a ConfigMap
+  from chart `files/`, an init container rewriting a trust store, or baking into an image — and the
+  chart-`files/` mount in `/work/HelmCharts/charts/nginx/templates/nginx-configmap-ca.yaml:1-6` is
+  the closest fit. D17's fallback is plain HTTP, a values change and nothing else.
+- **This chart takes no dependency on `homelab-shared`.** Argo's own render must not require
+  charts.home to be up — the same principle the serving chart itself follows
+  (`/work/Charts/README.md:75-80`). R14 is proven by the throwaway app, which is what a migrated
+  app actually looks like.
+
+### P2 — What Argo talks to: Alertmanager, Keycloak, and the credentials it reads git with
+
+Target: `../ArgoCDDeploy`
+
+Argo stops being a bare install: a failed sync and a degraded app both raise an alert, the operator
+logs in through Keycloak, and the repo-server and generator hold credentials for the private repos
+they read. Every secret value arrives from OpenBao through ESO; nothing secret is committed.
+
+- **Notifications are authored, not toggled** (D7). The chart ships the controller with empty
+  `triggers`/`templates`, so `on-sync-failed` and `on-health-degraded` each need a trigger, a
+  template and a subscription that actually reaches every app rather than requiring a per-app
+  annotation. The target is the notifications engine's native alertmanager service against
+  `prometheus-prd-alertmanager.prometheus-prd:9093`.
+- **Know what "an Alertmanager notification" can mean here.** Alertmanager's live config is the
+  chart's stock null sink — one empty `default-receiver`, no route tree
+  (`/work/HelmCharts/configs/prd/prometheus/prd/values.yaml:120-130` sets persistence and resources
+  only). An alert Argo raises lands in Alertmanager and goes no further, and Alertmanager carries no
+  `server-name` annotation either, so it is reachable only from inside the cluster. R9 is proven at
+  the Alertmanager API, not in anyone's inbox; building the receiver is somebody else's slice.
+- **SSO is a confidential Keycloak client the operator creates by hand** (the ruling): an
+  `oidc.config` stanza naming issuer, client id and a client-secret reference, plus the one
+  `argocd-rbac-cm` line mapping the operator's identity to `role:admin`. Local admin survives as
+  break-glass. Record the client id and the redirect URI the operator has to configure, so Trello
+  #68 can import the client rather than recreate it.
+- **Argo's git credential is its own**, separate from the hook's (the ruling): one Secret of type
+  `repo-creds` matching the `https://github.com/pvginkel/` prefix, which covers the registry repo
+  and every deploy repo Phase B adds without a per-repo leaf. R4's check is already answered —
+  anonymous read suffices nowhere.
+- **Leaf naming is the estate's convention**, `kv/eso/prd/argocd/prd/<name>` through the
+  `openbao-prd` ClusterSecretStore (Valid and Ready, checked this pass). The `eso` AppRole's
+  existing `eso/prd/*` grant already covers them
+  (`/work/Ansible/ansible/inventories/prd/group_vars/openbao.yml:91-96`), so this slice owes no
+  policy change — only the operator's `bao kv put` for each new leaf, which the phase records for
+  the close-out.
+- **The webhook secret is one value with two consumers** — Argo's `webhook.github.secret` and P5's
+  relay — from one leaf, never two. How it and the OIDC secret land in `argocd-secret`
+  (chart-created versus ESO-created) is yours to settle, provided `helm template` stays
+  deterministic and nothing regenerates on each sync.
+- **The estate's shared ExternalSecret helper is not available here** and could not express the
+  next phase's object anyway (it emits no `target.template`), so this chart hand-writes its
+  ExternalSecrets. `/work/HelmCharts/configs/prd/ceph-csi-cephfs/prd/manifests.yaml:13-33` is the
+  raw form the estate already uses.
+
+### P3 — Applications generate: the `releases` AppProject and both ApplicationSets
+
+Target: `../ArgoCDDeploy`
+
+The chart renders the AppProject and the two ApplicationSets, so that a registry entry marked
+`reconciler: argo-cd` and `deployed: true` becomes an Application and nothing else does.
+
+- **`design.md:155-273` is the authoritative template**, both sets, including the `templatePatch`
+  that is the conditional-autoSync mechanism and the finalizer that makes undeploy cascade. Take it
+  from there, not from `slice.md`'s quote of it, which is a triage-time snapshot: it omits the
+  `hook.namespace` helm parameter that `design.md:201-209` carries and that the library chart's Job
+  `required`-guards (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48`).
+  Three parameters instead of four fails every migrated app's render, not just the hook's.
+- **Namespaces are `argocd-prd`** (the ruling), wherever the document set writes `argocd`.
+- **The selector is the whole safety property.** `goTemplate: true` with
+  `goTemplateOptions: ["missingkey=error"]`, the glob scoped to `configs/prd/` only, and matching on
+  `reconciler` and `deployed` before any template renders. Today the glob matches 15 files
+  (`ls /work/HelmCharts/configs/prd/*/*/release.yaml`), none of which carries a `reconciler:` key
+  (`grep -rn reconciler /work/HelmCharts/configs/` is empty) — local-chart releases carry no
+  `release.yaml` at all, so the real exposure is smaller than the register's "~44" but the failure
+  mode is unchanged: one leak breaks the whole set.
+- **The AppProject has to permit what Argo's own Application needs**, or self-adoption fails on the
+  first sync: `argocd-prd` and `argocd-hooks` as destinations beside the `<app>-<stage>` app
+  namespaces, and a `clusterResourceWhitelist` covering every cluster-scoped kind the upstream
+  `argo-cd` chart carries — its CRDs among them — as well as `Namespace` and migrated charts' own
+  cluster-scoped resources (D10). `sourceRepos` covers the registry repo, the deploy repos and the
+  upstream chart repos; charts.home needs no entry, because a dependency fetch is not an
+  Application source.
+
+### P4 — `argocd-hooks`: the namespace a PreSync run lands in
+
+Target: `../ArgoCDDeploy`
+
+The chart creates the hook namespace, the single `argocd-hook-credentials` Secret that composes a
+run's whole environment, and the `tf-presync` identity the Job runs under — so that the hook slice
+007 built has somewhere to run.
+
+- **The key-by-key contract is already settled**, in slice 007's
+  [`attachments/credential-inventory.md`](../../completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md):
+  the enumerated OpenBao leaves on one side, and on the other the non-secret per-cluster provider
+  configuration as `template` literals copied from `/work/HelmCharts/_providers/clusters.yaml`'s
+  `prd` block, which stays the source of truth. Nothing is invented here and nothing is left out —
+  `envFrom` is all-or-nothing, and a missing key fails at `terraform apply`, deep inside a sync.
+- **The age public key is an input.** `TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS` is read off srviac per
+  `/work/Ansible/docs/runbooks/iac-agent.md` §"State encryption keypair (SOPS/age)" and never
+  derived; if it has not been handed over, that is a blocker, not something to fill in later.
+- **No AppRole, no OpenBao credential in the namespace** — the hook authenticates to nothing and is
+  agnostic to what is behind its environment variables (D33, D41).
+- **`argocd-hooks` is a fixed name**, not `<app>-<stage>`; the AppProject destination P3 grants and
+  the namespace the library Job hard-codes have to agree.
+- **The ServiceAccount's RBAC is what the hook genuinely does**: the `Released`-PV reattach (D29)
+  against a namespace handed in as an argument, plus whatever the kubernetes provider manages. It
+  is also the identity the entrypoint synthesises its kubeconfig from, so a run has one identity
+  and not two.
+
+### P5 — The public webhook edge: the relay's manifests
+
+Target: `../ArgoCDDeploy`
+
+The chart deploys slice 015's relay into `argocd-prd` and gives it the estate's one
+internet-facing hostname, so that a GitHub push reaches both Argo receivers without Argo being
+reachable from the internet.
+
+- **015's [`attachments/webhook-relay-consult.md`](../015_webhook_relay/attachments/webhook-relay-consult.md)
+  is authoritative** — §4 for placement and §2 for why nothing but the relay faces outward. Two
+  replicas and no state, so a self-sync roll of `argocd-prd` opens no drop window.
+- **The image is `registry:5000/webhook-relay:<n>` pinned to a build number slice 015 published** —
+  a real `<n>`, never `latest`, and the tag must exist before the operator's `helm install`.
+- **`deploy-hooks.webathome.org` with `is-public: "yes"` on the relay's own Service** (the ruling);
+  argocd-server keeps `is-public: "no"` from P1. The public DNS record and the router NAT rule are
+  operator actions outside every repo.
+- **Its only configuration is the shared HMAC secret and the two target URLs** — argocd-server's
+  `/api/webhook` and the applicationset-controller's on port 7000. The secret is the same value P2
+  wires into `webhook.github.secret`, from the same leaf: one secret, two readers.
+
+### P6 — Argo registers itself
+
+Target: `../HelmCharts`
+
+`configs/prd/argocd/prd/release.yaml` becomes the estate's first `reconciler: argo-cd` entry, so
+that the ApplicationSet generates `argocd-prd` and Argo adopts itself on first generation.
+
+- **The schema is `design.md:119-152` as amended by D38**: `reconciler`, `deployed`, `autoSync`,
+  `repo` and `targetRevision`, and no `chart:` key of any kind — slice 008 shipped the `resolve()`
+  change that stops validating another reconciler's entry as a HelmCharts release
+  (`/work/HelmCharts/tools/deploy/deploy_cli/release.py:15-28,161-171`). `deployed` and `autoSync`
+  are plain booleans and required in every entry.
+- **`autoSync: false` is permanent for Argo itself** (D3's sharp edge), not a cutover default: a
+  self-sync can restart the controller or repo-server mid-sync. Argo upgrades are a manual sync at
+  a chosen moment, forever.
+- **Nothing serves this entry until the operator's bootstrap**, which is why it lands last — and
+  why HelmCharts' own gate is the check that matters here: the entry is admitted by `_RELEASE_KEYS`
+  and skipped by discovery, so the Jenkins path gives it no stage and `deploy config` still exits 0
+  across the tree.
+- **The throwaway app's entry is not committed here.** Adding and removing it *is* A.5's
+  register → deploy → undeploy → unregister drill, live, on the operator's keystroke.
 
 ## Not in scope
 
