@@ -23,6 +23,45 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      happened, when, how it resolved, what it says. The driver appends refuted findings and
      funding-consult merges here itself. -->
 
+**Test phase (2026-08-16).** No findings cleared the generation bar; every existing close-out
+entry below was already recorded by phase review and stands unchanged. Beyond the established-green
+gate sweep (not rerun, per the driver's dispatch), the test phase independently re-verified all 16
+surviving `verification.json` items against the merged tree:
+
+- Reran `kc project test` from `/work/HelmCharts` (53 passed) and confirmed hermeticity by grepping
+  the suite for `subprocess` — the one hit is a monkeypatch that fails the test if `subprocess.run`
+  is reached, not an assumption.
+- Live-tree checks against the real `configs/prd/` tree (read-only intent, one temporary write):
+  added a temporary `reconciler: argo-cd` `release.yaml` under `configs/prd/calendar-support/prd/`
+  (not committed), confirmed `discover_releases()` drops from 51 to 50 releases with
+  `calendar-support` absent and `deploy config prd/calendar-support` exits 0 with `chart_name: null`
+  — the exact call `gen_architecture.py:578-580` makes — then removed the file and confirmed
+  `git status --short` clean throughout.
+- Verified `poetry install --only main` (what the `iac` image and CI use) installs no `pytest` in a
+  fresh clone, confirming V13 directly rather than by citation alone.
+- Confirmed `audit-prd-orphans` and `recommend-resources` cannot break from this slice's changes:
+  neither calls `resolve()` or the deploy CLI, so neither can raise from the new keys or a
+  `reconciler` value. For `audit-prd-orphans` this was also checked live: with the temporary
+  argo-cd entry above still in place, `audit-prd-orphans desired` ran to completion (exit 0, no
+  traceback). `collect-versions`' own `discover_releases('.')` call was checked the same way — 50
+  releases with the migrated one absent, confirming it inherits R2's skip live, not just by
+  citation.
+- Pushed HelmCharts (`c44072a..3c9af98`, pre-authorized under the driver's devlock hold for this
+  slice's verification) and confirmed via the Jenkins API that `IaC/HelmCharts` build #5820 ran
+  "Collect releases" successfully and every one of the 51 real `Deploying X@Y` stages was skipped
+  (none of this slice's changed files — all under `tools/`, `tests/`, `.kubecoder/`,
+  `pyproject.toml`/`poetry.lock`, `.gitignore` — match the Jenkinsfile's `changed()` path globs
+  `charts/`, `configs/prd/`, `terraform-modules/`, `_providers/`), so the push reached prd's deploy
+  pipeline without touching prd. No Ansible-repo commit belongs to this slice (`slice.md`: "no
+  manifest change is needed"), so nothing was pushed there.
+- One live check does not reproduce cleanly in this pod and is *not* a finding: `resolve-helm-args`
+  (the full CLI, which also queries currently-installed Helm releases) fails here with `secrets is
+  forbidden` for several unrelated namespaces under this pod's `kubecoder-ro` kubeconfig — reproduced
+  identically on unmodified `main` before adding any temporary entry, so it is this pod's read
+  scope, not a slice regression (mirrors the doc's `terraform plan`-needs-credentials carve-out).
+  The narrower, code-level checks above (`discover_releases()` called directly, `deploy config`)
+  avoid this path and are what `verification.json` cites.
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->

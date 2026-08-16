@@ -2,166 +2,216 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — release.yaml schema",
+      "area": "R1 \u2014 release.yaml schema",
       "description": "`_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision`: a release.yaml carrying all five passes the allowlist check, while any other key still fails loud with a non-zero exit.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Diff confirms the five keys added to `_RELEASE_KEYS` (release.py:12-25). `kc project test` rerun by the test phase: 53 passed. test_release.py::test_the_five_new_keys_pass_the_allowlist resolves a release.yaml carrying all five (plus reconciler: jenkins) and asserts it resolves; test_an_unknown_release_key_fails_loud and test_an_unknown_key_still_fails_loud_on_a_migrated_entry both assert a sixth, unrecognised key (`chrat`) still raises `unknown keys` \u2014 on a jenkins release and on a migrated one.",
       "evidence": [
-        "tools/deploy/deploy_cli/release.py:12-20",
-        "tools/deploy/deploy_cli/release.py:142-144"
+        "tools/deploy/deploy_cli/release.py:12-25",
+        "tools/deploy/deploy_cli/release.py:157-160",
+        "tests/test_release.py::test_the_five_new_keys_pass_the_allowlist",
+        "tests/test_release.py::test_an_unknown_release_key_fails_loud",
+        "tests/test_release.py::test_an_unknown_key_still_fails_loud_on_a_migrated_entry"
       ]
     },
     {
       "id": "V02",
-      "area": "R2 — prd enumeration",
-      "description": "`discover_releases` skips non-`jenkins` reconcilers by direct file read — no `deploy config` subprocess per release and no chart-existence trip.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R2 \u2014 prd enumeration",
+      "description": "`discover_releases` skips non-`jenkins` reconcilers by direct file read \u2014 no `deploy config` subprocess per release and no chart-existence trip.",
+      "verdict": "verified",
+      "rationale": "read_reconciler() opens release.yaml directly with no subprocess (resolve_helm_args.py:192-201); discover_releases skips on it at :210-213. tests/test_resolve_helm_args.py::test_the_reconciler_is_read_from_the_file_not_through_deploy_config monkeypatches subprocess.run to pytest.fail if called, and passes. Live-tree check (this pass): added a temporary `reconciler: argo-cd` release.yaml under configs/prd/calendar-support/prd (not committed) \u2014 discover_releases('.') dropped from 51 to 50 releases with calendar-support absent; file removed afterward, `git status --short` clean.",
       "evidence": [
-        "tools/chart_tools/resolve_helm_args.py:190-202"
+        "tools/chart_tools/resolve_helm_args.py:192-221",
+        "tests/test_resolve_helm_args.py::test_a_stage_another_reconciler_owns_is_skipped",
+        "tests/test_resolve_helm_args.py::test_the_reconciler_is_read_from_the_file_not_through_deploy_config",
+        "live-tree: discover_releases('.') over real configs/prd/ = 51 baseline / 50 with a temporary argo-cd entry, entry then removed"
       ]
     },
     {
       "id": "V03",
-      "area": "R3 — verb refusal",
+      "area": "R3 \u2014 verb refusal",
       "description": "Helm-bearing verbs (`deploy`, `template`, `stop`, `uninstall`) refuse `argo-cd` releases with a clear message and a non-zero exit.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "_JENKINS_ONLY_VERBS (main.py:50-52) includes all four; the guard raises before apply_cluster_environment (main.py:131-138). tests/test_main_verbs.py::test_a_refused_verb_names_the_release_and_its_reconciler is parametrized over every member of _JENKINS_ONLY_VERBS (including these four), asserts exit 1 and that stderr names the release (`prd/foo@prd`), the reconciler (`argo-cd`) and the verb. 53 passed.",
+      "evidence": [
+        "tools/deploy/deploy_cli/main.py:50-52",
+        "tools/deploy/deploy_cli/main.py:131-138",
+        "tests/test_main_verbs.py::test_a_refused_verb_names_the_release_and_its_reconciler"
+      ]
     },
     {
       "id": "V04",
-      "area": "Ruling — the refusal set",
+      "area": "Ruling \u2014 the refusal set",
       "description": "The state-mutating Terraform verbs `apply`, `destroy` and `import` refuse an `argo-cd` release too, so nothing writes against the old, emptied HelmCharts Terraform state key (D32).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "apply/destroy/import are members of _JENKINS_ONLY_VERBS (main.py:51); the same parametrized test (test_a_refused_verb_names_the_release_and_its_reconciler) covers all three, including import's two extra positional args via the ARGV map.",
+      "evidence": [
+        "tools/deploy/deploy_cli/main.py:50-52",
+        "tests/test_main_verbs.py::test_a_refused_verb_names_the_release_and_its_reconciler"
+      ]
     },
     {
       "id": "V05",
-      "area": "Ruling — the refusal set",
-      "description": "The genuinely read-only inspection verbs — `plan`, `output`, `config`, `wait` — stay usable against a migrated release; being able to look at one is worth keeping. `config` in particular never refuses, since `gen_architecture` calls it for every prd stage and does not catch a non-zero exit.",
-      "verdict": null,
-      "rationale": "",
+      "area": "Ruling \u2014 the refusal set",
+      "description": "The genuinely read-only inspection verbs \u2014 `plan`, `output`, `config`, `wait` \u2014 stay usable against a migrated release; being able to look at one is worth keeping. `config` in particular never refuses, since `gen_architecture` calls it for every prd stage and does not catch a non-zero exit.",
+      "verdict": "verified",
+      "rationale": "plan/output/config/wait are absent from _JENKINS_ONLY_VERBS (partition asserted by test_the_refused_and_inspection_verbs_partition_the_cli). test_config_reports_a_falsy_chart_rather_than_failing asserts `deploy config` on an argo-cd release exits 0 with chart_name: null \u2014 the exact call gen_architecture.py:578-580 makes. test_the_terraform_inspection_verbs_do_not_refuse[plan|output] and test_wait_does_not_refuse confirm the other three. Live-tree check (this pass): `deploy config prd/calendar-support` against a real temporary argo-cd entry exited 0 with chart_name: null (entry removed afterward).",
       "evidence": [
-        "tools/deploy/deploy_cli/main.py:28-41",
-        "tools/chart_tools/gen_architecture.py:578-580",
-        "tools/chart_tools/gen_architecture.py:149-158"
+        "tools/deploy/deploy_cli/main.py:28-41,50-52",
+        "tests/test_main_verbs.py::test_config_reports_a_falsy_chart_rather_than_failing",
+        "tests/test_main_verbs.py::test_the_terraform_inspection_verbs_do_not_refuse",
+        "tests/test_main_verbs.py::test_wait_does_not_refuse",
+        "live-tree: `deploy config prd/calendar-support` on a temporary real argo-cd entry \u2192 exit 0, chart_name: null"
       ]
     },
     {
       "id": "V06",
-      "area": "R1/R2 — default ownership",
+      "area": "R1/R2 \u2014 default ownership",
       "description": "`reconciler:` defaults to `jenkins` when absent: both a missing key and a missing release.yaml resolve and enumerate as Jenkins-owned, and every release that exists today behaves exactly as it does now.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Both read sites default via `.get(\"reconciler\", \"jenkins\")` (release.py:161; resolve_helm_args.py read_reconciler at :192-201, returning 'jenkins' for a missing file at :195-196 and via .get default for a missing key at :201). test_an_absent_file_and_an_absent_key_both_mean_jenkins covers resolve(); test_prd_tree.py's real-tree pass (51/51 discovered and resolved) is the enumeration-side proof, since none of today's release.yaml files name a reconciler. Live-tree baseline (this pass) confirms discover_releases('.') = 51 on unmodified main.",
+      "evidence": [
+        "tools/deploy/deploy_cli/release.py:161",
+        "tools/chart_tools/resolve_helm_args.py:192-201",
+        "tests/test_release.py::test_an_absent_file_and_an_absent_key_both_mean_jenkins",
+        "tests/test_prd_tree.py::test_discovery_covers_every_prd_stage_directory",
+        "tests/test_prd_tree.py::test_every_discovered_prd_release_resolves"
+      ]
     },
     {
       "id": "V07",
-      "area": "R3 — infra-only resolution",
+      "area": "R3 \u2014 infra-only resolution",
       "description": "`chart: null` keeps HelmCharts release resolution working once `charts/<app>/` is deleted, using the existing infra-only value and no new mechanism.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "The `chart:` handling at release.py:163-171 and chart_ref at :74-82 are unchanged by this slice's diff (confirmed by `git diff origin/main..HEAD`). test_chart_null_is_an_infra_only_release asserts chart_name/chart_path/chart_ref all resolve to None. configs/dev/_ci/prd/release.yaml is the pre-existing live user of this path and was not touched.",
       "evidence": [
-        "tools/deploy/deploy_cli/release.py:155-162",
+        "tools/deploy/deploy_cli/release.py:163-171",
         "tools/deploy/deploy_cli/release.py:74-82",
+        "tests/test_release.py::test_chart_null_is_an_infra_only_release",
         "configs/dev/_ci/prd/release.yaml"
       ]
     },
     {
       "id": "V08",
-      "area": "Ruling — prove no breakage",
-      "description": "A registered `reconciler: argo-cd` entry does not break `gen-architecture`, whatever shape the entry takes — `chart:` omitted, `chart: null`, or an `upstream: {repo, chart, version}` block: the run completes and the migrated app drops out of the model, rather than failing `Jenkinsfile.architecture` and losing the whole artifact. Silent non-coverage is the accepted outcome; a failure is not.",
-      "verdict": null,
-      "rationale": "",
+      "area": "Ruling \u2014 prove no breakage",
+      "description": "A registered `reconciler: argo-cd` entry does not break `gen-architecture`, whatever shape the entry takes \u2014 `chart:` omitted, `chart: null`, or an `upstream: {repo, chart, version}` block: the run completes and the migrated app drops out of the model, rather than failing `Jenkinsfile.architecture` and losing the whole artifact. Silent non-coverage is the accepted outcome; a failure is not.",
+      "verdict": "verified",
+      "rationale": "gen_architecture.releases() (gen_architecture.py:200-210) is reconciler-blind and its only touch point with release semantics is the `deploy config` subprocess call at :578-580, three lines before the falsy-chart_name skip at :581; a non-zero exit there is what would take the build down (check_returncode at :149-158, uncaught in main()). test_an_entry_another_reconciler_owns_is_not_validated_as_a_release proves resolve() returns chart_name=None (never raising) for all three entry shapes design.md specifies (chart omitted, chart: null, upstream: block) \u2014 the exact record `deploy config` serialises. test_config_reports_a_falsy_chart_rather_than_failing proves the CLI wrapper itself exits 0. Live-tree (this pass): a real temporary argo-cd stage (configs/prd/calendar-support/prd, chart: null) made `deploy config prd/calendar-support` exit 0 with chart_name: null against the actual repo tree; entry removed afterward, git status clean. Not run: a full `gen-architecture` invocation, which needs the published cross-repo architecture dataset this pod does not have \u2014 the mechanism it depends on (a non-raising `deploy config`) is what's proven instead, matching what P2 recorded doing at landing time.",
       "evidence": [
-        "tools/deploy/deploy_cli/release.py:146-153",
-        "tools/deploy/deploy_cli/release.py:156-162",
+        "tools/deploy/deploy_cli/release.py:157-171",
         "tools/chart_tools/gen_architecture.py:578-581",
-        "tools/chart_tools/gen_architecture.py:149-158"
+        "tools/chart_tools/gen_architecture.py:149-158",
+        "tests/test_release.py::test_an_entry_another_reconciler_owns_is_not_validated_as_a_release",
+        "tests/test_main_verbs.py::test_config_reports_a_falsy_chart_rather_than_failing",
+        "live-tree: `deploy config prd/calendar-support` on a temporary real argo-cd entry \u2192 exit 0, chart_name: null"
       ]
     },
     {
       "id": "V09",
-      "area": "Ruling — prove no breakage",
-      "description": "A registered `reconciler: argo-cd` entry does not break `audit-prd-orphans` or `recommend-resources` — each still runs to completion over `configs/prd/`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "Ruling \u2014 prove no breakage",
+      "description": "A registered `reconciler: argo-cd` entry does not break `audit-prd-orphans` or `recommend-resources` \u2014 each still runs to completion over `configs/prd/`.",
+      "verdict": "verified",
+      "rationale": "Neither walker calls resolve() or the deploy CLI, so neither can raise from anything this slice changed. audit_prd_orphans._release_yaml (audit_prd_orphans.py:65-70) is a bare `yaml.safe_load` with no key allowlist \u2014 an argo-cd entry's five extra keys are simply ignored; the code path already misclassifies a null-chart release as a non-orphan-candidate desired state, which is the pre-existing false-positive bug already recorded in close-out.md, not a crash. recommend_resources.get_stages() (recommend_resources.py:161-176) walks configs/prd/ directly and never reads release.yaml or calls resolve()/the CLI at all, so it is structurally unaffected by anything this slice touches. Confirmed by reading both modules; no code path in either reaches release.py or main.py. Live-tree (this pass): with the temporary real argo-cd entry present, `audit-prd-orphans desired` ran to completion (exit 0, printed its enumeration-commands banner, no traceback) \u2014 direct confirmation, not just code reading.",
+      "evidence": [
+        "tools/chart_tools/audit_prd_orphans.py:61-70",
+        "tools/chart_tools/audit_prd_orphans.py:115-160",
+        "tools/chart_tools/recommend_resources.py:161-176",
+        "close-out.md \u2014 \"audit-prd-orphans will report every migrated app's Helm release as an orphan candidate\" (pre-existing, unaffected by this verification)",
+        "live-tree: `audit-prd-orphans desired` with a temporary argo-cd entry present \u2192 exit 0, no traceback"
+      ]
     },
     {
       "id": "V10",
-      "area": "Ruling — prove no breakage",
+      "area": "Ruling \u2014 prove no breakage",
       "description": "The Jenkins deploy pipeline's release list and `collect-versions` survive a registered entry: both produce their output without a traceback, and the migrated release simply gets no deploy stage.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Both call discover_releases(), which excludes a non-jenkins stage before either ever sees it (R2, resolve_helm_args.py:210-213) \u2014 collect_version_dependencies.py:18 calls it directly; the Jenkinsfile's release list (Jenkinsfile:55-57) goes through resolve_helm_args.main(), same function. Live-tree (this pass): discover_releases('.') with a temporary real argo-cd entry returned 50 releases, the migrated one absent, matching \"gets no deploy stage.\" IaC/HelmCharts build #5820 (triggered by this pass's push) ran \"Collect releases\" successfully and every one of the 51 real \"Deploying X@Y\" stages was skipped (none of this slice's files match the Jenkinsfile's changed() path globs), confirming the pipeline survives end to end on the real tree. Live-tree (this pass): collect_version_dependencies.resolve_helm_args.discover_releases('.') with the temporary entry present returned 50 releases with calendar-support absent \u2014 the same skip collect-versions inherits, confirmed directly rather than only by citation.",
       "evidence": [
         "Jenkinsfile:55-57",
-        "tools/chart_tools/resolve_helm_args.py:204-221",
-        "tools/chart_tools/collect_version_dependencies.py:18-21"
+        "tools/chart_tools/resolve_helm_args.py:210-213",
+        "tools/chart_tools/collect_version_dependencies.py:18-21",
+        "live-tree: discover_releases('.') = 50/51 with a temporary argo-cd entry present",
+        "Jenkins IaC/HelmCharts build #5820 (2026-08-16, triggered by this pass's push of 3c9af98) \u2014 SUCCESS, Collect releases green, all 51 deploy stages skipped",
+        "live-tree: collect-versions' discover_releases('.') = 50/51 with a temporary argo-cd entry present, entry absent from the list"
       ]
     },
     {
       "id": "V12",
-      "area": "Ruling — how this slice is proven",
+      "area": "Ruling \u2014 how this slice is proven",
       "description": "`kc project test`, run from the HelmCharts repo root, runs the new unit tests and is green; the repo carries a `.kubecoder/project.yaml` declaring the curated entry points and **no** `.kubecoder/config.yaml`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": ".kubecoder/project.yaml declares one `root` component, `jenkins: IaC/HelmCharts`, `setup:`/`test:` only (no lint/build). No .kubecoder/config.yaml exists in the repo (confirmed by directory listing). `cexec iac poetry run pytest` rerun by the test phase from /work/HelmCharts: 53 passed. Matches the dispatch's established-green HelmCharts_root_test sweep row.",
+      "evidence": [
+        ".kubecoder/project.yaml",
+        "kc project test rerun by test phase: 53 passed, 0 failed",
+        "sweeps/r2/HelmCharts_root_test.log"
+      ]
     },
     {
       "id": "V13",
-      "area": "Ruling — how this slice is proven",
-      "description": "pytest arrives as a Poetry dependency group in HelmCharts' own pyproject.toml and the container needs nothing new: a `poetry install --only main` — what the iac image and CI use — installs no test dependency, and the Jenkinsfile is unchanged.",
-      "verdict": null,
-      "rationale": "",
+      "area": "Ruling \u2014 how this slice is proven",
+      "description": "pytest arrives as a Poetry dependency group in HelmCharts' own pyproject.toml and the container needs nothing new: a `poetry install --only main` \u2014 what the iac image and CI use \u2014 installs no test dependency, and the Jenkinsfile is unchanged.",
+      "verdict": "verified",
+      "rationale": "Live check (this pass): fresh clone of the repo, `poetry install --only main --no-interaction` installed 7 runtime packages (certifi/charset-normalizer/idna/pyyaml/requests/semver/urllib3) plus the project itself, no pytest; `python -c \"import pytest\"` raised ModuleNotFoundError. Jenkinsfile's IAC_SETUP is unchanged by this slice's diff and its `uv pip install -e .` installs only the main dependency set \u2014 confirmed in IaC/HelmCharts build #5820's log (\"Installed 8 packages\", no pytest).",
       "evidence": [
-        "pyproject.toml:5-9",
-        "pyproject.toml:42-48"
+        "pyproject.toml:5-9,42-55",
+        "live check: `poetry install --only main` in a fresh clone \u2192 no pytest; `import pytest` \u2192 ModuleNotFoundError",
+        "Jenkins IaC/HelmCharts build #5820 log \u2014 IAC_SETUP install step lists 8 packages, no pytest"
       ]
     },
     {
       "id": "V14",
-      "area": "Ruling — the latent get_chart_args crash",
+      "area": "Ruling \u2014 the latent get_chart_args crash",
       "description": "A release whose `chart:` overrides the config-directory name resolves through the local-chart path instead of falling through to the upstream-repo path and raising; the fix is provably inert for every current release, none of which sets a top-level `chart:`.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Diff confirms all three sites key on chart_name: the routing test at get_chart_args (resolve_helm_args.py:174) and both reads in get_helm_images (values.yaml at :38, templates/ walk at :49). tests/test_resolve_helm_args.py::test_a_chart_overriding_the_directory_name_resolves_locally, ::test_a_conventional_local_chart_still_resolves_locally, ::test_an_upstream_release_still_resolves_through_the_repo (all three routing cases, both paths stubbed) and ::test_the_images_come_from_the_resolved_chart_not_the_config_directory all pass. Inertness confirmed: `grep -rn 'chart:' configs/prd/` finds only configs/dev/_ci/prd/release.yaml's `chart: null`, which is falsy and short-circuits before this code path.",
       "evidence": [
-        "tools/chart_tools/resolve_helm_args.py:172",
-        "tools/chart_tools/resolve_helm_args.py:35",
-        "tools/chart_tools/resolve_helm_args.py:47"
+        "tools/chart_tools/resolve_helm_args.py:174",
+        "tools/chart_tools/resolve_helm_args.py:38",
+        "tools/chart_tools/resolve_helm_args.py:49",
+        "tests/test_resolve_helm_args.py::test_a_chart_overriding_the_directory_name_resolves_locally",
+        "tests/test_resolve_helm_args.py::test_a_conventional_local_chart_still_resolves_locally",
+        "tests/test_resolve_helm_args.py::test_an_upstream_release_still_resolves_through_the_repo",
+        "tests/test_resolve_helm_args.py::test_the_images_come_from_the_resolved_chart_not_the_config_directory"
       ]
     },
     {
       "id": "V15",
-      "area": "Ruling — how this slice is proven",
+      "area": "Ruling \u2014 how this slice is proven",
       "description": "The suite is hermetic: `kc project test` is green with no cluster, no network and no `helm`/`kubectl`/`terraform` subprocess, and leaves the repo's real `configs/` tree unmodified.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`cexec iac poetry run pytest -q` rerun by the test phase: 53 passed. `grep -rn subprocess tests/` finds exactly one reference \u2014 a monkeypatch in test_the_reconciler_is_read_from_the_file_not_through_deploy_config that fails the test if subprocess.run is reached, actively enforcing hermeticity rather than merely assuming it. `git status --short` in HelmCharts was clean before this pass's suite run, after it, and after this pass's own live-tree smoke checks (temporary file added and removed).",
+      "evidence": [
+        "kc project test rerun by test phase: 53 passed",
+        "grep -rn subprocess tests/ \u2192 tests/test_resolve_helm_args.py:57 (fail-if-called monkeypatch)",
+        "git status --short clean before/after the suite run and this pass's live-tree checks"
+      ]
     },
     {
       "id": "V16",
-      "area": "Ruling — the refusal set",
-      "description": "`refresh-secrets` refuses an `argo-cd` release: it is not an inspection verb — it annotates the namespace's ExternalSecrets and then rolls their consumers, which in a migrated namespace are Argo-owned pod templates.",
-      "verdict": null,
-      "rationale": "",
+      "area": "Ruling \u2014 the refusal set",
+      "description": "`refresh-secrets` refuses an `argo-cd` release: it is not an inspection verb \u2014 it annotates the namespace's ExternalSecrets and then rolls their consumers, which in a migrated namespace are Argo-owned pod templates.",
+      "verdict": "verified",
+      "rationale": "\"refresh-secrets\" is a member of _JENKINS_ONLY_VERBS (main.py:51). tests/test_main_verbs.py::test_a_refused_verb_names_the_release_and_its_reconciler is parametrized over the full frozenset, including refresh-secrets, and passes (exit 1, message names the release, reconciler and verb).",
       "evidence": [
+        "tools/deploy/deploy_cli/main.py:50-52",
         "tools/deploy/deploy_cli/helmops.py:373-376",
-        "tools/deploy/deploy_cli/helmops.py:393"
+        "tools/deploy/deploy_cli/helmops.py:393",
+        "tests/test_main_verbs.py::test_a_refused_verb_names_the_release_and_its_reconciler"
       ]
     },
     {
       "id": "V17",
-      "area": "Ruling — resolve() is reconciler-aware",
-      "description": "`_UPSTREAM_KEYS` is not widened and every `jenkins`-owned release keeps every check exactly as strict as today — the chart-existence check and the `upstream:` block's exactly-{repo_name, repo_url, chart} check both still fire for them; only an entry that names a non-`jenkins` reconciler is exempt.",
-      "verdict": null,
-      "rationale": "",
+      "area": "Ruling \u2014 resolve() is reconciler-aware",
+      "description": "`_UPSTREAM_KEYS` is not widened and every `jenkins`-owned release keeps every check exactly as strict as today \u2014 the chart-existence check and the `upstream:` block's exactly-{repo_name, repo_url, chart} check both still fire for them; only an entry that names a non-`jenkins` reconciler is exempt.",
+      "verdict": "verified",
+      "rationale": "`git diff origin/main..HEAD -- tools/deploy/deploy_cli/release.py` shows `_UPSTREAM_KEYS = {\"repo_name\", \"repo_url\", \"chart\"}` untouched by this slice. test_upstream_takes_exactly_its_three_keys (extra-key and missing-key cases) and test_a_jenkins_release_keeps_both_checks (chart-existence and upstream-keys cases) both pass against jenkins-reconciler releases, proving the two checks still fire unchanged. test_an_entry_another_reconciler_owns_is_not_validated_as_a_release proves the same two checks do not fire for a non-jenkins entry, including one carrying an `upstream: {repo, chart, version}` block that would fail the stricter allowlist if validated.",
       "evidence": [
         "tools/deploy/deploy_cli/release.py:21",
-        "tools/deploy/deploy_cli/release.py:146-153",
-        "tools/deploy/deploy_cli/release.py:156-162"
+        "tools/deploy/deploy_cli/release.py:164-171",
+        "tests/test_release.py::test_upstream_takes_exactly_its_three_keys",
+        "tests/test_release.py::test_a_jenkins_release_keeps_both_checks",
+        "tests/test_release.py::test_an_entry_another_reconciler_owns_is_not_validated_as_a_release"
       ]
     }
   ]
