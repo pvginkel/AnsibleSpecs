@@ -83,11 +83,13 @@
     {
       "id": "V10",
       "area": "R5 — exposure and O3",
-      "description": "argocd-server is reachable behind the estate's exposure mechanism with homelab TLS and is-public: no, and O3 is settled in favour of one fanned-out webhook endpoint: the relay at deploy-hooks.webathome.org is the only internet-facing surface, and Argo CD is not exposed to the internet.",
+      "description": "argocd-server is reachable behind the estate's exposure mechanism with homelab TLS and is-public: no — its Service carries is-public: \"no\" AND enable-ssl: \"yes\", and the vhost actually answers on 443 with a step-ca leaf, checked at the listener rather than at the annotation. And O3 is settled in favour of one fanned-out webhook endpoint: the relay at deploy-hooks.webathome.org is the only internet-facing surface, and Argo CD is not exposed to the internet.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/DockerImages/nginx-configurator/app/annotations.py:7-35 — exposure is nginx.webathome.org/* annotations on a Service; is-public is one flag per Service, so the relay needs its own"
+        "/work/DockerImages/nginx-configurator/app/annotations.py:7-35 — exposure is nginx.webathome.org/* annotations on a Service; is-public is one flag per Service, so the relay needs its own",
+        "/work/DockerImages/nginx-configurator/app/nginxconfigurator.py:137-146,182 — certificate issuance and the RFC1918 allow block are independent switches: the step-ca leaf is the `elif entry.enable_ssl` branch, and annotations.py:145 defaults enable_ssl to False when the annotation is absent, so is-public: \"no\" alone yields one listen-80 server with no certificate",
+        "/work/HelmCharts/charts/kubecoder/templates/controller-service.yaml:10-13 — the estate's internal-TLS shape is both annotations together"
       ]
     },
     {
@@ -161,12 +163,13 @@
     {
       "id": "V19",
       "area": "R14 — charts.home from the repo-server",
-      "description": "The repo-server performs helm dependency build against https://charts.home trusting the homelab CA (D17; fallback plain HTTP).",
+      "description": "The repo-server performs helm dependency build against https://charts.home trusting the homelab CA (D17; fallback plain HTTP). Per the r1 F3 ruling the trust must reach the repo-server container itself — that pod belongs to the pinned upstream subchart, so a ConfigMap the wrapper chart renders is not evidence.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "/work/Ansible/ansible/roles/baseline/files/homelab-root.crt — the source-of-truth artefact; nothing in this cluster inherits homelab CA trust, so the repo-server is wired explicitly",
-        "/work/Charts/charts/homelab-shared/Chart.yaml — homelab-shared 0.2.0 is what a consumer chart pins from https://charts.home"
+        "/work/Charts/charts/homelab-shared/Chart.yaml — homelab-shared 0.2.0 is what a consumer chart pins from https://charts.home",
+        "helm show values argo/argo-cd (chart 10.3.3 / app v3.5.1, checked 2026-08-16) — the two candidate surfaces are repoServer.volumes/volumeMounts/initContainers with the global.extraVolume* CA-bundle-over-/etc/ssl/certs example, and configs.tls.certificates, which upstream documents for repositories Argo itself resolves"
       ]
     },
     {
@@ -230,7 +233,7 @@
     {
       "id": "V27",
       "area": "Exit criterion — the throwaway app",
-      "description": "The throwaway app demonstrated register → deploy → undeploy → unregister with the namespace cascade (D27), and both the entry and the disposable deploy repo were deleted afterwards.",
+      "description": "The throwaway app demonstrated register → deploy → undeploy → unregister with the namespace cascade (D27), and both the entry and the disposable deploy repo were deleted afterwards — the repo's .kubecoder/config.yaml entry with it.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -238,7 +241,7 @@
     {
       "id": "V28",
       "area": "Gates",
-      "description": "Every repo this slice touched has a green gate: ArgoCDDeploy earns a deterministic one in its first phase — a render of the wrapper chart, not a lint of it — and HelmCharts' existing suite stays green with the estate's first reconciler: argo-cd entry present.",
+      "description": "Every repo this slice touched has a green gate: ArgoCDDeploy earns a deterministic one in its first phase — a render of the wrapper chart, not a lint of it — the disposable proof repo earns one too (chart render plus Terraform validation), and HelmCharts' existing suite stays green with the estate's first reconciler: argo-cd entry present.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -255,6 +258,18 @@
       "evidence": [
         "kubectl get clustersecretstore (2026-08-16) — openbao-prd is Valid and Ready",
         "/work/Ansible/ansible/inventories/prd/group_vars/openbao.yml:91-96 — the eso grant's eso/prd/* glob already covers kv/eso/prd/argocd/prd/*"
+      ]
+    },
+    {
+      "id": "V30",
+      "area": "A.5 — the disposable proof app as build work (r1 F1 ruling)",
+      "description": "The throwaway app is a real deploy repo, authored as a phase with its own gate and code review rather than improvised at drill time: chart/ carrying the tf-presync hook include, the Prune=false Namespace and a homelab-shared dependency from https://charts.home; a terraform/ the hook takes through clone → backend → apply against a real managed object; and config/prd/ reached as ../config/prd/values.yaml. A deliberate sync failure and a deliberate apply failure are both reachable by flipping a committed value.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDTools/presync/terraform.py:17,21-26,29-38 — a clone with no terraform/ and a clone with no config/<stage>/ are both fatal to the hook; *.tfvars are passed as -var-file in sorted order",
+        "/work/ArgoCDTools/presync/backend.py:57-72 — init supplies address/lock_address/unlock_address as -backend-config, so the repo's Terraform carries a bare backend \"http\" {}",
+        "/work/Charts/tests/consumer/ — Chart.yaml, values.yaml and seven templates, no terraform/ and no config/: a render fixture, not the worked example this repo has to be"
       ]
     }
   ]

@@ -143,3 +143,42 @@ before that slice's first phase runs, or plan for the driver to fail on it.
 
 Provenance: plan-writer, plan pass r1; ordering constraints in plan.md
 Disposition:
+
+### S3 — the throwaway app's Terraform state outlives the throwaway app
+
+A.5 says to delete the disposable app entry and its repo afterwards, and V27 checks that. Neither
+deletes what the proof run wrote to the estate's state repo: the hook's backend key is
+`argocd/<repo>/<stage>/terraform.tfstate` in `https://github.com/pvginkel/TerraformState` @ `main`,
+hard-coded in the image (`/work/ArgoCDTools/presync/backend.py:22-23,44-54`). So after the drill,
+`argocd/ProofDeploy/prd/terraform.tfstate` — a real, SOPS/age-encrypted state file describing an
+object that no longer exists — stays in the state repo with nothing left to reference it.
+
+Consequence is small and entirely tidiness: a stale key costs nothing operationally, and it is
+arguably useful evidence that the backend leg worked. But it is the first state key the Argo path
+ever writes, and nobody has yet decided who prunes state for an unregistered app — D28 leaves
+*destroy* unimplemented, so this is the same question in miniature, arriving before Phase B does.
+Worth an operator keystroke at close-out (delete the key, or keep it deliberately), and worth a line
+in whatever eventually answers D28.
+
+Found while planning P5a, working out what the proof repo's `terraform/` has to contain.
+
+Provenance: plan-writer, plan pass r2; plan.md P5a
+Disposition:
+
+### S4 — the register says the hook needs PV `get`, and the code never issues one
+
+R3 and `design.md`'s hook-namespace inventory both specify the `tf-presync` ServiceAccount's RBAC as
+"PV get/list/patch" (`/work/AnsibleSpecs/argo-cd/design.md:418`). The reattach the grant exists for
+issues exactly two calls: `GET /api/v1/persistentvolumes` — the collection, i.e. `list` — and
+`PATCH /api/v1/persistentvolumes/<name>` with `application/merge-patch+json`
+(`/work/ArgoCDTools/presync/reattach.py:18,42-49`, `presync/kube.py:21,40-53`). There is no
+single-object GET anywhere in the hook, so `get` on `persistentvolumes` is granted for nothing.
+
+This slice's P4 grants the requirement as written rather than narrowing it on its own authority —
+the difference is one verb on one cluster-scoped kind, and a wrong guess here fails a sync rather
+than a test. But the register is the document Phase B and any later audit will read, and it
+currently overstates what the hook does. Correct it in `design.md` (and drop the verb from the
+ServiceAccount) when the doc set is next touched, or record deliberately that the extra verb stays.
+
+Provenance: plan-writer, plan pass r2; plan.md P4
+Disposition:

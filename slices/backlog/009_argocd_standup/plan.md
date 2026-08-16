@@ -255,18 +255,23 @@ ApplicationSets set the pattern every Phase B deploy repo inherits.
   `reconciler: argo-cd` entry (there are none today); until Argo is installed and its
   ApplicationSets exist, adding it makes a claim nothing serves.
 - **Bootstrap is one operator keystroke sequence, and the run does not pause for it** — clone,
-  `helm dependency build`, `helm install`, then the registry entry. Everything downstream of it in
-  A.5 is live verification the operator executes and hands back.
+  `helm dependency build`, `helm install`. The registry entry is not part of that sequence: **P6
+  commits `configs/prd/argocd/prd/release.yaml`** as the last code phase, before the operator
+  installs anything, and R6's "then the registry entry" describes the same end state seen from the
+  operator's side. Nothing serves the entry until the ApplicationSets exist either way. Everything
+  downstream of the install in A.5 is live verification the operator executes and hands back.
 - **`ArgoCDDeploy` had no commit on `main` and no `origin/main`**, so the driver's merge-time
   `git checkout main` would have failed before P1 ever landed. A minimal `README.md` root commit
   was seeded this pass (`e8cb797`) and left **unpushed**, exactly as slice 006 did for `Charts`
   (`slices/completed/006_charts_repo_and_charts_home/plan.md:67-71`). Executors build on it.
-- **A.5 needs the disposable repo before the drill, not before any phase.** No phase targets it:
-  the slice states the proof items are acceptance, not build work, so the throwaway app's tiny
-  chart and Terraform are the test phase's to materialise into the repo the operator creates.
-  `/work/Charts/tests/consumer/` is the worked example — a consumer chart that already includes
-  `homelab-shared.tf-presync-hook` and depends on the library, which is what makes R11, R12 and
-  R14 observable at once.
+- **The disposable proof repo is operator input before the run starts, and it is P5a's `Target:`.**
+  The operator creates `pvginkel/ProofDeploy` **with an initial commit** — an empty GitHub repo has
+  no `origin/main`, the trap `ArgoCDDeploy` hit above — adds it to
+  `/work/Ansible/.kubecoder/config.yaml` and runs `kc env sync`, the same precedent as `Charts` and
+  `ArgoCDTools`. Until that lands, `run_loop.py run … --dry-run` cannot resolve `../ProofDeploy` and
+  the run cannot start. If the operator picks a different name, P5a's `Target:` and the drill's
+  registry path follow it. Repo and manifest entry are both deleted once the proof is done, per
+  A.5's "delete both afterwards".
 
 ## Phases
 
@@ -299,20 +304,34 @@ configuration the decision register fixes. The phase lands when `helm dependency
   `Prune=false` (D25, D26). `CreateNamespace` stays off: an untracked namespace is not deleted, and
   Argo's self-managed Application has to find its own namespace as a tracked resource like any
   other app's.
-- **argocd-server is exposed internally only.** There are no `Ingress` objects in this estate —
-  exposure is `nginx.webathome.org/*` annotations on the workload's own `Service`, and `is-public`
-  is one flag per Service (`/work/DockerImages/nginx-configurator/app/annotations.py:7-35`;
-  `/work/HelmCharts/charts/kubecoder/templates/controller-service.yaml:1-25` is the internal shape).
-  argocd-server gets `is-public: "no"`, a `.home` server name and a step-ca leaf. The internet-facing
-  Service is P5's relay and nothing else.
+- **argocd-server is exposed internally only, and internal TLS is two annotations, not one.** There
+  are no `Ingress` objects in this estate — exposure is `nginx.webathome.org/*` annotations on the
+  workload's own `Service` (`/work/DockerImages/nginx-configurator/app/annotations.py:7-35`).
+  `is-public` drives the RFC1918 allow block; the step-ca leaf is a separate branch that fires only
+  on `enable-ssl` (`.../nginxconfigurator.py:137-146,182`). So argocd-server carries a `.home`
+  server name, `is-public: "no"` **and** `enable-ssl: "yes"` — the shape
+  `/work/HelmCharts/charts/kubecoder/templates/controller-service.yaml:10-13` already ships. Drop
+  the second and the vhost is one plain `listen 80` server with no certificate at all, which fails
+  R5's "with homelab TLS" half without failing anything visible. That a 443 listener with a step-ca
+  leaf actually answers is V10's live check at bootstrap; what this phase owes is both annotations
+  in the render. The internet-facing Service is P5's relay and nothing else.
 - **The repo-server has to reach `https://charts.home` over the homelab CA** (D17) for every
-  migrated app's `helm dependency build`. Nothing in this cluster inherits that trust: the estate
-  wires it per workload from one committed artefact — `/work/Ansible/ansible/roles/baseline/files/homelab-root.crt`
-  is the source of truth, copied to `/work/HelmCharts/homelab-root.crt` and baked into the hook
-  image. Four existing patterns to choose from — a ConfigMap built by a deploy hook, a ConfigMap
-  from chart `files/`, an init container rewriting a trust store, or baking into an image — and the
-  chart-`files/` mount in `/work/HelmCharts/charts/nginx/templates/nginx-configmap-ca.yaml:1-6` is
-  the closest fit. D17's fallback is plain HTTP, a values change and nothing else.
+  migrated app's `helm dependency build` — and the pod that must trust it belongs to the **upstream
+  subchart**, not to this chart. A ConfigMap this chart templates reaches nothing on its own, and
+  baking trust into an image is not available against an upstream image; the wiring goes through the
+  pinned chart's own values. It offers two surfaces and they are not equivalent (`helm show values
+  argo/argo-cd`, chart 10.3.3 / app v3.5.1, checked 2026-08-16): the repo-server's
+  `volumes`/`volumeMounts`/`initContainers` and their `global.extraVolume*` equivalents — whose
+  values file documents exactly this, a CA bundle from a ConfigMap mounted over `/etc/ssl/certs` —
+  put the certificate in the **container's system trust store**, which a `helm dependency build`
+  subprocess consults; `configs.tls.certificates` populates `argocd-tls-certs-cm`, which upstream
+  documents for **repositories Argo itself resolves**, and a transitive dependency fetch is not one.
+  Which of them a dependency build honours is the question R14 exists to answer, so **the phase's
+  success condition is the trust reaching the repo-server container** — the rendered repo-server pod
+  carries it — not a ConfigMap object existing beside it. The certificate is one committed artefact,
+  `/work/Ansible/ansible/roles/baseline/files/homelab-root.crt` (copied to
+  `/work/HelmCharts/homelab-root.crt`, baked into the hook image). D17's fallback is plain HTTP, a
+  values change and nothing else.
 - **This chart takes no dependency on `homelab-shared`.** Argo's own render must not require
   charts.home to be up — the same principle the serving chart itself follows
   (`/work/Charts/README.md:75-80`). R14 is proven by the throwaway app, which is what a migrated
@@ -413,8 +432,17 @@ run's whole environment, and the `tf-presync` identity the Job runs under — so
   the namespace the library Job hard-codes have to agree.
 - **The ServiceAccount's RBAC is what the hook genuinely does**: the `Released`-PV reattach (D29)
   against a namespace handed in as an argument, plus whatever the kubernetes provider manages. It
-  is also the identity the entrypoint synthesises its kubeconfig from, so a run has one identity
-  and not two.
+  is also the identity the entrypoint synthesises its kubeconfig from
+  (`/work/ArgoCDTools/presync/kubeconfig.py:62-69`), so a run has one identity and not two.
+- **"Whatever the kubernetes provider manages" acts in the *app's* namespace, not in this one.**
+  The identity is `system:serviceaccount:argocd-hooks:tf-presync` — the Job's namespace and
+  ServiceAccount are hard-coded in the library template
+  (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:27,39`) — while the objects a
+  deploy repo's Terraform creates land in `<app>-<stage>`. A Role in `argocd-hooks` therefore grants
+  nothing that matters; the grant has to reach the app namespaces. P5a's proof Terraform is the
+  first real consumer and the narrowest possible test of it: a 403 there surfaces only as a failed
+  `apply` deep inside a sync (`presync/proc.py:24-26`, exit 1), which is precisely the failure R12
+  must not be diagnosing.
 
 ### P5 — The public webhook edge: the relay's manifests
 
@@ -436,6 +464,61 @@ reachable from the internet.
   `/api/webhook` and the applicationset-controller's on port 7000. The secret is the same value P2
   wires into `webhook.github.secret`, from the same leaf: one secret, two readers.
 
+### P5a — The disposable proof app: a deploy repo the A.5 drill can actually exercise
+
+Target: `../ProofDeploy`
+
+A.5's *"throwaway app entry + tiny deploy repo"* is build work, and this phase builds it (the r1 F1
+ruling): the smallest **real** deploy repo that makes the Phase A proof items observable — a chart
+carrying the PreSync hook and a `Prune=false` Namespace, a Terraform directory the hook can take
+through clone → backend → apply, and stage config reached the way a migrated app reaches it. It is
+thrown away, repo and manifest entry both, once the drill is done. The repo itself is operator
+input: it exists, with an initial commit and a workspace entry, before the run starts (see the
+ordering constraints) — until it does, this `Target:` does not resolve.
+
+- **It is a deploy repo in D12's layout**, not a render fixture: `chart/`, `terraform/`,
+  `config/prd/`. `/work/Charts/tests/consumer/` is *not* the worked example — it has no `terraform/`
+  and no `config/`, and its gate only greps rendered YAML
+  (`/work/Charts/tests/render-consumer.sh:53-89`). Nothing in the estate is one; this is the first
+  repo of its shape, and slice 010's `KubeCoderDeploy` is the second.
+- **What the hook demands of a clone is settled code, not a choice** (`/work/ArgoCDTools/presync/`):
+  Terraform runs in `<clone>/terraform` and its absence is fatal (`terraform.py:17,21-26`);
+  `config/<stage>/` must exist, and its `*.tfvars` are passed as `-var-file` in sorted order
+  (`terraform.py:29-38`); `init` supplies address, lock and unlock as `-backend-config`, so the
+  Terraform carries a bare `backend "http" {}` (`backend.py:57-72`); `TF_VAR_stage` and
+  `TF_VAR_namespace` arrive from the run and `TF_VAR_cluster` deliberately does not
+  (`terraform.py:52-57`); the kubeconfig is synthesised from the pod ServiceAccount before `init`,
+  so `provider "kubernetes" {}` needs no configuration (`kubeconfig.py:62-69`). Build to that
+  contract rather than rediscovering it at drill time.
+- **The Terraform has to manage something real.** R12 is clone → backend → apply → exit code, which
+  an empty directory proves nothing about. One trivial namespaced object the kubernetes provider
+  manages, in the app's own namespace, is enough — and whatever kind it picks is what P4's
+  ServiceAccount must be permitted to manage. The run writes state to the estate's real state repo
+  under `argocd/<repo>/<stage>/terraform.tfstate` (`backend.py:22-23,44-54`), so the state outlives
+  the repo unless the operator clears it.
+- **The chart is a migrated app in miniature**: a `Chart.yaml` dependency on `homelab-shared` from
+  `https://charts.home` — that fetch *is* what R14 observes on the repo-server — the one-line
+  include of `homelab-shared.tf-presync-hook`, the `sync-wave: "-1"` / `Prune=false` Namespace
+  manifest R13 turns on, and a workload trivial enough to sync in seconds. The four `hook.*` values
+  arrive as ApplicationSet helm parameters and the library `required`-guards every one
+  (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48`), so the chart must not
+  paper over a missing one with a default.
+- **`config/prd/values.yaml` is the file R10 proves.** It is reached as `../config/prd/values.yaml`
+  from `path: chart`, so it has to carry something whose effect is visible in the rendered output —
+  otherwise the proof cannot tell a rendered value from a chart default.
+- **A deliberate failure has to be reachable on demand.** R9's Alertmanager notification and R12's
+  "exit code gates the sync" are both proven by making this app fail: a value the operator flips in
+  git to break the sync, and one to break the Terraform apply. Design them in; improvising a failure
+  against a live cluster is how a drill turns into an incident.
+- **The repo earns a gate here**, like any other phase's work: a `.kubecoder/project.yaml` whose
+  `test` renders the chart and validates the Terraform. Helm and Terraform live in the `iac` sidecar,
+  so verbs carry `cexec iac` there and only there; `https://charts.home` answers 200 over the homelab
+  CA from that sidecar (checked 2026-08-16), so the dependency build works in the gate. No
+  Jenkinsfile and no `jenkins:` key — same shape as P1's repo, and this one is disposable besides.
+- **The registry entry is not committed anywhere.** Adding `configs/prd/<app>/prd/release.yaml` to
+  HelmCharts `main` and removing it again *is* A.5's register → deploy → undeploy → unregister
+  drill, live, on the operator's keystroke.
+
 ### P6 — Argo registers itself
 
 Target: `../HelmCharts`
@@ -455,8 +538,9 @@ that the ApplicationSet generates `argocd-prd` and Argo adopts itself on first g
   why HelmCharts' own gate is the check that matters here: the entry is admitted by `_RELEASE_KEYS`
   and skipped by discovery, so the Jenkins path gives it no stage and `deploy config` still exits 0
   across the tree.
-- **The throwaway app's entry is not committed here.** Adding and removing it *is* A.5's
-  register → deploy → undeploy → unregister drill, live, on the operator's keystroke.
+- **The throwaway app's entry is not committed here.** Adding and removing P5a's
+  `configs/prd/<app>/prd/release.yaml` *is* A.5's register → deploy → undeploy → unregister drill,
+  live, on the operator's keystroke.
 
 ## Not in scope
 
@@ -466,6 +550,8 @@ that the ApplicationSet generates `argocd-prd` and Argo adopts itself on first g
 - **Terraform-managed Keycloak clients** — hand-created here, adopted by keycloak-tf (Trello #68).
 - **Migrating any real application to Argo** — the only registry entry this slice adds is Argo's
   own, and the only other app is the disposable throwaway. KubeCoder is Phase B (slices 010–012).
+- **Creating and deleting the disposable proof repo, and its `.kubecoder/config.yaml` entry** —
+  operator keystrokes either side of the run; P5a authors the repo's contents and nothing else.
 - **The public DNS record for `deploy-hooks.webathome.org` and the router NAT rule** — operator
   actions outside every repo in this estate.
 - **Creating the GitHub webhooks** — the registry repo's is the operator's one-off (R7); each
