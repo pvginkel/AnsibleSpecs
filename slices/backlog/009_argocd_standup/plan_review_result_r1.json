@@ -1,0 +1,1 @@
+{"outcome": "issues", "summary": "AC coverage is 1:1 and Target/phase shape is sound, but A.5's throwaway deploy repo is build work no phase produces (nine criteria hang off it) and P1's exposure instruction rests on a wrong reading of the nginx-configurator: is-public: no alone yields plain HTTP, not the homelab TLS R5 requires."}
