@@ -198,7 +198,7 @@ rather than only proving their own new behaviour. The repo has no test suite of 
   After an environment rebuild the suite is red until someone runs `kc project setup` by hand — the
   loop's sweep never runs it.
 
-### P2 — `reconciler:` becomes the ownership fact the deploy CLI honours
+### P2 — `reconciler:` becomes the ownership fact the deploy CLI honours ✅ DONE 2026-08-16
 
 Target: ../HelmCharts
 
