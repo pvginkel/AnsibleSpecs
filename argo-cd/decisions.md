@@ -296,13 +296,12 @@ merge — is each product's own call. The project supplies mechanism: per-stage 
 in the registry (D20) and the tag-write library call (D45). D34–D37 are the **pilot's**
 (KubeCoder's) choices, recorded as the worked example and sane default, not as requirements.
 
-> **One exception, added 2026-08-16: D47's promotion markers are not per-app.** Garbage
-> collection is a property of the shared registry, not of any app, so an app that declines to
-> export its usage does not merely keep its own scheme — it gets its production images deleted
-> by a job that has no way to know they are in use. *How* an app writes markers stays its own
-> business (any stage prefix, any number of stages, any trigger); *that* it writes them is a
-> condition of migrating. This is the only requirement this project places on an app's tag
-> scheme, and it exists because the cost of opting out lands on someone else's job.
+> **Still true after D47 (checked 2026-08-16).** An intermediate design would have required
+> every app to export its image usage to the registry for garbage collection's benefit — a
+> genuine cross-cutting requirement, since the cost of opting out would have landed on someone
+> else's job. D47 as adopted needs no such contract: the tag that protects a stage's image *is*
+> the tag that stage deploys, so an app's tag scheme stays entirely its own business. Worth
+> recording that the exception was considered and is not needed.
 
 **D34 — Stage isolation by git revision: dev tracks `main`, prd tracks the `prd` branch.**
 Decided for KubeCoder (qa Q5, the surviving half; per-app scope — other apps pick their own
@@ -316,20 +315,24 @@ deploy repo, the merge-and-push at the end of a workflow simply *is* the deploy.
 comes free: chart, Terraform and image version sit together in a validated `main` tree, so
 promotion moves them as a unit, in a combination dev actually ran.
 
-> **Amended 2026-08-16 (operator): "no retag" is narrowed to "no retag *as the deployment
-> pointer*".** The branch-advance model is unchanged and the fast-forward survives intact —
-> `values.yaml` stays byte-identical on both branches. What comes back is a `crane` call as a
-> **side effect** of promoting: a marker tag aliasing the manifest `values.yaml` pins, so
-> garbage collection can tell the digest is in use. Nothing deploys from it. Without it the
-> production pin is an ordinary numbered tag that `registry-cleanup`'s per-prefix cap reaps
-> within days. See D47 for the mechanism and the ordering constraint it puts on the promote
-> job.
+> **Amended 2026-08-16 (operator): "no retag" does not survive; the branch advance does.** The
+> promote job performs one `crane tag` per app before advancing the branch, because the prd
+> stage values file references a `prd-<n>` tag that CI pre-wrote and only the promote job
+> creates (D47). `prd` still never carries a commit `main` doesn't, promotion is still a
+> fast-forward, and atomicity still comes free. What changes is that the advance is no longer
+> the *only* thing promotion does. `Deploy-PRD` is still deleted — but not before its
+> replacement retags, or the pilot's production reference points at a tag nobody created.
 
 **D36 — Rollback: revert on `main` and promote; pointer-move as the emergency lever.** Decided
 for KubeCoder 2026-08-12 (operator; per-app scope). The standard move is a revert on the deploy repo's
 `main`, promoted to `prd` — cheap (a deploy-repo push rebuilds nothing) and dev follows the
 revert, which is accepted. The emergency variant is force-moving `prd` back to the previously
 promoted SHA — loses nothing, since every state `prd` has ever had is a commit on `main`.
+
+> **Checked unchanged under D47 (2026-08-16).** Both paths still work: the reverted or
+> force-moved commit's prd values file names an older `prd-<n>`, which still exists. The one new
+> dependency is that it must *keep* existing — the `prd-` family's cap is now what bounds how
+> far back either path can reach, so that cap is this decision's rollback depth (D47).
 
 **D37 — Image tags are stage-agnostic: `:<n>` and `:latest`.** Decided for KubeCoder 2026-08-12
 (notes; per-app scope — an app keeps its scheme until it migrates). The
@@ -340,12 +343,24 @@ version is not a stage difference (D12). The committed default must be a real `<
 convention is per-repo opt-out-able in the shared `cicd` library, and everything keyed on the
 tag prefix gets repointed — registry retention/GC, `collect-versions`, the version-poller.
 
-> **Amended 2026-08-16 (operator).** The *deployed reference* stays stage-agnostic — this
-> decision is intact where it matters. What returns is `<stage>-<n>` / `<stage>-latest` as
-> **GC markers** alongside the build tags (D47), which is also how the "everything keyed on the
-> tag prefix gets repointed" verify item resolves: registry retention/GC and the version-poller
-> keep reading the prefix, and it keeps meaning what it always meant — "some stage uses this
-> digest". The change is who writes it and why. `collect-versions` is unaffected either way.
+> **Reversed 2026-08-16 (operator), except for the mutable-tag guard.** Stage-agnostic tags do
+> not survive: `<stage>-<n>` returns as the deployed reference, and it lives in the stage values
+> file rather than `chart/values.yaml` (D47). Two parts of this decision stand, and one is
+> strengthened.
+>
+> **The D12 principle needs restating rather than discarding.** "A version is not a stage
+> difference" was aimed at stages drifting to different *software*; that still must not happen,
+> and does not — `prd-<n>` and `<n>` are the same digest, so every stage runs the same bits. The
+> tag *name* is legitimately stage-specific, because under a branch-promotion model the name is
+> what expresses promotion state. Read D12 as being about the artifact, not its label.
+>
+> **"Never `latest`" is strengthened to "never a default at all":** `chart/values.yaml` carries
+> no image tag, so a missing stage values file fails to render instead of silently deploying a
+> fallback — the same hazard this decision named, reached by a different route.
+>
+> The "everything keyed on the tag prefix gets repointed" verify item resolves to *nothing to
+> repoint*: the prefix keeps meaning what it always meant, and `collect-versions` was never
+> prefix-keyed.
 
 **D38 — Migration-era coexistence is driven by the `reconciler:` key.** Decided (lifecycle,
 minus the `deploy apply` exemption D31 removed). `_RELEASE_KEYS` gains the new keys — the
@@ -388,48 +403,72 @@ JenkinsPipelineUtils method takes the deploy repo, the values-file path (default
 call. This is the mechanism behind "git equals deployed state" on the CI side: apps decide what
 goes in the dict and when the call runs (scope note); the library owns the git mechanics.
 
-**D47 — A stage's usage is exported to the registry as a marker tag, written by the promote
-job.** Decided 2026-08-16 (operator, after the registry audit found the fleet's retention had
-been running on truncated data). Amends D35 and D37; specified in full as §14 of
+**D47 — Stage tags are the deployed reference, pre-written by CI and created by the promote
+job.** Decided 2026-08-16 (operator; supersedes the marker design considered the same day).
+Amends D35 and D37; mechanics in §14 of
 `DockerImages/docs/registry-management/version-poller-redesign.md`.
 
-*The problem.* D37 makes the deployed reference an immutable `:<n>`, which is a **versioned**
-tag — exactly what `registry-cleanup`'s per-prefix cap and TTL delete. With stage prefixes gone
-every build lands in one bare-numbered family, so an active repo exhausts a cap of 5–10 in
-days: a production pin ages out long before any TTL is reached, and the only record that it is
-in use lives in a git repo the cleanup job has never read.
+*The problem.* D37's stage-agnostic `:<n>` in `chart/values.yaml` makes production's reference a
+**versioned** tag — exactly what `registry-cleanup`'s per-prefix cap deletes — with nothing in
+the registry recording that it is in use. With stage prefixes gone every build lands in one
+bare-numbered family, so an active repo exhausts its cap in days.
 
-*The two ways out, and why this one.* Either cleanup learns to read the deploy repos, or the
-deploy repos export what they use. The first was rejected: branch topology and orchestration are
-deliberately per-app (scope note), so a central reader would have to absorb every repo's layout
-choices, and it fails in the dangerous direction when it cannot read one. The second inverts the
-dependency — each repo declares its usage in a vocabulary the registry already speaks, and
-cleanup keeps **no** knowledge of git.
+*The design considered and rejected.* A **marker**: a `prd-*` tag aliasing the manifest, written
+from git, deployed by nothing, existing only so garbage collection could tell the digest was
+spoken for. It worked, and the rejection was not on correctness. A tag that exists but is not a
+deployment reference is a second concept every reader must hold, and its failure mode is silent
+— forget the marker and everything works until an image disappears weeks later, in another
+system, for reasons nobody traces back. Rejected as too indirect to explain and too quiet to
+fail.
 
-*The mechanism.* On promotion, `crane tag` the manifest `values.yaml` pins under
-`<stage>-<n>` (mirroring the build number) and `<stage>-latest`. Nothing deploys from these;
-they are a projection of git state into the registry, reproducible from git at any time. The
-fast-forward is untouched — `values.yaml` stays byte-identical across branches — so D35's model
-survives whole.
+*The decision.* Stage tags return as ordinary deployment references:
 
-*What makes it safe.* `<stage>-latest` is a tracking tag, which `registry-cleanup` never
-deletes, and a `crane` re-tag aliases the same manifest — so the build tag is protected by the
-existing shared-digest guard. Three obligations follow, and the first is the one that silently
-dissolves the guarantee if got wrong: the promote job must **`crane tag`, never copy or
-pull-push** (a re-upload can change the digest, leaving the marker protecting a manifest nothing
-deploys); markers must be stamped **before** the branch advance, so a marker is never later than
-the reference; and `prd` needs **branch protection** so a manual merge cannot produce a
-reference to unmarked images. `registry-cleanup` now fails closed on an unresolvable digest
-rather than deleting against an incomplete protection set, and the property is pinned by tests
-including a negative control.
+- `chart/values.yaml` carries **no image tag at all**, not even a default (see the D37
+  amendment). A stage's tag lives only in its stage values file.
+- CI on `main` writes both stage files in one commit: dev gets `<n>`, prd gets `prd-<n>` — **a
+  tag that does not exist yet.**
+- The promote job creates it — `crane tag <app>:<n> <app>:prd-<n>` — and then fast-forwards
+  `prd` to `main`.
 
-*Accepted costs.* Stale markers from a retired stage pin images until retired by hand — the
-failure direction is deliberately toward keeping the marker. Rollback depth is `min(cap, TTL)`,
-since historical `<stage>-<n>` markers are themselves versioned tags. Both are recorded in §14.6.
+*Why the forward reference is sound.* `prd-<n>` is predictable from `<n>` at build time, so
+pre-writing a reference that CI will later satisfy is ordinary rather than deferred or implicit.
+This is the observation the whole design rests on.
 
-*What it buys back.* `<stage>-latest` inherits the build's `rebuild-at`, so "production is
-running a 90-day-old image" becomes a report the registry can answer — the direct replacement
-for the operational assumption the original design rested on.
+*What it buys.* The failure mode inverts from silent-and-delayed to **loud, immediate and
+local**: no retag means Argo cannot pull `prd-<n>` and the deploy fails in the pipeline that
+caused it. The ordering constraint (retag before advance) stops being a subtlety about garbage
+collection and becomes self-evident — the tag must exist because something deploys it. And
+because the tag protecting the image *is* the tag deploying it, there is no GC contract for apps
+to honour, so an app's tag scheme stays its own business (see the scope note).
+
+*What it asks of `registry-cleanup`.* The shared-digest guard becomes load-bearing: `prd-<n>`
+and `<n>` are the same manifest, and the registry deletes by digest, so reaping the build tag
+once it ages out of the bare family's cap would destroy production with it. That guard now fails
+closed on an unresolvable digest and is pinned by tests including a negative control. Separately,
+**whatever TTL shape lands must not reap the newest member of a prefix family** — recorded as a
+requirement on that still-open design, not as a decided mechanism.
+
+*Cap sizing, which now has two independent meanings.* The bare family governs how stale a build
+can be and still be promotable — promoting the tip of `main` makes this ~1. The `prd-` family
+governs **how many promotions can be rolled back through**, which D36 needs; that is the number
+worth choosing deliberately. `registry-cleanup` caps per family, so the two are independent by
+construction.
+
+*Rollback needs nothing new.* D36 survives unchanged and was checked against this model: revert
+on `main` then promote works, and the force-move lever works, because the older `prd-<n>` still
+exists. A rollback parameter on the promote job was considered and rejected — it duplicates D36,
+and folding the emergency lever into the routine promote job is how a parameter slip rolls
+production back during an ordinary release. The lever stays a separate deliberate act.
+
+**D48 — Promotion is recorded by an annotated `release-<n>` tag on the deploy repo.** Decided
+2026-08-16 (operator). Promotion is a fast-forward, which creates **no commit** — so `git log
+prd` is identical to `git log main`, and the commits carry their authoring dates from when they
+landed on `main`, not from when they were promoted. There is no promotion event in the history
+at all. The reflog holds the ref movements but is clone-local and expires; Argo's sync history
+is bounded and lost if an Application is recreated. An annotated tag written by the promote job
+is therefore the **only durable record of when anything was released**, and carries tagger, date
+and message. `<n>` is the promote job's build number, not the image build's. One `git tag -a`;
+no parameters, and deliberately unrelated to rollback (D47).
 
 ## Security
 
