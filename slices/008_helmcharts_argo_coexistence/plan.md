@@ -328,6 +328,27 @@ resolved chart name throughout. Upstream releases are unaffected either way: the
 defaults to the directory name and `charts/<name>/Chart.yaml` genuinely does not exist, which is
 what routes them to the repo path in the first place.
 
+**Done (2026-08-16).** The local-chart path resolves through `chart_name` throughout; `kc project
+test` green, 53 tests.
+
+- Three sites, not one: the routing test (now `resolve_helm_args.py:174`) plus both reads in
+  `get_helm_images` — `charts/<name>/values.yaml` (`:38`) and `charts/<name>/templates/` (`:49`).
+  That function's local `chart_dir` variable is now `chart_name`, keyed on `config["chart_name"]`.
+  Fixing the test alone would have moved the crash to a missing file, as the constraint said.
+- Inert as claimed, and checked over the whole tree rather than just `configs/prd/`: the only
+  `chart:` anywhere is `configs/dev/_ci/prd/release.yaml`'s `chart: null`, which is falsy and
+  short-circuits `get_chart_args` before the path check. Every other release has
+  `chart_name == chart_dir`.
+- Tests (4, in `tests/test_resolve_helm_args.py`): three routing cases with **both** resolution
+  paths stubbed to sentinels — overriding `chart:` → local, conventional → local, upstream (no
+  `charts/<name>/Chart.yaml`) → repo — plus one hermetic `get_helm_images` assert over a synthetic
+  chart whose config directory does not exist. No subprocess, no network.
+- Mutation-checked per site: reverting the routing key, the `values.yaml` read, or the `templates/`
+  walk each turns a test red on its own.
+- Recorded in close-out, not fixed here: `Jenkinsfile:93-100` mis-keys the same way in Groovy —
+  change detection watches `charts/<chart_dir>/.*`. Outside this phase's named site, and inert for
+  the same reason.
+
 ## Not in scope
 
 - **Validating an `argo-cd` entry's contents.** Past the five allowlisted top-level keys, HelmCharts

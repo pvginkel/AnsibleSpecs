@@ -53,6 +53,25 @@ shells out to `tools/resolve-helm-args.py`, which is gone (the tools were unifie
 migration tooling is deliberately retained as the basis for a possible future bulk resource
 rename, and this would bite whoever picks it up.
 
+**nit — a half-written `reconciler:` key makes the refusal message say "deployed by None".**
+Found in P2 review r1 (F2). `reconciler:` with nothing after the colon is valid YAML for `None`, and
+`cfg.get("reconciler", "jenkins")` (`tools/deploy/deploy_cli/release.py:161`) only defaults on an
+*absent* key — so the record carries `None` on a field annotated `reconciler: str` (`:53`), and the
+refusal interpolates it with `!r` (`tools/deploy/deploy_cli/main.py:134`): `prd/foo@prd is deployed
+by None, not jenkins — refusing to deploy.` The skip itself is exactly what the typo-guard ruling
+accepted; what the ruling did not cover is that a half-written key reaches the operator as an
+unreadable message rather than a nameable one.
+
+**minor — the deploy pipeline's change detection repeats P3's mis-keying, in Groovy.** Found in P3
+while fixing the Python side. `Jenkinsfile:93-100`'s `changed(entry)` watches
+`charts/${entry['chart_dir']}/.*`, the config directory name — so a release whose `chart:` names a
+different chart watches a directory that need not exist, and an edit to the chart it actually
+deploys triggers no stage (`:73`). Out of P3's scope, which the ruling fixed to
+`resolve_helm_args.py`, and inert for the same reason: no `release.yaml` under `configs/prd/` sets
+`chart:`. The JSON already carries the resolved name — `process_release` emits both
+`chart` (`chart_name`) and `chart_dir` (`resolve_helm_args.py:223-224`) — so whoever introduces the
+first overriding `chart:` has what a fix needs; nothing in this slice does.
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -74,3 +93,14 @@ by side. Nothing reads `.llmbox/` any more — the environment is declared in
 outside P1's scope (D43 also argues against touching this repo more than needed). It is the one
 thing `/kubecoder:onboard` would retire here if the operator ever wants HelmCharts onboarded
 properly rather than gate-only, which is what P1 deliberately delivered.
+
+**Slices 011 and 012 inherit a gate that cannot see the refusal's ordering.** Found in P2 review r1
+(F1). The refusal is raised before `apply_cluster_environment` on purpose
+(`tools/deploy/deploy_cli/main.py:131-138`) — nothing is injected into the environment for a refused
+verb — but every test in `tests/test_main_verbs.py` stubs that call out via the `no_cluster_env`
+fixture (`:26-29`), so no test observes the ordering: moving the guard after
+`apply_cluster_environment` and re-running the file gives 14 passed. Harmless today (the process
+exits immediately after), but a later reordering would surface the *cluster's* error — `no cluster
+'x'`, or a missing `clusters.yaml` — in place of the refusal message the acceptance criteria
+describe. Both 011 and 012 edit this file against this gate; a single unstubbed test asserting the
+call is never reached for a refused verb would close it.
