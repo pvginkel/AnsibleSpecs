@@ -167,7 +167,7 @@ rather than only proving their own new behaviour. The repo has no test suite of 
 - D43 is the standing constraint. pytest and a manifest; no fixture library, no coverage tooling,
   and the `Jenkinsfile` is **not** wired to run this suite — the gate exists for the dev loop.
 
-**Done (2026-08-16).** `kc project test` is green: `cexec iac poetry run pytest`, 24 tests.
+**Done (2026-08-16).** `kc project test` is green: `cexec iac poetry run pytest`, 25 tests.
 
 - `.kubecoder/project.yaml` — one `root` component, `jenkins: IaC/HelmCharts`, `setup:` +
   `test:` only. **No `lint:` and no `build:`**: the repo carries no ruff config (the stray
@@ -184,6 +184,11 @@ rather than only proving their own new behaviour. The repo has no test suite of 
 - `tests/test_prd_tree.py` reads the **real** `configs/prd/` read-only: all 51 stage directories
   are discovered, and all 51 resolve. That already discharges P2's "every release that exists today
   must enumerate and resolve exactly as it does now" — P2 adds no second version of it.
+- Review r1/F1: that file's on-disk oracle is **reconciler-aware** — a stage whose `release.yaml`
+  names a non-`jenkins` reconciler is not expected to be discovered, absent file and absent key
+  both meaning `jenkins`. Without it the set-equality asserted the negation of R2 and slice 009's
+  first entry would have turned this gate red against correct code. Inert today (no `reconciler:`
+  in the tree); the oracle's own exclusion is pinned by a hermetic test beside it.
 - The unknown-key pin uses a typo key (`chrat`), deliberately **not** `reconciler`: P1's baseline
   must survive P2's allowlist widening unchanged, so it asserts only that an unrecognised key still
   fails loud.
@@ -272,7 +277,9 @@ never gets a stage (`Jenkinsfile:60`, `:93-100`).
   above spends its length preventing, and HelmCharts is deleted at the end of the migration.
 - Every release that exists today must enumerate and resolve exactly as it does now. P1 already
   pins this over the real tree (`tests/test_prd_tree.py`, all 51 prd stages) — do not write a second
-  version of it; the tests that ride this phase are for the new behaviour.
+  version of it; the tests that ride this phase are for the new behaviour. That test's on-disk
+  oracle already excludes a stage whose `release.yaml` names a non-`jenkins` reconciler, so it stays
+  true once the skip lands and once slice 009 registers the first entry — it needs no edit here.
 
 ### P3 — The latent `get_chart_args` fall-through
 
