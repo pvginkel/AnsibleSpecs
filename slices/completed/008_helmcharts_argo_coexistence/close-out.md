@@ -41,7 +41,7 @@ argument the test phase used for the code push — none of its paths match the J
 `changed()` globs (`charts/`, `configs/prd/`, `terraform-modules/`, `_providers/`) — but the
 keystroke is the operator's.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -97,7 +97,7 @@ surviving `verification.json` items against the merged tree:
   The narrower, code-level checks above (`discover_releases()` called directly, `deploy config`)
   avoid this path and are what `verification.json` cites.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ## Bugs
 
@@ -120,7 +120,7 @@ ORPHAN CANDIDATE (`:360-361`) — a false positive, printed, never raised. It do
 which is why this slice's acceptance is unaffected. Worth knowing before slice 009: an operator
 acting on that report would delete a healthy, Argo-owned release.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ### B2 — `migrate-release.py` calls a script that no longer exists · nit · HelmCharts
 
@@ -131,7 +131,7 @@ shells out to `tools/resolve-helm-args.py`, which is gone (the tools were unifie
 migration tooling is deliberately retained as the basis for a possible future bulk resource
 rename, and this would bite whoever picks it up.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ### B3 — a half-written `reconciler:` key makes the refusal message say "deployed by None" · nit · HelmCharts
 
@@ -143,7 +143,7 @@ by None, not jenkins — refusing to deploy.` The skip itself is exactly what th
 accepted; what the ruling did not cover is that a half-written key reaches the operator as an
 unreadable message rather than a nameable one.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ### B4 — the deploy pipeline's change detection repeats P3's mis-keying, in Groovy · minor · HelmCharts
 
@@ -157,7 +157,7 @@ deploys triggers no stage (`:73`). Out of P3's scope, which the ruling fixed to
 `chart` (`chart_name`) and `chart_dir` (`resolve_helm_args.py:223-224`) — so whoever introduces the
 first overriding `chart:` has what a fix needs; nothing in this slice does.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ### B5 — `recommend-resources` repeats the same mis-keying a third time, and silently · minor · HelmCharts
 
@@ -227,7 +227,7 @@ at all (verified 2026-08-16; none of the 15 names a reconciler). So the generato
 generated. The proof item is still worth running; its framing is what is off. Left unedited by the
 doc phase because it describes Argo-side behaviour this slice cannot verify.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ### S3 — HelmCharts still carries the retired `.llmbox/docker-compose.yml`
 
@@ -239,7 +239,7 @@ outside P1's scope (D43 also argues against touching this repo more than needed)
 thing `/kubecoder:onboard` would retire here if the operator ever wants HelmCharts onboarded
 properly rather than gate-only, which is what P1 deliberately delivered.
 
-Disposition:
+Disposition: That's it. I'm not progressing the rest.
 
 ### S4 — Slices 011 and 012 inherit a gate that cannot see the refusal's ordering
 
