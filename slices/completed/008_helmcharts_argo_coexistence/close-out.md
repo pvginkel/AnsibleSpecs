@@ -211,7 +211,11 @@ exactly the case that used to raise. The `argo-cd/` set now says so (`design.md`
 records of what was asked. Whoever plans 009 should take the `argo-cd/` set as authoritative
 where they differ, which is what `slice-doc-plan.md` already instructs.
 
-Disposition:
+Disposition: Can you add notes to the outstanding slices for S1? It only needs enough to point the
+planner to the right place.
+
+Done: a note after each stale quote in 009, 010 and 012 (012 twice — requirement 6 and the
+registry-entry block). The quotes themselves are untouched.
 
 ### S2 — Slice 009's `~44 unmigrated releases` proof item rests on a count that does not hold
 
@@ -250,4 +254,7 @@ exits immediately after), but a later reordering would surface the *cluster's* e
 describe. Both 011 and 012 edit this file against this gate; a single unstubbed test asserting the
 call is never reached for a refused verb would close it.
 
-Disposition:
+Disposition: Maybe make a note for S4 also?
+
+Done: a note in 011 and 012, each naming the ordering, the `no_cluster_env` stub that hides it,
+and the one-test fix — conditional on the slice actually touching that file.

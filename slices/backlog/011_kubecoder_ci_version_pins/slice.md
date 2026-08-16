@@ -137,6 +137,18 @@ cluster credential) in [`decisions.md`](../../../argo-cd/decisions.md).
 - `/work/HelmCharts` — registry retention/GC rules, `collect-versions` / the version-poller.
 - `/work/KubeCoderDeploy` — the `chart/values.yaml` written into (built by slice 010).
 
+### Note from slice 008's close-out (S4) — a blind spot in the HelmCharts gate
+
+HelmCharts now has a `kc project test` gate (slice 008's `tests/`), but it cannot see one thing.
+The `argo-cd` refusal in `tools/deploy/deploy_cli/main.py:131-138` is raised **before**
+`apply_cluster_environment` on purpose — nothing is injected into the environment for a refused
+verb — and every test in `tests/test_main_verbs.py` stubs that call out via the `no_cluster_env`
+fixture (`:26-29`). So no test observes the ordering: move the guard after
+`apply_cluster_environment` and the file still passes. Harmless today, but a reordering would
+surface the *cluster's* error (`no cluster 'x'`, a missing `clusters.yaml`) in place of the
+refusal message. If this slice touches that file, one unstubbed test asserting the call is never
+reached for a refused verb closes it.
+
 ## Q&A from triage (2026-08-13)
 
 - **Q: The Triage Inbox holds 12 other `Ansible`-tagged cards, none Argo-related. Sweep them too?**

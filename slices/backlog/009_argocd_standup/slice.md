@@ -149,6 +149,11 @@ Verbatim from `phases.md`. These are the slice's outcome-level acceptance, not e
 > `deployed` and `autoSync` are plain booleans (D23) and **required in every entry** — the
 > templates run with `missingkey=error`, so an absent key is a generation failure, not a default.
 
+**The `chart: null` line above is stale** — kept as the triage record of what was asked. Slice 008
+shipped `resolve()` so it stops validating an entry another reconciler owns as a HelmCharts release
+at all, so a migrated entry needs no `chart:` key of any kind. Take the `argo-cd/` set as
+authoritative where they differ: `design.md`, D38 in `decisions.md`, `phases.md` A.3 and B.5.
+
 ### design.md — "Generating Applications", the two ApplicationSets requirement 1 ships
 
 > Two ApplicationSets (D21), both shipped in ArgoCDDeploy's chart, both driven by a git files

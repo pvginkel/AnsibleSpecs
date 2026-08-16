@@ -62,6 +62,9 @@ Verbatim from `phases.md`:
    > The Jenkins pipeline fires on the path change and now *skips* the release (A.3) —
    > Jenkins and Argo are never both live on it.
 
+   **No `chart:` key is needed** — see the note under the registry-entry quote below. `phases.md`
+   B.5 now says so; this quote is the triage record of what was asked.
+
 7. > At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the
    > still-Jenkins-owned **prd** stage — `changed()` matches `configs/prd/kubecoder/.*`, not
    > per stage (review R5). Harmless while the shared chart is untouched; know it is coming.
@@ -119,6 +122,11 @@ Verbatim from `phases.md`:
 >
 > `deployed` and `autoSync` are plain booleans (D23) and **required in every entry** — the
 > templates run with `missingkey=error`, so an absent key is a generation failure, not a default.
+
+**The `chart: null` line above is stale** — kept as the triage record of what was asked. Slice 008
+shipped `resolve()` so it stops validating an entry another reconciler owns as a HelmCharts release
+at all, so a migrated entry needs no `chart:` key of any kind. Take the `argo-cd/` set as
+authoritative where they differ: `design.md`, D38 in `decisions.md`, `phases.md` A.3 and B.5.
 
 Note the `targetRevision` split: the pilot uses `main` for the dev stage and `prd` for the prd
 stage (D34).
@@ -180,6 +188,18 @@ cutover mechanism), **D25**/**D26** (the namespace and its guard), **D34** (the 
 topology), **D35**/**D36** (promotion and rollback), **D38** (coexistence) in
 [`decisions.md`](../../../argo-cd/decisions.md). **D145** in requirement 13 is a **KubeCoder**
 decision — `/work/KubeCoderSpecs/decisions.md`.
+
+### Note from slice 008's close-out (S4) — a blind spot in the HelmCharts gate
+
+HelmCharts now has a `kc project test` gate (slice 008's `tests/`), but it cannot see one thing.
+The `argo-cd` refusal in `tools/deploy/deploy_cli/main.py:131-138` is raised **before**
+`apply_cluster_environment` on purpose — nothing is injected into the environment for a refused
+verb — and every test in `tests/test_main_verbs.py` stubs that call out via the `no_cluster_env`
+fixture (`:26-29`). So no test observes the ordering: move the guard after
+`apply_cluster_environment` and the file still passes. Harmless today, but a reordering would
+surface the *cluster's* error (`no cluster 'x'`, a missing `clusters.yaml`) in place of the
+refusal message this slice's requirement 6 relies on. If this slice touches that file, one
+unstubbed test asserting the call is never reached for a refused verb closes it.
 
 ## Operator boundary
 
