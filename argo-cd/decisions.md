@@ -296,6 +296,14 @@ merge — is each product's own call. The project supplies mechanism: per-stage 
 in the registry (D20) and the tag-write library call (D45). D34–D37 are the **pilot's**
 (KubeCoder's) choices, recorded as the worked example and sane default, not as requirements.
 
+> **One exception, added 2026-08-16: D47's promotion markers are not per-app.** Garbage
+> collection is a property of the shared registry, not of any app, so an app that declines to
+> export its usage does not merely keep its own scheme — it gets its production images deleted
+> by a job that has no way to know they are in use. *How* an app writes markers stays its own
+> business (any stage prefix, any number of stages, any trigger); *that* it writes them is a
+> condition of migrating. This is the only requirement this project places on an app's tag
+> scheme, and it exists because the cost of opting out lands on someone else's job.
+
 **D34 — Stage isolation by git revision: dev tracks `main`, prd tracks the `prd` branch.**
 Decided for KubeCoder (qa Q5, the surviving half; per-app scope — other apps pick their own
 branch topology through the registry's per-stage `targetRevision`).
@@ -307,6 +315,15 @@ What performs the advance is the product's trigger choice (scope note); for a si
 deploy repo, the merge-and-push at the end of a workflow simply *is* the deploy. Atomicity
 comes free: chart, Terraform and image version sit together in a validated `main` tree, so
 promotion moves them as a unit, in a combination dev actually ran.
+
+> **Amended 2026-08-16 (operator): "no retag" is narrowed to "no retag *as the deployment
+> pointer*".** The branch-advance model is unchanged and the fast-forward survives intact —
+> `values.yaml` stays byte-identical on both branches. What comes back is a `crane` call as a
+> **side effect** of promoting: a marker tag aliasing the manifest `values.yaml` pins, so
+> garbage collection can tell the digest is in use. Nothing deploys from it. Without it the
+> production pin is an ordinary numbered tag that `registry-cleanup`'s per-prefix cap reaps
+> within days. See D47 for the mechanism and the ordering constraint it puts on the promote
+> job.
 
 **D36 — Rollback: revert on `main` and promote; pointer-move as the emergency lever.** Decided
 for KubeCoder 2026-08-12 (operator; per-app scope). The standard move is a revert on the deploy repo's
@@ -322,6 +339,13 @@ version is not a stage difference (D12). The committed default must be a real `<
 `latest`, or a values slip becomes a mutable-tag deploy. *Verify in phases:* the `<stage>-<n>`
 convention is per-repo opt-out-able in the shared `cicd` library, and everything keyed on the
 tag prefix gets repointed — registry retention/GC, `collect-versions`, the version-poller.
+
+> **Amended 2026-08-16 (operator).** The *deployed reference* stays stage-agnostic — this
+> decision is intact where it matters. What returns is `<stage>-<n>` / `<stage>-latest` as
+> **GC markers** alongside the build tags (D47), which is also how the "everything keyed on the
+> tag prefix gets repointed" verify item resolves: registry retention/GC and the version-poller
+> keep reading the prefix, and it keeps meaning what it always meant — "some stage uses this
+> digest". The change is who writes it and why. `collect-versions` is unaffected either way.
 
 **D38 — Migration-era coexistence is driven by the `reconciler:` key.** Decided (lifecycle,
 minus the `deploy apply` exemption D31 removed). `_RELEASE_KEYS` gains the new keys — the
@@ -363,6 +387,49 @@ JenkinsPipelineUtils method takes the deploy repo, the values-file path (default
 `chart/values.yaml`) and that dict, then clones → updates the file → commits → pushes in one
 call. This is the mechanism behind "git equals deployed state" on the CI side: apps decide what
 goes in the dict and when the call runs (scope note); the library owns the git mechanics.
+
+**D47 — A stage's usage is exported to the registry as a marker tag, written by the promote
+job.** Decided 2026-08-16 (operator, after the registry audit found the fleet's retention had
+been running on truncated data). Amends D35 and D37; specified in full as §14 of
+`DockerImages/docs/registry-management/version-poller-redesign.md`.
+
+*The problem.* D37 makes the deployed reference an immutable `:<n>`, which is a **versioned**
+tag — exactly what `registry-cleanup`'s per-prefix cap and TTL delete. With stage prefixes gone
+every build lands in one bare-numbered family, so an active repo exhausts a cap of 5–10 in
+days: a production pin ages out long before any TTL is reached, and the only record that it is
+in use lives in a git repo the cleanup job has never read.
+
+*The two ways out, and why this one.* Either cleanup learns to read the deploy repos, or the
+deploy repos export what they use. The first was rejected: branch topology and orchestration are
+deliberately per-app (scope note), so a central reader would have to absorb every repo's layout
+choices, and it fails in the dangerous direction when it cannot read one. The second inverts the
+dependency — each repo declares its usage in a vocabulary the registry already speaks, and
+cleanup keeps **no** knowledge of git.
+
+*The mechanism.* On promotion, `crane tag` the manifest `values.yaml` pins under
+`<stage>-<n>` (mirroring the build number) and `<stage>-latest`. Nothing deploys from these;
+they are a projection of git state into the registry, reproducible from git at any time. The
+fast-forward is untouched — `values.yaml` stays byte-identical across branches — so D35's model
+survives whole.
+
+*What makes it safe.* `<stage>-latest` is a tracking tag, which `registry-cleanup` never
+deletes, and a `crane` re-tag aliases the same manifest — so the build tag is protected by the
+existing shared-digest guard. Three obligations follow, and the first is the one that silently
+dissolves the guarantee if got wrong: the promote job must **`crane tag`, never copy or
+pull-push** (a re-upload can change the digest, leaving the marker protecting a manifest nothing
+deploys); markers must be stamped **before** the branch advance, so a marker is never later than
+the reference; and `prd` needs **branch protection** so a manual merge cannot produce a
+reference to unmarked images. `registry-cleanup` now fails closed on an unresolvable digest
+rather than deleting against an incomplete protection set, and the property is pinned by tests
+including a negative control.
+
+*Accepted costs.* Stale markers from a retired stage pin images until retired by hand — the
+failure direction is deliberately toward keeping the marker. Rollback depth is `min(cap, TTL)`,
+since historical `<stage>-<n>` markers are themselves versioned tags. Both are recorded in §14.6.
+
+*What it buys back.* `<stage>-latest` inherits the build's `rebuild-at`, so "production is
+running a 90-day-old image" becomes a report the registry can answer — the direct replacement
+for the operational assumption the original design rested on.
 
 ## Security
 

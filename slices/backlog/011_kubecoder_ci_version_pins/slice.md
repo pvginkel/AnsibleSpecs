@@ -39,8 +39,27 @@ Verbatim from `phases.md` §"B.3 — CI (D37, D45 — KubeCoder's per-app choice
    > `collect-versions` / the version-poller. "Running in prd" moves from the registry into
    > git — the point, but its readers must be told.
 
+   **Resolved 2026-08-16 by D47 — and it resolves the opposite way to how this reads.**
+   "Running in prd" does *not* move into git as far as the registry's readers are concerned.
+   The promote job exports it back to the registry as a marker tag (`prd-<n>` / `prd-latest`)
+   aliasing the manifest `values.yaml` pins, so registry retention/GC and the version-poller
+   keep reading the tag prefix and it keeps meaning what it always meant. **They need no
+   repointing at all** — `registry-cleanup` and `version-poller` require no code change for
+   this, only the marker being written. `collect-versions` was never prefix-keyed.
+   
+   The planner's real work here is therefore not repointing readers but the *producer* side:
+   the promote job's `crane tag` calls and their ordering (markers before the branch advance),
+   plus branch protection on `prd`. Constraints in D47 and §14.4 of
+   `DockerImages/docs/registry-management/version-poller-redesign.md`; the `crane tag`
+   (not copy/pull-push) requirement is load-bearing.
+
 4. > `Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays
    > alive until each stage cuts over.
+
+   **Amended by D47:** `Deploy-PRD` still goes, but the promote path that replaces it is not
+   a bare `git push origin main:prd` — it carries the marker stamping. Do not delete
+   `Deploy-PRD` until the promote job writes markers, or the pilot's production images become
+   cap-eligible with nothing holding them.
 
 5. > The committed default tag is a real `<n>`, never `latest` (D37).
 
