@@ -39,6 +39,13 @@ ORPHAN CANDIDATE (`:360-361`) — a false positive, printed, never raised. It do
 which is why this slice's acceptance is unaffected. Worth knowing before slice 009: an operator
 acting on that report would delete a healthy, Argo-owned release.
 
+**cosmetic — the deploy CLI's module docstring lists nine of its twelve verbs.**
+`tools/deploy/deploy_cli/main.py:6-9` names deploy, template, plan, stop, uninstall, destroy, wait,
+refresh-secrets and config, omitting `apply`, `output` and `import` — all three of which `_VERBS`
+has carried for a while. Noticed in P2 while adding the refusal set beside it; already stale before
+this slice, and correcting a docstring's verb list is not P2's scope. Only worth knowing because
+that docstring is the natural source for anyone documenting the CLI.
+
 **nit — `migrate-release.py` calls a script that no longer exists.** `tools/migrate-release.py:382`
 shells out to `tools/resolve-helm-args.py`, which is gone (the tools were unified under
 `poetry run resolve-helm-args`). The path already degrades gracefully to

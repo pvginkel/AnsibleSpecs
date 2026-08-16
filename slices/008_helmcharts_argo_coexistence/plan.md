@@ -281,6 +281,34 @@ never gets a stage (`Jenkinsfile:60`, `:93-100`).
   oracle already excludes a stage whose `release.yaml` names a non-`jenkins` reconciler, so it stays
   true once the skip lands and once slice 009 registers the first entry — it needs no edit here.
 
+**Done (2026-08-16).** R1, R2 and R3 landed together; `kc project test` green, 49 tests.
+
+- `resolve()` reads `cfg.get("reconciler", "jenkins")` into `ours`, and the short-circuit is two
+  ternaries: `upstream = cfg.get("upstream") if ours else None` and `chart_name = cfg.get("chart",
+  chart_dir) if ours else None`. **`upstream` is dropped from the record too, not merely
+  unvalidated** — the plan named only the validation, but a carried-through `upstream` makes
+  `chart_ref` return Argo's `chart` value, so the three entry shapes would stop behaving
+  identically. Dropping it is what makes "falsy chart for *every* shape" literally true.
+- `Release` gained `reconciler: str`; the refusal needs it and `resolve()` already reads it.
+- Both read sites use `.get("reconciler", "jenkins")`, matching P1's on-disk oracle exactly — so an
+  explicit `reconciler: null` is "not jenkins" in all three, and the real-tree set-equality holds.
+- `resolve_helm_args.read_reconciler(stage_dir)` is module-level and public (that module has no
+  private convention); `discover_releases` skips on it.
+- The refusal is one `_JENKINS_ONLY_VERBS` frozenset in `main.py`, raised as `ReleaseError`
+  **before** `apply_cluster_environment` — exit 1 through the existing handler, nothing injected
+  into the environment for a refused verb. The 8/4 partition of `_VERBS` is asserted by a test, not
+  by a second production set (D43).
+- Tests: `tests/test_main_verbs.py` (new — stubs `apply_cluster_environment`, parametrised over all
+  eight refusals and each inspection verb), plus additions to `test_release.py` and
+  `test_resolve_helm_args.py`. `test_prd_tree.py` needed no edit, as P1 predicted.
+- Mutation-checked: reverting either ternary, the enumeration skip, or one verb's membership each
+  turns tests red.
+- Real-tree smoke (entry created, run, removed): a `reconciler: argo-cd` stage makes `deploy config`
+  exit 0 with `chart_name: null` — the exact call `gen_architecture.py:578-580` makes, taking its
+  `:581` skip — and `discover_releases` still returns exactly the 51 jenkins-owned stages.
+- P3 is unaffected: its citations (`resolve_helm_args.py:35`, `:172`) sit above this phase's
+  insertion at `:190` and did not shift.
+
 ### P3 — The latent `get_chart_args` fall-through
 
 Target: ../HelmCharts
