@@ -167,6 +167,32 @@ rather than only proving their own new behaviour. The repo has no test suite of 
 - D43 is the standing constraint. pytest and a manifest; no fixture library, no coverage tooling,
   and the `Jenkinsfile` is **not** wired to run this suite — the gate exists for the dev loop.
 
+**Done (2026-08-16).** `kc project test` is green: `cexec iac poetry run pytest`, 24 tests.
+
+- `.kubecoder/project.yaml` — one `root` component, `jenkins: IaC/HelmCharts`, `setup:` +
+  `test:` only. **No `lint:` and no `build:`**: the repo carries no ruff config (the stray
+  `.ruff_cache` is not backed by one) and builds nothing locally, so declaring either would gate
+  on a convention that does not exist. The loop's `lint`/`build` sweep is a no-op here by design.
+- pytest is an optional `test` Poetry group beside `analysis`; `poetry.lock` regenerated (additive,
+  every new entry tagged `groups = ["test"]`, `poetry install --only main` verified pytest-free).
+  `[tool.pytest.ini_options] testpaths = ["tests"]` keeps collection off `charts/` and `configs/`.
+  `.gitignore` gained `__pycache__/` — pytest's assertion rewriting writes it beside the suite.
+- `tests/conftest.py` ships three fixtures later phases should build on rather than re-invent:
+  `repo` (monkeypatches `release.repo_root` to `tmp_path` — a test that skips it reads the real
+  tree), `make_chart(name, chart_yaml=True)`, `make_stage(cluster, chart, stage, release_yaml=,
+  files=)`.
+- `tests/test_prd_tree.py` reads the **real** `configs/prd/` read-only: all 51 stage directories
+  are discovered, and all 51 resolve. That already discharges P2's "every release that exists today
+  must enumerate and resolve exactly as it does now" — P2 adds no second version of it.
+- The unknown-key pin uses a typo key (`chrat`), deliberately **not** `reconciler`: P1's baseline
+  must survive P2's allowlist widening unchanged, so it asserts only that an unrecognised key still
+  fails loud.
+- Mutation-checked, not merely green: teaching `discover_releases` to skip any stage carrying a
+  `release.yaml` turns two tests red, including the real-tree one.
+- Later phases: the gate is `kc project test` from `/work/HelmCharts`; new tests go under `tests/`.
+  After an environment rebuild the suite is red until someone runs `kc project setup` by hand — the
+  loop's sweep never runs it.
+
 ### P2 — `reconciler:` becomes the ownership fact the deploy CLI honours
 
 Target: ../HelmCharts
@@ -244,8 +270,9 @@ never gets a stage (`Jenkinsfile:60`, `:93-100`).
   never picks it up, so it silently stops deploying instead of failing loud. Accepted — a loud
   version of this check is a `config` that exits non-zero, which is the failure mode the paragraph
   above spends its length preventing, and HelmCharts is deleted at the end of the migration.
-- Every release that exists today must enumerate and resolve exactly as it does now. Tests ride the
-  phase.
+- Every release that exists today must enumerate and resolve exactly as it does now. P1 already
+  pins this over the real tree (`tests/test_prd_tree.py`, all 51 prd stages) — do not write a second
+  version of it; the tests that ride this phase are for the new behaviour.
 
 ### P3 — The latent `get_chart_args` fall-through
 

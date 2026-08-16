@@ -59,3 +59,11 @@ Focus: <!-- doc-writer -->
 Focus: <!-- doc-writer -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+**HelmCharts still carries the retired `.llmbox/docker-compose.yml`.** Noticed in P1 while adding
+`.kubecoder/project.yaml`: the repo now has both the pre-KubeCoder setup and the new manifest side
+by side. Nothing reads `.llmbox/` any more — the environment is declared in
+`/work/Ansible/.kubecoder/config.yaml` — so it is dead weight, not a conflict. Deleting it was
+outside P1's scope (D43 also argues against touching this repo more than needed). It is the one
+thing `/kubecoder:onboard` would retire here if the operator ever wants HelmCharts onboarded
+properly rather than gate-only, which is what P1 deliberately delivered.
