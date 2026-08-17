@@ -1,0 +1,10 @@
+{
+  "outcome": "done",
+  "summary": "F1 is confirmed and fixed: the gate now renders under release `argocd-prd` — the Application's own name, which Argo uses and which is also the namespace — so the 61 objects, `argocd-cmd-params-cm`'s Service references and every workload's immutable `app.kubernetes.io/instance` selector are the ones the cluster gets. The regression test `check_release_name` takes the name from the rendered Namespace rather than from the constant and fails on the reviewed state (13 assertions); close-out A1's bootstrap command and P5's relay target URLs are corrected in place. F2 is refuted. `kc project lint` and `kc project test` are green on 9264944.",
+  "refuted": [
+    {
+      "id": "F2",
+      "evidence": "The repo-server derives the Helm repository from the chart's own Chart.yaml, not from Argo's configured repositories: getHelmDependencyRepos (v3.5.1 reposerver/repository/repository.go:1175-1208) parses dependencies[].repository and getHelmRepos (:1124-1163) synthesises Repository{Repo: url, Name: sanitizeRepoName(url)} when nothing configured matches — configured repos only attach credentials — and DependencyBuild helm-repo-adds each before `helm dependency build` (util/helm/helm.go:86-106,125). Replayed that exact sequence against this chart with an empty HELM_REPOSITORY_CONFIG and a cold cache: `helm repo add https:--argoproj.github.io-argo-helm https://argoproj.github.io/argo-helm` then `helm dependency build` exits 0 and writes argo-cd-10.3.3.tgz. The reviewer's repro omitted the repo add, which is the step the repo-server does perform and which tests/build-deps.sh:9 mirrors."
+    }
+  ]
+}

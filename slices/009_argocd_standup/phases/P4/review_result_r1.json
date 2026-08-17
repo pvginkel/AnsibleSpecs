@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "P4 delivers the argocd-hooks namespace, the 22-key argocd-hook-credentials ExternalSecret and the tf-presync identity, and the parts that could only fail in production check out live: every leaf path corroborated outside the diff, the openbao-prd ClusterSecretStore unrestricted by namespace, and the committed age recipient byte-identical to the one every tfstate in TerraformState is already encrypted to. Two advisory findings, neither blocking: the gate binds the per-cluster literals to clusters.yaml by value but not by key set (witnessed by mutation), and the age recipient is a committed literal whose private half is fetched from a leaf that already carries the public half, so rotation can drift it unseen.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The gate compares the hook's per-cluster literals to clusters.yaml's prd values but iterates hard-coded key tuples, so a key added to that file leaves the hook environment short and the gate green (mutation-witnessed)."
+    },
+    {
+      "id": "F2",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS is a committed literal while SOPS_AGE_KEY is fetched from iac/tf-backend, a leaf that already carries age_public_key (scripts/tf-backend.sh:10-12,46), so a keypair rotation can split the two halves with nothing in the gate able to see it."
+    }
+  ]
+}

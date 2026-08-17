@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "r1 F1 is genuinely fixed: the gate renders under `argocd-prd` and check_release_name ties workload names and instance selectors to the rendered Namespace — re-mutating RELEASE back to `argocd` produces 13 named failures, and design.md confirms the Application name and namespace are both `argocd-prd` with no releaseName override. No gate was recorded against this commit so I ran it; `kc project test` and `kc project lint` are green. Two advisory defects remain inside the new check — it KeyErrors on a dex-disabled render (the switch P2 owns) and its params/Services cross-check cannot fail for the reason its comment gives — neither blocking.",
+  "details": "code_review_r2.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "failing-test",
+      "summary": "check_release_name indexes render content a correct render need not carry: with `dex.enabled: false` — the switch plan.md:374 leaves to P2 — the gate dies `KeyError: 'server.dex.server'` on a correct render, and dropping the Namespace template raises StopIteration at :96 before check_namespace_manifest can report the named D25 failure it owns."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "The argocd-cmd-params-cm/Services cross-check at :111-121 cannot fail for the release-name mismatch its comment names — both sides derive from the same .Release.Name in one render; under the RELEASE=\"argocd\" mutation 13 assertions fired and this was not one of them, leaving only false-positive outcomes."
+    }
+  ]
+}

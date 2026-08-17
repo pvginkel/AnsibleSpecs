@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "P3 delivers its outcome: the releases AppProject and both ApplicationSets render, the selector excludes every entry that does not name reconciler: argo-cd and deployed: true, and every load-bearing claim in the done-record (path.segments indices, requeueAfterSeconds: 0, the empty templatePatch no-op, boolean flattening, name-only destinations, deny-by-default cluster whitelist) checks out against argo-cd v3.5.1's own source. Seven mutations I ran against the new gate checks each went red, so the coverage is real. One advisory Minor: the generated Application's source repoURL/targetRevision on the local set, and the chart version on the upstream set, are the only template fields no assertion reads — mutations to them leave the gate green.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "test-coverage",
+      "anchor": "coverage-gap",
+      "summary": "The gate asserts every field of both ApplicationSet templates except the generated Application's source repoURL/targetRevision (local) and chart version (upstream); mutating them to point at the registry repo, or to a git branch, leaves `kc project test` green."
+    }
+  ]
+}

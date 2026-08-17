@@ -1,0 +1,31 @@
+{
+  "outcome": "signoff",
+  "summary": "P2's three wires — notifications to Alertmanager, direct-to-Keycloak SSO, and the ESO-materialised credentials — all land, and the design's load-bearing claims hold when checked against Argo CD v3.5.1's own code and the live estate (part-of label, both webhook receivers resolving $refs, repo-creds prefix matching, the openbao-prd store and the eso/prd/* grant). Nothing is tagged blocking. Three advisory findings ride along: a startup window in which the applicationset-controller can cache the unresolved webhook reference forever, a mutation-proven blind spot in the new requestedScopes assertion, and a comment naming the wrong repo for the estate's shared ESO helper.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The applicationset-controller builds its GitHub webhook handler once at startup and never re-reads settings, so if it starts before ESO materialises argocd-webhook it verifies deliveries against the literal $argocd-webhook:githubSecret until the pod is restarted."
+    },
+    {
+      "id": "F2",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "coverage-gap",
+      "summary": "render-chart.py's `\"groups\" not in oidc.get(\"requestedScopes\", [])` passes when the key is deleted — the exact regression it guards; mutation run, gate stayed green at exit 0."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "external-secrets.yaml's header says the estate's shared ExternalSecret helper lives in HelmCharts; it is defined in Charts' homelab-shared library chart."
+    }
+  ]
+}

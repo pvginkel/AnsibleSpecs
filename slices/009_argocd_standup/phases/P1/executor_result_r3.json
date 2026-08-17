@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "ArgoCDDeploy is now a deploy repo on phase/009-P1 (3fc0b7e): chart/ pins argo-cd 10.3.3 exactly, adds the tracked Namespace (sync-wave -1, Prune=false) and the homelab root CA mounted subPath into the repo-server's trust directory, and config/prd/values.yaml carries the register's values (annotation tracking, 2 operation processors, controller polling and jitter off, 4 MiB webhook cap, argocd-server internal with both nginx annotations plus server.insecure). The repo earns its gate: .kubecoder/project.yaml runs tests/build-deps.sh + tests/render-chart.py, a structural parse of the 61-object render, negative-tested; kc project lint and test are both green. Settled: the ApplicationSet half of D6 cannot be done from values (applicationsetcontroller.requeue.after is clamped to a 1s minimum and falls back to 3m), so P3's bullet now carries the generator's requeueAfterSeconds: 0 — and R6's bootstrap namespace-adoption hazard is close-out A1.",
+  "refuted": []
+}

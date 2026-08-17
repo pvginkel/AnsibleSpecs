@@ -1,0 +1,31 @@
+{
+  "outcome": "issues",
+  "summary": "The repo, the pin, the register values and the gate are all right, and the gate has teeth — I ran it green and broke it seven ways. But it renders the chart under release name `argocd` while Argo will render it under the Application's name `argocd-prd`, which renames 42 of 61 objects and rewrites the shared argocd-cmd-params-cm to point at Services that do not exist; and nothing declares the argo-helm repository to Argo, so the repo-server's `helm dependency build` fails outright. Either one alone breaks R6's first self-generation.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Blocker",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "The chart's object names derive from the Helm release name; Argo renders it as `argocd-prd`, not the gate's `argocd`, renaming 42 of 61 objects and repointing the shared argocd-cmd-params-cm, so the self-managed Application does not adopt the bootstrapped install."
+    },
+    {
+      "id": "F2",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "chart/charts/ is gitignored but https://argoproj.github.io/argo-helm is declared to Argo nowhere, and the repo-server only adds the Helm repos Argo has configured — reproduced: `helm dependency build` exits 1 with `no repository definition for https://argoproj.github.io/argo-helm`."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "With server.insecure: true the argocd-server Service still publishes port 443 as plain HTTP; harmless for the nginx vhost, a trap for P5's relay target URL."
+    }
+  ]
+}

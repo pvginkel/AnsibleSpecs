@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "P6 lands exactly the five-key `reconciler: argo-cd` entry its Target names, and every key it carries is read on the consuming side — selector, local-chart template and autoSync patch — with the derived `argocd-prd` identity permitted by the AppProject and matching the P1 gate's release name. I mutation-tested all three new checks plus the `ours` short-circuit they protect; none is vacuous, and `deploy config` exits 0 across the whole tree with a falsy chart_name. Two advisory Minor findings, neither with a product consequence today; `audit-prd-orphans` is already recorded as close-out S11.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The tree-wide Argo-entry schema check asserts only the local-chart keys, so an upstream entry missing `upstream.repo`/`upstream.version` passes the gate and would fail generation for the whole upstream ApplicationSet."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "The new whole-tree config test asserts `namespace == <dir>-<stage>` for every stage directory, contradicting the allowlisted and documented `namespace:` override key, so a correct future config would turn the gate red."
+    }
+  ]
+}

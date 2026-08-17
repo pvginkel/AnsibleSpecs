@@ -41,6 +41,15 @@ D25 puts the Namespace in the chart as a tracked manifest, and P1 ships it: the 
 Argo and awkward for exactly one command — R6's one-off `helm install`, which runs before Argo
 exists.
 
+**Before any of it: push.** `git ls-remote origin` in `/work/ArgoCDDeploy` returns **nothing** — the
+GitHub repository still has no refs at all, the empty-repo state the plan's ordering constraints
+record (`plan.md:274-276`) and that no phase changed. Everything below assumes a clone, and the
+Application the registry entry generates syncs `https://github.com/pvginkel/ArgoCDDeploy.git` at
+`main`, so until the branch is pushed the bootstrap has nothing to clone and the first self-sync
+fails on the clone rather than on anything worth diagnosing. `/work/HelmCharts` is in the ordinary
+state — P6's commit is local, `origin/main` is one commit behind — and `/work/ProofDeploy` is empty
+on the remote too (**A4**). (Folded in from S10, struck below.)
+
 Helm writes the release Secret into the release namespace before it applies any of the chart's
 resources, so a plain `helm install argocd-prd chart --namespace argocd-prd` has nowhere to write it
 while `argocd-prd` does not exist. `--create-namespace` does not resolve it either: that creates the
@@ -103,6 +112,14 @@ Trello **#68**, imports rather than recreates it later). What the chart already 
 Local admin stays enabled as break-glass (D9), so a wrong client secret is recoverable without
 Keycloak.
 
+**And record it on Trello #68.** The R2 ruling's second half is *"Record the client so #68 can
+import rather than recreate it"*, and V07 checks that half as much as the client's existence. The
+record is this entry plus the committed `oidc.config` (`config/prd/values.yaml:32-37`) — nothing
+points at either from `keycloak-tf`'s own card, so one comment there naming the realm, the client id
+and this slice is what stops #68 minting a second client and rotating Argo's secret out from under
+it. Added by consult 1: the ruling assigns the recording to nobody else, and it is an operator
+keystroke like the three above.
+
 Provenance: code-writer, P2; ArgoCDDeploy `chart/templates/external-secrets.yaml`, `config/prd/values.yaml`
 Disposition:
 
@@ -148,8 +165,16 @@ deliberate failures safe to fire on a production cluster — and R8's "a deploy-
 refreshes" is observable without syncing at all. Flipping it to `true` and back is R15's proof;
 unlike Argo's own entry, nothing here forbids it.
 
-Three keystrokes hang off the entry beyond the drill itself. The repo needs its GitHub webhook
-pointed at the relay (**A3**) before R8's deploy-repo leg can be observed. When the proof is done,
+**The drill starts with a push, and nothing here works before it.** `git ls-remote origin` in
+`/work/ProofDeploy` returns **nothing**: the GitHub repository has no refs, the empty-repo state
+`plan.md:239-248` records and that P5a's branch did not change. Until `main` is pushed, the
+ApplicationSet generates an Application whose `repoURL` resolves to a repository with no `main`, the
+webhook has no pushes to deliver, and the first sync fails on a clone rather than on anything the
+drill is trying to observe. The same holds for `ArgoCDDeploy` and **A1**. (Folded in from S10,
+struck below.)
+
+Three further keystrokes hang off the entry beyond the drill itself. The repo needs its GitHub
+webhook pointed at the relay (**A3**) before R8's deploy-repo leg can be observed. When the proof is done,
 A.5's "delete both afterwards" means the registry entry, the GitHub repository **and** its
 `/work/Ansible/.kubecoder/config.yaml` line — leaving the last behind makes `kc env restart` fail
 on a clone that no longer resolves. The Terraform state the drill writes is **S3**, and is not
@@ -274,7 +299,7 @@ Found while reviewing P1's exposure values against the rendered Service.
 Provenance: code-reviewer, P1 round 1; phases/P1/code_review_r1.md F3
 Disposition:
 
-### B4 — the render gate crashes on a dex-disabled render, which is a switch P2 may throw · minor · ArgoCDDeploy
+### ~~B4 — the render gate crashes on a dex-disabled render, which is a switch P2 may throw~~ — resolved by P2 (`f747a9f`) and P4 (`008126d`), confirmed by consult 1 · minor · ArgoCDDeploy
 
 `tests/render-chart.py:114-121` reads `params["server.dex.server"]` out of `argocd-cmd-params-cm`
 unguarded. With `argo-cd.dex.enabled: false` the upstream chart drops that key entirely and renders
@@ -293,6 +318,14 @@ Nothing shipped is affected: the committed values enable dex, the Namespace temp
 `kc project test` and `kc project lint` are both green on `9264944`.
 
 Found while mutation-testing P1's fix commit for the release-name finding.
+
+Both instances are gone, and the phase that was predicted to inherit the red gate is the one that
+fixed it. **P2 retired dex** (D9 is direct OIDC) and rewrote the params loop with it: it now reads
+`("repo.server", "redis.server")` and `check_sso` asserts dex is *absent* instead
+(`tests/render-chart.py:787-792`). **P4** replaced the bare `next()` — its own second Namespace,
+`argocd-hooks`, broke it first — with the release namespace read off `argocd-cmd-params-cm`, and
+mutation-tested that the new derivation still goes red under a drifting release name. Read against
+the merged tree by consult 1; no entry survives here.
 
 Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F1
 Disposition:
@@ -365,12 +398,16 @@ Found while mutation-testing P2's five new gate checks.
 Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F2
 Disposition:
 
-### B8 — the ExternalSecret header names the wrong repo for the estate's shared ESO helper · nit · ArgoCDDeploy
+### ~~B8 — the ExternalSecret header names the wrong repo for the estate's shared ESO helper~~ — fixed in place by consult 1 (ArgoCDDeploy `415a0c4`) · nit · ArgoCDDeploy
 
 `chart/templates/external-secrets.yaml:8-9` says the estate's shared ExternalSecret helper "lives
 in HelmCharts' charts". It is defined once, in the `Charts` repo's library chart, at
 `/work/Charts/charts/homelab-shared/templates/_helpers.tpl:204`. The substantive claim beside it
 is correct — that helper emits no `target.template` and so cannot express the repo credential.
+
+Comment text in a file this slice authored, no behaviour change, so consult 1 corrected it rather
+than reporting it: the header now names the `Charts` library chart and its line. Nothing else moved
+and the render gate is unmoved at 68 objects.
 
 Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F3
 Disposition:
@@ -481,7 +518,7 @@ Found in P5 review round 1, reading the new invariant against the configurator's
 Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F2
 Disposition:
 
-### B13 — the relay's `:80` comment names a TLS failure that `server.insecure` rules out · nit · ArgoCDDeploy
+### ~~B13 — the relay's `:80` comment names a TLS failure that `server.insecure` rules out~~ — fixed in place by consult 1 (ArgoCDDeploy `415a0c4`) · nit · ArgoCDDeploy
 
 `chart/templates/webhook-relay.yaml:59-62` justifies the argocd-server leg with "a leg pointed at
 443 fails the whole delivery on the TLS handshake", and `tests/render-chart.py:172-176` restates it
@@ -494,6 +531,12 @@ belongs to an `https://` *scheme*, not to the port number. Port 80 is still the 
 gate pins it either way, so nothing follows from the words — the reason attached to them is wrong.
 
 Found in P5 review round 1, checking the comment against the rendered argocd-server Service.
+
+Comment text in files this slice authored, no behaviour change, so consult 1 corrected it rather
+than reporting it. Both places now carry the accurate reason — an `https://` *scheme* is what fails
+the handshake, and 80 is chosen because the port named `https` fronts the same plain listener and
+would only misname what answers there. The URLs, the port numbers and the gate's assertions are
+untouched; the render gate is unmoved at 68 objects.
 
 Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F3
 Disposition:
@@ -550,6 +593,33 @@ the provider implicitly from the same `KUBE_CONFIG_PATH`.
 Found in P5a review round 1, by mutating the file the assertion reads rather than trusting it.
 
 Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F1
+Disposition:
+
+### B16 — the new whole-tree config check hard-codes the derived namespace, so the documented `namespace:` key would fail it · nit · HelmCharts
+
+`test_every_prd_stage_directory_reports_a_config_whoever_reconciles_it` asserts, for **every** stage
+directory on disk, `config["namespace"] == f"{stage_dir.parent.name}-{stage}"`
+(`/work/HelmCharts/tests/test_prd_tree.py:88`). That holds for all 52 stage directories today, which
+is why the gate is green — but it is not the CLI's contract. `namespace` is an allowlisted
+`release.yaml` key (`tools/deploy/deploy_cli/release.py:17`), `resolve()` derives the namespace from
+it when present (`:204`), and the schema doc presents it as a supported override:
+"`namespace: design-assistant   # base name (CLI appends -<stage>); needs a justifying comment`"
+(`tools/deploy/README.md:95`).
+
+The assertion is incidental to what the test is for. Its docstring is about `gen-architecture`
+reaching every entry and being stopped there by a falsy `chart_name`, and that property is carried
+by the `resolve()` + `_print_config()` calls and the `chart_name` assertion, not by the namespace
+equality. So the first release that legitimately sets `namespace:` — the key exists for exactly that
+case — turns this test red for a config that is correct, with a failure message pointing at
+namespace derivation rather than at the override that caused it.
+
+Consequence: none shipped. Nothing in the tree sets the key; the failure mode is a red gate on a
+correct future change, not a wrong artifact.
+
+Found in P6 review round 1, checking the new tree-wide assertions against `_RELEASE_KEYS` rather
+than against the tree as it stands.
+
+Provenance: code-reviewer, P6 round 1; phases/P6/code_review_r1.md F2
 Disposition:
 
 ## Open questions and rulings
@@ -776,7 +846,7 @@ Found in P5 review round 1, comparing the relay's pod spec against the rest of i
 Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F1
 Disposition:
 
-### S10 — A4's drill runbook does not name the push the whole drill starts with
+### ~~S10 — A4's drill runbook does not name the push the whole drill starts with~~ — folded into A1 and A4 by consult 1
 
 **A4** above is the operator's runbook for A.5's register → deploy → undeploy → unregister drill. It
 names three keystrokes beyond the drill itself — the registry entry at
@@ -794,6 +864,10 @@ for when running this repo's drill, and it is the one place the prerequisite wou
 line closes it.
 
 Found in P5a review round 1, checking what A4 assumes against the repo's actual remote state.
+
+Consult 1 re-checked both remotes — `git ls-remote origin` is still empty in `/work/ProofDeploy`
+**and** in `/work/ArgoCDDeploy` — and wrote the prerequisite into the two entries that need it,
+**A1** and **A4**, since that is where an operator reaches for it. Nothing is left here.
 
 Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F2
 Disposition:
@@ -823,4 +897,49 @@ which belongs with whichever slice migrates the first real app, not here.
 Found in P6, checking every reader of `configs/prd/` that does not go through `discover_releases()`.
 
 Provenance: code-writer, P6; HelmCharts `tools/chart_tools/audit_prd_orphans.py:127-152,360-361`
+Disposition:
+
+### S12 — the Argo-entry schema gate covers a local entry's keys and none of an upstream entry's
+
+P6 adds `test_every_argo_owned_entry_carries_the_keys_argos_templates_require`
+(`/work/HelmCharts/tests/test_prd_tree.py:93-114`) as the tree-wide guard for every
+`reconciler: argo-cd` entry — the plan's Done section says "Phase B's entries inherit it". Its
+docstring names the hazard: under `goTemplateOptions: ["missingkey=error"]` a key missing from *one*
+entry fails generation for the whole ApplicationSet rather than for one app.
+
+It asserts `deployed`, `autoSync`, `repo`, `targetRevision` and the absence of `chart` — exactly the
+keys the *local-chart* set reads. The upstream set is selected by `upstream.chart` existing
+(`/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:148`) and its template then resolves
+`.upstream.repo`, `.upstream.chart` and `.upstream.version` (`:162,163,166`), a triple the check
+never looks at. An entry carrying `upstream: {chart: …}` with `repo` or `version` missing under it
+passes this gate and then takes down generation for every upstream-chart Application at once —
+the exact failure the docstring exists to prevent. The same hole runs the other way for
+`_RELEASE_KEYS`' HelmCharts-only keys (`namespace`, `helm_args`, `post_rollout_manifests`): all are
+inert on an Argo entry and only `chart` is refused.
+
+Cost today is nothing — no upstream Argo entry exists, and migrating one is explicitly out of this
+slice's scope. The gap becomes load-bearing at Phase B's first upstream-chart migration, which is
+also the first commit that can exercise it, so the extension belongs with that slice rather than
+here.
+
+Found in P6 review round 1, reading the new gate against both ApplicationSet templates rather than
+against the one entry the phase adds.
+
+Provenance: code-reviewer, P6 round 1; phases/P6/code_review_r1.md F1
+Disposition:
+
+### S13 — a 178 KB scratch dump of the upstream chart's values is sitting untracked in `/work/Ansible`
+
+`/work/Ansible/.tmp-argocd-values.yaml` (178 KB, 2026-08-17 20:04) is a verbatim `helm show values
+argo/argo-cd` dump, left in the repo root by the run that settled which upstream surface carries the
+repo-server's CA trust (P1's r1 F3 work). It is untracked, it is in no commit, and it is **not** in
+`.gitignore`, so it shows in every `git status` in that repo and a `git add -A` would commit it.
+
+Nothing depends on it and it regenerates with one command
+(`cexec iac helm show values argo/argo-cd --version 10.3.3`), so this is tidiness only. Consult 1 did
+not delete it: it is untracked in the operator's own working tree, and this pod is shared, so it
+could as easily be a file the operator opened for reference. One word disposes of it — delete, or
+leave it.
+
+Provenance: consult 1; `git status` in /work/Ansible at consult time
 Disposition:

@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "P5a builds the proof deploy repo the r1 F1 ruling asked for, and it holds up under test: the gate is green on b265fa3 (previously unverified), the hook's clone/backend/apply contract matches presync/ line for line, the apply-failure precondition was witnessed stopping at plan time before any create, and two acceptance-critical gate assertions go red on their own mutation. Two advisory findings, neither blocking: one gate assertion a commented-out backend block satisfies, and an operator keystroke missing from the close-out's drill runbook.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "coverage-gap",
+      "summary": "check_terraform_contract regex-searches raw .tf text, so a commented-out `backend \"http\" {}` keeps the whole gate green while `terraform init` falls back to local state with only a warning (mutation witnessed)."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "close-out A4's drill runbook names the registry entry, the webhook and the deletions but not pushing ProofDeploy to origin/main, which still has no refs — until it does, every keystroke A4 lists is inert."
+    }
+  ]
+}
