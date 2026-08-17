@@ -1,0 +1,39 @@
+{
+  "outcome": "issues",
+  "summary": "One blocking finding: the fan-out client follows HTTP redirects, so a receiver answering 303 makes the relay tell GitHub 200 for a delivery whose payload reached nothing, and a 307 replays the signed body cross-host — both witnessed against stub receivers, and both defeat R2's both-or-502, the property the plan says the design exists to protect. Everything else is sound: I re-ran the unverified gate myself (go test, -race, vet, gofmt, arch-validate over all 23 files, kaniko --no-push, all green) and confirmed the production HTTP path the suite never exercises. Three further findings are advisory, not fix work.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F4",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "relay.go:70's bare http.Client follows redirects, so relay.go:193 scores the last hop: a 303 receiver yields GitHub 200 with the payload never delivered, and a cross-host 307 replays the signed body."
+    },
+    {
+      "id": "F2",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "coverage-gap",
+      "summary": "V14's constant-time clause is unpinned: replacing hmac.Equal with == in signature.go:36 leaves the entire suite green."
+    },
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "contradiction",
+      "summary": "HEAD /healthz answers 200 and POST /api//webhook answers 307, contradicting V04's and README.md:75-76's 'every other method/path is refused'."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "architecture.yaml:4, README.md:9-10 and Dockerfile:12-13 call the relay the estate's only internet-facing service; 21 services are public today."
+    }
+  ]
+}

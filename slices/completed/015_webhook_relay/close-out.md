@@ -1,7 +1,8 @@
 # Close-out — slice 015 webhook_relay
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-08-17 09:12 → 10:21 · 1 phase · 0 bail-outs · 1 test round · doc phase done · $39.03
+(planner 26 %, research 2 %, rework 11 %)
 
 <!-- Every entry, in every section, has exactly this shape. The id is the section's letter
      (A · N · B · Q · S) and the next number — count the section's `###` headings, struck ones

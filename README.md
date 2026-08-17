@@ -26,14 +26,13 @@ the detail.
 
 ## Pending
 
-Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered and 015 cut out of 009's planning session on 2026-08-16 (015 → 009):
+Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered:
 
 - **[009](slices/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
 - **[010](slices/backlog/010_kubecoder_deploy_repo/slice.md)** — KubeCoderDeploy repo and image pinning: the pilot's chart, rebuilt Terraform and stage config, plus the seven `Build-Main` pins (phases.md B.1+B.2; #124).
 - **[011](slices/backlog/011_kubecoder_ci_version_pins/slice.md)** — KubeCoder CI: version-pin commits instead of deploys, via a new JenkinsPipelineUtils method (phases.md B.3; #124).
 - **[012](slices/backlog/012_kubecoder_argo_cutover/slice.md)** — KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124).
 - **[014](slices/backlog/014_deploy_repo_architecture_producers/slice.md)** — Architecture producers for the deploy repos: each deploy repo gains its own `Jenkinsfile.architecture`, HelmCharts' generator stops emitting for migrated app-stages, so a migrated app does not vanish from the federated model (major; settles the `gen-architecture` half of O2; needs 009+010, lands before 012; #124).
-- **[015](slices/015_webhook_relay/slice.md)** — The webhook relay: the `webhook-relay` image in `DockerImages`, one public endpoint that verifies GitHub's HMAC and fans every delivery out to both Argo CD receivers, so Argo CD itself stays off the internet (settles O3 as D49; 009 pins the tag and deploys it; #124).
 
 ## Completed
 
@@ -67,6 +66,7 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 | [006 charts-repo-and-charts-home](slices/completed/006_charts_repo_and_charts_home/plan.md) | `argo-cd/phases.md` A.1 | — | the `Charts` repo (`homelab-shared` library chart + packaging pipeline) and `charts.home` as an ordinary HelmCharts release — live, `homelab-shared 0.1.0` published and resolvable over TLS — shipped 2026-08-14 (#124) |
 | [007 argocd-tools-presync-hook](slices/completed/007_argocd_tools_presync_hook/plan.md) | `argo-cd/phases.md` A.2 | 006 | the `ArgoCDTools` repo and the PreSync hook image — clone-at-SHA, terraform-backend-git, `init`/`apply` on the stage tfvars, the PV reattach and D30's exit codes; `homelab-shared 0.2.0` carries the fourth argument and the image pin — shipped 2026-08-14, with the Jenkins job, the git PAT and the OpenBao writes owed to the operator; feeds 009 (#124) |
 | [008 helmcharts-argo-coexistence](slices/completed/008_helmcharts_argo_coexistence/plan.md) | `argo-cd/phases.md` A.3 | — | the HelmCharts deploy CLI honours `reconciler:`, so a release Argo owns drops out of `discover_releases` and eight verbs refuse it; the repo also gained its first gate (`.kubecoder/project.yaml` + a hermetic 53-test suite) — shipped 2026-08-16, nothing registered yet; hard prerequisite of 009 (#124) |
+| [015 webhook-relay](slices/completed/015_webhook_relay/plan.md) | cut out of 009's planning session 2026-08-16 | — | the `webhook-relay` image in `DockerImages`: one public endpoint that verifies GitHub's `X-Hub-Signature-256` in constant time and fans every verified delivery out to both Argo CD receivers, so Argo CD itself stays off the internet — settles O3 as D49; image published as `registry:5000/webhook-relay:2485`, nothing deployed yet — shipped 2026-08-17; 009 pins the tag, deploys it and owns the DNS record, NAT rule and secret leaf (#124) |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

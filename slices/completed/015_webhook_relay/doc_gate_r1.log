@@ -1,28 +1,15 @@
-$ cexec go go test -count=1 ./...            # DockerImages/webhook-relay/src
-?   	webhook-relay/cmd/webhook-relay	[no test files]
-?   	webhook-relay/internal/applog	[no test files]
-ok  	webhook-relay/internal/config	0.001s
-ok  	webhook-relay/internal/relay	0.511s
-ok  	webhook-relay/internal/signature	0.001s
-
-$ cexec go gofmt -l .                        # DockerImages/webhook-relay/src
-(no output)
-
-$ cexec iac ./scripts/arch-validate.py */architecture.yaml   # DockerImages root
-✓ 23/23 files, including ✓ webhook-relay/architecture.yaml
-
-$ kc project lint                            # /work/Ansible
+$ kc project lint
 root: no lint statements — skipped
 ansible: cexec iac poetry run yamllint -c ../.yamllint .    [  OK  ]
 ansible: cexec iac poetry run ansible-lint    [  OK  ]
 terraform: cexec iac terraform fmt -check -recursive    [  OK  ]
 architecture: no lint statements — skipped
-$ kc project build                           # /work/Ansible
+$ kc project build
 root: no build statements — skipped
 ansible: no build statements — skipped
 terraform: no build statements — skipped
 architecture: no build statements — skipped
-$ kc project test                            # /work/Ansible
+$ kc project test
 root: no test statements — skipped
 ansible: cexec iac poetry run yamllint -c ../.yamllint .    [  OK  ]
 ansible: cexec iac poetry run ansible-lint    [  OK  ]
