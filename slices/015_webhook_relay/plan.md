@@ -132,7 +132,7 @@ signature wire format and the CI posture; planning is transcription.
   `argo-cd/` document-set edits are the run loop's own doc phase — steered by R7 above, in the
   operator's words — not a phase here.
 
-### P1 — The webhook relay image
+### P1 — The webhook relay image ✅ DONE 2026-08-17
 
 Target: ../DockerImages
 
