@@ -387,7 +387,7 @@ consequences for later phases: the Services are `argocd-prd-server`, `argocd-prd
 `argocd-prd-applicationset-controller` (P5's target URLs, corrected in place), and close-out **A1**'s
 bootstrap command installs release `argocd-prd`.
 
-### P2 — What Argo talks to: Alertmanager, Keycloak, and the credentials it reads git with
+### P2 — What Argo talks to: Alertmanager, Keycloak, and the credentials it reads git with ✅ DONE 2026-08-17
 
 Target: `../ArgoCDDeploy`
 
