@@ -42,7 +42,7 @@ Argo and awkward for exactly one command — R6's one-off `helm install`, which 
 exists.
 
 Helm writes the release Secret into the release namespace before it applies any of the chart's
-resources, so a plain `helm install argocd chart --namespace argocd-prd` has nowhere to write it
+resources, so a plain `helm install argocd-prd chart --namespace argocd-prd` has nowhere to write it
 while `argocd-prd` does not exist. `--create-namespace` does not resolve it either: that creates the
 namespace outside the release, and Helm's install-time ownership check then refuses the chart's own
 Namespace manifest as an unimportable resource. The sequence that leaves Helm a namespace it will
@@ -52,9 +52,14 @@ adopt is to stamp the ownership metadata by hand first:
 cexec iac kubectl --kubeconfig ~/.kube/config-prd-write --context prd create namespace argocd-prd
 cexec iac kubectl ... label namespace argocd-prd app.kubernetes.io/managed-by=Helm
 cexec iac kubectl ... annotate namespace argocd-prd \
-  meta.helm.sh/release-name=argocd meta.helm.sh/release-namespace=argocd-prd
-cexec iac helm install argocd chart --namespace argocd-prd --values config/prd/values.yaml
+  meta.helm.sh/release-name=argocd-prd meta.helm.sh/release-namespace=argocd-prd
+cexec iac helm install argocd-prd chart --namespace argocd-prd --values config/prd/values.yaml
 ```
+
+**The release name is `argocd-prd` and not `argocd`** (review r1 F1, corrected here in place): Argo
+renders this chart under the Application's own name, so installing under any other release name
+gives the first self-sync 42 renamed objects to create beside the running ones rather than an
+install to adopt.
 
 Only the first install is affected — from the registry entry onward Argo creates and tracks the
 namespace itself, which is the whole point of D25. Stated from Helm's documented install ordering
@@ -122,6 +127,26 @@ this omission out. The entry is here because the stale quote survives in a triag
 later readers will reach for.
 
 Provenance: plan-writer, plan pass r1; plan.md P3
+Disposition:
+
+### B3 — `argocd-server`'s Service publishes port 443 as plain HTTP · minor · ArgoCDDeploy
+
+`server.insecure: true` is load-bearing for R5 — nginx terminates the step-ca leaf and proxies plain
+HTTP — but the upstream chart still renders both Service ports: `http 80 → 8080` and
+`https 443 → 8080`, and 8080 no longer speaks TLS. So `https://argocd-server.argocd-prd/` from
+inside the cluster reaches a plain-HTTP listener on a port named `https`.
+
+Nothing today is affected. nginx-configurator defaults `target-port` to `80` when the annotation is
+absent (`/work/DockerImages/nginx-configurator/app/annotations.py:131-139`), so the `argocd.home`
+vhost hits the right port, and P1 deliberately ships no `target-port` annotation. The consequence is
+forward-looking: P5's relay targets "argocd-server's `/api/webhook`", and a
+`https://argocd-server.argocd-prd/api/webhook` target would fail at the TLS handshake against a
+listener that no longer serves one — a failure that looks like a webhook problem and is not. Worth
+knowing when that URL is written rather than when the drill fails.
+
+Found while reviewing P1's exposure values against the rendered Service.
+
+Provenance: code-reviewer, P1 round 1; phases/P1/code_review_r1.md F3
 Disposition:
 
 ## Open questions and rulings

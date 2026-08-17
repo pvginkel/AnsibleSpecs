@@ -374,6 +374,19 @@ Settled beyond the plan's text:
   bound. dex stays at the chart default: whether Keycloak SSO retires it is P2's call.
 - R6's bootstrap hits a Helm namespace-adoption edge before any of this runs — close-out **A1**.
 
+**Done (r4, review r1 F1).** **The Helm release name is `argocd-prd`, not a free choice.** Argo
+templates a Helm source under the Application's own name (`templateOpts.Name = appName`) and the
+ApplicationSet sets no `releaseName`, so the release is the `<app>-<stage>` string that is also the
+namespace. Rendering under anything else is a different install: 42 of the 61 objects are named from
+it, `argocd-cmd-params-cm` keeps its name but points `repo.server`/`redis.server`/`server.dex.server`
+at the other install's Services, and `app.kubernetes.io/instance` is every workload's **immutable**
+selector — so a mismatch is not a rename the first self-sync can repair. The gate renders under
+`argocd-prd`, and `check_release_name` reads the namespace out of the render rather than from the
+constant, so a drifting release name fails there instead of at the operator's first sync. Two
+consequences for later phases: the Services are `argocd-prd-server`, `argocd-prd-repo-server`,
+`argocd-prd-applicationset-controller` (P5's target URLs, corrected in place), and close-out **A1**'s
+bootstrap command installs release `argocd-prd`.
+
 ### P2 — What Argo talks to: Alertmanager, Keycloak, and the credentials it reads git with
 
 Target: `../ArgoCDDeploy`
@@ -506,7 +519,9 @@ reachable from the internet.
   argocd-server keeps `is-public: "no"` from P1. The public DNS record and the router NAT rule are
   operator actions outside every repo.
 - **Its only configuration is the shared HMAC secret and the two target URLs** — argocd-server's
-  `/api/webhook` and the applicationset-controller's on port 7000. The secret is the same value P2
+  `/api/webhook` and the applicationset-controller's on port 7000. Both Services are named from the
+  Helm release, which is the Application's name (P1's done-record): `argocd-prd-server` and
+  `argocd-prd-applicationset-controller`, not `argocd-server`. The secret is the same value P2
   wires into `webhook.github.secret`, from the same leaf: one secret, two readers.
 
 ### P5a — The disposable proof app: a deploy repo the A.5 drill can actually exercise
