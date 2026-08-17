@@ -34,6 +34,36 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — R6's bootstrap `helm install` has to hand Helm an adoptable `argocd-prd`, or it cannot install at all
+
+D25 puts the Namespace in the chart as a tracked manifest, and P1 ships it: the render carries
+`Namespace/argocd-prd` with `sync-wave: "-1"` and `sync-options: Prune=false`. That is right for
+Argo and awkward for exactly one command — R6's one-off `helm install`, which runs before Argo
+exists.
+
+Helm writes the release Secret into the release namespace before it applies any of the chart's
+resources, so a plain `helm install argocd chart --namespace argocd-prd` has nowhere to write it
+while `argocd-prd` does not exist. `--create-namespace` does not resolve it either: that creates the
+namespace outside the release, and Helm's install-time ownership check then refuses the chart's own
+Namespace manifest as an unimportable resource. The sequence that leaves Helm a namespace it will
+adopt is to stamp the ownership metadata by hand first:
+
+```
+cexec iac kubectl --kubeconfig ~/.kube/config-prd-write --context prd create namespace argocd-prd
+cexec iac kubectl ... label namespace argocd-prd app.kubernetes.io/managed-by=Helm
+cexec iac kubectl ... annotate namespace argocd-prd \
+  meta.helm.sh/release-name=argocd meta.helm.sh/release-namespace=argocd-prd
+cexec iac helm install argocd chart --namespace argocd-prd --values config/prd/values.yaml
+```
+
+Only the first install is affected — from the registry entry onward Argo creates and tracks the
+namespace itself, which is the whole point of D25. Stated from Helm's documented install ordering
+and ownership check, **not** witnessed against a cluster: this repo's gate is a render and P1 never
+had a `helm install` to run. If the plain form happens to work, nothing is lost by having checked.
+
+Provenance: code-writer, P1 round 3; ArgoCDDeploy `chart/templates/namespace.yaml`
+Disposition:
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->

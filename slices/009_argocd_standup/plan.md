@@ -347,6 +347,33 @@ configuration the decision register fixes. The phase lands when `helm dependency
   (`/work/Charts/README.md:75-80`). R14 is proven by the throwaway app, which is what a migrated
   app actually looks like.
 
+**Done (r3).** `/work/ArgoCDDeploy` is a deploy repo: `chart/` pins `argo-cd` **10.3.3** (app
+v3.5.1) exactly rather than `~`, `chart/Chart.lock` is committed and `chart/charts/` ignored,
+`config/prd/values.yaml` holds every register value, and `.kubecoder/project.yaml` gates on
+`tests/build-deps.sh` + `tests/render-chart.py` — a structural parse of the 61-object render, not a
+grep, negative-tested to fail on each assertion.
+
+Settled beyond the plan's text:
+
+- **The ApplicationSet half of D6 is P3's, not this phase's.** `configs.cm.timeout.reconciliation: 0s`
+  (with `.jitter: 0s`) stops the application controller. `applicationsetcontroller.requeue.after`
+  *cannot* express "off" — it is clamped to a 1s minimum and falls back to 3m below it — so it is
+  deliberately unset here and P3's bullet now carries the generator field that works.
+- **CA trust is a `subPath` mount, not upstream's values-file example.** That example mounts a
+  ConfigMap *over* `/etc/ssl/certs`, dropping the image's public roots — which the same repo-server
+  needs for D18's upstream-chart apps. `repoServer.volumes`/`volumeMounts` add
+  `chart/files/homelab-root.crt` at `/etc/ssl/certs/homelab-root.crt` instead; Go reads every regular
+  file in that directory on top of the bundle, and `helm dependency build` is a Go binary. The gate
+  asserts the mount on the container named `repo-server` (not `argocd-repo-server`), its volume's
+  ConfigMap, and that ConfigMap's bytes against the committed file.
+- **`server.insecure: true` is load-bearing for R5's exposure**: nginx terminates the step-ca leaf
+  and proxies plain HTTP to Service port 80. With `server-name: argocd.home`, `is-public: "no"` and
+  `enable-ssl: "yes"`, `argocd-cm` gets `url: https://argocd.home` — the base P2's OIDC redirect URI
+  and the notification links are built from.
+- `webhook.maxPayloadSizeMB: 4` matches the relay's own 4 MiB refusal, so neither side is the looser
+  bound. dex stays at the chart default: whether Keycloak SSO retires it is P2's call.
+- R6's bootstrap hits a Helm namespace-adoption edge before any of this runs — close-out **A1**.
+
 ### P2 — What Argo talks to: Alertmanager, Keycloak, and the credentials it reads git with
 
 Target: `../ArgoCDDeploy`
@@ -411,6 +438,14 @@ The chart renders the AppProject and the two ApplicationSets, so that a registry
   (`grep -rn reconciler /work/HelmCharts/configs/` is empty) — local-chart releases carry no
   `release.yaml` at all, so the real exposure is smaller than the register's "~44" but the failure
   mode is unchanged: one leak breaks the whole set.
+- **Each git generator carries `requeueAfterSeconds: 0`, and that is the only half of D6 left.**
+  P1 turned the application controller's polling off (`timeout.reconciliation: 0s`) but deliberately
+  does **not** set `applicationsetcontroller.requeue.after`: `getDefaultRequeueAfter()`
+  (`applicationset/generators/interface.go`) parses `ARGOCD_APPLICATIONSET_CONTROLLER_REQUEUE_AFTER`
+  with a **1s minimum** and falls back to the 3m default below it, so the controller-level knob
+  cannot express "off". The generator's own field can: `GetRequeueAfter` returns it verbatim when
+  non-nil, `getMinRequeueAfter` then yields 0, and controller-runtime does not requeue on 0. Omit it
+  and the set polls every 3 minutes with nothing saying so.
 - **The AppProject has to permit what Argo's own Application needs**, or self-adoption fails on the
   first sync: `argocd-prd` and `argocd-hooks` as destinations beside the `<app>-<stage>` app
   namespaces, and a `clusterResourceWhitelist` covering every cluster-scoped kind the upstream
