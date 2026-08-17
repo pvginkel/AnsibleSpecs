@@ -121,7 +121,8 @@ to 009, and this plan's **Not in scope** denies it).
 
 pre-settled — `slice.md` names `attachments/webhook-relay-consult.md` "the authoritative design for
 this slice", R1–R6 fix the functional contract clause by clause, and this session's rulings pin the
-language, the layout precedent, the endpoint path and the CI posture; planning is transcription.
+language, the layout precedent and its runtime stage, the endpoint path, the two served routes, the
+signature wire format and the CI posture; planning is transcription.
 
 ## Ordering constraints
 
@@ -140,9 +141,12 @@ pipeline builds and publishes as `registry:5000/webhook-relay:<n>`, holding the 
 tests, its Dockerfile, its README and its `architecture.yaml`. R1–R6 above are the functional
 contract, clause by clause; the reasoning behind each — why both-or-502 rather than a queue, why
 duplication rather than a routing table, why no source-IP allowlist, why the parse surface is the
-whole point — is `attachments/webhook-relay-consult.md` §§1–3, authoritative and worth reading
-before the handler is written. Nothing in it needs re-deciding. When this phase merges, slice 009
-must be able to pin the tag and write the Deployment and Service without reopening this slice.
+whole point — is `attachments/webhook-relay-consult.md` §§1–3, worth reading before the handler is
+written and needing nothing re-decided. **Stop at §3.** Its §4 and §5 are superseded by the rulings
+above — §4's hostname is not the ruled one, and §5 owes this slice a chart fragment in
+`ArgoCDDeploy` proven by `helm template` that the cut-line ruling moved to 009 and **Not in scope**
+denies. When this phase merges, slice 009 must be able to pin the tag and write the Deployment and
+Service without reopening this slice.
 
 Constraints the repo will not tell you:
 
@@ -153,18 +157,32 @@ Constraints the repo will not tell you:
   (`Jenkinsfile:100-101`); the architecture producer copies every `*/architecture.yaml`
   (`Jenkinsfile.architecture:32`). Creating the directory *is* the whole of "wire it into the
   pipeline" — and per the ruling the root `Jenkinsfile` is not touched.
-- **Layout follows `backup-server`** per the Go ruling — module under `src/`, `cmd/<app>/main.go`,
-  `internal/<pkg>/`, and its multi-stage Dockerfile shape (`backup-server/Dockerfile:1-29`). Keep
-  the `go.mod` language version and the builder image tag consistent with each other and buildable
-  by this environment's Go toolchain (1.26.5 today), or the suite and the image disagree about
-  which Go this is.
+- **Layout follows `backup-server`; the runtime stage follows `iac-provisioner`** per the Go ruling
+  — module under `src/` with `cmd/<app>/main.go` and `internal/<pkg>/`, and the builder stage of
+  `backup-server/Dockerfile:1-9` (module download cached ahead of the source copy, `CGO_ENABLED=0`,
+  trimmed static build). The runtime stage is `iac-provisioner/Dockerfile:9-13`'s —
+  `debian:bookworm-slim` carrying the binary and its CA certificates and nothing more.
+  `backup-server`'s own runtime stage (`backup-server/Dockerfile:12-21`: an apt layer of `curl
+  ca-certificates unzip sudo` plus a piped `rclone` installer) is the counter-example and must not
+  be copied; on this surface the package list *is* the parse-surface argument. Keep the `go.mod`
+  language version and the builder image tag consistent with each other and buildable by this
+  environment's Go toolchain (1.26.5 today), or the suite and the image disagree about which Go
+  this is.
 - **The gates run in sidecars, not the dev container** — there is no `go` and no `python` here.
   `cexec go go test ./...` from the module root, and `cexec iac ./scripts/arch-validate.py
   */architecture.yaml` from the repo root — the whole set validated together so cross-file `svc:`
   references resolve (`DockerImages/CLAUDE.md:27-30`). Those two green are this phase's gate; the
   tests stay out of CI per the ruling.
-- **Exactly two paths are served**: the webhook path `/api/webhook` (ruling) and a health path.
-  Every other path is one of R4's structural refusals.
+- **Exactly two routes are served**: `POST /api/webhook` (ruling) and a `GET` health path. The
+  health path is R4's only exemption; every other path, and every other method on these two, is one
+  of R4's structural refusals. The acceptance criteria say so too, so the refusal matrix is
+  testable without a judgement call.
+- **The signature contract is pinned, not left to the handler's taste** — the wire-format ruling
+  above fixes all of it: the `sha256=`-prefixed lowercase-hex value, the HMAC taken over the exact
+  raw bytes read off the wire (the same slice forwarded verbatim), the constant-time comparison, a
+  missing `X-Hub-Signature-256` refused exactly like an invalid one, and SHA-1 forwarded but never
+  trusted. R6's suite pins each of those five, against
+  https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries.
 - **The README is 009's input.** 009 authors the Deployment, Service and public annotation against
   this image with no further contact with this slice, so what it needs must be findable there: the
   listen port, the environment variables carrying the shared secret and the two receiver URLs, the
@@ -176,7 +194,9 @@ Constraints the repo will not tell you:
 ## Not in scope
 
 - **The chart manifests.** Deployment, Service, the public annotation and the ExternalSecret for the
-  shared webhook secret are 009's, per the cut-line ruling above.
+  shared webhook secret are 009's, per the cut-line ruling above — and with them R5's second half
+  (the secret being the same value as `webhook.github.secret` in `argocd-secret`, one OpenBao leaf
+  and not a second secret), which only a deployment can make true.
 - **Creating the webhooks on GitHub.** The registry repo's hook is an operator keystroke in 009
   (A.4's last bullet); each deploy repo's is D39's Terraform resource in Phase B.
 - **The public DNS record and the router NAT rule** — operator actions outside every repo.

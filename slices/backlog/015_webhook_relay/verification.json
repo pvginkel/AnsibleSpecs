@@ -27,15 +27,15 @@
     {
       "id": "V04",
       "area": "R4 — structural refusals",
-      "description": "The service refuses structurally, not semantically: non-POST, any path but the webhook path, missing or invalid signature, missing Content-Length, body over the cap — refusing before reading the body where possible.",
+      "description": "The service refuses structurally, not semantically: non-POST, any path but the webhook path, missing or invalid signature, missing Content-Length, body over the cap — refusing before reading the body where possible. Per the health-path ruling, exactly two routes are served — POST /api/webhook and a GET health path — and the health path is R4's only exemption: every other path, and every other method on those two, is refused.",
       "verdict": null,
       "rationale": "",
       "evidence": []
     },
     {
       "id": "V05",
-      "area": "R5 — no credentials, one secret",
-      "description": "The service holds no credential toward GitHub and none toward the cluster; its only config is the shared secret and the two target URLs. The secret is the same value as webhook.github.secret in argocd-secret — one OpenBao leaf, not a second secret.",
+      "area": "R5 — no credentials, one secret (code half; the leaf half is 009's)",
+      "description": "The service holds no credential toward GitHub and none toward the cluster; its only config is the shared secret and the two target URLs. Per the R5 split ruling, R5's second sentence — the secret being the same value as webhook.github.secret in argocd-secret, one OpenBao leaf and not a second secret — is 009's to prove, since 009 authors the ExternalSecret and the operator writes the leaf; nothing this slice ships can establish it, and it is not judged here.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -75,13 +75,15 @@
     },
     {
       "id": "V09",
-      "area": "Ruling — Go, on backup-server's shape",
-      "description": "The relay is a Go service laid out like backup-server — module under src/, cmd/webhook-relay/main.go, internal/<pkg>/ — built by a multi-stage Dockerfile from a golang:*-bookworm builder into a slim runtime stage carrying only the static binary.",
+      "area": "Ruling — Go, backup-server's layout into iac-provisioner's runtime",
+      "description": "The relay is a Go service laid out like backup-server — module under src/, cmd/webhook-relay/main.go, internal/<pkg>/ — built by a multi-stage Dockerfile whose builder is a golang:*-bookworm stage on backup-server's shape and whose runtime stage follows iac-provisioner: debian:bookworm-slim carrying the static binary and its CA certificates and nothing more. backup-server's own runtime stage — an apt layer plus a piped rclone installer — is the counter-example and is not copied.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "DockerImages/backup-server/Dockerfile:1-29",
-        "DockerImages/backup-server/src/cmd/backup-server/main.go:1"
+        "DockerImages/backup-server/Dockerfile:1-9",
+        "DockerImages/backup-server/src/cmd/backup-server/main.go:1",
+        "DockerImages/iac-provisioner/Dockerfile:9-13",
+        "DockerImages/backup-server/Dockerfile:12-21"
       ]
     },
     {
@@ -117,6 +119,14 @@
       "id": "V13",
       "area": "Hand-off to 009",
       "description": "Slice 009 can pin this slice's image tag and author the relay's Deployment, Service and deploy-hooks.webathome.org annotation from what shipped alone: the listen port, the environment variables carrying the shared secret and the two receiver URLs, the health path, and the statelessness that makes more than one replica safe are all findable in the image's own documentation.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "Ruling — GitHub's webhook-secret wire format, pinned by the suite",
+      "description": "The suite pins GitHub's documented validation contract, not just 'an HMAC check': the signature is read from X-Hub-Signature-256 as sha256=<lowercase hex digest> with the prefix part of the value; the digest is computed over the exact raw body bytes read off the wire — the same bytes forwarded verbatim, never a parsed or re-serialized copy; the comparison is constant-time; a missing X-Hub-Signature-256 is refused exactly like an invalid one; and X-Hub-Signature (SHA-1) is forwarded but never trusted, verification reading the 256 header only.",
       "verdict": null,
       "rationale": "",
       "evidence": []
