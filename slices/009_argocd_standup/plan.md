@@ -236,6 +236,16 @@ Facts established at planning time, so they are not rediscovered:
   bullet's "then the registry entry" describes the same end state from the operator's side and
   reads as a contradiction. Reword the bullet to point at P6 explicitly. Wording, not mechanism —
   nothing serves the entry until the ApplicationSets exist either way.
+- Ruling (2026-08-17, run bail on P5a's `Target:`) — **the proof repo is `pvginkel/ProofDeploy`
+  and it now exists.** The run bailed because `../ProofDeploy` did not resolve; asked who creates
+  it, the operator answered *"I just created it."* The name is unchanged, so P5a's `Target:` and
+  the drill's registry path stand as written. GitHub had the repo but **no refs** — the empty-repo
+  trap the ordering constraints call out — so the remaining workspace mechanics were done in this
+  session: the url added to `/work/Ansible/.kubecoder/config.yaml`, a clone at `/work/ProofDeploy`,
+  and a minimal `README.md` root commit (`49efa37`) left **unpushed**, exactly as `ArgoCDDeploy`
+  was seeded at `e8cb797`. Executors build on that commit. (`kc env sync` does not exist in this
+  pod's `kc` build — only `kc env restart`, which would end the run — hence the hand clone; the
+  `config.yaml` entry is what makes it survive a future restart.)
 
 ## Task shape
 
