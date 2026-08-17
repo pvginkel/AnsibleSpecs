@@ -646,7 +646,7 @@ Settled beyond the plan's text:
   render carries `is-public: "yes"`, so argocd-server turning public fails here.
 - Public DNS, the NAT rule and the registered hook URL are operator keystrokes — close-out **A3**.
 
-### P5a — The disposable proof app: a deploy repo the A.5 drill can actually exercise
+### P5a — The disposable proof app: a deploy repo the A.5 drill can actually exercise ✅ DONE 2026-08-18
 
 Target: `../ProofDeploy`
 
