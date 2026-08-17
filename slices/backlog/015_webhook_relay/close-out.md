@@ -63,3 +63,25 @@ Focus: <!-- doc-writer -->
 Focus: <!-- doc-writer -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — `DockerImages` has no `.kubecoder/project.yaml`, so phases targeting it get no deterministic gate · DockerImages
+
+P1 is the first phase in the whole slice set to carry `Target: ../DockerImages` (`grep -rn
+"Target:.*DockerImages" /work/AnsibleSpecs/slices/` matches only this slice's plan). The run loop
+resolves a sibling repo's gate from that repo's own manifest and falls back to none when there is
+no `.kubecoder/project.yaml` — `run_loop.py:1509-1515` — so the dry run prints `gate: (no
+deterministic gate)` and the code reviewer is told the state is unverified. Of the repos checked
+out here, `Ansible`, `HelmCharts`, `Charts`, `ArgoCDTools`, `KubeCoder` and `AIWorkflow` carry a
+manifest; `DockerImages`, `ArgoCDDeploy`, `HomelabTerraformProvider`, `JenkinsPipelineUtils` and
+`AnsibleSpecs` do not.
+
+The plan works around it by naming the two gate commands in P1 itself (`cexec go go test ./...`,
+`cexec iac ./scripts/arch-validate.py */architecture.yaml`), which is correct for this slice but
+does not generalise — every future `DockerImages` phase pays the same tax, and each one invents
+its own gate. A small `.kubecoder/project.yaml` in `DockerImages` wiring `test` to the Go suites
+and `arch-validate.py` would make the loop's gate real there. Note the repo is heterogeneous (Go,
+Python and pure-Dockerfile directories), so what "test" means repo-wide is a genuine design
+question, not a copy-paste.
+
+Provenance: plan-writer, planning round 1; `plan.md` P1 and the `--dry-run` output
+Disposition:

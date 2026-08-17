@@ -35,7 +35,7 @@ verbatim and authoritative for *why* the relay is shaped this way.
   URL, not argocd-server's; and correct A.4's "homelab TLS" exposure bullet in `phases.md`, which
   as written contradicts D39.
 
-### Rulings carried in from 009's planning session (2026-08-16)
+#### Rulings carried in from 009's planning session (2026-08-16)
 
 - **Hostname: `deploy-hooks.webathome.org`** (operator: *"deploy-hooks please"*). Public DNS in this
   estate is a manual operator action outside any repo, as is the router NAT rule.
@@ -52,7 +52,7 @@ verbatim and authoritative for *why* the relay is shaped this way.
   Service and `deploy-hooks.webathome.org` annotation**, pinned to this slice's image tag — the same
   shape as 007's hook image pinned by 006's library chart. Ordering is linear: **015 → 009**.
 
-### Rulings from this planning session (2026-08-17)
+#### Rulings from this planning session (2026-08-17)
 
 - **Ruling (2026-08-17) — the relay is written in Go.** The consult's §1/§2 specify a "small Go
   binary", and that is what ships. `DockerImages` has the precedent twice — `backup-server` and
@@ -78,12 +78,61 @@ verbatim and authoritative for *why* the relay is shaped this way.
   `backup-server` documents — and the shared root `Jenkinsfile`, which builds and pushes every
   image and runs no tests today, is **not** touched.
 
+## Task shape
+
+pre-settled — `slice.md` names `attachments/webhook-relay-consult.md` "the authoritative design for
+this slice", R1–R6 fix the functional contract clause by clause, and this session's rulings pin the
+language, the layout precedent, the endpoint path and the CI posture; planning is transcription.
+
 ## Ordering constraints
 
 - **015 → 009.** Slice 009 pins this slice's published image tag; it cannot deploy a relay that has
   not been built. Nothing in 015 depends on 009.
-- Within this slice, the `DockerImages` work and the `AnsibleSpecs` doc updates (R7) are
-  independent of each other and share no files.
+- The slice has **one coding phase**. R7 is in scope and `verification.json` checks it, but its
+  `argo-cd/` document-set edits are the run loop's own doc phase — steered by R7 above, in the
+  operator's words — not a phase here.
+
+### P1 — The webhook relay image
+
+Target: ../DockerImages
+
+**Outcome.** A new in-house app directory `webhook-relay/` at the repo root that the existing
+pipeline builds and publishes as `registry:5000/webhook-relay:<n>`, holding the service, its unit
+tests, its Dockerfile, its README and its `architecture.yaml`. R1–R6 above are the functional
+contract, clause by clause; the reasoning behind each — why both-or-502 rather than a queue, why
+duplication rather than a routing table, why no source-IP allowlist, why the parse surface is the
+whole point — is `attachments/webhook-relay-consult.md` §§1–3, authoritative and worth reading
+before the handler is written. Nothing in it needs re-deciding. When this phase merges, slice 009
+must be able to pin the tag and write the Deployment and Service without reopening this slice.
+
+Constraints the repo will not tell you:
+
+- **The directory name is the image name, and there is no registration anywhere to edit.** Both
+  pipelines glob: the build discovers any top-level directory holding a `Dockerfile`
+  (`tools/dockerfile_deps.py:21-28`), rebuilds it only when that directory changed
+  (`Jenkinsfile:46`) and pushes `registry:5000/<dir>:<build#>` plus `:latest`
+  (`Jenkinsfile:100-101`); the architecture producer copies every `*/architecture.yaml`
+  (`Jenkinsfile.architecture:32`). Creating the directory *is* the whole of "wire it into the
+  pipeline" — and per the ruling the root `Jenkinsfile` is not touched.
+- **Layout follows `backup-server`** per the Go ruling — module under `src/`, `cmd/<app>/main.go`,
+  `internal/<pkg>/`, and its multi-stage Dockerfile shape (`backup-server/Dockerfile:1-29`). Keep
+  the `go.mod` language version and the builder image tag consistent with each other and buildable
+  by this environment's Go toolchain (1.26.5 today), or the suite and the image disagree about
+  which Go this is.
+- **The gates run in sidecars, not the dev container** — there is no `go` and no `python` here.
+  `cexec go go test ./...` from the module root, and `cexec iac ./scripts/arch-validate.py
+  */architecture.yaml` from the repo root — the whole set validated together so cross-file `svc:`
+  references resolve (`DockerImages/CLAUDE.md:27-30`). Those two green are this phase's gate; the
+  tests stay out of CI per the ruling.
+- **Exactly two paths are served**: the webhook path `/api/webhook` (ruling) and a health path.
+  Every other path is one of R4's structural refusals.
+- **The README is 009's input.** 009 authors the Deployment, Service and public annotation against
+  this image with no further contact with this slice, so what it needs must be findable there: the
+  listen port, the environment variables carrying the shared secret and the two receiver URLs, the
+  health path, and the fact that the process is stateless and safe above one replica.
+- `architecture.yaml` is hand-authored source of truth for a brand-new `SoftwareProduct` in the
+  federated model; `DockerImages/CLAUDE.md` §"What each producer owns" and §"Conventions" govern
+  its shape, and `backup-server/architecture.yaml` is the worked example.
 
 ## Not in scope
 

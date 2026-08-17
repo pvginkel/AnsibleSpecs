@@ -1,0 +1,125 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — the endpoint and the fan-out",
+      "description": "A stateless HTTP service exposes one POST endpoint, reads the body up to a size cap, verifies GitHub's X-Hub-Signature-256 HMAC-SHA256 in constant time against a shared secret, and on success forwards the raw body verbatim — with X-GitHub-Event, X-GitHub-Delivery, both signature headers and Content-Type — concurrently to both receivers: argocd-server /api/webhook and applicationset-controller :7000/api/webhook. Plus a health endpoint.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — both-or-502",
+      "description": "GitHub gets a 2xx only when both legs returned 2xx; otherwise a 502 whose body names the failed leg. Per-leg timeout is ~4s, inside GitHub's 10-second window. No retries, no queue, no buffering, no state — GitHub's Recent Deliveries stays the ledger for both legs.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — duplicate everything",
+      "description": "Every verified delivery is duplicated to both receivers with no routing table and no event-type filtering — ping is forwarded too — and the payload is never parsed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R4 — structural refusals",
+      "description": "The service refuses structurally, not semantically: non-POST, any path but the webhook path, missing or invalid signature, missing Content-Length, body over the cap — refusing before reading the body where possible.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R5 — no credentials, one secret",
+      "description": "The service holds no credential toward GitHub and none toward the cluster; its only config is the shared secret and the two target URLs. The secret is the same value as webhook.github.secret in argocd-secret — one OpenBao leaf, not a second secret.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R6 — where it lands and how it ships",
+      "description": "Source, Dockerfile and tests live in DockerImages, and the existing pipeline publishes the image as registry:5000/webhook-relay:<n> with no pipeline edit — the build discovers any top-level directory holding a Dockerfile and pushes it under that directory's name.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "DockerImages/tools/dockerfile_deps.py:21-28",
+        "DockerImages/Jenkinsfile:46",
+        "DockerImages/Jenkinsfile:100-101"
+      ]
+    },
+    {
+      "id": "V07",
+      "area": "R6 — the test suite",
+      "description": "Unit tests cover HMAC verification (accept and reject), the fan-out, both-or-502 including each leg failing alone, and every refusal in R4 — all provable against stub receivers, with no Argo CD in the loop.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R7 — the argo-cd document set",
+      "description": "O3 is closed in the argo-cd document set's decisions.md in favour of one fanned-out endpoint; design.md records that the registered hook URL — the registry repo's manual hook and each deploy repo's D39 github_repository_webhook alike — is the relay's public URL, not argocd-server's; and A.4's \"homelab TLS\" exposure bullet in phases.md, which as written contradicts D39, is corrected.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "AnsibleSpecs/argo-cd/decisions.md:542",
+        "AnsibleSpecs/argo-cd/design.md:290-291",
+        "AnsibleSpecs/argo-cd/phases.md:85-86",
+        "AnsibleSpecs/argo-cd/decisions.md:382"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "Ruling — Go, on backup-server's shape",
+      "description": "The relay is a Go service laid out like backup-server — module under src/, cmd/webhook-relay/main.go, internal/<pkg>/ — built by a multi-stage Dockerfile from a golang:*-bookworm builder into a slim runtime stage carrying only the static binary.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "DockerImages/backup-server/Dockerfile:1-29",
+        "DockerImages/backup-server/src/cmd/backup-server/main.go:1"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "Ruling — the endpoint path",
+      "description": "The endpoint path is /api/webhook, making the registered hook URL https://deploy-hooks.webathome.org/api/webhook — the URL R7 records in design.md and the one D39's Terraform resource carries.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Ruling — the federated model",
+      "description": "The image ships a hand-authored webhook-relay/architecture.yaml that validates as part of the whole set with ./scripts/arch-validate.py */architecture.yaml, so the estate's only internet-facing service is not a hole in the federated model.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "DockerImages/CLAUDE.md:27-30",
+        "DockerImages/Jenkinsfile.architecture:32-36"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "Ruling — tests stay out of CI",
+      "description": "The suite is run the way the repo already runs tests — go test ./... as backup-server documents — and the shared root Jenkinsfile, which builds and pushes every image and runs no tests today, is not touched.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "DockerImages/backup-server/README.md:157-162"
+      ]
+    },
+    {
+      "id": "V13",
+      "area": "Hand-off to 009",
+      "description": "Slice 009 can pin this slice's image tag and author the relay's Deployment, Service and deploy-hooks.webathome.org annotation from what shipped alone: the listen port, the environment variables carrying the shared secret and the two receiver URLs, the health path, and the statelessness that makes more than one replica safe are all findable in the image's own documentation.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
