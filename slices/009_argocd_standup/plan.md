@@ -430,6 +430,35 @@ they read. Every secret value arrives from OpenBao through ESO; nothing secret i
   ExternalSecrets. `/work/HelmCharts/configs/prd/ceph-csi-cephfs/prd/manifests.yaml:13-33` is the
   raw form the estate already uses.
 
+**Done.** The three wires land in the chart: `chart/templates/external-secrets.yaml` holds every
+ExternalSecret, `config/prd/values.yaml` the notifications, SSO and leaf coordinates, and
+`tests/render-chart.py` grows five checks over the same render — 19 new assertions, each
+negative-tested to fail.
+
+Settled beyond the plan's text:
+
+- **Nothing secret is merged into `argocd-secret`.** Argo resolves `$<secret>:<key>` in *both*
+  `oidc.config` and `webhook.github.secret` against the Secrets labelled
+  `app.kubernetes.io/part-of: argocd` in its own namespace (`oidcConfig`/`GetWebhookGitHubSecret`
+  → `ReplaceStringSecret`, v3.5.1 `util/settings/settings.go`; the applicationset-controller's Role
+  already carries secrets list/watch). So the chart commits the *reference* and ESO owns separate
+  objects — no `creationPolicy: Merge`, and the server-generated `server.secretkey` and
+  `admin.password` stay outside ESO's blast radius.
+- **The webhook value is one Secret, not one leaf read twice.** ESO materialises `argocd-webhook`
+  with key `githubSecret`; P5's relay takes a `secretKeyRef` at that object and authors no
+  ExternalSecret of its own (P5's bullet corrected in place).
+- **dex is retired** — D9 is direct OIDC, so the broker sits in nothing's path. That drops six
+  objects and `server.dex.server` from `argocd-cmd-params-cm`, exactly the break close-out **B4**
+  predicted: `check_release_name`'s params loop no longer names it and `check_sso` asserts dex is
+  gone instead.
+- **RBAC enforces on `preferred_username`.** Keycloak mints `sub` as a per-user UUID, so the
+  chart's `scopes: "[groups]"` default matches nobody here; `requestedScopes` drops `groups` for
+  the same reason — an authorization request naming a scope the realm lacks fails whole.
+- **One `repo-creds` Secret, `url: https://github.com/pvginkel/`.** Argo picks the credential whose
+  `url` is the longest lowercased prefix of the repo it clones, so Phase B's deploy repos need no
+  new leaf.
+- Three leaves and the hand-created Keycloak client are operator keystrokes — close-out **A2**.
+
 ### P3 — Applications generate: the `releases` AppProject and both ApplicationSets
 
 Target: `../ArgoCDDeploy`
@@ -521,8 +550,11 @@ reachable from the internet.
 - **Its only configuration is the shared HMAC secret and the two target URLs** — argocd-server's
   `/api/webhook` and the applicationset-controller's on port 7000. Both Services are named from the
   Helm release, which is the Application's name (P1's done-record): `argocd-prd-server` and
-  `argocd-prd-applicationset-controller`, not `argocd-server`. The secret is the same value P2
-  wires into `webhook.github.secret`, from the same leaf: one secret, two readers.
+  `argocd-prd-applicationset-controller`, not `argocd-server`. The secret is already in the
+  cluster and needs no ExternalSecret here: P2 materialises `argocd-webhook` in `argocd-prd` from
+  `eso/prd/argocd/prd/webhook`, key `githubSecret`, and `argocd-secret`'s `webhook.github.secret`
+  is a `$argocd-webhook:githubSecret` reference to that same key. The relay takes a `secretKeyRef`
+  at it — one object, three readers.
 
 ### P5a — The disposable proof app: a deploy repo the A.5 drill can actually exercise
 

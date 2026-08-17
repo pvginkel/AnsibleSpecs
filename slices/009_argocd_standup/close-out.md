@@ -69,6 +69,43 @@ had a `helm install` to run. If the plain form happens to work, nothing is lost 
 Provenance: code-writer, P1 round 3; ArgoCDDeploy `chart/templates/namespace.yaml`
 Disposition:
 
+### A2 — three OpenBao leaves and one hand-created Keycloak client, before the bootstrap sync
+
+P2's chart carries three ExternalSecrets and no values. Each needs its leaf written first, or the
+Secret materialises empty and the failure surfaces as a 401 on a clone, a broken login, or a
+webhook whose signature never matches. All three sit inside the `eso` AppRole's existing
+`eso/prd/*` grant (`ansible/inventories/prd/group_vars/openbao.yml:91-96`), so **no OpenBao policy
+change is owed** — only the writes:
+
+```
+bao kv put kv/eso/prd/argocd/prd/webhook github_secret=<the shared HMAC secret>
+bao kv put kv/eso/prd/argocd/prd/oidc    client_secret=<the Keycloak client secret>
+bao kv put kv/eso/prd/argocd/prd/git     token=<a classic PAT, repo scope>
+```
+
+`github_secret` is the **same value** the operator gives GitHub when creating the registry webhook
+(R7) and the same one slice 015's relay verifies — one value, three readers, never generated twice.
+The git token is Argo's own, deliberately **not** the hook's `eso/prd/argocd-hooks/git` (the
+2026-08-16 ruling): the two rotate independently. A classic PAT cannot express read-only on private
+repositories, so the scope is still `repo`.
+
+The **Keycloak client** is hand-created in the `homelab` realm (the 2026-08-16 ruling; keycloak-tf,
+Trello **#68**, imports rather than recreates it later). What the chart already assumes:
+
+- client id **`argocd`**, confidential (client authentication on), standard flow
+- valid redirect URI **`https://argocd.home/auth/callback`**; add
+  **`http://localhost:8085/auth/callback`** to keep `argocd login --sso` working from the CLI
+- the operator's `preferred_username` must be **`pvginkel`** — `argocd-rbac-cm` maps that subject
+  to `role:admin`, and Keycloak's `sub` is a per-user UUID that cannot be written into the chart
+- no group mapper needed: `requestedScopes` is `openid profile email` and RBAC enforces on
+  `preferred_username`
+
+Local admin stays enabled as break-glass (D9), so a wrong client secret is recoverable without
+Keycloak.
+
+Provenance: code-writer, P2; ArgoCDDeploy `chart/templates/external-secrets.yaml`, `config/prd/values.yaml`
+Disposition:
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -78,6 +115,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      the sidecar, a wait that hit a cap, a call the harness refused. What happened, when, how it
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
+
+### N1 — Fix round after review r1 of P1 refuted F2
+
+The fix round witnessed the claimed failure of the reviewer's finding F2 — "chart/charts/ is gitignored but https://argoproj.github.io/argo-helm is declared to Argo nowhere, and the repo-server only adds the Helm repos Argo has configured — reproduced: `helm dependency build` exits 1 with `no repository definition for https://argoproj.github.io/argo-helm`." — and could not make it fail: no code changed for it, and the finding funds no further work. The writer's evidence: The repo-server derives the Helm repository from the chart's own Chart.yaml, not from Argo's configured repositories: getHelmDependencyRepos (v3.5.1 reposerver/repository/repository.go:1175-1208) parses dependencies[].repository and getHelmRepos (:1124-1163) synthesises Repository{Repo: url, Name: sanitizeRepoName(url)} when nothing configured matches — configured repos only attach credentials — and DependencyBuild helm-repo-adds each before `helm dependency build` (util/helm/helm.go:86-106,125). Replayed that exact sequence against this chart with an empty HELM_REPOSITORY_CONFIG and a cold cache: `helm repo add https:--argoproj.github.io-argo-helm https://argoproj.github.io/argo-helm` then `helm dependency build` exits 0 and writes argo-cd-10.3.3.tgz. The reviewer's repro omitted the repo add, which is the step the repo-server does perform and which tests/build-deps.sh:9 mirrors.
+
+The full finding and the refutation record are in /work/AnsibleSpecs/slices/009_argocd_standup/phases/P1/code_review_r1.md.
+
+Provenance: code-writer P1, fix round after review r1; the review verdict's findings list in state.json
+Disposition:
 
 ## Bugs
 
@@ -147,6 +193,49 @@ knowing when that URL is written rather than when the drill fails.
 Found while reviewing P1's exposure values against the rendered Service.
 
 Provenance: code-reviewer, P1 round 1; phases/P1/code_review_r1.md F3
+Disposition:
+
+### B4 — the render gate crashes on a dex-disabled render, which is a switch P2 may throw · minor · ArgoCDDeploy
+
+`tests/render-chart.py:114-121` reads `params["server.dex.server"]` out of `argocd-cmd-params-cm`
+unguarded. With `argo-cd.dex.enabled: false` the upstream chart drops that key entirely and renders
+no dex Deployment or Service — a perfectly correct render — and the gate exits 1 with
+`KeyError: 'server.dex.server'` instead of passing. P1's done-record leaves exactly that switch open
+("dex stays at the chart default: whether Keycloak SSO retires it is P2's call", plan.md:374), so
+the first phase that retires dex for Keycloak SSO inherits a red gate and a traceback that names no
+requirement.
+
+The same line of code has a second, milder instance: `:96` takes the rendered Namespace with a bare
+`next()`, so deleting `chart/templates/namespace.yaml` dies with `StopIteration` before
+`check_namespace_manifest` — the check that owns the named D25/D26 assertion, and which runs after
+it — can report anything. The gate still goes red there; only the diagnosis is lost.
+
+Nothing shipped is affected: the committed values enable dex, the Namespace template is present, and
+`kc project test` and `kc project lint` are both green on `9264944`.
+
+Found while mutation-testing P1's fix commit for the release-name finding.
+
+Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F1
+Disposition:
+
+### B5 — one of the gate's release-name assertions cannot fail · nit · ArgoCDDeploy
+
+`tests/render-chart.py:111-121` checks that `argocd-cmd-params-cm`'s `repo.server`, `redis.server`
+and `server.dex.server` name Services the render creates, under a comment saying this is "where a
+name mismatch points running workloads at Services that do not exist". Both sides come out of one
+`helm template` invocation and the upstream chart derives both from the same `.Release.Name`, so
+they agree under any release name. Confirmed by mutation: rendering under `argocd` — the exact
+mismatch the comment describes — fired 13 assertions and none of them was this one.
+
+The failure it is aimed at is real but lives *between* two renders (Argo's under `argocd-prd` versus
+a bootstrap under `argocd`), which a single-render gate cannot observe. The check that does catch it
+is the `startswith`/`app.kubernetes.io/instance` pair immediately above, at `:101-109`. So no
+coverage is missing — the block is dead weight whose only reachable outcomes are false positives
+(B4's `KeyError`, or a `redis.server` pointed at an external Redis host).
+
+Found while mutation-testing P1's fix commit for the release-name finding.
+
+Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F2
 Disposition:
 
 ## Open questions and rulings
