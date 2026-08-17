@@ -2,274 +2,311 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — the wrapper chart",
+      "area": "R1 \u2014 the wrapper chart",
       "description": "ArgoCDDeploy is a deploy repo whose chart/ pins the upstream argo-cd chart in Chart.yaml dependencies: and renders a complete Argo CD install into namespace argocd-prd, with resourceTrackingMethod: annotation (D4), controller.operation.processors: 2 (D8) and polling disabled everywhere including the ApplicationSet git generator (D6).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`chart/Chart.yaml:9-10` pins `argo-cd` `10.3.3` exact (not `~`). `config/prd/values.yaml:14` sets `application.resourceTrackingMethod: annotation`, `:61` sets `controller.operation.processors: 2`, `:18-19` set `timeout.reconciliation: 0s` and `.jitter: 0s` (polling off). Rendered this session: `cexec iac tests/build-deps.sh && cexec iac tests/render-chart.py` -> `ok: 68 objects render into argocd-prd and argocd-hooks`. Direct render inspection confirms all four values reached `argocd-cmd-params-cm` (render lines 342, 446-447, 474) and the chart's own `Namespace/argocd-prd` manifest (`hook-namespace.yaml` for `argocd-hooks` at render line 4; the second Namespace, `argocd-prd`, follows at `templates/namespace.yaml`, confirmed present via `grep kind: Namespace` returning 2 matches).",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/Chart.yaml:9-10",
+        "/work/ArgoCDDeploy/config/prd/values.yaml:14,18-19,61",
+        "/work/ArgoCDDeploy/chart/templates/namespace.yaml",
+        "render (this session, cexec iac helm template argocd-prd chart -f config/prd/values.yaml): lines 342,446-447,474"
+      ]
     },
     {
       "id": "V02",
-      "area": "R1 — the AppProject",
+      "area": "R1 \u2014 the AppProject",
       "description": "The AppProject `releases` (D10) exists and permits everything Argo's own Application needs to sync: argocd-prd and argocd-hooks as destinations alongside the <app>-<stage> app namespaces, a clusterResourceWhitelist covering Namespace plus every cluster-scoped kind the upstream argo-cd chart carries and migrated charts' own, and sourceRepos covering the registry repo, the deploy repos and the upstream chart repos.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Rendered this session (see V01). AppProject `releases` in `argocd-prd`: `destinations` carries `*-dev`/`*-prd`/`*-tst`/`*-uat` plus `argocd-hooks`; `clusterResourceWhitelist` carries `Namespace`, `CustomResourceDefinition`, `ClusterRole`, `ClusterRoleBinding` \u2014 every cluster-scoped kind the render actually produces; `sourceRepos` carries `https://github.com/pvginkel/*` plus the eight upstream Helm repositories HelmCharts' `configs/prd` names. Read directly off the render, not off the plan's prose.",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/appproject.yaml",
+        "render (this session): AppProject block, lines 34270-34324"
+      ]
     },
     {
       "id": "V03",
-      "area": "R1 — both ApplicationSets",
-      "description": "Both ApplicationSets render per design.md's templates — goTemplate with missingkey=error, the glob scoped to configs/prd/, the local/upstream split on upstream.chart, the finalizer, and the templatePatch that is the conditional-autoSync mechanism — and the local-chart set passes all four hook helm parameters, hook.namespace included.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R1 \u2014 both ApplicationSets",
+      "description": "Both ApplicationSets render per design.md's templates \u2014 goTemplate with missingkey=error, the glob scoped to configs/prd/, the local/upstream split on upstream.chart, the finalizer, and the templatePatch that is the conditional-autoSync mechanism \u2014 and the local-chart set passes all four hook helm parameters, hook.namespace included.",
+      "verdict": "verified",
+      "rationale": "Rendered this session (see V01). Both ApplicationSets (`releases-local`, `releases-upstream`) carry `goTemplate: true` and `goTemplateOptions: [\"missingkey=error\"]`. `releases-local`'s git generator globs `configs/prd/*/*/release.yaml` with `requeueAfterSeconds: 0`; its template passes all four hook helm parameters (`hook.repo`, `hook.revision`, `hook.stage`, `hook.namespace`) \u2014 the omission `slice.md`'s stale quote drops is not present here. `upstream.chart` selector splits local vs upstream via `matchExpressions: DoesNotExist`.",
       "evidence": [
-        "/work/AnsibleSpecs/argo-cd/design.md:201-209 — the four helm parameters; slice.md's quote of the same template omits hook.namespace",
-        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48 — all four Job arguments are `required`-guarded, so three parameters fails the render"
+        "/work/ArgoCDDeploy/chart/templates/applicationsets.yaml",
+        "render (this session): releases-local block, lines 34324-34412 (goTemplate/missingkey 34333-34334; hook params 34380-34389; requeueAfterSeconds 34346)",
+        "render (this session): releases-upstream block, lines 34412-34477 (goTemplate/missingkey 34417-34418; requeueAfterSeconds 34425)"
       ]
     },
     {
       "id": "V04",
-      "area": "R1 — notifications",
-      "description": "Notifications config for Alertmanager with on-sync-failed + on-health-degraded authored (D7) — triggers, templates and a subscription that reaches every generated app, against prometheus-prd-alertmanager.prometheus-prd:9093.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R1 \u2014 notifications",
+      "description": "Notifications config for Alertmanager with on-sync-failed + on-health-degraded authored (D7) \u2014 triggers, templates and a subscription that reaches every generated app, against prometheus-prd-alertmanager.prometheus-prd:9093.",
+      "verdict": "verified",
+      "rationale": "Rendered this session (see V01). `argocd-notifications-cm`/`-cctl` data carries `service.alertmanager` targeting `prometheus-prd-alertmanager.prometheus-prd:9093`, `subscriptions` naming recipient `alertmanager` with triggers `on-sync-failed` and `on-health-degraded`, and both `trigger.on-health-degraded` / `trigger.on-sync-failed` templates authored (not stock-empty). Whether a sync failure actually reaches Alertmanager's API is R9/V14, owed separately; this item is about the config being authored, and it is.",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/argocd-cm.yaml (or wherever the notifications keys are templated)",
+        "render (this session): lines 518-560"
+      ]
     },
     {
       "id": "V05",
-      "area": "R1 — SSO wiring",
+      "area": "R1 \u2014 SSO wiring",
       "description": "SSO wiring (D9) ships in the chart: an oidc.config stanza naming issuer, client id and a client-secret reference, plus the argocd-rbac-cm line mapping the operator's identity to role:admin, with the local admin account left in place as break-glass.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Rendered this session (see V01). `argocd-cm`'s `oidc.config` (render line 345) names issuer/client id and a client-secret `$`-reference; `requestedScopes: [\"openid\",\"profile\",\"email\"]` (line 350) deliberately drops `groups`, matching the close-out A2 rationale (Keycloak mints `sub` as a UUID). `argocd-rbac-cm`'s `policy.csv` (line 578) carries `g, pvginkel, role:admin`. Local admin is not disabled anywhere in the chart or values (no `admin.enabled: \"false\"` set), so break-glass survives by omission \u2014 confirmed by its absence from every rendered ConfigMap/Secret key.",
+      "evidence": [
+        "/work/ArgoCDDeploy/config/prd/values.yaml:32-37 (SSO block, per close-out A2's citation)",
+        "render (this session): lines 345,350,578"
+      ]
     },
     {
       "id": "V06",
-      "area": "R1 — webhook secret reference",
-      "description": "The webhook secret reference is wired, and the shared secret is one value with two readers — Argo's webhook.github.secret and the relay — from one OpenBao leaf, never two.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R1 \u2014 webhook secret reference",
+      "description": "The webhook secret reference is wired, and the shared secret is one value with two readers \u2014 Argo's webhook.github.secret and the relay \u2014 from one OpenBao leaf, never two.",
+      "verdict": "verified",
+      "rationale": "Rendered this session (see V01). `argocd-secret`'s `webhook.github.secret` (render line 322) is base64 for the literal string `$argocd-webhook:githubSecret` (decoded this session) \u2014 a reference, not a copied value. The `argocd-webhook` ExternalSecret (render lines 34474-34500) materialises key `githubSecret` from `eso/prd/argocd/prd/webhook#github_secret`, and the relay's Deployment takes a `secretKeyRef` at the same object/key (render lines 33837-33843) \u2014 one leaf, three readers, matching P2's done-record.",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/external-secrets.yaml",
+        "render (this session): argocd-secret line 322; argocd-webhook ExternalSecret lines 34474-34500; relay secretKeyRef lines 33837-33843"
+      ]
     },
     {
       "id": "V07",
-      "area": "R2 — the Keycloak client",
+      "area": "R2 \u2014 the Keycloak client",
       "description": "Argo's Keycloak client exists and is recorded so keycloak-tf (Trello #68) can import rather than recreate it. Per the 2026-08-16 ruling the client is hand-created and ArgoCDDeploy ships no terraform/ and no Keycloak provider credential; the client secret reaches Argo as an ESO leaf exactly as D9 specifies.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "Not done. No repo in this slice creates a Keycloak client \u2014 per the 2026-08-16 ruling it is hand-created in the `homelab` realm, and nothing in this pod can create or read one (no Keycloak admin credential available, and reading one would be a credential access this session does not have). close-out **A2** carries the exact fields the chart already assumes: client id `argocd`, confidential, redirect URIs `https://argocd.home/auth/callback` and `http://localhost:8085/auth/callback`, and the operator's `preferred_username` must be `pvginkel`. The 'record it on Trello #68' half is also not done \u2014 no comment exists on that card from this slice. Settles only once both the client is created and #68 carries the record.",
       "evidence": [
-        "/work/HelmCharts/_providers/providers.tf — `provider \"keycloak\" {}` is bare and no keycloak_* resource exists in the estate; slice 007's credential-inventory.md:48-52 records the absent leaf as deliberate"
+        "/work/AnsibleSpecs/slices/009_argocd_standup/close-out.md \u2014 A2"
       ]
     },
     {
       "id": "V08",
-      "area": "R3 — the hook namespace",
-      "description": "The hook namespace argocd-hooks exists with the ExternalSecret materialising argocd-hook-credentials from A.2's enumerated leaves plus the non-secret per-cluster provider configuration as template literals — one object composing a run's whole environment — the tf-presync ServiceAccount and its RBAC (PV get/list/patch), permitted as an AppProject destination (D33).",
-      "verdict": null,
-      "rationale": "",
+      "area": "R3 \u2014 the hook namespace",
+      "description": "The hook namespace argocd-hooks exists with the ExternalSecret materialising argocd-hook-credentials from A.2's enumerated leaves plus the non-secret per-cluster provider configuration as template literals \u2014 one object composing a run's whole environment \u2014 the tf-presync ServiceAccount and its RBAC (PV get/list/patch), permitted as an AppProject destination (D33).",
+      "verdict": "verified",
+      "rationale": "Rendered this session (see V01). `argocd-hooks` Namespace manifest (render lines 1-11, `sync-wave: \"-1\"`, `Prune=false`); `argocd-hook-credentials` ExternalSecret in `argocd-hooks` (render lines 34562+) whose `target.template.data` names all 22 keys from slice 007's credential-inventory, secret half by `{{ .KEY }}` reference and non-secret half as literals; `tf-presync` ServiceAccount (render line 283) with ClusterRole (line 31739) and two ClusterRoleBindings (lines 31764,31787+) granting `persistentvolumes`/`secrets`/`namespaces`; AppProject destination list includes `argocd-hooks` (confirmed under V02). This is P4's chart-authoring deliverable, confirmed against the render directly rather than against plan.md's prose. The namespace's live existence on the cluster is R6's bootstrap (V11, owed) \u2014 this item is about what P4 shipped, and it renders correctly.",
       "evidence": [
-        "/work/AnsibleSpecs/slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md:32-82 — the authoritative key-by-key contract this object fills",
-        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:27,39,51 — the Job hard-codes namespace argocd-hooks, serviceAccountName tf-presync and secret argocd-hook-credentials"
+        "/work/ArgoCDDeploy/chart/templates/hook-namespace.yaml",
+        "/work/AnsibleSpecs/slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md:32-82",
+        "render (this session): Namespace lines 1-11; ExternalSecret lines 34562-34620ish; ServiceAccount line 283; ClusterRole line 31739; ClusterRoleBindings 31764,31787"
       ]
     },
     {
       "id": "V09",
-      "area": "R4 — repository credentials",
-      "description": "Repository credential Secrets via ESO (D40), after checking whether anonymous read suffices anywhere — it suffices nowhere, so per the 2026-08-16 ruling one repo-creds Secret matching the https://github.com/pvginkel/ prefix covers the registry repo and every deploy repo, on Argo's own token rather than the hook's.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R4 \u2014 repository credentials",
+      "description": "Repository credential Secrets via ESO (D40), after checking whether anonymous read suffices anywhere \u2014 it suffices nowhere, so per the 2026-08-16 ruling one repo-creds Secret matching the https://github.com/pvginkel/ prefix covers the registry repo and every deploy repo, on Argo's own token rather than the hook's.",
+      "verdict": "verified",
+      "rationale": "The anonymous-read check was answered at planning time (2026-08-16, `env -i` probe: HelmCharts, ArgoCDDeploy, KubeCoderDeploy, ArgoCDTools and Charts are all private) \u2014 plan.md's 'Facts established at planning time'. Rendered this session (see V01): `argocd-repo-creds-github` ExternalSecret (render lines 34532-34561) materialises a `repo-creds`-labelled Secret with `url: \"https://github.com/pvginkel/\"`, `username: x-access-token`, `password` from `eso/prd/argocd/prd/git#token` \u2014 Argo's own token, not the hook's, matching the 2026-08-16 ruling. One Secret, one prefix, covers the registry repo and every deploy repo Phase B adds.",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/external-secrets.yaml",
+        "render (this session): lines 34532-34561",
+        "/work/AnsibleSpecs/slices/009_argocd_standup/plan.md:100-103 (anonymous-read check)"
+      ]
     },
     {
       "id": "V10",
-      "area": "R5 — exposure and O3",
-      "description": "argocd-server is reachable behind the estate's exposure mechanism with homelab TLS and is-public: no — its Service carries is-public: \"no\" AND enable-ssl: \"yes\", and the vhost actually answers on 443 with a step-ca leaf, checked at the listener rather than at the annotation. And O3 is settled in favour of one fanned-out webhook endpoint: the relay at deploy-hooks.webathome.org is the only internet-facing surface, and Argo CD is not exposed to the internet.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R5 \u2014 exposure and O3",
+      "description": "argocd-server is reachable behind the estate's exposure mechanism with homelab TLS and is-public: no \u2014 its Service carries is-public: \"no\" AND enable-ssl: \"yes\", and the vhost actually answers on 443 with a step-ca leaf, checked at the listener rather than at the annotation. And O3 is settled in favour of one fanned-out webhook endpoint: the relay at deploy-hooks.webathome.org is the only internet-facing surface, and Argo CD is not exposed to the internet.",
+      "verdict": "owed-to-operator",
+      "rationale": "The annotation half is confirmed by render: argocd-server's Service carries `nginx.webathome.org/server-name: \"argocd.home\"`, `is-public: \"no\"` AND `enable-ssl: \"yes\"` (render lines 32311-32313) \u2014 both annotations together, per the r1 F2 ruling. The relay's Service carries `server-name: deploy-hooks.webathome.org` and `is-public: \"yes\"` (lines 32363,32367), and the gate's exposure invariant (`check_exposure`) asserts the relay is the only Service with `is-public: \"yes\"` in the whole render. But V10's own wording requires the check to happen 'at the listener' \u2014 whether a 443 listener with a step-ca leaf actually answers `https://argocd.home/` \u2014 and no nginx-configurator vhost exists yet: no Service is live (kubectl get ns confirms no `argocd-prd` namespace, checked this session), so nothing has been configured or answered. Settles once R6's bootstrap has run and `curl -v https://argocd.home/` from inside the cluster (or from a host that resolves `*.home`) returns a step-ca certificate.",
       "evidence": [
-        "/work/DockerImages/nginx-configurator/app/annotations.py:7-35 — exposure is nginx.webathome.org/* annotations on a Service; is-public is one flag per Service, so the relay needs its own",
-        "/work/DockerImages/nginx-configurator/app/nginxconfigurator.py:137-146,182 — certificate issuance and the RFC1918 allow block are independent switches: the step-ca leaf is the `elif entry.enable_ssl` branch, and annotations.py:145 defaults enable_ssl to False when the annotation is absent, so is-public: \"no\" alone yields one listen-80 server with no certificate",
-        "/work/HelmCharts/charts/kubecoder/templates/controller-service.yaml:10-13 — the estate's internal-TLS shape is both annotations together"
+        "render (this session): lines 32311-32313 (argocd-server), 32363,32367 (relay)",
+        "kubectl get ns (this session, 2026-08-17T22:xx) \u2014 no argocd-prd namespace"
       ]
     },
     {
       "id": "V11",
-      "area": "R6 — bootstrap",
-      "description": "Bootstrap happened once, by hand (operator): clone, helm dependency build, helm install; configs/prd/argocd/prd/release.yaml carries deployed: true, autoSync: false — autoSync stays false permanently for Argo itself (D3 sharp edge) — and Argo adopted itself on first generation.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R6 \u2014 bootstrap",
+      "description": "Bootstrap happened once, by hand (operator): clone, helm dependency build, helm install; configs/prd/argocd/prd/release.yaml carries deployed: true, autoSync: false \u2014 autoSync stays false permanently for Argo itself (D3 sharp edge) \u2014 and Argo adopted itself on first generation.",
+      "verdict": "owed-to-operator",
+      "rationale": "Not done. `kubectl get ns` (this session) lists no `argocd-prd`, `argocd-hooks` or `proofdeploy-prd` namespace \u2014 nothing from this slice has been installed. close-out **A1** carries the exact bootstrap sequence (stamp Helm ownership metadata onto a hand-created `argocd-prd` namespace before `helm install argocd-prd chart --namespace argocd-prd --values config/prd/values.yaml`, release name `argocd-prd` not `argocd`) and **A2** the three OpenBao leaves and the Keycloak client that must land first. `configs/prd/argocd/prd/release.yaml` already carries `deployed: true, autoSync: false` (HelmCharts commit f9c5b5b, pushed and its `IaC/HelmCharts` push build (5859) confirmed this session that no stage was created for `argocd@prd` \u2014 the entry is correctly invisible to the Jenkins deploy path, so it will not fight the operator's manual bootstrap).",
       "evidence": [
-        "kubectl get ns (2026-08-16) — no argocd* namespace exists; nothing here describes running infrastructure"
+        "/work/AnsibleSpecs/slices/009_argocd_standup/close-out.md \u2014 A1, A2",
+        "kubectl get ns (this session) \u2014 no argocd* namespace",
+        "Jenkins IaC/HelmCharts build 5859 (this session): no 'Deploying argocd@prd' stage in the console log"
       ]
     },
     {
       "id": "V12",
-      "area": "R7 — the registry webhook",
+      "area": "R7 \u2014 the registry webhook",
       "description": "The operator created the registry webhook on HelmCharts (manual, one-off) with the shared secret, pointing at the relay's public URL.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed-to-operator",
+      "rationale": "Not done \u2014 operator, manual, one-off per R7. No GitHub webhook exists on HelmCharts pointed at the relay yet (nothing to point at: the relay is not deployed, see V11/A1, and `deploy-hooks.webathome.org` has no DNS/NAT yet, close-out A3). Settles once the operator creates the webhook at `https://deploy-hooks.webathome.org/api/webhook` with the shared secret from `eso/prd/argocd/prd/webhook#github_secret` (A2).",
+      "evidence": [
+        "/work/AnsibleSpecs/slices/009_argocd_standup/close-out.md \u2014 A3"
+      ]
     },
     {
       "id": "V13",
-      "area": "R8 — both receivers",
+      "area": "R8 \u2014 both receivers",
       "description": "A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo push visibly refreshes (argocd-server receiver).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "R8 \u2014 both receivers regenerating/refreshing on a push is Argo CD behaviour; Argo does not exist yet (V11).",
       "evidence": []
     },
     {
       "id": "V14",
-      "area": "R9 — notification on failure",
-      "description": "A deliberate sync failure produces an Alertmanager notification. Read at Alertmanager's own API: its live config is the chart's stock null sink — one empty default-receiver, no route tree — so an alert lands there and goes no further, and it carries no server-name annotation either.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R9 \u2014 notification on failure",
+      "description": "A deliberate sync failure produces an Alertmanager notification. Read at Alertmanager's own API: its live config is the chart's stock null sink \u2014 one empty default-receiver, no route tree \u2014 so an alert lands there and goes no further, and it carries no server-name annotation either.",
+      "verdict": "owed-to-operator",
+      "rationale": "R9 \u2014 an Alertmanager notification requires a real sync failure on a running Argo; none exists yet. The config is authored (V04) but firing it is live.",
       "evidence": [
-        "/work/HelmCharts/configs/prd/prometheus/prd/values.yaml:120-130 — alertmanager config sets persistence and resources only; no receivers, no route"
+        "/work/HelmCharts/configs/prd/prometheus/prd/values.yaml:120-130 \u2014 alertmanager config sets persistence and resources only; no receivers, no route"
       ]
     },
     {
       "id": "V15",
-      "area": "R10 — relative value files",
+      "area": "R10 \u2014 relative value files",
       "description": "`../config/{stage}/values.yaml` renders on the deployed Argo version (D19; fallback $values, template-only change).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "R10 \u2014 the mechanism is confirmed structurally: the ApplicationSet's `helm.valueFiles` carries `'../config/{{ index .path.segments 3 }}/values.yaml'` (render line 34375), reaching `config/prd/values.yaml` from `path: chart` exactly as D19 describes, and ProofDeploy's own `config/prd/values.yaml` carries a value whose effect is visible in its chart's render (`tests/render-chart.py`, this session: `ok: 4 objects render into proofdeploy-prd and argocd-hooks`). But R10 says 'renders on the deployed Argo version' \u2014 the repo-server actually resolving a relative `$values`-style path against a second git source is Argo's own manifest-generation behaviour, which no repo-server is running to exercise yet. The plan classifies this under A.5 ('outcome-level acceptance, not extra build work') deliberately, per P5a's own done-record: 'config/prd/values.yaml is the file R10 proves'. Structural evidence noted, not treated as sufficient.",
       "evidence": []
     },
     {
       "id": "V16",
-      "area": "R11 — the synced SHA",
+      "area": "R11 \u2014 the synced SHA",
       "description": "$ARGOCD_APP_REVISION reaches a hook Job's args via helm parameters (D30).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "R11 \u2014 confirmed structurally: the local ApplicationSet's `hook.revision` parameter is the literal string `$ARGOCD_APP_REVISION` (render line 34383), Argo's own build-time substitution syntax (D30). Whether Argo actually substitutes the synced SHA there is live substitution behaviour with no running Application to observe \u2014 same A.5 classification as V15.",
       "evidence": []
     },
     {
       "id": "V17",
-      "area": "R12 — the hook end to end",
-      "description": "The hook Job runs in argocd-hooks, under the AppProject, end to end: clone → backend → apply → exit code gates the sync.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R12 \u2014 the hook end to end",
+      "description": "The hook Job runs in argocd-hooks, under the AppProject, end to end: clone \u2192 backend \u2192 apply \u2192 exit code gates the sync.",
+      "verdict": "owed-to-operator",
+      "rationale": "R12 \u2014 the hook end to end (clone -> backend -> apply -> exit code gates the sync) needs a live PreSync run in argocd-hooks under the AppProject; nothing has synced yet.",
       "evidence": []
     },
     {
       "id": "V18",
-      "area": "R13 — the namespace guard",
-      "description": "Deleting an Application whose chart carries the Prune=false Namespace does delete that namespace (D26 — if wrong, the guard changes, not the goal).",
-      "verdict": null,
-      "rationale": "",
+      "area": "R13 \u2014 the namespace guard",
+      "description": "Deleting an Application whose chart carries the Prune=false Namespace does delete that namespace (D26 \u2014 if wrong, the guard changes, not the goal).",
+      "verdict": "owed-to-operator",
+      "rationale": "R13 \u2014 the namespace guard needs an actual Application delete against a live namespace to observe the cascade; nothing is installed yet.",
       "evidence": []
     },
     {
       "id": "V19",
-      "area": "R14 — charts.home from the repo-server",
-      "description": "The repo-server performs helm dependency build against https://charts.home trusting the homelab CA (D17; fallback plain HTTP). Per the r1 F3 ruling the trust must reach the repo-server container itself — that pod belongs to the pinned upstream subchart, so a ConfigMap the wrapper chart renders is not evidence.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R14 \u2014 charts.home from the repo-server",
+      "description": "The repo-server performs helm dependency build against https://charts.home trusting the homelab CA (D17; fallback plain HTTP). Per the r1 F3 ruling the trust must reach the repo-server container itself \u2014 that pod belongs to the pinned upstream subchart, so a ConfigMap the wrapper chart renders is not evidence.",
+      "verdict": "owed-to-operator",
+      "rationale": "R14 \u2014 the mount is confirmed structurally and this session, independently of the phase's own gate: the render's `repo-server` container (the one under `containers:` at render line 32852, not a sibling) carries `volumeMounts: [{mountPath: /etc/ssl/certs/homelab-root.crt, name: homelab-root-ca, subPath: homelab-root.crt}]` (render lines 33119-33124) sourced from a ConfigMap holding the committed `homelab-root.crt` bytes (render line 682). Per the r1 F3 ruling this is the correct surface (the container's trust store, which a `helm dependency build` subprocess consults) rather than `configs.tls.certificates`. But R14 itself asks whether `helm dependency build` against `https://charts.home` actually succeeds from inside that container \u2014 a live process inside a pod that does not exist yet. Structural mount confirmed; the live fetch is owed.",
       "evidence": [
-        "/work/Ansible/ansible/roles/baseline/files/homelab-root.crt — the source-of-truth artefact; nothing in this cluster inherits homelab CA trust, so the repo-server is wired explicitly",
-        "/work/Charts/charts/homelab-shared/Chart.yaml — homelab-shared 0.2.0 is what a consumer chart pins from https://charts.home",
-        "helm show values argo/argo-cd (chart 10.3.3 / app v3.5.1, checked 2026-08-16) — the two candidate surfaces are repoServer.volumes/volumeMounts/initContainers with the global.extraVolume* CA-bundle-over-/etc/ssl/certs example, and configs.tls.certificates, which upstream documents for repositories Argo itself resolves"
+        "/work/Ansible/ansible/roles/baseline/files/homelab-root.crt \u2014 the source-of-truth artefact; nothing in this cluster inherits homelab CA trust, so the repo-server is wired explicitly",
+        "/work/Charts/charts/homelab-shared/Chart.yaml \u2014 homelab-shared 0.2.0 is what a consumer chart pins from https://charts.home",
+        "helm show values argo/argo-cd (chart 10.3.3 / app v3.5.1, checked 2026-08-16) \u2014 the two candidate surfaces are repoServer.volumes/volumeMounts/initContainers with the global.extraVolume* CA-bundle-over-/etc/ssl/certs example, and configs.tls.certificates, which upstream documents for repositories Argo itself resolves"
       ]
     },
     {
       "id": "V20",
-      "area": "R15 — the boolean flags",
+      "area": "R15 \u2014 the boolean flags",
       "description": "Boolean deployed/autoSync behave in selector and templatePatch on the pinned version (D23), including the flag-flip generating and removing syncPolicy.automated.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "R15 \u2014 the mechanism is confirmed structurally: `templatePatch` is `{{- if .autoSync }}spec: syncPolicy: automated: ...{{- end }}` on both ApplicationSets (render lines 34405-34416), an empty patch when `autoSync` is false/absent (converts to JSON null, merges nothing per v3.5.1's patch.go, cited in P3's done-record) and a real `syncPolicy.automated` block when true. Whether the live applicationset-controller on the *pinned* v3.5.1 build actually resolves the boolean and merges the patch this way (D23's Go-template-boolean gotcha) needs the real controller running against a real entry with the flag flipped both ways \u2014 A.5, not yet possible.",
       "evidence": []
     },
     {
       "id": "V21",
-      "area": "R16 — the selector excludes unmigrated entries",
-      "description": "Entries without the reconciler: key — every unmigrated release the glob matches — are excluded by the selector. missingkey=error means a leak here breaks the whole ApplicationSet, not one app.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R16 \u2014 the selector excludes unmigrated entries",
+      "description": "Entries without the reconciler: key \u2014 every unmigrated release the glob matches \u2014 are excluded by the selector. missingkey=error means a leak here breaks the whole ApplicationSet, not one app.",
+      "verdict": "owed-to-operator",
+      "rationale": "R16 \u2014 the selector is confirmed structurally: `matchLabels: {reconciler: argo-cd, deployed: \"true\"}` on the local set's generator (render line 34349), with `missingkey=error` (V03). `ls /work/HelmCharts/configs/prd/*/*/release.yaml` this session still returns exactly the entries recorded at planning time plus the one this slice added (`configs/prd/argocd/prd/release.yaml`, `reconciler: argo-cd`, the only entry with that key). Whether the live ApplicationSet controller actually excludes the other entries (rather than, say, erroring on `missingkey=error` against a key one of them happens to define) needs the controller running, per A.5's own framing.",
       "evidence": [
-        "ls /work/HelmCharts/configs/prd/*/*/release.yaml → 15 files (2026-08-16); grep -rn reconciler /work/HelmCharts/configs/ → empty. Local-chart releases carry no release.yaml at all, so the glob matches 15 entries, not the register's ~44 — the failure mode is unchanged"
+        "ls /work/HelmCharts/configs/prd/*/*/release.yaml \u2192 15 files (2026-08-16); grep -rn reconciler /work/HelmCharts/configs/ \u2192 empty. Local-chart releases carry no release.yaml at all, so the glob matches 15 entries, not the register's ~44 \u2014 the failure mode is unchanged"
       ]
     },
     {
       "id": "V22",
-      "area": "R17 — diff quality",
-      "description": "Point a no-sync Application at an existing live release and check the live-vs-git diff reads sensibly — diff quality proven before Phase B stakes a cutover on it.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R17 \u2014 diff quality",
+      "description": "Point a no-sync Application at an existing live release and check the live-vs-git diff reads sensibly \u2014 diff quality proven before Phase B stakes a cutover on it.",
+      "verdict": "owed-to-operator",
+      "rationale": "R17 \u2014 the diff-quality proof needs a live no-sync Application pointed at an existing release; nothing is installed yet.",
       "evidence": []
     },
     {
       "id": "V23",
-      "area": "R18 — login",
+      "area": "R18 \u2014 login",
       "description": "SSO login works; local admin break-glass works (D9).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "R18 \u2014 SSO login and local-admin break-glass are live UI/auth flows against a running argocd-server; not reachable yet (no listener, V10).",
       "evidence": []
     },
     {
       "id": "V24",
-      "area": "Relay proof (a) — the ruling's added item",
+      "area": "Relay proof (a) \u2014 the ruling's added item",
       "description": "A real GitHub delivery through the public URL lands 200 with both legs green.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed-to-operator",
+      "rationale": "Relay proof (a) \u2014 needs the relay deployed, DNS/NAT/webhook live (A3), and a real GitHub delivery; none of that exists yet.",
+      "evidence": [
+        "/work/AnsibleSpecs/slices/009_argocd_standup/close-out.md \u2014 A3"
+      ]
     },
     {
       "id": "V25",
-      "area": "Relay proof (b) — the ruling's added item",
-      "description": "The partial-failure drill: scale one receiver to zero, redeliver, see red in GitHub's Recent Deliveries naming the dead leg, restore, redeliver green — proving that a missed delivery is always visible where it can be redelivered.",
-      "verdict": null,
-      "rationale": "",
+      "area": "Relay proof (b) \u2014 the ruling's added item",
+      "description": "The partial-failure drill: scale one receiver to zero, redeliver, see red in GitHub's Recent Deliveries naming the dead leg, restore, redeliver green \u2014 proving that a missed delivery is always visible where it can be redelivered.",
+      "verdict": "owed-to-operator",
+      "rationale": "Relay proof (b) \u2014 the partial-failure drill needs a live relay and two live receivers to scale/redeliver against; not installed.",
       "evidence": []
     },
     {
       "id": "V26",
       "area": "Exit criterion",
       "description": "Argo runs and manages itself; the UI is reachable via Keycloak; every proof item is checked.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "Exit criterion \u2014 Argo is not running (V11) and the UI is not reachable (V10/V23); cannot be true yet.",
       "evidence": []
     },
     {
       "id": "V27",
-      "area": "Exit criterion — the throwaway app",
-      "description": "The throwaway app demonstrated register → deploy → undeploy → unregister with the namespace cascade (D27), and both the entry and the disposable deploy repo were deleted afterwards — the repo's .kubecoder/config.yaml entry with it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "Exit criterion \u2014 the throwaway app",
+      "description": "The throwaway app demonstrated register \u2192 deploy \u2192 undeploy \u2192 unregister with the namespace cascade (D27), and both the entry and the disposable deploy repo were deleted afterwards \u2014 the repo's .kubecoder/config.yaml entry with it.",
+      "verdict": "owed-to-operator",
+      "rationale": "Exit criterion \u2014 the throwaway-app drill (register -> deploy -> undeploy -> unregister) needs R6's bootstrap first, then ProofDeploy's own registration; the drill has not started. ProofDeploy is pushed and its gate is green (this session), ready for the operator to run the drill per close-out A4.",
+      "evidence": [
+        "/work/AnsibleSpecs/slices/009_argocd_standup/close-out.md \u2014 A4",
+        "cexec iac tests/render-chart.py + validate-terraform.sh (this session, ProofDeploy): both green"
+      ]
     },
     {
       "id": "V28",
       "area": "Gates",
-      "description": "Every repo this slice touched has a green gate: ArgoCDDeploy earns a deterministic one in its first phase — a render of the wrapper chart, not a lint of it — the disposable proof repo earns one too (chart render plus Terraform validation), and HelmCharts' existing suite stays green with the estate's first reconciler: argo-cd entry present.",
-      "verdict": null,
-      "rationale": "",
+      "description": "Every repo this slice touched has a green gate: ArgoCDDeploy earns a deterministic one in its first phase \u2014 a render of the wrapper chart, not a lint of it \u2014 the disposable proof repo earns one too (chart render plus Terraform validation), and HelmCharts' existing suite stays green with the estate's first reconciler: argo-cd entry present.",
+      "verdict": "verified",
+      "rationale": "Established GREEN per the driver's r2 sweep for all four repos (Ansible, ArgoCDDeploy, HelmCharts, ProofDeploy), and reconfirmed live this session, independently: `cexec iac tests/build-deps.sh && cexec iac tests/render-chart.py` in `/work/ArgoCDDeploy` -> `ok: 68 objects render into argocd-prd and argocd-hooks`; same in `/work/ProofDeploy` -> `ok: 4 objects render into proofdeploy-prd and argocd-hooks`, plus `cexec iac tests/validate-terraform.sh` -> `Success! The configuration is valid.`. Both `.kubecoder/project.yaml` files gate `test` on the render (not a lint), per P1/P5a's done-records. HelmCharts' own suite is unaffected: pushed commit f9c5b5b triggered `IaC/HelmCharts` build 5859 this session (SUCCESS) with no stage for the new `argocd@prd` entry, confirming `_RELEASE_KEYS`/discovery skip it exactly as P6's done-record claims \u2014 read live, not asserted from the code alone.",
       "evidence": [
-        "/work/HelmCharts/.kubecoder/project.yaml — setup: poetry install --with test, test: pytest; no lint verb",
-        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:15-28,161-171 — _RELEASE_KEYS admits the Argo keys and resolve() stops validating a non-jenkins entry as a HelmCharts release"
+        "/work/ArgoCDDeploy/.kubecoder/project.yaml",
+        "/work/ProofDeploy/.kubecoder/project.yaml",
+        "cexec iac tests/render-chart.py, tests/build-deps.sh, tests/validate-terraform.sh (this session, both repos)",
+        "Jenkins IaC/HelmCharts build 5859 (this session): console log, no 'Deploying argocd@prd' stage"
       ]
     },
     {
       "id": "V29",
       "area": "Secrets discipline",
       "description": "No secret value is committed anywhere this slice touches: every credential Argo or the hook reads arrives from a named OpenBao leaf through the openbao-prd ClusterSecretStore, and the new leaves sit inside the eso AppRole's existing grant so no policy change is owed.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Grepped `/work/ArgoCDDeploy` and `/work/ProofDeploy` this session for private-key markers, AWS/GitHub/Slack token shapes: no matches in any `*.yaml`/`*.tpl`/`*.tf`/`*.tfvars` file. Every secret value Argo or the hook reads is an ExternalSecret `remoteRef` (confirmed under V06/V08/V09): `argocd-webhook` <- `eso/prd/argocd/prd/webhook#github_secret`, `argocd-repo-creds-github` <- `eso/prd/argocd/prd/git#token`, the OIDC client secret <- its own leaf, `argocd-hook-credentials` <- the 007 inventory's enumerated leaves. `openbao-prd` ClusterSecretStore is `Valid`/`ReadWrite`/`Ready` (checked live this session, `kubectl get clustersecretstore openbao-prd`), and the `eso` AppRole's existing `eso/prd/*` grant already covers every new leaf path \u2014 confirmed unchanged at `ansible/inventories/prd/group_vars/openbao.yml:91-96`, no policy edit in this slice's diff.",
       "evidence": [
-        "kubectl get clustersecretstore (2026-08-16) — openbao-prd is Valid and Ready",
-        "/work/Ansible/ansible/inventories/prd/group_vars/openbao.yml:91-96 — the eso grant's eso/prd/* glob already covers kv/eso/prd/argocd/prd/*"
+        "grep -rniE for private-key/token shapes across /work/ArgoCDDeploy and /work/ProofDeploy (this session): no matches",
+        "kubectl get clustersecretstore openbao-prd (this session): Valid, ReadWrite, Ready",
+        "/work/Ansible/ansible/inventories/prd/group_vars/openbao.yml:91-96"
       ]
     },
     {
       "id": "V30",
-      "area": "A.5 — the disposable proof app as build work (r1 F1 ruling)",
-      "description": "The throwaway app is a real deploy repo, authored as a phase with its own gate and code review rather than improvised at drill time: chart/ carrying the tf-presync hook include, the Prune=false Namespace and a homelab-shared dependency from https://charts.home; a terraform/ the hook takes through clone → backend → apply against a real managed object; and config/prd/ reached as ../config/prd/values.yaml. A deliberate sync failure and a deliberate apply failure are both reachable by flipping a committed value.",
-      "verdict": null,
-      "rationale": "",
+      "area": "A.5 \u2014 the disposable proof app as build work (r1 F1 ruling)",
+      "description": "The throwaway app is a real deploy repo, authored as a phase with its own gate and code review rather than improvised at drill time: chart/ carrying the tf-presync hook include, the Prune=false Namespace and a homelab-shared dependency from https://charts.home; a terraform/ the hook takes through clone \u2192 backend \u2192 apply against a real managed object; and config/prd/ reached as ../config/prd/values.yaml. A deliberate sync failure and a deliberate apply failure are both reachable by flipping a committed value.",
+      "verdict": "verified",
+      "rationale": "P5a shipped as its own phase with its own gate and its own code review round (per the r1 F1 ruling), not improvised at drill time \u2014 confirmed via plan.md's P5a section and `phases/P5a/code_review_r1.md`. Both deliberate failures are committed and currently disarmed, confirmed by direct read this session: `chart/values.yaml:17` `proof.breakSync: false`, gated by `chart/templates/sync-failure.yaml:1` (`{{- if .Values.proof.breakSync }}`); `config/prd/proof.tfvars:11` `break_apply = false`, gated by `terraform/main.tf:65-66`'s `precondition`. `chart/` carries the `homelab-shared.tf-presync-hook` include and a `Prune=false` Namespace (confirmed present in ProofDeploy's render, this session: `ok: 4 objects render into proofdeploy-prd and argocd-hooks`); `terraform/` manages the namespace and a Secret, gated by `tests/validate-terraform.sh` (green this session); `config/prd/values.yaml` is reached as `../config/prd/values.yaml` (V15).",
       "evidence": [
-        "/work/ArgoCDTools/presync/terraform.py:17,21-26,29-38 — a clone with no terraform/ and a clone with no config/<stage>/ are both fatal to the hook; *.tfvars are passed as -var-file in sorted order",
-        "/work/ArgoCDTools/presync/backend.py:57-72 — init supplies address/lock_address/unlock_address as -backend-config, so the repo's Terraform carries a bare backend \"http\" {}",
-        "/work/Charts/tests/consumer/ — Chart.yaml, values.yaml and seven templates, no terraform/ and no config/: a render fixture, not the worked example this repo has to be"
+        "/work/AnsibleSpecs/slices/009_argocd_standup/plan.md \u2014 P5a section and 'Done (r_)' record",
+        "/work/AnsibleSpecs/slices/009_argocd_standup/phases/P5a/code_review_r1.md",
+        "/work/ProofDeploy/chart/values.yaml:17",
+        "/work/ProofDeploy/chart/templates/sync-failure.yaml:1",
+        "/work/ProofDeploy/config/prd/proof.tfvars:11",
+        "/work/ProofDeploy/terraform/main.tf:65-66"
       ]
     }
   ]

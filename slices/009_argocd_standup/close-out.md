@@ -50,6 +50,14 @@ fails on the clone rather than on anything worth diagnosing. `/work/HelmCharts` 
 state — P6's commit is local, `origin/main` is one commit behind — and `/work/ProofDeploy` is empty
 on the remote too (**A4**). (Folded in from S10, struck below.)
 
+**Discharged by the test phase.** All four repos were pushed this pass — `Ansible` `bd8c26f`,
+`ArgoCDDeploy` `415a0c4` (new branch, first push), `HelmCharts` `f9c5b5b`, `ProofDeploy` `b265fa3`
+(new branch, first push) — so the paragraph above is now historical. `origin/main` resolves in all
+four; the bootstrap has something to clone. Confirmed live the same session: `kubectl get ns` still
+shows no `argocd-prd`/`argocd-hooks` namespace (the bootstrap itself remains an operator action, see
+below), and `IaC/HelmCharts` build `5859` — triggered by the `HelmCharts` push — created no stage for
+`argocd@prd`, so P6's entry sat inert through a real pipeline run exactly as its done-record claims.
+
 Helm writes the release Secret into the release namespace before it applies any of the chart's
 resources, so a plain `helm install argocd-prd chart --namespace argocd-prd` has nowhere to write it
 while `argocd-prd` does not exist. `--create-namespace` does not resolve it either: that creates the
@@ -173,6 +181,13 @@ webhook has no pushes to deliver, and the first sync fails on a clone rather tha
 drill is trying to observe. The same holds for `ArgoCDDeploy` and **A1**. (Folded in from S10,
 struck below.)
 
+**Discharged by the test phase**, together with **A1**: `ProofDeploy` was pushed this pass (new
+branch `main` at `b265fa3`), so `origin/main` resolves and the ApplicationSet's `repoURL` has
+something to clone once it is registered. `cexec iac tests/render-chart.py` and
+`tests/validate-terraform.sh` were re-run live against the pushed commit and are both green. Nothing
+else in this entry changes — the registry entry, the webhook (**A3**) and the delete-afterwards
+keystrokes are all still owed.
+
 Three further keystrokes hang off the entry beyond the drill itself. The repo needs its GitHub
 webhook pointed at the relay (**A3**) before R8's deploy-repo leg can be observed. When the proof is done,
 A.5's "delete both afterwards" means the registry entry, the GitHub repository **and** its
@@ -227,6 +242,39 @@ credential read and therefore the operator). Worth running once before the first
 state, because a mismatch surfaces as state `iac` cannot decrypt rather than as a failure.
 
 Provenance: code-writer, P4; ArgoCDDeploy `config/prd/values.yaml`
+Disposition:
+
+### N3 — the test phase pushed all four repos and read every build it triggered
+
+Per the testing strategy doc's §4, all four repos the slice touched were pushed:
+`Ansible` `bd8c26f` (already had `origin/main`, fast-forwarded), `HelmCharts` `f9c5b5b`
+(fast-forwarded), and `ArgoCDDeploy` `415a0c4` / `ProofDeploy` `b265fa3` (both new branches — their
+GitHub repositories had no refs before this pass, per **A1**/**A4**).
+
+Four builds fired off the push, all read to completion:
+
+- `AaC/Ansible` #91 and `AaC/HelmCharts` #187 — the architecture-regeneration pipelines
+  (`Jenkinsfile.architecture`), unrelated to `iac-on-push`/deploy despite the similar name. Both
+  `SUCCESS`.
+- `IaC/Build-Main` #138 — this **is** `iac-on-push` (Jenkins displays it under a different name than
+  the Jenkinsfile's own header comment suggests): `terraform plan` on `terraform/prd` came back
+  "No changes. Your infrastructure matches the configuration.", `check-protected-vms.sh` ran and
+  found nothing slated for destroy/replace, `Finished: SUCCESS`. See **B17** for a latent bug in this
+  same stage's shell, found while reading the log.
+- `IaC/HelmCharts` #5859 — the real deploy pipeline, triggered because `AaC/Architecture` regenerated
+  `docs/architecture/helm-charts.yaml` off the `HelmCharts` push and that commit's own downstream
+  deploy fired in turn. Read start to finish: every stage except `webathome-org@prd` rendered empty
+  (`[Pipeline] { (Deploying X@prd) }` with no body — the changed-file check found nothing to do), and
+  there is **no stage at all** for `argocd@prd` — confirming P6's done-record claim (`_RELEASE_KEYS`
+  admits the entry, discovery skips it) against a real pipeline run rather than against the code
+  alone. The one real deploy, `webathome-org@prd` (redeploying `architecture-viewer` with the
+  refreshed doc), is routine and unrelated to this slice's content. `Finished: SUCCESS`.
+
+No apply, no `bao kv put`, no Keycloak action and no `ansible-playbook` ran this session — the
+operator boundary held throughout, confirmed against this session's own tool-call history.
+
+Provenance: test-agent, test phase round 1; Jenkins builds `AaC/Ansible#91`, `AaC/HelmCharts#187`,
+`IaC/Build-Main#138`, `IaC/HelmCharts#5859`
 Disposition:
 
 ## Bugs
@@ -620,6 +668,41 @@ Found in P6 review round 1, checking the new tree-wide assertions against `_RELE
 than against the tree as it stands.
 
 Provenance: code-reviewer, P6 round 1; phases/P6/code_review_r1.md F2
+Disposition:
+
+### B17 — `Jenkinsfile.iac-on-push`'s destroy-check guard silently never fires · nit · Ansible
+
+`Jenkinsfile.iac-on-push`'s single stage runs, inline under `iac -c`:
+
+```
+rc=0
+terraform plan -out=/tmp/plan.tfplan -no-color -detailed-exitcode || rc=$?
+if [[ $rc -ne 0 && $rc -ne 2 ]]; then exit $rc; fi
+terraform show -json /tmp/plan.tfplan > /tmp/plan.json
+check-protected-vms.sh /tmp/plan.json srviac
+```
+
+`iac -c` runs this snippet under a plain POSIX `sh` (dash), which does not implement `[[`. Witnessed
+in `IaC/Build-Main#138` (this session's push-triggered run, commit `bd8c26f`): after a clean
+`terraform plan` (`rc=0`, "No changes"), the log shows `sh: 7: [[: not found` immediately where the
+`if` line runs. Dash's `command not found` is exit 127, which `if` reads as "condition false", so the
+`then exit $rc` branch **never executes, regardless of what `rc` actually is** — the guard is dead
+code. `check-protected-vms.sh` itself is unaffected (its own `#!/usr/bin/env bash` shebang runs it
+under bash) and did execute and pass this session.
+
+Consequence is narrow, not a safety bypass: if `terraform plan` ever returned a real error (`rc=1`,
+not the "changes present" `rc=2`), the guard's silent no-op would let execution fall through to
+`terraform show -json /tmp/plan.tfplan`, which would itself fail under `set -e` (no plan file to
+read) — so the pipeline still goes red, just one step later and with a more confusing message than
+"terraform plan failed" would have been. `check-protected-vms.sh` is never starved of a valid plan
+by this bug; it only ever runs after a successful `terraform show`.
+
+Not in this slice's diff — `Jenkinsfile.iac-on-push` is untouched by any of slice 009's commits.
+Found incidentally while reading the build this test phase's push triggered, per the testing
+strategy doc's instruction to wait for `iac-on-push` and read it, not because a red run pointed at
+it.
+
+Provenance: test-agent, test phase round 1; Jenkins `IaC/Build-Main#138` console log
 Disposition:
 
 ## Open questions and rulings
