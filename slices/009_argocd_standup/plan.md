@@ -593,7 +593,7 @@ Settled beyond the plan's text:
   new derivation still goes red under a drifting release name (mutation-tested).
 - A PreSync hook precedes the chart's Namespace — close-out **B10**, P5a corrected in place.
 
-### P5 — The public webhook edge: the relay's manifests
+### P5 — The public webhook edge: the relay's manifests ✅ DONE 2026-08-17
 
 Target: `../ArgoCDDeploy`
 
