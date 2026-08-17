@@ -163,15 +163,15 @@ The "year 9" rotation event needs both the outgoing and the incoming root truste
 - **Drift comparison is by fingerprint set, not byte diff.** Once the bundle carries two roots, `/roots.pem`'s ordering is no longer pinned to the repo's. The `iac-scheduled-drift` "Homelab CA root drift" stage parses both sides and asserts the SHA-256 fingerprint sets are equal.
 - **On-host shape: one file per cert.** Debian's `update-ca-certificates` walks `/usr/local/share/ca-certificates/` and processes only one PEM block per `.crt` file; a multi-cert bundle dropped there is silently truncated. The `baseline` ca-trust task splits the bundle and writes each cert as `/usr/local/share/ca-certificates/homelab-root-<fp8>.crt`, where `<fp8>` is the first 8 hex chars of the cert's SHA-256 fingerprint. Naming by fingerprint (not by position-in-bundle) keeps filenames stable across bundle reordering and across removal of a root post-rotation, so neither churns `update-ca-certificates -f` runs.
 - **The install task reconciles, not just writes.** baseline enumerates desired certs (from the bundle) against present `homelab-root-*.crt` files on disk and `state: absent`s the diff. Without this, the retired root lingers on every host past the cutover and is trusted forever. The existing self-heal grep against `/etc/ssl/certs/ca-certificates.crt` generalises to a loop over the desired set.
-- **HelmCharts holds two copies of the same file** — `/work/HelmCharts/homelab-root.crt` and `/work/HelmCharts/charts/nginx/files/ca/homelab-root.crt`. A rotation that updates the in-repo bundle here must update both files there in the same change window, ordered *before* the new root starts appearing in step-ca's `/roots.pem` (otherwise the drift pipeline fires until HelmCharts catches up). Eventual fix is to collapse the duplication — single source via submodule, build-time fetch from this repo, or moving the canonical copy under HelmCharts and having Ansible read from there — recorded as a follow-up rather than blocking the next rotation.
+- **Four out-of-repo copies of the same file exist**, all byte-identical to the Ansible canonical copy — `/work/HelmCharts/homelab-root.crt`, `/work/HelmCharts/charts/nginx/files/ca/homelab-root.crt`, `/work/ArgoCDTools/image/homelab-root.crt` (the Argo CD presync hook image) and `/work/DockerImages/kube-coder-dev-base/homelab-root.crt`. A rotation that updates the in-repo bundle here must update all four in the same change window, ordered *before* the new root starts appearing in step-ca's `/roots.pem` (otherwise the drift pipeline fires until the others catch up); the two image copies additionally need their images rebuilt to take effect. Eventual fix is to collapse the duplication — single source via submodule, build-time fetch from this repo, or moving the canonical copy under HelmCharts and having Ansible read from there — recorded as a follow-up rather than blocking the next rotation.
 - **The KubeCoder controller image bakes its own copy** — `/work/KubeCoder/controller/homelab-root.crt`, the sixth out-of-repo copy. The controller validates `https://ca.home` when it asks step-ca to sign an environment pod's SSH host certificate, and its base image (`python:slim`) carries stock Debian roots only; the root goes into the image's trust store rather than onto the chart's configuration surface. It rotates like the other image-baked copies: editing the file is not the change landing — the image has to be rebuilt and the controller Deployment rolled onto the new tag. It ships with KubeCoder's SSH transport work, so the rotation runbook lists it ahead of the file itself.
-- **Runbook**: `docs/runbooks/step-ca-root-rotation.md`. Documents the cutover sequence — generate new root offline, install in step-ca alongside the old, add to the bundle in both repos, confirm the drift pipeline goes green, fleet-wide `baseline` apply to land the second cert, soak, then remove the old root from step-ca + both repos + apply again to drop it from hosts. Parallels the existing "Intermediate rotation" section in `step-ca-bootstrap.md` but at a different scope and cadence.
+- **Runbook**: `docs/runbooks/step-ca-root-rotation.md`. Documents the cutover sequence — generate new root offline, install in step-ca alongside the old, add to the bundle in every copy the runbook inventories (and rebuild the images carrying one), confirm the drift pipeline goes green, fleet-wide `baseline` apply to land the second cert, soak, then remove the old root from step-ca + every copy + apply again to drop it from hosts. Parallels the existing "Intermediate rotation" section in `step-ca-bootstrap.md` but at a different scope and cadence.
 
 TODOs gating the next rotation:
-- Write `docs/runbooks/step-ca-root-rotation.md`.
+- Finish `docs/runbooks/step-ca-root-rotation.md`. It exists and carries the settled half — the full inventory of artefacts a root change moves (canonical copy, four out-of-repo copies, the images that consume the cert without holding a copy, the parallel four-copy `terraform.rc` set) and the ordering constraint. The step-by-step cutover procedure is still owed, and is blocked on the two mechanism items below.
 - Update the `baseline` ca-trust task to read the bundle, split by cert, name by fingerprint, reconcile against `/usr/local/share/ca-certificates/homelab-root-*.crt`. Generalise the self-heal grep over the desired set.
 - Update the `iac-scheduled-drift` "Homelab CA root drift" stage from byte diff to fingerprint-set comparison.
-- Decide and implement the HelmCharts deduplication mechanism, or accept the two-copy maintenance burden by documenting both paths in the runbook.
+- Decide and implement the deduplication mechanism for the four out-of-repo copies, or accept the maintenance burden by documenting every path in the runbook.
 
 ## Bootstrap-tier ciphertext — public repo posture
 
@@ -302,6 +302,23 @@ No taints. Affinity is opt-in: workloads that need a capability declare `require
 Today: microk8s's `dashboard` addon (the upstream `kubernetes/dashboard` project bundled with the snap). The operator depends on the web UI day-to-day; codified into `microk8s_addons` for prd and dev.
 
 **Revisit after the plan**: [Headlamp](https://headlamp.dev/) (CNCF, modern UI, plugin system) deployed as a Helm chart in `HelmCharts`. Same web-UI workflow, version ownership shifts off microk8s's release cadence onto the operator's Helm flow. `k9s` (terminal UI) and OpenLens / desktop apps are off the table — operator wants browser-based.
+
+### The prd apiserver trusts Keycloak as an OIDC issuer
+
+**Yes — the prd microk8s apiserver gets OIDC.** Ruled by the operator at triage, 2026-08-16. The driver is SSO on Headlamp, which forwards the user's `id_token` straight to the kube-apiserver rather than validating it itself: chart-side OIDC flags achieve nothing on their own, so either the apiserver trusts the issuer or there is no Headlamp SSO to have.
+
+**What that trust requires**, on the prd apiserver:
+
+- `--oidc-issuer-url=https://auth.ginbov.nl/realms/homelab` — the same `homelab` realm every other estate consumer authenticates against.
+- `--oidc-client-id=headlamp`.
+- A username claim and a groups claim.
+- RBAC binding the mapped Keycloak group.
+
+So this is an Ansible/microk8s change plus RBAC, not a Helm one; Headlamp SSO is a consequence of it, not the delivery mechanism for it. It presupposes "k8s clusters enforce RBAC" above — under `AlwaysAllow` a group-mapped binding is inert, and the OIDC identity would be fully authorized rather than scoped.
+
+**The rejected alternative is the status quo**: Headlamp authenticating with a static admin-user ServiceAccount token pasted into its login form — a long-lived cluster-admin bearer token moved by copy-paste, with no per-user identity behind a request and no revocation short of deleting the ServiceAccount.
+
+Implementation is separate work; this entry records the ruling only.
 
 ## Environment mapping
 

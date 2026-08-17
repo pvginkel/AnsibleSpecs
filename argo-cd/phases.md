@@ -45,7 +45,9 @@ Four tracks, ordered by dependency; 1 and 2 can run in parallel.
 - [ ] Settle the inventory of a run's whole environment: every key the container reads, the leaf
       and property behind each secret, and the non-secret per-cluster provider facts that ride
       the same Secret. A.4 authors the ExternalSecret from it, and no phase before A.5 exercises
-      both halves together.
+      both halves together. **Written up in
+      [`credential-inventory.md`](../slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md)**
+      — slice 007's attachment is the source of truth; work from it rather than re-deriving.
 
 ### A.3 — HelmCharts coexistence code (D38)
 
@@ -79,7 +81,8 @@ until someone installs the optional `test` dependency group by hand.
       `argocd-hook-credentials` from A.2's enumerated leaves **plus the non-secret per-cluster
       provider configuration as `template` literals** — one object composes a run's whole
       environment — the `tf-presync` ServiceAccount and its RBAC (PV get/list/patch), permitted
-      as an AppProject destination (D33).
+      as an AppProject destination (D33). Author the ExternalSecret from A.2's inventory:
+      [`credential-inventory.md`](../slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md).
 - [ ] Repository credential Secrets via ESO (D40) — after checking whether anonymous read
       suffices anywhere.
 - [ ] Expose argocd-server behind the estate ingress with homelab TLS; decide **O3** (one
