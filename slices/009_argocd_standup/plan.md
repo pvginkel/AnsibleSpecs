@@ -565,6 +565,34 @@ run's whole environment, and the `tf-presync` identity the Job runs under — so
   `apply` deep inside a sync (`presync/proc.py:24-26`, exit 1), which is precisely the failure R12
   must not be diagnosing.
 
+**Done.** The chart creates `argocd-hooks` and everything D33's inventory says it holds:
+`chart/templates/hook-namespace.yaml` carries the Namespace, the `argocd-hook-credentials`
+ExternalSecret, the `tf-presync` ServiceAccount and its ClusterRole/ClusterRoleBinding; the
+environment itself is data in `config/prd/values.yaml`; `tests/render-chart.py` grows three checks
+over the same render, negative-tested with 25 mutations, each red on its own assertion.
+
+Settled beyond the plan's text:
+
+- **The age public key is no longer owed.** Read off srviac by the runbook's own procedure, not
+  derived and not an operator handoff — 007's inventory Status line is stale (close-out **N2**).
+- **The grant is a ClusterRoleBinding, and cluster-wide is load-bearing.** The identity is fixed at
+  `system:serviceaccount:argocd-hooks:tf-presync` while the objects land in `<app>-<stage>`
+  namespaces that cannot be enumerated at render time. Its rules are the whole lifecycle on the
+  three core kinds the estate's Terraform manages through the kubernetes provider —
+  `persistentvolumes`, `secrets`, `namespaces` — and the gate refuses a wildcard, so a fourth kind
+  is a deliberate edit. Blast radius is close-out **S6**.
+- **`persistentvolumes: get` is not the dead verb S4 called it.** The reattach issues no
+  single-object GET; the kubernetes provider's read of a managed volume does.
+- **The hook's ExternalSecret lives with the rest of the `argocd-hooks` inventory**, not in
+  `chart/templates/external-secrets.yaml` — P2's "every ExternalSecret in one file" no longer
+  holds. ESO's `target.template.data` *replaces* the fetched map, so all 22 keys are named there,
+  the secret half by `{{ .KEY }}` reference and the non-secret half as literals bound by the gate
+  to `_providers/clusters.yaml`'s `prd` block.
+- **`check_release_name` reads the release namespace off `argocd-cmd-params-cm`.** With two
+  Namespaces in the render its bare `next()` picked `argocd-hooks` and failed 11 assertions; the
+  new derivation still goes red under a drifting release name (mutation-tested).
+- A PreSync hook precedes the chart's Namespace — close-out **B10**, P5a corrected in place.
+
 ### P5 — The public webhook edge: the relay's manifests
 
 Target: `../ArgoCDDeploy`
@@ -616,10 +644,15 @@ ordering constraints) — until it does, this `Target:` does not resolve.
   (`terraform.py:52-57`); the kubeconfig is synthesised from the pod ServiceAccount before `init`,
   so `provider "kubernetes" {}` needs no configuration (`kubeconfig.py:62-69`). Build to that
   contract rather than rediscovering it at drill time.
-- **The Terraform has to manage something real.** R12 is clone → backend → apply → exit code, which
-  an empty directory proves nothing about. One trivial namespaced object the kubernetes provider
-  manages, in the app's own namespace, is enough — and whatever kind it picks is what P4's
-  ServiceAccount must be permitted to manage. The run writes state to the estate's real state repo
+- **The Terraform has to manage something real, and P4 has fixed what it may be.** R12 is clone →
+  backend → apply → exit code, which an empty directory proves nothing about. The `tf-presync`
+  ClusterRole permits three core kinds and no others — `persistentvolumes`, `secrets` and
+  `namespaces` — so the trivial object is a `kubernetes_secret_v1` in the app's own namespace; a
+  ConfigMap would 403. **A PreSync hook runs before every sync wave**, so on a first deploy the
+  chart's `sync-wave: "-1"` Namespace does not exist yet and a namespaced apply has nowhere to
+  land: either the same Terraform creates it with `kubernetes_namespace_v1` — the grant covers
+  that, and the chart's manifest adopts the object on the sync that follows — or the drill's first
+  apply fails on a missing namespace (close-out **B10**). The run writes state to the estate's real state repo
   under `argocd/<repo>/<stage>/terraform.tfstate` (`backend.py:22-23,44-54`), so the state outlives
   the repo unless the operator clears it.
 - **The chart is a migrated app in miniature**: a `Chart.yaml` dependency on `homelab-shared` from

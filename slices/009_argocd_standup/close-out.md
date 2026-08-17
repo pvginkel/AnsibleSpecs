@@ -125,6 +125,33 @@ The full finding and the refutation record are in /work/AnsibleSpecs/slices/009_
 Provenance: code-writer P1, fix round after review r1; the review verdict's findings list in state.json
 Disposition:
 
+### N2 — the age public key was read off srviac rather than handed over, so nothing is owed
+
+The plan's ordering constraints make the operator's age public key an input to P4 — "ask for it
+before that phase, not after" — and slice 007's `credential-inventory.md:110-112` still says "The
+age **public** key handoff below is still owed". It was not handed over, and P4 did not stop: the
+same file's §"The operator's keystrokes" and
+[`docs/runbooks/iac-agent.md`](/work/Ansible/docs/runbooks/iac-agent.md) §"State encryption keypair
+(SOPS/age)" both name reading it off srviac as the *preferred* way to obtain it — it is a public
+key sitting in plaintext, and deriving it with `age-keygen -y` is the discouraged alternative
+because that one is a credential read. So P4 ran the runbook's command,
+`ssh ansible@srviac 'sudo grep -A1 TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS /etc/iac/secrets.yaml'`, and
+committed the value it printed.
+
+Two consequences. The handoff is discharged — nothing is owed and no operator keystroke is pending
+for it. And `credential-inventory.md`'s Status line is now stale in a way that would make a later
+reader think slice 009 is blocked on an input it already has; correct it when the doc set is next
+touched.
+
+What is *not* proven here is D32's invariant, that the recipient is the public half of the keypair
+`SOPS_AGE_KEY` holds. The gate asserts only that the value is a well-formed age public key; the
+match-check is the runbook's (`bao kv get -field=age_secret_key … | age-keygen -y`, which needs a
+credential read and therefore the operator). Worth running once before the first hook apply writes
+state, because a mismatch surfaces as state `iac` cannot decrypt rather than as a failure.
+
+Provenance: code-writer, P4; ArgoCDDeploy `config/prd/values.yaml`
+Disposition:
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->
@@ -296,6 +323,62 @@ is correct — that helper emits no `target.template` and so cannot express the 
 Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F3
 Disposition:
 
+### B9 — the gate never reads the repository a generated Application syncs · minor · ArgoCDDeploy
+
+`chart/templates/applicationsets.yaml:96-97` is where every generated Application learns what to
+sync — `repoURL: '{{ .repo }}'` and `targetRevision: '{{ .targetRevision }}'` — and nothing in
+`tests/render-chart.py` asserts either. `check_local_set` (`:458-473`) covers `source.path`,
+`helm.valueFiles` and the four hook parameters; `check_applicationsets` covers the name, the
+destination, the project, the finalizer, the selector, the generator and the patch. The upstream
+set has both its `repoURL`s pinned (`:488`, `:498`) but not its chart version, `targetRevision:
+'{{ .upstream.version }}'` at `:166`.
+
+Confirmed by mutation on `20a32660d48f`, both leaving the gate green (`ok: 61 objects render into
+argocd-prd`, exit 0): repointing `:96-97` at the registry repo and a literal `main` — after which
+every generated Application syncs `HelmCharts` `main` at `path: chart`, a directory that does not
+exist, so all of them fail at once and Argo cannot adopt itself — and swapping `:166` for the git
+branch, after which every upstream-chart app asks its Helm repository for chart version `main`.
+
+Nothing shipped is affected: the committed template matches `design.md:155-273` field for field.
+The cost is later — P4, P5 and P6 keep editing this file, and it is the repo Argo syncs *itself*
+from with `autoSync: false`, so a regression in these two fields would surface at the operator's
+bootstrap sync rather than in `kc project test`. Every neighbouring field already has an assertion
+of exactly this shape, so this is a hole in an otherwise complete pattern.
+
+Found while mutation-testing P3's new gate checks.
+
+Provenance: code-reviewer, P3 round 1; phases/P3/code_review_r1.md F1
+Disposition:
+
+### B10 — a PreSync hook runs before the chart's Namespace, so a first deploy's Terraform has nowhere to write · minor · AnsibleSpecs
+
+D25 makes the app's namespace a tracked chart manifest at `sync-wave: "-1"`, and `CreateNamespace`
+stays off. Argo runs PreSync hooks to completion **before the Sync phase begins**, and sync waves
+order resources *within* that phase — so `-1` is still after the hook, not before it. On a first
+deploy of a migrated app the namespace `<app>-<stage>` therefore does not exist while the hook's
+`terraform apply` runs.
+
+That is fine for the estate's cluster-scoped Terraform (the three static-PV modules, and the
+reattach, which touches nothing namespaced). It is not fine for the namespaced half:
+`kubernetes_secret_v1` is what the `s3-storage` and `postgres-db` modules use to hand an app its
+credentials, and an apply that creates one in a namespace that does not exist fails — the failure
+gating the sync that would have created the namespace. Every migrated app that provisions a
+database or a bucket hits it on its first deploy, and only on its first.
+
+The way out is that the app's own Terraform creates the namespace (`kubernetes_namespace_v1`,
+which P4's grant covers) and the chart's manifest adopts it on the sync that follows — the shape
+D29 already relies on, where teardown leaves durable state behind and spin-up reattaches. That
+makes the chart's Namespace manifest and Terraform two writers of one object, which is worth
+stating in `design.md` rather than leaving each migration to rediscover.
+
+Stated from Argo's documented phase ordering, **not** witnessed: no Argo CD exists yet. P5a is the
+first place it can be observed, and its bullet is corrected in place to design for it.
+
+Found while settling what P4's ServiceAccount has to be permitted, and where.
+
+Provenance: code-writer, P4; plan.md P4 and P5a
+Disposition:
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -409,4 +492,34 @@ sync.
 Found while writing P3's AppProject and tying the gate's whitelist assertion to the render.
 
 Provenance: code-writer, P3; ArgoCDDeploy `chart/templates/appproject.yaml`
+Disposition:
+
+### S6 — the hook's ServiceAccount is granted cluster-wide, and `secrets` is the term that matters
+
+P4 binds `tf-presync` with a **ClusterRoleBinding**, because the objects a deploy repo's Terraform
+creates land in `<app>-<stage>` — a namespace derived per sync, created by that app's own chart,
+and not enumerable when Argo's chart renders. A `RoleBinding` in `argocd-hooks` would grant nothing
+where the work happens. The rules are as narrow as that shape allows: the full lifecycle on
+`persistentvolumes`, `secrets` and `namespaces`, which is every kind the estate's Terraform manages
+through the kubernetes provider (`grep -rn 'resource "kubernetes' /work/HelmCharts`, 2026-08-17),
+and the gate refuses a wildcard so a fourth kind is a deliberate edit.
+
+The consequence to know: **any Terraform any deploy repo runs can read and write every Secret in
+the cluster**, `argocd-prd`'s repo credential and OIDC client secret among them, and can delete any
+namespace. D41 already says write access to a deploy repo branch is arbitrary Terraform execution
+bounded by what `argocd-hooks` holds; this widens that bound past the credentials in the Secret to
+the cluster's own. It is not the dominant term — the classic PAT with `repo` on every private
+repository still is — but it is the one D33's "app namespaces in turn hold no deploy-time
+credentials at all" does not cover.
+
+The narrowing that exists: bind the same ClusterRole per app namespace with a RoleBinding the
+**library chart** renders beside the hook Job, so an app grants the hook access to its own
+namespace and nowhere else. It costs a `homelab-shared` change (`/work/Charts`, a different repo
+and outside this slice) and grants an app nothing it could not already do — its chart can create
+RoleBindings in its own namespace today, since the AppProject's namespaced whitelist is
+deliberately unset. Worth deciding while Phase B is still one migrated app rather than ten.
+
+Found while writing P4's RBAC and asking what a `Role` in `argocd-hooks` would actually permit.
+
+Provenance: code-writer, P4; ArgoCDDeploy `chart/templates/hook-namespace.yaml`
 Disposition:
