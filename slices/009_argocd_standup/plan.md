@@ -529,7 +529,7 @@ Settled beyond the plan's text:
 - **`hooks.namespace` is defined once**, in `chart/values.yaml` — P4 reads it there.
 - The `media` chart's chart-managed PersistentVolume is a Phase B whitelist input — close-out **S5**.
 
-### P4 — `argocd-hooks`: the namespace a PreSync run lands in
+### P4 — `argocd-hooks`: the namespace a PreSync run lands in ✅ DONE 2026-08-17
 
 Target: `../ArgoCDDeploy`
 
