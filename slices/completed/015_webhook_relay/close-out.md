@@ -78,7 +78,7 @@ automatically off exactly these three commits with no registration step, and fin
 `kaniko --context webhook-relay --no-push` dry run (also re-run green this session).
 
 Provenance: test-agent, test round 1; Jenkins `DockerImages` #2485.
-Disposition:
+Disposition: I'm not going to file the rest.
 
 ### N2 — a stray unpushed `Ansible` commit surfaced by the driver's push check · Ansible
 
@@ -93,7 +93,7 @@ protected-VM destroy check, both green). No live check from this pass needed red
 this commit touches was checked live here.
 
 Provenance: test-agent, test round 1 (driver nudge); Jenkins `IaC/Build-Main` #137.
-Disposition:
+Disposition: I'm not going to file the rest.
 
 ## Bugs
 
@@ -123,7 +123,9 @@ buys; a source-level guard (a lint rule, or a comment the next reader is expecte
 realistic shape of any fix.
 
 Provenance: code-reviewer, P1 round 1 (F2, Major severity / advisory impact); `phases/P1/code_review_r1.md`
-Disposition:
+Disposition: I would consider B1 but honestly this is homelab territory and I think I can survive
+without it. Do consider leaving a note in the folder. If I ever do move it out into its own project,
+it can gain a proper test suite and include this test.
 
 ### B2 — two request shapes escape the relay's stated refusal matrix · nit · DockerImages
 
@@ -148,7 +150,7 @@ shipped code (`HEAD /healthz` → `200`; `POST /api//webhook` and `POST /api/./w
 `Location: /api/webhook`) and `README.md`'s refusal table now states them, attributed to the
 standard library's mux rather than to this service. The product observation stands unchanged: the
 binary still behaves this way, and nothing pins it.
-Disposition:
+Disposition: I'm not going to file the rest.
 
 ### ~~B3 — "the estate's only internet-facing service" is false as written~~ — fixed in session by consult 1 (`6e01ede`), struck by consult 1 · nit · DockerImages
 
@@ -213,7 +215,7 @@ Python and pure-Dockerfile directories), so what "test" means repo-wide is a gen
 question, not a copy-paste.
 
 Provenance: plan-writer, planning round 1; `plan.md` P1 and the `--dry-run` output
-Disposition:
+Disposition: I'm not going to file the rest.
 
 ### S2 — `webhook-relay`'s architecture edge toward the two Argo CD receivers is owed to 009 · DockerImages / ArgoCDDeploy
 
@@ -237,7 +239,7 @@ relations to `webhook-relay/architecture.yaml` — relay `app:` → each receive
 wire. That is a two-relation edit to a file this slice already shipped, not new design.
 
 Provenance: code-writer, P1 round 1; `webhook-relay/architecture.yaml` and P1's done-record in `plan.md`
-Disposition:
+Disposition: I'm not going to file the rest.
 
 ### S3 — V08 cannot be earned in the phase that judges it: the test phase checks off `verification.json` before the doc phase writes R7 · AIWorkflow
 
@@ -257,7 +259,7 @@ doc-owed items — will recur in this repo, where the `argo-cd/` document set is
 deliverable.
 
 Provenance: consult 1; `state.json` (`test_rounds: 0` at consult time), `run_loop.py`, `agents/test-agent.md`
-Disposition:
+Disposition: Please file S3 as an operator action with only the AIWorkflow label.
 
 ### S4 — pending slices quote the pre-relay `argo-cd/` set verbatim · AnsibleSpecs
 
@@ -286,4 +288,5 @@ already reacts to pushes and can relay the webhook internally"* — both state t
 position and are dated artifacts, not live documents.
 
 Provenance: doc-writer, doc phase; the `argo-cd/{decisions,design,phases,history}.md` diff
-Disposition:
+Disposition: Regarding S4. 009 has been planned already, and I want to run it in a moment. If you
+want to make changes to it, feel free to do so now.
