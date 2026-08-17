@@ -106,6 +106,28 @@ Keycloak.
 Provenance: code-writer, P2; ArgoCDDeploy `chart/templates/external-secrets.yaml`, `config/prd/values.yaml`
 Disposition:
 
+### A3 — the relay's public edge: a DNS record, a NAT rule, and the hook URL every repository registers
+
+P5 ships the relay's Service with `nginx.webathome.org/server-name: deploy-hooks.webathome.org` and
+`is-public: "yes"`, which is the whole of what any repo in this estate can do for a public name. The
+three things that make it reachable are outside every repo:
+
+- a **public DNS record** for `deploy-hooks.webathome.org` pointing at the estate's internet address;
+- a **router NAT rule** forwarding 80 and 443 to the nginx LB at `10.2.1.7` — 80 included, because
+  `is-public: "yes"` takes the certbot branch and Let's Encrypt validates over HTTP-01;
+- the **registered hook URL**, `https://deploy-hooks.webathome.org/api/webhook`, on the registry repo
+  (R7's one-off) and on every deploy repo D39's Terraform adds in Phase B. Never a receiver's own
+  URL: argocd-server keeps `is-public: "no"` and is not reachable from GitHub at all.
+
+The webhook secret GitHub is given is the same value as `kv/eso/prd/argocd/prd/webhook#github_secret`
+(**A2**) — the relay verifies it at the edge and both receivers re-verify it.
+
+Until all three land, the relay renders and runs but no delivery reaches it, and A.5's two relay proof
+items (a real delivery landing 200 with both legs green; the partial-failure drill) cannot be run.
+
+Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, `config/prd/values.yaml`
+Disposition:
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -379,6 +401,35 @@ Found while settling what P4's ServiceAccount has to be permitted, and where.
 Provenance: code-writer, P4; plan.md P4 and P5a
 Disposition:
 
+### B11 — the gate binds the hook's per-cluster literals to `clusters.yaml` by value, but not by key set · minor · ArgoCDDeploy
+
+P4's design rests on `_providers/clusters.yaml` staying the source of truth for the non-secret half
+of `argocd-hook-credentials`, with the gate binding the chart's copy to it rather than restating it
+(`ArgoCDDeploy tests/render-chart.py:66-69`; the done-record at `plan.md:589-590`). It binds half of
+that. `check_hook_environment` (`tests/render-chart.py:883-897`) reads the `prd` block and compares
+values, but it iterates the hard-coded tuples `HOOK_ENV_LITERALS` and `HOOK_TF_VARS` (`:75-88`),
+never `prd["env"]` / `prd["tf_vars"]` — so a **changed** value is caught and an **added** key is
+not.
+
+Witnessed rather than reasoned: adding `HOMELAB_DRIFT_PROBE: probe-value` to `clusters.yaml`'s
+`prd.env` left the gate green (`ok: 66 objects render into argocd-prd and argocd-hooks`, exit 0),
+while changing `HOMELAB_CEPH_POOL: k8s` to `k8s-drift` went red as designed. `clusters.yaml` was
+restored.
+
+The consequence is the one the chart's own comment names — "`envFrom` is all-or-nothing and a
+missing key surfaces at `terraform apply`, deep inside a sync"
+(`chart/templates/hook-namespace.yaml:48-51`). Keys do get added to that file per cluster: the `prd`
+block carries `HOMELAB_BACKUP_SERVER_URL` and the `dev` block does not. Nothing is missing today —
+all 13 literals are present and byte-equal — so the exposure is on the next change to a file in
+another repo, at which point CI in both repos stays green and the first migrated app's PreSync
+`apply` fails on a provider that was configured for the deploy CLI's path and not for the hook's.
+
+Found in P4 review round 1, by mutating `clusters.yaml` in both directions rather than trusting the
+comment.
+
+Provenance: code-reviewer, P4 round 1; phases/P4/code_review_r1.md F1
+Disposition:
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -522,4 +573,60 @@ deliberately unset. Worth deciding while Phase B is still one migrated app rathe
 Found while writing P4's RBAC and asking what a `Role` in `argocd-hooks` would actually permit.
 
 Provenance: code-writer, P4; ArgoCDDeploy `chart/templates/hook-namespace.yaml`
+Disposition:
+
+### S7 — the age public key is in the leaf ESO already reads, so the recipient need not be a committed literal
+
+D32's invariant is that `TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS` and `SOPS_AGE_KEY` are one keypair.
+P4 delivers them by two different mechanisms: the private half is fetched from
+`iac/tf-backend#age_secret_key` (`ArgoCDDeploy config/prd/values.yaml:234-236`), the public half is
+committed as a literal (`:259-263`), on the premise — 007's `credential-inventory.md` §"Non-secret",
+[`docs/runbooks/iac-agent.md:201-207`](/work/Ansible/docs/runbooks/iac-agent.md) — that the public
+half lives only in srviac's `/etc/iac/secrets.yaml` and "every new consumer takes it as a plaintext
+literal".
+
+**That premise is stale.** `kv/iac/tf-backend` carries the public half as a field of the very leaf
+this ExternalSecret already fetches, and the estate's other consumer of the same daemon resolves it
+from there rather than pasting it: `/work/Ansible/scripts/tf-backend.sh:10-12` documents
+`age_public_key — age public key (encrypts state) -> TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS`, and `:46`
+reads exactly that field. The `eso` AppRole grant that carries `SOPS_AGE_KEY`
+(`ansible/inventories/prd/group_vars/openbao.yml:107`) is the same grant, so no policy or leaf work
+stands between the two forms — one more `data:` entry in place of one literal.
+
+What it buys is rotation safety, which the runbook itself flags as unexercised
+(`iac-agent.md:219`, "Rotation is not a paste … this path has not been exercised either"): rotating
+updates one leaf and every `!bao` consumer of it at once, while a committed recipient stays whatever
+was pasted — the hook then encrypts to the *old* recipient while holding the *new* identity, which
+is precisely D32's failure mode. The gate cannot catch it: `tests/render-chart.py:106,908-911` can
+only check the string is shaped like an age public key, never that it pairs with the private half
+beside it, and the runbook's answer to that gap is a manual match-check (`:209-215`) — a procedure
+rather than a property.
+
+Nothing is wrong today: the committed value is byte-identical to the recipient every tfstate in
+`pvginkel/TerraformState` is already encrypted to (verified against
+`helm-charts/dev/_ci/prd/infra.tfstate:148`), and the literal form is what the plan settled and N2
+records. The choice, and whether the two docs' "not in a leaf" wording should be corrected, is the
+operator's.
+
+Found in P4 review round 1, cross-checking the committed recipient against the live state repo and
+against every other consumer of the same leaf.
+
+Provenance: code-reviewer, P4 round 1; phases/P4/code_review_r1.md F2
+Disposition:
+
+### S8 — `ArgoCDDeploy` carries no architecture producer, so the relay's edges stay unmodelled
+
+Slice 015 recorded (its close-out **S2**) that `webhook-relay/architecture.yaml` carries no
+consumption edge toward the two receivers, because cross-producer references resolve by UUID and Argo
+CD is modelled by no producer yet — and named "009's `ArgoCDDeploy` producer" as where that edge
+belongs. This slice builds no such producer: nothing in the plan asks for one, and P1 deliberately
+gave the repo no Jenkins-side anything (`.kubecoder/project.yaml`, "no Jenkinsfile and no `jenkins:`
+key"), which is where every other repo's architecture producer is wired.
+
+So after this slice the federated model holds an internet-facing `webhook-relay` app pointing at
+nothing, and no model of Argo CD at all — the control plane that will own every deploy in the estate.
+Slice 014 is the architecture-producers slice; this is an input to it, or to whichever slice first
+gives `ArgoCDDeploy` a pipeline.
+
+Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, 015 close-out S2
 Disposition:

@@ -618,6 +618,34 @@ reachable from the internet.
   is a `$argocd-webhook:githubSecret` reference to that same key. The relay takes a `secretKeyRef`
   at it — one object, three readers.
 
+**Done.** `chart/templates/webhook-relay.yaml` carries the relay's Deployment and Service, its image
+and replica count are `relay.*` in `chart/values.yaml` and its public hostname is `relay.serverName`
+in `config/prd/values.yaml`; `tests/render-chart.py` grows `check_relay` over the same render — 22
+mutations, each red on its own assertion.
+
+Settled beyond the plan's text:
+
+- **The tag is `2485`** — the only webhook-relay build the registry holds (`/v2/webhook-relay/tags/list`,
+  image created 2026-08-17), so R6's "the tag must exist" is already true. The pin lives in
+  `chart/values.yaml` beside `Chart.yaml`'s `argo-cd` pin rather than in `config/{stage}`: the
+  relay's version is not a stage fact, and the gate refuses anything but `registry:5000/webhook-relay:<digits>`.
+- **The receiver URLs are derived from the release, not configured.** Both Services are named from
+  `.Release.Name`, so a literal would outlive a release rename and 502 every delivery. The gate
+  resolves each leg against the Services in the same render — scheme, host, path, and a port that
+  Service actually publishes — so an upstream chart bump that moved the receiver port fails the gate
+  instead of the drill (witnessed: `applicationSet.service.port: 7001` goes red).
+- **argocd-server is reached on `:80`, never 443** (close-out **B3**): `server.insecure` leaves the
+  port named `https` in front of a listener that no longer speaks TLS, and the relay treats a 3xx as
+  that leg's own answer rather than following it.
+- **The Service publishes 8080 and carries `target-port: "8080"`** — that annotation names the
+  *Service* port, not the container's, and the configurator defaults it to 80, which this Service
+  does not publish.
+- **`maxUnavailable: 0` beside the two replicas.** GitHub does not auto-redeliver, so a roll that
+  left the public endpoint with no ready replica would drop pushes into Recent Deliveries alone.
+- **The gate now pins the whole exposure claim, not the relay's half**: exactly one Service in the
+  render carries `is-public: "yes"`, so argocd-server turning public fails here.
+- Public DNS, the NAT rule and the registered hook URL are operator keystrokes — close-out **A3**.
+
 ### P5a — The disposable proof app: a deploy repo the A.5 drill can actually exercise
 
 Target: `../ProofDeploy`
