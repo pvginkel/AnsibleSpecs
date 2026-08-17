@@ -85,14 +85,23 @@ until someone installs the optional `test` dependency group by hand.
       [`credential-inventory.md`](../slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md).
 - [ ] Repository credential Secrets via ESO (D40) — after checking whether anonymous read
       suffices anywhere.
-- [ ] Expose argocd-server behind the estate ingress with homelab TLS; decide **O3** (one
-      fanned-out webhook endpoint vs two hooks on the registry repo).
+- [ ] Expose argocd-server behind the estate ingress on an internal `.home` name with homelab
+      TLS — the UI only. It is **not** published, and no webhook reaches it from outside (D49).
+- [ ] Deploy the webhook relay in `argocd-prd`, pinned to a `registry:5000/webhook-relay:<n>`
+      tag (slice 015 ships the image; its `README.md` is the contract): Deployment — stateless,
+      so ≥2 replicas and `RollingUpdate` — with `WEBHOOK_SECRET` from the `webhook.github.secret`
+      leaf and `ARGOCD_WEBHOOK_URL` / `APPLICATIONSET_WEBHOOK_URL` naming the two in-cluster
+      receivers, probes on `GET /healthz`, and a Service annotated
+      `nginx.webathome.org/server-name: deploy-hooks.webathome.org` +
+      `nginx.webathome.org/is-public: "yes"`. The public DNS record and the router NAT rule are
+      operator actions outside every repo.
 - [ ] **Bootstrap, once, by hand** (operator): clone, `helm dependency build`, `helm install`;
       add `configs/prd/argocd/prd/release.yaml` with `deployed: true, autoSync: false` —
       `autoSync` stays false **permanently** for Argo itself (D3 sharp edge). Argo adopts
       itself on first generation.
 - [ ] Operator creates the registry webhook on HelmCharts (manual, one-off) with the shared
-      secret.
+      secret, pointed at `https://deploy-hooks.webathome.org/api/webhook` like every other hook
+      (D49).
 
 ### A.5 — verification (the proof items, consolidated)
 
@@ -100,6 +109,10 @@ Use a throwaway app entry + tiny deploy repo; delete both afterwards.
 
 - [ ] A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo
       push visibly refreshes (argocd-server receiver).
+- [ ] A real GitHub delivery through `https://deploy-hooks.webathome.org/api/webhook` lands
+      `200` in *Recent Deliveries*, both legs green.
+- [ ] The partial-failure drill: scale one receiver to zero, redeliver, see the delivery red
+      with the dead leg named in the `502` body; restore it, redeliver green.
 - [ ] A deliberate sync failure produces an Alertmanager notification.
 - [ ] `../config/{stage}/values.yaml` renders on the deployed Argo version (D19; fallback
       `$values`, template-only change).

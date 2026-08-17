@@ -48,8 +48,9 @@ manual `kubectl` edits alive during debugging. Cutover is governed per app by th
 generator.** Decided (qa Q6/Q12; notes overrule lifecycle's "generator polling stays on"). This
 is the worked example of a visible deviation (brief, goal post 3): Argo's default polls. The
 accepted cost is that a dropped webhook is stale-but-green, not delayed — recorded in design.md;
-Triage **#507** revisits with a slow fallback poll. Registry pushes reach the
-applicationset-controller receiver; deploy-repo pushes reach argocd-server.
+Triage **#507** revisits with a slow fallback poll. A registry push is what the
+applicationset-controller acts on and a deploy-repo push what argocd-server acts on, though the
+relay delivers every push to both (D49).
 
 **D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes the review's
 deploy-wait-swallows-failures notifications gap; target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
@@ -165,8 +166,8 @@ intermediate shape, revisited in the endgame (D43).
 Accepted cost: those apps' chart version promotes by a registry commit rather than a branch
 advance, splitting their promotion unit. Recorded upgrade path, not adopted: a matrix generator
 reading `config/{stage}/` from the deploy repo at its own revision restores full branch
-isolation, at the cost of a second generator layer and deploy-repo webhooks also reaching the
-applicationset-controller.
+isolation, at the cost of a second generator layer — deploy-repo deliveries already reach the
+applicationset-controller, since the relay duplicates every one (D49).
 
 **D23 — `deployed` and `autoSync` are plain YAML booleans.** Decided 2026-08-12 (operator
 question, verified against the applicationset controller source). The post-selector flattens
@@ -383,12 +384,35 @@ of failing loud.
 Decided (lifecycle, bootstrap argument reworked for D6). `github_repository_webhook`, created on
 the first PreSync apply, surviving undeploy harmlessly, removed when destroy eventually exists.
 Bootstrap works without generator polling: registration is a registry push, which the registry
-repo's manually-created webhook delivers to the applicationset-controller; the first sync then
-runs PreSync and creates the deploy repo's hook. Costs: `integrations/github` joins the
+repo's manually-created webhook delivers — through the relay (D49) — to the
+applicationset-controller; the first sync then runs PreSync and creates the deploy repo's hook.
+Costs: `integrations/github` joins the
 provider set, and the hook's git token needs `admin:repo_hook` — folded into D41's deliberate
 token scoping, not assumed. Where one deploy repo backs several stages, exactly one stage's
 state owns the hook — a `manage_webhook` tfvar, true once per repo — since the resource is
 repo-scoped and the states per-stage (D32).
+
+**D49 — One public endpoint: GitHub delivers to a relay, and Argo CD stays off the internet.**
+Decided 2026-08-17 (operator, 009's planning session; consult and slice 015 — closes O3). Every
+hook — the registry repo's manual one and each deploy repo's D39 Terraform one — registers the
+same URL, `https://deploy-hooks.webathome.org/api/webhook`. Behind it sits `webhook-relay`, a
+stateless Go service built from `DockerImages` as `registry:5000/webhook-relay:<n>`: it verifies
+GitHub's `X-Hub-Signature-256` HMAC-SHA256 in constant time against the shared secret — configured
+with the same value as `webhook.github.secret` in `argocd-secret`, one leaf and not a second
+secret — then forwards the raw body verbatim and concurrently to both receivers, answering GitHub
+`200` only when both returned 2xx and `502` naming the failed leg otherwise. That is the point of
+the shape: *Recent Deliveries* stays the ledger for **both** receivers, which is what D6's
+accepted stale-but-green cost leans on. The relay keeps no state — no retries, no queue, no
+buffering — never parses the payload and filters no event type. argocd-server keeps an internal
+`.home` name and is not published; the relay is the only internet-facing surface in `argocd-prd`,
+and what an unauthenticated caller reaches is an HMAC over raw bytes in a binary holding no
+credential toward GitHub and none toward the cluster, rather than Argo's multi-provider webhook
+parser inside the process that holds the cluster (CVE-2024-40634, CVE-2025-59537). No source-IP
+allowlist and no rate limiting: HMAC is strictly stronger than source IP, and GitHub's published
+hook ranges would need a freshness mechanism. Costs: one more component in every trigger path, and
+the public DNS record and router NAT rule are manual operator actions, like all public DNS here.
+The rejected alternatives are in [`history.md`](history.md); slice 015 ships the image, A.4 deploys
+it.
 
 **D40 — Repository credentials are ESO leaves.** Decided (lifecycle). Argo needs registered
 credentials for the registry repo (the generator reads it) and each deploy repo (the repo-server
@@ -538,9 +562,6 @@ version-poller. Decided by endgame time; design.md carries the per-tool notes so
 has an obvious shape when it comes. Also in this bucket (qa Q3's caveat): the `configs/dev`
 chart-debugging tree and the ability to hand-run a chart or its Terraform ad hoc — the
 operator's srvk8sdev workflow must survive HelmCharts' deletion in some form.
-
-**O3 — Webhook ingress arrangement** — two hooks registered on the registry repo, or one
-endpoint fanned out to both receivers. A Phase A decision; nothing downstream depends on which.
 
 **O4 — Whether a GitHub App replaces the hook's classic PAT** (D41). The PAT is `repo` on every
 private repository because fine-grained tokens do not cross resource owners; an App installation

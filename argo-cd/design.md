@@ -71,8 +71,8 @@ config/
 An ordinary deploy repo where the app happens to be Argo CD (D3). `chart/` names the upstream
 `argo-cd` chart in `Chart.yaml` `dependencies:` with a pinned version and adds the estate's own
 manifests on top: the two ApplicationSets, the AppProject, the notifications configuration, the
-SSO wiring (D9). Its `terraform/` carries Argo's own infrastructure — the Keycloak client to
-start.
+SSO wiring (D9) and the webhook relay's Deployment, Service and public annotation (D49). Its
+`terraform/` carries Argo's own infrastructure — the Keycloak client to start.
 
 Bootstrap happens exactly once, by hand: clone, `helm dependency build`, `helm install`, create
 the registry entry. From then on the ApplicationSet generates an Application for `argocd/prd`
@@ -272,28 +272,51 @@ file per app-stage bounds any single edit's blast radius; `Prune=false` keeps a 
 would guard harder but is incompatible with undeploy-by-flag, and undeploy-by-flag is the
 lifecycle (D27).
 
-## Webhooks — push-only, two receivers
+## Webhooks — push-only, through the relay
 
-Polling is off everywhere, including the generator (D6).
+Polling is off everywhere, including the generator (D6). Argo CD is not published: **every hook
+registers one URL**, `https://deploy-hooks.webathome.org/api/webhook`, the public endpoint of the
+webhook relay, which verifies GitHub's signature and duplicates each verified delivery to both
+receivers (D49).
 
 | Push to | Must reach | Effect |
 | --- | --- | --- |
 | **HelmCharts** (the registry) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
 | **Each deploy repo** | argocd-server, `/api/webhook` | refresh and sync the affected Application |
 
-Both share the secret at `webhook.github.secret` in `argocd-secret`. The registry hook is
-created manually, once. Each deploy repo's hook is a `github_repository_webhook` resource in
-that repo's own Terraform (D39), so the PreSync apply creates it on first sync — bootstrap
+Both receivers get every delivery, and the one a push does not concern no-ops on it cheaply —
+argocd-server matches the pushed repo against Application sources, the applicationset-controller
+against its generators. That is why the relay carries no routing table and gains no edit per
+migrated app.
+
+Both share the secret at `webhook.github.secret` in `argocd-secret`, and re-verify what the relay
+already verified. The relay is configured with that same value — one leaf, not a second secret.
+The registry hook is created manually, once. Each deploy repo's hook is a
+`github_repository_webhook` resource in that repo's own Terraform (D39), so the PreSync apply
+creates it on first sync — bootstrap
 rides the registry hook, needing no polling. The resource is repo-scoped while stages apply
 the same `terraform/` under separate state keys (D32), so **exactly one stage's state owns
 it** — a `manage_webhook` variable in `config/{stage}/*.tfvars`, true once per repo — or the
-second stage's first apply collides with GitHub's hook-already-exists. Whether the two receivers sit behind one fanned-out
-endpoint or two registered hooks is O3, decided at Phase A standup.
+second stage's first apply collides with GitHub's hook-already-exists.
+
+**The relay's contract**, in full in `DockerImages/webhook-relay/README.md`: two routes only,
+`POST /api/webhook` and `GET /healthz`; the HMAC-SHA256 is taken over the exact bytes read off the
+wire — the same bytes forwarded verbatim — and compared in constant time; everything else is
+refused structurally before any semantic decision (`401` missing or invalid signature, `411` no
+`Content-Length`, `413` over the 4 MiB cap, `405`/`404` for a method or path it does not serve).
+Both legs `2xx` → `200`; anything else → `502` naming each failed leg and why, which *Recent
+Deliveries* shows. The per-leg timeout is 4 s, so the worst case stays inside GitHub's 10-second
+window. The cap and the timeout are source constants: the whole of the relay's configuration is
+the shared secret and the two receiver URLs, and it holds no credential toward GitHub and none
+toward the cluster. It is stateless, so more than one replica is safe — and with two, a roll of
+`argocd-prd` opens no window in which deliveries are dropped. Its Deployment, Service and public
+annotation are ArgoCDDeploy chart content, pinned to a `registry:5000/webhook-relay:<n>` tag.
 
 **The consequence to respect:** a dropped webhook is not a delay — it is stale-but-green,
 followed by the deploy landing at an arbitrary later moment when an unrelated refresh
 re-resolves the branch. Accepted deliberately (D6); Triage **#507** revisits a slow fallback
-poll; GitHub's *Recent Deliveries* page is where a miss is visible and redeliverable.
+poll; GitHub's *Recent Deliveries* page is where a miss is visible and redeliverable — for both
+receivers, which is what both-or-`502` buys.
 
 ## Sync semantics
 
@@ -507,6 +530,9 @@ None blocks the pilot; each needs its decision by endgame.
   Self-heal OFF is not what saves them — it earns its place keeping debug edits alive (D5).
 - **A dropped webhook is stale-but-green, then a surprise deploy** — the webhook section above;
   accepted (D6), revisited as Triage #507.
+- **The relay sits in every trigger path** (D49). If it is down, no push triggers anything —
+  but visibly: GitHub records the delivery failed, where it stays redeliverable. Renders and
+  manual syncs are unaffected; Argo reads git without any webhook.
 - **`helm` stops being the way to inspect a migrated app.** No release, no `helm history`, no
   `helm rollback`; inspection is the Argo UI, rollback is git or Argo's own history. (Argo's
   rollback refuses while auto-sync is on — flip the registry's `autoSync` off first.)

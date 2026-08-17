@@ -24,19 +24,40 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 015 shipped `webhook-relay` — a new in-house app in `DockerImages`, and a Go one against a
+repo of Python services. Its single public endpoint verifies GitHub's `X-Hub-Signature-256`
+HMAC-SHA256 in constant time over the exact bytes off the wire, then forwards those same bytes
+verbatim and concurrently to argocd-server and the applicationset-controller, answering GitHub
+`200` only when both accepted the delivery and `502` naming each failed leg otherwise. It ships
+with its Dockerfile (a `debian:bookworm-slim` runtime carrying the binary and CA certificates and
+nothing else), a README that is 009's contract, a hand-authored `architecture.yaml`, and a suite
+pinning GitHub's documented wire format against stub receivers. Creating the directory was the
+whole of wiring it into the pipeline: the first push published `registry:5000/webhook-relay:2485`
+with no registration step.
+
+The slice also closed the migration's O3. GitHub delivers to the relay and Argo CD is never
+exposed to the internet — now **D49**, with the target model in `argo-cd/design.md`, the narrative
+in `history.md`, and A.4's "homelab TLS" exposure bullet corrected, which as written asked for an
+internal `.home` name the router does not forward while D39 needed GitHub to reach the receivers.
+
+Nothing runs yet: slice 009 pins the tag and authors the Deployment, Service and the
+`deploy-hooks.webathome.org` exposure, and the operator's DNS record, NAT rule and secret leaf are
+its keystrokes, not this slice's.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: nothing is owed the operator here. The image is built and published, and everything the
+relay needs to run live — the manifests, the DNS record, the NAT rule and the shared secret leaf —
+is 009's, per this slice's cut line.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: an uneventful one-phase run — both entries are about pushes rather than the product. N1 is
+the good news: the first push proved live that a new directory is the whole of wiring an image into
+the pipeline. N2 is housekeeping the driver caught in a repo this slice never touched.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -75,7 +96,9 @@ Disposition:
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->
+Focus: B1 first — on the estate's one internet-facing service, the single security property among
+the five the suite pins is the one it would not notice being removed. B2 is two harmless edge shapes
+Go's `ServeMux` produces. Both are in `DockerImages`, both advisory; B3 was fixed in session.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -119,6 +142,11 @@ guess which way to rule", and these are exactly that guess — now also asserted
 README as a claim the binary does not make.
 
 Provenance: code-reviewer, P1 round 1 (F1, Minor severity / advisory impact); `phases/P1/code_review_r1.md`
+Resolution: the documentation half is closed. The doc phase re-probed both shapes against the
+shipped code (`HEAD /healthz` → `200`; `POST /api//webhook` and `POST /api/./webhook` → `307`
+`Location: /api/webhook`) and `README.md`'s refusal table now states them, attributed to the
+standard library's mux rather than to this service. The product observation stands unchanged: the
+binary still behaves this way, and nothing pins it.
 Disposition:
 
 ### ~~B3 — "the estate's only internet-facing service" is false as written~~ — fixed in session by consult 1 (`6e01ede`), struck by consult 1 · nit · DockerImages
@@ -148,7 +176,9 @@ Disposition: no action needed
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer -->
+Focus: none. Everything this slice had to settle — the language, the endpoint path, the two served
+routes, the wire format, the CI posture, the R5 split — was ruled in the planning session and is
+recorded in `plan.md`; the doc phase needed no operator decision.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -156,7 +186,9 @@ Focus: <!-- doc-writer -->
 
 ## Suggestions
 
-Focus: <!-- doc-writer -->
+Focus: S2 is the one with a home already — two relations 009 adds when it first models Argo CD.
+S4 is the doc debt this phase leaves: pending slices quote the pre-relay `argo-cd/` set verbatim.
+S1 and S3 are tooling, and neither is this repo's to fix alone.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -224,4 +256,33 @@ doc-owed items — will recur in this repo, where the `argo-cd/` document set is
 deliverable.
 
 Provenance: consult 1; `state.json` (`test_rounds: 0` at consult time), `run_loop.py`, `agents/test-agent.md`
+Disposition:
+
+### S4 — pending slices quote the pre-relay `argo-cd/` set verbatim · AnsibleSpecs
+
+R7's edits moved four documents in the `argo-cd/` set: O3 closed as D49, `design.md`'s webhook
+section now describes the relay, A.4's exposure bullet was replaced and A.5 gained two proof items.
+The slices already cut from that set quote the *old* text verbatim, and a slice's `slice.md` is the
+operator's triaged ask rather than a doc-phase surface, so they were left alone:
+
+- `slices/009_argocd_standup/slice.md:51-52` quotes A.4's replaced bullet (*"Expose argocd-server
+  behind the estate ingress with homelab TLS; decide **O3**"*), `:273-291` re-quotes design.md's
+  "Webhooks — push-only, two receivers" section wholesale, and `:381-382` still lists O3 among the
+  questions the slice must settle. 009's own `plan.md` already carries the relay rulings — the
+  hostname, the `is-public` Service, the tag pin — so its planner has both positions in one folder,
+  disagreeing.
+- `slices/backlog/010_kubecoder_deploy_repo/slice.md:167-172`,
+  `011_kubecoder_ci_version_pins/slice.md:90-96` and `012_kubecoder_argo_cutover/slice.md:152`
+  re-quote the same design.md block for their own requirements.
+- Unrelated to the relay but in the same neighbourhood: `009/plan.md:186` and `:455` link the
+  consult through `../backlog/015_webhook_relay/…`, a path that never existed — 015 sits at
+  `slices/015_webhook_relay/`.
+
+Cheapest fix is to re-cut 009's quoted extracts from the current set when it is next planned; the
+others are Phase B and have time. Left deliberately, for the record: `argo-cd/archive/` (the frozen
+originals) and `reviews/2026-07-iac-review/gitops.md:76-80` — *"No new ingress needed: Jenkins
+already reacts to pushes and can relay the webhook internally"* — both state the pre-relay
+position and are dated artifacts, not live documents.
+
+Provenance: doc-writer, doc phase; the `argo-cd/{decisions,design,phases,history}.md` diff
 Disposition:

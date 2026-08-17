@@ -26,13 +26,14 @@ the detail.
 
 ## Pending
 
-Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered:
+Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered and 015 cut out of 009's planning session on 2026-08-16 (015 → 009):
 
-- **[009](slices/backlog/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
+- **[009](slices/009_argocd_standup/slice.md)** — Argo CD standup and the Phase A proof: ArgoCDDeploy, both ApplicationSets, the `releases` AppProject, `argocd-hooks`, self-adoption and the eleven proof items (phases.md A.4+A.5; #124, interlocks #68).
 - **[010](slices/backlog/010_kubecoder_deploy_repo/slice.md)** — KubeCoderDeploy repo and image pinning: the pilot's chart, rebuilt Terraform and stage config, plus the seven `Build-Main` pins (phases.md B.1+B.2; #124).
 - **[011](slices/backlog/011_kubecoder_ci_version_pins/slice.md)** — KubeCoder CI: version-pin commits instead of deploys, via a new JenkinsPipelineUtils method (phases.md B.3; #124).
 - **[012](slices/backlog/012_kubecoder_argo_cutover/slice.md)** — KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124).
 - **[014](slices/backlog/014_deploy_repo_architecture_producers/slice.md)** — Architecture producers for the deploy repos: each deploy repo gains its own `Jenkinsfile.architecture`, HelmCharts' generator stops emitting for migrated app-stages, so a migrated app does not vanish from the federated model (major; settles the `gen-architecture` half of O2; needs 009+010, lands before 012; #124).
+- **[015](slices/015_webhook_relay/slice.md)** — The webhook relay: the `webhook-relay` image in `DockerImages`, one public endpoint that verifies GitHub's HMAC and fans every delivery out to both Argo CD receivers, so Argo CD itself stays off the internet (settles O3 as D49; 009 pins the tag and deploys it; #124).
 
 ## Completed
 

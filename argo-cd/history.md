@@ -186,6 +186,35 @@ is made visible and decided. The same session sharpened the brief itself: **lear
 technology and strategy first-hand is the motivation**; the prd stage-skew outage class is
 only the trigger that set the timing.
 
+## The webhook edge: exposing argocd-server → a relay in front of it (O3 → D49)
+
+O3 was filed as a registration convenience — two hooks on the registry repo or one fanned-out
+endpoint, "a Phase A decision; nothing downstream depends on which". Slice 009's planning session
+(2026-08-16) found the assumption under it broken instead. A.4 said to expose argocd-server
+"behind the estate ingress with homelab TLS", which in this estate means the internal step-ca on a
+`.home` name the router does not forward; A.4's next bullet, A.5's first proof item and D39 all
+need GitHub to reach the receivers from the internet. Asked to resolve it, the operator declined
+the exposure outright: *"It feels like a bad idea opening up argo cd to the internet. I feel a
+limited application to handle web hooks, that also handles the fan out, is the right call."*
+
+The consult that followed — kept with slice 015 — ruled out the near-fits first. nginx `mirror`
+works mechanically, subrequest headers and raw body included, but the mirrored response is
+discarded, so *Recent Deliveries* reads green whenever the primary leg succeeded: it amputates,
+for half the fan-out, the visibility D6's stale-but-green cost is accepted against. It also
+inverts under slowness — nginx holds the main response until the mirror finishes, so a slow
+receiver fails its healthy sibling's delivery — and it means template surgery on the shared
+internet-facing data plane. The smee/Hookdeck class puts a third-party SaaS in the deploy path,
+in an estate that deliberately removed its last cloud dependency; `adnanh/webhook` is a
+hook-to-shell runner, so fanning out means a curl script per delivery with mangled response
+fidelity; and relaying through Jenkins — the "no new ingress needed" option qa Q6 raised and the
+operator had already declined — consumes the delivery with no raw signed body left to forward,
+through the system D1 is retiring from CD.
+
+What remains is small, and the smallness *is* the argument: an HMAC over raw bytes in a binary
+holding no credential, standing in front of Argo's multi-provider webhook parser — whose record
+is unauthenticated crashes an attacker reaches by choosing the provider header (CVE-2024-40634,
+CVE-2025-59537). O3 closes as D49. Slice 015 shipped the image on 2026-08-17; A.4 deploys it.
+
 ## Gate-1 amendments worth remembering
 
 - **Alertmanager replaced Telegram** as the notifications target (D7); `processors` pinned to 2
