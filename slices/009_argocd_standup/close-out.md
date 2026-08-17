@@ -521,6 +521,37 @@ Found running P5a's lint verb for the first time against a consumer of the libra
 Provenance: code-writer, P5a; ProofDeploy `tests/lint.sh`, `chart/templates/tf-presync-hook.yaml`
 Disposition:
 
+### B15 — the proof repo's gate accepts a *commented-out* `backend "http" {}` · minor · ProofDeploy
+
+`tests/render-chart.py:342-352` is the assertion that keeps a hook run's Terraform state in the
+estate's state repo: it requires `terraform/` to carry a bare `backend "http" {}`, because the hook
+supplies `address`, `lock_address` and `unlock_address` as `-backend-config` at init
+(`/work/ArgoCDTools/presync/backend.py:57-72`). It reads the raw file text and
+`re.search`es for the block, so a comment satisfies it as well as a block does.
+
+Witnessed: replacing `terraform/main.tf:18`'s `  backend "http" {}` with `  # backend "http" {}`
+leaves the whole gate green — `tests/render-chart.py` prints `ok: 4 objects render into
+proofdeploy-prd and argocd-hooks` and exits 0, and `tests/validate-terraform.sh` exits 0, because
+`terraform init -backend=false` plus `terraform validate` have no opinion about a missing backend.
+The file was restored.
+
+The failure it fails to catch is silent. Replaying the hook's own init against the mutated
+configuration, Terraform answers `Warning: Missing backend configuration` and `Terraform has been
+successfully initialized!` — exit **0**, not an error — and then applies against local state on the
+Job pod's ephemeral disk. The first sync succeeds and writes nothing to
+`argocd/ProofDeploy/prd/terraform.tfstate`; the next plans from empty state and fails creating a
+namespace that already exists.
+
+Nothing shipped is affected: the committed block is real. This is coverage of V30's "a `terraform/`
+the hook takes through clone → backend → apply". The neighbouring `provider "kubernetes" {}` grep
+has the same shape and does not matter the same way — with no provider block Terraform configures
+the provider implicitly from the same `KUBE_CONFIG_PATH`.
+
+Found in P5a review round 1, by mutating the file the assertion reads rather than trusting it.
+
+Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F1
+Disposition:
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -743,4 +774,53 @@ chart, and this is where it would be stated.
 Found in P5 review round 1, comparing the relay's pod spec against the rest of its own render.
 
 Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F1
+Disposition:
+
+### S10 — A4's drill runbook does not name the push the whole drill starts with
+
+**A4** above is the operator's runbook for A.5's register → deploy → undeploy → unregister drill. It
+names three keystrokes beyond the drill itself — the registry entry at
+`configs/prd/proofdeploy/prd/release.yaml`, the GitHub webhook pointed at the relay (**A3**), and the
+delete-afterwards set — and does not name pushing `ProofDeploy` to `origin/main`.
+
+`git ls-remote origin` in `/work/ProofDeploy` returns **nothing**: the GitHub repository still has no
+refs at all, the empty-repo state `plan.md:239-248` records and that P5a's branch did not change.
+Until the push happens every keystroke A4 lists is inert — the ApplicationSet generates an
+Application whose `repoURL` resolves to a repository with no `main`, the webhook has no pushes to
+deliver, and the first sync fails on a clone rather than on anything the drill is trying to observe.
+The same holds for `ArgoCDDeploy` and **A1**'s "clone, `helm dependency build`, `helm install`", so
+this is a slice-wide assumption rather than a P5a invention — but A4 is the entry a reader reaches
+for when running this repo's drill, and it is the one place the prerequisite would be stated. One
+line closes it.
+
+Found in P5a review round 1, checking what A4 assumes against the repo's actual remote state.
+
+Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F2
+Disposition:
+
+### S11 — `audit-prd-orphans` counts an Argo-managed release as a Helm release, and from Phase B on that is wrong
+
+`audit_prd_orphans.desired_state()` walks `configs/prd/` itself rather than going through
+`discover_releases()`, and it reads `release.yaml` for exactly one key —
+`has_chart = ("chart" not in rel) or (rel.get("chart") is not None)`
+(`/work/HelmCharts/tools/chart_tools/audit_prd_orphans.py:127-152`). It never looks at
+`reconciler:`. So the entry P6 adds puts `argocd-prd` into both `desired["namespaces"]` and
+`desired["helm_releases"]`, and the tool diffs the second against `helm list` output
+(`:360-361`), printing anything desired-but-not-live as missing.
+
+For Argo itself that lands right by coincidence: R6's bootstrap *is* a real `helm install`, and the
+release secret survives Argo's self-adoption, so the live side carries `argocd-prd` too. It stops
+being right in Phase B. An Argo-managed app is rendered and applied, never installed, so it has no
+Helm release at all — every migrated app will report as a missing Helm release while its namespace
+and its workloads are healthy, and the count grows with each migration. The reconciler-blind read is
+what makes that report wrong; this entry is only the first case to exercise it.
+
+Cost today is nothing: `audit-prd-orphans` is a hand-run diagnostic against the live cluster, not
+part of any gate or pipeline, and its Argo line currently reads correctly. The fix is one
+`read_reconciler()` call in `desired_state` — the same call `discover_releases()` already makes —
+which belongs with whichever slice migrates the first real app, not here.
+
+Found in P6, checking every reader of `configs/prd/` that does not go through `discover_releases()`.
+
+Provenance: code-writer, P6; HelmCharts `tools/chart_tools/audit_prd_orphans.py:127-152,360-361`
 Disposition:

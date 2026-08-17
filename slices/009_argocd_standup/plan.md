@@ -763,6 +763,32 @@ that the ApplicationSet generates `argocd-prd` and Argo adopts itself on first g
   `configs/prd/<app>/prd/release.yaml` *is* A.5's register → deploy → undeploy → unregister drill,
   live, on the operator's keystroke.
 
+**Done.** `configs/prd/argocd/prd/release.yaml` is the estate's first `reconciler: argo-cd` entry —
+the five keys, no `chart:` of any kind — and `tests/test_prd_tree.py` grows three checks over the
+real tree, negative-tested with nine mutations, each red on its own assertion.
+
+Settled beyond the plan's text:
+
+- **`targetRevision: main`, not `prd`.** D34's dev-tracks-`main` / prd-tracks-`prd` split is
+  explicitly per-app scope, and `ArgoCDDeploy` carries one stage and one branch; a `prd` branch
+  nobody advances would be a second head for the bootstrap to get wrong. Phase B's deploy repos
+  still pick their own topology through this same key.
+- **`deploy config` over the *whole* tree is the property that mattered, not discovery.**
+  `gen_architecture.releases()` (`tools/chart_tools/gen_architecture.py:201-209`) enumerates
+  `configs/prd/` directly rather than through `discover_releases()`, so it does reach this entry and
+  does not catch a non-zero exit. What stops it before `deploy template` — a verb the CLI refuses on
+  a non-jenkins release — is `chart_name` coming back falsy, which slice 008's `ours` short-circuit
+  produces. The new test resolves and prints every stage directory on disk, so a regression there
+  fails in the gate rather than in the architecture producer.
+- **The Argo-side schema is gate-enforced across the tree, not just for this entry.** Both
+  ApplicationSets run `missingkey=error`, so a key missing from *any* entry fails generation for the
+  whole set rather than for one app; the check also refuses a YAML string where D23 needs a boolean
+  (the selector flattens `deployed` through `%v`, so `"false"` would select) and refuses a `chart:`
+  key. Phase B's entries inherit it.
+- **`audit-prd-orphans` is reconciler-blind** and now counts `argocd-prd` as a desired Helm release
+  — right today, because R6's bootstrap is a real `helm install`, and wrong from Phase B on, where
+  Argo creates no Helm release at all — close-out **S11**.
+
 ## Not in scope
 
 - **The webhook relay's own source, tests, image and pipeline** — slice 015.
