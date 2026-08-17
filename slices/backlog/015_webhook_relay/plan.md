@@ -4,7 +4,11 @@
 
 Requirements R1–R7 are `slice.md`'s numbered requirements, carried over as the authoritative
 statement of intent. The design behind them is `attachments/webhook-relay-consult.md`, kept
-verbatim and authoritative for *why* the relay is shaped this way.
+verbatim — **authoritative in §§1–3 only**, for *why* the relay is shaped this way. Its §4 and §5
+are superseded by rulings below and must not be followed: §4 suggests the hostname
+`hooks.webathome.org` (the ruling is `deploy-hooks.webathome.org`) and §5's cut line owes this
+slice a chart fragment in `ArgoCDDeploy` proven by `helm template` (the cut-line ruling moves that
+to 009, and this plan's **Not in scope** denies it).
 
 - **R1.** A stateless HTTP service that exposes **one POST endpoint**, reads the body up to a size
   cap, verifies GitHub's `X-Hub-Signature-256` HMAC-SHA256 in constant time against a shared
@@ -58,9 +62,14 @@ verbatim and authoritative for *why* the relay is shaped this way.
   binary", and that is what ships. `DockerImages` has the precedent twice — `backup-server` and
   `iac-provisioner`, both Go, both concurrency-shaped like this. On the estate's one
   internet-facing surface a static binary means no interpreter and no dependency tree to patch,
-  which is the parse-surface argument the whole design rests on. Follow `backup-server`'s layout
-  and Dockerfile shape: `src/` holding `go.mod`, `cmd/webhook-relay/main.go` and `internal/<pkg>/`,
-  multi-stage build from `golang:*-bookworm` into a slim runtime stage carrying only the binary.
+  which is the parse-surface argument the whole design rests on. **Layout follows `backup-server`**:
+  `src/` holding `go.mod`, `cmd/webhook-relay/main.go` and `internal/<pkg>/`, multi-stage build from
+  a `golang:*-bookworm` builder. **The runtime stage follows `iac-provisioner`, not `backup-server`**
+  — `iac-provisioner/Dockerfile:9-13` is `FROM debian:bookworm-slim` with minimal packages and the
+  binary, which is the slim runtime this design wants; `backup-server`'s runtime stage is the
+  counter-example (`FROM debian` plus an apt layer of `curl ca-certificates unzip sudo` plus a piped
+  `rclone` installer) and must not be copied. The runtime image's package surface *is* the consult's
+  §2 parse-surface argument, so it carries the binary and its CA certificates and nothing else.
   (This overrides the Python/Flask+waitress convention that the repo's other 14 small services
   follow; it was chosen deliberately, not by default.)
 - **Ruling (2026-08-17) — the endpoint path is `/api/webhook`.** The registered hook URL is
@@ -77,6 +86,36 @@ verbatim and authoritative for *why* the relay is shaped this way.
   is therefore run the way the repo already runs tests — for a Go image, `go test ./...` as
   `backup-server` documents — and the shared root `Jenkinsfile`, which builds and pushes every
   image and runs no tests today, is **not** touched.
+- **Ruling (2026-08-17) — R5's acceptance splits; the leaf half is 009's.** R5 has a code half and a
+  deployment half, and only the first is provable by anything this slice ships. **015 proves**: the
+  service holds no credential toward GitHub and none toward the cluster, and its only config is the
+  shared secret plus the two target URLs. **009 proves** the rest — that the secret is the same
+  value as `webhook.github.secret` in `argocd-secret`, one OpenBao leaf and not a second secret —
+  because 009 authors the ExternalSecret and the operator writes the leaf. Nothing is dropped; the
+  half that needs a deployment to be true moves to the slice that has one, and R5 stays in this
+  plan whole as the statement of intent.
+- **Ruling (2026-08-17) — exactly two paths are served, and R4's refusal rule exempts the health
+  path.** R4 says refuse "any path but the webhook path" and R1 requires a health endpoint; read
+  literally they contradict. The service serves **`POST /api/webhook`** and a **`GET` health path**,
+  and every other path and method is one of R4's structural refusals. The acceptance criterion for
+  R4 must say so, not just this plan — otherwise a test agent probing the refusal matrix gets 200 on
+  the health path and has to guess which way to rule.
+- **Ruling (2026-08-17) — GitHub webhook-secret validation, pinned to the wire format.** Operator:
+  *"I just realized I want to support GitHub secrets. I don't know if you've covered this. If not,
+  the plan needs to be updated,"* citing
+  https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries. This is already
+  R1's centerpiece and the reason the relay exists — no scope change — but the wire format it left
+  implicit is now explicit and the R6 tests must pin it:
+  - The signature arrives as `X-Hub-Signature-256: sha256=<hexdigest>` — the `sha256=` prefix is
+    part of the value, and the digest is **lowercase hex**.
+  - The HMAC is computed over the **exact raw body bytes read off the wire**, never a parsed,
+    re-serialized or re-encoded copy. This is the same byte slice that is forwarded verbatim to
+    both receivers, and it is why R3 forbids parsing the payload.
+  - The comparison is **constant-time** (`hmac.Equal`), never `==`.
+  - A **missing** `X-Hub-Signature-256` is a refusal, exactly like an invalid one (R4).
+  - `X-Hub-Signature` (HMAC-SHA1) is **legacy: forwarded, never trusted.** Verification reads the
+    256 header only, which is what GitHub recommends; R1 still forwards both headers so the
+    receivers see the delivery exactly as GitHub sent it.
 
 ## Task shape
 
