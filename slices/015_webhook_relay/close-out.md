@@ -50,6 +50,73 @@ Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, wh
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — nothing in `webhook-relay`'s suite pins the constant-time signature comparison · minor · DockerImages
+
+`verification.json` V14 names five properties of GitHub's webhook wire format that R6's suite must
+pin. Four are pinned by real tests — the `sha256=` prefix and lowercase-hex digest, the digest over
+the exact raw bytes off the wire, a missing `X-Hub-Signature-256` refused exactly like an invalid
+one, and SHA-1 forwarded but never trusted. The fifth, *"the comparison is **constant-time**
+(`hmac.Equal`), never `==`"*, has no test behind it. Mutation run during review: in a scratch copy
+of the module, replacing `webhook-relay/src/internal/signature/signature.go:36`'s
+`return hmac.Equal([]byte(got), []byte(want))` with `return got == want` leaves
+`cexec go go test -count=1 ./...` green across all three packages.
+
+Consequence: none today — the shipped code is constant-time, and the doc comment above it says why.
+The exposure is to a future edit: the one security property among the five is the one the suite
+would not notice being removed, on the service whose whole design rationale is what an
+unauthenticated internet caller can reach. It is filed rather than fixed because constant-timeness
+is not behaviourally testable in Go without a timing harness whose flakiness would cost more than it
+buys; a source-level guard (a lint rule, or a comment the next reader is expected to honour) is the
+realistic shape of any fix.
+
+Provenance: code-reviewer, P1 round 1 (F2, Major severity / advisory impact); `phases/P1/code_review_r1.md`
+Disposition:
+
+### B2 — two request shapes escape the relay's stated refusal matrix · nit · DockerImages
+
+`verification.json` V04, `plan.md`'s health-path ruling and `webhook-relay/README.md:75-76`'s table
+all say the same thing: exactly two routes are served, and every other path and every other method
+on those two is refused (`405` / `404`). Two shapes are neither, both consequences of Go's
+`ServeMux` and confirmed by probing the commit through `ServeHTTP` and over a real socket:
+`HEAD /healthz` → `200` (a `GET` pattern also matches `HEAD`), and `POST /api//webhook` or
+`POST /api/./webhook` → `307` (the mux redirects a non-canonical path rather than missing).
+`webhook-relay/src/internal/relay/relay_test.go:354-381` pins eleven refusal cases and covers
+neither shape.
+
+Consequence: none for the product — `HEAD` is `GET` without a body per RFC 9110, and the `307` lands
+the client on the canonical path where the signature still has to verify. It is worth recording only
+because the two-route ruling exists so that a test agent probing the refusal matrix "does not have to
+guess which way to rule", and these are exactly that guess — now also asserted in the image's own
+README as a claim the binary does not make.
+
+Provenance: code-reviewer, P1 round 1 (F1, Minor severity / advisory impact); `phases/P1/code_review_r1.md`
+Disposition:
+
+### ~~B3 — "the estate's only internet-facing service" is false as written~~ — fixed in session by consult 1 (`6e01ede`), struck by consult 1 · nit · DockerImages
+
+`webhook-relay/architecture.yaml:4`, `README.md:9-10` and `Dockerfile:12-13` each state flatly that
+the relay is the estate's only internet-facing service. Twenty-one Services are public today —
+`grep -rn isPublic /work/HelmCharts/configs/prd | grep -c yes` → 21, among them
+`jenkins/prd/values.yaml:4`, `keycloak/prd/values.yaml:4`, `guacamole/prd/values.yaml:4` and
+`webathome-org/prd/values.yaml:4` — and this slice's own estate facts say so: `slice.md`, *"Jenkins
+rides it today at `jenkins.webathome.org`"*. The authoritative design states the narrower, true
+claim: the consult's §1 calls the relay "the only public thing in `argocd-prd`".
+
+Consequence: nothing breaks, and the claim does not reach the merged federated model (it is a
+YAML comment, not a modelled element). It is recorded because one of the three copies is in a
+hand-authored `architecture.yaml`, which is source of truth rather than a throwaway comment, and
+because the sentence is the stated premise for the Dockerfile's minimal-package argument.
+
+Provenance: code-reviewer, P1 round 1 (F3, Minor severity / advisory impact); `phases/P1/code_review_r1.md`
+Resolution: fixed by consult 1 in `6e01ede` — comment and prose only, no behaviour change, in three
+files this slice's diff created, which is the mechanical-residue exception rather than a phase or a
+report entry. All three now state the true, narrower claim the authoritative design states: the
+relay is the only internet-facing service in `argocd-prd` and the only way in from the internet
+toward Argo CD. `main.go:27`'s "this process is internet-facing" was already true and is untouched.
+Gate re-run green after the edit: `cexec go go test ./...` and `cexec iac ./scripts/arch-validate.py
+*/architecture.yaml` over all 23 files.
+Disposition: no action needed
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -108,4 +175,24 @@ relations to `webhook-relay/architecture.yaml` — relay `app:` → each receive
 wire. That is a two-relation edit to a file this slice already shipped, not new design.
 
 Provenance: code-writer, P1 round 1; `webhook-relay/architecture.yaml` and P1's done-record in `plan.md`
+Disposition:
+
+### S3 — V08 cannot be earned in the phase that judges it: the test phase checks off `verification.json` before the doc phase writes R7 · AIWorkflow
+
+The loop runs `phases → sweep → consult → test → docs` (`run_loop.py:2486`, `:2521`, `:2631`). The
+test agent is the one role told to "check off the slice's `verification.json` as you verify"
+(`agents/test-agent.md:17`); the doc-writer is never told to touch that file. V08 is R7 — the
+`argo-cd/` document-set edits — which this plan deliberately assigns to the doc phase rather than a
+coding phase ("R7 is in scope and `verification.json` checks it, but its `argo-cd/` document-set
+edits are the run loop's own doc phase … not a phase here"). So when the test agent reaches V08 the
+work is genuinely not done yet, and no later role revisits the verdict.
+
+Consequence for this slice: probably none — the test agent reads `plan.md`, which says in as many
+words that R7 is the doc phase's, so it has the material to rule "owed to the doc phase" rather than
+red. It is recorded so that a V08 verdict of red, or a blank one, is read as this ordering and not as
+a product defect, and because the general shape — a slice whose acceptance criteria include
+doc-owed items — will recur in this repo, where the `argo-cd/` document set is a first-class
+deliverable.
+
+Provenance: consult 1; `state.json` (`test_rounds: 0` at consult time), `run_loop.py`, `agents/test-agent.md`
 Disposition:
