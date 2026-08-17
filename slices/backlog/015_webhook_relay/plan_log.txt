@@ -64,3 +64,5 @@
     [plan-writer r1] [1s] [init] Session started (claude-opus-5)
     [plan-writer r1] [5s] [tool_use: Bash] Check uncommitted changes in spec repo
     [plan-writer r1] [11s] [tool_use: Bash] Stage the three slice-folder files by name
+    [plan-writer r1] [16s] [tool_use: Bash] Commit the slice-folder run records
+    [plan-writer r1] [24s] [tool_use: Bash] Commit the appended log lines
