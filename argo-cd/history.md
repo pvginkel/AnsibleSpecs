@@ -215,6 +215,43 @@ holding no credential, standing in front of Argo's multi-provider webhook parser
 is unauthenticated crashes an attacker reaches by choosing the provider header (CVE-2024-40634,
 CVE-2025-59537). O3 closes as D49. Slice 015 shipped the image on 2026-08-17; A.4 deploys it.
 
+## The standup: four positions the register held loosely, settled by building it (D9, D24, D33, D40)
+
+Slice 009 authored A.4's chart, and four things the register had specified from the outside moved
+when they were written down concretely.
+
+**Argo's own namespace stopped being special.** The set wrote `namespace: argocd` throughout,
+which was the upstream chart's default read back as a decision. But Argo is an entry in the
+registry like anything else, and D24 derives name and namespace from the entry's path — so Argo's
+Application, its namespace and its Helm release are all `argocd-prd`. The release name turned out
+to be load-bearing rather than cosmetic: Argo templates a Helm source under the Application's own
+name, `app.kubernetes.io/instance` is every workload's immutable selector, and a bootstrap
+installed under any other name is not a rename the first self-sync can repair.
+
+**The Keycloak client left Terraform** (D9). "Argo's deploy repo manages Argo's infrastructure"
+was goal post 2 applied to itself, and it cost more than it bought for one client: a Keycloak
+provider credential in the hook's environment, a state key, and an interlock with keycloak-tf
+that would have had to import whatever this project created anyway. Ruled 2026-08-16 — the client
+is hand-created and ArgoCDDeploy ships no `terraform/` at all. The bill is that the client exists
+in no repo, which is why recording it on **#68** is an owed action rather than a courtesy. dex
+went at the same time: D9 points Argo straight at Keycloak, so the broker sat in nothing's path.
+
+**Repository credentials collapsed from per-repo to one prefix credential** (D40). The Phase A
+check the register asked for came back unambiguous — every repository Argo reads is private, so
+anonymous read buys nothing anywhere. Faced with a leaf, a values block and an operator write per
+deploy repo, the cheaper shape was the one Argo already supports: a `repo-creds` Secret on
+`https://github.com/pvginkel/`, matched by longest url prefix, covering the registry repo and
+every deploy repo Phase B adds. Argo's token was split off from the hook's in the same ruling —
+one blast radius per identity.
+
+**The hook's grant went cluster-wide** (D33, D41). The register said "a scoped ServiceAccount"
+and design.md's inventory read like a Role in the hook namespace. It cannot be one: the objects a
+deploy repo's Terraform creates land in `<app>-<stage>`, derived per sync, and there is no
+namespace to bind in when the chart renders. A ClusterRoleBinding is the structural answer, and
+the honest cost — recorded in D41 rather than left to an incident — is that any deploy repo's
+Terraform can read every Secret in the cluster. Narrowing it per-sync from the library chart is
+the standing way back.
+
 ## Gate-1 amendments worth remembering
 
 - **Alertmanager replaced Telegram** as the notifications target (D7); `processors` pinned to 2

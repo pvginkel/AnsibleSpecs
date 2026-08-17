@@ -74,19 +74,27 @@ until someone installs the optional `test` dependency group by hand.
       config for **Alertmanager** with `on-sync-failed` + `on-health-degraded` authored (D7),
       SSO wiring (D9), webhook secret reference. Values: `resourceTrackingMethod: annotation`
       (D4), `controller.operation.processors: 2` (D8), polling disabled (D6).
-- [ ] `terraform/` in ArgoCDDeploy: the Keycloak client (D9). How its secret reaches OpenBao —
-      operator writes it, or a public client with PKCE — is decided at implementation.
-      Interlocks with keycloak-tf (Trello **#68**).
+- [ ] Argo's Keycloak client: **hand-created by the operator**, confidential, in the `homelab`
+      realm (D9). ArgoCDDeploy ships no `terraform/` and holds no Keycloak provider credential;
+      the operator writes the client secret to the OIDC leaf and ESO carries it in. Because the
+      client then exists in no repo, it has to be recorded on keycloak-tf (Trello **#68**) so
+      that project imports it rather than recreating it.
 - [ ] Create the hook namespace `argocd-hooks`: the ExternalSecret materialising
       `argocd-hook-credentials` from A.2's enumerated leaves **plus the non-secret per-cluster
       provider configuration as `template` literals** — one object composes a run's whole
-      environment — the `tf-presync` ServiceAccount and its RBAC (PV get/list/patch), permitted
+      environment — the `tf-presync` ServiceAccount and its RBAC (a ClusterRoleBinding: the whole
+      lifecycle on `persistentvolumes`, `secrets` and `namespaces`, no wildcard), permitted
       as an AppProject destination (D33). Author the ExternalSecret from A.2's inventory:
       [`credential-inventory.md`](../slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md).
-- [ ] Repository credential Secrets via ESO (D40) — after checking whether anonymous read
-      suffices anywhere.
-- [ ] Expose argocd-server behind the estate ingress on an internal `.home` name with homelab
-      TLS — the UI only. It is **not** published, and no webhook reaches it from outside (D49).
+- [ ] Repository credentials via ESO (D40). The anonymous-read check is answered: it suffices
+      nowhere, every repository Argo reads is private. So one `repo-creds` Secret on the
+      `https://github.com/pvginkel/` prefix, on a token minted for Argo alone — not the hook's.
+- [ ] Expose argocd-server on an internal `.home` name with homelab TLS — the UI only. It is
+      **not** published, and no webhook reaches it from outside (D49). There are no Ingress
+      objects in this estate: exposure is nginx-configurator annotations on the workload's own
+      Service, and internal TLS needs **both** `is-public: "no"` and `enable-ssl: "yes"` —
+      `is-public` gates only the RFC1918 allow block, the step-ca leaf is a separate branch.
+      nginx terminates that leaf and proxies plain HTTP, so `server.insecure: true` goes with it.
 - [ ] Deploy the webhook relay in `argocd-prd`, pinned to a `registry:5000/webhook-relay:<n>`
       tag (slice 015 ships the image; its `README.md` is the contract): Deployment — stateless,
       so ≥2 replicas and `RollingUpdate` — with `WEBHOOK_SECRET` from the `webhook.github.secret`
@@ -103,9 +111,24 @@ until someone installs the optional `test` dependency group by hand.
       secret, pointed at `https://deploy-hooks.webathome.org/api/webhook` like every other hook
       (D49).
 
+Everything above that a repository can hold is committed: `ArgoCDDeploy` (chart, stage config
+and its render gate) and Argo's own `configs/prd/argocd/prd/release.yaml`. What is left is
+keystrokes only the operator can make, and Argo does not run until they land — the three OpenBao
+leaves under `eso/prd/argocd/prd/`, the Keycloak client, the bootstrap `helm install`, the public
+DNS record and NAT rule for `deploy-hooks.webathome.org`, and the registry webhook.
+
 ### A.5 — verification (the proof items, consolidated)
 
-Use a throwaway app entry + tiny deploy repo; delete both afterwards.
+Use a throwaway app entry + tiny deploy repo; delete both afterwards. The repo is
+[`ProofDeploy`](https://github.com/pvginkel/ProofDeploy) — a real deploy repo in D12's layout,
+gated like any other, with two deliberate failure switches in git: `proof.breakSync` in the stage
+values renders an object the API server refuses, and `break_apply` in the stage tfvars trips a
+Terraform precondition, so the sync failure and the hook failure are provoked in different phases
+rather than improvised at drill time. "Delete both afterwards" is three things, not two: the
+registry entry, the GitHub repository, **and** the repo's line in `/work/Ansible`'s
+`.kubecoder/config.yaml`, since a clone that no longer resolves breaks the environment. The
+Terraform state the drill writes under `argocd/ProofDeploy/prd/` survives all three — nothing
+prunes state for an unregistered app until D28 is designed.
 
 - [ ] A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo
       push visibly refreshes (argocd-server receiver).
@@ -125,9 +148,11 @@ Use a throwaway app entry + tiny deploy repo; delete both afterwards.
       the homelab CA (D17; fallback plain HTTP).
 - [ ] Boolean `deployed`/`autoSync` behave in selector and templatePatch on the pinned version
       (D23), including the flag-flip generating and removing `syncPolicy.automated`.
-- [ ] Entries **without** the `reconciler:` key — all ~44 unmigrated releases the glob matches —
+- [ ] Entries **without** the `reconciler:` key — the 15 unmigrated releases the glob matches —
       are excluded by the selector. `missingkey=error` means a leak here breaks the whole
-      ApplicationSet, not one app.
+      ApplicationSet, not one app. (`release.yaml` is the exception, not the rule: the glob
+      matches 16 files out of 52 app-stage directories, so migrating a local-chart app usually
+      means **creating** an entry rather than editing one — KubeCoder included.)
 - [ ] Point a no-sync Application at an existing live release and check the live-vs-git diff
       reads sensibly — diff quality proven before Phase B stakes a cutover on it.
 - [ ] SSO login works; local admin break-glass works (D9).
@@ -135,6 +160,20 @@ Use a throwaway app entry + tiny deploy repo; delete both afterwards.
 **Exit:** Argo runs and manages itself; UI reachable via Keycloak; every proof item checked;
 the throwaway app demonstrated register → deploy → undeploy → unregister with the namespace
 cascade (D27).
+
+A.5 is the operator's to run and none of it has run: no Argo CD exists yet, so every item above
+is owed. Two of the mechanisms it proves shipped without their documented fallback taken and
+therefore unexercised — D19's relative `../config/{stage}/values.yaml` (fallback `$values`) and
+D17's homelab-CA trust for the repo-server, which ships as a `subPath` mount adding one file to
+the image's trust directory rather than a ConfigMap over `/etc/ssl/certs`, because the same
+repo-server also fetches public chart repositories for D18's apps (fallback plain HTTP). Both
+fallbacks stay a template-or-values edit, and Phase B should not be planned as if either
+mechanism were confirmed. One trap is worth knowing before the first delivery is chased: read off
+upstream's code rather than witnessed, the applicationset-controller appears to build its webhook
+handler once at startup and not to re-read the secret, so a controller that starts before the
+`argocd-webhook` Secret resolves would hold the literal `$argocd-webhook:githubSecret` as its
+HMAC key for the life of the pod and reject every delivery. The bootstrap install is exactly that
+window; a rollout restart of the controller and a redelivery is the cheap thing to try first.
 
 ---
 

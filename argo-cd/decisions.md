@@ -50,7 +50,11 @@ is the worked example of a visible deviation (brief, goal post 3): Argo's defaul
 accepted cost is that a dropped webhook is stale-but-green, not delayed — recorded in design.md;
 Triage **#507** revisits with a slow fallback poll. A registry push is what the
 applicationset-controller acts on and a deploy-repo push what argocd-server acts on, though the
-relay delivers every push to both (D49).
+relay delivers every push to both (D49). Two knobs express it, one per controller:
+`timeout.reconciliation: 0s` (with its jitter) in `argocd-cm` for the application controller,
+and `requeueAfterSeconds: 0` on each git generator for the ApplicationSet one.
+`applicationsetcontroller.requeue.after` cannot be used for this — it is clamped to a 1s minimum
+and falls back to 3m below it, while the generator's own field is returned verbatim.
 
 **D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes the review's
 deploy-wait-swallows-failures notifications gap; target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
@@ -68,18 +72,39 @@ finish, so image pulls and pod churn still overlap — this throttles, it does n
 `oidc.config` stanza in `argocd-cm` — issuer, client id, client-secret reference — plus one
 RBAC line in `argocd-rbac-cm` mapping the operator's identity to `role:admin`. The client
 secret arrives as an ESO leaf in a Secret labelled `app.kubernetes.io/part-of: argocd`, which
-`oidc.config` references as `$<secret>:<key>`. The Keycloak client itself is Terraform in
-ArgoCDDeploy's own repo — the keycloak provider is already in the estate set, and Argo's deploy
-repo managing Argo's infrastructure is goal post 2 applied to itself. Group-claim mapping only
-if RBAC ever needs groups; for one operator, a direct subject mapping suffices. Interlocks
-with keycloak-tf, Trello **#68**.
+`oidc.config` references as `$<secret>:<key>`. **dex is disabled**: it is an OIDC broker, and
+`argocd-cm` points Argo straight at Keycloak, so it would sit in the path of nothing.
+
+RBAC matches on `preferred_username`, not the default `sub`: Keycloak mints `sub` as a per-user
+UUID, so `scopes` in `argocd-rbac-cm` names the username claim and `requestedScopes` asks for
+`openid`, `profile` and `email`. Argo's default set also asks for `groups`, which this realm does
+not emit — and an authorization request naming a scope the realm lacks fails whole — so `groups`
+is dropped. Group-claim mapping only if RBAC ever needs groups; for one operator, a direct
+subject mapping suffices.
+
+**The Keycloak client is hand-created by the operator, not Terraform** (ruling 2026-08-16).
+ArgoCDDeploy ships no `terraform/` and holds no Keycloak provider credential; the client is a
+confidential client in the `homelab` realm and only its secret travels, as the ESO leaf above.
+Issuer and client id are ordinary configuration. Creating it by hand puts the record outside any
+repo, so it is owed to keycloak-tf, Trello **#68**: that project has to import the client rather
+than recreate it, and nothing else carries the fact that it exists.
 
 **D10 — A dedicated AppProject, not `default`.** Decided (lifecycle). `clusterResourceWhitelist`
-covers `Namespace` plus the cluster-scoped resources migrated charts carry (KubeCoder's
-ClusterRole and binding); `destinations` covers the app namespaces and the hook namespace;
-`sourceRepos` covers the deploy repos. Granting `Namespace` project-wide lets any app in the
-project create arbitrary namespaces — acceptable for a single-operator homelab, and the reason
-this stays a dedicated project rather than a widened `default`.
+covers `Namespace`, the CRDs and cluster RBAC Argo's own chart renders, and the cluster-scoped
+resources migrated charts carry (KubeCoder's ClusterRole and binding); `destinations` covers the
+app namespaces and the hook namespace; `sourceRepos` covers the deploy repos and the upstream
+chart repositories. Granting `Namespace` project-wide lets any app in the project create
+arbitrary namespaces — acceptable for a single-operator homelab, and the reason this stays a
+dedicated project rather than a widened `default`.
+
+**The cluster whitelist is deny-by-default and the namespaced one is not**: an empty
+`clusterResourceWhitelist` permits no cluster-scoped resource at all, while an empty
+`namespacedResourceWhitelist` permits every namespaced kind. So the cluster list is enumerated
+from what the project's charts actually render and the namespaced list is deliberately unset —
+and **each migration that brings a new cluster-scoped kind owes an entry**. It fails loudly at
+sync rather than silently. `destinations` is likewise one `*-<stage>` glob per stage the registry
+tree carries rather than a bare `*`, so `argocd-prd` is permitted and `kube-system` is not, and
+a stage the estate adds later owes an entry too.
 
 ## Repositories and layout
 
@@ -271,9 +296,9 @@ can delete production; phases.md carries the checklist.
 
 **D33 — Hook Jobs run in a permanent hook namespace, with scoped credentials and a scoped
 ServiceAccount.** Decided (qa Q9; reworked 2026-08-12, gate-1 review). Why a dedicated namespace
-rather than `argocd`: the hook Job manifest is **app-authored chart content**, and the
-AppProject must permit whatever namespace hooks land in as a destination for every app (D10).
-Were that `argocd`, any app chart could place arbitrary resources next to the control plane and
+rather than Argo's own `argocd-prd`: the hook Job manifest is **app-authored chart content**, and
+the AppProject must permit whatever namespace hooks land in as a destination for every app (D10).
+Were that `argocd-prd`, any app chart could place arbitrary resources next to the control plane and
 mount its Secrets — repo credentials (D40), the webhook secret, the OIDC client secret (D9). A
 dedicated namespace bounds what app-authored manifests can reach to exactly the hook
 credentials, which a hook run legitimately gets anyway; app namespaces in turn hold no
@@ -284,9 +309,17 @@ encryption key, alongside the non-secret per-cluster provider configuration the 
 carries as `template` literals. The hook authenticates to nothing to obtain them — it reads
 plain environment variables and is agnostic to the provider behind them — so what a run holds is
 exactly the leaves that one object names (D41). The Job runs under a ServiceAccount whose RBAC
-covers what the hook genuinely does: the PV reattach (D29), whose target namespace it is handed
-as an argument, and whatever the kubernetes provider manages — the same identity the entrypoint
-builds the run's kubeconfig from.
+covers what the hook genuinely does — the PV reattach (D29), whose target namespace it is handed
+as an argument, and whatever the kubernetes provider manages — and it is the same identity the
+entrypoint builds the run's kubeconfig from.
+
+That RBAC is a **ClusterRole and ClusterRoleBinding**, not a Role in the hook namespace, and
+cluster-wide is structural rather than generous: the objects a deploy repo's Terraform creates
+land in `<app>-<stage>`, derived per sync and created by that app's own chart, so there is no
+namespace to bind in when the chart renders. Its rules are the whole lifecycle on the three core
+kinds the estate's Terraform reaches through the kubernetes provider — `persistentvolumes`,
+`secrets`, `namespaces` — and no wildcard, because a resource Terraform manages needs its whole
+lifecycle, create through delete.
 
 ## Promotion and CI
 
@@ -414,11 +447,16 @@ the public DNS record and router NAT rule are manual operator actions, like all 
 The rejected alternatives are in [`history.md`](history.md); slice 015 ships the image, A.4 deploys
 it.
 
-**D40 — Repository credentials are ESO leaves.** Decided (lifecycle). Argo needs registered
-credentials for the registry repo (the generator reads it) and each deploy repo (the repo-server
-renders it): Secrets in the `argocd` namespace labelled
-`argocd.argoproj.io/secret-type: repository`, provisioned via ESO. *Verify at Phase A* whether
-anonymous read suffices anywhere before minting tokens.
+**D40 — Repository credentials are one ESO-provisioned prefix credential.** Decided (lifecycle;
+shape settled 2026-08-16 at implementation). Argo needs registered credentials for the registry
+repo (the generator reads it) and each deploy repo (the repo-server renders it). The Phase A
+check that decided the shape: **anonymous read suffices nowhere** — every repository Argo reads
+is private. So rather than a `secret-type: repository` Secret and an OpenBao leaf per repo, one
+Secret labelled `argocd.argoproj.io/secret-type: repo-creds` carries the prefix
+`https://github.com/pvginkel/`; Argo picks the credential whose url is the longest prefix of the
+repository it is cloning, so the registry repo and every deploy repo Phase B adds are covered
+with no new leaf and no new values block. **The token is Argo's own, not the hook's** (D41's):
+the two rotate independently, and a compromise on one side does not hand over the other.
 
 **D45 — CI writes image tags through one shared-library call.** Decided 2026-08-12 (operator,
 gate-1 review). The pipeline assembles a dict of `{YAML path in the values file → tag}`; a new
@@ -506,6 +544,14 @@ hook run is exactly what the hook namespace holds (D33): the enumerated provider
 `argocd-hook-credentials`, the git token, the state encryption key, and the ServiceAccount's
 RBAC. Stated plainly: write access to a deploy repo branch is arbitrary Terraform execution
 inside a pod bounded by those credentials.
+
+**The ServiceAccount's RBAC is cluster-wide, which widens that bound** (D33 explains why it has
+to be): `secrets` and `namespaces` across every namespace, so a deploy repo's Terraform can read
+any Secret in the cluster — Argo's own repo credential and OIDC client secret among them — and
+delete any namespace. Recorded as the shipped position, not as the end state: rendering a
+per-namespace RoleBinding from the library chart alongside the hook Job would narrow it to the
+namespace being synced, and deciding that while Phase B is one migrated app costs less than
+after ten.
 
 **The git token is a classic PAT carrying `repo` on every private repository the operator owns.**
 This decision originally specified a fine-grained token — state repo read-write, deploy repos

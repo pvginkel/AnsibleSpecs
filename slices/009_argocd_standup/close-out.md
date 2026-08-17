@@ -24,12 +24,34 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Argo CD's standup, built but not yet run. `ArgoCDDeploy` is a new deploy repo whose chart pins
+`argo-cd` 10.3.3 exactly and adds the estate's own manifests on top: both ApplicationSets over the
+`configs/prd/*/*/release.yaml` glob, the `releases` AppProject, Alertmanager notifications with
+`on-sync-failed` and `on-health-degraded` authored, direct-to-Keycloak SSO with dex retired, the
+`argocd-hooks` namespace with its composed 22-key credential Secret and `tf-presync` identity, the
+ESO leaves every credential arrives through, the repo-server's homelab-CA trust for
+`https://charts.home`, and slice 015's webhook relay pinned at `:2485`. HelmCharts gained
+`configs/prd/argocd/prd/release.yaml` — the estate's first `reconciler: argo-cd` entry, `autoSync`
+false permanently — and a tree-wide schema gate over it. `ProofDeploy` is a real deploy repo in
+D12's layout carrying the drill's two deliberate failure switches. `/work/Ansible` gained that
+repo's `.kubecoder/config.yaml` line.
+
+Four positions moved while the chart was being written, and the `argo-cd/` set now states them:
+Argo's Application, namespace and Helm release are all `argocd-prd` (D24 names Argo too, and the
+release name is a contract); the Keycloak client is hand-created rather than Terraform, so
+ArgoCDDeploy ships no `terraform/` at all (D9); repository credentials collapsed to one
+prefix-matched `repo-creds` Secret on Argo's own token (D40); and the hook's grant is a
+ClusterRoleBinding, which is structural and widens D41's stated bound (D33).
+
+Nothing this slice built has run — no `argocd-prd` namespace exists. Every A.5 proof item, the
+bootstrap install, the three OpenBao leaves, the Keycloak client and the relay's public edge are
+owed to the operator as A1–A4.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A2 first — the three OpenBao leaves and the Keycloak client are inputs to the bootstrap,
+not follow-ups to it; then A1's install, which has a namespace-adoption edge and a release name
+(`argocd-prd`) that cannot be changed afterwards. A3 and A4 unblock the proof drill.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -200,7 +222,9 @@ Disposition:
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: N3 — the test phase pushed all four repos and read every build they triggered, which is
+what discharged the empty-remote prerequisite A1 and A4 used to carry. N1 and N2 each retired an
+input the plan thought was owed.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -279,7 +303,10 @@ Disposition:
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->
+Focus: B6 first — it would break the very first proof item silently, and its remedy is one
+`kubectl rollout restart` worth knowing before the drill. B1 next: D7's notification signal reaches
+Alertmanager and stops there. Most of the rest are gate-coverage gaps in ArgoCDDeploy's own render
+test; B16 is HelmCharts', B17 is this repo's Jenkinsfile and predates the slice.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -707,7 +734,8 @@ Disposition:
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer -->
+Focus: none — the two rulings this slice needed (the hand-created Keycloak client, Argo's own git
+token) were taken at planning time and are recorded in A2 and in the `argo-cd/` register.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -715,7 +743,9 @@ Focus: <!-- doc-writer -->
 
 ## Suggestions
 
-Focus: <!-- doc-writer -->
+Focus: S6 and S5 are Phase B planning inputs and want deciding while it is still one migrated app —
+the hook's cluster-wide `secrets` grant, and a cluster whitelist each migration has to extend. S1
+and S4's doc halves are applied; S3, S7 and S13 are one operator sentence each.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -1025,4 +1055,26 @@ could as easily be a file the operator opened for reference. One word disposes o
 leave it.
 
 Provenance: consult 1; `git status` in /work/Ansible at consult time
+Disposition:
+
+### S14 — Argo CD has no runbook, and cannot honestly get one until it has run once
+
+`docs/runbooks/` gained nothing from this slice, deliberately. Three procedures it creates are
+genuine repeats rather than one-offs: **upgrading Argo** is a manual sync at a chosen moment and
+stays that way forever (D3 pins `autoSync: false` for Argo's own entry, so a version bump is a
+commit plus a keystroke, never a re-resolve); **break-glass** is the local admin account when
+Keycloak or the client is broken (D9), which is the one login that still works when SSO does not;
+and **restarting the applicationset-controller** after a webhook-secret change is B6's remedy.
+None of the three has been performed once — no `argocd-prd` namespace exists — so a runbook
+written now would state what should happen rather than what does, which is exactly what the doc
+plan refuses.
+
+What makes it worth a disposition rather than a silent wait: the only procedure text that exists
+is A1–A4 in this file, and close-out archives it with the slice. After the operator has run the
+bootstrap and the drill, that text is the raw material for `docs/runbooks/argocd.md` and it should
+be lifted before it goes quiet. The same pass would settle whether `k8s-rebuild.md` owes a line —
+today it says HelmCharts releases need redeploying after a rebuild, which stays true only while
+`srvk8sdev` is the cluster being rebuilt and Argo is prd-only.
+
+Provenance: doc phase
 Disposition:

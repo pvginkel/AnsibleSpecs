@@ -69,13 +69,25 @@ config/
 ### ArgoCDDeploy — Argo manages itself
 
 An ordinary deploy repo where the app happens to be Argo CD (D3). `chart/` names the upstream
-`argo-cd` chart in `Chart.yaml` `dependencies:` with a pinned version and adds the estate's own
-manifests on top: the two ApplicationSets, the AppProject, the notifications configuration, the
-SSO wiring (D9) and the webhook relay's Deployment, Service and public annotation (D49). Its
-`terraform/` carries Argo's own infrastructure — the Keycloak client to start.
+`argo-cd` chart in `Chart.yaml` `dependencies:` with an exactly pinned version and adds the
+estate's own manifests on top: the two ApplicationSets, the AppProject, the notifications
+configuration, the SSO wiring (D9), the `argocd-hooks` namespace with its identity and composed
+credential Secret (D33), the ESO leaves Argo's own credentials arrive through (D40), and the
+webhook relay's Deployment, Service and public annotation (D49). It carries no `terraform/`:
+Argo's one piece of own infrastructure is the Keycloak client, and that is hand-created (D9).
 
-Bootstrap happens exactly once, by hand: clone, `helm dependency build`, `helm install`, create
-the registry entry. From then on the ApplicationSet generates an Application for `argocd/prd`
+Argo is an entry in the registry like any other, so **D24 names it too**: the entry is
+`configs/prd/argocd/prd/release.yaml`, the Application is `argocd-prd`, and it syncs into
+namespace `argocd-prd`. The Helm release name is `argocd-prd` as well, and that one is a
+contract rather than a preference — Argo templates a Helm source under the Application's own
+name and the ApplicationSet sets no `releaseName`, so most of the render's object names derive
+from it and `app.kubernetes.io/instance` — every workload's immutable selector — carries it.
+
+Bootstrap happens exactly once, by hand: clone, `helm dependency build`, `helm install` under
+the release name `argocd-prd`, create the registry entry. `--create-namespace` is not the path:
+the chart ships `Namespace/argocd-prd` as a tracked manifest (D25), so the namespace is created
+first and stamped with Helm's ownership metadata, and the install adopts it rather than
+colliding with it. From then on the ApplicationSet generates an Application for `argocd/prd`
 like any other, and Argo adopts itself.
 
 **Sharp edge** (D3): a self-sync can restart the controller or repo-server mid-sync — CRD and
@@ -168,7 +180,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: releases-local
-  namespace: argocd
+  namespace: argocd-prd
 spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
@@ -178,6 +190,7 @@ spec:
         revision: main
         files:
           - path: "configs/prd/*/*/release.yaml"
+        requeueAfterSeconds: 0     # D6: the only knob that can express "off"
       selector:
         matchLabels:
           reconciler: argo-cd
@@ -334,14 +347,21 @@ receivers, which is what both-or-`502` buys.
   | `Delete=false` | the Application-delete cascade | sync-time prune |
 
   *Proof item (throwaway app):* the cascade really does delete a `Prune=false` namespace.
-- **AppProject `releases`** (D10), never `default`: `clusterResourceWhitelist` covers
-  `Namespace` plus migrated charts' cluster-scoped resources (KubeCoder's ClusterRole and
-  binding); `destinations` covers the app-namespace patterns **and** `argocd-hooks`;
-  `sourceRepos` covers the deploy repos and the upstream chart repos. charts.home needs no
-  entry — dependency fetches aren't Application sources.
-- **Repository credentials** (D40): ESO leaves into `argocd`-namespace Secrets labelled
-  `argocd.argoproj.io/secret-type: repository`, for the registry repo and each deploy repo.
-  *Verify at Phase A* whether anonymous read suffices anywhere before minting tokens.
+- **AppProject `releases`** (D10), never `default`. `clusterResourceWhitelist` is
+  deny-by-default — an empty list permits no cluster-scoped resource at all — so it enumerates
+  every cluster-scoped kind the project's charts render: `Namespace`, the CRDs and cluster RBAC
+  Argo's own chart brings, and whatever each migrated chart adds as it arrives. The namespaced
+  whitelist stays unset, where empty means everything. `destinations` is one `*-<stage>` glob
+  per stage the registry tree carries **plus** `argocd-hooks` — so a stage the estate adds later
+  owes an entry. `sourceRepos` is the owner prefix `https://github.com/pvginkel/*`, which covers
+  the registry repo and every deploy repo because Argo's source globs do not cross a `/`, plus
+  the upstream chart repositories (D18). Neither charts.home nor the argo-helm repository this
+  chart itself depends on needs an entry — a dependency fetch is not an Application source.
+- **Repository credentials** (D40): one ESO-materialised `repo-creds` Secret matching the
+  `https://github.com/pvginkel/` prefix, on a token minted for Argo alone and separate from the
+  hook's. Anonymous read suffices nowhere — every repository Argo reads is private — and one
+  prefix credential covers the registry repo and every deploy repo Phase B adds without a new
+  leaf.
 - **Notifications to Alertmanager** (D7): the notifications engine's native alertmanager
   service, with `on-sync-failed` and `on-health-degraded` as the minimum trigger set. The chart
   ships the controller with empty `triggers`/`templates`, so both are authored, not toggled.
@@ -384,6 +404,16 @@ The flow, per sync of an app that has Terraform:
    handed, null out `claimRef.uid`/`resourceVersion` — under the Job's own ServiceAccount. With
    teardown deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
 6. The exit code gates the sync (D30): non-zero fails the PreSync hook and nothing is applied.
+
+**The hook runs before the chart does, and that decides who creates the namespace.** A PreSync
+hook completes before the Sync phase begins, so on an app's *first* deploy the chart's
+`sync-wave: "-1"` Namespace has not been applied yet and namespaced Terraform has nowhere to
+land. The app's own Terraform therefore creates its namespace — `kubernetes_namespace_v1` on
+`var.namespace`, the fourth argument — and the chart's manifest adopts it on the sync that
+follows. Chart and Terraform are two writers of one object, deliberately, and the Terraform
+resource carries `ignore_changes` on the namespace's annotations and labels: the kubernetes
+provider manages the whole metadata map, so without it every run would strip Argo's tracking
+annotation (D4) and every sync would write it back.
 
 The Job template lives in the **library chart** as `homelab-shared.tf-presync-hook` — a migrated
 local chart includes it in one line, with the root context. Its skeleton:
@@ -438,7 +468,7 @@ Terraform simply don't include the template — no hook, no cost.
 | Secret `argocd-hook-credentials` | Everything a run's environment carries beyond its own Job arguments: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
 | Git token | A classic PAT with `repo` on every private repository the operator owns — read-write on the state repo and the deploy repos alike. Not the per-repo scoping D41 first specified: fine-grained tokens do not cross resource owners and the estate's repos do not sit under one. It is the dominant term in a hook run's blast radius (D41), and D39's webhook creation rides the same scope |
 | State encryption key | terraform-backend-git's age keypair — `iac`'s own, read from the one leaf holding it, because both sides write the same state repo (D32) |
-| ServiceAccount `tf-presync` | PV get/list/patch, plus whatever the kubernetes provider manages — it is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
+| ServiceAccount `tf-presync` | The whole lifecycle on the three core kinds the estate's Terraform reaches through the kubernetes provider — `persistentvolumes`, `secrets`, `namespaces` — and no wildcard. Granted by a **ClusterRoleBinding**, which is structural rather than generous: the objects a deploy repo's Terraform creates land in `<app>-<stage>`, derived per sync and created by that app's own chart, so there is no namespace to bind in when this renders. It is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
 
 The hook itself holds no OpenBao credential and never authenticates to OpenBao. ESO resolves the
 leaves, the ExternalSecret composes them with the configuration literals, and the container reads

@@ -107,8 +107,12 @@ The scoping this section asked for, kept as the statement of intent behind O4:
 
 ## The operator's keystrokes
 
-**Status:** both OpenBao writes are done (2026-08-15, Trello #621). The age **public** key handoff
-below is still owed — it is an input to slice 009, not to 007.
+**Status:** both OpenBao writes are done (2026-08-15, Trello #621). The age **public** key needs
+no handoff: it is public, and slice 009 read it off srviac by the procedure in
+`Ansible/docs/runbooks/iac-agent.md` rather than waiting for one. What is still owed is the
+match-check in that same runbook — proving the recipient literal and `SOPS_AGE_KEY` are one
+keypair — which is a credential read, and worth running once before the first hook apply writes
+state (D32's failure mode is state one side cannot decrypt).
 
 The git token — a new leaf under `eso/prd/`, which the `eso` grant's `eso/prd/*` glob already
 covers, so it needed no policy change. **Written:** `kv/eso/prd/argocd-hooks/git` exists,
