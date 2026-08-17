@@ -238,6 +238,64 @@ Found while mutation-testing P1's fix commit for the release-name finding.
 Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F2
 Disposition:
 
+### B6 — the applicationset-controller can cache the *unresolved* webhook secret for the life of the pod · minor · ArgoCDDeploy
+
+P2 makes the GitHub HMAC secret an indirection — `configs.secret.githubSecret:
+$argocd-webhook:githubSecret` (`config/prd/values.yaml:56`) against a Secret ESO materialises
+after the manifests apply. argocd-server copes: `watchSettings` compares the **resolved** value
+(v3.5.1 `server/server.go:812,844`) and restarts itself whenever ESO first writes or later rotates
+the leaf. The applicationset-controller has no such watcher: it builds its GitHub handler once, in
+`NewWebhookHandler` (`applicationset/webhook/webhook.go:75-80`), from a one-shot `GetSettings()`,
+and `cmd/argocd-applicationset-controller/commands/applicationset_controller.go:195,240` subscribes
+to nothing.
+
+So if that container reaches `NewWebhookHandler` before `argocd-webhook` exists,
+`GetWebhookGitHubSecret()` finds no matching key, logs a warning and returns the literal string
+`$argocd-webhook:githubSecret` (`util/settings/settings.go:2530-2540`) — which becomes the HMAC
+key. Every GitHub delivery to the `:7000` receiver then 400s, for the life of the pod. The window
+is the bootstrap `helm install` (**A1**), and the drills it silently breaks are R8's
+applicationset leg (V13) and the relay's both-legs-green item (V24/V25).
+
+The caching itself is upstream behaviour — any change to `argocd-secret` is equally invisible to
+that controller — so the run does not fix it. The operator remedy is one keystroke: if a registry
+push does not regenerate after the bootstrap, `kubectl -n argocd-prd rollout restart deploy/argocd-prd-applicationset-controller`
+and redeliver. Worth knowing before the drill rather than during it.
+
+Found while checking P2's "one leaf, two receivers" claim against both receivers' code.
+
+Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F1
+Disposition:
+
+### B7 — the gate's guard against Argo requesting the `groups` scope passes when the key is deleted · minor · ArgoCDDeploy
+
+`tests/render-chart.py:349-352` asserts `"groups" not in oidc.get("requestedScopes", [])` under a
+comment naming the hazard precisely: Argo requests `openid/profile/email/groups` *unless told
+otherwise*, and an authorization request naming a scope the realm does not know fails whole. The
+default is the failure mode, so the edit that reintroduces it is deleting the key — and the `[]`
+fallback makes the assertion pass when it is gone. Confirmed by mutation: removing
+`requestedScopes` from `config/prd/values.yaml:37` leaves the gate green (`ok: 58 objects render
+into argocd-prd`, exit 0).
+
+Nothing shipped is affected — the committed `oidc.config` carries the scope list — and the
+regression would still be caught by V23's live SSO login, in Keycloak's error rather than in the
+gate. The neighbouring `rbac` assertion has no such hole: the chart's own default is `scopes:
+"[groups]"`, so deleting that override does go red.
+
+Found while mutation-testing P2's five new gate checks.
+
+Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F2
+Disposition:
+
+### B8 — the ExternalSecret header names the wrong repo for the estate's shared ESO helper · nit · ArgoCDDeploy
+
+`chart/templates/external-secrets.yaml:8-9` says the estate's shared ExternalSecret helper "lives
+in HelmCharts' charts". It is defined once, in the `Charts` repo's library chart, at
+`/work/Charts/charts/homelab-shared/templates/_helpers.tpl:204`. The substantive claim beside it
+is correct — that helper emits no `target.template` and so cannot express the repo credential.
+
+Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F3
+Disposition:
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -325,4 +383,30 @@ currently overstates what the hook does. Correct it in `design.md` (and drop the
 ServiceAccount) when the doc set is next touched, or record deliberately that the extra verb stays.
 
 Provenance: plan-writer, plan pass r2; plan.md P4
+Disposition:
+
+### S5 — the AppProject's cluster whitelist is deny-by-default, and Phase B has to extend it per app
+
+P3's `clusterResourceWhitelist` carries `Namespace`, `CustomResourceDefinition`, `ClusterRole` and
+`ClusterRoleBinding` — every cluster-scoped kind Argo's own chart renders, plus the pair D10 names
+for migrated charts (KubeCoder's). An empty cluster whitelist permits *nothing*
+(`IsGroupKindNamePermitted`, v3.5.1 `pkg/apis/application/v1alpha1/app_project_types.go:415`), and
+a kind outside the list is refused at sync, so each migration that brings a new cluster-scoped kind
+owes an entry.
+
+One is already visible in the tree: `/work/HelmCharts/charts/media/templates/samba-pv.yaml` is a
+chart-managed `PersistentVolume`, so migrating `media` needs either a whitelist entry or the PV
+moved into that repo's Terraform, which is where D29 puts PVs anyway. The estate's upstream-chart
+releases were **not** enumerated for this — cloudnative-pg, external-secrets, ceph-csi, csi-driver-smb
+and step-ca ship kinds of their own (CRDs, webhook configurations, `CSIDriver`, `StorageClass`) that
+nobody has checked against the list, because none of them migrates in this slice.
+
+The failure mode is loud rather than silent — the sync reports the refused kind — so this is a
+planning input for slices 010–012 and the later migrations, not a defect. Worth checking each app's
+chart for cluster-scoped kinds while planning its migration, rather than discovering it at first
+sync.
+
+Found while writing P3's AppProject and tying the gate's whitelist assertion to the render.
+
+Provenance: code-writer, P3; ArgoCDDeploy `chart/templates/appproject.yaml`
 Disposition:

@@ -496,6 +496,39 @@ The chart renders the AppProject and the two ApplicationSets, so that a registry
   upstream chart repos; charts.home needs no entry, because a dependency fetch is not an
   Application source.
 
+**Done.** The AppProject and both ApplicationSets render from `chart/templates/appproject.yaml` and
+`chart/templates/applicationsets.yaml` against `releases.*` in `config/prd/values.yaml`;
+`tests/render-chart.py` grows AppProject, ApplicationSet and CRD-schema checks over the same render
+— 32 mutations, each negative-tested to fail.
+
+Settled beyond the plan's text:
+
+- **Destinations are one glob per registry stage, plus the hook namespace.** The tree carries four
+  stage directories (`dev`, `prd`, `tst`, `uat`), so the project permits `*-dev`/`*-prd`/`*-tst`/
+  `*-uat` rather than `*`: `argocd-prd` falls under one of them, `kube-system` under none. A stage
+  the estate adds later needs a `releases.stages` entry, and the failure is a refused destination at
+  the first sync rather than a silent apply.
+- **`clusterResourceWhitelist` is asserted against the render, not against a list.** An empty
+  cluster whitelist permits nothing while an empty *namespaced* one permits everything
+  (`IsGroupKindNamePermitted`), so the namespaced side stays unset and the gate requires every
+  cluster-scoped object this chart renders — `Namespace`, the three CRDs, ClusterRole and
+  ClusterRoleBinding — to be whitelisted. An upstream chart bump that adds a kind fails the gate
+  instead of Argo's first self-sync; D10's migrated-chart pair is those same two RBAC kinds.
+- **One owner-prefix source entry**, `https://github.com/pvginkel/*`, covers the registry repo and
+  every Phase B deploy repo: Argo's source globs do not cross a `/`, so it reaches the owner's
+  repositories and nothing below them. The eight upstream Helm repositories are the `repo_url` set
+  in HelmCharts' `configs/prd`.
+- **An empty `templatePatch` is a no-op**, so `autoSync: false` — Argo's own permanent state (R6) —
+  generates cleanly: it converts to JSON `null` and merges nothing (v3.5.1
+  `applicationset/controllers/template/patch.go`). The patch is one `define` both sets include.
+- **`requeueAfterSeconds: 0` confirmed on the pinned version**: the generator's field is returned
+  verbatim and `getMinRequeueAfter` then yields 0, which requeues nothing.
+- **The CRD-schema check earns its place**: a key a CRD does not define is pruned *silently* on
+  apply, so a `templatePatches` typo would apply clean and do nothing. The gate walks the three new
+  objects against the CRDs in the same render.
+- **`hooks.namespace` is defined once**, in `chart/values.yaml` — P4 reads it there.
+- The `media` chart's chart-managed PersistentVolume is a Phase B whitelist input — close-out **S5**.
+
 ### P4 — `argocd-hooks`: the namespace a PreSync run lands in
 
 Target: `../ArgoCDDeploy`
@@ -516,7 +549,8 @@ run's whole environment, and the `tf-presync` identity the Job runs under — so
 - **No AppRole, no OpenBao credential in the namespace** — the hook authenticates to nothing and is
   agnostic to what is behind its environment variables (D33, D41).
 - **`argocd-hooks` is a fixed name**, not `<app>-<stage>`; the AppProject destination P3 grants and
-  the namespace the library Job hard-codes have to agree.
+  the namespace the library Job hard-codes have to agree. P3 defines it once as
+  `.Values.hooks.namespace` — read it there rather than repeating the literal.
 - **The ServiceAccount's RBAC is what the hook genuinely does**: the `Released`-PV reattach (D29)
   against a namespace handed in as an argument, plus whatever the kubernetes provider manages. It
   is also the identity the entrypoint synthesises its kubeconfig from
