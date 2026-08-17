@@ -285,7 +285,7 @@ ApplicationSets set the pattern every Phase B deploy repo inherits.
 
 ## Phases
 
-### P1 — `ArgoCDDeploy` becomes a repo: the wrapper chart renders a complete Argo CD
+### P1 — `ArgoCDDeploy` becomes a repo: the wrapper chart renders a complete Argo CD ✅ DONE 2026-08-17
 
 Target: `../ArgoCDDeploy`
 
