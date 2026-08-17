@@ -4,132 +4,170 @@
       "id": "V01",
       "area": "R1 — the endpoint and the fan-out",
       "description": "A stateless HTTP service exposes one POST endpoint, reads the body up to a size cap, verifies GitHub's X-Hub-Signature-256 HMAC-SHA256 in constant time against a shared secret, and on success forwards the raw body verbatim — with X-GitHub-Event, X-GitHub-Delivery, both signature headers and Content-Type — concurrently to both receivers: argocd-server /api/webhook and applicationset-controller :7000/api/webhook. Plus a health endpoint.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`Routes()` registers exactly `POST /api/webhook` and `GET /healthz` (relay.go:87-92). `handleWebhook` reads the body via `http.MaxBytesReader` up to the 4 MiB cap (relay.go:110-124), verifies via `signature.Verify` — `hmac.Equal` constant-time compare (signature.go:32-37) — and on success calls `fanOut`, which posts the same byte slice concurrently to both legs (relay.go:149-171) forwarding exactly `forwardedHeaders` = X-GitHub-Event, X-GitHub-Delivery, X-Hub-Signature-256, X-Hub-Signature, Content-Type (relay.go:42-48, 188-192). Re-ran `cexec go go test -race -count=1 ./...` this session (all green); `TestDeliveryIsDuplicatedToBothReceiversVerbatim` and `TestLegsRunConcurrently` (relay_test.go:166-198, 217-242) directly witness verbatim body + exact header set on both stub receivers, concurrently. `TestHealthEndpoint` (relay_test.go:244-250) confirms the health path answers 200 and forwards nothing.",
+      "evidence": [
+        "webhook-relay/src/internal/relay/relay.go:87-92",
+        "webhook-relay/src/internal/relay/relay.go:98-171",
+        "webhook-relay/src/internal/signature/signature.go:32-37",
+        "webhook-relay/src/internal/relay/relay_test.go:166-198"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — both-or-502",
       "description": "GitHub gets a 2xx only when both legs returned 2xx; otherwise a 502 whose body names the failed leg. Per-leg timeout is ~4s, inside GitHub's 10-second window. No retries, no queue, no buffering, no state — GitHub's Recent Deliveries stays the ledger for both legs.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`handleWebhook` answers 200 only when `fanOut` returns zero failures, else 502 with one `<leg>: <reason>` line per failed leg (relay.go:131-144). `post()` makes exactly one attempt per leg with no loop or retry, under a 4s `context.WithTimeout` (relay.go:36-37, 180-211) — `defaultLegTimeout = 4*time.Second`, asserted `<= 5s` by `TestLegTimeoutFitsGitHubsDeliveryWindow` (relay_test.go:354-358) to stay inside GitHub's 10s window on the worst case (both legs timing out). No queue/buffer/state anywhere in the package (no persistent store, no channel-backed retry). Re-ran the suite fresh this session: `TestSingleFailedLegYields502NamingIt` (each leg failing alone, relay_test.go:254-293), `TestBothLegsFailingYields502NamingBoth` (295-307) and `TestSlowLegTimesOutAndYields502` (339-352) all pass, each asserting the healthy/other leg still received its delivery (no rollback).",
+      "evidence": [
+        "webhook-relay/src/internal/relay/relay.go:131-144",
+        "webhook-relay/src/internal/relay/relay.go:180-211",
+        "webhook-relay/src/internal/relay/relay_test.go:254-293",
+        "webhook-relay/src/internal/relay/relay_test.go:354-358"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — duplicate everything",
       "description": "Every verified delivery is duplicated to both receivers with no routing table and no event-type filtering — ping is forwarded too — and the payload is never parsed.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`fanOut` iterates the fixed two-element `legs` slice unconditionally (relay.go:149-159) — no event-type branch, no repository/routing lookup anywhere in the package. The body is handled only as `[]byte` from read to forward (relay.go:115, 126, 184); nothing in `internal/relay` or `internal/signature` unmarshals JSON. Re-ran fresh: `TestForwardsPingWithoutEventFiltering` (relay_test.go:362-376) confirms a `ping` event reaches both legs unfiltered; `TestUnparseableBodyIsStillRelayedVerbatim` (380-391) sends non-JSON bytes (including `\\x00\\xff`) and both legs receive them byte-for-byte, proving nothing parses the payload on the accept path.",
+      "evidence": [
+        "webhook-relay/src/internal/relay/relay.go:149-159",
+        "webhook-relay/src/internal/relay/relay_test.go:362-391"
+      ]
     },
     {
       "id": "V04",
       "area": "R4 — structural refusals",
       "description": "The service refuses structurally, not semantically: non-POST, any path but the webhook path, missing or invalid signature, missing Content-Length, body over the cap — refusing before reading the body where possible. Per the health-path ruling, exactly two routes are served — POST /api/webhook and a GET health path — and the health path is R4's only exemption: every other path, and every other method on those two, is refused.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Exactly two patterns are registered (`\"POST \"+Path`, `\"GET \"+HealthPath`, relay.go:89-90); Go's method-aware `ServeMux` answers 405 on the wrong method and 404 on every other path with no hand-rolled dispatch to get wrong. Signature and Content-Length are checked, in that order, before the body is read (relay.go:99-113); over-cap is refused both from the declared `Content-Length` (110-113) and from the actual read via `http.MaxBytesReader` if the declared length lied (115-124). Re-ran `TestRefusesEveryPathAndMethodButTheTwoServed` (relay_test.go:395-422, 11 cases), `TestRefusesMissingAndInvalidSignature` (426-445), `TestRefusesMissingContentLength` (460-469) and the two over-cap tests (471-492) fresh this session — all green, all confirm nothing is forwarded on a refusal. Two edge shapes fall outside this matrix and are already filed rather than re-reported here: `HEAD /healthz` answers 200 (Go's GET pattern also matches HEAD) and `POST /api//webhook` / `POST /api/./webhook` answer 307 (ServeMux's own path-cleaning redirect) rather than 404 — close-out B2, filed at code review (P1 round 1, F1) with no behavioural consequence (a 307 still lands on the canonical path, which still requires a valid signature).",
+      "evidence": [
+        "webhook-relay/src/internal/relay/relay.go:87-113",
+        "webhook-relay/src/internal/relay/relay_test.go:395-422",
+        "webhook-relay/src/internal/relay/relay_test.go:426-445",
+        "close-out.md#B2"
+      ]
     },
     {
       "id": "V05",
       "area": "R5 — no credentials, one secret (code half; the leaf half is 009's)",
       "description": "The service holds no credential toward GitHub and none toward the cluster; its only config is the shared secret and the two target URLs. Per the R5 split ruling, R5's second sentence — the secret being the same value as webhook.github.secret in argocd-secret, one OpenBao leaf and not a second secret — is 009's to prove, since 009 authors the ExternalSecret and the operator writes the leaf; nothing this slice ships can establish it, and it is not judged here.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`grep -rn \"os.Getenv\\|os.LookupEnv\"` across `webhook-relay/src` returns exactly four hits, all in `config.go`: `WEBHOOK_SECRET`, `ARGOCD_WEBHOOK_URL`, `APPLICATIONSET_WEBHOOK_URL`, `LISTEN_ADDR` (config.go:25-28, 62) — no fifth setting, no Kubernetes API config, no GitHub API token. `grep -rl \"k8s.io\\|Authorization\\|rest.InClusterConfig\"` matches only `relay_test.go`, where it appears solely inside `TestForwardsNoCredentialOfItsOwn` (relay_test.go:202-215) asserting the *absence* of Authorization/Cookie/Proxy-Authorization/X-Argocd-Token on both outbound legs — re-ran fresh, green. `go.mod` (3 lines, stdlib only) confirms no cluster-client dependency exists to hold such a credential. R5's second sentence (the leaf equality) is explicitly out of this slice's reach per the ruling and not judged here — left for 009.",
+      "evidence": [
+        "webhook-relay/src/internal/config/config.go:23-42",
+        "webhook-relay/src/go.mod:1-3",
+        "webhook-relay/src/internal/relay/relay_test.go:202-215"
+      ]
     },
     {
       "id": "V06",
       "area": "R6 — where it lands and how it ships",
       "description": "Source, Dockerfile and tests live in DockerImages, and the existing pipeline publishes the image as registry:5000/webhook-relay:<n> with no pipeline edit — the build discovers any top-level directory holding a Dockerfile and pushes it under that directory's name.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`webhook-relay/` is a new top-level directory in `DockerImages` carrying `Dockerfile`, `README.md`, `architecture.yaml` and `src/`. `iter_image_dirs` globs any subdirectory holding a `Dockerfile` (dockerfile_deps.py:21-28); `Jenkinsfile:46`'s closure builds only images `utils.hasChanges(\"${img}/.*\")`; `Jenkinsfile:100-101` pushes `registry:5000/${image}:${currentBuild.number}` and `:latest`, `image` being the directory name. `git diff` of the slice base against HEAD shows zero changes to `Jenkinsfile` or `Jenkinsfile.architecture` (both confirmed byte-identical). Pushed the slice's 3 commits to `origin/main` this session (`1f06dba..6e01ede`) and watched the live pipeline pick it up with no registration step: Jenkins job `DockerImages` build #2485 started automatically, its changeset listing exactly the 3 pushed commits and only `webhook-relay/*` paths.",
       "evidence": [
         "DockerImages/tools/dockerfile_deps.py:21-28",
         "DockerImages/Jenkinsfile:46",
-        "DockerImages/Jenkinsfile:100-101"
+        "DockerImages/Jenkinsfile:100-101",
+        "Jenkins DockerImages #2485 (commit 6e01edec5008276d9d785155f859d6b1a41f162e)"
       ]
     },
     {
       "id": "V07",
       "area": "R6 — the test suite",
       "description": "Unit tests cover HMAC verification (accept and reject), the fan-out, both-or-502 including each leg failing alone, and every refusal in R4 — all provable against stub receivers, with no Argo CD in the loop.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Re-ran `cexec go go test -race -count=1 ./...` fresh this session: `ok webhook-relay/internal/config`, `ok webhook-relay/internal/relay`, `ok webhook-relay/internal/signature` — all green, plus `gofmt -l .` empty and `go vet ./...` clean. Coverage confirmed by direct read: HMAC accept/reject in `signature_test.go` (`TestVerifyAcceptsGitHubDocumentedVector`, `TestVerifyRejects` with 8 sub-cases); fan-out in `relay_test.go`'s R1 block (166-250); both-or-502 including each leg alone in the R2 block (254-358, including `TestSingleFailedLegYields502NamingIt`'s two named sub-cases); every R4 refusal in the R4 block (395-500). All receivers in the suite are `httptest.Server` stubs (relay_test.go:52-77) — no Argo CD binary or config anywhere in the test tree.",
+      "evidence": [
+        "webhook-relay/src/internal/signature/signature_test.go:21-53",
+        "webhook-relay/src/internal/relay/relay_test.go:164-500",
+        "cexec go go test -race -count=1 ./... (this session, all green)"
+      ]
     },
     {
       "id": "V08",
       "area": "R7 — the argo-cd document set",
       "description": "O3 is closed in the argo-cd document set's decisions.md in favour of one fanned-out endpoint; design.md records that the registered hook URL — the registry repo's manual hook and each deploy repo's D39 github_repository_webhook alike — is the relay's public URL, not argocd-server's; and A.4's \"homelab TLS\" exposure bullet in phases.md, which as written contradicts D39, is corrected.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed to doc phase",
+      "rationale": "Not yet done, and not owed to this phase: `plan.md` assigns R7's `argo-cd/` document-set edits to the run loop's own doc phase, which per `state.json` (`run_phase: \"test\"`, no doc round recorded) has not run yet. Confirmed unresolved by direct read: `decisions.md:542-549` still lists O3 as an open question (\"two hooks registered on the registry repo, or one endpoint fanned out to both receivers\"); `design.md:290-291` still frames it as undecided (\"Whether the two receivers sit behind one fanned-out endpoint or two registered hooks is O3, decided at Phase A standup\"); `phases.md:85-86` still reads \"Expose argocd-server behind the estate ingress with homelab TLS\", the exposure bullet the ruling says contradicts D39. This is the ordering already flagged by consult 1 as close-out S3 — the test phase runs before the doc phase in this loop, so V08 is correctly ruled owed here rather than red.",
       "evidence": [
-        "AnsibleSpecs/argo-cd/decisions.md:542",
+        "AnsibleSpecs/argo-cd/decisions.md:542-549",
         "AnsibleSpecs/argo-cd/design.md:290-291",
         "AnsibleSpecs/argo-cd/phases.md:85-86",
-        "AnsibleSpecs/argo-cd/decisions.md:382"
+        "close-out.md#S3"
       ]
     },
     {
       "id": "V09",
       "area": "Ruling — Go, backup-server's layout into iac-provisioner's runtime",
       "description": "The relay is a Go service laid out like backup-server — module under src/, cmd/webhook-relay/main.go, internal/<pkg>/ — built by a multi-stage Dockerfile whose builder is a golang:*-bookworm stage on backup-server's shape and whose runtime stage follows iac-provisioner: debian:bookworm-slim carrying the static binary and its CA certificates and nothing more. backup-server's own runtime stage — an apt layer plus a piped rclone installer — is the counter-example and is not copied.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Directory layout matches: `src/go.mod`, `src/cmd/webhook-relay/main.go`, `src/internal/{applog,config,relay,signature}/` — the same shape as `backup-server/src/{cmd/backup-server,internal/{applog,handler,config,auth,pipeline}}`. Builder stage (Dockerfile:1-9) mirrors `backup-server/Dockerfile:1-9`: `golang:*-bookworm` base, module download before source copy, `CGO_ENABLED=0`, `-trimpath`, `-ldflags=\"-s -w\"`. Runtime stage (Dockerfile:15-24) is `debian:bookworm-slim` + `ca-certificates` only, matching `iac-provisioner/Dockerfile:9-13` exactly in shape — not `backup-server/Dockerfile:12-21`'s `curl ca-certificates unzip sudo` plus piped rclone installer, confirmed absent by direct read of the shipped Dockerfile.",
       "evidence": [
+        "webhook-relay/Dockerfile:1-24",
         "DockerImages/backup-server/Dockerfile:1-9",
-        "DockerImages/backup-server/src/cmd/backup-server/main.go:1",
-        "DockerImages/iac-provisioner/Dockerfile:9-13",
-        "DockerImages/backup-server/Dockerfile:12-21"
+        "DockerImages/iac-provisioner/Dockerfile:9-13"
       ]
     },
     {
       "id": "V10",
       "area": "Ruling — the endpoint path",
       "description": "The endpoint path is /api/webhook, making the registered hook URL https://deploy-hooks.webathome.org/api/webhook — the URL R7 records in design.md and the one D39's Terraform resource carries.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`const Path = \"/api/webhook\"` (relay.go:24), registered as the sole POST route (relay.go:89). `README.md:106` records the public URL as `https://deploy-hooks.webathome.org/api/webhook`, the exact value 009/D39 must carry. This is the code half only — the doc-side recording in `design.md` is R7/V08's, owed to the doc phase.",
+      "evidence": [
+        "webhook-relay/src/internal/relay/relay.go:21-24",
+        "webhook-relay/README.md:106"
+      ]
     },
     {
       "id": "V11",
       "area": "Ruling — the federated model",
       "description": "The image ships a hand-authored webhook-relay/architecture.yaml that validates as part of the whole set with ./scripts/arch-validate.py */architecture.yaml, so the estate's only internet-facing service is not a hole in the federated model.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Re-ran `cexec iac ./scripts/arch-validate.py */architecture.yaml` from the DockerImages root fresh this session: all 23 files pass including `✓ webhook-relay/architecture.yaml`. The file is hand-authored (schemaVersion 0.1, producer docker-images) declaring one `SoftwareProduct` applicationComponent, one applicationService and one applicationInterface with UUIDs, per `backup-server/architecture.yaml`'s shape.",
       "evidence": [
-        "DockerImages/CLAUDE.md:27-30",
-        "DockerImages/Jenkinsfile.architecture:32-36"
+        "webhook-relay/architecture.yaml:1-56",
+        "cexec iac ./scripts/arch-validate.py */architecture.yaml (this session, 23/23 green)"
       ]
     },
     {
       "id": "V12",
       "area": "Ruling — tests stay out of CI",
       "description": "The suite is run the way the repo already runs tests — go test ./... as backup-server documents — and the shared root Jenkinsfile, which builds and pushes every image and runs no tests today, is not touched.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "`README.md`'s \"Local development\" section (117-126) documents `go test ./...` / `go build`, the same shape as `backup-server/README.md:157-162`, and states plainly \"tests are not run in CI\". `git diff <slice-base>..HEAD -- Jenkinsfile` is empty — confirmed byte-identical to the pre-slice tree.",
       "evidence": [
-        "DockerImages/backup-server/README.md:157-162"
+        "webhook-relay/README.md:117-126",
+        "DockerImages/backup-server/README.md:157-162",
+        "git diff 1f06dbaf..6e01edec -- Jenkinsfile (empty)"
       ]
     },
     {
       "id": "V13",
       "area": "Hand-off to 009",
       "description": "Slice 009 can pin this slice's image tag and author the relay's Deployment, Service and deploy-hooks.webathome.org annotation from what shipped alone: the listen port, the environment variables carrying the shared secret and the two receiver URLs, the health path, and the statelessness that makes more than one replica safe are all findable in the image's own documentation.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`README.md` states the listen port (8080, `EXPOSE`d, README:103), health path (`GET /healthz`, README:104-105), the three-plus-one env vars in a table with meaning and examples (README:87-92), the public URL (README:106-108), and a dedicated \"Statelessness and replicas\" section stating more than one replica and `RollingUpdate` are safe (README:110-115). Nothing in this contract requires access to anything 009 doesn't have.",
+      "evidence": [
+        "webhook-relay/README.md:85-115"
+      ]
     },
     {
       "id": "V14",
       "area": "Ruling — GitHub's webhook-secret wire format, pinned by the suite",
       "description": "The suite pins GitHub's documented validation contract, not just 'an HMAC check': the signature is read from X-Hub-Signature-256 as sha256=<lowercase hex digest> with the prefix part of the value; the digest is computed over the exact raw body bytes read off the wire — the same bytes forwarded verbatim, never a parsed or re-serialized copy; the comparison is constant-time; a missing X-Hub-Signature-256 is refused exactly like an invalid one; and X-Hub-Signature (SHA-1) is forwarded but never trusted, verification reading the 256 header only.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Four of the five properties are pinned by real, re-run-green tests against GitHub's own documented vector (`docSecret`/`docBody`/`docSignature`, signature_test.go:15-19): the `sha256=` prefix and lowercase hex are pinned by `TestVerifyRejects`'s \"digest without the sha256= prefix\" and \"uppercase hex digest\" cases (signature_test.go:38-40); the exact-raw-bytes requirement by `TestVerifyCoversExactRawBytes` (58-70); the missing-header-refused-like-invalid rule by `relay_test.go`'s `TestRefusesMissingAndInvalidSignature` \"missing\" case (426-445) and `signature_test.go`'s \"empty signature\" case; SHA-1-forwarded-never-trusted by `TestSHA1SignatureIsNeverTrusted` (relay_test.go:449-458) and the header-forwarding assertion in `TestDeliveryIsDuplicatedToBothReceiversVerbatim`. The fifth property — the comparison is constant-time — is true in the shipped code (`hmac.Equal`, signature.go:36) but is not test-enforced: this is close-out B1, filed at code review with a mutation-testing proof (replacing `hmac.Equal` with `==` leaves the suite green) and judged advisory rather than blocking at consult 1. Recorded here rather than re-litigated, per the generation bar — the gap is already found, documented and routed.",
+      "evidence": [
+        "webhook-relay/src/internal/signature/signature_test.go:15-53",
+        "webhook-relay/src/internal/relay/relay_test.go:449-458",
+        "webhook-relay/src/internal/signature/signature.go:32-37",
+        "close-out.md#B1"
+      ]
     }
   ]
 }

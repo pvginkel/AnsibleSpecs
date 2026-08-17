@@ -44,6 +44,20 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — first push of `webhook-relay`; live `DockerImages` build confirms the pipeline discovery claim · DockerImages
+
+The test phase pushed this slice's three `DockerImages` commits (`51f6653`, `6f4c884`, `6e01ede`)
+to `origin/main` — their first push; the branch had only existed locally since the phase and
+consult rounds. `track_build.py` could not track the result (`$JENKINS_TOKEN` is not set in this
+pod), so the Jenkins MCP tools were polled by hand instead: job `DockerImages` build #2485 started
+automatically off exactly these three commits with no registration step, and finished `SUCCESS` in
+120s, publishing `registry:5000/webhook-relay:2485` and `:latest`. This is live evidence for V06's
+"creating the directory is the whole of wiring it into the pipeline" claim, beyond the phase's own
+`kaniko --context webhook-relay --no-push` dry run (also re-run green this session).
+
+Provenance: test-agent, test round 1; Jenkins `DockerImages` #2485.
+Disposition:
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->
