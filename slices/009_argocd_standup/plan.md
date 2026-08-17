@@ -740,7 +740,7 @@ Settled beyond the plan's text:
   unauthenticated. The drill's registry-entry text and the delete-afterwards keystrokes are
   close-out **A4**; `helm lint`'s warning on the library's hook Job is **B14**.
 
-### P6 — Argo registers itself
+### P6 — Argo registers itself ✅ DONE 2026-08-18
 
 Target: `../HelmCharts`
 
