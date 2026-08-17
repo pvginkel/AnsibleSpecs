@@ -58,6 +58,21 @@ automatically off exactly these three commits with no registration step, and fin
 Provenance: test-agent, test round 1; Jenkins `DockerImages` #2485.
 Disposition:
 
+### N2 — a stray unpushed `Ansible` commit surfaced by the driver's push check · Ansible
+
+The driver's push check found `/work/Ansible` main 1 commit ahead of `origin/main` — `f870332`,
+"triage 2026-08-16: the kubeconfig limit, the provider mirror, root rotation" — a docs-only commit
+unrelated to this slice's own diff (no `webhook-relay` or `argo-cd` content), left local from
+triage work earlier in this session before 015 was planned. Not caught by the first pass because
+this slice's own work never touched `/work/Ansible`, so nothing prompted a status check there.
+Pushed per the driver's nudge and the procedure's push step: `IaC/Build-Main` #137 started
+automatically off exactly this commit and finished `SUCCESS` in 21s (terraform plan + the
+protected-VM destroy check, both green). No live check from this pass needed redoing — nothing
+this commit touches was checked live here.
+
+Provenance: test-agent, test round 1 (driver nudge); Jenkins `IaC/Build-Main` #137.
+Disposition:
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first; which are in this slice's repos, which elsewhere -->
