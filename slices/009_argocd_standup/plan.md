@@ -459,7 +459,7 @@ Settled beyond the plan's text:
   new leaf.
 - Three leaves and the hand-created Keycloak client are operator keystrokes — close-out **A2**.
 
-### P3 — Applications generate: the `releases` AppProject and both ApplicationSets
+### P3 — Applications generate: the `releases` AppProject and both ApplicationSets ✅ DONE 2026-08-17
 
 Target: `../ArgoCDDeploy`
 
