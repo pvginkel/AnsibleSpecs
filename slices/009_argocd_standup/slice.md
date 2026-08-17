@@ -29,7 +29,10 @@ bullets point at, and the documents stay authoritative for anything not quoted.
 
 ### A.4 — Argo CD standup (D3, and most of the register)
 
-Verbatim from `phases.md`:
+Verbatim from `phases.md`. **Items 5 and 7 were re-cut 2026-08-17** from the current `phases.md`,
+after slice 015 shipped the relay image and O3 closed as **D49**; `plan.md`'s **R5** and **R7**
+quote the pre-relay wording and record the ruling that replaced it, and the R-numbering they and
+`verification.json` use is unchanged — A.4's new relay bullet rides inside item 5.
 
 1. > Create `ArgoCDDeploy`: wrapper chart pinning the upstream `argo-cd` chart, plus the
    > AppProject `releases` (D10), both ApplicationSets (design.md templates), notifications
@@ -48,8 +51,17 @@ Verbatim from `phases.md`:
 4. > Repository credential Secrets via ESO (D40) — after checking whether anonymous read
    > suffices anywhere.
 
-5. > Expose argocd-server behind the estate ingress with homelab TLS; decide **O3** (one
-   > fanned-out webhook endpoint vs two hooks on the registry repo).
+5. > Expose argocd-server behind the estate ingress on an internal `.home` name with homelab
+   > TLS — the UI only. It is **not** published, and no webhook reaches it from outside (D49).
+   >
+   > Deploy the webhook relay in `argocd-prd`, pinned to a `registry:5000/webhook-relay:<n>`
+   > tag (slice 015 ships the image; its `README.md` is the contract): Deployment — stateless,
+   > so ≥2 replicas and `RollingUpdate` — with `WEBHOOK_SECRET` from the `webhook.github.secret`
+   > leaf and `ARGOCD_WEBHOOK_URL` / `APPLICATIONSET_WEBHOOK_URL` naming the two in-cluster
+   > receivers, probes on `GET /healthz`, and a Service annotated
+   > `nginx.webathome.org/server-name: deploy-hooks.webathome.org` +
+   > `nginx.webathome.org/is-public: "yes"`. The public DNS record and the router NAT rule are
+   > operator actions outside every repo.
 
 6. > **Bootstrap, once, by hand** (operator): clone, `helm dependency build`, `helm install`;
    > add `configs/prd/argocd/prd/release.yaml` with `deployed: true, autoSync: false` —
@@ -57,7 +69,8 @@ Verbatim from `phases.md`:
    > itself on first generation.
 
 7. > Operator creates the registry webhook on HelmCharts (manual, one-off) with the shared
-   > secret.
+   > secret, pointed at `https://deploy-hooks.webathome.org/api/webhook` like every other hook
+   > (D49).
 
 ### A.5 — verification (the proof items, consolidated)
 
@@ -85,6 +98,15 @@ Verbatim from `phases.md`. These are the slice's outcome-level acceptance, not e
 17. > Point a no-sync Application at an existing live release and check the live-vs-git diff
     > reads sensibly — diff quality proven before Phase B stakes a cutover on it.
 18. > SSO login works; local admin break-glass works (D9).
+19. > A real GitHub delivery through `https://deploy-hooks.webathome.org/api/webhook` lands
+    > `200` in *Recent Deliveries*, both legs green.
+20. > The partial-failure drill: scale one receiver to zero, redeliver, see the delivery red
+    > with the dead leg named in the `502` body; restore it, redeliver green.
+
+Items 19 and 20 are the 2026-08-16 ruling's two added proof items, re-cut 2026-08-17 from the
+current `phases.md` A.5, where they follow item 8. They sit last here so items 8–18 keep the
+numbers `plan.md` and `verification.json` already use; the plan carries these two as **V24** and
+**V25**.
 
 ### Exit criterion
 
@@ -270,28 +292,54 @@ authoritative where they differ: `design.md`, D38 in `decisions.md`, `phases.md`
 > would guard harder but is incompatible with undeploy-by-flag, and undeploy-by-flag is the
 > lifecycle (D27).
 
-### design.md — "Webhooks — push-only, two receivers" (requirements 5 and 7, proof item 8)
+### design.md — "Webhooks — push-only, through the relay" (requirements 5 and 7, proof items 8, 19, 20)
 
-> Polling is off everywhere, including the generator (D6).
+Re-cut 2026-08-17 after slice 015; the section was titled "two receivers" and left O3 open when this
+slice was triaged.
+
+> Polling is off everywhere, including the generator (D6). Argo CD is not published: **every hook
+> registers one URL**, `https://deploy-hooks.webathome.org/api/webhook`, the public endpoint of the
+> webhook relay, which verifies GitHub's signature and duplicates each verified delivery to both
+> receivers (D49).
 >
 > | Push to | Must reach | Effect |
 > | --- | --- | --- |
 > | **HelmCharts** (the registry) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
 > | **Each deploy repo** | argocd-server, `/api/webhook` | refresh and sync the affected Application |
 >
-> Both share the secret at `webhook.github.secret` in `argocd-secret`. The registry hook is
-> created manually, once. Each deploy repo's hook is a `github_repository_webhook` resource in
-> that repo's own Terraform (D39), so the PreSync apply creates it on first sync — bootstrap
+> Both receivers get every delivery, and the one a push does not concern no-ops on it cheaply —
+> argocd-server matches the pushed repo against Application sources, the applicationset-controller
+> against its generators. That is why the relay carries no routing table and gains no edit per
+> migrated app.
+>
+> Both share the secret at `webhook.github.secret` in `argocd-secret`, and re-verify what the relay
+> already verified. The relay is configured with that same value — one leaf, not a second secret.
+> The registry hook is created manually, once. Each deploy repo's hook is a
+> `github_repository_webhook` resource in that repo's own Terraform (D39), so the PreSync apply
+> creates it on first sync — bootstrap
 > rides the registry hook, needing no polling. The resource is repo-scoped while stages apply
 > the same `terraform/` under separate state keys (D32), so **exactly one stage's state owns
 > it** — a `manage_webhook` variable in `config/{stage}/*.tfvars`, true once per repo — or the
-> second stage's first apply collides with GitHub's hook-already-exists. Whether the two receivers sit behind one fanned-out
-> endpoint or two registered hooks is O3, decided at Phase A standup.
+> second stage's first apply collides with GitHub's hook-already-exists.
+>
+> **The relay's contract**, in full in `DockerImages/webhook-relay/README.md`: two routes only,
+> `POST /api/webhook` and `GET /healthz`; the HMAC-SHA256 is taken over the exact bytes read off the
+> wire — the same bytes forwarded verbatim — and compared in constant time; everything else is
+> refused structurally before any semantic decision (`401` missing or invalid signature, `411` no
+> `Content-Length`, `413` over the 4 MiB cap, `405`/`404` for a method or path it does not serve).
+> Both legs `2xx` → `200`; anything else → `502` naming each failed leg and why, which *Recent
+> Deliveries* shows. The per-leg timeout is 4 s, so the worst case stays inside GitHub's 10-second
+> window. The cap and the timeout are source constants: the whole of the relay's configuration is
+> the shared secret and the two receiver URLs, and it holds no credential toward GitHub and none
+> toward the cluster. It is stateless, so more than one replica is safe — and with two, a roll of
+> `argocd-prd` opens no window in which deliveries are dropped. Its Deployment, Service and public
+> annotation are ArgoCDDeploy chart content, pinned to a `registry:5000/webhook-relay:<n>` tag.
 >
 > **The consequence to respect:** a dropped webhook is not a delay — it is stale-but-green,
 > followed by the deploy landing at an arbitrary later moment when an unrelated refresh
 > re-resolves the branch. Accepted deliberately (D6); Triage **#507** revisits a slow fallback
-> poll; GitHub's *Recent Deliveries* page is where a miss is visible and redeliverable.
+> poll; GitHub's *Recent Deliveries* page is where a miss is visible and redeliverable — for both
+> receivers, which is what both-or-`502` buys.
 
 ### design.md — "Sync semantics" (requirements 1, 3, 4; proof items 9, 13, 18)
 
@@ -378,14 +426,17 @@ non-secret literal is slice 007's `attachments/credential-inventory.md`.
 
 ### Open questions phases.md hands to implementation
 
-- **O3** — *"one fanned-out webhook endpoint vs two hooks on the registry repo"*, requirement 5,
-  decided at standup.
+- ~~**O3** — *"one fanned-out webhook endpoint vs two hooks on the registry repo"*, requirement 5,
+  decided at standup.~~ **Closed 2026-08-17 as D49** in the planning session: one fanned-out
+  endpoint, the relay at `deploy-hooks.webathome.org`, and Argo CD stays off the internet. It is no
+  longer in `decisions.md` §"Open"; the ruling is in `plan.md` and the narrative in
+  [`history.md`](../../../argo-cd/history.md) §"The webhook edge".
 - Requirement 2's Keycloak client secret: *"operator writes it, or a public client with PKCE — is
   decided at implementation."*
 - Requirement 4: *"after checking whether anonymous read suffices anywhere."*
 
 These are the planner's to bottom out with the operator; triage records them open rather than
-guessing. **O3** and the register's other `On` entries are in
+guessing. The register's remaining `On` entries are in
 [`decisions.md`](../../../argo-cd/decisions.md) §"Open".
 
 ## Repo state at triage

@@ -183,7 +183,7 @@ Facts established at planning time, so they are not rediscovered:
   line deliberately differs from the consult's §5, which put the chart fragment in 015 — but
   `ArgoCDDeploy` does not exist until this slice's first phase creates it, so that cut would make
   the two slices mutually blocking. Ordering is linear: **015 → 009**. The relay's design is
-  [`015_webhook_relay/attachments/webhook-relay-consult.md`](../backlog/015_webhook_relay/attachments/webhook-relay-consult.md)
+  [`015_webhook_relay/attachments/webhook-relay-consult.md`](../completed/015_webhook_relay/attachments/webhook-relay-consult.md)
   — authoritative for the manifests this slice writes, especially §4 (placement) and §2 (the
   security model, which is why nothing but the relay faces the internet).
 - Ruling (2026-08-16) — **two proof items are added to A.5**, on top of R8, because the relay is
@@ -452,7 +452,7 @@ The chart deploys slice 015's relay into `argocd-prd` and gives it the estate's 
 internet-facing hostname, so that a GitHub push reaches both Argo receivers without Argo being
 reachable from the internet.
 
-- **015's [`attachments/webhook-relay-consult.md`](../backlog/015_webhook_relay/attachments/webhook-relay-consult.md)
+- **015's [`attachments/webhook-relay-consult.md`](../completed/015_webhook_relay/attachments/webhook-relay-consult.md)
   is authoritative** — §4 for placement and §2 for why nothing but the relay faces outward. Two
   replicas and no state, so a self-sync roll of `argocd-prd` opens no drop window.
 - **The image is `registry:5000/webhook-relay:<n>` pinned to a build number slice 015 published** —
