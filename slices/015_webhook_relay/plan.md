@@ -215,6 +215,12 @@ over all 23 files. `kaniko --context webhook-relay --no-push` builds; root `Jenk
 - **The suite pins GitHub's documented vector** as a known answer (`It's a Secret to Everybody` /
   `Hello, World!` → `sha256=757107ea…043e17`), and both test helpers compute HMACs from the
   documented recipe rather than calling the code under test.
+- **Redirects are not followed; a 3xx is that leg's own answer** (r1 F4, fixed in `6f4c884`).
+  Go's default policy followed up to ten hops, so a receiver answering `303` scored the delivery
+  green with nothing processed and a `307` replayed the body and its valid signature to the
+  `Location` host. `CheckRedirect` returns `ErrUseLastResponse`, the leg fails as `HTTP 3xx`, and
+  `README.md`'s configuration section tells 009 that a redirecting URL — `http://` toward a
+  receiver that upgrades to `https://` — is a `502` every time.
 - **`architecture.yaml` carries no consumption edge toward the two receivers.** Cross-producer
   references resolve by UUID and Argo CD is modelled by no producer yet, so there is nothing to point
   at. **009's `ArgoCDDeploy` producer is where that edge belongs** — relay `app:` → each receiver's
