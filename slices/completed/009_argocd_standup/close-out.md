@@ -1,7 +1,8 @@
 # Close-out — slice 009 argocd_standup
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-08-17 19:51 → 2026-08-18 01:20 · 7 phases · 2 bail-outs (1 operator question) · 1 test
+round · doc phase done · $139.61 (planner 15 %, research 8 %, rework 11 %)
 
 <!-- Every entry, in every section, has exactly this shape. The id is the section's letter
      (A · N · B · Q · S) and the next number — count the section's `###` headings, struck ones
