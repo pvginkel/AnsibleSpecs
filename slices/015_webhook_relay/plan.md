@@ -191,6 +191,35 @@ Constraints the repo will not tell you:
   federated model; `DockerImages/CLAUDE.md` §"What each producer owns" and §"Conventions" govern
   its shape, and `backup-server/architecture.yaml` is the worked example.
 
+**Done (2026-08-17).** Landed on `phase/015-P1`: `webhook-relay/` — `Dockerfile`, `README.md`,
+`architecture.yaml` and `src/` (module `webhook-relay`, `cmd/webhook-relay/main.go`,
+`internal/{applog,config,relay,signature}/`). Gate green: `cexec go go test ./...` from `src/` (also
+clean under `-race` and `gofmt -l`) and `cexec iac ./scripts/arch-validate.py */architecture.yaml`
+over all 23 files. `kaniko --context webhook-relay --no-push` builds; root `Jenkinsfile` untouched.
+
+- **The contract 009 pins**, all in `README.md`: port **8080**, health **`GET /healthz`**, env
+  **`WEBHOOK_SECRET`** / **`ARGOCD_WEBHOOK_URL`** / **`APPLICATIONSET_WEBHOOK_URL`** plus optional
+  `LISTEN_ADDR` (`:8080`); stateless, so >1 replica and `RollingUpdate` are safe; no volumes and no
+  service account beyond the default.
+- **The 4 MiB cap and the 4 s per-leg timeout are source constants, not env vars** — which is what
+  makes R5's "only config is the shared secret and the two target URLs" literally true. The tests
+  reach them as unexported `Relay` fields.
+- **R4's matrix is Go's method-aware `ServeMux`, not hand-rolled dispatch**: `405` on any other
+  method on the two served patterns, `404` on every other path. Missing or invalid
+  `X-Hub-Signature-256` → `401`, missing `Content-Length` → `411`, declared length or body over the
+  cap → `413`; signature presence and declared length are both checked before the body is read.
+- **`502` bodies name each failed leg and why** (`argocd-server: HTTP 500`, `… timeout after 4s`);
+  the underlying error, receiver URL included, goes to the log only, not to GitHub.
+- **Go 1.26**: `go 1.26.0` in `go.mod` against a `golang:1.26-bookworm` builder. Standard library
+  only, so there is **no `go.sum`** and the Dockerfile copies `src/go.mod` alone.
+- **The suite pins GitHub's documented vector** as a known answer (`It's a Secret to Everybody` /
+  `Hello, World!` → `sha256=757107ea…043e17`), and both test helpers compute HMACs from the
+  documented recipe rather than calling the code under test.
+- **`architecture.yaml` carries no consumption edge toward the two receivers.** Cross-producer
+  references resolve by UUID and Argo CD is modelled by no producer yet, so there is nothing to point
+  at. **009's `ArgoCDDeploy` producer is where that edge belongs** — relay `app:` → each receiver's
+  `svc:`; recorded as close-out S2.
+
 ## Not in scope
 
 - **The chart manifests.** Deployment, Service, the public annotation and the ExternalSecret for the

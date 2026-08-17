@@ -85,3 +85,27 @@ question, not a copy-paste.
 
 Provenance: plan-writer, planning round 1; `plan.md` P1 and the `--dry-run` output
 Disposition:
+
+### S2 — `webhook-relay`'s architecture edge toward the two Argo CD receivers is owed to 009 · DockerImages / ArgoCDDeploy
+
+`webhook-relay/architecture.yaml` models the relay's own identity and exposed surface — `app:`,
+`svc:`, `if:POST /api/webhook` — but carries **no consumption edge** toward the two receivers it
+fans out to, even though those are its only outbound dependencies and the reason it exists. The
+producer manual is why: "A cross-producer reference is the UUID — period," and Argo CD is modelled by
+no producer today (`find /work/HelmCharts -name architecture.yaml | xargs grep -il argo` matches
+nothing, and `ArgoCDDeploy` does not exist until 009's first phase). There is no UUID to point at, so
+the honest artifact omits the edge rather than minting a dangling hint-only reference.
+
+Consequence: in the merged model the estate's one internet-facing service looks like a leaf — it
+exposes a public endpoint and consumes nothing — which understates both its blast radius and the
+`015 → 009` dependency. Nothing breaks; `arch-validate` is green either way, since it does not
+resolve cross-producer refs.
+
+The fix belongs to whichever slice first models Argo CD. When 009 authors `ArgoCDDeploy` (and with it
+argocd-server's and the applicationset-controller's `svc:` ids), add two `type: Association`
+relations to `webhook-relay/architecture.yaml` — relay `app:` → each receiver's `svc:` UUID, with
+`boundBy: "env:ARGOCD_WEBHOOK_URL"` and `boundBy: "env:APPLICATIONSET_WEBHOOK_URL"` recording the
+wire. That is a two-relation edit to a file this slice already shipped, not new design.
+
+Provenance: code-writer, P1 round 1; `webhook-relay/architecture.yaml` and P1's done-record in `plan.md`
+Disposition:
