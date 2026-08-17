@@ -706,6 +706,40 @@ ordering constraints) — until it does, this `Target:` does not resolve.
   HelmCharts `main` and removing it again *is* A.5's register → deploy → undeploy → unregister
   drill, live, on the operator's keystroke.
 
+**Done.** `/work/ProofDeploy` is a deploy repo in D12's layout: `chart/` carries the hook include,
+the `Prune=false` Namespace, a ConfigMap that tells a stage value from a chart default and echoes
+the synced SHA, and one workload; `terraform/` manages the app's namespace and a Secret in it;
+`config/prd/` holds `values.yaml` and `proof.tfvars`. `.kubecoder/project.yaml` gates on
+`tests/render-chart.py` + `tests/validate-terraform.sh` — 25 mutations, each negative-tested to
+fail on its own assertion.
+
+Settled beyond the plan's text:
+
+- **The app is `proofdeploy`, so the drill's registry entry is `configs/prd/proofdeploy/prd/release.yaml`
+  and the namespace `proofdeploy-prd`.** The chart takes the namespace from `.Release.Namespace` —
+  the Application's destination — so no template repeats the literal, and the gate renders under
+  the `<app>-<stage>` release name for the same reason P1 does.
+- **The two deliberate failures fail in different phases, by design.** `proof.breakSync` in the
+  stage values renders an object the API server refuses (an underscore is not a DNS subdomain), so
+  the failure lands in the sync's apply phase where `on-sync-failed` fires (R9); `break_apply` in
+  the stage tfvars trips a Terraform `precondition`, which fails before anything is created or
+  destroyed, so the hook exits non-zero and Argo applies nothing (R12). A render-time break would
+  be a comparison error and would prove neither.
+- **Terraform creates the namespace and the chart adopts it** (close-out **B10**), with
+  `ignore_changes` on its annotations and labels: the kubernetes provider manages the whole metadata
+  map, so without that every hook run would strip Argo's tracking annotation and every sync write it
+  back.
+- **The gate reads the repo against the hook's code, not only the render**: bare `backend "http" {}`
+  and bare `provider "kubernetes" {}`, every declared variable defaulted or supplied by
+  `config/prd/*.tfvars` or exported by the run, and `terraform fmt` as the gate's only reader of the
+  tfvars — `terraform validate` never sees a var-file.
+- **`--set hook.x=null` cannot test "the chart defaults nothing"**: helm deletes the coalesced key,
+  so a chart-side default survives it. The gate renders from a copy of `tests/hook-parameters.yaml`
+  with the key removed.
+- The workload is `busybox:1.37`, pinned; the estate already pulls busybox from Docker Hub
+  unauthenticated. The drill's registry-entry text and the delete-afterwards keystrokes are
+  close-out **A4**; `helm lint`'s warning on the library's hook Job is **B14**.
+
 ### P6 — Argo registers itself
 
 Target: `../HelmCharts`

@@ -128,6 +128,36 @@ items (a real delivery landing 200 with both legs green; the partial-failure dri
 Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, `config/prd/values.yaml`
 Disposition:
 
+### A4 — the throwaway app's registry entry, and what deleting it afterwards means
+
+P5a authored `/work/ProofDeploy` and deliberately committed no registry entry: adding one to
+HelmCharts `main` and removing it again *is* A.5's register → deploy → undeploy → unregister drill.
+The entry the repo is built for, at `configs/prd/proofdeploy/prd/release.yaml` — the path decides
+the Application name and the namespace, `proofdeploy-prd`, so it is not free:
+
+```yaml
+reconciler: argo-cd
+deployed: true
+autoSync: false
+repo: https://github.com/pvginkel/ProofDeploy
+targetRevision: main
+```
+
+Starting at `autoSync: false` keeps every sync an operator keystroke, which is what makes the two
+deliberate failures safe to fire on a production cluster — and R8's "a deploy-repo push visibly
+refreshes" is observable without syncing at all. Flipping it to `true` and back is R15's proof;
+unlike Argo's own entry, nothing here forbids it.
+
+Three keystrokes hang off the entry beyond the drill itself. The repo needs its GitHub webhook
+pointed at the relay (**A3**) before R8's deploy-repo leg can be observed. When the proof is done,
+A.5's "delete both afterwards" means the registry entry, the GitHub repository **and** its
+`/work/Ansible/.kubecoder/config.yaml` line — leaving the last behind makes `kc env restart` fail
+on a clone that no longer resolves. The Terraform state the drill writes is **S3**, and is not
+removed by any of that.
+
+Provenance: code-writer, P5a; ProofDeploy `chart/`, `terraform/`, `config/prd/`
+Disposition:
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -430,6 +460,67 @@ comment.
 Provenance: code-reviewer, P4 round 1; phases/P4/code_review_r1.md F1
 Disposition:
 
+### B12 — the render gate's "only the relay is public" claim only sees one spelling of the annotation · minor · ArgoCDDeploy
+
+P5's strongest new assertion is the exposure invariant: `tests/render-chart.py:871-877` collects the
+Services whose `nginx.webathome.org/is-public` annotation equals the literal `"yes"` and requires
+that list to be the relay alone, so argocd-server turning public fails the gate. nginx-configurator
+reads the same annotation through `parse_bool`, which is `value in ("yes", "true")`
+(`/work/DockerImages/nginx-configurator/app/annotations.py:191-192`). A Service annotated
+`is-public: "true"` is therefore internet-facing in the cluster and invisible to the assertion: the
+gate would still report the relay as the only public surface while a second vhost had a Let's
+Encrypt certificate and no RFC1918 allow block. The companion check at `:649-653` (argocd-server is
+`"no"`) fails safe under the same mismatch; the exclusivity claim does not.
+
+Nothing today spells it that way — the render carries exactly two annotated Services, both
+canonical — so this is coverage of V10's "the relay … is the only internet-facing surface", not a
+live defect.
+
+Found in P5 review round 1, reading the new invariant against the configurator's own parser.
+
+Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F2
+Disposition:
+
+### B13 — the relay's `:80` comment names a TLS failure that `server.insecure` rules out · nit · ArgoCDDeploy
+
+`chart/templates/webhook-relay.yaml:59-62` justifies the argocd-server leg with "a leg pointed at
+443 fails the whole delivery on the TLS handshake", and `tests/render-chart.py:172-176` restates it
+as "a leg pointed anywhere else fails every delivery". With `server.insecure: true` the upstream
+chart renders both Service ports onto the same plain-HTTP container port — `http 80 → 8080` and
+`https 443 → 8080` — so an `http://…:443/api/webhook` leg reaches the identical listener and
+succeeds; no handshake is attempted, and the insecure listener issues no redirect for the "does not
+follow redirects" clause to catch. **B3** above records the accurate version: the handshake failure
+belongs to an `https://` *scheme*, not to the port number. Port 80 is still the right choice and the
+gate pins it either way, so nothing follows from the words — the reason attached to them is wrong.
+
+Found in P5 review round 1, checking the comment against the rendered argocd-server Service.
+
+Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F3
+Disposition:
+
+### B14 — `helm lint` warns on every chart that includes the PreSync hook · nit · Charts
+
+`helm lint` checks each rendered object's `metadata.name` and does not know about `generateName`,
+so a chart including `homelab-shared.tf-presync-hook` lints with:
+
+```
+[WARNING] templates/tf-presync-hook.yaml: object name does not conform to Kubernetes naming
+requirements: "": metadata.name: Invalid value: ""
+```
+
+The Job's `generateName: tf-presync-` is correct and deliberate (the library chart,
+`_tf-presync-hook.tpl:26`) — a fixed name would collide across syncs. The warning is helm's blind
+spot, exits 0, and is invisible in `Charts`' own gate because a library chart renders no templates.
+It becomes visible in every repo that *consumes* the library: ProofDeploy's `kc project lint` today,
+`KubeCoderDeploy`'s tomorrow (slice 010), and each migrated app's after that. Worth knowing so a
+later phase does not read it as its own defect; the only fixes available are silencing lint or
+dropping `generateName`, and neither is worth it.
+
+Found running P5a's lint verb for the first time against a consumer of the library.
+
+Provenance: code-writer, P5a; ProofDeploy `tests/lint.sh`, `chart/templates/tf-presync-hook.yaml`
+Disposition:
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer -->
@@ -629,4 +720,27 @@ Slice 014 is the architecture-producers slice; this is an input to it, or to whi
 gives `ArgoCDDeploy` a pipeline.
 
 Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, 015 close-out S2
+Disposition:
+
+### S9 — the estate's one internet-facing pod is the only pod in `argocd-prd` with no securityContext
+
+The relay's pod spec (`chart/templates/webhook-relay.yaml:41-49`) sets no `securityContext` at
+either level and leaves `automountServiceAccountToken` alone, so it runs under the namespace's
+`default` ServiceAccount with its token mounted, as UID 0 — the image sets no `USER`, which 015's
+own review confirmed is the DockerImages convention rather than an oversight — with a writable root
+filesystem and the default capability set. Every other pod this chart renders (`-server`,
+`-repo-server`, `-application-controller`, `-applicationset-controller`, `-notifications-controller`,
+`-redis`) gets a container `securityContext` from the upstream chart's defaults; the relay is the
+one without, and the one reachable from the internet.
+
+What that costs is a claim, not a capability: the consult's §2 blast radius is *"compromise of the
+relay pod yields the shared HMAC secret … The relay holds nothing else; that is the whole point"*,
+and as deployed it also holds an authenticated cluster identity. `default` has no RBAC in this
+namespace and the binary never parses the payload, so the practical exposure is small — which is why
+this is a suggestion and not a bug. The pod-side half of that design property is decided in this
+chart, and this is where it would be stated.
+
+Found in P5 review round 1, comparing the relay's pod spec against the rest of its own render.
+
+Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F1
 Disposition:
