@@ -168,10 +168,10 @@ The "year 9" rotation event needs both the outgoing and the incoming root truste
 - **Runbook**: `docs/runbooks/step-ca-root-rotation.md`. Documents the cutover sequence — generate new root offline, install in step-ca alongside the old, add to the bundle in every copy the runbook inventories (and rebuild the images carrying one), confirm the drift pipeline goes green, fleet-wide `baseline` apply to land the second cert, soak, then remove the old root from step-ca + every copy + apply again to drop it from hosts. Parallels the existing "Intermediate rotation" section in `step-ca-bootstrap.md` but at a different scope and cadence.
 
 TODOs gating the next rotation:
-- Finish `docs/runbooks/step-ca-root-rotation.md`. It exists and carries the settled half — the full inventory of artefacts a root change moves (canonical copy, five out-of-repo copies, the images that consume the cert without holding a copy, the parallel four-copy `terraform.rc` set) and the ordering constraint. The step-by-step cutover procedure is still owed, and is blocked on the two mechanism items below.
+- Finish `docs/runbooks/step-ca-root-rotation.md`. It exists and carries the settled half — the full inventory of artefacts a root change moves (canonical copy, six out-of-repo copies, the images that consume the cert without holding a copy, the parallel four-copy `terraform.rc` set) and the ordering constraint. The step-by-step cutover procedure is still owed, and is blocked on the two mechanism items below.
 - Update the `baseline` ca-trust task to read the bundle, split by cert, name by fingerprint, reconcile against `/usr/local/share/ca-certificates/homelab-root-*.crt`. Generalise the self-heal grep over the desired set.
 - Update the `iac-scheduled-drift` "Homelab CA root drift" stage from byte diff to fingerprint-set comparison.
-- Decide and implement the deduplication mechanism for the five out-of-repo copies, or accept the maintenance burden by documenting every path in the runbook.
+- Decide and implement the deduplication mechanism for the six out-of-repo copies, or accept the maintenance burden by documenting every path in the runbook.
 
 ## Bootstrap-tier ciphertext — public repo posture
 
