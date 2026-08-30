@@ -48,6 +48,24 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — Test phase (r1): six of ten internal_tls leaves are already inside their renewal window in prod, right now · major
+
+Live --check --diff against the whole reachable prd fleet (2026-08-30) plus direct openssl reads confirm this is not hypothetical: pve/pve1/pve2 (notAfter Sep 10 20:37:42 2026 GMT), srvk8s1 (Sep 12 08:35:38), srvk8s2 (Sep 12 08:37:26) and srvk8s3 (Sep 10 20:45:27) are all inside the 14-day renewal window today, and playbooks/renew-internal-tls.yml correctly flags all six for reissue under --check. srvvault1/2/3 (Sep 16) are not yet due; srvk8s4 correctly has no leaf. b7de205 is pushed to main. The Friday 2026-09-04 04:00 UTC iac-scheduled-certs cron will pick these six up with six days of margin before the PVE expiry, or the operator can run it now: cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook --diff playbooks/renew-internal-tls.yml --limit '!k8s_dev' --check, then the same command with --check deleted. See verification.json V01 for the full evidence.
+
+**Consequence:** If neither the Friday cron nor a manual run happens before Sep 10, the pveproxy leaves on pve/pve1/pve2 lapse and the Proxmox web UI serves an expired certificate on all three nodes -- the exact outage this slice exists to prevent. This supersedes close-out A1's manual-rotation fallback: the tested, reviewed path now exists and should be used instead of an out-of-band PVE-only rotation.
+
+**Provenance:** witnessed, test-agent r1, live --check --diff + direct SSH cert reads against the prd fleet, 2026-08-30
+**Disposition:**
+
+### N2 — Test phase (r1): iac-on-push's result for b7de205 could not be confirmed -- Jenkins MCP was down · minor
+
+Push (d4e5a60..b7de205) completed and is pre-authorized under the devlock hold. Per slice-testing-strategy.md section 4 the pushed commit should be confirmed against iac-on-push (terraform plan + protected-VM destroy check), but the jenkins MCP server returned 502 for the whole test-phase pass and this pod carries no JENKINS_TOKEN for the track_build.py CLI fallback (env checked directly: only GH_TOKEN, KUBECODER_*, TF_VAR_* tokens are projected). This does not block the certs renewal itself -- iac-scheduled-certs is a separate cron-triggered job with no dependency on iac-on-push's result -- but the operator should glance at the iac-on-push build for b7de205 before assuming main is plan-clean.
+
+**Consequence:** Low: iac-on-push only plans and destroy-checks, it converges nothing, so an unnoticed red there costs a delayed signal rather than a live mutation. Worth a look next time Jenkins is reachable.
+
+**Provenance:** witnessed, test-agent r1, jenkins MCP 502 + empty JENKINS_TOKEN env, 2026-08-30
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -108,13 +126,49 @@ The README's playbook list stops at `refresh-k8s-addons.yml`, `adopt.yml` and `g
 **Provenance:** witnessed | code-writer, P2, r1 — read while placing renew-internal-tls.yml; ansible/playbooks/README.md:15-22
 **Disposition:**
 
-### B5 — Ansible — renew-internal-tls.yml's no-serial comment blames max_fail_percentage, which serial: never sets · minor
+### ~~B5 — Ansible — renew-internal-tls.yml's no-serial comment blames max_fail_percentage, which serial: never sets · minor~~ — resolved by consult 1 (b7de205): the no-serial comment now states the unconditional entire-batch-failed break and that max_fail_percentage cannot lift it; re-read against ansible-core 2.20.5 playbook_executor.py:188-195 and linear.py:336-350, kc project lint+test green; struck by consult 1
 
 `ansible/playbooks/renew-internal-tls.yml:64-71` says "setting [serial] defaults max_fail_percentage to 0, so the first failed host ends the play with the remaining hosts untried". The conclusion is right, the mechanism is not: `max_fail_percentage` is a play attribute with no default (`ansible/playbook/play.py:86`, `NonInheritableFieldAttribute(isa='percent')` → None) and the linear strategy skips the check unless it was explicitly set (`ansible/plugins/strategy/linear.py:337`). What actually ends the play is unconditional and elsewhere: `ansible/executor/playbook_executor.py:190-195` compares each batch's new failed-plus-unreachable count against the batch size and breaks when they match, which at batch size 1 is any single bad host. Checked against the pinned ansible-core 2.20.5 in the installed package. The plan's P1 constraints already record the correct account, including that max_fail_percentage cannot buy the coverage back.
 
 **Consequence:** The next author of a cluster-touching playbook, reading this comment, reaches for the remedy it implies — 'serial: 1' plus 'max_fail_percentage: 100' — and gets a play that still loses every host after the first failure. It also risks travelling into decisions.md, since P4 is told to derive the serialization wording from what shipped in P1-P3 rather than from the plan's prose.
 
 **Provenance:** witnessed — code-reviewer, P2 round 1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### B6 — Ansible — a dev-stage failure in iac-scheduled-certs loses its Telegram warning when a later prd stage then reds the build · minor
+
+notify.warning only echoes a [raisealert|type=warning] marker into the build log (/work/JenkinsPipelineUtils/vars/notify.groovy:46-48), and the job echoes it solely from post { unstable } (Jenkinsfile.iac-scheduled-certs:205-217), which Jenkins runs only when the final build result is UNSTABLE. Before slice 016 the dev host-cert stage was the last stage in the job, so nothing could downgrade an UNSTABLE build to FAILURE after DEV_STAGE_FAILED was set. P3 puts prd work after a dev stage for the first time: Host certs (k8s dev) at :102-125 sets the flag, and TLS leaves (excl. k8s dev) at :144-161 can red the build afterwards. The same shape already exists in Jenkinsfile.iac-scheduled-drift, whose dev k8s stage at :119-142 precedes prd stages at :144-161 and :195-229, so this is the repo's standing flag idiom rather than something P3 invents.
+
+**Consequence:** srvk8sdev is up, its host-cert renewal fails (build UNSTABLE, flag set), then the prd leaf run fails on an unreachable host (build FAILURE). The unstable handler never runs, so no warning marker reaches the log and the operator's only push is the bot's FAILURE report for the leaf stage — the dev failure, and the genuinely-failed-vs-powered-off distinction, survive only in the build log.
+
+**Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F1
+**Disposition:**
+
+### B7 — Ansible — iac-scheduled-certs no longer sets any build description when the failure is outside its two prd stages · nit
+
+P3 removed the job-level post { failure } that unconditionally set currentBuild.description = 'host certs may lapse' (Jenkinsfile.iac-scheduled-certs:196-204; base commit 3b971a5 :113-124) in favour of two stage-scoped handlers at :85-91 and :154-160, so the two certificate classes can each state their own cost. Anything that reds the build outside those two stages — a failing 'library' step at :34, an unallocatable iac-controller agent, a failed SCM checkout — now leaves the description null. Arguably the right trade, since a blanket 'host certs may lapse' on an agent-allocation failure was a claim the job had not earned; recorded so the catch-all's absence is known before the next stage is added.
+
+**Consequence:** A red iac-scheduled-certs whose failure is infrastructural rather than in a renewal stage produces a Telegram FAILURE message with no cost line appended — the job name and build link only, where before it read 'host certs may lapse'.
+
+**Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F2
+**Disposition:**
+
+### ~~B8 — AnsibleSpecs — decisions.md:26 credits both throttled handlers with an in-task readiness wait; Reload openbao has none · minor~~ — resolved by consult 1 (AnsibleSpecs c4c048c): decisions.md:26 now credits the readiness wait to the kubelite restart alone and says why it must sit in that task; Reload openbao is described as throttle-only; struck by consult 1
+
+The rewritten principle at decisions.md:26 says the one-at-a-time limit rides the mutating task: `throttle: 1` on the `Restart microk8s kubelite` and `Reload openbao` handlers, "with the readiness wait inside that same task". Only the kubelite handler has one — roles/microk8s/handlers/main.yml:60-77 is systemctl restart plus a curl loop on the node's own readiness endpoint in one shell task. roles/openbao/handlers/main.yml:13-23 is a bare ansible.builtin.systemd state: reloaded with throttle: 1 and no wait; its own comment claims only the one-peer-at-a-time SIGHUP, never a wait.
+
+**Consequence:** Someone auditing the serialization doctrine against the code finds the readiness wait in Restart microk8s kubelite and nothing of the kind in Reload openbao, and has to work out for themselves whether the openbao handler is missing a wait or the doctrine is overstating. Nothing built by following the sentence is wrong — an in-task readiness wait is the right pattern.
+
+**Provenance:** read, code-reviewer, P4 round 1, phases/P4/code_review_r1.md
+**Disposition:**
+
+### ~~B9 — AnsibleSpecs — decisions.md:26 states 'never two k8s nodes mutated at once' absolutely, while the playbook the same paragraph endorses writes a new leaf to three at once · nit~~ — resolved by consult 1 (AnsibleSpecs c4c048c): decisions.md:26 now serializes the step that takes a node out of service, not the file write that arms it, so the invariant and renew-internal-tls.yml no longer read as contradictory; struck by consult 1
+
+decisions.md:26 opens 'Never two k8s or Ceph nodes mutated at once' with no qualification, then points at playbooks/renew-internal-tls.yml as correct. That playbook (ansible/playbooks/renew-internal-tls.yml:53-91) has no serial: and no throttle: on the issuance or install path — the repo's only two throttle: 1 are the two handlers — so on a run where all three prd control-plane leaves are due, srvk8s1/2/3 each get a freshly signed certificate installed simultaneously. Only the kubelite restart is serialized. The entry introduces the disruptive/non-disruptive distinction only in its drain-and-cordon clause; decisions.md:499, untouched and the doc's own generalization of this principle, resolves it explicitly in terms of disrupting workloads.
+
+**Consequence:** A reader planning the next cluster-touching playbook — the reader this entry was rewritten for — has to reconcile the unqualified invariant in the first sentence against renew-internal-tls.yml being held up as the right shape in the fourth. The surrounding text is enough to land on the right answer, so the cost is a re-read, not a wrong build.
+
+**Provenance:** read, code-reviewer, P4 round 1, phases/P4/code_review_r1.md
 **Disposition:**
 
 ## Open questions and rulings
