@@ -421,6 +421,31 @@ too — `:294` describes the RBAC flip rolling one node at a time specifically "
 in `decisions.md` is: the entry at `:145` about internal_tls monitoring is separately wrong and was
 already wrong before this slice, and it is filed in the slice's close-out rather than fixed here.
 
+**Done (P4).** `decisions.md` states the serialization invariant and treats `serial: 1` as one
+mechanism for holding it, not as the rule.
+
+- `:26` rewritten: the invariant unchanged and absolute; drain/cordon scoped to mutations that
+  disrupt workloads (the kubelite bounce disrupts none — pods keep running while its control plane
+  blips); `serial: 1` named as one way to hold the line, with what it costs; and the alternative —
+  `throttle: 1` on the mutating task, readiness wait inside that same task, because Ansible finishes
+  a handler on every notified host before starting the next.
+- The coverage trap is stated the way Ansible behaves, **not** the way this plan's prose put it:
+  `serial:` does not set `max_fail_percentage`; a batch in which *every* host failed ends the play,
+  and under `serial: 1` a batch is one host. Probed against the repo's own ansible: `serial: 1` with
+  h1 failing → h2/h3 never reach the recap (exit 2); identical with `max_fail_percentage: 100`;
+  identical with h1 unreachable (exit 4); no `serial:` → all three run and the run still exits 2.
+  Close-out B5 flagged this framing as at risk of travelling into doctrine; it did not.
+- `:294` no longer attributes the RBAC flip's one-node-at-a-time roll to `site-k8s.yml`'s `serial: 1`
+  — the handler's own `throttle: 1` and readiness wait carry it whatever drives the play.
+- No other serialization claim in `decisions.md` is falsified: `:212`, `:234-235`, `:244`, `:256`,
+  `:472` and `:499` are drain/reboot/upgrade rolls whose plays still carry `serial: 1`, and this
+  slice touched none of them.
+- **For the doc phase:** `:26` and `:294` are settled — re-editing them risks the two-entries-on-one-
+  subject failure surface 1 forbids. Still owed there and outside P4's scope: `:140` says the leaves
+  "have no scheduled driver" and names Trello 737 as the open gap, which this slice closes.
+- Gate: AnsibleSpecs carries no `kc` manifest, no lint and no tests; the diff is two prose lines, no
+  headings, links or structure touched.
+
 ## Not in scope
 
 - The step-ca **root CA and intermediate** — rotated by a manual ceremony, by design.
