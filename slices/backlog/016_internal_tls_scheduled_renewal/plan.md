@@ -43,14 +43,64 @@
   dev box must not fail the build. The operator picks up the missed dev renewal by hand
   afterwards — the job is not expected to chase it.
 
-- **Ruling (2026-08-30) — a scheduled kubelite bounce on the prd control plane.** Acceptable,
-  **with `serial: 1`**: at most once per ~33 days per node, one node at a time; the apiserver
-  VIP and the peer nodes cover the few-second gap and workload pods keep running.
+- **Ruling (2026-08-30) — a scheduled kubelite bounce on the prd control plane, and what
+  serializing must not cost.** The bounce is acceptable **with `serial: 1`**: at most once per
+  ~33 days per node, one node at a time; the apiserver VIP and the peer nodes cover the
+  few-second gap and workload pods keep running.
 
-  Load-bearing detail: `serial: 1` is **not** inherited from the role or the handler. It is
-  expressed on the play in `ansible/playbooks/site-k8s.yml:52`; the `Restart microk8s
-  kubelite` handler only names it as a precondition in its comment. Whatever drives the k8s
-  renewal has to carry the one-node-at-a-time guarantee itself.
+  Serializing **must not cost fleet-wide coverage**. Asked whether it is acceptable that a
+  wedged node stops the remaining nodes being renewed, the operator ruled *no — keep both
+  properties*: one node at a time, **and** a wedged or unreachable host must not stop the other
+  hosts' renewals, **and** the run must still fail the build so it pages. The mechanism is the
+  planner's call.
+
+  Load-bearing details, both of which the naive reading gets wrong:
+
+  - `serial: 1` is **not** inherited from the role or the handler. It is expressed on the play
+    in `ansible/playbooks/site-k8s.yml:52`; the `Restart microk8s kubelite` handler only names
+    it as a precondition in its comment. Whatever drives the k8s renewal has to carry the
+    one-node-at-a-time guarantee itself.
+  - `serial: 1` on its own gives the *opposite* of the coverage property above: Ansible
+    defaults `max_fail_percentage` to 0 whenever `serial` is set, so every batch is one host
+    and the first failed or unreachable host ends the play — the later hosts are never
+    attempted. That is the silent partial coverage `playbooks/renew-host-certs.yml:43-47`
+    deliberately avoids by carrying no `serial:` at all.
+
+- **Ruling (2026-08-30) — how the renewal reaches a leaf without a second copy of its
+  declaration.** **Refactor to share.** Extract a `roles/proxmox_host/tasks/internal_tls.yml`
+  from the inline include at `roles/proxmox_host/tasks/main.yml:28-40`, and hoist the microk8s
+  host-eligibility guard — `_microk8s_installed.stat.exists`,
+  `microk8s_apiserver_homelab_sans | length > 0`, `not microk8s_worker_only`
+  (`roles/microk8s/tasks/main.yml:122-126`) — into `roles/microk8s/tasks/internal_tls.yml`, so
+  the renewal path *imports* that guard instead of restating it. The renewal then reaches each
+  leaf through the three per-consumer task files.
+
+  The point of the refactor is that the invariant actually holds: no SAN list, install path,
+  owner/group/mode, reload handler **or host-eligibility condition** exists in two places that
+  can drift apart. The two rejected alternatives were restating the microk8s guard with a
+  cross-referencing comment, and tagging the three include sites to drive `site*.yml --tags`.
+  This touches all three consumer roles, and the phase may need splitting to stay PR-sized.
+
+- **Ruling (2026-08-30) — the OpenBao renewal serializes across the Raft peers.** The
+  `srvvault1`, `srvvault2`, `srvvault3` renewal carries the same serial-on-apply idiom as the
+  converge path at `playbooks/site-openbao.yml:171`, so the three Raft peers never take the
+  `Reload openbao` SIGHUP at once. What the converge path guarantees today, the renewal path
+  keeps. (Fanning out on the grounds that a listener reload never touches Raft config was
+  offered and rejected.)
+
+- **Ruling (2026-08-30) — what detects a stalled renewer.** The operator:
+
+  > The weekly build. Besides that, we do have an alert mechanism that allows pipelines to
+  > raise alerts that I get in a Telegram app. Assume that that'll go into the Prometheus feed
+  > also at some point, although that shouldn't matter too much for now.
+
+  So the detector is a **red or unstable `iac-scheduled-certs`**, reaching the operator through
+  the pipeline alerting the job already uses — exactly the arrangement that backs the SSH host
+  certs. The plan must **not** rest any claim on a Prometheus stalled-renewer signal: the alert
+  rule is deferred (`/work/AnsibleSpecs/decisions.md:145`) and `metric.yml` publishes nothing
+  at all on the four k8s leaves, which have no node-exporter textfile dir. Keeping the expiry
+  metric published on every invocation rather than only on issuance is still correct and stays
+  in — it just earns no detection claim here.
 
 - **Ruling (2026-08-30) — the Sep 10 PVE expiry does not constrain phase order.** Asked
   whether the plan should sequence the proxmox_host path first so it is shippable before the
