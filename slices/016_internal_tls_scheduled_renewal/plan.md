@@ -122,7 +122,7 @@ and reaches into all three of those roles, and the change lands across two compo
 None beyond producers-before-consumers. The Sep 10 PVE expiry was considered as an ordering
 constraint and deliberately ruled out (see the ruling above).
 
-### P1 — Every internal_tls leaf is declared once, and the reloads it triggers limit their own blast radius
+### P1 — Every internal_tls leaf is declared once, and the reloads it triggers limit their own blast radius ✅ DONE 2026-08-30
 
 Target: ansible
 
