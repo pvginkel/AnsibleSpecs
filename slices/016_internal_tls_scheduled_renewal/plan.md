@@ -303,6 +303,31 @@ Prior art for both the shape and the documentation standard: `playbooks/renew-ho
 — its header explains why scheduled renewal is its own artifact and why drift cannot stand in for
 it. The new playbook earns a header of the same kind.
 
+**Done (P2).** `ansible/playbooks/renew-internal-tls.yml` renews all ten leaves; nothing about the
+converge paths changed.
+
+- One play, `hosts: proxmox:k8s:openbao`, three `import_role ... tasks_from: internal_tls` tasks
+  routed only by `group_names`. Entering the role carries its defaults, vars and handlers; no SAN
+  list, path, ownership, handler or eligibility condition is restated.
+- **One play, not one per consumer group** — proved locally that when *every* host of a play fails
+  Ansible abandons the whole run and later plays never execute, and that `max_fail_percentage: 100`
+  does not lift it. Three plays would have let one wedged group cost the other groups their
+  renewal, which is the coverage property the ruling keeps.
+- **`force_handlers: true`** — proved that without it a host that fails anywhere *after* issuance
+  drops its pending reload: the new leaf sits on disk, the next weekly run finds it fresh and
+  notifies nothing, and the service serves the certificate it loaded before until that one expires.
+  With it the reload lands and the run still exits 2.
+- No `serial:` and no `any_errors_fatal:`; the one-at-a-time guarantee is entirely P1's throttled
+  handlers. Proved in the same probe that a host failing mid-play does not stop its peers' throttled
+  handlers from running and the run still exits non-zero.
+- Verified against the real inventory: the play resolves to 11 hosts — the ten leaves plus srvk8s4,
+  which skips through the microk8s gate, not through anything written here. `--limit '!k8s_dev'`
+  → 10 hosts, `--limit k8s_dev` → srvk8sdev alone, so P3's two scopes cut cleanly. `--list-tasks`
+  shows only the three leaf paths and microk8s's install detection.
+- The three roles' defaults/vars share no key, so `import_role`'s play-scope exposure is inert.
+- `playbooks/README.md` catalogues playbooks but already omits `renew-host-certs.yml` and the other
+  cert playbooks; left to the doc phase rather than half-fixed here.
+
 ### P3 — The weekly certs job renews the leaves alongside the SSH host certs
 
 Target: root
@@ -337,6 +362,13 @@ Constraints the repo will not tell you:
 
 - **The SSH host-cert stages keep their behaviour and run first.** A host that has lost SSH
   reachability is unreachable for everything, leaf renewal included.
+
+- **The leaf renewal's worst case is longer than the SSH stage's.** `renew-internal-tls.yml` takes
+  the same two scopes the SSH stages use — `--limit '!k8s_dev'` and `--limit k8s_dev` — but its
+  handler phase is serialized: the kubelite restart waits up to `microk8s_kubelite_ready_timeout`
+  (180s, `roles/microk8s/defaults/main.yml`) per prd control-plane node, one node at a time. A prd
+  run in which all three k8s leaves come due can therefore spend ~9 minutes in handlers alone. A
+  stage `timeout` sized on the SSH job's 10m would kill such a run mid-roll.
 
 ### P4 — The serialization doctrine says what it now means
 

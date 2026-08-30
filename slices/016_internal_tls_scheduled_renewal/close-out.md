@@ -90,6 +90,24 @@ The line reads: "**Renewal** is threshold-gated by `internal_tls` (re-issue unde
 **Provenance:** read, code-writer, P1, r1, ansible/roles/proxmox_host/README.md:55
 **Disposition:**
 
+### B3 — Ansible — the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml · minor
+
+P1 changed 'Restart microk8s kubelite' from ansible.builtin.systemd to ansible.builtin.shell (roles/microk8s/handlers/main.yml:60-71) so the restart-then-wait could be one throttled task. The shell module has no check-mode support, so under --check the handler is skipped rather than reported, and ansible.cfg:12 sets display_skipped_hosts = False, so it vanishes from the output entirely. Reproduced on the pinned ansible-core 2.20.5 with a three-host play: 'RUNNING HANDLER [H] skipping: [h1] [h2] [h3]', recap changed=1 skipped=1 per host. Drift detection is unaffected — check-ansible-drift.sh:39-43 sums recap changed= counts and the notifying lineinfile tasks still report changed in check mode.
+
+**Consequence:** An operator running the docs/design-philosophy.md-mandated --check --diff before an iac-apply of site-k8s.yml sees three changed lineinfile tasks and no mention of the kubelite restart they notify — the most disruptive action in the role, a bounce of each prd control-plane node, is the one thing the dry run does not name.
+
+**Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### B4 — Ansible — ansible/playbooks/README.md catalogues playbooks but lists none of the certificate ones · nit
+
+The README's playbook list stops at `refresh-k8s-addons.yml`, `adopt.yml` and `grow-disks.yml`. It has never listed `renew-host-certs.yml`, `reissue-host-cert.yml`, `site-openbao.yml` or `refresh-calico-token.yml`, and P2's `renew-internal-tls.yml` joins that set. The omission predates this slice, so it sits outside the slice's diff; left alone rather than half-fixed in a code phase.
+
+**Consequence:** An operator scanning ansible/playbooks/README.md for what renews certificates finds nothing and concludes no scheduled renewal playbook exists — the belief this whole slice is closing for the leaves, now reproduced one directory up.
+
+**Provenance:** witnessed | code-writer, P2, r1 — read while placing renew-internal-tls.yml; ansible/playbooks/README.md:15-22
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -126,4 +144,22 @@ itself broken and the drift red is the last warning left.
 **Consequence:** For up to six days per leaf per ~33-day cycle the daily iac-scheduled-drift build reds for a renewal the Friday certs job will handle by itself, with nothing for the operator to do — which is exactly the pattern that trains an operator to stop reading drift.
 
 **Provenance:** read, plan-writer, plan phase, round 1, support/iac-agent/bin/check-ansible-drift.sh:39-43 and ansible/roles/internal_tls/tasks/issue.yml:75-91
+**Disposition:**
+
+### S2 — Ansible — the kubelite wait gates on /livez, which is liveness, not the 'serving again' the handler comment claims · minor
+
+roles/microk8s/handlers/main.yml:65,73-75 releases the throttle slot when https://127.0.0.1:16443/livez answers on an apiserver node, or http://127.0.0.1:10248/healthz on a worker; the comment at :48-51 describes this as the next node going down 'only once this one is serving'. Probed live against the prd apiserver: /readyz?verbose runs etcd-readiness, informer-sync and shutdown, which /livez?verbose does not — exactly the checks separating 'the process answers' from 'this apiserver can serve'. The worker branch is weaker again: kubelet healthz says the health server is up, not that the kubelet has re-registered or its lease resumed, which is the failure mode playbooks/tasks/wait-node-ready.yml:11-28 records from build #15 (a local check on srvk8s4 passing in 0.471s).
+
+**Consequence:** None observed. With three prd control-plane members the VIP still has a healthy peer if one node is live-but-not-ready while the next is restarting, and the plan asked only that the wait last until the apiserver 'answers again', which /livez satisfies. Worth knowing before anyone treats the comment as a guarantee.
+
+**Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F2
+**Disposition:**
+
+### S3 — Ansible — Reload openbao now carries throttle 1 but Restart openbao, in the same role, still does not · nit
+
+roles/openbao/handlers/main.yml:23 puts throttle: 1 on Reload openbao and its comment states the doctrine: the limit belongs with the reload 'rather than restated on each caller'. Restart openbao at :8-11 — a full service restart, strictly more disruptive to the Raft peers than a SIGHUP — is left relying on playbooks/site-openbao.yml:171's serial being arranged by whatever drives it. It is notified from config.yml and hardening.yml.
+
+**Consequence:** Nothing today: the ruling asked only about the reload, and P2's renewal path enters at tasks_from: internal_tls, which notifies Reload openbao and nothing else. It becomes real the first time a driver enters the openbao role at an entry point touching config or the hardening drop-in without arranging serial itself — all three peers would restart at once.
+
+**Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F3
 **Disposition:**
