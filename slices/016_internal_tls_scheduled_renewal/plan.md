@@ -370,6 +370,36 @@ Constraints the repo will not tell you:
   run in which all three k8s leaves come due can therefore spend ~9 minutes in handlers alone. A
   stage `timeout` sized on the SSH job's 10m would kill such a run mid-roll.
 
+**Done (P3).** `Jenkinsfile.iac-scheduled-certs` runs four stages on the one Friday cron — host
+certs prd, host certs dev, TLS leaves prd, TLS leaves dev — closing R1: nothing in the loop is
+hand-started.
+
+- The two existing stages are renamed `Host certs (…)`, behaviour untouched; `Renew (…)` no longer
+  says which class. Their playbook, scopes, 10m dev bound and dev handling are byte-identical.
+- The leaf stages take `renew-internal-tls.yml` on the same two scopes. prd is a plain `sh`, so a
+  non-zero exit reds the build — arriving at the end of the run, since P2 lets healthy hosts finish
+  first. It carries **no `timeout`**: ~9 minutes of serialized handler waits is a legitimate run, and
+  the comment says so where the next editor would reach for the host-cert stage's 10m.
+- Dev leaf stage: `devUp()` probe, 15m bound (one node, one leaf, ≤180s readiness wait), skip →
+  UNSTABLE, genuine failure → UNSTABLE + page. Nothing carries a missed dev renewal forward.
+- **The shared `post` block was the real work.** One description could not stay true of two classes,
+  so each prd stage now carries its own `post { failure }` — `host certs may lapse; TLS leaf renewal
+  did not run` and `internal_tls leaves may lapse`. Stage-level `post` is new to this repo's
+  Jenkinsfiles; the alternative (an env breadcrumb set at stage entry, read by one handler) is
+  indirect and goes stale on the next stage added.
+- The page gate is unchanged: both dev stages set `DEV_STAGE_FAILED`, the shared-flag idiom
+  `iac-scheduled-drift` already uses across four dev stages. Its message generalised to `dev
+  certificate renewal failed on srvk8sdev`, true of either stage; each stage's own `unstable()`
+  names its class in the build log.
+- Header comment now covers both classes and records that this job's red-or-unstable signal is the
+  whole detector for a leaf renewal that stopped happening.
+- The first description says `TLS leaf renewal did not run` because a red prd host-cert stage aborts
+  the pipeline before either leaf stage — filed as close-out S4, with the `catchError` remedy and
+  why P3's constraints ruled it out.
+- Gate green. Note it proves nothing here: `--project root` has no test statements, no gate lints
+  Jenkinsfiles, and no Groovy parser exists in this environment — the pipeline syntax is reviewed,
+  not machine-checked. No `ansible/` file changed; the architecture model names none of these jobs.
+
 ### P4 — The serialization doctrine says what it now means
 
 Target: ../AnsibleSpecs

@@ -108,6 +108,15 @@ The README's playbook list stops at `refresh-k8s-addons.yml`, `adopt.yml` and `g
 **Provenance:** witnessed | code-writer, P2, r1 — read while placing renew-internal-tls.yml; ansible/playbooks/README.md:15-22
 **Disposition:**
 
+### B5 — Ansible — renew-internal-tls.yml's no-serial comment blames max_fail_percentage, which serial: never sets · minor
+
+`ansible/playbooks/renew-internal-tls.yml:64-71` says "setting [serial] defaults max_fail_percentage to 0, so the first failed host ends the play with the remaining hosts untried". The conclusion is right, the mechanism is not: `max_fail_percentage` is a play attribute with no default (`ansible/playbook/play.py:86`, `NonInheritableFieldAttribute(isa='percent')` → None) and the linear strategy skips the check unless it was explicitly set (`ansible/plugins/strategy/linear.py:337`). What actually ends the play is unconditional and elsewhere: `ansible/executor/playbook_executor.py:190-195` compares each batch's new failed-plus-unreachable count against the batch size and breaks when they match, which at batch size 1 is any single bad host. Checked against the pinned ansible-core 2.20.5 in the installed package. The plan's P1 constraints already record the correct account, including that max_fail_percentage cannot buy the coverage back.
+
+**Consequence:** The next author of a cluster-touching playbook, reading this comment, reaches for the remedy it implies — 'serial: 1' plus 'max_fail_percentage: 100' — and gets a play that still loses every host after the first failure. It also risks travelling into decisions.md, since P4 is told to derive the serialization wording from what shipped in P1-P3 rather than from the plan's prose.
+
+**Provenance:** witnessed — code-reviewer, P2 round 1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -162,4 +171,13 @@ roles/openbao/handlers/main.yml:23 puts throttle: 1 on Reload openbao and its co
 **Consequence:** Nothing today: the ruling asked only about the reload, and P2's renewal path enters at tasks_from: internal_tls, which notifies Reload openbao and nothing else. It becomes real the first time a driver enters the openbao role at an entry point touching config or the hardening drop-in without arranging serial itself — all three peers would restart at once.
 
 **Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F3
+**Disposition:**
+
+### S4 — Ansible — a failed SSH host-cert stage aborts iac-scheduled-certs before either leaf stage runs · minor
+
+The four stages are plain declarative stages, so the two prd ones fail the pipeline outright: if `Host certs (excl. k8s dev)` reds on one unreachable host, `TLS leaves (excl. k8s dev)` and `TLS leaves (k8s dev)` never execute and the fleet loses that week's leaf renewal. This is the stage ordering P3 was given ("the SSH host-cert stages keep their behaviour and run first") plus the estate-wide convention that a prd stage failure aborts the build — the same coupling the job's own header comment rejects at the job level ("a wedged node blocks certificate renewal fleet-wide"), reproduced one level down between stages. The remedy would be `catchError(buildResult: FAILURE, stageResult: FAILURE)` around the two prd stages so each class runs independently and the build still reds; that changes the SSH stages' behaviour, which P3 was told not to do, and it is a pattern no iac-* Jenkinsfile uses today.
+
+**Consequence:** One unreachable host during the host-cert stage silently costs all ten internal_tls leaves their weekly renewal. The build is red and pages, so it is visible; but two consecutive red Fridays inside a leaf's 14-day window would let that leaf lapse while the operator is still chasing the host-cert failure.
+
+**Provenance:** witnessed | code-writer, P3, r1, Jenkinsfile.iac-scheduled-certs stages block
 **Disposition:**
