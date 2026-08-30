@@ -23,6 +23,21 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Rotate the PVE leaves by hand if this slice slips past ~Sep 8 2026
+
+At triage the operator declined a pre-emptive hand-run `iac-apply` on the grounds that the
+slice starts today, and at planning chose natural phase ordering over sequencing the
+proxmox_host path first — both rulings are recorded in `plan.md`. Neither is revisitable by
+the plan: the leaves lapse on wall-clock regardless of the slice's state, so if the run is
+still open around ~Sep 8 the operator's own out-of-band rotation is the only thing that
+stops the expiry. This entry exists so the deadline is visible on the board rather than only
+inside the plan's rulings.
+
+**Consequence:** The pveproxy leaves on pve, pve1 and pve2 expire Sep 10 2026; if the slice has not shipped and applied by then the Proxmox web UI serves an expired certificate on all three nodes, and internal_tls cannot help a leaf that has already lapsed.
+
+**Provenance:** read, plan-writer, plan phase, round 1, plan.md rulings section and slices/backlog/016_internal_tls_scheduled_renewal/slice.md
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -55,3 +70,26 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — Ansible — once the certs job signs the leaves, a pending renewal becomes drift noise rather than an actionable red
+
+`internal_tls` deliberately reports `changed` under `--check` when a leaf is inside its
+renewal window (`roles/internal_tls/tasks/issue.yml:81-91`), and
+`check-ansible-drift.sh:39-43` exits non-zero on any `changed>0` — so a due renewal reds the
+daily 11:00 drift build. Today that red is the signal: nothing else will sign the leaf.
+
+After this slice it stops being one. The Friday 04:00 certs job signs the leaf on its own, so
+between the day a leaf crosses the 14-day threshold and the next Friday, drift reds for
+something that needs no hand. Worst case is six consecutive red drift builds, per leaf, per
+cycle.
+
+Out of scope here: slice.md asks only for a scheduled renewal path, and the fix is a design
+call the operator should make rather than something to bolt onto this plan. The obvious
+options — have drift tolerate a leaf that is merely inside its window, or move the leaf check
+out of the drift set entirely — trade differently against the case where the certs job is
+itself broken and the drift red is the last warning left.
+
+**Consequence:** For up to six days per leaf per ~33-day cycle the daily iac-scheduled-drift build reds for a renewal the Friday certs job will handle by itself, with nothing for the operator to do — which is exactly the pattern that trains an operator to stop reading drift.
+
+**Provenance:** read, plan-writer, plan phase, round 1, support/iac-agent/bin/check-ansible-drift.sh:39-43 and ansible/roles/internal_tls/tasks/issue.yml:75-91
+**Disposition:**

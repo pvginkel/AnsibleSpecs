@@ -1,0 +1,124 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — scheduled renewal path",
+      "description": "The internal_tls step-ca leaf certificates are renewed on a schedule, with no hand-started iac-apply in the loop: the weekly iac-scheduled-certs job renews them, and a leaf inside its renewal window is signed by that job rather than only reported by the --check-only drift run.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "Coverage — hosts and groups",
+      "description": "All ten leaves on ten hosts are covered, per the operator's \"All\": pveproxy on pve, pve1 and pve2; the kube-apiserver homelab SNI leaf on srvk8s1, srvk8s2, srvk8s3 and srvk8sdev; the OpenBao listener leaf on srvvault1, srvvault2 and srvvault3.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "Coverage — hosts and groups",
+      "description": "srvk8s4 is not renewed and does not fail the run: it is microk8s_worker_only, runs no kube-apiserver, and has no SNI leaf.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/inventories/prd/host_vars/srvk8s4.yml:11", "ansible/roles/microk8s/tasks/main.yml:120-126"]
+    },
+    {
+      "id": "V04",
+      "area": "Blast radius — kubelite bounce",
+      "description": "The k8s renewal path carries the one-node-at-a-time guarantee itself (serial: 1), so at most one prd control-plane node bounces kubelite at a time and the apiserver VIP and peer nodes cover the gap. serial: 1 is not inherited from the role or the handler — it is expressed on the play.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/playbooks/site-k8s.yml:52", "ansible/roles/microk8s/handlers/main.yml:40-49"]
+    },
+    {
+      "id": "V05",
+      "area": "Blast radius — kubelite bounce",
+      "description": "A node's kubelite is bounced at most once per ~33 days by this arrangement — leaves live 47 days and re-issue inside the last 14, so a healthy leaf is a no-op on every other run.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["docs/runbooks/step-ca-bootstrap.md:121-127", "ansible/roles/internal_tls/defaults/main.yml:21"]
+    },
+    {
+      "id": "V06",
+      "area": "Dev convention",
+      "description": "A powered-off srvk8sdev is not an error: the dev stage is skipped behind the bounded devUp() probe and the build goes UNSTABLE, not FAILURE, and does not page. The operator picks the missed dev renewal up by hand; the job does not chase it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["Jenkinsfile.iac-scheduled-certs:28-43", "Jenkinsfile.iac-scheduled-certs:87-110", "Jenkinsfile.iac-scheduled-certs:125-135"]
+    },
+    {
+      "id": "V07",
+      "area": "Dev convention",
+      "description": "A dev box that is up and whose renewal genuinely fails still yields UNSTABLE and a page, distinct from the merely-powered-off case.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["Jenkinsfile.iac-scheduled-certs:104-107", "Jenkinsfile.iac-scheduled-certs:125-135"]
+    },
+    {
+      "id": "V08",
+      "area": "Pipeline signal",
+      "description": "A failure on the prd path reds the build, and the job's post block — the build description on failure and the page gate on unstable — stays truthful about whichever stage actually failed now that two classes of certificate run in one job.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["Jenkinsfile.iac-scheduled-certs:113-135"]
+    },
+    {
+      "id": "V09",
+      "area": "Idempotence",
+      "description": "A run against a healthy fleet is a no-op: outside the 14-day renewal window nothing is signed, no handler fires, and the recap reports changed=0 — so the playbook is safe to run at any time.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/roles/internal_tls/tasks/issue.yml:26-73"]
+    },
+    {
+      "id": "V10",
+      "area": "Single source of truth",
+      "description": "The renewal path does not re-declare any leaf's SAN list, install paths, owner/group/mode or reload handler — those stay declared once, so the renewal path and the converge path cannot drift apart and reinstall a leaf with the wrong ownership or the wrong SANs.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/roles/microk8s/tasks/internal_tls.yml:11-23", "ansible/roles/openbao/tasks/internal_tls.yml:2-15", "ansible/roles/proxmox_host/tasks/main.yml:28-40"]
+    },
+    {
+      "id": "V11",
+      "area": "Consumer reload",
+      "description": "A renewed leaf is actually picked up by its consumer on the renewal path: pveproxy reloads, openbao takes its SIGHUP, and microk8s kubelite restarts — no service is left serving the old certificate.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/roles/proxmox_host/handlers/main.yml:2", "ansible/roles/openbao/handlers/main.yml:13", "ansible/roles/microk8s/handlers/main.yml:40"]
+    },
+    {
+      "id": "V12",
+      "area": "Job robustness",
+      "description": "The scheduled leaf renewal needs no Terraform working directory and no Proxmox credentials — the OpenBao hosts are reached over the ordinary ansible.cfg args, as playbooks/renew-host-certs.yml already reaches them weekly, not via site-openbao.yml's terraform-output known_hosts handoff.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/playbooks/site-openbao.yml:35-140", "ansible/playbooks/renew-host-certs.yml:40"]
+    },
+    {
+      "id": "V13",
+      "area": "Cadence",
+      "description": "Weekly against the 14-day window gives at least two attempts before any leaf lapses, the same margin the SSH host-cert job was sized for.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/playbooks/renew-host-certs.yml:18-23", "Jenkinsfile.iac-scheduled-certs:13-15"]
+    },
+    {
+      "id": "V14",
+      "area": "No regression",
+      "description": "The existing SSH host-certificate renewal is unchanged in behaviour and still runs first, and site.yml, site-k8s.yml and site-openbao.yml converge exactly what they converged before.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["Jenkinsfile.iac-scheduled-certs:63-110"]
+    },
+    {
+      "id": "V15",
+      "area": "Observability",
+      "description": "The leaf's cert-expiry metric keeps being published on every invocation, not only when a certificate is issued, so a stalled renewer still surfaces in Prometheus.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["ansible/roles/internal_tls/tasks/metric.yml:1-11"]
+    }
+  ]
+}
