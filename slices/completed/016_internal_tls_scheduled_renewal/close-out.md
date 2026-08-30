@@ -1,7 +1,8 @@
 # Close-out — slice 016 internal_tls_scheduled_renewal
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-08-30 11:22 → 13:08 · 4 phases · 0 bail-outs · 1 test round · doc phase done · $51.88
+(planner 25 %, research 1 %, rework 5 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold

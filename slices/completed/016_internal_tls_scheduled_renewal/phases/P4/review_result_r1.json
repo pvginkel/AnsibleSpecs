@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "P4's outcome holds: decisions.md:26 now states the serialization invariant with `serial: 1` as one mechanism rather than the rule, and :294 no longer misattributes the RBAC roll to site-k8s.yml's serial. I verified the load-bearing new claim two ways — reading the pinned ansible-core 2.20.5 (the entire-batch-failed break is unconditional) and running the probe (serial: 1 with max_fail_percentage: 100, first host failing, ends the play at that host, exit 2) — and confirmed no other serialization claim in decisions.md is falsified. Two advisory prose imprecisions in the rewritten sentence, neither blocking.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "decisions.md:26 credits both throttled handlers with an in-task readiness wait, but Reload openbao (roles/openbao/handlers/main.yml:13-23) is a bare systemd reload with throttle: 1 and no wait."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "decisions.md:26 states 'never two k8s or Ceph nodes mutated at once' unqualified, while renew-internal-tls.yml — endorsed four clauses later — installs new leaves on srvk8s1/2/3 concurrently; only the restart is serialized."
+    }
+  ]
+}

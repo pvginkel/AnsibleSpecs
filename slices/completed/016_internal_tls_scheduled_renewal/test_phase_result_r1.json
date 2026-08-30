@@ -1,0 +1,4 @@
+{
+  "outcome": "clean",
+  "summary": "Ran the full slice-testing-strategy procedure: gates taken as established GREEN per dispatch, diff read in full across all four phases (Jenkins + AnsibleSpecs), and live read-only verification against the real prd fleet -- host resolution, srvk8s4's skip, and idempotence all confirmed live, plus direct cert reads showing pve/pve1/pve2 and srvk8s1/2/3 are genuinely inside their 14-day renewal window right now. Pushed b7de205 to main (pre-authorized under the devlock hold). All 19 verification.json items settled: 18 verified, V01 (the leaves actually get signed by the job) marked owed to operator since a real apply against prd stays operator-gated -- operator command is in V01 and close-out N1. No finding cleared the generation bar; two close-out notes added (N1: six leaves due now, with the command; N2: iac-on-push's result for b7de205 unconfirmed this pass, jenkins MCP was down)."
+}

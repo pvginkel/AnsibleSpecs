@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "P3's outcome holds: iac-scheduled-certs runs the leaf renewal on the same Friday cron and the same two scopes as the host certs, the host-cert stages are renamed only and still run first, and the split build descriptions are truthful in both directions. Two advisory findings, neither blocking: the dev page is lost when a dev stage's flag is followed by a prd stage failure, and the catch-all failure description is gone. The largest residual risk — a red host-cert stage aborting before either leaf stage — is already recorded as close-out S4 and not re-filed.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "notify.warning fires only from post { unstable }, so a dev stage's DEV_STAGE_FAILED page is lost once a later prd stage reds the build — newly reachable because P3 puts prd work after a dev stage."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "Removing the job-level post { failure } leaves a red build with no description at all when the failure is outside the two prd stages (library step, agent allocation, SCM checkout)."
+    }
+  ]
+}

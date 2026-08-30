@@ -1,0 +1,31 @@
+{
+  "outcome": "signoff",
+  "summary": "Both P1 outcomes land and I verified the load-bearing mechanisms independently: the standalone `tasks_from: internal_tls` entry works with the hoisted gate, and throttle-on-a-handler serializes strictly while still letting a failed host's peers run and still exiting non-zero. Converge behaviour and the drift signal are unchanged. Three advisory findings, none blocking: check-mode no longer surfaces the kubelite restart, /livez is a weaker signal than the comment's 'serving again', and Restart openbao is left outside the limit its sibling reload now carries.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The kubelite restart handler is a shell task, so a --check --diff run skips it and (with display_skipped_hosts=False) never names the control-plane bounce an apply will do."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "The wait gates on /livez (and kubelet healthz on a worker), which omit etcd-readiness/informer-sync — weaker than the 'only once this one is serving' the handler comment claims."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "Reload openbao gained throttle: 1 but the more disruptive Restart openbao in the same role still relies on the caller's serial."
+    }
+  ]
+}
