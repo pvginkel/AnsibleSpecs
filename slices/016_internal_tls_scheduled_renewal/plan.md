@@ -328,7 +328,7 @@ converge paths changed.
 - `playbooks/README.md` catalogues playbooks but already omits `renew-host-certs.yml` and the other
   cert playbooks; left to the doc phase rather than half-fixed here.
 
-### P3 — The weekly certs job renews the leaves alongside the SSH host certs
+### P3 — The weekly certs job renews the leaves alongside the SSH host certs ✅ DONE 2026-08-30
 
 Target: root
 
