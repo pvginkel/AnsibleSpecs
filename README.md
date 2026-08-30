@@ -33,6 +33,10 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 - **[012](slices/backlog/012_kubecoder_argo_cutover/slice.md)** — KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124).
 - **[014](slices/backlog/014_deploy_repo_architecture_producers/slice.md)** — Architecture producers for the deploy repos: each deploy repo gains its own `Jenkinsfile.architecture`, HelmCharts' generator stops emitting for migrated app-stages, so a migrated app does not vanish from the federated model (major; settles the `gen-architecture` half of O2; needs 009+010, lands before 012; #124).
 
+Independent of the Argo CD sequence:
+
+- **[016](slices/backlog/016_internal_tls_scheduled_renewal/slice.md)** — Scheduled renewal for the internal_tls leaf certificates: nothing renews the ten step-ca X.509 leaves on a schedule; drift is `--check`-only and cannot sign (major; PVE leaves lapse Sep 10 2026; #737).
+
 ## Completed
 
 | Slice | Was | Depends on | Consumed by |
