@@ -229,7 +229,7 @@ Constraints the repo will not tell you:
 - `proxmox_host/README.md:55` claims drift renews the leaf; filed as close-out B2 for the doc phase
   because it sits outside this slice's diff.
 
-### P2 — One playbook renews every internal_tls leaf in the fleet
+### P2 — One playbook renews every internal_tls leaf in the fleet ✅ DONE 2026-08-30
 
 Target: ansible
 
