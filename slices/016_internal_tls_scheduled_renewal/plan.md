@@ -400,7 +400,7 @@ hand-started.
   Jenkinsfiles, and no Groovy parser exists in this environment — the pipeline syntax is reviewed,
   not machine-checked. No `ansible/` file changed; the architecture model names none of these jobs.
 
-### P4 — The serialization doctrine says what it now means
+### P4 — The serialization doctrine says what it now means ✅ DONE 2026-08-30
 
 Target: ../AnsibleSpecs
 
