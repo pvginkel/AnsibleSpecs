@@ -200,6 +200,35 @@ Constraints the repo will not tell you:
   than contradictory — no added cost or failure on the daily `--check` drift run, and
   `rebuild-k8s.yml` and `update-k8s.yml`, which notify the same kubelite handler, keep working.
 
+**Done (P1).** Each leaf is declared once, and both reloads carry their own blast-radius limit.
+
+- `roles/proxmox_host/tasks/internal_tls.yml` extracted, pmxcfs ownership note travelling with it;
+  `main.yml` imports it. `roles/openbao/tasks/internal_tls.yml` already was one file — untouched.
+- microk8s: the eligibility gate (`_microk8s_installed.stat.exists`, non-empty
+  `microk8s_apiserver_homelab_sans`, `not microk8s_worker_only`) is now a block-level `when:` in
+  `tasks/internal_tls.yml`; `main.yml`'s import carries no `when:`. The stat moved to
+  `tasks/check-installed.yml`, imported by both, so the fact is registered on whichever path
+  reaches it and the repo still holds one stat task — it just runs twice on the converge path.
+- Verified offline against the real role on localhost: microk8s absent → skip, `worker_only: true`
+  → skip (the srvk8s4 case), empty SAN list → skip, eligible → enters `internal_tls`.
+- `Restart microk8s kubelite` is one shell task — `systemctl restart` plus a wait until this node
+  answers its own readiness endpoint — with `throttle: 1`. `throttle`, not `serial:`, is the
+  mechanism, and it had to stay one task: proved locally that a throttled handler runs strictly
+  one host at a time and holds the slot for the whole task, that a host whose handler fails does
+  not stop the others (recap `failed=1`, peers `ok`, exit 2), and that Ansible runs each handler
+  across every notified host before starting the next — so restart-then-wait as two handlers would
+  restart every node before waiting on any.
+- Readiness endpoint is per node class, verified live on srvk8s1/2/3 and srvk8s4: `16443/livez`
+  where kubelite binds it, kubelet healthz `127.0.0.1:10248` on a worker, where 16443 belongs to
+  the separate apiserver-proxy daemon and answers while the local kubelite is down. Budget:
+  `microk8s_kubelite_ready_timeout: 180`.
+- `Reload openbao` carries `throttle: 1`: the three Raft peers never take the SIGHUP at once.
+- Drift is unaffected: under `--check` the shell handler is skipped where the systemd module used
+  to report `changed`, so no restart and no cost, while the notifying task still reports `changed`
+  — which is what `check-ansible-drift.sh` greps. Nothing else about the converge paths changed.
+- `proxmox_host/README.md:55` claims drift renews the leaf; filed as close-out B2 for the doc phase
+  because it sits outside this slice's diff.
+
 ### P2 — One playbook renews every internal_tls leaf in the fleet
 
 Target: ansible
@@ -222,7 +251,11 @@ Constraints the repo will not tell you:
   a pveproxy leaf reinstalled `root:root` on pmxcfs, or a leaf signed for last quarter's SANs.
   Entering a role at an alternate task entry point is what carries the role's defaults, vars and
   handlers along with the tasks — the reason P1's extraction is a *role* task file and not a loose
-  include.
+  include. All three are now reached the same way, `tasks_from: internal_tls`; microk8s's file
+  stats the install itself and carries the eligibility gate, so the play needs no `when:` and no
+  host pattern of its own. One asymmetry: openbao's file expects `openbao_tls_dir` to exist, which
+  `dirs.yml` makes on the converge path — a never-converged host therefore fails loudly at
+  issuance rather than being silently skipped.
 
 - **Per-host independence, exactly as the prior art states it.** `playbooks/renew-host-certs.yml:43-47`
   gives both the property and the reason: renewal is per-host and independent, so one unreachable or

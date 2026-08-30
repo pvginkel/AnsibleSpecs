@@ -81,6 +81,15 @@ than what ships, and the deferred monitoring slice
 **Provenance:** read, plan-reviewer, plan phase, round 1, plan_review_r1.md finding F4 (AnsibleSpecs/decisions.md:145, Ansible roles/internal_tls/tasks/metric.yml:23-32)
 **Disposition:**
 
+### B2 — Ansible — roles/proxmox_host/README.md:55 says the pveproxy leaf is renewed on each iac-scheduled-drift cycle, which drift cannot do · minor
+
+The line reads: "**Renewal** is threshold-gated by `internal_tls` (re-issue under 14 days left) on each `iac-scheduled-drift` cycle." The drift job runs `ansible-playbook --check` (check-ansible-drift.sh), so it can report a due re-issue and can never sign one — the premise of this whole slice. The line is outside P1's diff (no task file I touched contains it), so the slice's diff-based doc phase can miss it; it should end up naming the weekly certs job P3 adds instead. The equivalent microk8s README lines (:26, :114) are accurate and need nothing.
+
+**Consequence:** An operator reading the proxmox_host role README concludes the pveproxy leaves are already renewed daily and stops looking — the exact belief that let the pve/pve1/pve2 leaves run to within 14 days of expiry with nothing signing them.
+
+**Provenance:** read, code-writer, P1, r1, ansible/roles/proxmox_host/README.md:55
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
