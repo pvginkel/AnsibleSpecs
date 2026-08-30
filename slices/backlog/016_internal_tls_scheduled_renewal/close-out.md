@@ -56,6 +56,31 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — AnsibleSpecs — decisions.md overstates internal_tls metric coverage: the four k8s apiserver leaves get no expiry gauge from either path it names · minor
+
+`decisions.md:145` says each leaf's absolute expiry "is published as the Prometheus gauge
+`internal_tls_cert_not_after_seconds` — written by the `internal_tls` role to a node-exporter
+textfile collector for VM consumers, and by an equivalent in-cluster collector for the certbot
+path", and separately records that "the alert rule and the in-cluster metric are deferred".
+
+The kube-apiserver homelab SNI leaf is a VM consumer of the `internal_tls` role, but it falls
+through both halves of that sentence. `roles/internal_tls/tasks/metric.yml:23-32` skips the
+textfile write when the node-exporter textfile directory is absent, and its own comment records
+that this is the steady state on k8s nodes — they run node_exporter as an in-cluster DaemonSet
+and carry no Debian `prometheus-node-exporter` package. The "other path" that comment points at
+is the in-cluster collector the same decisions.md bullet defers.
+
+So the bullet reads as fleet-wide coverage of the VM consumers when it is coverage of the
+Proxmox and OpenBao leaves only. Out of scope for slice 016, which adds a renewal path and does
+not touch the metric or what alerts on it — but it is a doctrine page stating something broader
+than what ships, and the deferred monitoring slice
+(`slices/deferred/internal-tls-monitoring.md`) is where the gap is supposed to be tracked.
+
+**Consequence:** Anyone reading decisions.md concludes every internal_tls leaf's expiry is observable in Prometheus. For the kube-apiserver SNI leaves on srvk8s1, srvk8s2, srvk8s3 and srvk8sdev no gauge is written at all, and no alert exists on any leaf — so a stalled renewer on 4 of the 10 leaves is invisible except through the daily drift red.
+
+**Provenance:** read, plan-reviewer, plan phase, round 1, plan_review_r1.md finding F4 (AnsibleSpecs/decisions.md:145, Ansible roles/internal_tls/tasks/metric.yml:23-32)
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
