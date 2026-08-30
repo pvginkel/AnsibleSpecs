@@ -13,12 +13,31 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+The ten `internal_tls` step-ca leaves — pveproxy on pve/pve1/pve2, the kube-apiserver homelab
+SNI leaf on the k8s control planes, the OpenBao listener leaf on srvvault1/2/3 — got a
+scheduled renewer. Each leaf is now declared once, in its consumer role's own
+`tasks/internal_tls.yml` with its eligibility gate alongside it, so a converge and a direct
+entry cover the same hosts; `playbooks/renew-internal-tls.yml` enters all three roles at that
+file and renews the fleet in one un-serialised play; and `iac-scheduled-certs` runs it every
+Friday in two stages of its own, beside the SSH host certs it already renewed.
+
+The one-node-at-a-time property the reloads need moved onto the reloads themselves: `throttle:
+1` on `Restart microk8s kubelite` — now a restart plus an in-task readiness poll bounded by the
+new `microk8s_kubelite_ready_timeout` — and on `Reload openbao`, so no caller has to arrange
+`serial:` for them. `decisions.md` states the serialization invariant in those terms: what is
+serialized is the step that takes a node out of service, and `serial: 1` is one way to hold
+that line rather than the line itself.
+
+Nothing has been signed yet. The code is on `main` (b7de205), but a real apply against prd is
+the operator's keystroke, so the six leaves already inside their window — pve/pve1/pve2 and
+srvk8s1/2/3, expiring Sep 10-12 2026 — wait on either the Friday 2026-09-04 cron or a hand run
+(V01, N1, A1).
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A1 is a deadline, and N1 has already overtaken its remedy — the shipped path exists, so
+what is owed is the leaves being signed before Sep 10, by Friday's cron or by hand, not an
+out-of-band PVE-only rotation.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -40,7 +59,8 @@ inside the plan's rulings.
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: N1 first — the fleet's live state, six of ten leaves already inside their window, is what
+puts a date on this slice. N2 is one missing CI signal, not a failure.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -68,9 +88,10 @@ Push (d4e5a60..b7de205) completed and is pre-authorized under the devlock hold. 
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B1 first — it is the one that misleads about coverage an operator would rely on: four of
+the ten leaves have no expiry gauge and no leaf has an alert. B2 and B4 were fixed in the doc
+phase (see their notes); B10 is the runbook that phase could not write. B3, B6 and B7 are
+visibility gaps — what a dry run shows, and what a red build tells the operator.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -103,6 +124,8 @@ than what ships, and the deferred monitoring slice
 
 The line reads: "**Renewal** is threshold-gated by `internal_tls` (re-issue under 14 days left) on each `iac-scheduled-drift` cycle." The drift job runs `ansible-playbook --check` (check-ansible-drift.sh), so it can report a due re-issue and can never sign one — the premise of this whole slice. The line is outside P1's diff (no task file I touched contains it), so the slice's diff-based doc phase can miss it; it should end up naming the weekly certs job P3 adds instead. The equivalent microk8s README lines (:26, :114) are accurate and need nothing.
 
+doc-writer, doc phase, 2026-08-30 — Fixed in the doc phase. roles/proxmox_host/README.md now says the leaf is threshold-gated by internal_tls and driven by the weekly iac-scheduled-certs job running playbooks/renew-internal-tls.yml against every PVE node, and that iac-scheduled-drift is --check-only and never signs. The same false driver claim appeared in three more places and was corrected with it: roles/internal_tls/README.md's cadence section (which still said nothing calls the role on a schedule), AnsibleSpecs decisions.md:140, and two 'run the drift cycle' instructions in docs/runbooks/step-ca-bootstrap.md.
+
 **Consequence:** An operator reading the proxmox_host role README concludes the pveproxy leaves are already renewed daily and stops looking — the exact belief that let the pve/pve1/pve2 leaves run to within 14 days of expiry with nothing signing them.
 
 **Provenance:** read, code-writer, P1, r1, ansible/roles/proxmox_host/README.md:55
@@ -117,24 +140,6 @@ P1 changed 'Restart microk8s kubelite' from ansible.builtin.systemd to ansible.b
 **Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F1
 **Disposition:**
 
-### B4 — Ansible — ansible/playbooks/README.md catalogues playbooks but lists none of the certificate ones · nit
-
-The README's playbook list stops at `refresh-k8s-addons.yml`, `adopt.yml` and `grow-disks.yml`. It has never listed `renew-host-certs.yml`, `reissue-host-cert.yml`, `site-openbao.yml` or `refresh-calico-token.yml`, and P2's `renew-internal-tls.yml` joins that set. The omission predates this slice, so it sits outside the slice's diff; left alone rather than half-fixed in a code phase.
-
-**Consequence:** An operator scanning ansible/playbooks/README.md for what renews certificates finds nothing and concludes no scheduled renewal playbook exists — the belief this whole slice is closing for the leaves, now reproduced one directory up.
-
-**Provenance:** witnessed | code-writer, P2, r1 — read while placing renew-internal-tls.yml; ansible/playbooks/README.md:15-22
-**Disposition:**
-
-### ~~B5 — Ansible — renew-internal-tls.yml's no-serial comment blames max_fail_percentage, which serial: never sets · minor~~ — resolved by consult 1 (b7de205): the no-serial comment now states the unconditional entire-batch-failed break and that max_fail_percentage cannot lift it; re-read against ansible-core 2.20.5 playbook_executor.py:188-195 and linear.py:336-350, kc project lint+test green; struck by consult 1
-
-`ansible/playbooks/renew-internal-tls.yml:64-71` says "setting [serial] defaults max_fail_percentage to 0, so the first failed host ends the play with the remaining hosts untried". The conclusion is right, the mechanism is not: `max_fail_percentage` is a play attribute with no default (`ansible/playbook/play.py:86`, `NonInheritableFieldAttribute(isa='percent')` → None) and the linear strategy skips the check unless it was explicitly set (`ansible/plugins/strategy/linear.py:337`). What actually ends the play is unconditional and elsewhere: `ansible/executor/playbook_executor.py:190-195` compares each batch's new failed-plus-unreachable count against the batch size and breaks when they match, which at batch size 1 is any single bad host. Checked against the pinned ansible-core 2.20.5 in the installed package. The plan's P1 constraints already record the correct account, including that max_fail_percentage cannot buy the coverage back.
-
-**Consequence:** The next author of a cluster-touching playbook, reading this comment, reaches for the remedy it implies — 'serial: 1' plus 'max_fail_percentage: 100' — and gets a play that still loses every host after the first failure. It also risks travelling into decisions.md, since P4 is told to derive the serialization wording from what shipped in P1-P3 rather than from the plan's prose.
-
-**Provenance:** witnessed — code-reviewer, P2 round 1, phases/P2/code_review_r1.md F1
-**Disposition:**
-
 ### B6 — Ansible — a dev-stage failure in iac-scheduled-certs loses its Telegram warning when a later prd stage then reds the build · minor
 
 notify.warning only echoes a [raisealert|type=warning] marker into the build log (/work/JenkinsPipelineUtils/vars/notify.groovy:46-48), and the job echoes it solely from post { unstable } (Jenkinsfile.iac-scheduled-certs:205-217), which Jenkins runs only when the final build result is UNSTABLE. Before slice 016 the dev host-cert stage was the last stage in the job, so nothing could downgrade an UNSTABLE build to FAILURE after DEV_STAGE_FAILED was set. P3 puts prd work after a dev stage for the first time: Host certs (k8s dev) at :102-125 sets the flag, and TLS leaves (excl. k8s dev) at :144-161 can red the build afterwards. The same shape already exists in Jenkinsfile.iac-scheduled-drift, whose dev k8s stage at :119-142 precedes prd stages at :144-161 and :195-229, so this is the repo's standing flag idiom rather than something P3 invents.
@@ -142,6 +147,26 @@ notify.warning only echoes a [raisealert|type=warning] marker into the build log
 **Consequence:** srvk8sdev is up, its host-cert renewal fails (build UNSTABLE, flag set), then the prd leaf run fails on an unreachable host (build FAILURE). The unstable handler never runs, so no warning marker reaches the log and the operator's only push is the bot's FAILURE report for the leaf stage — the dev failure, and the genuinely-failed-vs-powered-off distinction, survive only in the build log.
 
 **Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F1
+**Disposition:**
+
+### B10 — Ansible — docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery · minor
+
+The SSH side has a full runbook: symptom, the job that should have prevented it, and `reissue-host-cert.yml` as the fix. The X.509 side now has a fix worth documenting for the first time — `playbooks/renew-internal-tls.yml` — but no runbook names it as a recovery path, and an expired leaf has three distinct symptoms nothing points at: a PVE web UI certificate error, SNI validation failing for `kubernetes-api.home`, and the OpenBao listener refusing connections (docs/runbooks/openbao.md:257 already lists 'listener cert expired' as a cold-boot cause and points nowhere). The doc phase did not write that runbook because its central claim could not be grounded from the repo: internal_tls re-issues when the leaf is missing, inside the threshold, or SAN-drifted (roles/internal_tls/tasks/issue.yml), and the threshold check is `step certificate needs-renewal --expires-in`, whose exit code on an *already expired* certificate is not stated anywhere in the repo and cannot be verified without running step against a lapsed leaf. Writing 'run renew-internal-tls.yml and the leaf comes back' would have been an unverified recovery instruction in a runbook read under outage pressure.
+
+**Consequence:** An operator facing an expired homelab leaf — Proxmox UI, kubernetes-api.home or the OpenBao listener — finds no runbook, and has to work out from the role's source whether a plain renewal run recovers a certificate that has already lapsed or whether the leaf must be removed first.
+
+**Provenance:** read, doc-writer, doc phase, docs/runbooks/ inventory and roles/internal_tls/tasks/issue.yml:26-70
+**Disposition:**
+
+### B4 — Ansible — ansible/playbooks/README.md catalogues playbooks but lists none of the certificate ones · nit
+
+The README's playbook list stops at `refresh-k8s-addons.yml`, `adopt.yml` and `grow-disks.yml`. It has never listed `renew-host-certs.yml`, `reissue-host-cert.yml`, `site-openbao.yml` or `refresh-calico-token.yml`, and P2's `renew-internal-tls.yml` joins that set. The omission predates this slice, so it sits outside the slice's diff; left alone rather than half-fixed in a code phase.
+
+doc-writer, doc phase, 2026-08-30 — Fixed in the doc phase, for the certificate playbooks only. ansible/playbooks/README.md now lists renew-host-certs.yml and renew-internal-tls.yml as one entry (scheduled renewal, threshold-gated no-ops outside the window, both run weekly by iac-scheduled-certs) and reissue-host-cert.yml as the lapsed-cert recovery. The catalogue's other pre-existing omissions — site-openbao.yml, site-ceph.yml, refresh-calico-token.yml — are untouched: they are outside this slice's behaviour and the doc phase reconciles rather than rewrites.
+
+**Consequence:** An operator scanning ansible/playbooks/README.md for what renews certificates finds nothing and concludes no scheduled renewal playbook exists — the belief this whole slice is closing for the leaves, now reproduced one directory up.
+
+**Provenance:** witnessed | code-writer, P2, r1 — read while placing renew-internal-tls.yml; ansible/playbooks/README.md:15-22
 **Disposition:**
 
 ### B7 — Ansible — iac-scheduled-certs no longer sets any build description when the failure is outside its two prd stages · nit
@@ -153,7 +178,22 @@ P3 removed the job-level post { failure } that unconditionally set currentBuild.
 **Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F2
 **Disposition:**
 
+### ~~B5 — Ansible — renew-internal-tls.yml's no-serial comment blames max_fail_percentage, which serial: never sets · minor~~ — resolved by consult 1 (b7de205): the no-serial comment now states the unconditional entire-batch-failed break and that max_fail_percentage cannot lift it; re-read against ansible-core 2.20.5 playbook_executor.py:188-195 and linear.py:336-350, kc project lint+test green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+`ansible/playbooks/renew-internal-tls.yml:64-71` says "setting [serial] defaults max_fail_percentage to 0, so the first failed host ends the play with the remaining hosts untried". The conclusion is right, the mechanism is not: `max_fail_percentage` is a play attribute with no default (`ansible/playbook/play.py:86`, `NonInheritableFieldAttribute(isa='percent')` → None) and the linear strategy skips the check unless it was explicitly set (`ansible/plugins/strategy/linear.py:337`). What actually ends the play is unconditional and elsewhere: `ansible/executor/playbook_executor.py:190-195` compares each batch's new failed-plus-unreachable count against the batch size and breaks when they match, which at batch size 1 is any single bad host. Checked against the pinned ansible-core 2.20.5 in the installed package. The plan's P1 constraints already record the correct account, including that max_fail_percentage cannot buy the coverage back.
+
+**Consequence:** The next author of a cluster-touching playbook, reading this comment, reaches for the remedy it implies — 'serial: 1' plus 'max_fail_percentage: 100' — and gets a play that still loses every host after the first failure. It also risks travelling into decisions.md, since P4 is told to derive the serialization wording from what shipped in P1-P3 rather than from the plan's prose.
+
+**Provenance:** witnessed — code-reviewer, P2 round 1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+</details>
+
 ### ~~B8 — AnsibleSpecs — decisions.md:26 credits both throttled handlers with an in-task readiness wait; Reload openbao has none · minor~~ — resolved by consult 1 (AnsibleSpecs c4c048c): decisions.md:26 now credits the readiness wait to the kubelite restart alone and says why it must sit in that task; Reload openbao is described as throttle-only; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 The rewritten principle at decisions.md:26 says the one-at-a-time limit rides the mutating task: `throttle: 1` on the `Restart microk8s kubelite` and `Reload openbao` handlers, "with the readiness wait inside that same task". Only the kubelite handler has one — roles/microk8s/handlers/main.yml:60-77 is systemctl restart plus a curl loop on the node's own readiness endpoint in one shell task. roles/openbao/handlers/main.yml:13-23 is a bare ansible.builtin.systemd state: reloaded with throttle: 1 and no wait; its own comment claims only the one-peer-at-a-time SIGHUP, never a wait.
 
@@ -162,7 +202,11 @@ The rewritten principle at decisions.md:26 says the one-at-a-time limit rides th
 **Provenance:** read, code-reviewer, P4 round 1, phases/P4/code_review_r1.md
 **Disposition:**
 
+</details>
+
 ### ~~B9 — AnsibleSpecs — decisions.md:26 states 'never two k8s nodes mutated at once' absolutely, while the playbook the same paragraph endorses writes a new leaf to three at once · nit~~ — resolved by consult 1 (AnsibleSpecs c4c048c): decisions.md:26 now serializes the step that takes a node out of service, not the file write that arms it, so the invariant and renew-internal-tls.yml no longer read as contradictory; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 decisions.md:26 opens 'Never two k8s or Ceph nodes mutated at once' with no qualification, then points at playbooks/renew-internal-tls.yml as correct. That playbook (ansible/playbooks/renew-internal-tls.yml:53-91) has no serial: and no throttle: on the issuance or install path — the repo's only two throttle: 1 are the two handlers — so on a run where all three prd control-plane leaves are due, srvk8s1/2/3 each get a freshly signed certificate installed simultaneously. Only the kubelite restart is serialized. The entry introduces the disruptive/non-disruptive distinction only in its drain-and-cordon clause; decisions.md:499, untouched and the doc's own generalization of this principle, resolves it explicitly in terms of disrupting workloads.
 
@@ -171,9 +215,11 @@ decisions.md:26 opens 'Never two k8s or Ceph nodes mutated at once' with no qual
 **Provenance:** read, code-reviewer, P4 round 1, phases/P4/code_review_r1.md
 **Disposition:**
 
+</details>
+
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: None — nothing in this run was left for the operator to rule on.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -181,8 +227,9 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S4 is the one that can cost a whole renewal cycle — a red host-cert stage skips both leaf
+stages. S1 changes an operational signal the operator reads daily (drift now reds for renewals
+the certs job will handle by itself). S2, S3 and S5 are precision items with no consequence today.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -234,4 +281,13 @@ The four stages are plain declarative stages, so the two prd ones fail the pipel
 **Consequence:** One unreachable host during the host-cert stage silently costs all ten internal_tls leaves their weekly renewal. The build is red and pages, so it is visible; but two consecutive red Fridays inside a leaf's 14-day window would let that leaf lapse while the operator is still chasing the host-cert failure.
 
 **Provenance:** witnessed | code-writer, P3, r1, Jenkinsfile.iac-scheduled-certs stages block
+**Disposition:**
+
+### S5 — AnsibleSpecs — slices/deferred/internal-tls-monitoring.md still argues its urgency from 'no detector exists', which this slice changed · nit
+
+The deferred monitoring design says that until the expiry gauge and alert land, 'no expiry alert fires — a silent renewer failure would surface only when a leaf actually expires', and that this is acceptable given '47-day leaves, a working renewer, and a small fleet'. Both premises moved: the renewer now has a schedule rather than depending on someone starting an apply, and a red or unstable iac-scheduled-certs is a detector for a renewal that stopped happening — one that reaches the operator by Telegram, ahead of any leaf expiring. The doc phase left the file alone: slice documents are outside its surfaces per docs/slice-doc-plan.md, and this one is a parked design rather than a live claim about the fleet. The gap the file describes is still real and still worth its §J work — the four kube-apiserver leaves emit no gauge at all (close-out B1), and the certs job only detects a renewal that fails loudly, not one that silently stops covering a host.
+
+**Consequence:** Whoever reactivates the deferred monitoring work reads a risk argument written before the renewal had a schedule, and either over-rates the urgency or dismisses the file as stale; the genuine remaining gap — no gauge on the k8s leaves, no alert on any leaf — is in the same file and easy to lose with it.
+
+**Provenance:** read, doc-writer, doc phase, slices/deferred/internal-tls-monitoring.md:10-17 and Jenkinsfile.iac-scheduled-certs:195-217
 **Disposition:**
