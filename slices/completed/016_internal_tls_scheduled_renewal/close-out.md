@@ -255,7 +255,7 @@ itself broken and the drift red is the last warning left.
 **Consequence:** For up to six days per leaf per ~33-day cycle the daily iac-scheduled-drift build reds for a renewal the Friday certs job will handle by itself, with nothing for the operator to do — which is exactly the pattern that trains an operator to stop reading drift.
 
 **Provenance:** read, plan-writer, plan phase, round 1, support/iac-agent/bin/check-ansible-drift.sh:39-43 and ansible/roles/internal_tls/tasks/issue.yml:75-91
-**Disposition:**
+**Disposition:** operator, 2026-09-03 — fix now, the first option: drift tolerates a leaf that is merely inside its window. It happened as predicted (drift #91 red on the three OpenBao leaves, 13 days out, the day before the Friday run). The drift stages now check one certs-job period shorter than the renewer — `internal_tls_renewal_threshold_days=7` against the role's 14 — so drift reds only for a renewal the Friday run already missed, which keeps it as the last warning for a broken certs job without the six-day noise. Ansible 9af8fb9; doctrine in decisions.md "Internal TLS".
 
 ### S2 — Ansible — the kubelite wait gates on /livez, which is liveness, not the 'serving again' the handler comment claims · minor
 
