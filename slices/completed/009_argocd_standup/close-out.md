@@ -241,7 +241,7 @@ Until all three land, the relay renders and runs but no delivery reaches it, and
 items (a real delivery landing 200 with both legs green; the partial-failure drill) cannot be run.
 
 Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, `config/prd/values.yaml`
-Disposition:
+Disposition: operator, 2026-09-04 — done, "done", all three parts and proven end to end. DNS resolves (deploy-hooks.webathome.org CNAME webathome.org -> 45.81.170.227 public, 10.2.1.7 internal). The NAT rule is proven rather than asserted: the vhost serves a Let's Encrypt leaf valid to Dec 3 2026, and HTTP-01 cannot validate unless inbound :80 from the internet reaches the LB. The hook is registered on the registry repo (pvginkel/HelmCharts hook 674610477, push, content_type json, https://deploy-hooks.webathome.org/api/webhook) and GitHub's creation ping came back 200/active -- which also exercises :443. The relay logged `delivery cdeec8ca-a896-11f1-91e4-17061ce2366a event=ping: both receivers accepted`, so the fan-out reached argocd-server and the applicationset-controller and both took it. That last fact is also the first positive confirmation of B6's remedy: before the rollout restart the applicationset-controller had no webhook handler at all, so an accepted delivery was not possible.
 
 ### A4 — the throwaway app's registry entry, and what deleting it afterwards means
 
