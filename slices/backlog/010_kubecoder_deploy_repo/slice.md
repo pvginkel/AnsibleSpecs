@@ -334,3 +334,64 @@ Found while writing P4's RBAC and asking what a `Role` in `argocd-hooks` would a
 
 Provenance: code-writer, P4; ArgoCDDeploy `chart/templates/hook-namespace.yaml`
 Disposition:
+
+## Also folded in from slice 009's close-out (2026-09-04, second pass)
+
+Two more entries whose own text defers the fix to "whichever slice migrates the first real app" —
+this one. Appended verbatim with their `Provenance:` lines.
+
+### S11 — `audit-prd-orphans` counts an Argo-managed release as a Helm release, and from Phase B on that is wrong
+
+`audit_prd_orphans.desired_state()` walks `configs/prd/` itself rather than going through
+`discover_releases()`, and it reads `release.yaml` for exactly one key —
+`has_chart = ("chart" not in rel) or (rel.get("chart") is not None)`
+(`/work/HelmCharts/tools/chart_tools/audit_prd_orphans.py:127-152`). It never looks at
+`reconciler:`. So the entry P6 adds puts `argocd-prd` into both `desired["namespaces"]` and
+`desired["helm_releases"]`, and the tool diffs the second against `helm list` output
+(`:360-361`), printing anything desired-but-not-live as missing.
+
+For Argo itself that lands right by coincidence: R6's bootstrap *is* a real `helm install`, and the
+release secret survives Argo's self-adoption, so the live side carries `argocd-prd` too. It stops
+being right in Phase B. An Argo-managed app is rendered and applied, never installed, so it has no
+Helm release at all — every migrated app will report as a missing Helm release while its namespace
+and its workloads are healthy, and the count grows with each migration. The reconciler-blind read is
+what makes that report wrong; this entry is only the first case to exercise it.
+
+Cost today is nothing: `audit-prd-orphans` is a hand-run diagnostic against the live cluster, not
+part of any gate or pipeline, and its Argo line currently reads correctly. The fix is one
+`read_reconciler()` call in `desired_state` — the same call `discover_releases()` already makes —
+which belongs with whichever slice migrates the first real app, not here.
+
+Found in P6, checking every reader of `configs/prd/` that does not go through `discover_releases()`.
+
+Provenance: code-writer, P6; HelmCharts `tools/chart_tools/audit_prd_orphans.py:127-152,360-361`
+Disposition:
+
+### S12 — the Argo-entry schema gate covers a local entry's keys and none of an upstream entry's
+
+P6 adds `test_every_argo_owned_entry_carries_the_keys_argos_templates_require`
+(`/work/HelmCharts/tests/test_prd_tree.py:93-114`) as the tree-wide guard for every
+`reconciler: argo-cd` entry — the plan's Done section says "Phase B's entries inherit it". Its
+docstring names the hazard: under `goTemplateOptions: ["missingkey=error"]` a key missing from *one*
+entry fails generation for the whole ApplicationSet rather than for one app.
+
+It asserts `deployed`, `autoSync`, `repo`, `targetRevision` and the absence of `chart` — exactly the
+keys the *local-chart* set reads. The upstream set is selected by `upstream.chart` existing
+(`/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:148`) and its template then resolves
+`.upstream.repo`, `.upstream.chart` and `.upstream.version` (`:162,163,166`), a triple the check
+never looks at. An entry carrying `upstream: {chart: …}` with `repo` or `version` missing under it
+passes this gate and then takes down generation for every upstream-chart Application at once —
+the exact failure the docstring exists to prevent. The same hole runs the other way for
+`_RELEASE_KEYS`' HelmCharts-only keys (`namespace`, `helm_args`, `post_rollout_manifests`): all are
+inert on an Argo entry and only `chart` is refused.
+
+Cost today is nothing — no upstream Argo entry exists, and migrating one is explicitly out of this
+slice's scope. The gap becomes load-bearing at Phase B's first upstream-chart migration, which is
+also the first commit that can exercise it, so the extension belongs with that slice rather than
+here.
+
+Found in P6 review round 1, reading the new gate against both ApplicationSet templates rather than
+against the one entry the phase adds.
+
+Provenance: code-reviewer, P6 round 1; phases/P6/code_review_r1.md F1
+Disposition:
