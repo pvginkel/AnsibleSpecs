@@ -267,33 +267,6 @@ The full finding and the refutation record are in /work/AnsibleSpecs/slices/009_
 Provenance: code-writer P1, fix round after review r1; the review verdict's findings list in state.json
 Disposition:
 
-### N2 — the age public key was read off srviac rather than handed over, so nothing is owed
-
-The plan's ordering constraints make the operator's age public key an input to P4 — "ask for it
-before that phase, not after" — and slice 007's `credential-inventory.md:110-112` still says "The
-age **public** key handoff below is still owed". It was not handed over, and P4 did not stop: the
-same file's §"The operator's keystrokes" and
-[`docs/runbooks/iac-agent.md`](/work/Ansible/docs/runbooks/iac-agent.md) §"State encryption keypair
-(SOPS/age)" both name reading it off srviac as the *preferred* way to obtain it — it is a public
-key sitting in plaintext, and deriving it with `age-keygen -y` is the discouraged alternative
-because that one is a credential read. So P4 ran the runbook's command,
-`ssh ansible@srviac 'sudo grep -A1 TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS /etc/iac/secrets.yaml'`, and
-committed the value it printed.
-
-Two consequences. The handoff is discharged — nothing is owed and no operator keystroke is pending
-for it. And `credential-inventory.md`'s Status line is now stale in a way that would make a later
-reader think slice 009 is blocked on an input it already has; correct it when the doc set is next
-touched.
-
-What is *not* proven here is D32's invariant, that the recipient is the public half of the keypair
-`SOPS_AGE_KEY` holds. The gate asserts only that the value is a well-formed age public key; the
-match-check is the runbook's (`bao kv get -field=age_secret_key … | age-keygen -y`, which needs a
-credential read and therefore the operator). Worth running once before the first hook apply writes
-state, because a mismatch surfaces as state `iac` cannot decrypt rather than as a failure.
-
-Provenance: code-writer, P4; ArgoCDDeploy `config/prd/values.yaml`
-Disposition:
-
 ### N3 — the test phase pushed all four repos and read every build it triggered
 
 Per the testing strategy doc's §4, all four repos the slice touched were pushed:
@@ -326,6 +299,37 @@ operator boundary held throughout, confirmed against this session's own tool-cal
 Provenance: test-agent, test phase round 1; Jenkins builds `AaC/Ansible#91`, `AaC/HelmCharts#187`,
 `IaC/Build-Main#138`, `IaC/HelmCharts#5859`
 Disposition:
+
+### ~~N2 — the age public key was read off srviac rather than handed over, so nothing is owed~~ — the match-check folded into A1 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+The plan's ordering constraints make the operator's age public key an input to P4 — "ask for it
+before that phase, not after" — and slice 007's `credential-inventory.md:110-112` still says "The
+age **public** key handoff below is still owed". It was not handed over, and P4 did not stop: the
+same file's §"The operator's keystrokes" and
+[`docs/runbooks/iac-agent.md`](/work/Ansible/docs/runbooks/iac-agent.md) §"State encryption keypair
+(SOPS/age)" both name reading it off srviac as the *preferred* way to obtain it — it is a public
+key sitting in plaintext, and deriving it with `age-keygen -y` is the discouraged alternative
+because that one is a credential read. So P4 ran the runbook's command,
+`ssh ansible@srviac 'sudo grep -A1 TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS /etc/iac/secrets.yaml'`, and
+committed the value it printed.
+
+Two consequences. The handoff is discharged — nothing is owed and no operator keystroke is pending
+for it. And `credential-inventory.md`'s Status line is now stale in a way that would make a later
+reader think slice 009 is blocked on an input it already has; correct it when the doc set is next
+touched.
+
+What is *not* proven here is D32's invariant, that the recipient is the public half of the keypair
+`SOPS_AGE_KEY` holds. The gate asserts only that the value is a well-formed age public key; the
+match-check is the runbook's (`bao kv get -field=age_secret_key … | age-keygen -y`, which needs a
+credential read and therefore the operator). Worth running once before the first hook apply writes
+state, because a mismatch surfaces as state `iac` cannot decrypt rather than as a failure.
+
+Provenance: code-writer, P4; ArgoCDDeploy `config/prd/values.yaml`
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — the actionable tail (D32's age-keypair match-check, owed before the first hook apply writes state) folded into A1 as a pre-install check. The rest is a record: the handoff is discharged and `credential-inventory.md:110-115` already says so.
+
+</details>
 
 ## Bugs
 
@@ -363,23 +367,6 @@ notification" can be proven to mean.
 Provenance: plan-writer, plan pass r1; plan.md P2 and verification.json V14
 Disposition:
 
-### B2 — `slice.md`'s ApplicationSet quote drops the `hook.namespace` parameter · nit · AnsibleSpecs
-
-`slice.md`'s "Generating Applications" extract lists three helm parameters — `hook.repo`,
-`hook.revision`, `hook.stage`. `design.md:201-209` lists four; the fourth is `hook.namespace`,
-`'{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'`. The library chart's Job
-`required`-guards all four (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48`),
-so an ApplicationSet built from the quote would fail to render **every** migrated app that includes
-the hook — not just the hook Job, the whole chart.
-
-`slice.md` already flags two of its own quotes as stale and says to take the `argo-cd/` set as
-authoritative, so the plan is not misled: P3 names `design.md:155-273` as the template and calls
-this omission out. The entry is here because the stale quote survives in a triage artefact that
-later readers will reach for.
-
-Provenance: plan-writer, plan pass r1; plan.md P3
-Disposition:
-
 ### B3 — `argocd-server`'s Service publishes port 443 as plain HTTP · minor · ArgoCDDeploy
 
 `server.insecure: true` is load-bearing for R5 — nginx terminates the step-ca leaf and proxies plain
@@ -400,85 +387,6 @@ Found while reviewing P1's exposure values against the rendered Service.
 Provenance: code-reviewer, P1 round 1; phases/P1/code_review_r1.md F3
 Disposition:
 
-### ~~B4 — the render gate crashes on a dex-disabled render, which is a switch P2 may throw~~ — resolved by P2 (`f747a9f`) and P4 (`008126d`), confirmed by consult 1 · minor · ArgoCDDeploy
-
-`tests/render-chart.py:114-121` reads `params["server.dex.server"]` out of `argocd-cmd-params-cm`
-unguarded. With `argo-cd.dex.enabled: false` the upstream chart drops that key entirely and renders
-no dex Deployment or Service — a perfectly correct render — and the gate exits 1 with
-`KeyError: 'server.dex.server'` instead of passing. P1's done-record leaves exactly that switch open
-("dex stays at the chart default: whether Keycloak SSO retires it is P2's call", plan.md:374), so
-the first phase that retires dex for Keycloak SSO inherits a red gate and a traceback that names no
-requirement.
-
-The same line of code has a second, milder instance: `:96` takes the rendered Namespace with a bare
-`next()`, so deleting `chart/templates/namespace.yaml` dies with `StopIteration` before
-`check_namespace_manifest` — the check that owns the named D25/D26 assertion, and which runs after
-it — can report anything. The gate still goes red there; only the diagnosis is lost.
-
-Nothing shipped is affected: the committed values enable dex, the Namespace template is present, and
-`kc project test` and `kc project lint` are both green on `9264944`.
-
-Found while mutation-testing P1's fix commit for the release-name finding.
-
-Both instances are gone, and the phase that was predicted to inherit the red gate is the one that
-fixed it. **P2 retired dex** (D9 is direct OIDC) and rewrote the params loop with it: it now reads
-`("repo.server", "redis.server")` and `check_sso` asserts dex is *absent* instead
-(`tests/render-chart.py:787-792`). **P4** replaced the bare `next()` — its own second Namespace,
-`argocd-hooks`, broke it first — with the release namespace read off `argocd-cmd-params-cm`, and
-mutation-tested that the new derivation still goes red under a drifting release name. Read against
-the merged tree by consult 1; no entry survives here.
-
-Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F1
-Disposition:
-
-### B5 — one of the gate's release-name assertions cannot fail · nit · ArgoCDDeploy
-
-`tests/render-chart.py:111-121` checks that `argocd-cmd-params-cm`'s `repo.server`, `redis.server`
-and `server.dex.server` name Services the render creates, under a comment saying this is "where a
-name mismatch points running workloads at Services that do not exist". Both sides come out of one
-`helm template` invocation and the upstream chart derives both from the same `.Release.Name`, so
-they agree under any release name. Confirmed by mutation: rendering under `argocd` — the exact
-mismatch the comment describes — fired 13 assertions and none of them was this one.
-
-The failure it is aimed at is real but lives *between* two renders (Argo's under `argocd-prd` versus
-a bootstrap under `argocd`), which a single-render gate cannot observe. The check that does catch it
-is the `startswith`/`app.kubernetes.io/instance` pair immediately above, at `:101-109`. So no
-coverage is missing — the block is dead weight whose only reachable outcomes are false positives
-(B4's `KeyError`, or a `redis.server` pointed at an external Redis host).
-
-Found while mutation-testing P1's fix commit for the release-name finding.
-
-Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F2
-Disposition:
-
-### B6 — the applicationset-controller can cache the *unresolved* webhook secret for the life of the pod · minor · ArgoCDDeploy
-
-P2 makes the GitHub HMAC secret an indirection — `configs.secret.githubSecret:
-$argocd-webhook:githubSecret` (`config/prd/values.yaml:56`) against a Secret ESO materialises
-after the manifests apply. argocd-server copes: `watchSettings` compares the **resolved** value
-(v3.5.1 `server/server.go:812,844`) and restarts itself whenever ESO first writes or later rotates
-the leaf. The applicationset-controller has no such watcher: it builds its GitHub handler once, in
-`NewWebhookHandler` (`applicationset/webhook/webhook.go:75-80`), from a one-shot `GetSettings()`,
-and `cmd/argocd-applicationset-controller/commands/applicationset_controller.go:195,240` subscribes
-to nothing.
-
-So if that container reaches `NewWebhookHandler` before `argocd-webhook` exists,
-`GetWebhookGitHubSecret()` finds no matching key, logs a warning and returns the literal string
-`$argocd-webhook:githubSecret` (`util/settings/settings.go:2530-2540`) — which becomes the HMAC
-key. Every GitHub delivery to the `:7000` receiver then 400s, for the life of the pod. The window
-is the bootstrap `helm install` (**A1**), and the drills it silently breaks are R8's
-applicationset leg (V13) and the relay's both-legs-green item (V24/V25).
-
-The caching itself is upstream behaviour — any change to `argocd-secret` is equally invisible to
-that controller — so the run does not fix it. The operator remedy is one keystroke: if a registry
-push does not regenerate after the bootstrap, `kubectl -n argocd-prd rollout restart deploy/argocd-prd-applicationset-controller`
-and redeliver. Worth knowing before the drill rather than during it.
-
-Found while checking P2's "one leaf, two receivers" claim against both receivers' code.
-
-Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F1
-Disposition:
-
 ### B7 — the gate's guard against Argo requesting the `groups` scope passes when the key is deleted · minor · ArgoCDDeploy
 
 `tests/render-chart.py:349-352` asserts `"groups" not in oidc.get("requestedScopes", [])` under a
@@ -497,20 +405,6 @@ gate. The neighbouring `rbac` assertion has no such hole: the chart's own defaul
 Found while mutation-testing P2's five new gate checks.
 
 Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F2
-Disposition:
-
-### ~~B8 — the ExternalSecret header names the wrong repo for the estate's shared ESO helper~~ — fixed in place by consult 1 (ArgoCDDeploy `415a0c4`) · nit · ArgoCDDeploy
-
-`chart/templates/external-secrets.yaml:8-9` says the estate's shared ExternalSecret helper "lives
-in HelmCharts' charts". It is defined once, in the `Charts` repo's library chart, at
-`/work/Charts/charts/homelab-shared/templates/_helpers.tpl:204`. The substantive claim beside it
-is correct — that helper emits no `target.template` and so cannot express the repo credential.
-
-Comment text in a file this slice authored, no behaviour change, so consult 1 corrected it rather
-than reporting it: the header now names the `Charts` library chart and its line. Nothing else moved
-and the render gate is unmoved at 68 objects.
-
-Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F3
 Disposition:
 
 ### B9 — the gate never reads the repository a generated Application syncs · minor · ArgoCDDeploy
@@ -619,52 +513,6 @@ Found in P5 review round 1, reading the new invariant against the configurator's
 Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F2
 Disposition:
 
-### ~~B13 — the relay's `:80` comment names a TLS failure that `server.insecure` rules out~~ — fixed in place by consult 1 (ArgoCDDeploy `415a0c4`) · nit · ArgoCDDeploy
-
-`chart/templates/webhook-relay.yaml:59-62` justifies the argocd-server leg with "a leg pointed at
-443 fails the whole delivery on the TLS handshake", and `tests/render-chart.py:172-176` restates it
-as "a leg pointed anywhere else fails every delivery". With `server.insecure: true` the upstream
-chart renders both Service ports onto the same plain-HTTP container port — `http 80 → 8080` and
-`https 443 → 8080` — so an `http://…:443/api/webhook` leg reaches the identical listener and
-succeeds; no handshake is attempted, and the insecure listener issues no redirect for the "does not
-follow redirects" clause to catch. **B3** above records the accurate version: the handshake failure
-belongs to an `https://` *scheme*, not to the port number. Port 80 is still the right choice and the
-gate pins it either way, so nothing follows from the words — the reason attached to them is wrong.
-
-Found in P5 review round 1, checking the comment against the rendered argocd-server Service.
-
-Comment text in files this slice authored, no behaviour change, so consult 1 corrected it rather
-than reporting it. Both places now carry the accurate reason — an `https://` *scheme* is what fails
-the handshake, and 80 is chosen because the port named `https` fronts the same plain listener and
-would only misname what answers there. The URLs, the port numbers and the gate's assertions are
-untouched; the render gate is unmoved at 68 objects.
-
-Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F3
-Disposition:
-
-### B14 — `helm lint` warns on every chart that includes the PreSync hook · nit · Charts
-
-`helm lint` checks each rendered object's `metadata.name` and does not know about `generateName`,
-so a chart including `homelab-shared.tf-presync-hook` lints with:
-
-```
-[WARNING] templates/tf-presync-hook.yaml: object name does not conform to Kubernetes naming
-requirements: "": metadata.name: Invalid value: ""
-```
-
-The Job's `generateName: tf-presync-` is correct and deliberate (the library chart,
-`_tf-presync-hook.tpl:26`) — a fixed name would collide across syncs. The warning is helm's blind
-spot, exits 0, and is invisible in `Charts`' own gate because a library chart renders no templates.
-It becomes visible in every repo that *consumes* the library: ProofDeploy's `kc project lint` today,
-`KubeCoderDeploy`'s tomorrow (slice 010), and each migrated app's after that. Worth knowing so a
-later phase does not read it as its own defect; the only fixes available are silencing lint or
-dropping `generateName`, and neither is worth it.
-
-Found running P5a's lint verb for the first time against a consumer of the library.
-
-Provenance: code-writer, P5a; ProofDeploy `tests/lint.sh`, `chart/templates/tf-presync-hook.yaml`
-Disposition:
-
 ### B15 — the proof repo's gate accepts a *commented-out* `backend "http" {}` · minor · ProofDeploy
 
 `tests/render-chart.py:342-352` is the assertion that keeps a hook run's Terraform state in the
@@ -696,6 +544,66 @@ Found in P5a review round 1, by mutating the file the assertion reads rather tha
 Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F1
 Disposition:
 
+### B2 — `slice.md`'s ApplicationSet quote drops the `hook.namespace` parameter · nit · AnsibleSpecs
+
+`slice.md`'s "Generating Applications" extract lists three helm parameters — `hook.repo`,
+`hook.revision`, `hook.stage`. `design.md:201-209` lists four; the fourth is `hook.namespace`,
+`'{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'`. The library chart's Job
+`required`-guards all four (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48`),
+so an ApplicationSet built from the quote would fail to render **every** migrated app that includes
+the hook — not just the hook Job, the whole chart.
+
+`slice.md` already flags two of its own quotes as stale and says to take the `argo-cd/` set as
+authoritative, so the plan is not misled: P3 names `design.md:155-273` as the template and calls
+this omission out. The entry is here because the stale quote survives in a triage artefact that
+later readers will reach for.
+
+Provenance: plan-writer, plan pass r1; plan.md P3
+Disposition:
+
+### B5 — one of the gate's release-name assertions cannot fail · nit · ArgoCDDeploy
+
+`tests/render-chart.py:111-121` checks that `argocd-cmd-params-cm`'s `repo.server`, `redis.server`
+and `server.dex.server` name Services the render creates, under a comment saying this is "where a
+name mismatch points running workloads at Services that do not exist". Both sides come out of one
+`helm template` invocation and the upstream chart derives both from the same `.Release.Name`, so
+they agree under any release name. Confirmed by mutation: rendering under `argocd` — the exact
+mismatch the comment describes — fired 13 assertions and none of them was this one.
+
+The failure it is aimed at is real but lives *between* two renders (Argo's under `argocd-prd` versus
+a bootstrap under `argocd`), which a single-render gate cannot observe. The check that does catch it
+is the `startswith`/`app.kubernetes.io/instance` pair immediately above, at `:101-109`. So no
+coverage is missing — the block is dead weight whose only reachable outcomes are false positives
+(B4's `KeyError`, or a `redis.server` pointed at an external Redis host).
+
+Found while mutation-testing P1's fix commit for the release-name finding.
+
+Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F2
+Disposition:
+
+### B14 — `helm lint` warns on every chart that includes the PreSync hook · nit · Charts
+
+`helm lint` checks each rendered object's `metadata.name` and does not know about `generateName`,
+so a chart including `homelab-shared.tf-presync-hook` lints with:
+
+```
+[WARNING] templates/tf-presync-hook.yaml: object name does not conform to Kubernetes naming
+requirements: "": metadata.name: Invalid value: ""
+```
+
+The Job's `generateName: tf-presync-` is correct and deliberate (the library chart,
+`_tf-presync-hook.tpl:26`) — a fixed name would collide across syncs. The warning is helm's blind
+spot, exits 0, and is invisible in `Charts`' own gate because a library chart renders no templates.
+It becomes visible in every repo that *consumes* the library: ProofDeploy's `kc project lint` today,
+`KubeCoderDeploy`'s tomorrow (slice 010), and each migrated app's after that. Worth knowing so a
+later phase does not read it as its own defect; the only fixes available are silencing lint or
+dropping `generateName`, and neither is worth it.
+
+Found running P5a's lint verb for the first time against a consumer of the library.
+
+Provenance: code-writer, P5a; ProofDeploy `tests/lint.sh`, `chart/templates/tf-presync-hook.yaml`
+Disposition:
+
 ### B16 — the new whole-tree config check hard-codes the derived namespace, so the documented `namespace:` key would fail it · nit · HelmCharts
 
 `test_every_prd_stage_directory_reports_a_config_whoever_reconciles_it` asserts, for **every** stage
@@ -723,7 +631,121 @@ than against the tree as it stands.
 Provenance: code-reviewer, P6 round 1; phases/P6/code_review_r1.md F2
 Disposition:
 
-### B17 — `Jenkinsfile.iac-on-push`'s destroy-check guard silently never fires · nit · Ansible
+### ~~B4 — the render gate crashes on a dex-disabled render, which is a switch P2 may throw~~ — resolved by P2 (`f747a9f`) and P4 (`008126d`), confirmed by consult 1 · minor · ArgoCDDeploy
+
+<details><summary>struck — body kept for the record</summary>
+
+`tests/render-chart.py:114-121` reads `params["server.dex.server"]` out of `argocd-cmd-params-cm`
+unguarded. With `argo-cd.dex.enabled: false` the upstream chart drops that key entirely and renders
+no dex Deployment or Service — a perfectly correct render — and the gate exits 1 with
+`KeyError: 'server.dex.server'` instead of passing. P1's done-record leaves exactly that switch open
+("dex stays at the chart default: whether Keycloak SSO retires it is P2's call", plan.md:374), so
+the first phase that retires dex for Keycloak SSO inherits a red gate and a traceback that names no
+requirement.
+
+The same line of code has a second, milder instance: `:96` takes the rendered Namespace with a bare
+`next()`, so deleting `chart/templates/namespace.yaml` dies with `StopIteration` before
+`check_namespace_manifest` — the check that owns the named D25/D26 assertion, and which runs after
+it — can report anything. The gate still goes red there; only the diagnosis is lost.
+
+Nothing shipped is affected: the committed values enable dex, the Namespace template is present, and
+`kc project test` and `kc project lint` are both green on `9264944`.
+
+Found while mutation-testing P1's fix commit for the release-name finding.
+
+Both instances are gone, and the phase that was predicted to inherit the red gate is the one that
+fixed it. **P2 retired dex** (D9 is direct OIDC) and rewrote the params loop with it: it now reads
+`("repo.server", "redis.server")` and `check_sso` asserts dex is *absent* instead
+(`tests/render-chart.py:787-792`). **P4** replaced the bare `next()` — its own second Namespace,
+`argocd-hooks`, broke it first — with the release namespace read off `argocd-cmd-params-cm`, and
+mutation-tested that the new derivation still goes red under a drifting release name. Read against
+the merged tree by consult 1; no entry survives here.
+
+Provenance: code-reviewer, P1 round 2; phases/P1/code_review_r2.md F1
+Disposition:
+
+</details>
+
+### ~~B6 — the applicationset-controller can cache the *unresolved* webhook secret for the life of the pod · minor · ArgoCDDeploy~~ — folded into A1 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+P2 makes the GitHub HMAC secret an indirection — `configs.secret.githubSecret:
+$argocd-webhook:githubSecret` (`config/prd/values.yaml:56`) against a Secret ESO materialises
+after the manifests apply. argocd-server copes: `watchSettings` compares the **resolved** value
+(v3.5.1 `server/server.go:812,844`) and restarts itself whenever ESO first writes or later rotates
+the leaf. The applicationset-controller has no such watcher: it builds its GitHub handler once, in
+`NewWebhookHandler` (`applicationset/webhook/webhook.go:75-80`), from a one-shot `GetSettings()`,
+and `cmd/argocd-applicationset-controller/commands/applicationset_controller.go:195,240` subscribes
+to nothing.
+
+So if that container reaches `NewWebhookHandler` before `argocd-webhook` exists,
+`GetWebhookGitHubSecret()` finds no matching key, logs a warning and returns the literal string
+`$argocd-webhook:githubSecret` (`util/settings/settings.go:2530-2540`) — which becomes the HMAC
+key. Every GitHub delivery to the `:7000` receiver then 400s, for the life of the pod. The window
+is the bootstrap `helm install` (**A1**), and the drills it silently breaks are R8's
+applicationset leg (V13) and the relay's both-legs-green item (V24/V25).
+
+The caching itself is upstream behaviour — any change to `argocd-secret` is equally invisible to
+that controller — so the run does not fix it. The operator remedy is one keystroke: if a registry
+push does not regenerate after the bootstrap, `kubectl -n argocd-prd rollout restart deploy/argocd-prd-applicationset-controller`
+and redeliver. Worth knowing before the drill rather than during it.
+
+Found while checking P2's "one leaf, two receivers" claim against both receivers' code.
+
+Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F1
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass (A1-A4 plus B6 and N2, then S1/S2/S5/S6/S8 as planning inputs) — folded into A1 as a bootstrap-time keystroke: the caching mechanism, the drills it silently breaks (V13, V24/V25) and the `rollout restart` remedy.
+
+</details>
+
+### ~~B8 — the ExternalSecret header names the wrong repo for the estate's shared ESO helper~~ — fixed in place by consult 1 (ArgoCDDeploy `415a0c4`) · nit · ArgoCDDeploy
+
+<details><summary>struck — body kept for the record</summary>
+
+`chart/templates/external-secrets.yaml:8-9` says the estate's shared ExternalSecret helper "lives
+in HelmCharts' charts". It is defined once, in the `Charts` repo's library chart, at
+`/work/Charts/charts/homelab-shared/templates/_helpers.tpl:204`. The substantive claim beside it
+is correct — that helper emits no `target.template` and so cannot express the repo credential.
+
+Comment text in a file this slice authored, no behaviour change, so consult 1 corrected it rather
+than reporting it: the header now names the `Charts` library chart and its line. Nothing else moved
+and the render gate is unmoved at 68 objects.
+
+Provenance: code-reviewer, P2 round 1; phases/P2/code_review_r1.md F3
+Disposition:
+
+</details>
+
+### ~~B13 — the relay's `:80` comment names a TLS failure that `server.insecure` rules out~~ — fixed in place by consult 1 (ArgoCDDeploy `415a0c4`) · nit · ArgoCDDeploy
+
+<details><summary>struck — body kept for the record</summary>
+
+`chart/templates/webhook-relay.yaml:59-62` justifies the argocd-server leg with "a leg pointed at
+443 fails the whole delivery on the TLS handshake", and `tests/render-chart.py:172-176` restates it
+as "a leg pointed anywhere else fails every delivery". With `server.insecure: true` the upstream
+chart renders both Service ports onto the same plain-HTTP container port — `http 80 → 8080` and
+`https 443 → 8080` — so an `http://…:443/api/webhook` leg reaches the identical listener and
+succeeds; no handshake is attempted, and the insecure listener issues no redirect for the "does not
+follow redirects" clause to catch. **B3** above records the accurate version: the handshake failure
+belongs to an `https://` *scheme*, not to the port number. Port 80 is still the right choice and the
+gate pins it either way, so nothing follows from the words — the reason attached to them is wrong.
+
+Found in P5 review round 1, checking the comment against the rendered argocd-server Service.
+
+Comment text in files this slice authored, no behaviour change, so consult 1 corrected it rather
+than reporting it. Both places now carry the accurate reason — an `https://` *scheme* is what fails
+the handshake, and 80 is chosen because the port named `https` fronts the same plain listener and
+would only misname what answers there. The URLs, the port numbers and the gate's assertions are
+untouched; the render gate is unmoved at 68 objects.
+
+Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F3
+Disposition:
+
+</details>
+
+### ~~B17 — `Jenkinsfile.iac-on-push`'s destroy-check guard silently never fires · nit · Ansible~~ — already fixed by Ansible e456b7f (2026-08-30), confirmed 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
 
 `Jenkinsfile.iac-on-push`'s single stage runs, inline under `iac -c`:
 
@@ -756,7 +778,9 @@ strategy doc's instruction to wait for `iac-on-push` and read it, not because a 
 it.
 
 Provenance: test-agent, test phase round 1; Jenkins `IaC/Build-Main#138` console log
-Disposition:
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — no action owed: already fixed 2026-08-30 by Ansible `e456b7f` ("iac pipelines: POSIX tests, because iac -c is dash and not bash"); the guard now reads `if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]` with a comment naming dash.
+
+</details>
 
 ## Open questions and rulings
 
@@ -774,42 +798,6 @@ the hook's cluster-wide `secrets` grant, and a cluster whitelist each migration 
 and S4's doc halves are applied; S3, S7 and S13 are one operator sentence each.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### S1 — the register's "~44 unmigrated releases the glob matches" is 15, and Phase B has to create the file
-
-R16 and `phases.md` A.5 both describe the ApplicationSet's git generator matching "all ~44
-unmigrated releases", which the selector must then exclude. The tree does not look like that:
-`configs/prd/*/*/release.yaml` resolves to **15** files (checked 2026-08-16), against 51 app-stage
-directories and 46 apps. `release.yaml` is the exception in this repo, not the rule — it exists only
-where a release diverges from convention (`/work/HelmCharts/tools/deploy/README.md:89-106`), and a
-local-chart release carries none at all, its chart name defaulting to the config directory name
-(`tools/deploy/deploy_cli/release.py:174`).
-
-Nothing about R16's proof changes — the 15 that *are* matched all lack `reconciler:` (`grep -rn
-reconciler /work/HelmCharts/configs/` is empty) and must all be excluded, and `missingkey=error`
-still means one leak breaks the whole set. What changes is a Phase B expectation: migrating a
-local-chart app is not "add three keys to its existing entry", it is **creating a `release.yaml`
-that does not exist yet** — KubeCoder included, whose `configs/prd/kubecoder/{dev,prd}/` hold only
-`values.yaml`. Worth folding into slices 010–012's planning, and worth correcting in `phases.md`
-and `design.md` when the doc set is next touched.
-
-Provenance: plan-writer, plan pass r1; plan.md P3 and P6, verification.json V21
-Disposition:
-
-### S2 — `/work/KubeCoderDeploy` will hit the same empty-repo bootstrap trap this slice hit
-
-`ArgoCDDeploy` had no commit on `main` **and** no `origin/main`, which would have failed the run
-loop's merge-time `git checkout main` before P1 ever landed — the hazard slice 006 already named and
-solved by seeding a root commit during refinement
-(`slices/completed/006_charts_repo_and_charts_home/plan.md:67-71`). This pass seeded one (`e8cb797`,
-a minimal `README.md`, left unpushed).
-
-`/work/KubeCoderDeploy` is in exactly the same state — `.git` and nothing else, branch `main`, zero
-commits — and slice 010 (`010_kubecoder_deploy_repo`) will target it. Seed a root commit there
-before that slice's first phase runs, or plan for the driver to fail on it.
-
-Provenance: plan-writer, plan pass r1; ordering constraints in plan.md
-Disposition:
 
 ### S3 — the throwaway app's Terraform state outlives the throwaway app
 
@@ -830,80 +818,6 @@ in whatever eventually answers D28.
 Found while planning P5a, working out what the proof repo's `terraform/` has to contain.
 
 Provenance: plan-writer, plan pass r2; plan.md P5a
-Disposition:
-
-### S4 — the register says the hook needs PV `get`, and the code never issues one
-
-R3 and `design.md`'s hook-namespace inventory both specify the `tf-presync` ServiceAccount's RBAC as
-"PV get/list/patch" (`/work/AnsibleSpecs/argo-cd/design.md:418`). The reattach the grant exists for
-issues exactly two calls: `GET /api/v1/persistentvolumes` — the collection, i.e. `list` — and
-`PATCH /api/v1/persistentvolumes/<name>` with `application/merge-patch+json`
-(`/work/ArgoCDTools/presync/reattach.py:18,42-49`, `presync/kube.py:21,40-53`). There is no
-single-object GET anywhere in the hook, so `get` on `persistentvolumes` is granted for nothing.
-
-This slice's P4 grants the requirement as written rather than narrowing it on its own authority —
-the difference is one verb on one cluster-scoped kind, and a wrong guess here fails a sync rather
-than a test. But the register is the document Phase B and any later audit will read, and it
-currently overstates what the hook does. Correct it in `design.md` (and drop the verb from the
-ServiceAccount) when the doc set is next touched, or record deliberately that the extra verb stays.
-
-Provenance: plan-writer, plan pass r2; plan.md P4
-Disposition:
-
-### S5 — the AppProject's cluster whitelist is deny-by-default, and Phase B has to extend it per app
-
-P3's `clusterResourceWhitelist` carries `Namespace`, `CustomResourceDefinition`, `ClusterRole` and
-`ClusterRoleBinding` — every cluster-scoped kind Argo's own chart renders, plus the pair D10 names
-for migrated charts (KubeCoder's). An empty cluster whitelist permits *nothing*
-(`IsGroupKindNamePermitted`, v3.5.1 `pkg/apis/application/v1alpha1/app_project_types.go:415`), and
-a kind outside the list is refused at sync, so each migration that brings a new cluster-scoped kind
-owes an entry.
-
-One is already visible in the tree: `/work/HelmCharts/charts/media/templates/samba-pv.yaml` is a
-chart-managed `PersistentVolume`, so migrating `media` needs either a whitelist entry or the PV
-moved into that repo's Terraform, which is where D29 puts PVs anyway. The estate's upstream-chart
-releases were **not** enumerated for this — cloudnative-pg, external-secrets, ceph-csi, csi-driver-smb
-and step-ca ship kinds of their own (CRDs, webhook configurations, `CSIDriver`, `StorageClass`) that
-nobody has checked against the list, because none of them migrates in this slice.
-
-The failure mode is loud rather than silent — the sync reports the refused kind — so this is a
-planning input for slices 010–012 and the later migrations, not a defect. Worth checking each app's
-chart for cluster-scoped kinds while planning its migration, rather than discovering it at first
-sync.
-
-Found while writing P3's AppProject and tying the gate's whitelist assertion to the render.
-
-Provenance: code-writer, P3; ArgoCDDeploy `chart/templates/appproject.yaml`
-Disposition:
-
-### S6 — the hook's ServiceAccount is granted cluster-wide, and `secrets` is the term that matters
-
-P4 binds `tf-presync` with a **ClusterRoleBinding**, because the objects a deploy repo's Terraform
-creates land in `<app>-<stage>` — a namespace derived per sync, created by that app's own chart,
-and not enumerable when Argo's chart renders. A `RoleBinding` in `argocd-hooks` would grant nothing
-where the work happens. The rules are as narrow as that shape allows: the full lifecycle on
-`persistentvolumes`, `secrets` and `namespaces`, which is every kind the estate's Terraform manages
-through the kubernetes provider (`grep -rn 'resource "kubernetes' /work/HelmCharts`, 2026-08-17),
-and the gate refuses a wildcard so a fourth kind is a deliberate edit.
-
-The consequence to know: **any Terraform any deploy repo runs can read and write every Secret in
-the cluster**, `argocd-prd`'s repo credential and OIDC client secret among them, and can delete any
-namespace. D41 already says write access to a deploy repo branch is arbitrary Terraform execution
-bounded by what `argocd-hooks` holds; this widens that bound past the credentials in the Secret to
-the cluster's own. It is not the dominant term — the classic PAT with `repo` on every private
-repository still is — but it is the one D33's "app namespaces in turn hold no deploy-time
-credentials at all" does not cover.
-
-The narrowing that exists: bind the same ClusterRole per app namespace with a RoleBinding the
-**library chart** renders beside the hook Job, so an app grants the hook access to its own
-namespace and nowhere else. It costs a `homelab-shared` change (`/work/Charts`, a different repo
-and outside this slice) and grants an app nothing it could not already do — its chart can create
-RoleBindings in its own namespace today, since the AppProject's namespaced whitelist is
-deliberately unset. Worth deciding while Phase B is still one migrated app rather than ten.
-
-Found while writing P4's RBAC and asking what a `Role` in `argocd-hooks` would actually permit.
-
-Provenance: code-writer, P4; ArgoCDDeploy `chart/templates/hook-namespace.yaml`
 Disposition:
 
 ### S7 — the age public key is in the leaf ESO already reads, so the recipient need not be a committed literal
@@ -945,23 +859,6 @@ against every other consumer of the same leaf.
 Provenance: code-reviewer, P4 round 1; phases/P4/code_review_r1.md F2
 Disposition:
 
-### S8 — `ArgoCDDeploy` carries no architecture producer, so the relay's edges stay unmodelled
-
-Slice 015 recorded (its close-out **S2**) that `webhook-relay/architecture.yaml` carries no
-consumption edge toward the two receivers, because cross-producer references resolve by UUID and Argo
-CD is modelled by no producer yet — and named "009's `ArgoCDDeploy` producer" as where that edge
-belongs. This slice builds no such producer: nothing in the plan asks for one, and P1 deliberately
-gave the repo no Jenkins-side anything (`.kubecoder/project.yaml`, "no Jenkinsfile and no `jenkins:`
-key"), which is where every other repo's architecture producer is wired.
-
-So after this slice the federated model holds an internet-facing `webhook-relay` app pointing at
-nothing, and no model of Argo CD at all — the control plane that will own every deploy in the estate.
-Slice 014 is the architecture-producers slice; this is an input to it, or to whichever slice first
-gives `ArgoCDDeploy` a pipeline.
-
-Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, 015 close-out S2
-Disposition:
-
 ### S9 — the estate's one internet-facing pod is the only pod in `argocd-prd` with no securityContext
 
 The relay's pod spec (`chart/templates/webhook-relay.yaml:41-49`) sets no `securityContext` at
@@ -983,32 +880,6 @@ chart, and this is where it would be stated.
 Found in P5 review round 1, comparing the relay's pod spec against the rest of its own render.
 
 Provenance: code-reviewer, P5 round 1; phases/P5/code_review_r1.md F1
-Disposition:
-
-### ~~S10 — A4's drill runbook does not name the push the whole drill starts with~~ — folded into A1 and A4 by consult 1
-
-**A4** above is the operator's runbook for A.5's register → deploy → undeploy → unregister drill. It
-names three keystrokes beyond the drill itself — the registry entry at
-`configs/prd/proofdeploy/prd/release.yaml`, the GitHub webhook pointed at the relay (**A3**), and the
-delete-afterwards set — and does not name pushing `ProofDeploy` to `origin/main`.
-
-`git ls-remote origin` in `/work/ProofDeploy` returns **nothing**: the GitHub repository still has no
-refs at all, the empty-repo state `plan.md:239-248` records and that P5a's branch did not change.
-Until the push happens every keystroke A4 lists is inert — the ApplicationSet generates an
-Application whose `repoURL` resolves to a repository with no `main`, the webhook has no pushes to
-deliver, and the first sync fails on a clone rather than on anything the drill is trying to observe.
-The same holds for `ArgoCDDeploy` and **A1**'s "clone, `helm dependency build`, `helm install`", so
-this is a slice-wide assumption rather than a P5a invention — but A4 is the entry a reader reaches
-for when running this repo's drill, and it is the one place the prerequisite would be stated. One
-line closes it.
-
-Found in P5a review round 1, checking what A4 assumes against the repo's actual remote state.
-
-Consult 1 re-checked both remotes — `git ls-remote origin` is still empty in `/work/ProofDeploy`
-**and** in `/work/ArgoCDDeploy` — and wrote the prerequisite into the two entries that need it,
-**A1** and **A4**, since that is where an operator reaches for it. Nothing is left here.
-
-Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F2
 Disposition:
 
 ### S11 — `audit-prd-orphans` counts an Argo-managed release as a Helm release, and from Phase B on that is wrong
@@ -1104,3 +975,184 @@ today it says HelmCharts releases need redeploying after a rebuild, which stays 
 
 Provenance: doc phase
 Disposition:
+
+### ~~S1 — the register's "~44 unmigrated releases the glob matches" is 15, and Phase B has to create the file~~ — folded into slice 010 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+R16 and `phases.md` A.5 both describe the ApplicationSet's git generator matching "all ~44
+unmigrated releases", which the selector must then exclude. The tree does not look like that:
+`configs/prd/*/*/release.yaml` resolves to **15** files (checked 2026-08-16), against 51 app-stage
+directories and 46 apps. `release.yaml` is the exception in this repo, not the rule — it exists only
+where a release diverges from convention (`/work/HelmCharts/tools/deploy/README.md:89-106`), and a
+local-chart release carries none at all, its chart name defaulting to the config directory name
+(`tools/deploy/deploy_cli/release.py:174`).
+
+Nothing about R16's proof changes — the 15 that *are* matched all lack `reconciler:` (`grep -rn
+reconciler /work/HelmCharts/configs/` is empty) and must all be excluded, and `missingkey=error`
+still means one leak breaks the whole set. What changes is a Phase B expectation: migrating a
+local-chart app is not "add three keys to its existing entry", it is **creating a `release.yaml`
+that does not exist yet** — KubeCoder included, whose `configs/prd/kubecoder/{dev,prd}/` hold only
+`values.yaml`. Worth folding into slices 010–012's planning, and worth correcting in `phases.md`
+and `design.md` when the doc set is next touched.
+
+Provenance: plan-writer, plan pass r1; plan.md P3 and P6, verification.json V21
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — folded verbatim into `slices/backlog/010_kubecoder_deploy_repo/slice.md` as a planning input.
+
+</details>
+
+### ~~S2 — `/work/KubeCoderDeploy` will hit the same empty-repo bootstrap trap this slice hit~~ — folded into slice 010 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+`ArgoCDDeploy` had no commit on `main` **and** no `origin/main`, which would have failed the run
+loop's merge-time `git checkout main` before P1 ever landed — the hazard slice 006 already named and
+solved by seeding a root commit during refinement
+(`slices/completed/006_charts_repo_and_charts_home/plan.md:67-71`). This pass seeded one (`e8cb797`,
+a minimal `README.md`, left unpushed).
+
+`/work/KubeCoderDeploy` is in exactly the same state — `.git` and nothing else, branch `main`, zero
+commits — and slice 010 (`010_kubecoder_deploy_repo`) will target it. Seed a root commit there
+before that slice's first phase runs, or plan for the driver to fail on it.
+
+Provenance: plan-writer, plan pass r1; ordering constraints in plan.md
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — folded verbatim into `slices/backlog/010_kubecoder_deploy_repo/slice.md`. Re-verified live 2026-09-04: `/work/KubeCoderDeploy` is `.git` and nothing else, branch `main`, zero commits — still exactly the trap this entry predicts.
+
+</details>
+
+### ~~S4 — the register says the hook needs PV `get`, and the code never issues one~~ — already corrected by 009's doc phase (37dd629), confirmed 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+R3 and `design.md`'s hook-namespace inventory both specify the `tf-presync` ServiceAccount's RBAC as
+"PV get/list/patch" (`/work/AnsibleSpecs/argo-cd/design.md:418`). The reattach the grant exists for
+issues exactly two calls: `GET /api/v1/persistentvolumes` — the collection, i.e. `list` — and
+`PATCH /api/v1/persistentvolumes/<name>` with `application/merge-patch+json`
+(`/work/ArgoCDTools/presync/reattach.py:18,42-49`, `presync/kube.py:21,40-53`). There is no
+single-object GET anywhere in the hook, so `get` on `persistentvolumes` is granted for nothing.
+
+This slice's P4 grants the requirement as written rather than narrowing it on its own authority —
+the difference is one verb on one cluster-scoped kind, and a wrong guess here fails a sync rather
+than a test. But the register is the document Phase B and any later audit will read, and it
+currently overstates what the hook does. Correct it in `design.md` (and drop the verb from the
+ServiceAccount) when the doc set is next touched, or record deliberately that the extra verb stays.
+
+Provenance: plan-writer, plan pass r2; plan.md P4
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — no action owed: 009's own doc phase (`37dd629`) rewrote the claim. `design.md:471` now states the whole-lifecycle grant on `persistentvolumes`/`secrets`/`namespaces` deliberately, so the "PV get/list/patch" wording this entry corrects no longer exists.
+
+</details>
+
+### ~~S5 — the AppProject's cluster whitelist is deny-by-default, and Phase B has to extend it per app~~ — folded into slice 010 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+P3's `clusterResourceWhitelist` carries `Namespace`, `CustomResourceDefinition`, `ClusterRole` and
+`ClusterRoleBinding` — every cluster-scoped kind Argo's own chart renders, plus the pair D10 names
+for migrated charts (KubeCoder's). An empty cluster whitelist permits *nothing*
+(`IsGroupKindNamePermitted`, v3.5.1 `pkg/apis/application/v1alpha1/app_project_types.go:415`), and
+a kind outside the list is refused at sync, so each migration that brings a new cluster-scoped kind
+owes an entry.
+
+One is already visible in the tree: `/work/HelmCharts/charts/media/templates/samba-pv.yaml` is a
+chart-managed `PersistentVolume`, so migrating `media` needs either a whitelist entry or the PV
+moved into that repo's Terraform, which is where D29 puts PVs anyway. The estate's upstream-chart
+releases were **not** enumerated for this — cloudnative-pg, external-secrets, ceph-csi, csi-driver-smb
+and step-ca ship kinds of their own (CRDs, webhook configurations, `CSIDriver`, `StorageClass`) that
+nobody has checked against the list, because none of them migrates in this slice.
+
+The failure mode is loud rather than silent — the sync reports the refused kind — so this is a
+planning input for slices 010–012 and the later migrations, not a defect. Worth checking each app's
+chart for cluster-scoped kinds while planning its migration, rather than discovering it at first
+sync.
+
+Found while writing P3's AppProject and tying the gate's whitelist assertion to the render.
+
+Provenance: code-writer, P3; ArgoCDDeploy `chart/templates/appproject.yaml`
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — folded verbatim into `slices/backlog/010_kubecoder_deploy_repo/slice.md` as a planning input.
+
+</details>
+
+### ~~S6 — the hook's ServiceAccount is granted cluster-wide, and `secrets` is the term that matters~~ — folded into slice 010 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+P4 binds `tf-presync` with a **ClusterRoleBinding**, because the objects a deploy repo's Terraform
+creates land in `<app>-<stage>` — a namespace derived per sync, created by that app's own chart,
+and not enumerable when Argo's chart renders. A `RoleBinding` in `argocd-hooks` would grant nothing
+where the work happens. The rules are as narrow as that shape allows: the full lifecycle on
+`persistentvolumes`, `secrets` and `namespaces`, which is every kind the estate's Terraform manages
+through the kubernetes provider (`grep -rn 'resource "kubernetes' /work/HelmCharts`, 2026-08-17),
+and the gate refuses a wildcard so a fourth kind is a deliberate edit.
+
+The consequence to know: **any Terraform any deploy repo runs can read and write every Secret in
+the cluster**, `argocd-prd`'s repo credential and OIDC client secret among them, and can delete any
+namespace. D41 already says write access to a deploy repo branch is arbitrary Terraform execution
+bounded by what `argocd-hooks` holds; this widens that bound past the credentials in the Secret to
+the cluster's own. It is not the dominant term — the classic PAT with `repo` on every private
+repository still is — but it is the one D33's "app namespaces in turn hold no deploy-time
+credentials at all" does not cover.
+
+The narrowing that exists: bind the same ClusterRole per app namespace with a RoleBinding the
+**library chart** renders beside the hook Job, so an app grants the hook access to its own
+namespace and nowhere else. It costs a `homelab-shared` change (`/work/Charts`, a different repo
+and outside this slice) and grants an app nothing it could not already do — its chart can create
+RoleBindings in its own namespace today, since the AppProject's namespaced whitelist is
+deliberately unset. Worth deciding while Phase B is still one migrated app rather than ten.
+
+Found while writing P4's RBAC and asking what a `Role` in `argocd-hooks` would actually permit.
+
+Provenance: code-writer, P4; ArgoCDDeploy `chart/templates/hook-namespace.yaml`
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — folded verbatim into `slices/backlog/010_kubecoder_deploy_repo/slice.md`, flagged there as the decision the operator owes before a second migration widens the grant.
+
+</details>
+
+### ~~S8 — `ArgoCDDeploy` carries no architecture producer, so the relay's edges stay unmodelled~~ — folded into slice 014 by the operator's close-out pass, 2026-09-04
+
+<details><summary>struck — body kept for the record</summary>
+
+Slice 015 recorded (its close-out **S2**) that `webhook-relay/architecture.yaml` carries no
+consumption edge toward the two receivers, because cross-producer references resolve by UUID and Argo
+CD is modelled by no producer yet — and named "009's `ArgoCDDeploy` producer" as where that edge
+belongs. This slice builds no such producer: nothing in the plan asks for one, and P1 deliberately
+gave the repo no Jenkins-side anything (`.kubecoder/project.yaml`, "no Jenkinsfile and no `jenkins:`
+key"), which is where every other repo's architecture producer is wired.
+
+So after this slice the federated model holds an internet-facing `webhook-relay` app pointing at
+nothing, and no model of Argo CD at all — the control plane that will own every deploy in the estate.
+Slice 014 is the architecture-producers slice; this is an input to it, or to whichever slice first
+gives `ArgoCDDeploy` a pipeline.
+
+Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, 015 close-out S2
+Disposition: operator, 2026-09-04 — "let's go for it" on the focused pass — folded verbatim into `slices/backlog/014_deploy_repo_architecture_producers/slice.md`.
+
+</details>
+
+### ~~S10 — A4's drill runbook does not name the push the whole drill starts with~~ — folded into A1 and A4 by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+**A4** above is the operator's runbook for A.5's register → deploy → undeploy → unregister drill. It
+names three keystrokes beyond the drill itself — the registry entry at
+`configs/prd/proofdeploy/prd/release.yaml`, the GitHub webhook pointed at the relay (**A3**), and the
+delete-afterwards set — and does not name pushing `ProofDeploy` to `origin/main`.
+
+`git ls-remote origin` in `/work/ProofDeploy` returns **nothing**: the GitHub repository still has no
+refs at all, the empty-repo state `plan.md:239-248` records and that P5a's branch did not change.
+Until the push happens every keystroke A4 lists is inert — the ApplicationSet generates an
+Application whose `repoURL` resolves to a repository with no `main`, the webhook has no pushes to
+deliver, and the first sync fails on a clone rather than on anything the drill is trying to observe.
+The same holds for `ArgoCDDeploy` and **A1**'s "clone, `helm dependency build`, `helm install`", so
+this is a slice-wide assumption rather than a P5a invention — but A4 is the entry a reader reaches
+for when running this repo's drill, and it is the one place the prerequisite would be stated. One
+line closes it.
+
+Found in P5a review round 1, checking what A4 assumes against the repo's actual remote state.
+
+Consult 1 re-checked both remotes — `git ls-remote origin` is still empty in `/work/ProofDeploy`
+**and** in `/work/ArgoCDDeploy` — and wrote the prerequisite into the two entries that need it,
+**A1** and **A4**, since that is where an operator reaches for it. Nothing is left here.
+
+Provenance: code-reviewer, P5a round 1; phases/P5a/code_review_r1.md F2
+Disposition:
+
+</details>
