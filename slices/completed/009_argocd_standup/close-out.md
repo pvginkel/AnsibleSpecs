@@ -174,7 +174,7 @@ Both are discharged by the single B6 keystroke. After `rollout restart deploy/ar
 **One ordering trap for the runbook.** The generated Application syncs `ArgoCDDeploy` at `main`, so any bootstrap-time fix left unpushed is reverted by the first self-sync. This run hit it: the RBAC subject correction (`26e51cc`, the realm is email-as-username so `preferred_username` is `pvginkel@gmail.com` and the committed `pvginkel` matched nothing — with `policy.default: ""` that is no access at all, not readonly) was made after the install command was prepared. Pushed before the restart, and confirmed resolved: `status.sync.revision` reads `26e51cc`. Note that a hard refresh takes a few seconds to land — reading `status.sync.revision` immediately after annotating returns the previous value, which reads alarmingly like the push not having been seen.
 
 Provenance: code-writer, P1 round 3; ArgoCDDeploy `chart/templates/namespace.yaml`
-Disposition:
+Disposition: operator, 2026-09-04 — done. "It synced", and Argo CD is up on prd: bootstrap install clean after the CRD pre-apply (see the notes above), release argocd-prd rev 1, 68 objects, Argo self-adopted and then synced by the operator. Two bootstrap findings and the CRD remedy are recorded on this entry as S14's raw material. One user-visible outcome is parked elsewhere: the bare `https://argocd` still fails because the step-ca leaf carries only the first name from `server-name` — nginx-configurator bug, Trello #845 (DockerImages). The chart side is correct and pushed (ArgoCDDeploy 3f55579).
 
 ### A2 — three OpenBao leaves and one hand-created Keycloak client, before the bootstrap sync
 
@@ -219,7 +219,7 @@ it. Added by consult 1: the ruling assigns the recording to nobody else, and it 
 keystroke like the three above.
 
 Provenance: code-writer, P2; ArgoCDDeploy `chart/templates/external-secrets.yaml`, `config/prd/values.yaml`
-Disposition:
+Disposition: operator, 2026-09-04 — done, all four parts. The three leaves are written (argocd-oidc, argocd-webhook, argocd-repo-creds-github all SecretSynced) and the Keycloak client is hand-created and proven, not merely present: argocd-server logs an authenticated call carrying `preferred_username: pvginkel@gmail.com`, and the live argocd-rbac-cm grants that subject role:admin — "I'm in already". The client is recorded on Trello #68 (comment 2026-09-04) naming the realm, client id, redirect URIs and the OpenBao leaf, so keycloak-tf imports rather than recreates it. One correction the run owed and did not have: the realm has Email-as-username, so the committed `g, pvginkel, role:admin` matched nothing and with policy.default empty would have granted no access at all; fixed in ArgoCDDeploy 26e51cc before the install.
 
 ### A3 — the relay's public edge: a DNS record, a NAT rule, and the hook URL every repository registers
 
