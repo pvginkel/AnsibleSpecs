@@ -131,6 +131,48 @@ The remedy is one keystroke:
 kubectl -n argocd-prd rollout restart deploy/argocd-prd-applicationset-controller
 ```
 
+operator + Claude, bootstrap run 2026-09-04, 2026-09-04 — **Witnessed at the bootstrap.** The stamped-namespace procedure above is correct and worked — but the plain `helm install` that follows it fails first, on CRD ordering, which this entry did not predict. The upstream `argo-cd` subchart ships its CRDs as `templates/crds/*.yaml`, not in a `crds/` directory, and Helm pre-installs only the latter ahead of rendering. So the chart's own three `argoproj.io/v1alpha1` resources are resolved against a cluster that does not yet know those kinds, and the install dies at manifest build with `no matches for kind "AppProject"` / `"ApplicationSet"`, before applying anything (no release is created; `helm list -n argocd-prd` stays empty, and the stamped namespace survives for the retry).
+
+The remedy, run before the install and verified 2026-09-04: render the three CRD templates and apply them **server-side**, then stamp them with Helm's ownership metadata exactly as the namespace is stamped, so the install adopts rather than refusing them.
+
+```
+cexec iac sh -c 'cd /work/ArgoCDDeploy && helm template argocd-prd chart -n argocd-prd -f config/prd/values.yaml \
+  -s charts/argo-cd/templates/crds/crd-application.yaml \
+  -s charts/argo-cd/templates/crds/crd-applicationset.yaml \
+  -s charts/argo-cd/templates/crds/crd-appproject.yaml \
+  | kubectl $KC apply --server-side -f -'
+for c in applications.argoproj.io applicationsets.argoproj.io appprojects.argoproj.io; do
+  kubectl $KC label crd $c app.kubernetes.io/managed-by=Helm --overwrite
+  kubectl $KC annotate crd $c meta.helm.sh/release-name=argocd-prd meta.helm.sh/release-namespace=argocd-prd --overwrite
+done
+```
+
+`--server-side` is load-bearing, not stylistic: the three rendered CRDs are 1.8 MB and a client-side apply writes the manifest into `last-applied-configuration`, past the 262144-byte annotation limit. The chart says the same thing itself — all three carry `argocd.argoproj.io/sync-options: ServerSideApply=true`. Pre-applying is also free later: all three carry `helm.sh/resource-policy: keep`, so an uninstall never deletes them. No repo change is owed — `crds.install` stays true and Argo manages them normally after self-adoption.
+
+With that done the install succeeded first try: `STATUS: deployed`, REVISION 1, 68 objects, eight pods Running, all four ExternalSecrets `SecretSynced`, both ApplicationSets and the `releases` AppProject present, and `argocd-hook-credentials` carrying its 22 keys in `argocd-hooks`.
+
+operator + Claude, bootstrap run 2026-09-04, 2026-09-04 — **B6 fired, and in a blunter form than it predicted.** The entry above folds in B6's hazard as "the controller caches the unresolved `$argocd-webhook:githubSecret` literal and 400s every delivery". What the bootstrap actually produced, at 18:47:03, three seconds after the pod started:
+
+```
+level=error msg="failed to get argocd settings: server.secretkey is missing
+failed to create webhook handler"
+```
+
+Handler creation failed outright rather than caching a bad key. The missing input is not the ESO-materialised leaf at all — it is `server.secretkey`, which argocd-server generates on *its* first start and writes into `argocd-secret`, and the applicationset-controller reached `NewWebhookHandler` first. Same window, same one-shot read, same remedy; a louder symptom, since it logs an error at startup instead of failing silently at the first delivery. Worth knowing for the runbook: the string to grep for is `failed to create webhook handler`, not anything naming the webhook secret.
+
+**A second, independent startup race, not previously recorded.** Two seconds later, at 18:47:05, both ApplicationSets failed their only generation attempt against a repo-server that was not yet listening:
+
+```
+error retrieving Git files: rpc error: code = Unavailable
+  desc = "transport: Error while dialing: dial tcp <repo-server>:8081: connect: connection refused"
+```
+
+With polling disabled (D6) nothing retries, so this does not heal on its own: the log carried no further generation attempts and `kubectl -n argocd-prd get applications` stayed empty for the following three minutes. It is invisible unless looked for — the install reports `STATUS: deployed`, every pod is `Running` and every ExternalSecret is `SecretSynced`, and the estate simply has no Applications.
+
+Both are discharged by the single B6 keystroke. After `rollout restart deploy/argocd-prd-applicationset-controller` the controller log is clean of both errors and one Application generated as designed: `argocd-prd`, project `releases`, `OutOfSync`/`Healthy`, `syncPolicy: null`, never synced — Argo has adopted itself and waits for the operator, which is D3 working exactly as written.
+
+**One ordering trap for the runbook.** The generated Application syncs `ArgoCDDeploy` at `main`, so any bootstrap-time fix left unpushed is reverted by the first self-sync. This run hit it: the RBAC subject correction (`26e51cc`, the realm is email-as-username so `preferred_username` is `pvginkel@gmail.com` and the committed `pvginkel` matched nothing — with `policy.default: ""` that is no access at all, not readonly) was made after the install command was prepared. Pushed before the restart, and confirmed resolved: `status.sync.revision` reads `26e51cc`. Note that a hard refresh takes a few seconds to land — reading `status.sync.revision` immediately after annotating returns the previous value, which reads alarmingly like the push not having been seen.
+
 Provenance: code-writer, P1 round 3; ArgoCDDeploy `chart/templates/namespace.yaml`
 Disposition:
 
