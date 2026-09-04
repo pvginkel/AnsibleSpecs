@@ -666,3 +666,25 @@ Recorded, not resolved — triage does not decide these.
 Nothing on the tracker — this arrived directly from the operator on 2026-08-15. It belongs to the
 same project as Trello **#124** ("ArgoCD migration — Jenkins-orchestrated push → ArgoCD CD"),
 alongside slices 006–012, and settles the `gen-architecture` half of **O2**.
+
+## Folded in from slice 009's close-out (2026-09-04)
+
+One entry from `slices/completed/009_argocd_standup/close-out.md`, appended verbatim with its
+`Provenance:` line.
+
+### S8 — `ArgoCDDeploy` carries no architecture producer, so the relay's edges stay unmodelled
+
+Slice 015 recorded (its close-out **S2**) that `webhook-relay/architecture.yaml` carries no
+consumption edge toward the two receivers, because cross-producer references resolve by UUID and Argo
+CD is modelled by no producer yet — and named "009's `ArgoCDDeploy` producer" as where that edge
+belongs. This slice builds no such producer: nothing in the plan asks for one, and P1 deliberately
+gave the repo no Jenkins-side anything (`.kubecoder/project.yaml`, "no Jenkinsfile and no `jenkins:`
+key"), which is where every other repo's architecture producer is wired.
+
+So after this slice the federated model holds an internet-facing `webhook-relay` app pointing at
+nothing, and no model of Argo CD at all — the control plane that will own every deploy in the estate.
+Slice 014 is the architecture-producers slice; this is an input to it, or to whichever slice first
+gives `ArgoCDDeploy` a pipeline.
+
+Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, 015 close-out S2
+Disposition:

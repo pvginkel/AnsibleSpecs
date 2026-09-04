@@ -298,6 +298,49 @@ No taints. Affinity is opt-in: workloads that need a capability declare `require
 
 **Rollout is dev-first.** `srvk8sdev` runs the same HelmCharts as prd, so a chart whose ServiceAccount relied on `AlwaysAllow` surfaces on the single-node dev cluster first (where the per-node consistency concern is also moot). prd follows once dev is clean and the prd workload/SA audit is done. Tracked on the Ansible Trello board (cards #60/#61).
 
+### The KubeCoder prd write credential is cluster-admin
+
+**`~/.kube/config-prd-write` — the `kube-system:kubecoder-rw` ServiceAccount — is bound to
+`cluster-admin` on the prd cluster.** Ruled by the operator 2026-09-04 (Trello #725); applied the
+same day by replacing the `kubecoder-rw-edit` ClusterRoleBinding with `kubecoder-rw-admin`. It was
+cluster-wide `edit` before, which is namespaced-admin and carries **no** cluster-scoped verb: no
+Nodes, no PersistentVolumes, no namespace creation, no RBAC. Agents therefore had a standing
+instruction to route anything cluster-scoped over SSH to `sudo microk8s kubectl` on a node — a
+detour that silently broke procedures written against the documented envelope (it surfaced twice:
+Ansible slice 007's PV reattach proof, and scoping KubeCoder slice 176).
+
+**The SA token is unchanged.** The credential in OpenBao (`eso/prd/kubecoder/prd/catalog`,
+key `kubeconfig-prd-write`) authenticates the ServiceAccount, not the role, so widening the binding
+needed no re-mint, no ESO refresh and no pod restart. Reverting is symmetrically cheap: rebind to
+`edit`.
+
+**The base kubeconfig is deliberately untouched.** `~/.kube/config` remains the separate
+`kubecoder-ro` identity — cluster-wide `view` (excludes Secrets) plus `edit` in `development` — so
+every environment keeps the narrow default and only envs holding the `kubePrdWrite` capability get
+the wide file. `~/.kube/config-dev-write` stays `edit` on the dev cluster; the ruling was scoped to
+prd.
+
+**A ServiceAccount bound to `cluster-admin`, never the microk8s admin cert.** The admin cert is
+`O=system:masters`, which the apiserver hard-wires to bypass the authorizer (see "k8s clusters
+enforce RBAC" above). Same capability, far worse properties: certs have no revocation path short of
+rotating the cluster CA (which also invalidates the operator's own `microk8s config` and the IaC
+Agent's), the identity is indistinguishable from the operator's in the audit log, and being outside
+the authorizer it can never be narrowed later. The SA keeps all three levers — revoke by deleting
+one binding, attribute by subject name, and tighten to a custom ClusterRole without re-minting
+anything.
+
+**The accepted cost is standing escalation.** Every environment holding the `kubePrdWrite` grant
+can now read every Secret on prd, delete namespaces and mint tokens. KubeCoder slice 176 rejected
+exactly this widening on those grounds and designed around it; that rejection is superseded for the
+general case, and the mitigation is the grant itself — `kubePrdWrite` is opt-in per environment and
+defaults off.
+
+**The binding is unmanaged and does not survive a rebuild.** Nothing in the Ansible repo reconciles
+`kubecoder-ro` / `kubecoder-rw`, their bindings, or their tokens; they are hand-minted out-of-band
+per KubeCoder slice 012's K1 recipe. A cluster rebuild drops them silently and every KubeCoder
+environment loses cluster access. Codifying the re-mint is KubeCoder's, tracked on its board — the
+operator ruled it does not belong in `docs/runbooks/k8s-rebuild.md`.
+
 ### Dashboard tooling
 
 Today: microk8s's `dashboard` addon (the upstream `kubernetes/dashboard` project bundled with the snap). The operator depends on the web UI day-to-day; codified into `microk8s_addons` for prd and dev.

@@ -236,3 +236,101 @@ too — the latter holds the KubeCoder decision register that D145 belongs to.
 
 Trello **#124** — "ArgoCD migration — Jenkins-orchestrated push → ArgoCD CD" (the project's
 origin card), jointly with slices 006–009, 011 and 012.
+
+## Folded in from slice 009's close-out (2026-09-04)
+
+Four entries from `slices/completed/009_argocd_standup/close-out.md`, appended verbatim with their
+`Provenance:` lines. They are planning inputs for this slice, not requirements already agreed —
+S6 in particular is a decision the operator owes before the grant is widened by a second migration.
+
+### S1 — the register's "~44 unmigrated releases the glob matches" is 15, and Phase B has to create the file
+
+R16 and `phases.md` A.5 both describe the ApplicationSet's git generator matching "all ~44
+unmigrated releases", which the selector must then exclude. The tree does not look like that:
+`configs/prd/*/*/release.yaml` resolves to **15** files (checked 2026-08-16), against 51 app-stage
+directories and 46 apps. `release.yaml` is the exception in this repo, not the rule — it exists only
+where a release diverges from convention (`/work/HelmCharts/tools/deploy/README.md:89-106`), and a
+local-chart release carries none at all, its chart name defaulting to the config directory name
+(`tools/deploy/deploy_cli/release.py:174`).
+
+Nothing about R16's proof changes — the 15 that *are* matched all lack `reconciler:` (`grep -rn
+reconciler /work/HelmCharts/configs/` is empty) and must all be excluded, and `missingkey=error`
+still means one leak breaks the whole set. What changes is a Phase B expectation: migrating a
+local-chart app is not "add three keys to its existing entry", it is **creating a `release.yaml`
+that does not exist yet** — KubeCoder included, whose `configs/prd/kubecoder/{dev,prd}/` hold only
+`values.yaml`. Worth folding into slices 010–012's planning, and worth correcting in `phases.md`
+and `design.md` when the doc set is next touched.
+
+Provenance: plan-writer, plan pass r1; plan.md P3 and P6, verification.json V21
+Disposition:
+
+### S2 — `/work/KubeCoderDeploy` will hit the same empty-repo bootstrap trap this slice hit
+
+`ArgoCDDeploy` had no commit on `main` **and** no `origin/main`, which would have failed the run
+loop's merge-time `git checkout main` before P1 ever landed — the hazard slice 006 already named and
+solved by seeding a root commit during refinement
+(`slices/completed/006_charts_repo_and_charts_home/plan.md:67-71`). This pass seeded one (`e8cb797`,
+a minimal `README.md`, left unpushed).
+
+`/work/KubeCoderDeploy` is in exactly the same state — `.git` and nothing else, branch `main`, zero
+commits — and slice 010 (`010_kubecoder_deploy_repo`) will target it. Seed a root commit there
+before that slice's first phase runs, or plan for the driver to fail on it.
+
+Provenance: plan-writer, plan pass r1; ordering constraints in plan.md
+Disposition:
+
+### S5 — the AppProject's cluster whitelist is deny-by-default, and Phase B has to extend it per app
+
+P3's `clusterResourceWhitelist` carries `Namespace`, `CustomResourceDefinition`, `ClusterRole` and
+`ClusterRoleBinding` — every cluster-scoped kind Argo's own chart renders, plus the pair D10 names
+for migrated charts (KubeCoder's). An empty cluster whitelist permits *nothing*
+(`IsGroupKindNamePermitted`, v3.5.1 `pkg/apis/application/v1alpha1/app_project_types.go:415`), and
+a kind outside the list is refused at sync, so each migration that brings a new cluster-scoped kind
+owes an entry.
+
+One is already visible in the tree: `/work/HelmCharts/charts/media/templates/samba-pv.yaml` is a
+chart-managed `PersistentVolume`, so migrating `media` needs either a whitelist entry or the PV
+moved into that repo's Terraform, which is where D29 puts PVs anyway. The estate's upstream-chart
+releases were **not** enumerated for this — cloudnative-pg, external-secrets, ceph-csi, csi-driver-smb
+and step-ca ship kinds of their own (CRDs, webhook configurations, `CSIDriver`, `StorageClass`) that
+nobody has checked against the list, because none of them migrates in this slice.
+
+The failure mode is loud rather than silent — the sync reports the refused kind — so this is a
+planning input for slices 010–012 and the later migrations, not a defect. Worth checking each app's
+chart for cluster-scoped kinds while planning its migration, rather than discovering it at first
+sync.
+
+Found while writing P3's AppProject and tying the gate's whitelist assertion to the render.
+
+Provenance: code-writer, P3; ArgoCDDeploy `chart/templates/appproject.yaml`
+Disposition:
+
+### S6 — the hook's ServiceAccount is granted cluster-wide, and `secrets` is the term that matters
+
+P4 binds `tf-presync` with a **ClusterRoleBinding**, because the objects a deploy repo's Terraform
+creates land in `<app>-<stage>` — a namespace derived per sync, created by that app's own chart,
+and not enumerable when Argo's chart renders. A `RoleBinding` in `argocd-hooks` would grant nothing
+where the work happens. The rules are as narrow as that shape allows: the full lifecycle on
+`persistentvolumes`, `secrets` and `namespaces`, which is every kind the estate's Terraform manages
+through the kubernetes provider (`grep -rn 'resource "kubernetes' /work/HelmCharts`, 2026-08-17),
+and the gate refuses a wildcard so a fourth kind is a deliberate edit.
+
+The consequence to know: **any Terraform any deploy repo runs can read and write every Secret in
+the cluster**, `argocd-prd`'s repo credential and OIDC client secret among them, and can delete any
+namespace. D41 already says write access to a deploy repo branch is arbitrary Terraform execution
+bounded by what `argocd-hooks` holds; this widens that bound past the credentials in the Secret to
+the cluster's own. It is not the dominant term — the classic PAT with `repo` on every private
+repository still is — but it is the one D33's "app namespaces in turn hold no deploy-time
+credentials at all" does not cover.
+
+The narrowing that exists: bind the same ClusterRole per app namespace with a RoleBinding the
+**library chart** renders beside the hook Job, so an app grants the hook access to its own
+namespace and nowhere else. It costs a `homelab-shared` change (`/work/Charts`, a different repo
+and outside this slice) and grants an app nothing it could not already do — its chart can create
+RoleBindings in its own namespace today, since the AppProject's namespaced whitelist is
+deliberately unset. Worth deciding while Phase B is still one migrated app rather than ten.
+
+Found while writing P4's RBAC and asking what a `Role` in `argocd-hooks` would actually permit.
+
+Provenance: code-writer, P4; ArgoCDDeploy `chart/templates/hook-namespace.yaml`
+Disposition:

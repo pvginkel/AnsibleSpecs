@@ -106,6 +106,31 @@ namespace itself, which is the whole point of D25. Stated from Helm's documented
 and ownership check, **not** witnessed against a cluster: this repo's gate is a render and P1 never
 had a `helm install` to run. If the plain form happens to work, nothing is lost by having checked.
 
+**Two more keystrokes belong to this bootstrap.** (Folded in from B6 and N2, struck below.)
+
+*Before the install — check the age keypair.* D32's invariant is that the recipient committed at
+`config/prd/values.yaml:259-263` is the public half of the `SOPS_AGE_KEY` the hook fetches from
+`iac/tf-backend#age_secret_key`. Nothing has ever verified it: the render gate can only assert the
+string is a well-formed age public key, never that it pairs with the private half, and the
+match-check is a credential read and therefore the operator's
+(`bao kv get -field=age_secret_key kv/iac/tf-backend | age-keygen -y`, compared against the
+committed literal). Worth running **once before the first hook apply writes state**, because a
+mismatch surfaces as state `iac` cannot decrypt rather than as a failure.
+
+*After the install — restart the applicationset-controller if the first push does not regenerate.*
+The applicationset-controller builds its GitHub webhook handler once, in `NewWebhookHandler`, from
+a one-shot `GetSettings()` and subscribes to nothing. If that container reaches it before ESO has
+written `argocd-webhook`, `GetWebhookGitHubSecret()` returns the literal string
+`$argocd-webhook:githubSecret` and that becomes the HMAC key — every GitHub delivery to the `:7000`
+receiver then 400s for the life of the pod. The window is exactly this bootstrap, and the drills it
+silently breaks are R8's applicationset leg (V13) and the relay's both-legs-green item (V24/V25).
+argocd-server is unaffected: `watchSettings` compares the resolved value and restarts itself.
+The remedy is one keystroke:
+
+```
+kubectl -n argocd-prd rollout restart deploy/argocd-prd-applicationset-controller
+```
+
 Provenance: code-writer, P1 round 3; ArgoCDDeploy `chart/templates/namespace.yaml`
 Disposition:
 
