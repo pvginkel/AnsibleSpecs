@@ -555,7 +555,7 @@ Record:
   attribute match rests on the module source.
 - `kc project test` and `kc project lint` are green.
 
-### P7 — Ansible runbook: preview a deploy repo's diff before its cutover
+### P7 — Ansible runbook: preview a deploy repo's diff before its cutover ✅ DONE 2026-09-13
 
 Target: root
 
