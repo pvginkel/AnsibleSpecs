@@ -314,6 +314,27 @@ orphan candidates and `desired - live` as missing (`:301-302,360`).
   - So the guard keys on Argo ownership, not on one release name.
 - **Tests.** HelmCharts' hermetic suite covers both behaviours. Nothing tests this tool today.
 
+**Done (P2).** `audit-prd-orphans` reads `reconciler:`. A non-`jenkins` entry goes into a new
+`owned_elsewhere` set instead of `helm_releases`/`disabled`, and its namespace and storage stay
+desired. `diff` removes `owned_elsewhere` from the live Helm releases before the orphan diff and lists
+live ones apart (`= <name>`, "never uninstall from here"). Landed as HelmCharts `869e19b` on
+`phase/010-P2`.
+
+Later phases: none affected.
+
+Record:
+
+- Ownership is read from the release.yaml the tool already loads (`rel.get("reconciler",
+  "jenkins")`), matching `read_reconciler`. It does not import it: `resolve_helm_args` pulls in
+  `requests` and `semver`, and HelmCharts' `CLAUDE.md` says this tool uses only the stdlib and pyyaml.
+- The guard covers any non-`jenkins` reconciler, as `discover_releases()` does. Today only
+  `argo-cd` exists.
+- `desired` prints the new set. On the real tree it lists `argocd-prd` alone.
+- Tests: `tests/test_audit_prd_orphans.py`, 4 tests on `repo`/`make_stage`, all 4 red against the
+  pre-change module.
+- `kc project test` is green.
+- A bug from before this phase (the ZFS dataset parse) is in close-out Bugs.
+
 ### P3 — KubeCoderDeploy: the chart on the library dependency, its stage config and its render gate
 
 Target: ../KubeCoderDeploy

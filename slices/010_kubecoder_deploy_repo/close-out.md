@@ -81,6 +81,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — HelmCharts audit-prd-orphans: reads KubeCoder's conditional ZFS dataset as a zpool2 dataset named prd · minor
+
+`_resolve()` takes the first quoted string in an attribute. KubeCoder's `_shared/infrastructure.tf` sets `dataset = var.stage == "prd" ? "kubecoder" : "kubecoder-${var.stage}"` on pool `zpool5`, so `audit-prd-orphans desired` on the real tree lists `prd` under 'ZFS datasets — zpool2'. The tool also assumes every ZFS dataset lives on zpool2 and never collects zpool5, so the real KubeCoder datasets are not audited at all. This existed before P2; P2 did not touch the storage parsing.
+
+**Consequence:** A hand-run audit-prd-orphans diff reports a phantom MISSING zpool2 dataset 'prd' and never checks KubeCoder's zpool5 datasets.
+
+**Provenance:** witnessed — code-writer, P2, r1, audit-prd-orphans desired run against /work/HelmCharts at 869e19b
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
