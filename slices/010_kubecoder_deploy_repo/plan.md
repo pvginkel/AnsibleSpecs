@@ -586,6 +586,36 @@ The procedure must also state what the executor cannot derive on its own:
   (`slices/backlog/012_kubecoder_argo_cutover/slice.md:254-257`). Anything beyond that set is the
   finding.
 
+**Done (P7).** `docs/runbooks/argocd.md` has a new section after the registration one, "Previewing
+a migrating app's diff before its cutover". It opens with the rules the manifest cannot show:
+- use an `<app>-<stage>-preview` name;
+- never sync it;
+- delete it with `kubectl`, never the UI's *Delete*;
+- the operator runs both keystrokes;
+- only `ArgoCDHealthDegraded` can fire for it.
+
+KubeCoder's dev procedure follows. It uses a heredoc Application, `kubecoder-dev-preview`: project
+`releases`, `chart/`, `../config/dev/values.yaml`, the four `hook.*` parameters, no `syncPolicy`,
+no finalizer. The section ends with an object-by-object expected-diff table. Landed as Ansible
+`3194f3f` on `phase/010-P7`.
+
+Later phases: none affected.
+
+Record:
+
+- The manifest's `spec` has the same shape as the live generated `argocd-prd` Application, and
+  `kubectl create --dry-run=client --validate=strict` accepts it.
+- The table comes from a `helm template` dev diff on 2026-09-13, HelmCharts `charts/kubecoder`
+  against KubeCoderDeploy `9d6c448`. Beyond slice 012's text, it has the Namespace's
+  `sync-wave`/`Prune=false` annotations and the ConfigMap's worker/vsix pins, which `checksum/config`
+  follows (close-out S9). HelmCharts had no chart commits since `65ca9db`.
+- The rule against the UI's *Delete* is beyond the plan: its cascading default makes argocd-server
+  add the finalizer the manifest omits.
+- `cexec` forwards stdin, so the manifest is a quoted heredoc and needs no file.
+- KubeCoderDeploy `origin/main` is still the seed `a7796bf`, so A3 waits on the slice's push (note
+  on A3).
+- `kc project test --project root` has no test statements and skips.
+
 ## Not in scope
 
 - Syncing anything: the preview Application P7 supplies, and the operator's manual sync of

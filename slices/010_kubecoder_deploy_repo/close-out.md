@@ -58,6 +58,8 @@ Using the prd-write kubeconfig:
 
 Never sync it. KubeCoderDeploy has to be on `origin/main` first.
 
+code-writer P7 r1, 2026-09-13 — The procedure is docs/runbooks/argocd.md, section "Previewing a migrating app's diff before its cutover". It has two preconditions. First, KubeCoderDeploy's P3–P5 commits must be on origin/main, which on 2026-09-13 still held only the seed commit a7796bf. Second, delete the Application with kubectl, never with the Argo UI's Delete: that dialog defaults to cascading, which adds the resources finalizer and deletes kubecoder-dev.
+
 **Consequence:** The diff-quality proof left open by the Phase A.5 drill stays open, and slice 012 cutover review becomes the first reading of a KubeCoderDeploy diff.
 
 **Provenance:** read — plan-writer, plan pass r1; plan.md P7, settled 12
@@ -174,4 +176,22 @@ Slice 012 requirement 3 moves HelmCharts' module.zfs.homelab_zfs_dataset.this an
 **Consequence:** Without these names, slice 012's state surgery has to rediscover them in terraform/, and a wrong target plans a create against the live dataset.
 
 **Provenance:** read, code-writer, P5, r1, plan.md P5 done-record
+**Disposition:**
+
+### S8 — KubeCoderDeploy: nothing in the gate covers the homelab provider's zfs_pools = var.zfs_pools (ruling F2) · minor
+
+terraform/providers.tf:23-25 is correct today, but tests/terraform.sh cannot see its absence. With the attribute blanked in a scratch copy, terraform validate reported the configuration valid and the dev and prd terraform test runs each passed 2 of 2. The cause: mock_provider "homelab" never configures the real provider, and zfs_pools has no environment fallback (HomelabTerraformProvider provider.go:261). Possible fix: a static check in tests/terraform.sh that the homelab provider block assigns zfs_pools from var.zfs_pools.
+
+**Consequence:** A later edit that drops the attribute keeps kc project test green, and the next KubeCoder sync then fails in its PreSync apply.
+
+**Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
+### S9 — Slice 012 requirement 8's expected diff omits the Namespace's sync-wave/Prune=false annotations and the controller ConfigMap's worker/vsix pins · minor
+
+Slice 012's expected diff lists image references, the deployment annotation and the namespace's tracking annotation. Its 'Carried in from slice 010' section adds the dropped imagePullPolicy lines and the bot/MCP stamps. A helm template diff on 2026-09-13 found more: HelmCharts charts/kubecoder (dev values) against KubeCoderDeploy 9d6c448 (dev values) also shows the Namespace gaining argocd.argoproj.io/sync-wave "-1" and sync-options Prune=false (D25's manifest). It also shows kubecoder-controller-config's worker and vsix images moving from dev-latest to the pin, with the controller's checksum/config following. The runbook table in docs/runbooks/argocd.md lists all of these. Slice 012's own text does not.
+
+**Consequence:** At the dev cutover, an operator reviewing against slice 012's list alone stops the cutover on differences that are expected.
+
+**Provenance:** witnessed | code-writer, P7, r1, plan.md P7 done-record
 **Disposition:**
