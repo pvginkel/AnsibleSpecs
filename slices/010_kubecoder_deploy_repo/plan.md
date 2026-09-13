@@ -428,7 +428,7 @@ Record:
   - two renders more than 1 s apart are identical.
 - Eight mutations each turned the gate red. Lint and test are green.
 
-### P4 — KubeCoderDeploy: the seven Build-Main images pinned
+### P4 — KubeCoderDeploy: the seven Build-Main images pinned ✅ DONE 2026-09-13
 
 Target: ../KubeCoderDeploy
 
