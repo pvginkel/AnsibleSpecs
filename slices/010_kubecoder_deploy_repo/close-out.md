@@ -75,6 +75,24 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — HelmCharts had diverged from origin/main by one unrelated commit; the test phase's push required a rebase
+
+Before this phase's push, /work/HelmCharts's local main (P2's 869e19b) and origin/main had each moved one commit past their common base 65ca9db: ours was audit-prd-orphans's reconciler-awareness (P2), origin's was an unrelated elasticsearch probe change (db24d33, #932). A straight push would have been rejected as non-fast-forward. dev:rebase-agent rebased 869e19b onto db24d33 mechanically (the two commits touch disjoint files, so it was conflict-free) and re-ran kc project lint and test against the resulting tree — a tree nothing had run against yet — both GREEN. The rebased commit is c19885a, pushed to HelmCharts origin/main as part of this phase.
+
+**Consequence:** none — caught and resolved before push; recorded so the r2 sweep's HelmCharts commit (869e19b) and the pushed one (c19885a) are understood to be the same change, rebased.
+
+**Provenance:** witnessed — test phase r1, dev:rebase-agent run; HelmCharts c19885a
+**Disposition:**
+
+### N2 — All four repos pushed to origin/main; Ansible's iac-on-push (IaC/Build-Main #159) finished green
+
+Pushed in this phase: ArgoCDDeploy 3f55579..d2aa093, HelmCharts db24d33..c19885a (the rebased P2 commit), KubeCoderDeploy a7796bf..021cc1b, Ansible 7a5047d..77ef98d. The Ansible push triggered Jenkins IaC/Build-Main #159 (https://jenkins.webathome.org/job/IaC/job/Build-Main/159/), whose changeset confirms it ran against exactly this slice's two P7 commits (3194f3f, 77ef98d). Result: SUCCESS in 69s — consistent with the terraform-plan + protected-VM destroy check the docs describe, converging nothing. That green is the real signal this phase can record: the commit plans cleanly against live Terraform state and destroys nothing protected.
+
+**Consequence:** none — this is the expected, converge-nothing CI signal for a push to main; recorded per the testing doc's instruction to wait for it and read it.
+
+**Provenance:** witnessed — test phase r1, Jenkins IaC/Build-Main build 159
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -115,6 +133,8 @@ KubeCoderDeploy's copy of the chart leaves that file behind (plan.md P3), becaus
 
 Slice 012's planning should decide where an Argo-managed app's architecture mapping lives.
 
+consult 1, 2026-09-13 — Backlog slice 014 (slices/backlog/014_deploy_repo_architecture_producers/slice.md:44-46) already plans a KubeCoderDeploy architecture producer as a handover from HelmCharts, which models kubecoder today and must stop. The open point is ordering: either 014 lands before slice 012 deletes charts/kubecoder/, or 012 keeps architecture.yaml until 014 lands.
+
 **Consequence:** Once slice 012 lands, the published architecture model may lose the KubeCoder workload-to-product mapping.
 
 **Provenance:** read — plan-writer, plan pass r1; HelmCharts tools/chart_tools/gen_architecture.py:574,585
@@ -149,15 +169,6 @@ In HelmCharts the chart's CA file is a symlink to the repo's canonical homelab-r
 **Consequence:** After a root CA rotation, KubeCoder's controller still hands step the old root from kubecoder-controller-ca until someone updates KubeCoderDeploy's copy, so SSH host-key signing for env pods fails.
 
 **Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
-**Disposition:**
-
-### S5 — KubeCoderDeploy chart/values.yaml pin comment says worker/vsix take the default pull policy; the controller still pulls them Always · minor
-
-chart/values.yaml:8-10, added by P4, groups controllerConfig.images.{worker,vsix} with the five pinned containers as taking the kubelet's default pull policy. The controller mounts both as ImageVolumes with an explicit pullPolicy Always (/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725). Those lines stay by ruling D3, and slice 012 removes them.
-
-**Consequence:** A reader of the chart believes worker/vsix are no longer re-pulled on every env pod start until slice 012 lands; nothing is misconfigured.
-
-**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md
 **Disposition:**
 
 ### S6 — KubeCoderDeploy terraform/ constrains no provider versions and commits no lock file, so every PreSync init takes the newest providers · minor
@@ -211,7 +222,22 @@ Argo passes the Application name as the Helm release name unless spec.source.hel
 
 Helm installed the live kubecoder-<stage> Deployments. They carry no kubectl.kubernetes.io/last-applied-configuration annotation (kubecoder-dev/kubecoder-bot, read 2026-09-13). Argo's default client-side apply computes deletions only from that annotation. Its diff falls back to TwoWayDiff, which is ThreeWayDiff(config, config, live) (argo-cd v3.5.1 gitops-engine/pkg/diff/diff.go:122-133,554-557), so a field present only on the live object survives both the diff and the sync. Server-side diff is off by default (cmd/argocd-application-controller/commands/argocd_application_controller.go:305), and nothing in ArgoCDDeploy turns it on. As a result, P4's chart-side drop of imagePullPolicy: Always (ruling D3) does not reach the live controller, ingress, manual, bot and MCP containers at cutover. Bot and MCP also keep their last timestamp deployment annotation, which is static and rolls nothing.
 
+consult 1, 2026-09-13 — Not owed by this slice. Ruling D3 limits R14's acceptance here to the chart render: V19 checks that, and P4 delivered it. Slice 012's slice.md (lines 238 and 255) still expects the five containers to lose imagePullPolicy: Always at cutover, and nothing there addresses the missing last-applied-configuration. Its planning has to choose how the drop goes live. The options are an explicit imagePullPolicy in the chart, server-side diff and apply, or a hand edit at cutover. That choice also has to be made before 012 records D145's partial retirement.
+
 **Consequence:** After slice 012's cutover the five pinned containers still pull Always on every pod start, and slice 012's D145 update would record a partial retirement that is not live.
 
 **Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F5)
 **Disposition:**
+
+### ~~S5 — KubeCoderDeploy chart/values.yaml pin comment says worker/vsix take the default pull policy; the controller still pulls them Always · minor~~ — resolved by consult 1 (KubeCoderDeploy 021cc1b): chart/values.yaml:8-10 now says env pods still pull worker/vsix Always; comment only, line numbering kept; kc project lint and test re-run green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+chart/values.yaml:8-10, added by P4, groups controllerConfig.images.{worker,vsix} with the five pinned containers as taking the kubelet's default pull policy. The controller mounts both as ImageVolumes with an explicit pullPolicy Always (/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725). Those lines stay by ruling D3, and slice 012 removes them.
+
+**Consequence:** A reader of the chart believes worker/vsix are no longer re-pulled on every env pod start until slice 012 lands; nothing is misconfigured.
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md
+**Disposition:**
+
+</details>
