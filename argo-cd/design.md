@@ -405,15 +405,15 @@ The flow, per sync of an app that has Terraform:
    teardown deleting the namespace and PVC, this is the *normal* spin-up path, not an edge case.
 6. The exit code gates the sync (D30): non-zero fails the PreSync hook and nothing is applied.
 
-**The hook runs before the chart does, and that decides who creates the namespace.** A PreSync
-hook completes before the Sync phase begins, so on an app's *first* deploy the chart's
-`sync-wave: "-1"` Namespace has not been applied yet and namespaced Terraform has nowhere to
-land. The app's own Terraform therefore creates its namespace — `kubernetes_namespace_v1` on
-`var.namespace`, the fourth argument — and the chart's manifest adopts it on the sync that
-follows. Chart and Terraform are two writers of one object, deliberately, and the Terraform
-resource carries `ignore_changes` on the namespace's annotations and labels: the kubernetes
-provider manages the whole metadata map, so without it every run would strip Argo's tracking
-annotation (D4) and every sync would write it back.
+**Argo creates the namespace before the hook runs, so the app's Terraform must not.** Witnessed
+on the first ProofDeploy sync (2026-09-13): the sync engine applies the chart's `sync-wave: "-1"`
+Namespace during its dry-run pass, before it creates the PreSync Job — it needs the destination
+namespace to exist for the server-side dry-run of the namespaced resources — so by the time the
+hook's `terraform apply` runs the namespace is there, tracked by Argo (D4). Namespaced Terraform
+lands in `var.namespace`, the fourth argument, as given. A `kubernetes_namespace_v1` for it
+would be a second creator and fail on "already exists"; ProofDeploy shipped with one and lost it
+before its first successful sync. Prediction reversed: the earlier text here had the Terraform
+create the namespace for the chart to adopt.
 
 The Job template lives in the **library chart** as `homelab-shared.tf-presync-hook` — a migrated
 local chart includes it in one line, with the root context. Its skeleton:
