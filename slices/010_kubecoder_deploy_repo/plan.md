@@ -335,7 +335,7 @@ Record:
 - `kc project test` is green.
 - A bug from before this phase (the ZFS dataset parse) is in close-out Bugs.
 
-### P3 — KubeCoderDeploy: the chart on the library dependency, its stage config and its render gate
+### P3 — KubeCoderDeploy: the chart on the library dependency, its stage config and its render gate ✅ DONE 2026-09-13
 
 Target: ../KubeCoderDeploy
 
