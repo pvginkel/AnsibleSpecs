@@ -121,9 +121,24 @@ Settled items, agreed with the rulings above:
     take the namespace with it), its diff against the live release reviewed in the UI, then
     deleted. Applying and deleting it on prd is the operator's keystroke; the slice supplies the
     manifest and the procedure.
-13. The only KubeCoder repo edit is adding KubeCoderDeploy to `/work/KubeCoder/.kubecoder/config.yaml`;
-    its push runs KubeCoder's usual build-and-deploy (accepted). The Ansible-side manifest line
-    stays the operator's — flagged as an outstanding action, never edited by the slice.
+13. KubeCoder's half of R10 is done **outside the run** (ruling F1): the session added
+    KubeCoderDeploy to `/work/KubeCoder/.kubecoder/config.yaml` and pushed it on 2026-09-13 (its
+    push runs KubeCoder's usual build-and-deploy — accepted). No phase touches KubeCoder. The
+    Ansible-side manifest line stays the operator's — flagged as an outstanding action, never
+    edited by the slice.
+
+Plan review r1 rulings (2026-09-13, operator in chat: "Agreed"):
+
+- Ruling F1 — **no phase targets `../KubeCoder`.** Its gate (`/work/KubeCoder/.kubecoder/project.yaml`)
+  needs the `python` and `frontend` tool containers, which this environment lacks (`kc env
+  describe`: `iac`, `go`, `image-builder`), so a KubeCoder phase could never land green. The
+  manifest line was made by the session ahead of the run (settled 13); R10's KubeCoder criterion
+  records it as delivered before the run, not by a phase.
+- Ruling F2 — **KubeCoderDeploy's Terraform passes `zfs_pools` to the homelab provider block from
+  its variable** (`provider "homelab" { zfs_pools = var.zfs_pools }`, as
+  `/work/HelmCharts/_providers/providers.tf` does). The attribute has no environment fallback
+  (`/work/HomelabTerraformProvider/internal/provider/provider.go:261`), and `terraform validate`
+  cannot catch its absence — it would only fail in the PreSync apply on cutover day.
 
 #### Grounding the plan rests on (verified 2026-09-13 unless marked)
 
