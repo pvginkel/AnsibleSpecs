@@ -453,6 +453,29 @@ This is B.2, and it changes only the chart.
   - The controller's worker/vsix ImageVolume lines, and D145, are slice 012's.
 - **Gate.** It asserts all of this for each stage.
 
+**Done (P4).** `chart/values.yaml` pins `images.{controller,bot,mcp,ingress,manual}` and
+`controllerConfig.images.{worker,vsix}` to `dev-511`, the newest build all seven carried in
+`registry:5000` when the phase ran (`dev-510` above was one build behind). Both stage files lost
+their `images:` and `controllerConfig.images` overrides, so dev and prd render the chart's pins.
+The five pinned containers state no `imagePullPolicy`; `tunnel-reclaim` (`:latest`, `Always`) and
+every controllerConfig container spec keep theirs. Landed as KubeCoderDeploy `6002b64` on
+`phase/010-P4`.
+
+Later phases:
+
+- P5: this phase shifted the Terraform comments P5 cites; its text now names
+  `config/dev/values.yaml:33` and `chart/values.yaml:758`.
+
+Record:
+
+- Registry: all seven list `dev-507`…`dev-511`; a manifest HEAD on each `dev-511` returned 200.
+- Gate additions in `tests/render-chart.py`:
+  - `check_pins()`: each of the seven chart pins fully matches `registry:5000/kubecoder-<key>:dev-<n>`, with one `n`; `tunnelReclaim` stays `:latest`.
+  - `check_stage_values`: no `image`/`images` key anywhere in a stage file.
+  - `check_images(stage, docs)`: the five containers render the chart's reference and do not pull `Always`; `tunnel-reclaim` renders `:latest` pulling `Always`; the rendered ConfigMap's `images.{worker,vsix}` equal the pins; every `container`/`mainContainer` spec in `controller.yaml` pulls `Always` (17 today — `samba` and `kaniko` carry no raw spec; controller code sets theirs).
+- `chart/values.yaml:72-80` (the D145 interim comment) is unchanged: its containers still float.
+- Nine mutations each turned the gate red: an image override in dev or prd, `Always` back on bot, vsix on another build, controller on `:latest`, `tunnelReclaim` pinned, and `Always` dropped from tunnel-reclaim, a toolchain and `mainContainer`. Lint and test are green.
+
 ### P5 — KubeCoderDeploy: Terraform rebuilt to the ZFS PV, stage tfvars, the repo's webhook
 
 Target: ../KubeCoderDeploy
@@ -485,7 +508,7 @@ Target: ../KubeCoderDeploy
 - **Stage differences in `config/{stage}/*.tfvars` (R8).** Everything `infrastructure.tf` derives
   inline from `var.stage` today becomes a per-stage value, alongside `manage_webhook`. The
   copied comments that point at the old Terraform name the new location instead:
-  `config/dev/values.yaml:43` (`../_shared/infrastructure.tf`), `chart/values.yaml:755` and
+  `config/dev/values.yaml:33` (`../_shared/infrastructure.tf`), `chart/values.yaml:758` and
   `chart/templates/zfs-pvc.yaml:1` (`infrastructure.tf`, `static-zfs-pv`).
 - **The repo's own webhook (R9, settled 7).** A `github_repository_webhook` on KubeCoderDeploy,
   created only where `manage_webhook` is true: `config/dev/` and nowhere else.
