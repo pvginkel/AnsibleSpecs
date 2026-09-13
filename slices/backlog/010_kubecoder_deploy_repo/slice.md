@@ -395,3 +395,26 @@ against the one entry the phase adds.
 
 Provenance: code-reviewer, P6 round 1; phases/P6/code_review_r1.md F1
 Disposition:
+
+## Carried over from the Phase A.5 drill (2026-09-13, Trello #849)
+
+Facts the planner should take as given; the drill's full record is on the card and in
+`/work/Ansible/docs/runbooks/argocd.md`.
+
+- **Argo applies the chart's `sync-wave: "-1"` Namespace before the PreSync hook runs** (during its
+  dry-run pass), so the app's Terraform must never create the namespace — `design.md` is corrected
+  to say so. KubeCoderDeploy's Terraform is the ZFS PV only, so this is a constraint to keep, not
+  work to do.
+- **A deploy repo without a GitHub webhook never refreshes** — polling is off (D6). D39 has the
+  webhook as a Terraform resource that the hook's *own apply* creates, so the very first sync of a
+  new deploy repo has to be triggered by hand (UI Refresh + Sync); every push after it refreshes
+  within ~10 s.
+- **The diff-quality proof item is still open** and falls here: "point a no-sync Application at an
+  existing live release and check the live-vs-git diff reads sensibly" needs a real deploy repo,
+  which this slice is the first to produce. B.5's "review the Application's diff in the UI" is the
+  cutover-time version of the same check; do it once on dev before staking the cutover on it.
+- **A sync-phase failure is not atomic**: valid objects in the same wave are applied beside a
+  refused one. Only a hook (PreSync) failure leaves the cluster untouched.
+- The registry entry must carry `deployed`, `autoSync`, `repo`, `targetRevision` and no `chart:`;
+  HelmCharts' `kc project test` gates the shape and the pipeline skips the release (proven on
+  every push of the drill).
