@@ -130,3 +130,21 @@ KubeCoder is not exposed: its dataset is on zpool5, and the audit collects zpool
 
 **Provenance:** read — plan-reviewer, plan review r1; HelmCharts tools/chart_tools/audit_prd_orphans.py, slices/backlog/012_kubecoder_argo_cutover/slice.md requirement 6
 **Disposition:**
+
+### S3 — HelmCharts audit-prd-orphans: no test pins that the uninstall guard keys on reconciler ownership rather than the name argocd-prd · minor
+
+The only test of the diff guard uses an Argo-owned entry whose live release is argocd-prd (tests/test_audit_prd_orphans.py:68-79). A mutation that subtracts {"argocd-prd"} instead of desired["owned_elsewhere"] (audit_prd_orphans.py:374) passes all four tests. The shipped code keys on ownership, as plan.md:314 requires. A test with a live release of an Argo-owned entry under another name would pin that, for example kubecoder-dev, the case slice 012's cutover creates.
+
+**Consequence:** A later edit that narrows the guard to argocd-prd keeps the suite green, and a hand-run audit would then list slice 012's live kubecoder-<stage> Helm releases as orphans to uninstall.
+
+**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md (F1)
+**Disposition:**
+
+### S4 — KubeCoderDeploy commits a copy of the homelab root CA (chart/files/ca/homelab-root.crt) that a root rotation has to update by hand · minor
+
+In HelmCharts the chart's CA file is a symlink to the repo's canonical homelab-root.crt. Argo's repo-server refuses a symlink that leaves the repository, so KubeCoderDeploy carries a real copy, as ArgoCDDeploy already does (chart/files/homelab-root.crt). Nothing ties either copy to the canonical file; the CA ConfigMap's comment is the only pointer.
+
+**Consequence:** After a root CA rotation, KubeCoder's controller still hands step the old root from kubecoder-controller-ca until someone updates KubeCoderDeploy's copy, so SSH host-key signing for env pods fails.
+
+**Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
+**Disposition:**

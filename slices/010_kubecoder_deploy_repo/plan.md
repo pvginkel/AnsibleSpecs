@@ -389,6 +389,45 @@ arrives in P5.
   - It asserts this phase's outcomes against the rendered objects.
   - The `iac` sidecar can reach charts.home.
 
+**Done (P3).** `chart/` and `config/{dev,prd}/values.yaml` are copies from HelmCharts `65ca9db`,
+recorded in `README.md` with the replay command. They build on an exact `homelab-shared` 0.2.0
+dependency from charts.home (`chart/Chart.lock` committed, `chart/charts/` ignored). The
+controller's `deployment` annotation is the controllerConfig checksum; bot and MCP carry no stamp.
+Both stage files set `global.environment`. The chart renders its wave -1 `Prune=false` Namespace
+and the library's hook Job. Gate: `.kubecoder/project.yaml` runs `tests/build-deps.sh`, `helm lint`
+per stage and `tests/render-chart.py`. Landed as KubeCoderDeploy `86656d7` and a gate fix on
+`phase/010-P3`.
+
+Later phases:
+
+- P4: the pull-policy sites moved in the copy (P4's text now cites them); `values.yaml` line
+  numbers did not. The stage files still carry the copied `images:` and `controllerConfig.images`
+  overrides. Add checks as `check_*(stage, docs)` called per stage from `main()`. A worker/vsix pin
+  bump changes the controllerConfig checksum, so it rolls envs (D1).
+- P5: the copied comments naming the old Terraform are listed in P5's text. The claim binds PV
+  `kubecoder-<stage>-zfs-pv`, which the gate asserts.
+
+Record:
+
+- `files/ca/homelab-root.crt` was a symlink out of the chart. It is now a real copy, because Argo's
+  repo-server refuses symlinks that leave the repo (close-out Suggestions).
+- `65ca9db` is the last commit touching the copied paths; identical at HelmCharts `origin/main`
+  (`db24d33`) on 2026-09-13.
+- `shared.externalsecrets` became `homelab-shared.externalsecrets`; no other helper was used.
+  `checksum/config` stays, set from the same `$configChecksum` as `deployment`, because KubeCoder's
+  `docs/operations/deploy-hazards.md:46,188` names it.
+- The Namespace name is `.Release.Namespace` (ArgoCDDeploy's precedent); the gate asserts it is
+  `kubecoder-<stage>`. Comment-only edits kept `chart/values.yaml`'s line numbering.
+- The gate renders as Argo does: release and namespace `kubecoder-<stage>`, plus four
+  `--set hook.*` (repo `…/KubeCoderDeploy.git`). What it asserts:
+  - the library pin; no symlink or `define` under `chart/`; `chart/charts` untracked;
+  - the stage names;
+  - `deployment` equals the sha256 of the rendered `controller.yaml` and changes with controllerConfig;
+  - one PreSync Job, and each omitted `hook.*` fails on the library's guard;
+  - every kind is in a whitelist constant copied from `appproject.yaml:40-47` or in a namespaced set;
+  - two renders more than 1 s apart are identical.
+- Eight mutations each turned the gate red. Lint and test are green.
+
 ### P4 — KubeCoderDeploy: the seven Build-Main images pinned
 
 Target: ../KubeCoderDeploy
@@ -407,9 +446,9 @@ This is B.2, and it changes only the chart.
   controllerConfig keep their tags.
 - **Always-pull dropped where pinned (R14, ruling D3).**
   - The controller, ingress, manual, MCP and bot containers lose `imagePullPolicy: Always`
-    (`templates/controller-deployment.yaml:45,173,195`, `mcp-deployment.yaml:25`,
-    `bot-deployment.yaml:29`).
-  - `tunnel-reclaim` keeps it (`:227`), and so does every controllerConfig-level `Always`
+    (`chart/templates/controller-deployment.yaml:47,175,197`, `mcp-deployment.yaml:23`,
+    `bot-deployment.yaml:27`).
+  - `tunnel-reclaim` keeps it (`:229`), and so does every controllerConfig-level `Always`
     (`values.yaml:69-77` and the container entries it describes).
   - The controller's worker/vsix ImageVolume lines, and D145, are slice 012's.
 - **Gate.** It asserts all of this for each stage.
@@ -445,8 +484,9 @@ Target: ../KubeCoderDeploy
     it; only the PreSync apply would fail.
 - **Stage differences in `config/{stage}/*.tfvars` (R8).** Everything `infrastructure.tf` derives
   inline from `var.stage` today becomes a per-stage value, alongside `manage_webhook`. The
-  stage-values comment that points at `../_shared/infrastructure.tf`
-  (`configs/prd/kubecoder/dev/values.yaml:38`) is updated to name the new location.
+  copied comments that point at the old Terraform name the new location instead:
+  `config/dev/values.yaml:43` (`../_shared/infrastructure.tf`), `chart/values.yaml:755` and
+  `chart/templates/zfs-pvc.yaml:1` (`infrastructure.tf`, `static-zfs-pv`).
 - **The repo's own webhook (R9, settled 7).** A `github_repository_webhook` on KubeCoderDeploy,
   created only where `manage_webhook` is true: `config/dev/` and nowhere else.
   - It sends push deliveries as JSON to `https://deploy-hooks.webathome.org/api/webhook`, signed
