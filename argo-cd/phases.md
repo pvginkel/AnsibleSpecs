@@ -130,50 +130,51 @@ registry entry, the GitHub repository, **and** the repo's line in `/work/Ansible
 Terraform state the drill writes under `argocd/ProofDeploy/prd/` survives all three — nothing
 prunes state for an unregistered app until D28 is designed.
 
-- [ ] A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo
+- [x] A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo
       push visibly refreshes (argocd-server receiver).
-- [ ] A real GitHub delivery through `https://deploy-hooks.webathome.org/api/webhook` lands
+- [x] A real GitHub delivery through `https://deploy-hooks.webathome.org/api/webhook` lands
       `200` in *Recent Deliveries*, both legs green.
 - [ ] The partial-failure drill: scale one receiver to zero, redeliver, see the delivery red
-      with the dead leg named in the `502` body; restore it, redeliver green.
-- [ ] A deliberate sync failure produces an Alertmanager notification.
-- [ ] `../config/{stage}/values.yaml` renders on the deployed Argo version (D19; fallback
+      with the dead leg named in the `502` body; restore it, redeliver green. **Still open**
+      (2026-09-13): runnable any time against the HelmCharts hook's *Recent Deliveries*.
+- [x] A deliberate sync failure produces an Alertmanager notification.
+- [x] `../config/{stage}/values.yaml` renders on the deployed Argo version (D19; fallback
       `$values`, template-only change).
-- [ ] `$ARGOCD_APP_REVISION` reaches a hook Job's args via helm parameters (D30).
-- [ ] The hook Job runs in `argocd-hooks`, under the AppProject, end to end: clone → backend →
+- [x] `$ARGOCD_APP_REVISION` reaches a hook Job's args via helm parameters (D30).
+- [x] The hook Job runs in `argocd-hooks`, under the AppProject, end to end: clone → backend →
       apply → exit code gates the sync.
-- [ ] Deleting an Application whose chart carries the `Prune=false` Namespace **does** delete
+- [x] Deleting an Application whose chart carries the `Prune=false` Namespace **does** delete
       that namespace (D26 — if wrong, the guard changes, not the goal).
-- [ ] The repo-server performs `helm dependency build` against `https://charts.home` trusting
+- [x] The repo-server performs `helm dependency build` against `https://charts.home` trusting
       the homelab CA (D17; fallback plain HTTP).
-- [ ] Boolean `deployed`/`autoSync` behave in selector and templatePatch on the pinned version
+- [x] Boolean `deployed`/`autoSync` behave in selector and templatePatch on the pinned version
       (D23), including the flag-flip generating and removing `syncPolicy.automated`.
-- [ ] Entries **without** the `reconciler:` key — the 15 unmigrated releases the glob matches —
+- [x] Entries **without** the `reconciler:` key — the 15 unmigrated releases the glob matches —
       are excluded by the selector. `missingkey=error` means a leak here breaks the whole
       ApplicationSet, not one app. (`release.yaml` is the exception, not the rule: the glob
       matches 16 files out of 52 app-stage directories, so migrating a local-chart app usually
       means **creating** an entry rather than editing one — KubeCoder included.)
 - [ ] Point a no-sync Application at an existing live release and check the live-vs-git diff
-      reads sensibly — diff quality proven before Phase B stakes a cutover on it.
-- [ ] SSO login works; local admin break-glass works (D9).
+      reads sensibly — diff quality proven before Phase B stakes a cutover on it. **Still open**:
+      needs a real deploy repo, so it falls to slice 010's KubeCoderDeploy ahead of B.5's diff review.
+- [ ] SSO login works; local admin break-glass works (D9). SSO proven 2026-09-04; **break-glass
+      still open** — never exercised.
 
 **Exit:** Argo runs and manages itself; UI reachable via Keycloak; every proof item checked;
 the throwaway app demonstrated register → deploy → undeploy → unregister with the namespace
 cascade (D27).
 
-A.5 is the operator's to run and none of it has run: no Argo CD exists yet, so every item above
-is owed. Two of the mechanisms it proves shipped without their documented fallback taken and
-therefore unexercised — D19's relative `../config/{stage}/values.yaml` (fallback `$values`) and
-D17's homelab-CA trust for the repo-server, which ships as a `subPath` mount adding one file to
-the image's trust directory rather than a ConfigMap over `/etc/ssl/certs`, because the same
-repo-server also fetches public chart repositories for D18's apps (fallback plain HTTP). Both
-fallbacks stay a template-or-values edit, and Phase B should not be planned as if either
-mechanism were confirmed. One trap is worth knowing before the first delivery is chased: read off
-upstream's code rather than witnessed, the applicationset-controller appears to build its webhook
-handler once at startup and not to re-read the secret, so a controller that starts before the
-`argocd-webhook` Secret resolves would hold the literal `$argocd-webhook:githubSecret` as its
-HMAC key for the life of the pod and reject every delivery. The bootstrap install is exactly that
-window; a rollout restart of the controller and a redelivery is the cheap thing to try first.
+A.5 ran on **2026-09-13** against ProofDeploy (Trello #849 holds the record; the operator's
+runbook lifted from it is `/work/Ansible/docs/runbooks/argocd.md`). Everything checked above was
+witnessed; the three items left open are marked in place. D19's relative
+`../config/{stage}/values.yaml` and D17's homelab-CA trust on the repo-server both worked on the
+deployed version — neither fallback was needed. Two predictions reversed: Argo applies the
+`sync-wave: "-1"` Namespace during its dry-run pass, *before* the PreSync hook, so an app's
+Terraform must not create it (design.md, corrected); and a sync-phase failure is not atomic — valid
+objects in the same wave are applied beside the refused one, only a hook failure leaves the cluster
+untouched. The bootstrap of 2026-09-04 confirmed the applicationset-controller trap in a louder
+form (`failed to create webhook handler`, plus one never-retried generation attempt against a
+repo-server not yet listening); one `rollout restart` of that controller clears both.
 
 ---
 
