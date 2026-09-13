@@ -201,16 +201,242 @@ Settled items, agreed with the rulings above:
   (`/work/ArgoCDDeploy/.kubecoder/project.yaml:12-20` — dependency build, `helm lint`, a render
   test) is the precedent.
 
+## Task shape
+
+<!-- Declared by the plan-writer BEFORE it investigates; checked by the plan
+     review against slice.md. One of pre-settled | localized | cross-cutting,
+     justified in one line from slice.md facts. -->
+
+cross-cutting — the requirements and rulings land in four repos (KubeCoderDeploy; ArgoCDDeploy per
+ruling D2 and settled 7; HelmCharts per settled 6; KubeCoder per R10), and slice.md makes KubeCoder
+the pilot that later migrations' deploy repos are modelled on.
+
 ## Ordering constraints
 
-- The hook environment variable ArgoCDDeploy adds for the webhook secret and the Terraform variable
-  KubeCoderDeploy's webhook resource reads are one contract; whichever phase lands second matches
-  the first.
-- Nothing in this slice syncs anything: no Argo Application references KubeCoderDeploy until the
-  operator's check (settled 12) and slice 012's registry entry.
+- **P1 before P5.** P5's webhook signs with the shared secret through the hook-environment key
+  P1 adds: P1 names it, P5 reads it.
+- **P3, P4, P5 in that order.** P3 creates KubeCoderDeploy's gate; P4 and P5 extend it.
+- **P7 last.** It previews the deploy repo as P3–P5 leave it.
+- **Nothing in this slice syncs anything.** Until slice 012's registry entry, the only Argo
+  Application that references KubeCoderDeploy is the operator's preview (P7's procedure, never
+  synced, deleted afterwards). P1 reaches the cluster only when the operator syncs `argocd-prd`
+  by hand (D3), and that sync is owed before KubeCoder's first dev sync.
+
+### P1 — ArgoCDDeploy: the hook environment carries the webhook secret, and the hook loses its namespace grant
+
+Target: ../ArgoCDDeploy
+
+This phase makes two changes to what a PreSync run holds. The repo's render gate
+(`tests/render-chart.py`) is updated for both.
+
+- **The webhook secret reaches deploy-repo Terraform (settled 7).** `argocd-hook-credentials`
+  gains Argo's shared GitHub webhook secret, under a key Terraform takes as an input variable.
+  - It is the single value GitHub, the relay and both receivers already share
+    (`/work/AnsibleSpecs/argo-cd/design.md:305-306`).
+  - It lives at `eso/prd/argocd/prd/webhook`, property `github_secret`
+    (`chart/templates/external-secrets.yaml:40-43`, `config/prd/values.yaml:289`).
+  - The key name is the contract P5's webhook resource reads.
+  - The leaf is inside the `eso` AppRole's `eso/prd/*` grant (`config/prd/values.yaml:284`), so
+    OpenBao needs no change.
+  - The gate asserts the environment's key set exactly (`tests/render-chart.py:50-105`).
+- **No namespace grant (ruling D2).** The `tf-presync` ClusterRole stops granting `namespaces`
+  (`chart/templates/hook-namespace.yaml:95`). `persistentvolumes` and `secrets` keep their full
+  lifecycle.
+  - No run needs the grant. The reattach reads PersistentVolumes only
+    (`/work/ArgoCDTools/presync/reattach.py:42-45`), and a deploy repo's Terraform never creates
+    its namespace (`design.md:407-415`).
+  - The gate rejects a namespace grant instead of requiring one (`tests/render-chart.py:112,1166`).
+  - The comments that justify the grant describe only the kinds that remain.
+
+### P2 — HelmCharts: `audit-prd-orphans` reads the reconciler
+
+Target: ../HelmCharts
+
+This is settled 6 (close-out S11). Today `desired_state()` counts every non-disabled entry with a
+chart as a desired Helm release and never reads `reconciler:`
+(`tools/chart_tools/audit_prd_orphans.py:115,149-151`). The diff then lists `live - desired` as
+orphan candidates and `desired - live` as missing (`:301-302,360`).
+
+- **Owned elsewhere, not desired.** An entry another reconciler owns contributes no desired Helm
+  release. Ownership is read the same way `discover_releases()` reads it
+  (`tools/chart_tools/resolve_helm_args.py:212-219`). A healthy Argo-managed app is therefore not
+  reported as a missing release, and its namespace and Terraform-declared storage stay desired.
+- **Argo-owned releases are never uninstall candidates.** A live Helm release whose entry Argo
+  owns is never listed as an orphan to uninstall.
+  - Today that is `argocd-prd`, Argo's own bootstrap install. Uninstalling it removes Argo.
+  - Slice 012's cutover puts `kubecoder-<stage>` releases in the same position until its
+    requirement 13 deletes their release Secrets
+    (`slices/backlog/012_kubecoder_argo_cutover/slice.md:86-87`).
+  - So the guard keys on Argo ownership, not on one release name.
+- **Tests.** HelmCharts' hermetic suite covers both behaviours. Nothing tests this tool today.
+
+### P3 — KubeCoderDeploy: the chart on the library dependency, its stage config and its render gate
+
+Target: ../KubeCoderDeploy
+
+This phase lays KubeCoder's chart and stage values out per D12
+(`/work/AnsibleSpecs/argo-cd/design.md:50-66`) and makes Argo able to render them. `terraform/`
+arrives in P5.
+
+- **Copied, not moved (settled 10).**
+  - `/work/HelmCharts/charts/kubecoder` becomes `chart/`, and `configs/prd/kubecoder/{dev,prd}/values.yaml`
+    become `config/{dev,prd}/values.yaml`. HelmCharts is not touched.
+  - The repo records the HelmCharts commit it copied, where slice 012's re-sync looks for it
+    (its `slice.md:249-253`).
+  - `charts/kubecoder/architecture.yaml` stays behind. It is input to HelmCharts' architecture
+    generator (`tools/chart_tools/gen_architecture.py:585`), not chart content.
+  - Image references and pull policies are copied unchanged; P4 owns them.
+- **Helpers from the library chart (R2).**
+  - The `_helpers.tpl` symlink gives way to an exact-pinned `homelab-shared` dependency from
+    `https://charts.home` (D17, `design.md:113-116`), which serves `0.2.0`.
+  - The library carries the same helpers under a `homelab-shared.` prefix
+    (`/work/Charts/charts/homelab-shared/templates/_helpers.tpl`).
+  - Nothing is vendored, and the built dependency is never committed: Argo's repo-server builds it
+    at render time.
+- **A render-stable deployment identity (R3, ruling D1, settled 9).**
+  - The controller pod keeps its `deployment` annotation, the key the controller reads back as
+    `KUBECODER_DEPLOYMENT_ID` (`templates/controller-deployment.yaml:24,97`).
+  - The annotation's value becomes the controllerConfig checksum, already computed at `:25`.
+  - It must never render empty: a blank value makes the controller roll every env on every start
+    (`/work/KubeCoder/controller/src/kubecoder_controller/config.py:1297-1322`).
+  - The bot and MCP pods stop carrying the stamp (`bot-deployment.yaml:20`, `mcp-deployment.yaml:15`).
+  - Two renders of the same commit are identical. No other template reads the clock or randomness.
+- **`global.environment` per stage (R4).**
+  - Both stage files declare it, with a comment saying it carries the stage.
+  - Under Argo nothing injects it. Today the deploy CLI's `--set` does
+    (`/work/HelmCharts/tools/deploy/deploy_cli/helmops.py:182`).
+  - It names the ClusterRole, its binding's namespace and the ZFS claim
+    (`controller-clusterrole.yaml:7`, `controller-clusterrolebinding.yaml:4,8,11`, `zfs-pvc.yaml:6,14`).
+- **The namespace is chart content (R5).** A `Namespace` manifest for the stage namespace carries
+  `sync-wave: "-1"` and `Prune=false` (D25, D26). It replaces `module.namespace`
+  (`configs/prd/kubecoder/_shared/infrastructure.tf:6-9`).
+- **The hook Job (R6).** It is included in one line from the library
+  (`homelab-shared.tf-presync-hook`, `/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:20`).
+  Its four `required` values (`:45-48`) come from the ApplicationSet's helm parameters
+  (`/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:109-118`), so the gate supplies them.
+- **No AppProject change (R7, settled 1).** Every cluster-scoped kind the chart renders is on
+  the `releases` whitelist (`/work/ArgoCDDeploy/chart/templates/appproject.yaml:40-47`), and the
+  gate keeps it that way.
+- **The repo's gate.** A `.kubecoder/project.yaml` modelled on ArgoCDDeploy's
+  (`/work/ArgoCDDeploy/.kubecoder/project.yaml:13-20`: dependency build, `helm lint`, a render test).
+  - It renders both stages the way the ApplicationSet will: `chart/` with
+    `../config/<stage>/values.yaml` (`applicationsets.yaml:98-105`).
+  - It asserts this phase's outcomes against the rendered objects.
+  - The `iac` sidecar can reach charts.home.
+
+### P4 — KubeCoderDeploy: the seven Build-Main images pinned
+
+Target: ../KubeCoderDeploy
+
+This is B.2, and it changes only the chart.
+
+- **Pinned (R11, R12, settled 8).**
+  - `images.{controller,bot,mcp,ingress,manual}` and `controllerConfig.images.{worker,vsix}` in
+    `chart/values.yaml` (`:8-15,645,648` in the HelmCharts source) all name one Build-Main build.
+  - That build is the newest one all seven share in `registry:5000` when the phase runs (`dev-510`
+    on 2026-09-13). Build-Main pushes `:dev-<build>` next to `:dev-latest` for each image
+    (`/work/KubeCoder/Jenkinsfile:219,228,240,262,271,287,302`).
+  - No stage file carries an image reference, so both stages render the chart's pins.
+  - Under Argo nothing resolves digests, so each tag renders as written.
+- **Everything else keeps floating (R13).** `images.tunnelReclaim` (`:19`) and every other image under
+  controllerConfig keep their tags.
+- **Always-pull dropped where pinned (R14, ruling D3).**
+  - The controller, ingress, manual, MCP and bot containers lose `imagePullPolicy: Always`
+    (`templates/controller-deployment.yaml:45,173,195`, `mcp-deployment.yaml:25`,
+    `bot-deployment.yaml:29`).
+  - `tunnel-reclaim` keeps it (`:227`), and so does every controllerConfig-level `Always`
+    (`values.yaml:69-77` and the container entries it describes).
+  - The controller's worker/vsix ImageVolume lines, and D145, are slice 012's.
+- **Gate.** It asserts all of this for each stage.
+
+### P5 — KubeCoderDeploy: Terraform rebuilt to the ZFS PV, stage tfvars, the repo's webhook
+
+Target: ../KubeCoderDeploy
+
+- **The ZFS PV, inline (R8, settled 2).** `terraform/` declares KubeCoder's env-storage dataset
+  and the local PV that exposes it directly, with no module.
+  - It keeps the discipline `/work/HelmCharts/terraform-modules/static-zfs-pv/main.tf` carries:
+    `prevent_destroy` on the dataset, `Retain`, a `claimRef`, and node affinity to the pool's node.
+  - It describes today's live objects exactly, so slice 012's `state mv` onto the rebuilt
+    addresses (its requirement 3) plans no change
+    (`configs/prd/kubecoder/_shared/infrastructure.tf:16-27`):
+    - pool `zpool5`;
+    - dataset `kubecoder` on prd, `kubecoder-<stage>` otherwise;
+    - quota and size 80G/80Gi on prd, 20G/20Gi otherwise;
+    - PV `kubecoder-<stage>-zfs-pv`, claimed by `kubecoder-<stage>-zfs-pvc`.
+  - Nothing in it creates the namespace.
+- **Written for the hook, not the deploy CLI.** The hook applies `terraform/` from its own clone,
+  and nothing from HelmCharts' `_providers/` comes along:
+  - it fills an empty `backend "http" {}` at init (`/work/ArgoCDTools/presync/backend.py:67`);
+  - it exports `TF_VAR_stage` and `TF_VAR_namespace` (`presync/terraform.py:41-57`);
+  - it passes each `config/<stage>/*.tfvars` at apply (`:29`);
+  - the kubernetes provider reads its credentials from `KUBE_CONFIG_PATH` (`presync/kubeconfig.py:37`);
+  - the homelab provider reads `HOMELAB_*` and `TF_VAR_zfs_pools`
+    (`/work/ArgoCDDeploy/config/prd/values.yaml:263`).
+- **Stage differences in `config/{stage}/*.tfvars` (R8).** Everything `infrastructure.tf` derives
+  inline from `var.stage` today becomes a per-stage value, alongside `manage_webhook`. The
+  stage-values comment that points at `../_shared/infrastructure.tf`
+  (`configs/prd/kubecoder/dev/values.yaml:38`) is updated to name the new location.
+- **The repo's own webhook (R9, settled 7).** A `github_repository_webhook` on KubeCoderDeploy,
+  created only where `manage_webhook` is true: `config/dev/` and nowhere else.
+  - It sends push deliveries as JSON to `https://deploy-hooks.webathome.org/api/webhook`, signed
+    with the shared secret read through P1's hook-environment key (`design.md:288-313`). The
+    equivalent hand-made hook is described at `/work/Ansible/docs/runbooks/argocd.md:115-119`.
+  - The GitHub provider authenticates with the hook's `GITHUB_TOKEN` (`config/prd/values.yaml:214`)
+    and installs from the public registry (`/work/ArgoCDTools/image/terraform.rc` mirrors only
+    `pvginkel/*`).
+  - Unverified: whether the hook's classic PAT can create repository webhooks (`design.md:469`
+    says the `repo` scope covers it). Slice 012's first dev sync is the proof.
+- **Gate.** It adds Terraform formatting and validation.
+
+### P6 — KubeCoder: KubeCoderDeploy in KubeCoder's environment manifest
+
+Target: ../KubeCoder
+
+This covers R10 and settled 13.
+
+- The `repos:` list in `.kubecoder/config.yaml` (`:17-34`) gains
+  `https://github.com/pvginkel/KubeCoderDeploy`, commented in the same style as its neighbours.
+  Nothing else in KubeCoder changes.
+- The push runs KubeCoder's usual Build-Main build-and-deploy, which the operator accepted.
+- The Ansible repo's own `.kubecoder/config.yaml` stays the operator's and is never edited here.
+  The close-out records it as an outstanding action.
+
+### P7 — Ansible runbook: preview a deploy repo's diff before its cutover
+
+Target: root
+
+This covers R15 and settled 12. `docs/runbooks/argocd.md` gains a procedure for seeing what a
+migrating app's first sync would change, before any cutover depends on it. It comes with the
+manifest for KubeCoder's dev stage:
+
+- a hand-made Application in the `releases` project;
+- it renders KubeCoderDeploy's `main` exactly as the generated Application will: `chart/`,
+  `../config/dev/values.yaml` and the four `hook.*` parameters
+  (`/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:98-118`);
+- it has no automated sync and no `resources-finalizer.argocd.argoproj.io` (`:89-92`), so
+  deleting it cannot cascade into `kubecoder-dev`.
+
+The procedure must also state what the executor cannot derive on its own:
+
+- **Its name is not `kubecoder-dev`.** Slice 012's registry entry generates that name from its
+  path (`docs/runbooks/argocd.md:206-207`), and the ApplicationSet would take over an Application
+  already holding it.
+- **It is never synced.** Syncing runs the PreSync hook against a state key nothing has written
+  yet, because slice 012's state surgery has not happened. That apply would try to create the live
+  dataset, PV and webhook, and would then apply the chart over the Helm-owned release.
+- **Applying and deleting it are the operator's keystrokes.** Both use the prd-write kubeconfig
+  (`argocd.md:20-29`). KubeCoderDeploy must be on `origin/main` first, and with no webhook yet
+  the refresh is manual (`argocd.md:131`).
+- **What a sensible diff contains.** This is slice 012's expected set: its requirement 8, extended
+  in its "Carried in from slice 010" section
+  (`slices/backlog/012_kubecoder_argo_cutover/slice.md:254-257`). Anything beyond that set is the
+  finding.
 
 ## Not in scope
 
+- Syncing anything: the preview Application P7 supplies, and the operator's manual sync of
+  `argocd-prd` after P1. Both are operator keystrokes, recorded in the close-out.
 - KubeCoder's `release.yaml` registry entries, Terraform state surgery, the cutover itself, the `prd`
   branch, and deleting `charts/kubecoder` / `configs/prd/kubecoder/` from HelmCharts — slice 012.
 - CI writing image pins on each build (D37/D45) — slice 011.

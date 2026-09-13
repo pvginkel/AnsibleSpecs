@@ -23,6 +23,44 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Add KubeCoderDeploy to the Ansible environment manifest and run kc env sync
+
+R10 asks for KubeCoderDeploy in both `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own manifest. The operator's note of 2026-08-13 keeps the Ansible-side edit and `kc env sync` with the operator. The slice therefore adds only KubeCoder's line (plan.md P6). `/work/KubeCoderDeploy` is cloned in this environment today, but no manifest declares it.
+
+**Consequence:** A rebuilt Ansible environment comes up without a /work/KubeCoderDeploy checkout until the line is added and synced.
+
+**Provenance:** read — plan-writer, plan pass r1; plan.md R10, settled 13
+**Disposition:**
+
+### A2 — Sync argocd-prd by hand once P1 has landed, before KubeCoder first dev sync
+
+P1 changes ArgoCDDeploy in two ways:
+- `argocd-hook-credentials` gains the webhook-secret key that KubeCoderDeploy's webhook Terraform (P5) reads.
+- The `tf-presync` ClusterRole drops `namespaces`.
+
+Argo's own Application never auto-syncs (D3), so neither change reaches the cluster until the operator syncs `argocd-prd`. That sync is owed before KubeCoder's first dev sync. The first dev sync itself is slice 012's; see that slice's "Carried in from slice 010's planning" section.
+
+**Consequence:** Until Argo is synced, KubeCoder first dev sync fails in its PreSync apply because the webhook-secret variable is missing, and the hook keeps its cluster-wide namespace grant.
+
+**Provenance:** read — plan-writer, plan pass r1; plan.md P1, settled 7, ruling D2
+**Disposition:**
+
+### A3 — Run the dev-stage diff preview from docs/runbooks/argocd.md, then delete the Application
+
+R15 closes as an operator-run check (settled 12). P7 adds the procedure and its manifest to `/work/Ansible/docs/runbooks/argocd.md`. The manifest is a hand-made Application for KubeCoderDeploy's dev stage, with no automated sync and no resources finalizer.
+
+Using the prd-write kubeconfig:
+1. Apply the Application.
+2. Review its diff against the live `kubecoder-dev` release in the UI.
+3. Delete it.
+
+Never sync it. KubeCoderDeploy has to be on `origin/main` first.
+
+**Consequence:** The diff-quality proof left open by the Phase A.5 drill stays open, and slice 012 cutover review becomes the first reading of a KubeCoderDeploy diff.
+
+**Provenance:** read — plan-writer, plan pass r1; plan.md P7, settled 12
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -55,3 +93,16 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — HelmCharts architecture generator reads charts/kubecoder/architecture.yaml, which slice 012 deletes
+
+`gen_architecture.py` walks the registry's releases. For each one it reads the chart's image-to-product mapping from `charts/<chart>/architecture.yaml` (`/work/HelmCharts/tools/chart_tools/gen_architecture.py:574,585`).
+
+KubeCoderDeploy's copy of the chart leaves that file behind (plan.md P3), because it is generator input, not chart content. Slice 012 then deletes `charts/kubecoder/` (its requirement 13) and flips the registry entry to `reconciler: argo-cd`. After that, nothing in the tree carries KubeCoder's mapping.
+
+Slice 012's planning should decide where an Argo-managed app's architecture mapping lives.
+
+**Consequence:** Once slice 012 lands, the published architecture model may lose the KubeCoder workload-to-product mapping.
+
+**Provenance:** read — plan-writer, plan pass r1; HelmCharts tools/chart_tools/gen_architecture.py:574,585
+**Disposition:**

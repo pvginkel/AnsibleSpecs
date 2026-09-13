@@ -1,0 +1,268 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "B.1 layout (R1)",
+      "description": "Repo laid out per D12: `chart/`, `terraform/`, `config/{dev,prd}/`. KubeCoderDeploy holds the chart, the Terraform and the two stage directories, with no `_shared/` and nothing stage-specific outside `config/`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:50-56 (the deploy-repo layout)",
+        "/work/KubeCoderDeploy at a7796bf holds only README.md"
+      ]
+    },
+    {
+      "id": "V02",
+      "area": "B.1 chart source (R2, settled 10)",
+      "description": "Chart moves from HelmCharts, as a copy rather than a move (settled 10). The slice leaves `/work/HelmCharts/charts/kubecoder` and `configs/prd/kubecoder/` untouched and creates no KubeCoder `release.yaml`. KubeCoderDeploy records the HelmCharts commit it copied.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/configs/prd/kubecoder/{dev,prd}/ hold only values.yaml at HelmCharts 456396f"
+      ]
+    },
+    {
+      "id": "V03",
+      "area": "B.1 library chart (R2)",
+      "description": "Helpers come from the library chart dependency (charts.home), replacing the `charts/shared` symlinks, with no vendoring. `chart/Chart.yaml` pins `homelab-shared` exactly from `https://charts.home`. No template is a symlink, and no helper or built dependency is committed. The chart renders once the dependency is built.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/templates/_helpers.tpl is a symlink to ../../shared/_helpers.tpl",
+        "https://charts.home/index.yaml lists homelab-shared 0.2.0 (read 2026-09-13)",
+        "/work/Charts/charts/homelab-shared/templates/_helpers.tpl:1,204 (homelab-shared.deployment.timestamp, homelab-shared.externalsecrets)"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "B.1 deployment identity (R3, ruling D1)",
+      "description": "`deployment.timestamp` value changes; the key stays. On the controller pod template, the `deployment` annotation (the key `KUBECODER_DEPLOYMENT_ID`'s fieldRef reads) carries the controllerConfig checksum. The value is never empty, is identical across two renders of the same commit, and differs when controllerConfig changes. No rendered value derives from the render time.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/shared/_helpers.tpl:1-3 (renders now())",
+        "/work/HelmCharts/charts/kubecoder/templates/controller-deployment.yaml:24,25,97",
+        "/work/KubeCoder/controller/src/kubecoder_controller/config.py:1297-1322 (blank id falls back to rolling every env on every start)"
+      ]
+    },
+    {
+      "id": "V05",
+      "area": "B.1 deployment identity (settled 9)",
+      "description": "The bot and MCP Deployments carry no deployment stamp. They roll only when their own pin or spec changes.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/templates/bot-deployment.yaml:20",
+        "/work/HelmCharts/charts/kubecoder/templates/mcp-deployment.yaml:15"
+      ]
+    },
+    {
+      "id": "V06",
+      "area": "B.1 stage identity (R4)",
+      "description": "`global.environment` is declared in both `config/{stage}/values.yaml`, each with a comment saying it carries the *stage*. The dev and prd renders name ClusterRole `kubecoder-<stage>-nodes`, give its binding's subject the namespace `kubecoder-<stage>`, and claim `kubecoder-<stage>-zfs-pvc`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/tools/deploy/deploy_cli/helmops.py:182 (the only injection today)",
+        "/work/HelmCharts/charts/kubecoder/templates/controller-clusterrole.yaml:7",
+        "/work/HelmCharts/charts/kubecoder/templates/controller-clusterrolebinding.yaml:4,8,11",
+        "/work/HelmCharts/charts/kubecoder/templates/zfs-pvc.yaml:6,14"
+      ]
+    },
+    {
+      "id": "V07",
+      "area": "B.1 namespace (R5)",
+      "description": "The chart renders the stage's `Namespace` manifest (D25) with `sync-wave: \"-1\"` and `Prune=false`, replacing `module.namespace`. Nothing in KubeCoderDeploy's Terraform creates or manages a namespace.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/configs/prd/kubecoder/_shared/infrastructure.tf:6-9 (module.namespace)",
+        "/work/AnsibleSpecs/argo-cd/design.md:407-415 (Argo creates the namespace before the hook runs)"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "B.1 hook Job (R6)",
+      "description": "The hook Job template is included from the library chart. Rendered with the four `hook.*` values the ApplicationSet passes, the chart yields the `tf-presync-` PreSync Job in `argocd-hooks`. Rendered without them, it fails.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:20,45-48",
+        "/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:109-118"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "B.1 AppProject (R7, settled 1)",
+      "description": "AppProject: KubeCoder's ClusterRole and binding are whitelisted (cluster-scoped and tracked, so the cascade removes them on teardown). The `releases` whitelist already carries both, and the slice changes no AppProject. No stage render of KubeCoderDeploy's chart contains a cluster-scoped kind outside that whitelist.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/appproject.yaml:40-47"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "B.1 Terraform (R8)",
+      "description": "Terraform is rebuilt (D12 licence): the ZFS PV is all that remains, inlined with no module ceremony, and `config/{stage}/*.tfvars` carry the stage differences. For each stage, the dataset, quota, PV and claim it describes match what HelmCharts' `module.zfs` manages today, so slice 012's state move plans no change. It is formatted and validates.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/configs/prd/kubecoder/_shared/infrastructure.tf:16-27",
+        "/work/HelmCharts/terraform-modules/static-zfs-pv/main.tf",
+        "/work/ArgoCDTools/presync/terraform.py:29,41-57",
+        "/work/ArgoCDTools/presync/backend.py:67"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "B.1 webhook (R9, settled 7)",
+      "description": "The deploy-repo webhook is a TF resource (D39), with `manage_webhook` true in exactly one stage's tfvars: `config/dev/`. The resource registers KubeCoderDeploy's push deliveries at `https://deploy-hooks.webathome.org/api/webhook`, signed with the shared webhook secret it reads from the hook environment.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:291,305-313"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "ArgoCDDeploy hook environment (settled 7)",
+      "description": "`argocd-hook-credentials` carries Argo's webhook shared secret, fetched from `eso/prd/argocd/prd/webhook` property `github_secret`, under the key KubeCoderDeploy's webhook Terraform reads. ArgoCDDeploy's render gate asserts the extended key set.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/external-secrets.yaml:40-43",
+        "/work/ArgoCDDeploy/config/prd/values.yaml:284,289",
+        "/work/ArgoCDDeploy/tests/render-chart.py:50-105"
+      ]
+    },
+    {
+      "id": "V13",
+      "area": "ArgoCDDeploy hook grant (ruling D2)",
+      "description": "The `tf-presync` hook's cluster-wide ClusterRole no longer grants `namespaces`. `persistentvolumes` and `secrets` keep their full lifecycle, still with no wildcard. ArgoCDDeploy's render gate fails if a namespace grant returns.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/hook-namespace.yaml:85,95",
+        "/work/ArgoCDDeploy/tests/render-chart.py:112,1166",
+        "/work/ArgoCDTools/presync/reattach.py:42-45 (the hook reads PersistentVolumes only)"
+      ]
+    },
+    {
+      "id": "V14",
+      "area": "Environment manifests (R10)",
+      "description": "Add KubeCoderDeploy to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own. Per the operator's 2026-08-13 note, KubeCoder's `.kubecoder/config.yaml` lists KubeCoderDeploy under `repos:`. `/work/Ansible/.kubecoder/config.yaml` stays unedited, and its entry (with `kc env sync`) is flagged for the operator as an outstanding action in the close-out.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/KubeCoder/.kubecoder/config.yaml:17-34 (repos: list, no KubeCoderDeploy)"
+      ]
+    },
+    {
+      "id": "V15",
+      "area": "B.2 pins (R11)",
+      "description": "`images.{controller,bot,mcp,ingress,manual}` are pinned in `chart/values.yaml`. Each names a versioned Build-Main tag, and none says `latest`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/values.yaml:8-15 (all :latest today)",
+        "/work/KubeCoder/Jenkinsfile:219,262,271,287,302 (controller, bot, mcp, manual, ingress push :dev-<build>)"
+      ]
+    },
+    {
+      "id": "V16",
+      "area": "B.2 pins (R12)",
+      "description": "`controllerConfig.images.{worker,vsix}` are pinned, the unpinned half D145 documents. Both name a versioned Build-Main tag and neither says `latest`, both in the chart's values and in each stage's rendered controller ConfigMap.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/values.yaml:645,648 (both :latest today)",
+        "/work/KubeCoder/Jenkinsfile:228,240 (worker, vsix push :dev-<build>)"
+      ]
+    },
+    {
+      "id": "V17",
+      "area": "B.2 pins (settled 8)",
+      "description": "All seven pins name the same build: the newest all seven shared in the registry when the pinning phase ran. No `config/{stage}/values.yaml` carries an image tag, so the dev and prd renders both use the chart's pins.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/configs/prd/kubecoder/dev/values.yaml and prd/values.yaml set images.* and controllerConfig.images to dev-latest / prd-latest today"
+      ]
+    },
+    {
+      "id": "V18",
+      "area": "B.2 floating (R13)",
+      "description": "`images.tunnelReclaim` is left floating. It is a DockerImages toolchain image, out of scope by operator decision, so its tag is unchanged from the copied chart.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/values.yaml:19"
+      ]
+    },
+    {
+      "id": "V19",
+      "area": "B.2 always-pull retirement (R14, ruling D3)",
+      "description": "The D145 `imagePullPolicy: Always` overrides are retired for what is pinned. This slice does the chart half:\n- The controller, ingress, manual, MCP and bot containers carry no `imagePullPolicy: Always`.\n- `tunnel-reclaim` and every controllerConfig-level `Always` keep theirs.\n- The controller's worker/vsix ImageVolume `pullPolicy` lines and D145 are untouched (slice 012).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/templates/controller-deployment.yaml:45,173,195,227",
+        "/work/HelmCharts/charts/kubecoder/templates/mcp-deployment.yaml:25",
+        "/work/HelmCharts/charts/kubecoder/templates/bot-deployment.yaml:29",
+        "/work/HelmCharts/charts/kubecoder/values.yaml:69-77"
+      ]
+    },
+    {
+      "id": "V20",
+      "area": "HelmCharts orphan audit (settled 6)",
+      "description": "`audit-prd-orphans` becomes reconciler-aware. An entry Argo owns is not counted as a desired Helm release, so it is not reported missing, while its namespace and storage stay desired. It carries one guard: Argo's own bootstrap Helm release (`argocd-prd`) is not reported as an orphan to uninstall. HelmCharts' suite covers both.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/tools/chart_tools/audit_prd_orphans.py:115,149-151,301-302,360",
+        "/work/HelmCharts/tools/chart_tools/resolve_helm_args.py:212-219 (read_reconciler)",
+        "/work/HelmCharts/configs/prd/argocd/prd/release.yaml (reconciler: argo-cd)"
+      ]
+    },
+    {
+      "id": "V21",
+      "area": "Diff-quality proof (R15, settled 12)",
+      "description": "The diff-quality proof item is still open and falls here: point a no-sync Application at an existing live release and check the live-vs-git diff reads sensibly, once on dev before staking the cutover on it. The slice supplies the manifest and procedure in `/work/Ansible/docs/runbooks/argocd.md`:\n- a hand-made dev-stage Application with no automated sync and no cascade-delete finalizer;\n- it carries the four `hook.*` parameters;\n- it is named apart from the `kubecoder-dev` the registry will generate;\n- it is never synced;\n- its UI diff against the live release is reviewed, then it is deleted.\nApplying and deleting it is recorded as the operator's outstanding action.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:89-92,98-118",
+        "/work/Ansible/docs/runbooks/argocd.md:206-207 (the entry path names the Application)"
+      ]
+    },
+    {
+      "id": "V22",
+      "area": "Branch topology (settled 11)",
+      "description": "No `prd` branch exists in KubeCoderDeploy. `main` carries both stages' configuration.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V23",
+      "area": "Boundaries",
+      "description": "The slice changes nothing in `/work/Charts`, including the library chart's `now()` timestamp helper, and nothing in KubeCoder beyond the manifest line.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Charts/charts/homelab-shared/templates/_helpers.tpl:1"
+      ]
+    },
+    {
+      "id": "V24",
+      "area": "Gates",
+      "description": "KubeCoderDeploy has its own `kc project` gate, run from its root. It builds the library dependency, lints and renders both stages as the ApplicationSet does, asserts the chart outcomes above, and checks the Terraform's formatting and validity. ArgoCDDeploy's and HelmCharts' gates are green with this slice's changes.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy/.kubecoder/project.yaml:13-20 (the precedent)"
+      ]
+    }
+  ]
+}
