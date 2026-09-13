@@ -292,7 +292,7 @@ Record:
   comment still holds and is unchanged.
 - `kc project test` and `kc project lint` are green.
 
-### P2 — HelmCharts: `audit-prd-orphans` reads the reconciler
+### P2 — HelmCharts: `audit-prd-orphans` reads the reconciler ✅ DONE 2026-09-13
 
 Target: ../HelmCharts
 
