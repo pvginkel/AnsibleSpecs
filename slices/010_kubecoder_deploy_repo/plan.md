@@ -597,7 +597,7 @@ a migrating app's diff before its cutover". It opens with the rules the manifest
 KubeCoder's dev procedure follows. It uses a heredoc Application, `kubecoder-dev-preview`: project
 `releases`, `chart/`, `../config/dev/values.yaml`, the four `hook.*` parameters, no `syncPolicy`,
 no finalizer. The section ends with an object-by-object expected-diff table. Landed as Ansible
-`3194f3f` on `phase/010-P7`.
+`3194f3f` and a review fix on `phase/010-P7`.
 
 Later phases: none affected.
 
@@ -605,10 +605,16 @@ Record:
 
 - The manifest's `spec` has the same shape as the live generated `argocd-prd` Application, and
   `kubectl create --dry-run=client --validate=strict` accepts it.
-- The table comes from a `helm template` dev diff on 2026-09-13, HelmCharts `charts/kubecoder`
-  against KubeCoderDeploy `9d6c448`. Beyond slice 012's text, it has the Namespace's
-  `sync-wave`/`Prune=false` annotations and the ConfigMap's worker/vsix pins, which `checksum/config`
-  follows (close-out S9). HelmCharts had no chart commits since `65ca9db`.
+- The table is Argo CD v3.5.1's `StateDiffs`, run on 2026-09-13 in a throwaway harness: the 23 live
+  `kubecoder-dev` objects against KubeCoderDeploy `9d6c448`'s dev render, with client-side diff,
+  `/status` ignored and annotation tracking. It departs from slice 012's text (close-out S9 and its
+  note):
+  - every object gains the tracking annotation;
+  - the live images are digests, and `tunnel-reclaim` goes to `:latest`;
+  - no `imagePullPolicy` or `deployment` removal shows, because no live object carries
+    `last-applied-configuration`.
+
+  HelmCharts had no chart commits since `65ca9db`.
 - The rule against the UI's *Delete* is beyond the plan: its cascading default makes argocd-server
   add the finalizer the manifest omits.
 - `cexec` forwards stdin, so the manifest is a quoted heredoc and needs no file.

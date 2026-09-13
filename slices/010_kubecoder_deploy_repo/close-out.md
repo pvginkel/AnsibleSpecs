@@ -191,7 +191,27 @@ terraform/providers.tf:23-25 is correct today, but tests/terraform.sh cannot see
 
 Slice 012's expected diff lists image references, the deployment annotation and the namespace's tracking annotation. Its 'Carried in from slice 010' section adds the dropped imagePullPolicy lines and the bot/MCP stamps. A helm template diff on 2026-09-13 found more: HelmCharts charts/kubecoder (dev values) against KubeCoderDeploy 9d6c448 (dev values) also shows the Namespace gaining argocd.argoproj.io/sync-wave "-1" and sync-options Prune=false (D25's manifest). It also shows kubecoder-controller-config's worker and vsix images moving from dev-latest to the pin, with the controller's checksum/config following. The runbook table in docs/runbooks/argocd.md lists all of these. Slice 012's own text does not.
 
+code-writer, P7, r2, 2026-09-13 — Slice 012's set is wrong beyond these omissions. Argo CD v3.5.1's own StateDiffs was run on 2026-09-13 in a throwaway harness (client-side diff, /status ignored, annotation tracking), with the 23 live kubecoder-dev objects against KubeCoderDeploy 9d6c448's dev render. It shows three things. Every rendered object gains argocd.argoproj.io/tracking-id: no live object carries app.kubernetes.io/instance, so tracking is not normalized away. The live images are HelmCharts' deploy-time digests, so the five pins and tunnel-reclaim (to :latest) show as digest changes. The imagePullPolicy: Always and bot/MCP deployment-annotation removals never show, because the Helm-created objects carry no last-applied-configuration. The runbook table now matches that diff. Slice 012's requirement 8 and its 'Carried in from slice 010' bullet still state the old set.
+
 **Consequence:** At the dev cutover, an operator reviewing against slice 012's list alone stops the cutover on differences that are expected.
 
 **Provenance:** witnessed | code-writer, P7, r1, plan.md P7 done-record
+**Disposition:**
+
+### S10 — Ansible argocd runbook: the diff preview's <app>-<stage>-preview name is also the Helm release name Argo renders, unlike the generated <app>-<stage> Application · minor
+
+Argo passes the Application name as the Helm release name unless spec.source.helm.releaseName is set (argo-cd v3.5.1 reposerver/repository/repository.go:1288-1289). The preview procedure names the Application <app>-<stage>-preview (docs/runbooks/argocd.md:248-250) and says it renders the deploy repo exactly as the generated Application will (:240-241). KubeCoderDeploy's chart reads only .Release.Namespace (chart/templates/namespace.yaml:9), so KubeCoder's preview is unaffected. A later migration whose chart reads .Release.Name would preview names or labels the generated Application does not render.
+
+**Consequence:** A later migration's preview of a chart that reads .Release.Name shows differences its real first sync would not make.
+
+**Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F4)
+**Disposition:**
+
+### S11 — KubeCoderDeploy / slice 012: Argo's first sync leaves imagePullPolicy: Always on the five pinned containers and the old deployment annotation on bot and MCP · minor
+
+Helm installed the live kubecoder-<stage> Deployments. They carry no kubectl.kubernetes.io/last-applied-configuration annotation (kubecoder-dev/kubecoder-bot, read 2026-09-13). Argo's default client-side apply computes deletions only from that annotation. Its diff falls back to TwoWayDiff, which is ThreeWayDiff(config, config, live) (argo-cd v3.5.1 gitops-engine/pkg/diff/diff.go:122-133,554-557), so a field present only on the live object survives both the diff and the sync. Server-side diff is off by default (cmd/argocd-application-controller/commands/argocd_application_controller.go:305), and nothing in ArgoCDDeploy turns it on. As a result, P4's chart-side drop of imagePullPolicy: Always (ruling D3) does not reach the live controller, ingress, manual, bot and MCP containers at cutover. Bot and MCP also keep their last timestamp deployment annotation, which is static and rolls nothing.
+
+**Consequence:** After slice 012's cutover the five pinned containers still pull Always on every pod start, and slice 012's D145 update would record a partial retirement that is not live.
+
+**Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F5)
 **Disposition:**
