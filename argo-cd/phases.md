@@ -83,7 +83,7 @@ until someone installs the optional `test` dependency group by hand.
       `argocd-hook-credentials` from A.2's enumerated leaves **plus the non-secret per-cluster
       provider configuration as `template` literals** — one object composes a run's whole
       environment — the `tf-presync` ServiceAccount and its RBAC (a ClusterRoleBinding: the whole
-      lifecycle on `persistentvolumes`, `secrets` and `namespaces`, no wildcard), permitted
+      lifecycle on `persistentvolumes` and `secrets`, never `namespaces`, no wildcard), permitted
       as an AppProject destination (D33). Author the ExternalSecret from A.2's inventory:
       [`credential-inventory.md`](../slices/completed/007_argocd_tools_presync_hook/attachments/credential-inventory.md).
 - [ ] Repository credentials via ESO (D40). The anonymous-read check is answered: it suffices
@@ -156,7 +156,8 @@ prunes state for an unregistered app until D28 is designed.
       means **creating** an entry rather than editing one — KubeCoder included.)
 - [ ] Point a no-sync Application at an existing live release and check the live-vs-git diff
       reads sensibly — diff quality proven before Phase B stakes a cutover on it. **Still open**:
-      needs a real deploy repo, so it falls to slice 010's KubeCoderDeploy ahead of B.5's diff review.
+      the procedure, against KubeCoderDeploy's dev stage, is the runbook's "Previewing a migrating
+      app's diff before its cutover" — an operator run owed ahead of B.5's diff review.
 - [ ] SSO login works; local admin break-glass works (D9). SSO proven 2026-09-04; **break-glass
       still open** — never exercised.
 
@@ -185,14 +186,16 @@ Dev stage end to end first. Let it sit. Then prd. Depends on all of Phase A.
 ### B.1 — KubeCoderDeploy
 
 - [ ] Repo laid out per D12: `chart/`, `terraform/`, `config/{dev,prd}/`.
-- [ ] Chart moves from HelmCharts; helpers come from the **library chart** dependency
-      (charts.home), replacing the `charts/shared` symlinks — no vendoring.
-- [ ] **`deployment.timestamp` value changes — the key stays.** It renders `now()` today,
-      which under Argo's re-render-on-refresh would be permanently OutOfSync and roll the
-      controller forever; but the key is the controller's deployment identity, read back via
-      the Downward API, and deleting it makes every controller start roll all env pods. Make
-      the value render-stable and deploy-varying: the controllerConfig checksum or a digest
-      over the image pins.
+- [ ] Chart copied from HelmCharts, which keeps deploying KubeCoder until the cutover —
+      KubeCoderDeploy's `README.md` records the source commit and the replay command; helpers
+      come from the **library chart** dependency (charts.home), replacing the `charts/shared`
+      symlinks — no vendoring.
+- [ ] **The controller's `deployment` annotation keeps its key; its value is the controllerConfig
+      checksum.** `deployment.timestamp` renders `now()`, which under Argo's re-render-on-refresh
+      would be permanently OutOfSync and roll the controller forever; but the key is the
+      controller's deployment identity, read back via the Downward API, and deleting it makes
+      every controller start roll all env pods. The bot and MCP Deployments carry no stamp and
+      roll only on their own pin or spec.
 - [ ] **Declare `global.environment` in both `config/{stage}/values.yaml`**, commented that it
       carries the *stage*. Today the deploy CLI injects it; it names the ClusterRole
       `kubecoder-<env>-nodes` and its binding's namespace, so a miss renders broken RBAC.
@@ -205,21 +208,33 @@ Dev stage end to end first. Let it sit. Then prd. Depends on all of Phase A.
       module ceremony. `config/{stage}/*.tfvars` carry the stage differences.
 - [ ] Deploy-repo webhook as a TF resource (D39), with `manage_webhook` true in exactly one
       stage's tfvars — the resource is repo-scoped, the states per-stage; a second owner
-      collides on GitHub's hook-already-exists.
+      collides on GitHub's hook-already-exists. The dev stage owns it; the hook signs it with
+      `TF_VAR_github_webhook_secret` from its environment.
 - [ ] Add KubeCoderDeploy to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own.
 
 ### B.2 — image pinning
 
-The chart names 23 images; only the seven `Build-Main` images are in scope, and versioned tags
-already exist — this is deleting `-latest`, not a new scheme.
+Of the images the chart names, only the seven `Build-Main` images are in scope, and versioned
+tags already exist — this is deleting `-latest`, not a new scheme.
 
-- [ ] Pin `images.{controller,bot,mcp,ingress,manual}` in `chart/values.yaml`.
+- [ ] Pin `images.{controller,bot,mcp,ingress,manual}` in `chart/values.yaml`, to one build's
+      `dev-<n>` tag; no stage file overrides an image.
 - [ ] Pin `controllerConfig.images.{worker,vsix}` — the unpinned half D145 documents; today's
       digest scraper never reached them.
 - [ ] Leave `images.tunnelReclaim` floating: DockerImages toolchain image, out of scope by
       operator decision — the boundary is "the seven Build-Main images", not the block.
-- [ ] Retire the D145 `imagePullPolicy: Always` overrides once pinned (that decision carries
-      its own sunset checklist, including the worker/vsix ImageVolume `pullPolicy` lines).
+- [ ] Retire the D145 `imagePullPolicy: Always` overrides on the five pinned chart Deployment
+      containers — controller, ingress, manual, mcp, bot. `tunnel-reclaim` and every
+      controllerConfig container spec keep theirs: those images float. The controller's own
+      worker/vsix ImageVolume `pullPolicy` lines, and D145's update (its sunset checklist is
+      stale), wait until both stages run from pins — B.5's cleanup, after prd.
+
+Everything above that a repository can hold is committed (slice 010): KubeCoderDeploy — the chart
+on `homelab-shared` 0.2.0, both stages' values and tfvars, the rebuilt Terraform, and render and
+Terraform gates — plus ArgoCDDeploy's hook changes, the webhook-secret key and the dropped
+`namespaces` rule, and KubeCoder's manifest line. Owed to the operator: a manual sync of
+`argocd-prd`, without which neither hook change is live and KubeCoder's first PreSync apply lacks
+its webhook secret; the `/work/Ansible` manifest line; and A.5's diff preview.
 
 ### B.3 — CI (D37, D45 — KubeCoder's per-app choices)
 
@@ -245,7 +260,9 @@ Operator keystrokes throughout; per stage:
 - [ ] `terraform state rm module.namespace` **before** the first sync adopts the namespace —
       the rm now means *handing it to Argo*, and the two tools must never both believe they
       own it.
-- [ ] `state mv` the ZFS addresses to their rebuilt names.
+- [ ] `state mv` the ZFS addresses to their rebuilt names: `module.zfs.homelab_zfs_dataset.this`
+      → `homelab_zfs_dataset.env_storage`, `module.zfs.kubernetes_persistent_volume_v1.this` →
+      `kubernetes_persistent_volume_v1.env_storage`.
 - [ ] Prove with a `terraform plan` showing **no destroys** before any hook runs for real.
 
 ### B.5 — cutover, per stage (dev first, then prd)
@@ -255,7 +272,8 @@ templates carry digest-resolved images and the timestamp annotation; the new ren
 pins and a stable value. Recreate at `replicas: 1` means a brief control-plane outage, and every
 env pod in the stage restarts — including whichever session is driving the migration.
 
-- [ ] Land KubeCoderDeploy; `helm template` renders clean with the library dependency.
+- [ ] Replay onto KubeCoderDeploy what HelmCharts' `charts/kubecoder` and stage values gained
+      since the copy (the README's command); its render gate stays green.
 - [ ] One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus
       `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's
       `values.yaml` (+ `_shared/` once both stages are over).
@@ -264,8 +282,8 @@ env pod in the stage restarts — including whichever session is driving the mig
 - [ ] At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the
       still-Jenkins-owned **prd** stage — `changed()` matches `configs/prd/kubecoder/.*`, not
       per stage (review R5). Harmless while the shared chart is untouched; know it is coming.
-- [ ] Review the Application's diff in the UI. Expected: image references, the deployment
-      annotation, the namespace gaining a tracking annotation — **anything else stops the
+- [ ] Review the Application's diff in the UI. Expected: the table closing the runbook's
+      "Previewing a migrating app's diff before its cutover" — **anything else stops the
       cutover**.
 - [ ] Sync once, manually, at the chosen moment. Verify Synced/Healthy, controller
       `1/1 Running`, ConfigMap correct, env pods back.
@@ -274,7 +292,8 @@ env pod in the stage restarts — including whichever session is driving the mig
 - [ ] prd additionally: promotion exercised once (`prd` advanced to the validated `main` SHA),
       and a rollback rehearsed (revert on `main`, promote — D36).
 - [ ] Afterwards, unhurried: delete the orphaned `sh.helm.release.v1.kubecoder-<stage>.*`
-      Secrets, `charts/kubecoder/` in HelmCharts, and the D145 overrides (B.2).
+      Secrets, `charts/kubecoder/` in HelmCharts, and — once prd runs from pins — the
+      controller's worker/vsix ImageVolume `pullPolicy` lines, with D145's update (B.2).
 
 **Exit:** both stages on Argo; a full build → dev → promote → prd cycle and one rollback done
 through git alone; Jenkins holds no cluster credential for KubeCoder.

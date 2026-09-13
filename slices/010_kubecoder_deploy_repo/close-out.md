@@ -13,12 +13,22 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 010 built KubeCoderDeploy, KubeCoder's Argo CD deploy repo, and did not cut KubeCoder over.
+The chart was copied from HelmCharts `65ca9db` onto the `homelab-shared` 0.2.0 library. It renders
+its own Namespace and PreSync hook Job, and the controller's deployment identity is the
+controllerConfig checksum. The seven Build-Main images are pinned to `dev-511`, and their five
+Deployment containers no longer pull Always. The Terraform was rebuilt to the ZFS dataset, its PV
+and the repo's webhook, which dev owns.
+
+Elsewhere, ArgoCDDeploy's hook gained the webhook secret and lost its `namespaces` grant, and
+HelmCharts' `audit-prd-orphans` no longer offers an Argo-owned release for uninstall. The Ansible
+argocd runbook gained the pre-cutover diff preview. All four repos are pushed; nothing is synced.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A2 first. Until `argocd-prd` is synced by hand, the hook has neither the webhook secret nor
+the narrowed grant, and KubeCoder's first dev sync fails its PreSync apply. A3, the dev diff
+preview, is the diff-quality proof that slice 012's cutover review relies on.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -67,7 +77,9 @@ code-writer P7 r1, 2026-09-13 — The procedure is docs/runbooks/argocd.md, sect
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: A quiet run with no bail-outs and no appended phases. Before the push, P2's HelmCharts
+commit was rebased onto one unrelated upstream commit (N1), and Ansible's iac-on-push came back
+green (N2). One consult struck S5 with a comment-only fix.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -95,9 +107,9 @@ Pushed in this phase: ArgoCDDeploy 3f55579..d2aa093, HelmCharts db24d33..c19885a
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: One bug, B1: minor, witnessed, and older than this slice. It is in HelmCharts'
+`audit-prd-orphans`, a repo this slice touched: the tool misreads KubeCoder's conditional ZFS
+dataset and never collects zpool5, which matters only to a hand-run audit.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -112,16 +124,29 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Q1 decides slice 011's shape. D47 puts image tags in the stage files; this slice pinned
+them in `chart/values.yaml`, and its gate refuses stage-file images. Rule on it before 011 is
+planned.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
+### Q1 — argo-cd D47 puts KubeCoder's image tags in the stage values files; slice 010 pinned them in chart/values.yaml, and its gate refuses stage-file images
+
+D47 (/work/AnsibleSpecs/argo-cd/decisions.md, 2026-08-16) says chart/values.yaml carries no image tag at all: a stage's tag lives only in its stage values file, and CI writes `<n>` for dev and `prd-<n>` for prd. Slice 011's slice.md (lines 42-50) plans CI writing two stage values files on that basis. Slice 010 shipped the opposite shape under its settled item 8, which the operator agreed. The seven pins sit at `dev-511` in KubeCoderDeploy chart/values.yaml, config/{dev,prd}/values.yaml name no image, and tests/render-chart.py's check_stage_values fails the gate on any image key in a stage file. design.md's Deploy repos section ("the chart's values.yaml carries defaults plus the CI-written image tags") matches the shipped shape, so the register disagrees with itself. The doc phase left D47, design.md and slice 011's text as they are. Where the tags live is a tag-scheme decision, not a doc edit: D47's `prd-<n>` retag exists so that registry-cleanup's per-prefix cap cannot delete production's image.
+
+**Consequence:** If slice 011 is planned from D47, it moves the pins out of chart/values.yaml and trips slice 010's render gate. If it is planned from slice 010's shape, prd runs a dev-<n> tag, which D47 says registry-cleanup's per-prefix cap can delete.
+
+**Provenance:** read — doc-writer, doc phase r1; argo-cd/decisions.md D47, slices/backlog/011_kubecoder_ci_version_pins/slice.md:42-50, KubeCoderDeploy tests/render-chart.py check_stage_values
+**Disposition:**
+
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S9 (witnessed), S11 and S7 change slice 012. Its expected diff is wrong: use the runbook
+table. Under client-side apply the dropped `Always` never goes live, so 012 must choose a mechanism
+before it records D145. S1 turns on ordering against slice 014. S3 and S8 (both witnessed), S4 and
+S6 are small gate and hardening items.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -166,6 +191,8 @@ The only test of the diff guard uses an Argo-owned entry whose live release is a
 
 In HelmCharts the chart's CA file is a symlink to the repo's canonical homelab-root.crt. Argo's repo-server refuses a symlink that leaves the repository, so KubeCoderDeploy carries a real copy, as ArgoCDDeploy already does (chart/files/homelab-root.crt). Nothing ties either copy to the canonical file; the CA ConfigMap's comment is the only pointer.
 
+doc-writer, doc phase r1, 2026-09-13 — docs/runbooks/step-ca-root-rotation.md now lists KubeCoderDeploy's copy in the root inventory and in the md5sum check, and all three chart copies matched the canonical file on 2026-09-13. Nothing binds the copy to the canonical file mechanically; that part of the suggestion stands.
+
 **Consequence:** After a root CA rotation, KubeCoder's controller still hands step the old root from kubecoder-controller-ca until someone updates KubeCoderDeploy's copy, so SSH host-key signing for env pods fails.
 
 **Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
@@ -183,6 +210,8 @@ terraform/providers.tf names integrations/github, hashicorp/kubernetes and pvgin
 ### S7 — Slice 012 state mv targets for KubeCoder's ZFS objects are homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage · nit
 
 Slice 012 requirement 3 moves HelmCharts' module.zfs.homelab_zfs_dataset.this and module.zfs.kubernetes_persistent_volume_v1.this onto KubeCoderDeploy's rebuilt addresses, per stage: homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage (terraform/storage.tf). module.namespace has no counterpart; requirement 2 removes it. github_repository_webhook.argocd[0] is new in dev's state; no hand-made KubeCoderDeploy hook may exist when dev first syncs, or the create collides.
+
+doc-writer, doc phase r1, 2026-09-13 — argo-cd/phases.md B.4 now names both state mv targets. Slice 012's own slice.md does not yet name them.
 
 **Consequence:** Without these names, slice 012's state surgery has to rediscover them in terraform/, and a wrong target plans a create against the live dataset.
 
@@ -203,6 +232,8 @@ terraform/providers.tf:23-25 is correct today, but tests/terraform.sh cannot see
 Slice 012's expected diff lists image references, the deployment annotation and the namespace's tracking annotation. Its 'Carried in from slice 010' section adds the dropped imagePullPolicy lines and the bot/MCP stamps. A helm template diff on 2026-09-13 found more: HelmCharts charts/kubecoder (dev values) against KubeCoderDeploy 9d6c448 (dev values) also shows the Namespace gaining argocd.argoproj.io/sync-wave "-1" and sync-options Prune=false (D25's manifest). It also shows kubecoder-controller-config's worker and vsix images moving from dev-latest to the pin, with the controller's checksum/config following. The runbook table in docs/runbooks/argocd.md lists all of these. Slice 012's own text does not.
 
 code-writer, P7, r2, 2026-09-13 — Slice 012's set is wrong beyond these omissions. Argo CD v3.5.1's own StateDiffs was run on 2026-09-13 in a throwaway harness (client-side diff, /status ignored, annotation tracking), with the 23 live kubecoder-dev objects against KubeCoderDeploy 9d6c448's dev render. It shows three things. Every rendered object gains argocd.argoproj.io/tracking-id: no live object carries app.kubernetes.io/instance, so tracking is not normalized away. The live images are HelmCharts' deploy-time digests, so the five pins and tunnel-reclaim (to :latest) show as digest changes. The imagePullPolicy: Always and bot/MCP deployment-annotation removals never show, because the Helm-created objects carry no last-applied-configuration. The runbook table now matches that diff. Slice 012's requirement 8 and its 'Carried in from slice 010' bullet still state the old set.
+
+doc-writer, doc phase r1, 2026-09-13 — argo-cd/phases.md B.5 now points the cutover's diff review at the runbook table. Slice 012's slice.md (requirement 8 and its 'Carried in from slice 010' bullet) still gives the old set; slice specs are not the doc phase's to edit.
 
 **Consequence:** At the dev cutover, an operator reviewing against slice 012's list alone stops the cutover on differences that are expected.
 

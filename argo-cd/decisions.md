@@ -316,10 +316,13 @@ entrypoint builds the run's kubeconfig from.
 That RBAC is a **ClusterRole and ClusterRoleBinding**, not a Role in the hook namespace, and
 cluster-wide is structural rather than generous: the objects a deploy repo's Terraform creates
 land in `<app>-<stage>`, derived per sync and created by that app's own chart, so there is no
-namespace to bind in when the chart renders. Its rules are the whole lifecycle on the three core
-kinds the estate's Terraform reaches through the kubernetes provider — `persistentvolumes`,
-`secrets`, `namespaces` — and no wildcard, because a resource Terraform manages needs its whole
-lifecycle, create through delete.
+namespace to bind in when the chart renders. Its rules are the whole lifecycle on the two core
+kinds a deploy repo's Terraform reaches through the kubernetes provider — `persistentvolumes` and
+`secrets` — and no wildcard, because a resource Terraform manages needs its whole lifecycle,
+create through delete. `namespaces` is never granted: Argo applies each app's chart-owned
+Namespace before it creates the hook Job (design.md), so no run creates one, and a cluster-wide
+grant would let any app's Terraform delete every other app's namespace. ArgoCDDeploy's render
+gate refuses a rule naming it.
 
 ## Promotion and CI
 
@@ -546,12 +549,12 @@ RBAC. Stated plainly: write access to a deploy repo branch is arbitrary Terrafor
 inside a pod bounded by those credentials.
 
 **The ServiceAccount's RBAC is cluster-wide, which widens that bound** (D33 explains why it has
-to be): `secrets` and `namespaces` across every namespace, so a deploy repo's Terraform can read
-any Secret in the cluster — Argo's own repo credential and OIDC client secret among them — and
-delete any namespace. Recorded as the shipped position, not as the end state: rendering a
-per-namespace RoleBinding from the library chart alongside the hook Job would narrow it to the
-namespace being synced, and deciding that while Phase B is one migrated app costs less than
-after ten.
+to be): `secrets` across every namespace, so a deploy repo's Terraform can read any Secret in the
+cluster — Argo's own repo credential and OIDC client secret among them. Recorded as the shipped
+position, not as the end state: rendering a per-namespace RoleBinding from the library chart
+alongside the hook Job would narrow it to the namespace being synced. That narrowing is owed
+before the first migration whose Terraform manages Secrets (Triage #991); KubeCoder's manages
+none.
 
 **The git token is a classic PAT carrying `repo` on every private repository the operator owns.**
 This decision originally specified a fine-grained token — state repo read-write, deploy repos

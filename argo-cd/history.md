@@ -250,7 +250,10 @@ deploy repo's Terraform creates land in `<app>-<stage>`, derived per sync, and t
 namespace to bind in when the chart renders. A ClusterRoleBinding is the structural answer, and
 the honest cost — recorded in D41 rather than left to an incident — is that any deploy repo's
 Terraform can read every Secret in the cluster. Narrowing it per-sync from the library chart is
-the standing way back.
+the standing way back. The grant lost `namespaces` in slice 010 (2026-09-13): the first
+ProofDeploy sync had shown Argo creating the namespace before the hook runs, so no run needed the
+kind, and keeping it let any app's Terraform delete every other app's namespace. `secrets` stayed;
+its narrowing is Triage #991, owed before the first migration whose Terraform manages Secrets.
 
 ## Gate-1 amendments worth remembering
 

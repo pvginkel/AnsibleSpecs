@@ -307,7 +307,9 @@ already verified. The relay is configured with that same value — one leaf, not
 The registry hook is created manually, once. Each deploy repo's hook is a
 `github_repository_webhook` resource in that repo's own Terraform (D39), so the PreSync apply
 creates it on first sync — bootstrap
-rides the registry hook, needing no polling. The resource is repo-scoped while stages apply
+rides the registry hook, needing no polling. It is signed with that same shared secret: the hook's
+environment carries it as `TF_VAR_github_webhook_secret`, which the deploy repo's Terraform reads
+as `var.github_webhook_secret`. The resource is repo-scoped while stages apply
 the same `terraform/` under separate state keys (D32), so **exactly one stage's state owns
 it** — a `manage_webhook` variable in `config/{stage}/*.tfvars`, true once per repo — or the
 second stage's first apply collides with GitHub's hook-already-exists.
@@ -411,7 +413,8 @@ Namespace during its dry-run pass, before it creates the PreSync Job — it need
 namespace to exist for the server-side dry-run of the namespaced resources — so by the time the
 hook's `terraform apply` runs the namespace is there, tracked by Argo (D4). Namespaced Terraform
 lands in `var.namespace`, the fourth argument, as given. A `kubernetes_namespace_v1` for it
-would be a second creator and fail on "already exists"; ProofDeploy shipped with one and lost it
+would be a second creator, and the hook's ServiceAccount is granted no `namespaces` (D33), so the
+apply fails; ProofDeploy shipped with one and lost it
 before its first successful sync. Prediction reversed: the earlier text here had the Terraform
 create the namespace for the chart to adopt.
 
@@ -468,7 +471,7 @@ Terraform simply don't include the template — no hook, no cost.
 | Secret `argocd-hook-credentials` | Everything a run's environment carries beyond its own Job arguments: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
 | Git token | A classic PAT with `repo` on every private repository the operator owns — read-write on the state repo and the deploy repos alike. Not the per-repo scoping D41 first specified: fine-grained tokens do not cross resource owners and the estate's repos do not sit under one. It is the dominant term in a hook run's blast radius (D41), and D39's webhook creation rides the same scope |
 | State encryption key | terraform-backend-git's age keypair — `iac`'s own, read from the one leaf holding it, because both sides write the same state repo (D32) |
-| ServiceAccount `tf-presync` | The whole lifecycle on the three core kinds the estate's Terraform reaches through the kubernetes provider — `persistentvolumes`, `secrets`, `namespaces` — and no wildcard. Granted by a **ClusterRoleBinding**, which is structural rather than generous: the objects a deploy repo's Terraform creates land in `<app>-<stage>`, derived per sync and created by that app's own chart, so there is no namespace to bind in when this renders. It is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
+| ServiceAccount `tf-presync` | The whole lifecycle on the two core kinds a deploy repo's Terraform reaches through the kubernetes provider — `persistentvolumes` and `secrets` — and no wildcard; never `namespaces`, which each app's chart creates before the hook runs. Granted by a **ClusterRoleBinding**, which is structural rather than generous: the objects a deploy repo's Terraform creates land in `<app>-<stage>`, derived per sync and created by that app's own chart, so there is no namespace to bind in when this renders. It is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
 
 The hook itself holds no OpenBao credential and never authenticates to OpenBao. ESO resolves the
 leaves, the ExternalSecret composes them with the configuration literals, and the container reads
@@ -568,10 +571,13 @@ None blocks the pilot; each needs its decision by endgame.
   rollback refuses while auto-sync is on — flip the registry's `autoSync` off first.)
 - **Teardown leaves the `Retain` PV `Released` every time**, and the reattach step is the
   normal path (D29).
-- **A worker/vsix pin bump rolls the controller and every env pod — by design.** Pinning makes
-  the env-pod upgrade roll *correct* for the first time (today a worker rebuild changes nothing
-  the chart sees), and it also makes it *recurring*: the same in-flight-session cost as the
-  cutover roll, on every pin bump. Schedule bumps accordingly.
+- **Any controllerConfig change rolls KubeCoder's controller and every env pod — by design.**
+  The controller's deployment identity, the `deployment` annotation it reads back, is the
+  controllerConfig checksum, and the worker/vsix pins sit inside controllerConfig — so a pin
+  bump rolls them, and a re-render that changes nothing rolls nothing. Pinning makes the env-pod
+  upgrade roll *correct* for the first time (today a worker rebuild changes nothing the chart
+  sees), and it also makes it *recurring*: the same in-flight-session cost as the cutover roll,
+  on every pin bump. Schedule bumps accordingly.
 - **charts.home is a render-time single point of failure** for every migrated app (D17) —
   frozen deploys, not outages.
 - **The deploy path now lives on the cluster it deploys to.** A cluster-wide outage takes the
