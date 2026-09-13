@@ -104,11 +104,14 @@
     {
       "id": "V10",
       "area": "B.1 Terraform (R8)",
-      "description": "Terraform is rebuilt (D12 licence): the ZFS PV is all that remains, inlined with no module ceremony, and `config/{stage}/*.tfvars` carry the stage differences. For each stage, the dataset, quota, PV and claim it describes match what HelmCharts' `module.zfs` manages today, so slice 012's state move plans no change. It is formatted and validates.",
+      "description": "Terraform is rebuilt (D12 licence): the ZFS PV is all that remains, inlined with no module ceremony, and `config/{stage}/*.tfvars` carry the stage differences. For each stage, the dataset, quota, PV and claim it describes match what HelmCharts' `module.zfs` manages today, so slice 012's state move plans no change. The homelab provider block takes `zfs_pools` from the variable the hook's `TF_VAR_zfs_pools` fills (ruling F2). It is formatted and validates.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "/work/HelmCharts/configs/prd/kubecoder/_shared/infrastructure.tf:16-27",
+        "/work/HomelabTerraformProvider/internal/provider/provider.go:261 (zfs_pools has no env fallback)",
+        "/work/HelmCharts/_providers/providers.tf:94-96 (provider \"homelab\" { zfs_pools = var.zfs_pools })",
+        "/work/ArgoCDDeploy/config/prd/values.yaml:263 (the hook exports TF_VAR_zfs_pools)",
         "/work/HelmCharts/terraform-modules/static-zfs-pv/main.tf",
         "/work/ArgoCDTools/presync/terraform.py:29,41-57",
         "/work/ArgoCDTools/presync/backend.py:67"
@@ -151,11 +154,11 @@
     {
       "id": "V14",
       "area": "Environment manifests (R10)",
-      "description": "Add KubeCoderDeploy to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own. Per the operator's 2026-08-13 note, KubeCoder's `.kubecoder/config.yaml` lists KubeCoderDeploy under `repos:`. `/work/Ansible/.kubecoder/config.yaml` stays unedited, and its entry (with `kc env sync`) is flagged for the operator as an outstanding action in the close-out.",
+      "description": "Add KubeCoderDeploy to `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own. Per the operator's 2026-08-13 note, KubeCoder's `.kubecoder/config.yaml` lists KubeCoderDeploy under `repos:`. The session delivered that line before the run, not a phase (settled 13, ruling F1), and it is on KubeCoder's `origin/main`. `/work/Ansible/.kubecoder/config.yaml` stays unedited, and its entry (with `kc env sync`) is flagged for the operator as an outstanding action in the close-out.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/KubeCoder/.kubecoder/config.yaml:17-34 (repos: list, no KubeCoderDeploy)"
+        "/work/KubeCoder/.kubecoder/config.yaml:28 (- url: https://github.com/pvginkel/KubeCoderDeploy), KubeCoder commit 1e523e79, main level with origin/main (checked 2026-09-13)"
       ]
     },
     {
@@ -247,7 +250,7 @@
     {
       "id": "V23",
       "area": "Boundaries",
-      "description": "The slice changes nothing in `/work/Charts`, including the library chart's `now()` timestamp helper, and nothing in KubeCoder beyond the manifest line.",
+      "description": "The slice changes nothing in `/work/Charts`, including the library chart's `now()` timestamp helper, and no phase changes anything in `/work/KubeCoder` (ruling F1).",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -257,7 +260,7 @@
     {
       "id": "V24",
       "area": "Gates",
-      "description": "KubeCoderDeploy has its own `kc project` gate, run from its root. It builds the library dependency, lints and renders both stages as the ApplicationSet does, asserts the chart outcomes above, and checks the Terraform's formatting and validity. ArgoCDDeploy's and HelmCharts' gates are green with this slice's changes.",
+      "description": "KubeCoderDeploy has its own `kc project` gate, run from its root. It builds the library dependency, lints and renders both stages as the ApplicationSet does, asserts the chart outcomes above, and checks the Terraform's formatting and validity. ArgoCDDeploy's and HelmCharts' gates are green with this slice's changes. KubeCoder is not one of this slice's gates: no phase touches it, and its gate needs tool containers this environment lacks (ruling F1).",
       "verdict": null,
       "rationale": "",
       "evidence": [

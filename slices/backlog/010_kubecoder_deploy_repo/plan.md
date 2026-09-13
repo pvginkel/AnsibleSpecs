@@ -223,8 +223,8 @@ Plan review r1 rulings (2026-09-13, operator in chat: "Agreed"):
      justified in one line from slice.md facts. -->
 
 cross-cutting — the requirements and rulings land in four repos (KubeCoderDeploy; ArgoCDDeploy per
-ruling D2 and settled 7; HelmCharts per settled 6; KubeCoder per R10), and slice.md makes KubeCoder
-the pilot that later migrations' deploy repos are modelled on.
+ruling D2 and settled 7; HelmCharts per settled 6; Ansible's Argo runbook per R15), and slice.md
+makes KubeCoder the pilot that later migrations' deploy repos are modelled on.
 
 ## Ordering constraints
 
@@ -386,8 +386,13 @@ Target: ../KubeCoderDeploy
   - it exports `TF_VAR_stage` and `TF_VAR_namespace` (`presync/terraform.py:41-57`);
   - it passes each `config/<stage>/*.tfvars` at apply (`:29`);
   - the kubernetes provider reads its credentials from `KUBE_CONFIG_PATH` (`presync/kubeconfig.py:37`);
-  - the homelab provider reads `HOMELAB_*` and `TF_VAR_zfs_pools`
-    (`/work/ArgoCDDeploy/config/prd/values.yaml:263`).
+  - the homelab provider reads its credentials from `HOMELAB_*`, but `zfs_pools` is a provider
+    attribute with no environment fallback
+    (`/work/HomelabTerraformProvider/internal/provider/provider.go:261`). The hook exports
+    `TF_VAR_zfs_pools` (`/work/ArgoCDDeploy/config/prd/values.yaml:263`), and the configuration
+    hands that variable to the homelab provider block itself (ruling F2), as
+    `/work/HelmCharts/_providers/providers.tf:94-96` does. Formatting and validation pass without
+    it; only the PreSync apply would fail.
 - **Stage differences in `config/{stage}/*.tfvars` (R8).** Everything `infrastructure.tf` derives
   inline from `var.stage` today becomes a per-stage value, alongside `manage_webhook`. The
   stage-values comment that points at `../_shared/infrastructure.tf`
@@ -403,19 +408,6 @@ Target: ../KubeCoderDeploy
   - Unverified: whether the hook's classic PAT can create repository webhooks (`design.md:469`
     says the `repo` scope covers it). Slice 012's first dev sync is the proof.
 - **Gate.** It adds Terraform formatting and validation.
-
-### P6 — KubeCoder: KubeCoderDeploy in KubeCoder's environment manifest
-
-Target: ../KubeCoder
-
-This covers R10 and settled 13.
-
-- The `repos:` list in `.kubecoder/config.yaml` (`:17-34`) gains
-  `https://github.com/pvginkel/KubeCoderDeploy`, commented in the same style as its neighbours.
-  Nothing else in KubeCoder changes.
-- The push runs KubeCoder's usual Build-Main build-and-deploy, which the operator accepted.
-- The Ansible repo's own `.kubecoder/config.yaml` stays the operator's and is never edited here.
-  The close-out records it as an outstanding action.
 
 ### P7 — Ansible runbook: preview a deploy repo's diff before its cutover
 
@@ -463,4 +455,7 @@ The procedure must also state what the executor cannot derive on its own:
 - Pinning any image beyond the seven, including `images.tunnelReclaim` (R13) and every
   controllerConfig toolchain/service image.
 - Changing the library chart (`/work/Charts`), including its `now()` timestamp helper.
+- Any change to `/work/KubeCoder`. Its manifest line for R10 was pushed before the run (settled 13,
+  `/work/KubeCoder/.kubecoder/config.yaml:28`), and its gate cannot run in this environment
+  (ruling F1).
 - The Ansible-side `.kubecoder/config.yaml` entry and `kc env sync` — the operator's.

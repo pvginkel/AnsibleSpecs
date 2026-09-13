@@ -27,6 +27,8 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 R10 asks for KubeCoderDeploy in both `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own manifest. The operator's note of 2026-08-13 keeps the Ansible-side edit and `kc env sync` with the operator. The slice therefore adds only KubeCoder's line (plan.md P6). `/work/KubeCoderDeploy` is cloned in this environment today, but no manifest declares it.
 
+plan-writer, plan pass r2, 2026-09-13 — No phase adds KubeCoder's line. The session added KubeCoderDeploy to `/work/KubeCoder/.kubecoder/config.yaml` (line 28, KubeCoder `1e523e79`) and pushed it before the run, and the plan no longer has a KubeCoder phase (plan.md ruling F1, settled 13). What this entry owes the operator is unchanged: the Ansible-side line and `kc env sync`.
+
 **Consequence:** A rebuilt Ansible environment comes up without a /work/KubeCoderDeploy checkout until the line is added and synced.
 
 **Provenance:** read — plan-writer, plan pass r1; plan.md R10, settled 13
