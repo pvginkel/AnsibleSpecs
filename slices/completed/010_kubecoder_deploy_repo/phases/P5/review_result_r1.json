@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "P5's inline ZFS dataset and PV match static-zfs-pv attribute for attribute, with each stage's values in its tfvars. The webhook is dev-only and signed with P1's key, and the configuration fits how the hook runs Terraform. One advisory finding: nothing in the gate covers the F2 zfs_pools provider wiring.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "Deleting zfs_pools from the homelab provider block (ruling F2) leaves validate and both mocked terraform test runs green; only a PreSync apply would catch it"
+    }
+  ]
+}

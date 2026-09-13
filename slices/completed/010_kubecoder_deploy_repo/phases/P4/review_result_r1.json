@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The seven Build-Main images are pinned to dev-511, the newest build all seven share in the registry. Neither stage file overrides the pins, and Always is dropped only on the five pinned containers. The gate asserts each of these per stage. One advisory comment inaccuracy.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "chart/values.yaml:8-10 says worker/vsix take the default pull policy; the controller still mounts them with pullPolicy Always (podcomposer.py:1718,1725) until slice 012"}]}

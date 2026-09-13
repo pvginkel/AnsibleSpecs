@@ -1,0 +1,184 @@
+/work/HelmCharts — P2: git diff 65ca9dbea91d..869e19bcb3d8
+
+tests/test_audit_prd_orphans.py        | 79 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ tools/chart_tools/audit_prd_orphans.py | 42 ++++++++++++++++++++---------
+ 2 files changed, 109 insertions(+), 12 deletions(-)
+
+diff --git a/tests/test_audit_prd_orphans.py b/tests/test_audit_prd_orphans.py
+new file mode 100644
+index 0000000..f33c68f
+--- /dev/null
++++ b/tests/test_audit_prd_orphans.py
+@@ -0,0 +1,79 @@
++"""chart_tools.audit_prd_orphans: reconciler ownership in desired state and the
++helm-release diff."""
++
++import json
++
++from chart_tools.audit_prd_orphans import cmd_diff, desired_state
++
++ZFS_TF = """\
++module "zfs" {
++  source  = "./terraform-modules/static-zfs-pv"
++  dataset = "${var.namespace}"
++}
++"""
++
++
++def _argo_entry():
++    return {"reconciler": "argo-cd", "deployed": True, "autoSync": False}
++
++
++def _shared_tf(repo, chart, text):
++    shared = repo / "configs" / "prd" / chart / "_shared"
++    shared.mkdir()
++    (shared / "infrastructure.tf").write_text(text)
++
++
++def _helm_report(repo, capsys, live_releases):
++    outdir = repo / "audit-live"
++    outdir.mkdir()
++    (outdir / "helm.json").write_text(
++        json.dumps([{"name": n, "namespace": n} for n in live_releases])
++    )
++    cmd_diff(str(repo), str(outdir))
++    return capsys.readouterr().out.split("[Helm releases]", 1)[1].split("\n[", 1)[0]
++
++
++def test_an_entry_another_reconciler_owns_is_no_desired_helm_release(repo, make_stage):
++    make_stage("prd", "app", "prd")
++    make_stage("prd", "kubecoder", "dev", release_yaml=_argo_entry())
++    _shared_tf(repo, "kubecoder", ZFS_TF)
++
++    state = desired_state(str(repo))
++
++    assert state["helm_releases"] == {"app-prd"}
++    assert state["owned_elsewhere"] == {"kubecoder-dev"}
++    assert state["namespaces"] == {"app-prd", "kubecoder-dev"}
++    assert state["zfs_zpool2"] == {"kubecoder-dev"}
++
++
++def test_a_disabled_flag_does_not_make_another_reconcilers_entry_ours(repo, make_stage):
++    make_stage("prd", "kubecoder", "dev", release_yaml={**_argo_entry(), "disabled": True})
++
++    state = desired_state(str(repo))
++
++    assert state["disabled"] == set()
++    assert state["owned_elsewhere"] == {"kubecoder-dev"}
++
++
++def test_an_entry_another_reconciler_owns_is_not_reported_missing(repo, make_stage, capsys):
++    make_stage("prd", "app", "prd")
++    make_stage("prd", "kubecoder", "dev", release_yaml=_argo_entry())
++
++    report = _helm_report(repo, capsys, ["app-prd"])
++
++    assert "MISSING" not in report
++    assert "clean" in report
++
++
++def test_a_live_release_another_reconciler_owns_is_never_an_orphan_candidate(
++    repo, make_stage, capsys
++):
++    make_stage("prd", "app", "prd")
++    make_stage("prd", "argocd", "prd", release_yaml=_argo_entry())
++
++    report = _helm_report(repo, capsys, ["app-prd", "argocd-prd", "gone-prd"])
++    orphans = report.split("ORPHAN CANDIDATES", 1)[1].split("\n\n", 1)[0]
++
++    assert "+ gone-prd" in orphans
++    assert "argocd-prd" not in orphans
++    assert "    = argocd-prd" in report
+diff --git a/tools/chart_tools/audit_prd_orphans.py b/tools/chart_tools/audit_prd_orphans.py
+index 03a03d2..3cd0a77 100644
+--- a/tools/chart_tools/audit_prd_orphans.py
++++ b/tools/chart_tools/audit_prd_orphans.py
+@@ -1,7 +1,7 @@
+ """Phase-4 orphan audit for the prd cluster.
+ 
+-Desired state is the 41 `configs/prd` releases (45 release-stages) and the
+-durable storage their `_shared/*.tf` declares. Everything live on the cluster
++Desired state is every `configs/prd` release-stage and the durable storage
++its `_shared/*.tf` declares. Everything live on the cluster
+ or the prod Ceph that is *not* in that desired set is an orphan candidate the
+ operator reviews before deleting (Phase 3).
+ 
+@@ -27,6 +27,10 @@ run in the repo:
+ Pool / group / fs are all `k8s` on the prd cluster; ZFS datasets live on
+ zpool2 (clusters.yaml). Disabled releases (helm uninstalled, TF storage kept)
+ have their namespace + storage in desired state but no helm release / workload.
++A stage another reconciler owns (release.yaml `reconciler:`, D38) is the same:
++namespace + storage desired, no helm release from here. A live helm release of
++one is listed apart and never as an orphan candidate — `argocd-prd` is Argo's
++own bootstrap install, and uninstalling it removes Argo.
+ """
+ 
+ import json
+@@ -123,6 +127,7 @@ def desired_state(repo):
+         "s3_buckets": set(),
+         "s3_users": set(),
+         "disabled": set(),
++        "owned_elsewhere": set(),
+     }
+     for chart in sorted(os.listdir(prd)):
+         chart_dir = os.path.join(prd, chart)
+@@ -143,14 +148,19 @@ def desired_state(repo):
+             ns = f"{chart}-{stage}"
+             state["namespaces"].add(ns)
+             rel = _release_yaml(os.path.join(chart_dir, stage))
+-            # A release with a helm chart (chart key absent => default to the
+-            # chart dir; chart: null => infra-only) and not disabled has a
+-            # helm release named <chart>-<stage>.
+-            has_chart = ("chart" not in rel) or (rel.get("chart") is not None)
+-            if has_chart and not rel.get("disabled"):
+-                state["helm_releases"].add(ns)
+-            if rel.get("disabled"):
+-                state["disabled"].add(ns)
++            # Same reading as resolve_helm_args.read_reconciler, which is not
++            # imported: this tool runs on hosts with only stdlib + pyyaml.
++            if rel.get("reconciler", "jenkins") != "jenkins":
++                state["owned_elsewhere"].add(ns)
++            else:
++                # A release with a helm chart (chart key absent => default to
++                # the chart dir; chart: null => infra-only) and not disabled
++                # has a helm release named <chart>-<stage>.
++                has_chart = ("chart" not in rel) or (rel.get("chart") is not None)
++                if has_chart and not rel.get("disabled"):
++                    state["helm_releases"].add(ns)
++                if rel.get("disabled"):
++                    state["disabled"].add(ns)
+             for kind, label, body in _iter_blocks(tf_text):
+                 src = _attr(body, "source") or ""
+                 if "static-rbd-pv" in src:
+@@ -262,6 +272,8 @@ def cmd_desired(repo):
+     print("Desired-state inventory (from configs/prd)\n" + "=" * 42)
+     _print_set("Namespaces (<chart>-<stage>)", state["namespaces"])
+     _print_set("Helm releases (excludes disabled)", state["helm_releases"])
++    _print_set("Owned by another reconciler (no helm release from here)",
++               state["owned_elsewhere"])
+     _print_set("RBD images — pool k8s", state["rbd_k8s"])
+     _print_set("CephFS subvolumes — group k8s", state["cephfs_k8s"])
+     _print_set("ZFS datasets — zpool2", state["zfs_zpool2"])
+@@ -356,14 +368,20 @@ def cmd_diff(repo, outdir):
+ 
+     # Helm releases. A disabled release that is still installed is not a true
+     # orphan — it is mid-decommission (pipeline uninstalls it). Surface those
+-    # separately so they don't read as a surprise.
++    # separately so they don't read as a surprise. A live release another
++    # reconciler owns is never an orphan candidate: it is that reconciler's.
+     _diff("Helm releases", desired["helm_releases"],
+-          live["helm_releases"] - desired["disabled"])
++          live["helm_releases"] - desired["disabled"] - desired["owned_elsewhere"])
+     still_installed = live["helm_releases"] & desired["disabled"]
+     if still_installed:
+         print("\n  Disabled releases still installed (expect uninstall, not destroy):")
+         for n in sorted(still_installed):
+             print(f"    ~ {n}")
++    owned_elsewhere = live["helm_releases"] & desired["owned_elsewhere"]
++    if owned_elsewhere:
++        print("\n  Owned by another reconciler (never uninstall from here):")
++        for n in sorted(owned_elsewhere):
++            print(f"    = {n}")
+     if live.get("helm_detail"):
+         bad = {n: ns for n, ns in live["helm_detail"].items()
+                if n in desired["helm_releases"] and ns != n}

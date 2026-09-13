@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "P3 meets its outcome: both stage renders differ from HelmCharts' 65ca9db chart only in the Namespace, the hook Job, the checksum deployment identity and the dropped bot/MCP stamps. Gate state is unverified; targeted helm template/lint probes and the checksum check pass on both stages. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

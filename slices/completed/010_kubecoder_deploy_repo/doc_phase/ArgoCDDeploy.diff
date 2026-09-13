@@ -1,0 +1,145 @@
+/work/ArgoCDDeploy — P1: git diff 3f555790af49..d2aa093072cc
+
+chart/templates/hook-namespace.yaml | 10 ++++------
+ config/prd/values.yaml              |  6 ++++++
+ tests/render-chart.py               | 49 ++++++++++++++++++++++++++++++++++++++++---------
+ 3 files changed, 50 insertions(+), 15 deletions(-)
+
+diff --git a/chart/templates/hook-namespace.yaml b/chart/templates/hook-namespace.yaml
+index c6d335e..722d7e4 100644
+--- a/chart/templates/hook-namespace.yaml
++++ b/chart/templates/hook-namespace.yaml
+@@ -84,15 +84,13 @@ rules:
+     resources:
+       - persistentvolumes
+     verbs: [get, list, watch, create, update, patch, delete]
+-  # The rest of what the estate's Terraform manages through the kubernetes
+-  # provider, and the whole of it: kubernetes_secret_v1 (the s3-storage and
+-  # postgres-db modules hand an app its credentials) and kubernetes_namespace_v1.
+-  # A managed resource needs its whole lifecycle — an apply that drops one
+-  # deletes it.
++  # Secrets, the other kind a deploy repo's Terraform manages through the
++  # kubernetes provider: the s3-storage and postgres-db modules hand an app its
++  # credentials as kubernetes_secret_v1. A managed resource needs its whole
++  # lifecycle — an apply that drops one deletes it.
+   - apiGroups: [""]
+     resources:
+       - secrets
+-      - namespaces
+     verbs: [get, list, watch, create, update, patch, delete]
+ ---
+ {{/*
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 6d0756a..907679e 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -214,6 +214,12 @@ hooks:
+       GITHUB_TOKEN:
+         key: eso/prd/argocd-hooks/git
+         property: token
++      # What D39's webhook is signed with: Argo's shared webhook secret, the leaf
++      # argocd-secret and the relay already read, never a second secret. A deploy
++      # repo's Terraform takes it as var.github_webhook_secret.
++      TF_VAR_github_webhook_secret:
++        key: eso/prd/argocd/prd/webhook
++        property: github_secret
+       # The homelab provider's rbd/cephfs resources.
+       HOMELAB_CEPH_USER:
+         key: shared/prd/ceph-csi
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 3a6ac00..247e267 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -49,12 +49,16 @@ PROJECT = "releases"
+ HOOK_NAMESPACE = "argocd-hooks"
+ HOOK_SERVICE_ACCOUNT = "tf-presync"
+ HOOK_SECRET = "argocd-hook-credentials"
++# The key a deploy repo's D39 github_repository_webhook is signed with, read as
++# var.github_webhook_secret — the name is KubeCoderDeploy's Terraform contract.
++HOOK_WEBHOOK_SECRET = "TF_VAR_github_webhook_secret"
+ # The enumerated leaves, key by key: slice 007's credential-inventory.md:32-42,
+-# settled against what the container reads. `envFrom` is all-or-nothing, so a key
+-# that is missing or fetched from the wrong property surfaces at `terraform
+-# apply`, deep inside a sync.
++# settled against what the container reads, plus the webhook secret above.
++# `envFrom` is all-or-nothing, so a key that is missing or fetched from the wrong
++# property surfaces at `terraform apply`, deep inside a sync.
+ HOOK_LEAVES = {
+     "GITHUB_TOKEN": ("eso/prd/argocd-hooks/git", "token"),
++    HOOK_WEBHOOK_SECRET: ("eso/prd/argocd/prd/webhook", "github_secret"),
+     "HOMELAB_CEPH_USER": ("shared/prd/ceph-csi", "user_id"),
+     "HOMELAB_CEPH_KEY": ("shared/prd/ceph-csi", "user_key"),
+     "HOMELAB_S3_ADMIN_ACCESS_KEY": ("shared/prd/ceph-rgw/s3", "access_key_id"),
+@@ -106,10 +110,15 @@ HOOK_ENVIRONMENT = frozenset(HOOK_LEAVES) | HOOK_LITERAL_KEYS
+ # Bech32 with the age HRP: 62 characters, `age1` and 58 more.
+ AGE_RECIPIENT = re.compile(r"age1[0-9a-z]{58}")
+ # What the hook's identity has to be permitted, all of it core-group: the
+-# reattach's own two calls plus every kind the estate's Terraform manages through
+-# the kubernetes provider. A managed resource needs its whole lifecycle, since an
+-# apply that drops one deletes it.
+-HOOK_MANAGED = ("persistentvolumes", "secrets", "namespaces")
++# reattach's own two calls on PersistentVolumes plus the kinds a deploy repo's
++# Terraform manages through the kubernetes provider. A managed resource needs its
++# whole lifecycle, since an apply that drops one deletes it.
++HOOK_MANAGED = ("persistentvolumes", "secrets")
++# What it must never be granted. Argo applies an app's wave -1 Namespace before it
++# creates the PreSync Job (/work/AnsibleSpecs/argo-cd/design.md, "Argo creates the
++# namespace before the hook runs"), so no run creates one, and a cluster-wide
++# grant would let any app's Terraform delete every other app's namespace.
++HOOK_REFUSED = ("namespaces",)
+ LIFECYCLE = ("get", "list", "watch", "create", "update", "patch", "delete")
+ # The only literals this repo is allowed to commit into a credential Secret, per
+ # Secret: the repo credential's non-secret half, and the hook environment's
+@@ -1053,7 +1062,7 @@ def check_hook_namespace(docs):
+     )
+ 
+ 
+-def check_hook_environment(materialised):
++def check_hook_environment(docs, materialised):
+     """One object composes a run's whole environment, key by enumerated key."""
+     secret = materialised.get(HOOK_SECRET)
+     check(secret is not None, f"no ExternalSecret materialises {HOOK_SECRET}, so no hook can run")
+@@ -1070,6 +1079,22 @@ def check_hook_environment(materialised):
+             fetched == {"key": leaf, "property": prop},
+             f"{HOOK_SECRET} fills {key} from {fetched!r}, not {leaf}#{prop}",
+         )
++    # One value, not a second secret: a deploy repo's webhook has to be signed with
++    # what the relay and both receivers verify, which is the leaf argocd-secret's
++    # own reference resolves to.
++    raw = (find(docs, "Secret", "argocd-secret")["data"] or {}).get("webhook.github.secret")
++    receivers = SECRET_REF.match(base64.b64decode(raw).decode()) if raw else None
++    verified = (
++        materialised.get(receivers["secret"], {}).get("fetched", {}).get(receivers["key"])
++        if receivers
++        else None
++    )
++    signing = secret["fetched"].get(HOOK_WEBHOOK_SECRET)
++    check(
++        verified is not None and signing == verified,
++        f"{HOOK_SECRET} fills {HOOK_WEBHOOK_SECRET} from {signing!r} while the receivers verify "
++        f"{verified!r}: every deploy-repo webhook delivery fails the relay's signature check",
++    )
+ 
+     prd = yaml.safe_load(CLUSTERS.read_text())[CLUSTER]
+     literals = secret["literals"]
+@@ -1169,6 +1194,12 @@ def check_hook_rbac(docs):
+                 permits(rules, resource, verb),
+                 f"ClusterRole/{role['metadata']['name']} cannot {verb} {resource}",
+             )
++    for resource in HOOK_REFUSED:
++        grants = [rule for rule in rules if resource in rule.get("resources", [])]
++        check(
++            not grants,
++            f"ClusterRole/{role['metadata']['name']} grants {resource} cluster-wide: {grants!r}",
++        )
+ 
+ 
+ def main():
+@@ -1189,7 +1220,7 @@ def main():
+     check_repo_credentials(materialised)
+     check_relay(docs, materialised)
+     check_hook_namespace(docs)
+-    check_hook_environment(materialised)
++    check_hook_environment(docs, materialised)
+     check_hook_rbac(docs)
+     check_nothing_secret_committed(docs, materialised)

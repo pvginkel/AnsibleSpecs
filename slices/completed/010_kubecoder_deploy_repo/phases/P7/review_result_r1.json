@@ -1,0 +1,15 @@
+{"outcome": "issues",
+ "summary": "The preview procedure's safety rules and manifest are sound, but its expected-diff table was built from a helm-template render diff and misreads Argo's live diff. Tunnel-reclaim's digest-to-:latest change and the tracking annotation on all 23 adopted objects would each be flagged as findings. The table's promised pull-policy and annotation removals never appear.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "tunnel-reclaim is live at a deploy-time digest and renders :latest, so its image differs, yet argocd.md:335-337 declares it unchanged and makes any other field a finding"},
+  {"id": "F2", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "Argo stamps its tracking annotation on every rendered object and masks nothing on unlabelled Helm objects, so all 23 show OutOfSync; the table lists 5 and makes the other 18 findings"},
+  {"id": "F3", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "Argo's two-way diff (no last-applied annotation, no server-side diff) keeps fields found only on the live objects, so the table's promised imagePullPolicy: Always and bot/MCP deployment-annotation removals never appear"},
+  {"id": "F4", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "The <app>-<stage>-preview name becomes the Helm release name, so 'renders exactly as the generated Application' fails for charts that read .Release.Name (not KubeCoder's)"},
+  {"id": "F5", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "Cross-slice: Argo's client-side apply on Helm-created objects removes nothing, so P4's chart-side Always retirement does not reach the live containers at cutover"}
+ ]}

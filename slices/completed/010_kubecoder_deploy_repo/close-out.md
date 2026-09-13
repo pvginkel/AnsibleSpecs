@@ -1,7 +1,8 @@
 # Close-out — slice 010 kubecoder_deploy_repo
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-13 18:39 → 20:40 · 6 phases · 0 bail-outs · 1 test round · doc phase done · $56.01
+(planner 30 %, research 7 %, rework 7 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold

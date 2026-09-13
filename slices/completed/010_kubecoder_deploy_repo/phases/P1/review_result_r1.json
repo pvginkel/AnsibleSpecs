@@ -1,0 +1,6 @@
+{
+  "outcome": "signoff",
+  "summary": "argocd-hook-credentials carries TF_VAR_github_webhook_secret from the leaf argocd-webhook already syncs live, and the tf-presync ClusterRole no longer grants namespaces. The gate checks both non-vacuously, and no live consumer needs the removed grant.",
+  "details": "code_review_r1.md",
+  "findings": []
+}

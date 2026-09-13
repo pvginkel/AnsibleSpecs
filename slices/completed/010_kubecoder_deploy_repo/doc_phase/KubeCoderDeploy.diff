@@ -1,0 +1,3192 @@
+/work/KubeCoderDeploy — P3: git diff a7796bf49cd5..32520a24d69d
+
+.gitignore                                         |   3 +
+ .kubecoder/project.yaml                            |  26 ++
+ README.md                                          |  13 +
+ chart/Chart.lock                                   |   6 +
+ chart/Chart.yaml                                   |  10 +
+ chart/files/ca/homelab-root.crt                    |  11 +
+ chart/files/samba/00-make-users.sh                 |  19 +
+ chart/files/samba/smb.conf                         |  18 +
+ chart/templates/bot-deployment.yaml                |  66 ++++
+ chart/templates/controller-ca-configmap.yaml       |  11 +
+ chart/templates/controller-clusterrole.yaml        |  18 +
+ chart/templates/controller-clusterrolebinding.yaml |  12 +
+ chart/templates/controller-config.yaml             |  12 +
+ chart/templates/controller-deployment.yaml         | 259 ++++++++++++++
+ chart/templates/controller-role.yaml               |  26 ++
+ chart/templates/controller-rolebinding.yaml        |  11 +
+ chart/templates/controller-service.yaml            |  25 ++
+ chart/templates/controller-serviceaccount.yaml     |   4 +
+ chart/templates/externalsecrets.yaml               |   1 +
+ chart/templates/mcp-deployment.yaml                |  89 +++++
+ chart/templates/mcp-public-service.yaml            |  24 ++
+ chart/templates/mcp-service.yaml                   |  14 +
+ chart/templates/namespace.yaml                     |  12 +
+ chart/templates/samba-configmap.yaml               |  10 +
+ chart/templates/tf-presync-hook.yaml               |   1 +
+ chart/templates/zfs-pvc.yaml                       |  14 +
+ chart/values.yaml                                  | 786 +++++++++++++++++++++++++++++++++++++++++
+ config/dev/values.yaml                             | 146 ++++++++
+ config/prd/values.yaml                             | 183 ++++++++++
+ tests/build-deps.sh                                |  10 +
+ tests/render-chart.py                              | 307 ++++++++++++++++
+ 31 files changed, 2147 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..9d3beaa
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,3 @@
++# The pinned library chart is resolved by `helm dependency build` from chart/Chart.lock, here
++# and on Argo's repo-server alike; the tarball is never committed.
++/chart/charts/
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+new file mode 100644
+index 0000000..974f159
+--- /dev/null
++++ b/.kubecoder/project.yaml
+@@ -0,0 +1,26 @@
++# Curated entry points for KubeCoderDeploy. Helm lives in the `iac` toolchain
++# sidecar, so the verbs carry their `cexec` prefix here and only here.
++
++projects:
++  root:
++    description: >-
++      KubeCoder's deploy repo: its Helm chart on the homelab-shared library
++      dependency and the per-stage configuration Argo CD syncs KubeCoder from.
++      There is no Jenkinsfile and no `jenkins:` key, and that is deliberate
++      rather than missing — a deploy repo publishes no image, and Argo deploys it.
++    # helm lint reads the built dependency, so the deps step comes first. The
++    # hook.* values stand in for the four helm parameters the ApplicationSet
++    # passes; the library `required`-guards each one.
++    lint:
++      - cexec iac tests/build-deps.sh
++      - >-
++        cexec iac helm lint chart --values config/dev/values.yaml
++        --set hook.repo=https://github.com/pvginkel/KubeCoderDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=dev,hook.namespace=kubecoder-dev
++      - >-
++        cexec iac helm lint chart --values config/prd/values.yaml
++        --set hook.repo=https://github.com/pvginkel/KubeCoderDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=kubecoder-prd
++    # The gate is the render: tests/render-chart.py renders both stages as the
++    # ApplicationSet does and asserts against the objects helm produces.
++    test:
++      - cexec iac tests/build-deps.sh
++      - cexec iac tests/render-chart.py
+diff --git a/README.md b/README.md
+index 02a69a7..6d125d4 100644
+--- a/README.md
++++ b/README.md
+@@ -2,3 +2,16 @@
+ 
+ KubeCoder's deploy repo: the Helm chart, the app's Terraform and the per-stage configuration
+ Argo CD syncs KubeCoder from.
++
++## Copied from HelmCharts
++
++`chart/` and `config/{dev,prd}/values.yaml` are copies of HelmCharts' `charts/kubecoder` and
++`configs/prd/kubecoder/{dev,prd}/values.yaml`, and `chart/files/ca/homelab-root.crt` of its
++`homelab-root.crt`, at HelmCharts commit `65ca9dbea91d5e363817210c57004e2107ef9cf5` — the last to
++touch any of them when they were copied. HelmCharts deploys KubeCoder until the cutover, so what
++landed there since is not here yet:
++
++```
++git -C /work/HelmCharts log 65ca9dbea91d5e363817210c57004e2107ef9cf5..origin/main -- \
++  charts/kubecoder configs/prd/kubecoder homelab-root.crt
++```
+diff --git a/chart/Chart.lock b/chart/Chart.lock
+new file mode 100644
+index 0000000..bc55e93
+--- /dev/null
++++ b/chart/Chart.lock
+@@ -0,0 +1,6 @@
++dependencies:
++- name: homelab-shared
++  repository: https://charts.home
++  version: 0.2.0
++digest: sha256:369bd43bc0bc7843a0097146cac6a85f679a595de60e896134b93a160fba1c04
++generated: "2026-09-13T18:59:35.072721541+02:00"
+diff --git a/chart/Chart.yaml b/chart/Chart.yaml
+new file mode 100644
+index 0000000..e3ba18a
+--- /dev/null
++++ b/chart/Chart.yaml
+@@ -0,0 +1,10 @@
++apiVersion: v2
++name: kubecoder
++version: "0.1"
++type: application
++dependencies:
++  # Exact, not a range (D17): the helpers and the hook Job this chart renders move on a
++  # deliberate commit, never on a re-resolve.
++  - name: homelab-shared
++    version: "0.2.0"
++    repository: https://charts.home
+diff --git a/chart/files/ca/homelab-root.crt b/chart/files/ca/homelab-root.crt
+new file mode 100644
+index 0000000..7e974c7
+--- /dev/null
++++ b/chart/files/ca/homelab-root.crt
+@@ -0,0 +1,11 @@
++-----BEGIN CERTIFICATE-----
++MIIBqDCCAU6gAwIBAgIRAP2icmeUuen7hls+UdWGx/swCgYIKoZIzj0EAwIwMjET
++MBEGA1UEChMKaG9tZWxhYi1jYTEbMBkGA1UEAxMSaG9tZWxhYi1jYSBSb290IENB
++MB4XDTI2MDUxMzE4MzE0MFoXDTM2MDUxMDE4MzE0MFowMjETMBEGA1UEChMKaG9t
++ZWxhYi1jYTEbMBkGA1UEAxMSaG9tZWxhYi1jYSBSb290IENBMFkwEwYHKoZIzj0C
++AQYIKoZIzj0DAQcDQgAExErM2qzc9SgqwKe10dSwhRL13Oi7PZRrwtvvR15rJGO+
++IyNQ5f3z5aYxvbea0CrRfZkgBT4sOH4jzSgcAyJNjKNFMEMwDgYDVR0PAQH/BAQD
++AgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFJkGFQesmRqRMOv1x1k2
++27k3F03qMAoGCCqGSM49BAMCA0gAMEUCIBvOR8kJLvbttEa+IBSfjV7Z5WqPsOb3
++aTMeHoQr7Q1eAiEAmE9cGdPV83hfen/7iZobGFI065H0AWEnODDaVkbnmYs=
++-----END CERTIFICATE-----
+diff --git a/chart/files/samba/00-make-users.sh b/chart/files/samba/00-make-users.sh
+new file mode 100644
+index 0000000..b8f8717
+--- /dev/null
++++ b/chart/files/samba/00-make-users.sh
+@@ -0,0 +1,19 @@
++#!/bin/sh
++
++set -e
++
++add_user() {
++    local username="$1" password="$2" aliases="$3"
++
++    useradd -g smb -s /sbin/nologin -M "$username"
++    cat << EOF | smbpasswd -a -s "$username"
++$password
++$password
++EOF
++
++    if [ "$aliases" != "" ]; then
++        echo "$username = $aliases" >> /etc/samba/smbusers
++    fi
++}
++
++add_user pvginkel "$PASSWORD_pvginkel" "pieter pvginkel@gmail.com"
+diff --git a/chart/files/samba/smb.conf b/chart/files/samba/smb.conf
+new file mode 100644
+index 0000000..95640d7
+--- /dev/null
++++ b/chart/files/samba/smb.conf
+@@ -0,0 +1,18 @@
++[global]
++
++workgroup = WORKGROUP
++server string = kubecoder
++comment = KubeCoder /work
++include = /etc/samba/defaults.conf
++username map = /etc/samba/smbusers
++
++# Serve /work as the env user (uid 1000). The samba image's `smb` account is uid 1000 /
++# gid 1000 (DockerImages samba/Dockerfile: addgroup -g 1000 smb + adduser --uid 1000 smb),
++# matching the env pod's runAsUser/fsGroup, so forcing all file operations to `smb` keeps
++# SMB-written files co-owned with the uid-1000 dev container.
++force user = smb
++force group = smb
++
++[work]
++
++path = /work
+diff --git a/chart/templates/bot-deployment.yaml b/chart/templates/bot-deployment.yaml
+new file mode 100644
+index 0000000..e1bba10
+--- /dev/null
++++ b/chart/templates/bot-deployment.yaml
+@@ -0,0 +1,66 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: kubecoder-bot
++spec:
++  replicas: {{ .Values.bot.replicas }}
++  # Recreate (D141): the outgoing pod is fully terminated before the replacement starts.
++  # Telegram grants a single getUpdates lock per bot token, so an overlapping replacement
++  # would race the outgoing pod for it and both would take Conflict errors.
++  strategy:
++    type: Recreate
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: kubecoder-bot
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: kubecoder-bot
++    spec:
++      # The bot is unpinned (D039) — no placement constraint, no toleration, no RBAC.
++      # No kubelet service-link env injection (D105): the bot talks to the controller over
++      # REST via DNS, never the Docker-link <SVC>_SERVICE_HOST/_PORT vars.
++      enableServiceLinks: false
++      containers:
++        - name: kubecoder-bot
++          image: registry:5000/kubecoder-bot{{ .Values.images.bot }}
++          imagePullPolicy: Always
++          ports:
++            - containerPort: 8080
++          env:
++            # The controller REST API (surface ①) the bot drives; in-namespace Service DNS.
++            - name: KUBECODER_CONTROLLER_URL
++              value: http://kubecoder-controller:8080
++            # The operator manual, served by the controller pod's own `manual` sidecar under
++            # the controller's external origin — hence derived from externalBaseUrl rather than
++            # declared a second time. The bot renders no manual pointer when this is unset.
++            - name: KUBECODER_MANUAL_URL
++              value: {{ printf "%s/help/" (trimSuffix "/" .Values.controllerConfig.externalBaseUrl) | quote }}
++            # Allow-listed Telegram chat ids (R5/Q013); CSV. Empty ⇒ the bot answers nobody.
++            - name: KUBECODER_ALLOWED_CHAT_IDS
++              value: {{ .Values.bot.allowedChatIds | join "," | quote }}
++            # Secret-backed tokens (ESO-materialised; never in code/config — R5/D031).
++            - name: KUBECODER_BOT_TOKEN
++              valueFrom:
++                secretKeyRef:
++                  name: kubecoder-bot-token
++                  key: token
++            # South leg: this client's own surface-① credential, which the controller
++            # resolves to the named client `bot` (ESO leaf kubecoder-client-token-bot).
++            - name: KUBECODER_CLIENT_TOKEN
++              valueFrom:
++                secretKeyRef:
++                  name: kubecoder-client-token-bot
++                  key: token
++          readinessProbe:
++            httpGet:
++              path: /readyz
++              port: 8080
++          livenessProbe:
++            httpGet:
++              path: /healthz
++              port: 8080
++{{- if (index .Values.resources "kubecoder-bot" "kubecoder-bot") }}
++          resources:
++            {{- toYaml (index .Values.resources "kubecoder-bot" "kubecoder-bot") | nindent 12 }}
++{{- end }}
+diff --git a/chart/templates/controller-ca-configmap.yaml b/chart/templates/controller-ca-configmap.yaml
+new file mode 100644
+index 0000000..91f3ac3
+--- /dev/null
++++ b/chart/templates/controller-ca-configmap.yaml
+@@ -0,0 +1,11 @@
++# The homelab root certificate the controller hands `step` as `--root` when it signs an env's
++# SSH host key, mounted read-only into the controller container by controller-deployment.yaml
++# and named to it by KUBECODER_STEP_CA_ROOT. files/ca/homelab-root.crt is a copy of
++# HelmCharts' homelab-root.crt, not a symlink — Argo's repo-server refuses a symlink that leaves
++# the repository — so a root rotation has to update it here too.
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: kubecoder-controller-ca
++data:
++  {{- (.Files.Glob "files/ca/**").AsConfig | nindent 2 }}
+diff --git a/chart/templates/controller-clusterrole.yaml b/chart/templates/controller-clusterrole.yaml
+new file mode 100644
+index 0000000..a7da5b7
+--- /dev/null
++++ b/chart/templates/controller-clusterrole.yaml
+@@ -0,0 +1,18 @@
++# Cluster-scoped node reads — the admission gate / GET /capacity need the dev node's allocatable
++# memory (D051) and its ACTUAL memory usage from metrics-server (slice 086). Name is env-suffixed
++# for cluster uniqueness across stages.
++apiVersion: rbac.authorization.k8s.io/v1
++kind: ClusterRole
++metadata:
++  name: kubecoder-{{ .Values.global.environment }}-nodes
++rules:
++  - apiGroups: [""]
++    resources: ["nodes"]
++    verbs: ["get", "list"]
++  # NodeMetrics is a cluster-scoped resource, hence this Role rather than the namespaced one that
++  # carries the matching PodMetrics grant. GET /capacity reports the node's real usage next to the
++  # committed limits; the read is non-fatal (this APIService flaps), so a missing grant degrades
++  # the view to committed-only instead of breaking it.
++  - apiGroups: ["metrics.k8s.io"]
++    resources: ["nodes"]
++    verbs: ["get", "list"]
+diff --git a/chart/templates/controller-clusterrolebinding.yaml b/chart/templates/controller-clusterrolebinding.yaml
+new file mode 100644
+index 0000000..2e5a773
+--- /dev/null
++++ b/chart/templates/controller-clusterrolebinding.yaml
+@@ -0,0 +1,12 @@
++apiVersion: rbac.authorization.k8s.io/v1
++kind: ClusterRoleBinding
++metadata:
++  name: kubecoder-{{ .Values.global.environment }}-nodes
++subjects:
++  - kind: ServiceAccount
++    name: kubecoder-controller
++    namespace: kubecoder-{{ .Values.global.environment }}
++roleRef:
++  kind: ClusterRole
++  name: kubecoder-{{ .Values.global.environment }}-nodes
++  apiGroup: rbac.authorization.k8s.io
+diff --git a/chart/templates/controller-config.yaml b/chart/templates/controller-config.yaml
+new file mode 100644
+index 0000000..1cb5806
+--- /dev/null
++++ b/chart/templates/controller-config.yaml
+@@ -0,0 +1,12 @@
++# The controller-owned config (D058): profiles, the service catalog, the secret catalog,
++# the namespace whitelist, env-pod placement, storage roots, and images. Authored as the
++# `controllerConfig` values block and mounted read-only at /etc/kubecoder/controller.yaml.
++# The controller refuses to start if any profile/service container omits a memory limit
++# (acceptance #3), so a bad edit here fails the rollout loudly.
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: kubecoder-controller-config
++data:
++  controller.yaml: |
++{{ .Values.controllerConfig | toYaml | indent 4 }}
+diff --git a/chart/templates/controller-deployment.yaml b/chart/templates/controller-deployment.yaml
+new file mode 100644
+index 0000000..59d7485
+--- /dev/null
++++ b/chart/templates/controller-deployment.yaml
+@@ -0,0 +1,259 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: kubecoder-controller
++spec:
++  replicas: {{ .Values.controller.replicas }}
++  # Recreate (D141): the outgoing pod is fully terminated before the replacement starts, so
++  # two controllers never reconcile the cluster at once. The RWO ZFS share PVC mounted below
++  # pins this pod to one node anyway, so a surge replica would buy no availability.
++  strategy:
++    type: Recreate
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: kubecoder-controller
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: kubecoder-controller
++      annotations:
++        # The controller's deployment identity: the controller container reads this exact
++        # annotation key back as KUBECODER_DEPLOYMENT_ID (fieldRef below), so the two sites must
++        # name the same key. The value is the controllerConfig checksum — identical across
++        # renders of one commit, and never empty, since a blank id makes the controller roll
++        # every env on every start.
++        {{- $configChecksum := .Values.controllerConfig | toYaml | sha256sum }}
++        deployment: {{ $configChecksum | quote }}
++        checksum/config: {{ $configChecksum }}
++    spec:
++      serviceAccountName: kubecoder-controller
++      # No kubelet service-link env injection (D105): nothing in KubeCoder reads the
++      # Docker-link <SVC>_SERVICE_HOST/_PORT vars (the parts talk over REST via DNS).
++      enableServiceLinks: false
++      # The ZFS share PVC mounted below pins this pod to srvk8s4, which is taint-dedicated
++      # (D044), so it tolerates that one taint and no other (D050). A blanket `operator: Exists`
++      # would also tolerate node.kubernetes.io/unschedulable: the replacement pod would schedule
++      # straight back onto a node a drain has just cordoned and run its startup passes mid-drain,
++      # while the env pods around it are still being evicted — the one state KubeCoder's
++      # drain-recovery pass is written to assume cannot happen (D215).
++      tolerations:
++        - key: homelab.local/performance
++          operator: Equal
++          value: high
++          effect: NoSchedule
++      containers:
++        - name: kubecoder-controller
++          image: registry:5000/kubecoder-controller{{ .Values.images.controller }}
++          imagePullPolicy: Always
++          ports:
++            - containerPort: 8080
++          env:
++            - name: KUBECODER_CONFIG
++              value: /etc/kubecoder/controller.yaml
++            - name: KUBECODER_CATALOG_SECRET
++              value: kubecoder-secret-catalog
++            # The north MCP adapter's in-cluster endpoint and the name of the Secret holding its
++            # static bearer, under key `token` — the same Secret and key mcp-deployment.yaml
++            # reads. Together they are the deployment half of the fleetAdmin capability: either
++            # one absent or blank means this deployment cannot provide it, and an environment
++            # whose config.yaml asks for it starts without fleet reach and carries a warning.
++            # The controller never reads the Secret — it projects a secretKeyRef to it onto the
++            # granted environment's dev container, which resolves because env pods are composed
++            # into this namespace.
++            - name: KUBECODER_MCP_URL
++              value: http://kubecoder-mcp:8080/mcp
++            - name: KUBECODER_MCP_AUTH_SECRET
++              value: kubecoder-mcp-auth-token
++            # The root certificate the controller hands `step` as `--root` when it signs an
++            # env's SSH host key: the file the `ca` volume below mounts, from the
++            # kubecoder-controller-ca ConfigMap. A configured controllerConfig.sshd.stepCa requires
++            # this to name a CA root certificate the controller can read: unset, blank or
++            # unreadable REFUSES controller startup.
++            - name: KUBECODER_STEP_CA_ROOT
++              value: /etc/ssl/homelab/homelab-root.crt
++            # The API-server certificate check, from controller.verifyApiCertificate —
++            # values.yaml documents when a cluster has to opt out.
++            - name: KUBECODER_K8S_VERIFY_SSL
++              value: {{ .Values.controller.verifyApiCertificate | quote }}
++            # The controller's namespace + the node it lands on (pinned by the ZFS PVC):
++            # spec.nodeName is by construction the placement node the admission gate reads
++            # (D050/D058), so the node name is never hardcoded.
++            - name: KUBECODER_NAMESPACE
++              valueFrom:
++                fieldRef:
++                  fieldPath: metadata.namespace
++            - name: KUBECODER_NODE_NAME
++              valueFrom:
++                fieldRef:
++                  fieldPath: spec.nodeName
++            # This pod's own deploy stamp — the `deployment` annotation the pod template above
++            # carries, read back through the Downward API. The controller stamps it onto every
++            # env pod it creates and rolls the envs whose stamp differs, so a deploy never
++            # leaves an env on a stale worker. The coupling is fail-soft by design: a missing
++            # annotation key resolves to the empty string rather than failing admission, and a
++            # blank id makes the controller fall back to a per-process id — rolling every env
++            # on every start (wasteful, loud) instead of silently missing a roll.
++            - name: KUBECODER_DEPLOYMENT_ID
++              valueFrom:
++                fieldRef:
++                  fieldPath: metadata.annotations['deployment']
++            # Secret-backed operational tokens (ESO-materialised; never on ZFS — D031).
++            # One KUBECODER_CLIENT_TOKEN_<NAME> per client credential the stage declares — an
++            # externalSecrets leaf carrying `clientName:`. The var and the leaf render off that
++            # single declaration, so dropping a client's entry from the stage values removes its
++            # ExternalSecret, the Secret it owns and this var together: the redeploy that revokes
++            # a client is also what stops the controller holding its credential. `optional` is
++            # what keeps the other absence graceful: a leaf declared here whose OpenBao path is
++            # not seeded materialises no Secret, and the controller must boot with that var unset
++            # and simply not register the client rather than fail to start.
++{{- range $entry := .Values.externalSecrets.secrets }}
++{{- if $entry.clientName }}
++            - name: KUBECODER_CLIENT_TOKEN_{{ $entry.clientName | upper }}
++              valueFrom:
++                secretKeyRef:
++                  name: {{ $entry.targetName }}
++                  key: {{ (first $entry.data).secretKey }}
++                  optional: true
++{{- end }}
++{{- end }}
++            - name: KUBECODER_GITHUB_TOKEN
++              valueFrom:
++                secretKeyRef:
++                  name: kubecoder-github-token
++                  key: token
++            # step-ca's kubecoder-jwk provisioner password, which the controller writes to a
++            # file under /run/kubecoder for the duration of a `step ssh certificate` call
++            # (--provisioner-password-file). One provisioner serves both stages, so the two
++            # stage-pathed OpenBao leaves hold the same value.
++            - name: KUBECODER_STEP_CA_PROVISIONER_PASSWORD
++              valueFrom:
++                secretKeyRef:
++                  name: kubecoder-step-ca-provisioner-password
++                  key: password
++          # Startup budget: ~2 min (12 x 10s). Boot passes that scale with the number of envs
++          # on the node run before uvicorn binds :8080 — the k8s watch baseline, the
++          # tunnel-reservation reaper and the recovery kick — so on a full fleet the port
++          # stays closed (probes get connection-refused, not a 503) past the ~30s the k8s
++          # probe defaults allow. A startupProbe suspends BOTH probes below until it first
++          # succeeds, so the pod can only ever join the Service later than /readyz alone
++          # would have let it, never earlier.
++          startupProbe:
++            httpGet:
++              path: /healthz
++              port: 8080
++            periodSeconds: 10
++            failureThreshold: 12
++          readinessProbe:
++            httpGet:
++              path: /readyz
++              port: 8080
++          livenessProbe:
++            httpGet:
++              path: /healthz
++              port: 8080
++          volumeMounts:
++            - name: zfs-share
++              mountPath: /zfs
++            - name: config
++              mountPath: /etc/kubecoder
++              readOnly: true
++            - name: ca
++              mountPath: /etc/ssl/homelab
++              readOnly: true
++            - name: run-kubecoder
++              mountPath: /run/kubecoder
++{{- if (index .Values.resources "kubecoder-controller" "kubecoder-controller") }}
++          resources:
++            {{- toYaml (index .Values.resources "kubecoder-controller" "kubecoder-controller") | nindent 12 }}
++{{- end }}
++        # The pod's front door (D159): a pure-routing nginx owning the Service's target port,
++        # fanning /help/ out to the manual sidecar and everything else — the whole REST surface,
++        # /healthz, /readyz, the SSE stream — to the controller on :8080. The Service's targetPort
++        # points HERE, not at the controller; the controller is no longer directly addressable.
++        - name: ingress
++          image: registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
++          imagePullPolicy: Always
++          ports:
++            - containerPort: 8090
++          readinessProbe:
++            httpGet:
++              path: /health
++              port: 8090
++          livenessProbe:
++            httpGet:
++              path: /health
++              port: 8090
++{{- if (index .Values.resources "kubecoder-controller" "ingress") }}
++          resources:
++            {{- toYaml (index .Values.resources "kubecoder-controller" "ingress") | nindent 12 }}
++{{- end }}
++        # The operator manual (D158): nginx over the MkDocs build, served under /help/.
++        # LIVENESS ONLY — DELIBERATELY NO READINESS PROBE. A pod is an eligible Service endpoint
++        # only when EVERY container is ready, so a readiness probe here would let an unready manual
++        # drop the whole controller pod out of the Service: a broken docs sidecar would become a
++        # control-plane outage. Liveness still restarts it if it wedges.
++        - name: manual
++          image: registry:5000/kubecoder-manual{{ .Values.images.manual }}
++          imagePullPolicy: Always
++          ports:
++            - containerPort: 8081
++          env:
++            # This instance's own origin. The site is built once with a sentinel origin baked into
++            # its absolute-URL surfaces and one image serves every stage (D178), so the image's
++            # /docker-entrypoint.d script rewrites them to this value before nginx starts. Passed
++            # verbatim — no `/help/` suffix and trailing slashes are the script's to strip — and
++            # under a name of its own: the bot's KUBECODER_MANUAL_URL is a different value.
++            - name: KUBECODER_EXTERNAL_BASE_URL
++              value: {{ .Values.controllerConfig.externalBaseUrl | quote }}
++          livenessProbe:
++            httpGet:
++              path: /health
++              port: 8081
++{{- if (index .Values.resources "kubecoder-controller" "manual") }}
++          resources:
++            {{- toYaml (index .Values.resources "kubecoder-controller" "manual") | nindent 12 }}
++{{- end }}
++        # The dev-tunnel reclaim actuator (slice 105): a loopback-only Flask sidecar the controller's
++        # reaper POSTs an env's code_tunnel.json to, which runs `code tunnel unregister` to release
++        # that tunnel reservation. It binds 127.0.0.1:8092 only — no Service, no ingress route, reached
++        # solely over pod loopback. DELIBERATELY NO READINESS PROBE: a pod is an eligible Service
++        # endpoint only when every container is ready, so gating readiness on this private actuator
++        # would let a wedged reclaimer drop the whole controller pod out of the Service (the same
++        # shared-fate reasoning as `manual`). No httpGet liveness either — the listener is
++        # loopback-bound, so the kubelet's pod-IP probe cannot reach it. Its ONLY mount is the shared
++        # account token.json, read-only via subPath: no write access to /zfs and no per-env mounts
++        # (every env's code_tunnel.json arrives in the POST body). The mountPath is the image's default
++        # SHARED_TOKEN_PATH.
++        - name: tunnel-reclaim
++          image: registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }}
++          imagePullPolicy: Always
++          ports:
++            - containerPort: 8092
++          volumeMounts:
++            - name: zfs-share
++              mountPath: /vscode-cli-shared/token.json
++              subPath: system/home/.vscode-cli-shared/token.json
++              readOnly: true
++{{- if (index .Values.resources "kubecoder-controller" "tunnel-reclaim") }}
++          resources:
++            {{- toYaml (index .Values.resources "kubecoder-controller" "tunnel-reclaim") | nindent 12 }}
++{{- end }}
++      volumes:
++        - name: zfs-share
++          persistentVolumeClaim:
++            claimName: kubecoder-{{ .Values.global.environment }}-zfs-pvc
++        - name: config
++          configMap:
++            name: kubecoder-controller-config
++        - name: ca
++          configMap:
++            name: kubecoder-controller-ca
++        # Scratch for secret material the controller hands to `step` as a file — the
++        # provisioner password above, plus whatever `step` writes beside it. Memory-backed so
++        # it never reaches disk, and mounted at the same /run/kubecoder path the worker uses
++        # inside an env pod. A Memory emptyDir is charged against the pod's memory, hence the
++        # explicit cap.
++        - name: run-kubecoder
++          emptyDir:
++            medium: Memory
++            sizeLimit: 10Mi
+diff --git a/chart/templates/controller-role.yaml b/chart/templates/controller-role.yaml
+new file mode 100644
+index 0000000..424b8ec
+--- /dev/null
++++ b/chart/templates/controller-role.yaml
+@@ -0,0 +1,26 @@
++# Namespaced Role for the controller. The controller creates/reconciles all per-env objects
++# imperatively. Nothing in the product asks Kubernetes for exec — the controller drives env pods
++# via the worker API + its direct ZFS share mount, and in-pod `cexec` reaches a sibling tool
++# container over a Unix socket — so this Role grants no RBAC-authoring verbs and no `pods/exec`.
++apiVersion: rbac.authorization.k8s.io/v1
++kind: Role
++metadata:
++  name: kubecoder-controller
++rules:
++  # Pods are reconciled via create/delete and watched as the source of truth (D002); the
++  # controller never updates a pod in place, so no `update` verb here.
++  - apiGroups: [""]
++    resources: ["pods"]
++    verbs: ["create", "get", "list", "watch", "delete"]
++  # services/secrets/configmaps SURVIVE a stop (only the pod is deleted); `start` re-runs
++  # bring-up, which create-or-REPLACEs each one (HTTP PUT = the `update` verb). Without
++  # `update`, start is denied the moment RBAC is enforced (the "breaks itself on flip" bug).
++  - apiGroups: [""]
++    resources: ["services", "secrets", "configmaps"]
++    verbs: ["create", "get", "list", "watch", "update", "delete"]
++  # Per-env memory USAGE from metrics-server (slice 086): the capacity view shows each running
++  # env's actual usage beside its limits. PodMetrics is namespaced, like the env pods themselves;
++  # the node-wide counterpart lives in the cluster-scoped nodes Role.
++  - apiGroups: ["metrics.k8s.io"]
++    resources: ["pods"]
++    verbs: ["get", "list"]
+diff --git a/chart/templates/controller-rolebinding.yaml b/chart/templates/controller-rolebinding.yaml
+new file mode 100644
+index 0000000..53a7a16
+--- /dev/null
++++ b/chart/templates/controller-rolebinding.yaml
+@@ -0,0 +1,11 @@
++apiVersion: rbac.authorization.k8s.io/v1
++kind: RoleBinding
++metadata:
++  name: kubecoder-controller
++subjects:
++  - kind: ServiceAccount
++    name: kubecoder-controller
++roleRef:
++  kind: Role
++  name: kubecoder-controller
++  apiGroup: rbac.authorization.k8s.io
+diff --git a/chart/templates/controller-service.yaml b/chart/templates/controller-service.yaml
+new file mode 100644
+index 0000000..1b1e6d8
+--- /dev/null
++++ b/chart/templates/controller-service.yaml
+@@ -0,0 +1,25 @@
++apiVersion: v1
++kind: Service
++metadata:
++  name: kubecoder-controller
++  annotations:
++{{ if .Values.service.controller.dnsName }}
++    dns.webathome.org/hostname: {{ .Values.service.controller.dnsName }}
++{{ end }}
++{{ if .Values.service.controller.serverName }}
++    nginx.webathome.org/server-name: {{ .Values.service.controller.serverName }}
++    nginx.webathome.org/is-public: {{ .Values.service.controller.isPublic | quote }}
++    nginx.webathome.org/enable-ssl: "yes"
++    nginx.webathome.org/target-port: "8080"
++{{ end }}
++spec:
++  type: {{ .Values.service.controller.type }}
++  selector:
++    app.kubernetes.io/name: kubecoder-controller
++  ports:
++    # The Service port stays 8080 (and so does the nginx.webathome.org/target-port annotation
++    # above — that names the SERVICE port, not the container's). Only the target moves: traffic
++    # now lands on the ingress sidecar (:8090), which routes /help/ to the manual and everything
++    # else to the controller. One door into the pod (D159).
++    - port: 8080
++      targetPort: 8090
+diff --git a/chart/templates/controller-serviceaccount.yaml b/chart/templates/controller-serviceaccount.yaml
+new file mode 100644
+index 0000000..aecf560
+--- /dev/null
++++ b/chart/templates/controller-serviceaccount.yaml
+@@ -0,0 +1,4 @@
++apiVersion: v1
++kind: ServiceAccount
++metadata:
++  name: kubecoder-controller
+diff --git a/chart/templates/externalsecrets.yaml b/chart/templates/externalsecrets.yaml
+new file mode 100644
+index 0000000..293b533
+--- /dev/null
++++ b/chart/templates/externalsecrets.yaml
+@@ -0,0 +1 @@
++{{- include "homelab-shared.externalsecrets" . -}}
+diff --git a/chart/templates/mcp-deployment.yaml b/chart/templates/mcp-deployment.yaml
+new file mode 100644
+index 0000000..57828f3
+--- /dev/null
++++ b/chart/templates/mcp-deployment.yaml
+@@ -0,0 +1,89 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: kubecoder-mcp
++spec:
++  replicas: {{ .Values.mcp.replicas }}
++  selector:
++    matchLabels:
++      app.kubernetes.io/name: kubecoder-mcp
++  template:
++    metadata:
++      labels:
++        app.kubernetes.io/name: kubecoder-mcp
++    spec:
++      # The MCP adapter is the bot's structural twin (D151): a second north client of the
++      # controller REST boundary (surface ①). Like the bot it is unpinned (D039) — no taint
++      # toleration, no ZFS pin, no RBAC — and reaches the controller over in-namespace Service
++      # DNS, never the Docker-link <SVC>_SERVICE_HOST/_PORT vars (D105).
++      enableServiceLinks: false
++      containers:
++        - name: kubecoder-mcp
++          image: registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
++          imagePullPolicy: Always
++          # The Streamable-HTTP MCP surface (path /mcp). Unlike the bot (outbound-only), the
++          # adapter serves inbound, so it carries a Service (mcp-service.yaml, plus the
++          # internet-reachable mcp-public-service.yaml where a stage configures one).
++          ports:
++            - containerPort: 8080
++          env:
++            # The controller REST API (surface ①) the adapter drives; in-namespace Service DNS.
++            - name: KUBECODER_CONTROLLER_URL
++              value: http://kubecoder-controller:8080
++            # South leg: this client's own surface-① credential, which the controller resolves
++            # to the named client `mcp` (ESO leaf kubecoder-client-token-mcp). Unrestricted like
++            # every named client, but revocable on its own. main fails fast if unset (D031).
++            - name: KUBECODER_CLIENT_TOKEN
++              valueFrom:
++                secretKeyRef:
++                  name: kubecoder-client-token-mcp
++                  key: token
++            # North leg (D151), first principal: the static inbound bearer. It is the permanent
++            # path for the in-cluster consumer, which cannot drive an interactive OAuth flow.
++            # Its own ESO leaf kubecoder-mcp-auth-token; the OpenBao KV path
++            # eso/prd/kubecoder/prd/mcp-auth-token is seeded out-of-band by the operator.
++            - name: KUBECODER_MCP_AUTH_TOKEN
++              valueFrom:
++                secretKeyRef:
++                  name: kubecoder-mcp-auth-token
++                  key: token
++{{- if or .Values.mcp.oidc.issuerUrl .Values.mcp.oidc.jwksUrl .Values.mcp.oidc.audience .Values.mcp.oidc.publicUrl .Values.mcp.oidc.scope }}
++            # North leg, second principal: IdP-issued JWTs, validated natively by the adapter as
++            # an OAuth 2.1 resource server. These five are all-or-nothing and the adapter refuses
++            # to start on a partial set, or on any of them present-but-empty — so a stage with no
++            # authorization server leaves mcp.oidc unset entirely and renders none of them.
++            - name: KUBECODER_MCP_OIDC_ISSUER_URL
++              value: {{ .Values.mcp.oidc.issuerUrl | quote }}
++            - name: KUBECODER_MCP_OIDC_JWKS_URL
++              value: {{ .Values.mcp.oidc.jwksUrl | quote }}
++            # A resource identifier, never a client id: an ID token's `aud` IS the client id, so
++            # a client id here would admit ID tokens as access tokens.
++            - name: KUBECODER_MCP_OIDC_AUDIENCE
++              value: {{ .Values.mcp.oidc.audience | quote }}
++            # The with-path URL a client dials; the RFC 9728 metadata the adapter advertises and
++            # the metadata hint in its 401 are both built from it.
++            - name: KUBECODER_MCP_PUBLIC_URL
++              value: {{ .Values.mcp.oidc.publicUrl | quote }}
++            # The one scope advertised as scopes_supported and required on every JWT; the static
++            # bearer carries it by construction. It must exist on the authorization server and be
++            # assigned to the connector's client.
++            - name: KUBECODER_MCP_OIDC_SCOPE
++              value: {{ .Values.mcp.oidc.scope | quote }}
++            # Admitted token `sub` values, CSV (the bot's KUBECODER_ALLOWED_CHAT_IDS pattern,
++            # D040). Empty admits no JWT at all. The static bearer above is a different
++            # principal and is not subject to this list.
++            - name: KUBECODER_MCP_ALLOWED_SUBJECTS
++              value: {{ .Values.mcp.oidc.allowedSubjects | join "," | quote }}
++{{- end }}
++          readinessProbe:
++            httpGet:
++              path: /readyz
++              port: 8080
++          livenessProbe:
++            httpGet:
++              path: /healthz
++              port: 8080
++{{- if (index .Values.resources "kubecoder-mcp" "kubecoder-mcp") }}
++          resources:
++            {{- toYaml (index .Values.resources "kubecoder-mcp" "kubecoder-mcp") | nindent 12 }}
++{{- end }}
+diff --git a/chart/templates/mcp-public-service.yaml b/chart/templates/mcp-public-service.yaml
+new file mode 100644
+index 0000000..2faf498
+--- /dev/null
++++ b/chart/templates/mcp-public-service.yaml
+@@ -0,0 +1,24 @@
++{{- if .Values.service.mcpPublic.serverName }}
++# Second Service onto the same pod: nginx.webathome.org/is-public is one flag per Service, so
++# an internet-reachable hostname cannot share the intranet-only kubecoder-mcp Service, which
++# has to stay unannotated for the in-cluster consumer (mcp-service.yaml).
++apiVersion: v1
++kind: Service
++metadata:
++  name: kubecoder-mcp-public
++  annotations:
++{{ if .Values.service.mcpPublic.dnsName }}
++    dns.webathome.org/hostname: {{ .Values.service.mcpPublic.dnsName }}
++{{ end }}
++    nginx.webathome.org/server-name: {{ .Values.service.mcpPublic.serverName }}
++    nginx.webathome.org/is-public: {{ .Values.service.mcpPublic.isPublic | quote }}
++spec:
++  type: {{ .Values.service.mcpPublic.type }}
++  selector:
++    app.kubernetes.io/name: kubecoder-mcp
++  ports:
++    - name: tcp
++      protocol: TCP
++      port: 80
++      targetPort: 8080
++{{- end }}
+diff --git a/chart/templates/mcp-service.yaml b/chart/templates/mcp-service.yaml
+new file mode 100644
+index 0000000..e3e1431
+--- /dev/null
++++ b/chart/templates/mcp-service.yaml
+@@ -0,0 +1,14 @@
++apiVersion: v1
++kind: Service
++metadata:
++  name: kubecoder-mcp
++spec:
++  # The in-cluster consumer's path. This Service stays unannotated whatever a stage
++  # configures: internet exposure rides the separate mcp-public-service.yaml, because
++  # nginx.webathome.org/is-public is one flag per Service.
++  type: {{ .Values.service.mcp.type }}
++  selector:
++    app.kubernetes.io/name: kubecoder-mcp
++  ports:
++    - port: 8080
++      targetPort: 8080
+diff --git a/chart/templates/namespace.yaml b/chart/templates/namespace.yaml
+new file mode 100644
+index 0000000..fa18637
+--- /dev/null
++++ b/chart/templates/namespace.yaml
+@@ -0,0 +1,12 @@
++{{/*
++The stage namespace is a tracked chart manifest (D25), applied at wave -1 so it exists before the
++PreSync hook runs. `Prune=false` blocks only the sync-time prune path (D26) — the
++Application-delete cascade still removes it.
++*/}}
++apiVersion: v1
++kind: Namespace
++metadata:
++  name: {{ .Release.Namespace }}
++  annotations:
++    argocd.argoproj.io/sync-wave: "-1"
++    argocd.argoproj.io/sync-options: Prune=false
+diff --git a/chart/templates/samba-configmap.yaml b/chart/templates/samba-configmap.yaml
+new file mode 100644
+index 0000000..617f8e2
+--- /dev/null
++++ b/chart/templates/samba-configmap.yaml
+@@ -0,0 +1,10 @@
++# Samba /work sidecar config (D139, slice 069) — consumed by the controller-composed samba
++# sidecar, which subPath-mounts smb.conf -> /etc/samba/smb.conf and the make-users init script
++# -> /docker-entrypoint-init.d/00-make-users.sh. Referenced by name from
++# controllerConfig.samba.configMap. A single /work share; see docs (samba /work share, D139).
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: kubecoder-samba-config
++data:
++  {{- (.Files.Glob "files/samba/*").AsConfig | nindent 2 }}
+diff --git a/chart/templates/tf-presync-hook.yaml b/chart/templates/tf-presync-hook.yaml
+new file mode 100644
+index 0000000..ffa5a15
+--- /dev/null
++++ b/chart/templates/tf-presync-hook.yaml
+@@ -0,0 +1 @@
++{{- include "homelab-shared.tf-presync-hook" . -}}
+diff --git a/chart/templates/zfs-pvc.yaml b/chart/templates/zfs-pvc.yaml
+new file mode 100644
+index 0000000..3c27e85
+--- /dev/null
++++ b/chart/templates/zfs-pvc.yaml
+@@ -0,0 +1,14 @@
++# Claims the TF-owned ZFS local PV (static-zfs-pv in infrastructure.tf). The PV carries
++# node-affinity to the pool's node, so mounting this PVC is what pins the controller.
++apiVersion: v1
++kind: PersistentVolumeClaim
++metadata:
++  name: kubecoder-{{ .Values.global.environment }}-zfs-pvc
++spec:
++  accessModes:
++    - ReadWriteOnce
++  resources:
++    requests:
++      storage: {{ .Values.storage.zfs.size }}
++  storageClassName: ""
++  volumeName: kubecoder-{{ .Values.global.environment }}-zfs-pv
+diff --git a/chart/values.yaml b/chart/values.yaml
+new file mode 100644
+index 0000000..4975072
+--- /dev/null
++++ b/chart/values.yaml
+@@ -0,0 +1,786 @@
++# KubeCoder control-plane chart. Deploys the three long-lived services (controller + bot +
++# the north-facing MCP adapter) and the shared substrate (RBAC, the ZFS share PV that anchors
++# placement, ESO secrets).
++# It does NOT template per-env objects — the controller creates those at runtime (D022).
++# See KubeCoderSpecs/slices/helm-chart.md.
++
++images:
++  controller: :latest # registry:5000/kubecoder-controller{{ .Values.images.controller }}
++  bot: :latest # registry:5000/kubecoder-bot{{ .Values.images.bot }}
++  mcp: :latest # registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
++  # The controller pod's two sidecars (slice 084): the pure-routing nginx front door and the
++  # operator manual it serves at /help/. Both ride IN the controller's pod, so both images must
++  # already be in the registry before this chart rolls — a missing image takes the controller down.
++  ingress: :latest # registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
++  manual: :latest # registry:5000/kubecoder-manual{{ .Values.images.manual }}
++  # The controller pod's dev-tunnel reclaim actuator (slice 105): a loopback-only sidecar that runs
++  # `code tunnel unregister`. Like the two sidecars above it rides IN the controller's pod, so its
++  # image must be in the registry before this chart rolls — a missing image takes the controller down.
++  tunnelReclaim: :latest # registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }}
++
++controller:
++  replicas: 1
++  # Whether the controller verifies the Kubernetes API server's certificate
++  # (KUBECODER_K8S_VERIFY_SSL). A cluster whose API-server CA certificate the controller's
++  # X.509 verification rejects — microk8s', which carries no keyUsage extension — must set
++  # this false; the API server is reached over the trusted pod network and the ServiceAccount
++  # token authenticates the client either way.
++  verifyApiCertificate: true
++
++bot:
++  replicas: 1
++  # Authorised Telegram chat ids (R5/Q013) → KUBECODER_ALLOWED_CHAT_IDS (CSV). DM-only;
++  # the bot ignores everyone else. Empty here ⇒ the bot answers nobody until set per-stage
++  # (config/<stage>/values.yaml) once the operator provides the id.
++  allowedChatIds: []
++
++# The north-facing MCP adapter (D151) — the bot's twin, a second client of surface ①.
++mcp:
++  replicas: 1
++  # The north leg's optional OAuth 2.1 resource-server configuration: with it, the adapter also
++  # admits IdP-issued JWTs, for clients that cannot be handed a bearer token. Which authorization
++  # server sits behind these URLs is deployment configuration the adapter knows nothing about.
++  # issuerUrl / jwksUrl / audience / publicUrl / scope are all-or-nothing: set together they turn
++  # OIDC on, and the adapter refuses to start on a partial set or on any of them
++  # present-but-empty.
++  # Leave the whole block unset on a stage without an authorization server — the adapter then
++  # keeps its static-bearer gate and the Deployment renders none of these variables.
++  oidc:
++    issuerUrl:
++    jwksUrl:
++    # A resource identifier, never a client id, and conventionally the same value as publicUrl.
++    # It must be bound IdP-side on every token issued for the client.
++    audience:
++    # The with-path URL a client dials (https://<public host>/mcp).
++    publicUrl:
++    # One scope, required alongside the four above: advertised in the adapter's protected-resource
++    # metadata and required on every JWT. It must exist on the authorization server and be
++    # assigned to the connector's client — a hosted connector requests the scopes the resource
++    # advertises and its own beside them, offline_access among those.
++    scope:
++    # Admitted token `sub` values (the bot's allowedChatIds pattern, D040). Empty admits no JWT
++    # at all, so an OIDC-enabled stage refuses every one until this is set per-stage.
++    allowedSubjects: []
++
++# Controller-owned config (D058), rendered verbatim into the kubecoder-controller-config
++# ConfigMap and mounted at /etc/kubecoder/controller.yaml. The secret-backed operational
++# bits (API/GitHub tokens) arrive as env vars, not here.
++#
++# EVERY `container:` dict below states `imagePullPolicy: Always` — an INTERIM override of D145's
++# version-pinning direction (D145, amended by slice 100), removed when that pinning lands. These
++# images float on mutable tags, so a node that already holds the layer otherwise keeps serving a
++# stale rebuild. It is stated even where the tag would already yield Always under the kubelet
++# default: these lines are the sunset's checklist, so the redundant-looking ones are load-bearing
++# and must not be cleaned up. The three containers the controller builds from scratch (home-seed
++# init, samba sidecar, image builder) carry the same policy in controller code
++# (podcomposer.CONFIG_IMAGE_PULL_POLICY); the two `images.*` ImageVolumes are a deliberate
++# carve-out, as are author-supplied inline manifest tool images.
++controllerConfig:
++  # The controller's external https origin (nginx-fronted at kubecoder.home, D089). The
++  # surfaced tunnel `url` is an https link under this origin
++  # (https://kubecoder.home/environments/<id>/tunnel/open) that 307-redirects to the worker's
++  # vscode:// deep link, so it is tappable in Telegram. REQUIRED with no default in the
++  # controller config (extra=forbid) — this value and the controller image that needs it must
++  # deploy together (coupled config+chart, D085-style).
++  externalBaseUrl: https://kubecoder.home
++  # The operator's real Headlamp container-logs deep link, carrying a literal {env_id} token the
++  # controller substitutes when `GET /logs/{envId}` 307-redirects to it (D171). This is the ONE
++  # place the Headlamp URL is declared: the bot no longer holds a template of its own — the
++  # controller mints the short link (<externalBaseUrl>/logs/<envId>) onto Environment.logs_url and
++  # the bot renders it verbatim, exactly as it does the tunnel link. OPTIONAL (the controller
++  # config is extra=forbid, so this defaults rather than being required); unset ⇒ logs_url is null,
++  # the route 404s and no link is rendered. Set per-stage — the URL embeds the release namespace
++  # (env pods run in the controller's namespace).
++  headlampLogsUrl:
++  # The controller's IN-CLUSTER base URL — the Service DNS an env pod dials to reach surface ①
++  # for its in-pod self-actions (e.g. `kc env restart`, slice 039 / D101-D102). REQUIRED with no
++  # default in the controller config (extra=forbid), mirroring externalBaseUrl, so this value and
++  # the controller image that needs it must deploy together (coupled config+chart). Short
++  # same-namespace Service form.
++  internalBaseUrl: http://kubecoder-controller:8080
++  # Cap on the concurrent dev-tunnel reservations KubeCoder allocates against the shared account
++  # (slice 105). Bounds only KUBECODER's own reservations — the operator may spend the account's
++  # remaining slots elsewhere — and is never a claim about the account's true total. OPTIONAL: the
++  # controller defaults it to 10 (ControllerConfig.max_tunnels), so this is the operator's explicit
++  # knob, not a required key.
++  max_tunnels: 10
++  defaultProfile: claude-dev
++  profiles:
++    claude-dev:
++      # The dev (main) container as a k8s container spec (D030). The controller fills in
++      # volumeMounts/env when it composes the env pod (Phase 3b); resources.limits.memory
++      # is the admission-gate source of truth and is mandatory.
++      mainContainer:
++        name: dev
++        image: registry:5000/kube-coder-dev:latest
++        imagePullPolicy: Always
++        resources:
++          limits:
++            memory: 8Gi
++      # Setup-wide plain, non-secret env vars projected onto every env pod's dev container
++      # (D167). A sibling of `mainContainer`, NOT a key inside it — the composer assigns the
++      # dev container's `env` wholesale, so anything authored under `mainContainer.env` is
++      # silently discarded. A project overrides any name here in its own `.kubecoder/config.yaml`
++      # `env:` (the manifest wins); names only one level declares are unioned in.
++      # Secret material does NOT belong here — it keeps its `manifest.secrets` → ESO path (D031).
++      # Names the platform owns (the `KUBECODER_*` prefix, plus HOME/TZ/PATH/GH_TOKEN
++      # and the VSCODE_CLI_* trio), a repeat, or a non-POSIX name REFUSE controller startup —
++      # a typo here crash-loops the controller rather than degrading quietly.
++      # cexec caveat before adding one: a name starting `KUBERNETES_` or containing `_PORT` /
++      # `_SERVICE_` reaches the dev container but is dropped from every cexec'd tool, silently
++      # (hence KEYCLOAK_URL, not KEYCLOAK_PORT).
++      # This key and the controller image that understands it must deploy together (coupled
++      # config+chart, D085-style): a controller without D167's schema sees an unknown key and
++      # refuses to start.
++      env:
++        - { name: KEYCLOAK_URL, value: http://keycloak-dev }
++        - { name: KEYCLOAK_REALM, value: homelab-dev }
++        - { name: GIT_USER_NAME, value: "Pieter van Ginkel" }
++        - { name: GIT_USER_EMAIL, value: pvginkel@gmail.com }
++  # Service catalog (native sidecars, D029). The four data services are dev-tuned definitions
++  # DERIVED from DesignAssistant's CI services (Jenkinsfile / tools/suite_runner/remote.py),
++  # deliberately NOT copied: small footprints sized for several envs sharing one node
++  # (Q004/Q006). Each container MUST set resources.limits.memory (the startup guard).
++  # `dataPath` hostPath-mounts the env's `sidecars/<catalog key>` directory so the service's data
++  # survives a pod restart/stop-start. `secrets:` maps ENV_VAR -> catalog key; the controller
++  # projects each as a secretKeyRef into the sidecar against its configured catalog Secret (D031),
++  # and a key the live catalog lacks drops the whole service with a warning rather than failing the
++  # env. That field and the controller image that understands it must deploy together (coupled
++  # config+chart, D085-style): a controller without it sees an unknown key and refuses to start.
++  services:
++    postgres:
++      # Plain latest PostgreSQL (Q004: DA's pgvector is no longer used). Dev-tuned: small
++      # shared_buffers + few connections — a throwaway per-project DB, not a prod cluster.
++      description: >-
++        PostgreSQL 18 relational database, dev-tuned (small buffers, 50 connections); data
++        persists across restarts.
++      instructions: >-
++        PostgreSQL 18, running as a sidecar in this environment's pod and reachable at
++        localhost:5432. Connect as user `postgres` with password `postgres`; the default database
++        is also `postgres`. Only the password is configured anywhere — on the sidecar's own
++        environment; the user and database are the image's defaults, set nowhere. None of it
++        reaches the dev container: Kubernetes service-link variables are disabled and there is no
++        connection secret. If the repo configures its own connection string, prefer that over
++        hardcoding these values. The data directory persists per environment and survives a pod
++        restart. It is a small dev-tuned instance (128MB shared_buffers, 50 connections), not a
++        production cluster.
++      container:
++        image: postgres:18
++        imagePullPolicy: Always
++        args:
++          [
++            -c,
++            shared_buffers=128MB,
++            -c,
++            max_connections=50,
++            -c,
++            effective_cache_size=256MB,
++            -c,
++            work_mem=8MB,
++          ]
++        env:
++          - { name: POSTGRES_PASSWORD, value: postgres }
++          - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
++        # Root so the official entrypoint can initdb + own PGDATA on the hostPath subfolder
++        # (the pod's runAsUser=1000 has no passwd entry the postgres tooling can resolve).
++        securityContext: { runAsUser: 0, runAsGroup: 0 }
++        # No memory request — the pod composer books it at 0 (D124) so capacity is governed
++        # solely by the env count cap; the limit still caps usage.
++        resources:
++          limits: { memory: 512Mi }
++      dataPath: /var/lib/postgresql/data
++      ports:
++        - { port: 5432, type: tcp }
++    opensearch:
++      # Single-node, security off (dev). Heap is the knob that matters most for fitting
++      # several envs on one node — kept lean (CI uses 192m; a usable dev node gets a little
++      # more) and single-processor. Runs as its native uid 1000 (data dir chowned to it).
++      description: >-
++        OpenSearch 2 search and analytics engine — single-node, security disabled, lean heap.
++      instructions: >-
++        OpenSearch 2, running as a sidecar in this environment's pod and reachable at
++        http://localhost:9200. The security plugin is disabled, so it is plain HTTP with no
++        credentials and no TLS — query it directly. It runs single-node with a 256MB heap and one
++        processor, so treat it as a small dev index rather than something to load-test. Its data
++        directory persists per environment and survives a pod restart.
++      container:
++        image: opensearchproject/opensearch:2
++        imagePullPolicy: Always
++        env:
++          - { name: discovery.type, value: single-node }
++          - { name: plugins.security.disabled, value: "true" }
++          - { name: DISABLE_INSTALL_DEMO_CONFIG, value: "true" }
++          - { name: bootstrap.memory_lock, value: "false" }
++          - {
++              name: OPENSEARCH_JAVA_OPTS,
++              value: "-Xms256m -Xmx256m -XX:MaxDirectMemorySize=64m -Dnode.processors=1",
++            }
++        # No memory request — the pod composer books it at 0 (D124) so capacity is governed
++        # solely by the env count cap; the limit still caps usage.
++        resources:
++          limits: { memory: 768Mi }
++      dataPath: /usr/share/opensearch/data
++      ports:
++        - { port: 9200, type: http }
++    minio:
++      # MinIO S3-compatible object store (DA stores documents here). Tiny dev footprint.
++      description: >-
++        MinIO S3-compatible object store, with the web console on the second port.
++      instructions: >-
++        MinIO, an S3-compatible object store running as a sidecar in this environment's pod. The
++        S3 API is at http://localhost:9000 and the web console at http://localhost:9001; both use
++        access key `minioadmin` and secret key `minioadmin`. No buckets are pre-created — the
++        container only runs the server — so create whatever the repo needs. Its data directory
++        persists per environment and survives a pod restart.
++      container:
++        image: minio/minio
++        imagePullPolicy: Always
++        command: [minio]
++        args: [server, /data, --console-address, ":9001"]
++        env:
++          - { name: MINIO_ROOT_USER, value: minioadmin }
++          - { name: MINIO_ROOT_PASSWORD, value: minioadmin }
++        # No memory request — the pod composer books it at 0 (D124) so capacity is governed
++        # solely by the env count cap; the limit still caps usage.
++        resources:
++          limits: { memory: 256Mi }
++      dataPath: /data
++      ports:
++        - { port: 9000, type: http }
++        - { port: 9001, type: http }
++    rabbitmq:
++      # RabbitMQ broker (DA's async work) with the management UI. Runs as root: the Erlang
++      # runtime wants a resolvable user + HOME and to own /var/lib/rabbitmq on the hostPath.
++      description: >-
++        RabbitMQ 4.3 message broker, with the management UI on the second port.
++      instructions: >-
++        RabbitMQ 4.3 with the management plugin, running as a sidecar in this environment's pod.
++        AMQP is at localhost:5672 and the management UI at http://localhost:15672. No user is
++        configured, so the image's default `guest`/`guest` applies. RabbitMQ accepts `guest` only
++        over a loopback interface, which is exactly the case here: every container in the pod
++        shares one network namespace, so the dev container reaches the broker as localhost. Its
++        data directory persists per environment and survives a pod restart.
++      container:
++        image: rabbitmq:4.3-management
++        imagePullPolicy: Always
++        securityContext: { runAsUser: 0, runAsGroup: 0 }
++        # No memory request — the pod composer books it at 0 (D124) so capacity is governed
++        # solely by the env count cap; the limit still caps usage.
++        resources:
++          limits: { memory: 512Mi }
++      dataPath: /var/lib/rabbitmq
++      ports:
++        - { port: 5672, type: tcp }
++        - { port: 15672, type: http }
++    terraform-backend-git:
++      # The git-backed Terraform state backend that pvginkel/Ansible's `backend "http"` blocks
++      # address at http://localhost:6061 — reachable because every container in the env pod
++      # shares one network namespace, and published nowhere outside it (only a manifest's
++      # `expose:` folds a port into the env's Service). No dataPath: the daemon clones
++      # pvginkel/TerraformState into an in-memory working tree (shallow, one per repository,
++      # cached until the sidecar restarts) and writes nothing to disk. The image declares no
++      # ENTRYPOINT (its CMD is `bash`), so the binary is named as the command.
++      description: >-
++        terraform-backend-git — a Terraform HTTP state backend that stores state in a git
++        repository, SOPS/age encrypted.
++      instructions: >-
++        terraform-backend-git, running as a sidecar in this environment's pod and reachable at
++        http://localhost:6061. It serves Terraform's HTTP state protocol, keeping state in a git
++        repository and encrypting it with SOPS/age. Which repository, which state path and which
++        encryption are all carried by the backend URL, so use the `backend "http"` blocks the
++        repo already declares rather than composing your own. Its GitHub token and age keys are
++        configured on the sidecar itself and are not readable from the dev container. It writes
++        nothing to disk: the state repository is cloned into an in-memory working tree, which is
++        kept for the sidecar's lifetime and shared across requests.
++      container:
++        image: ghcr.io/plumber-cd/terraform-backend-git:v0.1.11
++        imagePullPolicy: Always
++        command: [terraform-backend-git]
++        args: [--access-logs]
++        env:
++          - { name: GIT_USERNAME, value: x-access-token }
++          - { name: TF_BACKEND_HTTP_ENCRYPTION_PROVIDER, value: sops }
++        # Root so go-git can resolve the calling user when it commits a lock file: the image
++        # carries no passwd entry for the pod's runAsUser=1000, and without one every LOCK
++        # fails with a 500 and no `terraform apply` completes.
++        securityContext: { runAsUser: 0, runAsGroup: 0 }
++        # No memory request — the pod composer books it at 0 (D124) so capacity is governed
++        # solely by the env count cap; the limit still caps usage.
++        resources:
++          limits: { memory: 256Mi }
++      # GITHUB_TOKEN reuses the shared github-rw catalog key: a catalog service is
++      # operator-curated, so these are projected regardless of the environment's declared
++      # `capabilities.github` level. The two age keys live in the same catalog leaf, seeded
++      # there by the operator.
++      secrets:
++        GITHUB_TOKEN: github-rw
++        SOPS_AGE_KEY: tf-backend-age-secret-key
++        TF_BACKEND_HTTP_SOPS_AGE_RECIPIENTS: tf-backend-age-public-key
++      ports:
++        - { port: 6061, type: http }
++  # Toolchain catalog (D115, slice 054) — operator-curated reusable dev/tool sidecars, selected
++  # from a repo manifest's `tools` list by `{use: <name>}` exactly as `services` are. Each is a
++  # raw container spec (parallel to a service), MINUS the service-data field (no dataPath —
++  # toolchains carry no service data). Most images are built on the shared kube-coder-dev-base;
++  # `esp-idf` and `arm64-cross` are thin layers on the upstream image the repos they serve already
++  # build with in CI (slice 214), which is why those two are the only entries reaching for
++  # `activationWrapper` or `skipParityChecks`. A toolchain MUST declare a `resources.limits.memory`
++  # and MUST NOT declare `command`/`args` — the controller refuses to start on either, and it
++  # composes the exec daemon as the container command itself, so a declared one would fight it
++  # (slice 125). Limit only, no request (the pod composer books the request at 0; D124).
++  # A matrix-built image publishes only its resolved tag and no `:latest`, so its entry pins that
++  # tag — frontend, modern-app, java and esp-idf; every other entry takes `:latest`. Adding a
++  # second version of a matrix image therefore needs a second entry here as well as a second matrix
++  # row. Selecting one yields an exec-ready sidecar carrying the dev
++  # container's full home stack (D-S3). A toolchain declares the writable persistent home paths it
++  # needs in its OWN `homeOverlays:` (a sibling of `container:`, not a key inside it); the
++  # controller unions and dedupes that with its built-in list and the selecting repo manifest's
++  # `homeOverlays:`, so a repo need not know what a toolchain requires — see frontend/modern-app
++  # and `.corepack` below, the first case of this. There is no inheritance between entries: an
++  # image built FROM another toolchain's image declares the same overlays again on its own entry.
++  # An overlay MASKS whatever the image baked at that path, so an entry declaring one must not
++  # also bake content there.
++  toolchains:
++    python:
++      description: >-
++        Python 3.13 with uv, Poetry and Ruff.
++      instructions: >-
++        The Python toolchain. It carries Poetry, Ruff and uv, all in system paths. Python itself
++        is the base image's own 3.13; no second interpreter is installed.
++      container:
++        image: registry:5000/kube-coder-python-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 1Gi }
++    frontend:
++      # Runs Playwright (browser automation) — the larger limit is for the headless browser.
++      # Declares the node re-download caches this toolchain owns, so each persists per env instead
++      # of being re-fetched on every pod start:
++      #   - .bun: bun's package cache at ~/.bun/install/cache. The image installs the binary into
++      #     /usr/local/bin and leaves BUN_INSTALL out of its ENV precisely so bun's mutable state
++      #     stays under ~/.bun, where uid 1000 can write it and this overlay can keep it.
++      #   - .corepack: the image sets COREPACK_HOME=/home/ubuntu/.corepack and bakes no pnpm, so
++      #     corepack downloads the version a repo pins in `packageManager` on first use — the path
++      #     must be writable by uid 1000 (the old system-path /opt/corepack was root-owned and
++      #     failed with "Failed to create cache directory").
++      #   - .npm: npm's cache at ~/.npm. slice 116 drops .npm from the controller's built-in overlay
++      #     list, so a node repo now gets its per-env npm cache from this declaration.
++      #   - .pnpm: pnpm's content store. Persisting it depends on the image's
++      #     PNPM_HOME=/home/ubuntu/.pnpm (+ store-dir under it) ENV — the declaration alone is an
++      #     empty dir with no writer.
++      # The image bakes nothing at any of the four, so none masks baked content.
++      description: >-
++        Node.js 24 with npm, pnpm and bun, plus the Chromium system libraries Playwright needs
++        (browsers are not bundled — the repo installs them).
++      instructions: >-
++        The frontend toolchain. It carries Node 24 with corepack enabled, bun, and Playwright's OS
++        dependencies, but no browser bundle, so browsers must be installed before browser tests
++        can run.
++      homeOverlays: [.bun, .corepack, .npm, .pnpm]
++      container:
++        image: registry:5000/kube-coder-frontend-toolchain:node-24
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 5Gi }
++    modern-app:
++      # The python + frontend toolsets in one sidecar (image kube-coder-modern-app-toolchain, built
++      # FROM the frontend toolchain + the python tools), for full-stack repos. Matrix-built off the
++      # frontend toolchain's shared build-matrix, so it carries the same node-$NODE_VERSION tag and
++      # no `:latest`. Carries Playwright via the frontend layer, but unlike frontend it also boots the
++      # app under test: a full-stack E2E suite spawns the backend (+ SSE + frontend) per Playwright
++      # worker alongside chromium, and backend pytest runs in the same sidecar — which pushed past
++      # frontend's 3Gi (OOMKilled during IoTSupport onboarding), hence 5Gi. Built FROM the frontend
++      # image, it inherits that image's node env (COREPACK_HOME + PNPM_HOME) and its bun install, so
++      # it needs the same [.bun, .corepack, .npm, .pnpm] overlays for the same reasons as frontend
++      # (see its note) — re-declared here on its own entry, since the union reads each selected
++      # toolchain's own list and does not follow image inheritance.
++      description: >-
++        The frontend and Python toolchains in one sidecar for full-stack repos: Node.js 24 with
++        npm, pnpm and bun and the Chromium system libraries, plus uv, Poetry and Ruff.
++      instructions: >-
++        The frontend and Python toolchains together in one sibling container, for full-stack
++        repos. Built from the frontend toolchain image, so it carries Node 24 with corepack, bun
++        and Playwright's OS dependencies (no browser bundle), plus Poetry, Ruff and uv.
++      homeOverlays: [.bun, .corepack, .npm, .pnpm]
++      container:
++        image: registry:5000/kube-coder-modern-app-toolchain:node-24
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 5Gi }
++    go:
++      # Declares `go` to persist the GOPATH module cache: Go defaults GOPATH to ~/go and downloads
++      # modules into ~/go/pkg/mod, so persisting the whole ~/go overlay keeps them across pod
++      # restarts instead of re-fetching per pod. The image sets no GOPATH/GOMODCACHE ENV and bakes
++      # nothing under ~/go, so the overlay masks nothing. (Go's build cache lives under the
++      # system-covered ~/.cache, so it needs no declaration here.)
++      description: >-
++        Go with golangci-lint.
++      instructions: >-
++        The Go toolchain. It carries the Go compiler (the distribution's golang-go package) and
++        golangci-lint.
++      homeOverlays: [go]
++      container:
++        image: registry:5000/kube-coder-go-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 2Gi }
++    iac:
++      # Declares `.terraform-plugin-cache` to persist terraform's provider plugin cache, so
++      # `terraform init` reuses downloaded providers instead of re-fetching them per pod. Persisting
++      # it depends on the image's TF_PLUGIN_CACHE_DIR=/home/ubuntu/.terraform-plugin-cache ENV — the
++      # declaration alone is an empty dir with no writer. The dirname is dot-free by necessity:
++      # `.terraform.d` would derive the invalid k8s volume name `home-terraform.d`. The image bakes
++      # nothing there, so the overlay masks nothing.
++      description: >-
++        Infrastructure tooling: Terraform, Helm 4, kubectl, OpenBao (bao) and step-cli — on top
++        of the Python toolchain.
++      instructions: >-
++        The infrastructure toolchain. It carries kubectl, helm, terraform, bao (OpenBao) and
++        step-cli, and is layered on the Python toolchain, so Poetry, Ruff and uv are present too.
++      homeOverlays: [.terraform-plugin-cache]
++      container:
++        image: registry:5000/kube-coder-iac-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 1Gi }
++    java:
++      # Declares `.m2` to persist Maven's local repository at ~/.m2/repository — the downloaded
++      # artifact cache — so builds do not re-fetch dependencies per pod. The image bakes nothing
++      # under ~/.m2, so the overlay masks nothing.
++      description: >-
++        OpenJDK 21 with Maven.
++      instructions: >-
++        The Java toolchain. It carries OpenJDK 21 and Maven.
++      homeOverlays: [.m2]
++      container:
++        image: registry:5000/kube-coder-java-toolchain:jdk-21
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 1Gi }
++    esp-idf:
++      # Slice 214, serving the firmware repos. A thin layer on `espressif/idf:v5.5.3` rather than
++      # on kube-coder-dev-base, so the toolchain set is Espressif's own; the image is matrix-built
++      # and carries no `:latest`, hence the pinned tag below.
++      # `activationWrapper` is what puts IDF on PATH: the composer overwrites the container command
++      # with the exec daemon, so the image's own ENTRYPOINT never runs and `cexec` prepends this
++      # argv instead. /opt/esp/entrypoint.sh is upstream's export-then-`exec "$@"` script, verified
++      # present and executable in the built image — a declared wrapper that does not resolve is a
++      # hard error, and one that only sources is a silent no-op.
++      # Declares `.ccache` to persist the compiler cache upstream's IDF_CCACHE_ENABLE=1 fills, at
++      # the image's CCACHE_DIR=/home/ubuntu/.ccache; the image bakes nothing there. The IDF tools
++      # are deliberately NOT overlaid — they sit at IDF_TOOLS_PATH=/opt/esp, a system path, and an
++      # overlay there would mask the whole toolchain out of existence at pod start. The component
++      # manager's download cache is under the controller's built-in `.cache` already.
++      # 4Gi is an UNMEASURED starting point — tune it against a real firmware build.
++      description: >-
++        ESP-IDF 5.5.3 for ESP32 firmware: idf.py with the Xtensa and RISC-V toolchains.
++      instructions: >-
++        The ESP-IDF toolchain, at version 5.5.3. It is Espressif's own image, so `idf.py`, the
++        Xtensa and RISC-V cross compilers and the IDF Python environment are present and are
++        activated for you: every command run here already runs inside the IDF environment. Project
++        components are resolved from Espressif's component registry at build time, not baked in.
++      homeOverlays: [.ccache]
++      activationWrapper: [/opt/esp/entrypoint.sh]
++      container:
++        image: registry:5000/kube-coder-esp-idf-toolchain:idf-5.5.3
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 4Gi }
++    dotnet:
++      # Slice 214. Declares `.nuget` to persist NuGet's global packages folder at its
++      # ~/.nuget/packages default — the restored-package cache — so builds do not re-fetch
++      # dependencies per pod. The image sets no NUGET_PACKAGES and bakes nothing under ~/.nuget, so
++      # the overlay masks nothing. NuGet's HTTP cache needs no declaration of its own: the image
++      # points NUGET_HTTP_CACHE_PATH under the controller's built-in `.cache` overlay.
++      # 2Gi is an UNMEASURED starting point — tune it against a real build.
++      description: >-
++        The .NET 8 and 9 SDKs side by side.
++      instructions: >-
++        The .NET toolchain. It carries the 8.0 and 9.0 SDKs installed side by side behind one
++        `dotnet` on PATH. A project builds with the SDK its `global.json` names, else the highest
++        installed one, and that SDK builds any target framework it has a targeting pack for — so
++        `dotnet build`, `dotnet test` and `dotnet publish` work against a net8.0 project and a
++        net9.0 project alike. No global dotnet tools are baked.
++      homeOverlays: [.nuget]
++      container:
++        image: registry:5000/kube-coder-dotnet-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 2Gi }
++    android:
++      # Slice 214. Two overlays, each persisting a download a build would otherwise repeat per pod:
++      #   - .gradle: Gradle's user home at its ~/.gradle default. The image bakes NO Gradle — each
++      #     repo's wrapper fetches the distribution that repo pins — and a repo pinning its JVM
++      #     through gradle-daemon-jvm.properties has Gradle provision that JDK into ~/.gradle/jdks
++      #     as well (~350 MB for JetBrains Runtime 21). Load-bearing, not a nicety.
++      #   - .android: the SDK's per-user directory, ~/.android — its download cache and the
++      #     debug.keystore, which must stay stable across pods for a debug build to keep its
++      #     signing identity.
++      # The image bakes nothing at either, and the SDK itself is on the system path
++      # ANDROID_HOME=/opt/android-sdk, so no overlay masks it. Licences are accepted in the image
++      # and the SDK tree is uid-1000-owned, so a component download AGP starts finishes rather than
++      # stopping on a prompt or on permissions.
++      # 5Gi is an UNMEASURED starting point — tune it against a real build.
++      description: >-
++        The Android SDK: platform 35, build-tools 35.0.0 and cmdline-tools on JDK 17.
++      instructions: >-
++        The Android toolchain. It carries JDK 17 and the Android SDK at /opt/android-sdk — platform
++        35, build-tools 35.0.0 and cmdline-tools, with the licences accepted — so sdkmanager,
++        apksigner, aapt2, zipalign and d8 all resolve on PATH. Gradle is NOT in the image: run each
++        repo's own `./gradlew` wrapper, which fetches the version that repo pins.
++      homeOverlays: [.gradle, .android]
++      container:
++        image: registry:5000/kube-coder-android-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 5Gi }
++    arm64-cross:
++      # Slice 214, serving KitchenDisplay. A thin layer on `dockcross/linux-arm64` rather than on
++      # kube-coder-dev-base — the image that repo's CI cross-builds with — so the cross triple,
++      # CROSS_ROOT, the compiler variables and the CMake toolchain file all arrive as that base's
++      # own ENV and nothing here shadows them.
++      # That base is Debian and carries no passwd entry for uid 1000 (confirmed against the built
++      # image: `getent passwd 1000` is empty), so `skipParityChecks` mutes cexec's advisory passwd
++      # warning that would otherwise fire on every command. It grants no capability.
++      # No homeOverlays: everything a cross build reads is image ENV, and its output lands in the
++      # checkout's own build tree — nothing worth persisting is written under $HOME.
++      # 4Gi is an UNMEASURED starting point — tune it against a real build.
++      description: >-
++        An aarch64 cross-compiler toolchain (dockcross/linux-arm64) with CMake and Make.
++      instructions: >-
++        The arm64 cross toolchain, for building aarch64 binaries. It is CROSS-ONLY: $CC and $CXX
++        are the aarch64-unknown-linux-gnu compilers and its `cmake` injects the cross toolchain
++        file, so a pass that is meant to produce native x86_64 binaries will silently cross-compile
++        if you run it here — run that pass in another container.
++      skipParityChecks: true
++      container:
++        image: registry:5000/kube-coder-arm64-cross-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 4Gi }
++    native:
++      # Native x86_64 C/C++ on kube-coder-dev-base. It also carries clang-format and clang-tidy,
++      # which the esp-idf and arm64-cross stock images do not, so a repo whose build runs in one of
++      # those selects this one alongside it for its formatting gate. Every tool is the base Ubuntu
++      # release's apt package, so clang-format's major version changes only with the base.
++      # No homeOverlays: a build writes into the checkout, and the image configures no ccache.
++      # 4Gi is an UNMEASURED starting point — tune it against a real build.
++      description: >-
++        Native x86_64 C and C++: GCC, Clang, clang-format, clang-tidy, CMake, Ninja and gdb.
++      instructions: >-
++        The native C/C++ toolchain, for building and checking x86_64 code. It carries
++        build-essential (gcc, g++, make), clang, clang-format, clang-tidy, CMake with Ninja, gdb
++        and pkg-config, all from the base Ubuntu release. CC and CXX are unset, so `cc` is gcc;
++        select clang by name. A repo that builds in esp-idf or arm64-cross runs its clang-format
++        here, since neither of those carries it.
++      container:
++        image: registry:5000/kube-coder-native-toolchain:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 4Gi }
++  # The kubeconfig files this deployment projects under ~/.kube (D085), in projection order.
++  # `catalogKey` is the catalog Secret key holding the file and `file` the bare name it lands as,
++  # so this list is also the set of catalog keys every env's catalog must carry. An entry without
++  # a `grant` reaches every env; a `grant` names the `capabilities.<name>` key an env's manifest
++  # sets to override the `default` here. The controller declares no kubeconfig of its own.
++  # Each `description` is rendered VERBATIM into the env's CLAUDE.md, after "- `~/.kube/<file>` - ",
++  # so it carries its own terminal full stop and states only what this deployment's file grants:
++  # kubectl's mechanism (which file is the default, the identical mount in every tool container,
++  # elevated files never merged into KUBECONFIG) is the worker's template prose, not repeated here.
++  kubeconfigs:
++    - file: config
++      catalogKey: kubeconfig
++      description: >-
++        has contexts `dev` and `prd` (current context `prd`), granting **read-only** access on both
++        the `dev` and `prd` clusters **plus** read-write access in the `prd` cluster's
++        `development` namespace.
++    - file: config-dev-write
++      catalogKey: kubeconfig-dev-write
++      description: >-
++        an **elevated** dev-write kubeconfig (context `dev`).
++      grant:
++        name: kubeDevWrite
++        default: false
++    - file: config-prd-write
++      catalogKey: kubeconfig-prd-write
++      description: >-
++        an **elevated** prd-write kubeconfig (context `prd`), bound to `cluster-admin`: every verb
++        on every resource, cluster-scoped included — nodes, PersistentVolumes, namespaces and RBAC
++        are all writable.
++      grant:
++        name: kubePrdWrite
++        default: false
++  whitelist:
++    - { namespace: pvginkel, kind: user }
++  # Env-pod placement stamped by the controller (D050): want the node that has the share
++  # AND is high-performance, and tolerate its NoSchedule taint (D044).
++  placement:
++    nodeAffinity:
++      - { key: homelab.local/storage, value: zpool5 }
++      - { key: homelab.local/performance, value: high }
++    tolerations:
++      - {
++          key: homelab.local/performance,
++          operator: Equal,
++          value: high,
++          effect: NoSchedule,
++        }
++  # How an env is reachable from outside the cluster (slice 201, D191): the DNS suffix every
++  # naming site joins the env-id onto (`<env-id>.home`, and `<port-name>.<env-id>.home` for an
++  # offloaded port), the annotation this homelab's DNS controller reads off the env Service, and
++  # the three its nginx edge reads off each `sslOffload` front Service. `{host}` is the Service's
++  # own DNS name and `{port}` the offloaded port number — the only placeholders either map may
++  # name, checked at load, so a typo fails the deploy rather than every later pod composition. No
++  # `is-public` annotation among them: the absent flag is what keeps an offloaded port
++  # intranet-only, on step-ca (D086). OPTIONAL — the controller defaults each key to exactly what
++  # stands here, so declaring them changes no behaviour; it moves the homelab's own exposure
++  # vocabulary out of controller code and into this deployment, where a different edge or DNS
++  # provider costs config rather than code.
++  exposure:
++    dnsSuffix: home
++    serviceAnnotations:
++      dns.webathome.org/hostname: "{host}"
++    frontServiceAnnotations:
++      nginx.webathome.org/server-name: "{host}"
++      nginx.webathome.org/enable-ssl: "yes"
++      nginx.webathome.org/target-port: "{port}"
++  storage:
++    zfsMountPath: /zfs # where the controller mounts the env-storage share
++    zfsHostPath: /zpool5/kubecoder # the dataset's node path (env pods hostPath-mount here)
++    # The single ZFS home shared by every env pod (D061): <zfsHostPath>/system/home, mounted
++    # at /home/<homeUser>. homeUid (default 1000) owns it + is the env pod's runAsUser/fsGroup.
++    homeUser: ubuntu
++  github:
++    apiBaseUrl: https://api.github.com
++    # The one host the controller builds clone URLs on, accepts shared extra repos on, and embeds
++    # its PAT for (D135). A bare host name: a scheme, a path or a space refuses startup. Not
++    # derived from apiBaseUrl: the credential's destination is declared, never inferred from a
++    # differently-purposed setting.
++    cloneHost: github.com
++  images:
++    # Image root IS the worker's bin directory, mounted as an ImageVolume at TWO paths: at
++    # /opt/kubecoder/bin on the dev container and every parity tool sidecar, and at
++    # /kubecoderenvtools/bin on the image-builder sidecar, which resolves kanikod straight from
++    # the image root. Change this key and BOTH mount points need checking (D121, slice 104).
++    worker: registry:5000/kubecoder-worker:latest
++    # The packaged VS Code extension alone (extension.vsix at the image root), mounted as an
++    # ImageVolume at /opt/kubecoder/share on the dev container only (D095, slice 104).
++    vsix: registry:5000/kubecoder-vsix:latest
++    # Distributed as a Kubernetes ImageVolume mounting the image root at $HOME/.local (slice 011)
++    localHome: registry:5000/kube-coder-dev-local-home:latest
++  # Samba /work sidecar (D139, slice 069) — controller-composed env-pod infrastructure that
++  # exposes each env's /work over authenticated SMB (445) so the operator can browse/transfer
++  # the source tree from their desktop. The PRESENCE of this block is the deployment-wide on/off
++  # switch (omit it and no env gets samba). NOT a services catalog entry, NOT manifest-selected.
++  # The image keeps the tracking :latest tag (own image in registry:5000) and is not pinned. This
++  # block carries no raw container dict, so the sidecar's `imagePullPolicy: Always` is set in
++  # controller code (_samba_sidecar), not here.
++  # configMap = the smb.conf + make-users ConfigMap (templates/samba-configmap.yaml);
++  # credentialSecret = the dedicated samba-only Secret (samba-users ExternalSecret, key
++  # PASSWORD_pvginkel). Exposure posture (root + shareProcessNamespace) is documented in the
++  # controller's docs/platform/samba-work-share.md; Triage #137 owns the hardening follow-up.
++  samba:
++    image: registry:5000/samba:latest
++    configMap: kubecoder-samba-config
++    credentialSecret: kubecoder-samba-credential
++    resources:
++      limits: { memory: 256Mi }
++  # The per-env image builder (slice 140) — controller-composed env-pod infrastructure that runs
++  # the worker's `kanikod` daemon as a sidecar; the dev container reaches it with the `kaniko`
++  # client over a dedicated unix socket, streaming the build context as a gzipped tar. Unlike
++  # `samba` above, this block's presence is only HALF the switch: it says the deployment CAN
++  # build, and an environment's own `.kubecoder/config.yaml` `imageBuilder: true` says it DOES —
++  # either half alone composes no builder. The sidecar mounts nothing of the environment (no
++  # /work at any path), so the streamed context is the only thing a build can read.
++  # Stock upstream kaniko on its tracking tag: a third-party image like any other, not pinned per
++  # stage and not built here. This block carries no raw container dict, so the sidecar's
++  # `imagePullPolicy: Always` is set in controller code (_image_builder_sidecar), not here; limit
++  # only, no request (D124), and image builds are memory-heavy (layer snapshotting).
++  # `executorFlags` is the trailing argv the controller hands the daemon's command line, which it
++  # prepends to every build — chart-side precisely so a flag change is a chart change and never a
++  # worker release; --insecure-registry=registry:5000 is this homelab's registry policy. All three
++  # keys are REQUIRED: the controller config is extra=forbid, and an absent executorFlags refuses
++  # startup rather than composing a builder that cannot reach the registry (an empty list is legal
++  # and means no flags). This block and the controller image that understands it must deploy
++  # together (coupled config+chart, D085-style).
++  kaniko:
++    image: registry.gitlab.com/gitlab-ci-utils/container-images/kaniko:debug
++    resources:
++      limits: { memory: 4Gi }
++    executorFlags:
++      - --insecure
++      - --insecure-registry=registry:5000
++      - --skip-tls-verify
++      - --cleanup
++      - --snapshot-mode=redo
++      - --use-new-run
++      - --compressed-caching=false
++  # Admission gate: a per-node cap on the number of environments — count, NOT memory, because
++  # every composed container books a memory request of 0 (D124), leaving the scheduler nothing
++  # to bound them by. Keyed by node name; the controller resolves which node an env lands on
++  # from the zpool placement labels read off node metadata. A node with no entry here is
++  # refused admission (D140), so add an entry per node you run env pods on.
++  nodes:
++    srvk8s4:
++      maxEnvironments: 5
++  # When a repo has no .kubecoder/config.yaml, the controller drops a default one in (launch
++  # in the repo dir, this trust level + the default profile) so any whitelisted repo onboards
++  # without a hand-authored manifest. `github` is the trust grant for those auto-onboarded
++  # envs (none|rw) — set to none if rw-by-default is too permissive.
++  defaultManifest:
++    github: rw
++
++service:
++  # Optional nginx-fronted exposure of the controller REST API (per-stage; off unless set).
++  # serverName drives nginx routing + DNS; dnsName is the separate dns.webathome.org hostname.
++  controller:
++    type: ClusterIP
++    dnsName:
++    serverName:
++    isPublic: false
++  # The MCP adapter's intranet Service, which its in-cluster consumer dials; never nginx-fronted.
++  mcp:
++    type: ClusterIP
++  # A second Service onto the same pod, internet-reachable (per-stage; renders only once
++  # serverName is set). It cannot be an annotation on `mcp` above: nginx.webathome.org/is-public
++  # is one flag per Service.
++  mcpPublic:
++    type: ClusterIP
++    dnsName:
++    serverName:
++    isPublic: false
++
++storage:
++  zfs:
++    # k8s capacity accounting only; the ZFS dataset quota (infrastructure.tf) is the
++    # real bound. The PVC pre-binds the TF-owned PV by volumeName.
++    size: 80Gi
++
++# Per-container resources, keyed <deployment>.<container>. Filled per-stage by
++# `poetry run recommend-resources`; null = no resources block rendered.
++resources:
++  kubecoder-controller:
++    kubecoder-controller:
++    ingress:
++    manual:
++    tunnel-reclaim:
++  kubecoder-bot:
++    kubecoder-bot:
++  kubecoder-mcp:
++    kubecoder-mcp:
++
++# ESO wiring (homelab-shared.externalsecrets helper). Leaves are defined per-stage in
++# config/<stage>/values.yaml. The controller has NO OpenBao
++# identity of its own (D031) — ESO materialises these into namespace Secrets.
++# A leaf that also carries `clientName: <name>` is a surface-① client credential:
++# controller-deployment.yaml renders it as KUBECODER_CLIENT_TOKEN_<NAME>, so that one
++# entry declares both the leaf and the controller's registration of the client.
++externalSecrets:
++  refreshInterval: 1h
++  storeRef:
++    name: openbao-prd
++    kind: ClusterSecretStore
++  secrets: {}
++
++global:
++  environment: # the stage (dev/prd) — set by each config/<stage>/values.yaml
+diff --git a/config/dev/values.yaml b/config/dev/values.yaml
+new file mode 100644
+index 0000000..918bacb
+--- /dev/null
++++ b/config/dev/values.yaml
+@@ -0,0 +1,146 @@
++global:
++  # Carries the stage. The chart names the node ClusterRole, its binding's namespace and the ZFS
++  # claim from it, and nothing but this file sets it.
++  environment: dev
++
++service:
++  controller:
++    serverName: kubecoder-dev.home
++
++images:
++  controller: :dev-latest
++  bot: :dev-latest
++  mcp: :dev-latest
++  ingress: :dev-latest
++  manual: :dev-latest
++
++controller:
++  # Both stages run on the same MicroK8s cluster, whose API-server CA certificate carries no
++  # keyUsage extension — the X.509 verification in the controller's runtime rejects it. The API
++  # server is reached over the trusted pod network and the ServiceAccount token authenticates
++  # the client.
++  verifyApiCertificate: false
++
++# Authorised Telegram chat ids (R5/Q013) → KUBECODER_ALLOWED_CHAT_IDS (CSV). DM-only;
++# the bot ignores everyone else. Same operator chat as prd; the dev instance has its
++# own bot identity (the bot-token leaf below).
++bot:
++  allowedChatIds: ["8524367576"]
++
++# Controller-owned config (D058).
++controllerConfig:
++  # Must agree with service.controller.serverName above — the controller mints its
++  # tunnel/logs links under this origin.
++  externalBaseUrl: https://kubecoder-dev.home
++  # Headlamp deep link to the env pod's dev-container logs (Headlamp ≥0.42 ?view=logs
++  # deep-link; the pod name IS the env id, in the release namespace).
++  headlampLogsUrl: "http://headlamp/c/main/pods/kubecoder-dev/{env_id}?view=logs&container=dev"
++  images:
++    worker: registry:5000/kubecoder-worker:dev-latest
++    vsix: registry:5000/kubecoder-vsix:dev-latest
++  storage:
++    # Node path of this stage's ZFS dataset — must stay in sync with the stage-derived
++    # "kubecoder-${var.stage}" dataset name in ../_shared/infrastructure.tf.
++    zfsHostPath: /zpool5/kubecoder-dev
++  # prd + dev share srvk8s4; the env-count caps split the node between them (D124).
++  nodes:
++    srvk8s4:
++      maxEnvironments: 2
++  # The in-pod SSH transport (slice 170): deployment-wide, no per-env override — every env pod
++  # this controller composes gets an unprivileged sshd and port 22 on its LoadBalancer Service.
++  # Declared per stage rather than in the chart default, because `controllerConfig` is
++  # extra=forbid and a controller image that predates this key refuses to start on it (D191):
++  # dev leads, prd's own overlay follows its promotion.
++  # authorizedKeys is the operator's workstation key; it is read once at env start, so a change
++  # here reaches a running env only on its next roll. An ENABLED sshd with no authorizedKeys, or
++  # a stepCa block without KUBECODER_STEP_CA_PROVISIONER_PASSWORD (the step-ca-provisioner-password
++  # leaf below) or without a KUBECODER_STEP_CA_ROOT naming a CA root certificate the controller can
++  # read (both are env vars the controller Deployment sets), REFUSES controller startup.
++  sshd:
++    enabled: true
++    authorizedKeys:
++      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOB2beR+Af+8CLWnyOdoQTa3SK/THTr00PwqykISP5W pvginkel
++    # Signs each env's SSH host key. One provisioner serves both stages; it is used for SSH HOST
++    # certificates only. Omitting this block would leave sshd on a bare host key (client TOFU).
++    stepCa:
++      caUrl: https://ca.home
++      provisioner: kubecoder-jwk
++
++# ESO leaves materialised into kubecoder-dev namespace Secrets (no controller OpenBao
++# identity — D031). The chart default for this map is empty and helm merges exactly one
++# stage overlay, so EVERY leaf must be declared here — an absent leaf renders no
++# ExternalSecret. OpenBao KV paths under eso/prd/kubecoder/dev/* (samba-users excepted,
++# see below). targetNames are namespace-local, so they match prd's; isolation is by
++# namespace. The `secret-catalog` Secret is what the controller projects into env pods
++# by secretKeyRef.
++externalSecrets:
++  secrets:
++    bot-token:
++      targetName: kubecoder-bot-token
++      data:
++        - {secretKey: token, path: eso/prd/kubecoder/dev/bot-token, property: token}
++    # Surface-① client credentials, one leaf per client: `clientName` is what makes the
++    # controller render KUBECODER_CLIENT_TOKEN_<NAME> for it, so removing an entry here
++    # revokes that client and reaches no other client's secret.
++    client-token-bot:
++      clientName: bot
++      targetName: kubecoder-client-token-bot
++      data:
++        - {secretKey: token, path: eso/prd/kubecoder/dev/client-token-bot, property: token}
++    client-token-mcp:
++      clientName: mcp
++      targetName: kubecoder-client-token-mcp
++      data:
++        - {secretKey: token, path: eso/prd/kubecoder/dev/client-token-mcp, property: token}
++    # The MCP adapter's north-leg inbound bearer (D151) — enforced on every /mcp request
++    # (KUBECODER_MCP_AUTH_TOKEN).
++    mcp-auth-token:
++      targetName: kubecoder-mcp-auth-token
++      data:
++        - {secretKey: token, path: eso/prd/kubecoder/dev/mcp-auth-token, property: token}
++    github-token:
++      targetName: kubecoder-github-token
++      data:
++        - {secretKey: token, path: eso/prd/kubecoder/dev/github-token, property: token}
++    # Password of step-ca's kubecoder-jwk provisioner (slice 165) →
++    # KUBECODER_STEP_CA_PROVISIONER_PASSWORD on the controller. One provisioner serves both
++    # stages, so this leaf and its prd twin hold the SAME value.
++    step-ca-provisioner-password:
++      targetName: kubecoder-step-ca-provisioner-password
++      data:
++        - {secretKey: password, path: eso/prd/kubecoder/dev/step-ca-provisioner-password, property: password}
++    secret-catalog:
++      targetName: kubecoder-secret-catalog
++      path: eso/prd/kubecoder/dev/catalog
++    # Samba /work sidecar credential (slice 069) — deliberately NOT dev-pathed: the
++    # shared/samba/users#pvginkel credential is stage-independent (scantopdf/media read
++    # the same leaf) and has no dev twin. The leaf must still be declared here or the
++    # kubecoder-samba-credential Secret never renders — every env pod's samba sidecar
++    # envFroms that Secret.
++    samba-users:
++      targetName: kubecoder-samba-credential
++      data:
++        - {secretKey: PASSWORD_pvginkel, path: shared/samba/users, property: pvginkel}
++
++resources:
++  kubecoder-controller:
++    tunnel-reclaim:
++      requests:
++        memory: 40Mi
++    ingress:
++      requests:
++        memory: 8Mi
++    manual:
++      requests:
++        memory: 7Mi
++    kubecoder-controller:
++      requests:
++        memory: 112Mi
++  kubecoder-bot:
++    kubecoder-bot:
++      requests:
++        memory: 64Mi
++  kubecoder-mcp:
++    kubecoder-mcp:
++      requests:
++        memory: 56Mi
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+new file mode 100644
+index 0000000..a76a4d1
+--- /dev/null
++++ b/config/prd/values.yaml
+@@ -0,0 +1,183 @@
++global:
++  # Carries the stage. The chart names the node ClusterRole, its binding's namespace and the ZFS
++  # claim from it, and nothing but this file sets it.
++  environment: prd
++
++service:
++  controller:
++    serverName: kubecoder.home, kubecoder
++  # The MCP adapter's internet-reachable Service. The intranet `mcp` Service is untouched, so
++  # the in-cluster consumer keeps dialling kubecoder-mcp:8080 as before.
++  mcpPublic:
++    serverName: kubecoder-mcp.ginbov.nl
++    isPublic: yes
++
++images:
++  controller: :prd-latest
++  bot: :prd-latest
++  mcp: :prd-latest
++  ingress: :prd-latest
++  manual: :prd-latest
++
++controller:
++  # Both stages run on the same MicroK8s cluster, whose API-server CA certificate carries no
++  # keyUsage extension — the X.509 verification in the controller's runtime rejects it. The API
++  # server is reached over the trusted pod network and the ServiceAccount token authenticates
++  # the client.
++  verifyApiCertificate: false
++
++# Authorised Telegram chat ids (R5/Q013) → KUBECODER_ALLOWED_CHAT_IDS (CSV). DM-only;
++# the bot ignores everyone else.
++bot:
++  allowedChatIds: ["8524367576"]
++
++# The MCP adapter's north leg also accepts IdP-issued JWTs on the public Service above; the
++# static bearer keeps working unchanged for the in-cluster consumer.
++mcp:
++  oidc:
++    issuerUrl: https://auth.ginbov.nl/realms/homelab
++    jwksUrl: https://auth.ginbov.nl/realms/homelab/protocol/openid-connect/certs
++    # Must be bound IdP-side as the `aud` of every token issued for the client; it is the
++    # adapter's own public URL, not a client id.
++    audience: https://kubecoder-mcp.ginbov.nl/mcp
++    publicUrl: https://kubecoder-mcp.ginbov.nl/mcp
++    # The client scope the connector requests: it exists on the authorization server and is
++    # assigned to the connector's client, and every token issued through it echoes it in `scope`.
++    scope: kubecoder-mcp
++    # Empty admits no JWT at all — the operator's own `sub` goes here once their client is
++    # registered with the authorization server.
++    allowedSubjects: ["03811f1f-63f9-4e24-b27f-993490cd5db6"]
++
++# Controller-owned config (D058). The Headlamp deep link moved here from bot.headlampLogsUrl in
++# slice 085: the controller resolves it behind its own short `GET /logs/{envId}` redirect (D171),
++# so the URL is declared once and the bot renders the short link it is handed.
++controllerConfig:
++  # Headlamp deep link to the env pod's dev-container logs (Headlamp ≥0.42 ?view=logs
++  # deep-link; the pod name IS the env id, in the release namespace).
++  headlampLogsUrl: "http://headlamp/c/main/pods/kubecoder-prd/{env_id}?view=logs&container=dev"
++  images:
++    worker: registry:5000/kubecoder-worker:prd-latest
++    vsix: registry:5000/kubecoder-vsix:prd-latest
++
++  # The in-pod SSH transport (slice 170): deployment-wide, no per-env override — every env pod
++  # this controller composes gets an unprivileged sshd and port 22 on its LoadBalancer Service.
++  # Declared per stage rather than in the chart default, because `controllerConfig` is
++  # extra=forbid and a controller image that predates this key refuses to start on it (D191):
++  # dev leads, prd's own overlay follows its promotion.
++  # authorizedKeys is the operator's workstation key; it is read once at env start, so a change
++  # here reaches a running env only on its next roll. An ENABLED sshd with no authorizedKeys, or
++  # a stepCa block without KUBECODER_STEP_CA_PROVISIONER_PASSWORD (the step-ca-provisioner-password
++  # leaf below) or without a KUBECODER_STEP_CA_ROOT naming a CA root certificate the controller can
++  # read (both are env vars the controller Deployment sets), REFUSES controller startup.
++  sshd:
++    enabled: true
++    authorizedKeys:
++      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOB2beR+Af+8CLWnyOdoQTa3SK/THTr00PwqykISP5W pvginkel
++    # Signs each env's SSH host key. One provisioner serves both stages; it is used for SSH HOST
++    # certificates only. Omitting this block would leave sshd on a bare host key (client TOFU).
++    stepCa:
++      caUrl: https://ca.home
++      provisioner: kubecoder-jwk
++
++# ESO leaves materialised into kubecoder-prd namespace Secrets (no controller OpenBao
++# identity — D031). OpenBao KV paths under eso/prd/kubecoder/prd/*. The `secret-catalog`
++# Secret is what the controller projects into env pods by secretKeyRef.
++externalSecrets:
++  secrets:
++    bot-token:
++      targetName: kubecoder-bot-token
++      data:
++        - {
++            secretKey: token,
++            path: eso/prd/kubecoder/prd/bot-token,
++            property: token,
++          }
++    # Surface-① client credentials, one leaf per client: `clientName` is what makes the
++    # controller render KUBECODER_CLIENT_TOKEN_<NAME> for it, so removing an entry here
++    # revokes that client and reaches no other client's secret.
++    client-token-bot:
++      clientName: bot
++      targetName: kubecoder-client-token-bot
++      data:
++        - {
++            secretKey: token,
++            path: eso/prd/kubecoder/prd/client-token-bot,
++            property: token,
++          }
++    client-token-mcp:
++      clientName: mcp
++      targetName: kubecoder-client-token-mcp
++      data:
++        - {
++            secretKey: token,
++            path: eso/prd/kubecoder/prd/client-token-mcp,
++            property: token,
++          }
++    # The MCP adapter's north-leg inbound bearer (D151) — enforced on every /mcp request
++    # (KUBECODER_MCP_AUTH_TOKEN). The OpenBao KV path eso/prd/kubecoder/prd/mcp-auth-token
++    # (property: token) is seeded out-of-band by the operator before deploy.
++    mcp-auth-token:
++      targetName: kubecoder-mcp-auth-token
++      data:
++        - {
++            secretKey: token,
++            path: eso/prd/kubecoder/prd/mcp-auth-token,
++            property: token,
++          }
++    github-token:
++      targetName: kubecoder-github-token
++      data:
++        - {
++            secretKey: token,
++            path: eso/prd/kubecoder/prd/github-token,
++            property: token,
++          }
++    # Password of step-ca's kubecoder-jwk provisioner (slice 165) →
++    # KUBECODER_STEP_CA_PROVISIONER_PASSWORD on the controller. One provisioner serves both
++    # stages, so this leaf and its dev twin hold the SAME value.
++    step-ca-provisioner-password:
++      targetName: kubecoder-step-ca-provisioner-password
++      data:
++        - {
++            secretKey: password,
++            path: eso/prd/kubecoder/prd/step-ca-provisioner-password,
++            property: password,
++          }
++    secret-catalog:
++      targetName: kubecoder-secret-catalog
++      path: eso/prd/kubecoder/prd/catalog
++    # Samba /work sidecar credential (slice 069) — a DEDICATED single-key Secret the controller
++    # projects into the samba sidecar by envFrom (so it sees ONLY its own credential). The key is
++    # PASSWORD_pvginkel (the samba make-users script reads $PASSWORD_pvginkel). The OpenBao path
++    # shared/samba/users#pvginkel already exists (scantopdf/media use it) — operator applies at deploy.
++    samba-users:
++      targetName: kubecoder-samba-credential
++      data:
++        - {
++            secretKey: PASSWORD_pvginkel,
++            path: shared/samba/users,
++            property: pvginkel,
++          }
++
++resources:
++  kubecoder-controller:
++    ingress:
++      requests:
++        memory: 8Mi
++    tunnel-reclaim:
++      requests:
++        memory: 40Mi
++    kubecoder-controller:
++      requests:
++        memory: 160Mi
++    manual:
++      requests:
++        memory: 7Mi
++  kubecoder-mcp:
++    kubecoder-mcp:
++      requests:
++        memory: 64Mi
++  kubecoder-bot:
++    kubecoder-bot:
++      requests:
++        memory: 64Mi
+diff --git a/tests/build-deps.sh b/tests/build-deps.sh
+new file mode 100755
+index 0000000..32cdf6c
+--- /dev/null
++++ b/tests/build-deps.sh
+@@ -0,0 +1,10 @@
++#!/bin/sh
++# Resolve chart/Chart.lock into chart/charts/, the same verb Argo's repo-server
++# runs (D17). `helm dependency build` resolves a dependency's repository through
++# helm's local repository list, so the entry has to exist first.
++set -eu
++
++cd "$(dirname "$0")/.."
++
++helm repo add charts-home https://charts.home --force-update >/dev/null
++helm dependency build chart
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+new file mode 100755
+index 0000000..9ea8683
+--- /dev/null
++++ b/tests/render-chart.py
+@@ -0,0 +1,307 @@
++#!/usr/bin/env python3
++"""The gate: KubeCoder's chart renders each stage the way Argo CD renders it.
++
++A stage is templated the way the releases ApplicationSet has Argo produce it
++(/work/ArgoCDDeploy/chart/templates/applicationsets.yaml:84-120): `chart` under the
++Application's own name `kubecoder-<stage>`, into that namespace, with
++`../config/<stage>/values.yaml` and the four `hook.*` helm parameters as `--set`. The
++library dependency is built from chart/Chart.lock, as the repo-server builds it.
++
++Run tests/build-deps.sh first; the render needs chart/charts/ populated.
++"""
++
++import hashlib
++import pathlib
++import re
++import subprocess
++import sys
++import time
++
++import yaml
++
++REPO = pathlib.Path(__file__).resolve().parent.parent
++CHART = REPO / "chart"
++STAGES = ("dev", "prd")
++# Exact (D17), from the chart repository Argo's repo-server resolves it from.
++LIBRARY = {"name": "homelab-shared", "version": "0.2.0", "repository": "https://charts.home"}
++DEFINE = re.compile(r"\{\{-?\s*define\b")
++# The registry entry's `repo:` form, and a SHA of the shape `$ARGOCD_APP_REVISION` becomes.
++HOOK_REPO = "https://github.com/pvginkel/KubeCoderDeploy.git"
++HOOK_REVISION = "0123456789abcdef0123456789abcdef01234567"
++# Where the library's Job template puts the hook
++# (/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl).
++HOOK_NAMESPACE = "argocd-hooks"
++HOOK_GUARD = "is required by the Terraform PreSync hook"
++# The annotation key KUBECODER_DEPLOYMENT_ID's fieldRef reads
++# (templates/controller-deployment.yaml).
++DEPLOYMENT_ID = "deployment"
++# The `releases` AppProject's clusterResourceWhitelist as (group, kind)
++# (/work/ArgoCDDeploy/chart/templates/appproject.yaml:40-47). Argo refuses to sync a
++# cluster-scoped object outside it.
++CLUSTER_WHITELIST = {
++    ("", "Namespace"),
++    ("apiextensions.k8s.io", "CustomResourceDefinition"),
++    ("rbac.authorization.k8s.io", "ClusterRole"),
++    ("rbac.authorization.k8s.io", "ClusterRoleBinding"),
++}
++# Every namespaced kind the chart renders. A render cannot tell a kind's scope, so a kind in
++# neither set fails the gate until it is classified.
++NAMESPACED = {
++    ("", "ConfigMap"),
++    ("", "PersistentVolumeClaim"),
++    ("", "Service"),
++    ("", "ServiceAccount"),
++    ("apps", "Deployment"),
++    ("batch", "Job"),
++    ("external-secrets.io", "ExternalSecret"),
++    ("rbac.authorization.k8s.io", "Role"),
++    ("rbac.authorization.k8s.io", "RoleBinding"),
++}
++
++failures = []
++
++
++def check(condition, message):
++    if not condition:
++        failures.append(message)
++
++
++def namespace(stage):
++    return f"kubecoder-{stage}"
++
++
++def hook_parameters(stage):
++    # In the library's argument order: repo, revision, stage, namespace.
++    return {
++        "hook.repo": HOOK_REPO,
++        "hook.revision": HOOK_REVISION,
++        "hook.stage": stage,
++        "hook.namespace": namespace(stage),
++    }
++
++
++def template(stage, parameters, extra=()):
++    args = [
++        "helm", "template", namespace(stage), "chart",
++        "--namespace", namespace(stage),
++        "--values", f"config/{stage}/values.yaml",
++    ]
++    for name, value in parameters.items():
++        args += ["--set", f"{name}={value}"]
++    return subprocess.run([*args, *extra], cwd=REPO, capture_output=True, text=True)
++
++
++def render(stage, extra=()):
++    result = template(stage, hook_parameters(stage), extra)
++    if result.returncode != 0:
++        sys.exit(f"helm template failed for {stage}:\n{result.stderr}")
++    return result.stdout
++
++
++def objects(stdout):
++    return [doc for doc in yaml.safe_load_all(stdout) if doc]
++
++
++def find(docs, kind, name):
++    for doc in docs:
++        if doc["kind"] == kind and doc["metadata"].get("name") == name:
++            return doc
++    return None
++
++
++def label(doc):
++    metadata = doc["metadata"]
++    return f"{doc['kind']}/{metadata.get('name') or metadata.get('generateName')}"
++
++
++def check_library():
++    chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
++    check(
++        chart.get("dependencies") == [LIBRARY],
++        f"chart/Chart.yaml does not pin exactly {LIBRARY}: {chart.get('dependencies')} (R2)",
++    )
++    links = sorted(str(p.relative_to(REPO)) for p in CHART.rglob("*") if p.is_symlink())
++    check(not links, f"symlinks under chart/, which Argo's repo-server refuses: {links}")
++    defines = sorted(
++        p.name for p in (CHART / "templates").iterdir() if DEFINE.search(p.read_text())
++    )
++    check(not defines, f"templates define helpers the library chart provides: {defines} (R2)")
++    tracked = subprocess.run(
++        ["git", "ls-files", "chart/charts"], cwd=REPO, capture_output=True, text=True, check=True
++    ).stdout.split()
++    check(not tracked, f"the built dependency is committed: {tracked}")
++
++
++def check_stage_values(stage):
++    values = yaml.safe_load((REPO / "config" / stage / "values.yaml").read_text())
++    check(
++        (values.get("global") or {}).get("environment") == stage,
++        f"config/{stage}/values.yaml does not set global.environment to {stage!r} (R4)",
++    )
++
++
++def check_namespace_manifest(stage, docs):
++    ns = namespace(stage)
++    names = [doc["metadata"]["name"] for doc in docs if doc["kind"] == "Namespace"]
++    check(names == [ns], f"{stage}: renders Namespaces {names}, not the one {ns} (D25)")
++    manifest = find(docs, "Namespace", ns)
++    if manifest is None:
++        return
++    annotations = manifest["metadata"].get("annotations") or {}
++    check(
++        annotations.get("argocd.argoproj.io/sync-wave") == "-1",
++        f"{stage}: Namespace/{ns} is missing sync-wave -1 (D25)",
++    )
++    check(
++        annotations.get("argocd.argoproj.io/sync-options") == "Prune=false",
++        f"{stage}: Namespace/{ns} is missing sync-options Prune=false (D26)",
++    )
++
++
++def check_stage_identity(stage, docs):
++    ns = namespace(stage)
++    nodes = f"kubecoder-{stage}-nodes"
++    claim = f"kubecoder-{stage}-zfs-pvc"
++    volume = f"kubecoder-{stage}-zfs-pv"
++
++    check(find(docs, "ClusterRole", nodes) is not None, f"{stage}: no ClusterRole/{nodes} (R4)")
++    binding = find(docs, "ClusterRoleBinding", nodes)
++    check(binding is not None, f"{stage}: no ClusterRoleBinding/{nodes} (R4)")
++    if binding is not None:
++        check(
++            binding["roleRef"]["name"] == nodes,
++            f"{stage}: ClusterRoleBinding/{nodes} binds {binding['roleRef']['name']} (R4)",
++        )
++        subjects = [(s["kind"], s["name"], s.get("namespace")) for s in binding["subjects"]]
++        check(
++            subjects == [("ServiceAccount", "kubecoder-controller", ns)],
++            f"{stage}: ClusterRoleBinding/{nodes} subjects are {subjects}, not the controller in {ns} (R4)",
++        )
++
++    pvc = find(docs, "PersistentVolumeClaim", claim)
++    check(pvc is not None, f"{stage}: no PersistentVolumeClaim/{claim} (R4)")
++    if pvc is not None:
++        check(
++            pvc["spec"].get("volumeName") == volume,
++            f"{stage}: PersistentVolumeClaim/{claim} binds {pvc['spec'].get('volumeName')}, not {volume}",
++        )
++    controller = find(docs, "Deployment", "kubecoder-controller")
++    claims = [
++        v["persistentVolumeClaim"]["claimName"]
++        for v in controller["spec"]["template"]["spec"]["volumes"]
++        if "persistentVolumeClaim" in v
++    ]
++    check(claims == [claim], f"{stage}: the controller mounts claims {claims}, not {claim} (R4)")
++
++
++def pod_annotations(docs, name):
++    return find(docs, "Deployment", name)["spec"]["template"]["metadata"].get("annotations") or {}
++
++
++def deployment_id(docs):
++    return pod_annotations(docs, "kubecoder-controller").get(DEPLOYMENT_ID)
++
++
++def check_deployment_identity(stage, docs):
++    identity = deployment_id(docs)
++    config = find(docs, "ConfigMap", "kubecoder-controller-config")["data"]["controller.yaml"]
++    # Helm's toYaml drops the final newline the ConfigMap's block scalar puts back, so this is
++    # the exact text `sha256sum` hashed.
++    checksum = hashlib.sha256(config.removesuffix("\n").encode()).hexdigest()
++    check(
++        identity == checksum,
++        f"{stage}: the controller's {DEPLOYMENT_ID!r} annotation is {identity!r}, not the "
++        f"checksum of the controllerConfig it mounts, {checksum} (R3)",
++    )
++    for name in ("kubecoder-bot", "kubecoder-mcp"):
++        check(
++            DEPLOYMENT_ID not in pod_annotations(docs, name),
++            f"{stage}: Deployment/{name} carries a {DEPLOYMENT_ID!r} stamp",
++        )
++
++    probed = objects(render(stage, ["--set", "controllerConfig.renderGateProbe=changed"]))
++    check(
++        deployment_id(probed) != identity,
++        f"{stage}: changing controllerConfig leaves the deployment identity unchanged (R3)",
++    )
++
++
++def check_hook_job(stage, docs):
++    jobs = [doc for doc in docs if doc["kind"] == "Job"]
++    check(len(jobs) == 1, f"{stage}: renders {len(jobs)} Jobs, not the one PreSync hook (R6)")
++    if len(jobs) != 1:
++        return
++    metadata = jobs[0]["metadata"]
++    check(
++        metadata.get("generateName") == "tf-presync-" and metadata.get("namespace") == HOOK_NAMESPACE,
++        f"{stage}: the hook Job is {label(jobs[0])} in {metadata.get('namespace')}, not tf-presync- in {HOOK_NAMESPACE} (R6)",
++    )
++    check(
++        (metadata.get("annotations") or {}).get("argocd.argoproj.io/hook") == "PreSync",
++        f"{stage}: the hook Job is not a PreSync hook (R6)",
++    )
++    args = [c.get("args") for c in jobs[0]["spec"]["template"]["spec"]["containers"]]
++    expected = list(hook_parameters(stage).values())
++    check(args == [expected], f"{stage}: the hook Job's args are {args}, not {expected} (R6)")
++
++    for omitted in hook_parameters(stage):
++        parameters = {k: v for k, v in hook_parameters(stage).items() if k != omitted}
++        result = template(stage, parameters)
++        check(
++            result.returncode != 0 and f"{omitted} {HOOK_GUARD}" in result.stderr,
++            f"{stage}: rendering without {omitted} does not fail on the library's guard (R6)",
++        )
++
++
++def check_scope(stage, docs):
++    for doc in docs:
++        api_version = doc["apiVersion"]
++        group_kind = (api_version.split("/")[0] if "/" in api_version else "", doc["kind"])
++        if group_kind in CLUSTER_WHITELIST:
++            continue
++        check(
++            group_kind in NAMESPACED,
++            f"{stage}: {label(doc)} is a kind this gate has not classified; a cluster-scoped kind "
++            "needs the releases AppProject to whitelist it first (R7)",
++        )
++        explicit = doc["metadata"].get("namespace")
++        check(
++            explicit in (None, HOOK_NAMESPACE),
++            f"{stage}: {label(doc)} renders into {explicit}, outside the Application's destination",
++        )
++
++
++def check_render_stable(first):
++    # `now` renders to the second, so a render more than a second later differs if any value
++    # reads the clock; one reading randomness differs on any second render.
++    time.sleep(1.1)
++    for stage in STAGES:
++        check(
++            render(stage) == first[stage],
++            f"{stage}: two renders of the same commit differ (R3)",
++        )
++
++
++def main():
++    check_library()
++    first = {}
++    for stage in STAGES:
++        first[stage] = render(stage)
++        docs = objects(first[stage])
++        check_stage_values(stage)
++        check_namespace_manifest(stage, docs)
++        check_stage_identity(stage, docs)
++        check_deployment_identity(stage, docs)
++        check_hook_job(stage, docs)
++        check_scope(stage, docs)
++    check_render_stable(first)
++
++    if failures:
++        for failure in failures:
++            print(f"FAIL: {failure}", file=sys.stderr)
++        sys.exit(1)
++    counts = ", ".join(f"{stage} {len(objects(first[stage]))}" for stage in STAGES)
++    print(f"ok: both stages render as Argo renders them ({counts} objects)")
++
++
++main()
+
+/work/KubeCoderDeploy — P4: git diff 32520a24d69d..6002b6404e0c
+
+chart/templates/bot-deployment.yaml        |   1 -
+ chart/templates/controller-deployment.yaml |   3 --
+ chart/templates/mcp-deployment.yaml        |   1 -
+ chart/values.yaml                          |  17 ++++---
+ config/dev/values.yaml                     |  10 ----
+ config/prd/values.yaml                     |  10 ----
+ tests/render-chart.py                      | 129 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 139 insertions(+), 32 deletions(-)
+
+diff --git a/chart/templates/bot-deployment.yaml b/chart/templates/bot-deployment.yaml
+index e1bba10..c2c24c3 100644
+--- a/chart/templates/bot-deployment.yaml
++++ b/chart/templates/bot-deployment.yaml
+@@ -24,7 +24,6 @@ spec:
+       containers:
+         - name: kubecoder-bot
+           image: registry:5000/kubecoder-bot{{ .Values.images.bot }}
+-          imagePullPolicy: Always
+           ports:
+             - containerPort: 8080
+           env:
+diff --git a/chart/templates/controller-deployment.yaml b/chart/templates/controller-deployment.yaml
+index 59d7485..dda9b25 100644
+--- a/chart/templates/controller-deployment.yaml
++++ b/chart/templates/controller-deployment.yaml
+@@ -44,7 +44,6 @@ spec:
+       containers:
+         - name: kubecoder-controller
+           image: registry:5000/kubecoder-controller{{ .Values.images.controller }}
+-          imagePullPolicy: Always
+           ports:
+             - containerPort: 8080
+           env:
+@@ -172,7 +171,6 @@ spec:
+         # points HERE, not at the controller; the controller is no longer directly addressable.
+         - name: ingress
+           image: registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
+-          imagePullPolicy: Always
+           ports:
+             - containerPort: 8090
+           readinessProbe:
+@@ -194,7 +192,6 @@ spec:
+         # control-plane outage. Liveness still restarts it if it wedges.
+         - name: manual
+           image: registry:5000/kubecoder-manual{{ .Values.images.manual }}
+-          imagePullPolicy: Always
+           ports:
+             - containerPort: 8081
+           env:
+diff --git a/chart/templates/mcp-deployment.yaml b/chart/templates/mcp-deployment.yaml
+index 57828f3..86e878f 100644
+--- a/chart/templates/mcp-deployment.yaml
++++ b/chart/templates/mcp-deployment.yaml
+@@ -20,7 +20,6 @@ spec:
+       containers:
+         - name: kubecoder-mcp
+           image: registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
+-          imagePullPolicy: Always
+           # The Streamable-HTTP MCP surface (path /mcp). Unlike the bot (outbound-only), the
+           # adapter serves inbound, so it carries a Service (mcp-service.yaml, plus the
+           # internet-reachable mcp-public-service.yaml where a stage configures one).
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 4975072..3e5c6fc 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -5,14 +5,17 @@
+ # See KubeCoderSpecs/slices/helm-chart.md.
+ 
+ images:
+-  controller: :latest # registry:5000/kubecoder-controller{{ .Values.images.controller }}
+-  bot: :latest # registry:5000/kubecoder-bot{{ .Values.images.bot }}
+-  mcp: :latest # registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
++  # controller, bot, mcp, ingress, manual and controllerConfig.images.{worker,vsix} name one
++  # KubeCoder Build-Main build's `:dev-<build>` tag, and no stage file overrides them; their
++  # containers take the kubelet's default pull policy. tunnelReclaim is a DockerImages image.
++  controller: :dev-511 # registry:5000/kubecoder-controller{{ .Values.images.controller }}
++  bot: :dev-511 # registry:5000/kubecoder-bot{{ .Values.images.bot }}
++  mcp: :dev-511 # registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
+   # The controller pod's two sidecars (slice 084): the pure-routing nginx front door and the
+   # operator manual it serves at /help/. Both ride IN the controller's pod, so both images must
+   # already be in the registry before this chart rolls — a missing image takes the controller down.
+-  ingress: :latest # registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
+-  manual: :latest # registry:5000/kubecoder-manual{{ .Values.images.manual }}
++  ingress: :dev-511 # registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
++  manual: :dev-511 # registry:5000/kubecoder-manual{{ .Values.images.manual }}
+   # The controller pod's dev-tunnel reclaim actuator (slice 105): a loopback-only sidecar that runs
+   # `code tunnel unregister`. Like the two sidecars above it rides IN the controller's pod, so its
+   # image must be in the registry before this chart rolls — a missing image takes the controller down.
+@@ -662,10 +665,10 @@ controllerConfig:
+     # /opt/kubecoder/bin on the dev container and every parity tool sidecar, and at
+     # /kubecoderenvtools/bin on the image-builder sidecar, which resolves kanikod straight from
+     # the image root. Change this key and BOTH mount points need checking (D121, slice 104).
+-    worker: registry:5000/kubecoder-worker:latest
++    worker: registry:5000/kubecoder-worker:dev-511
+     # The packaged VS Code extension alone (extension.vsix at the image root), mounted as an
+     # ImageVolume at /opt/kubecoder/share on the dev container only (D095, slice 104).
+-    vsix: registry:5000/kubecoder-vsix:latest
++    vsix: registry:5000/kubecoder-vsix:dev-511
+     # Distributed as a Kubernetes ImageVolume mounting the image root at $HOME/.local (slice 011)
+     localHome: registry:5000/kube-coder-dev-local-home:latest
+   # Samba /work sidecar (D139, slice 069) — controller-composed env-pod infrastructure that
+diff --git a/config/dev/values.yaml b/config/dev/values.yaml
+index 918bacb..7cf0e6e 100644
+--- a/config/dev/values.yaml
++++ b/config/dev/values.yaml
+@@ -7,13 +7,6 @@ service:
+   controller:
+     serverName: kubecoder-dev.home
+ 
+-images:
+-  controller: :dev-latest
+-  bot: :dev-latest
+-  mcp: :dev-latest
+-  ingress: :dev-latest
+-  manual: :dev-latest
+-
+ controller:
+   # Both stages run on the same MicroK8s cluster, whose API-server CA certificate carries no
+   # keyUsage extension — the X.509 verification in the controller's runtime rejects it. The API
+@@ -35,9 +28,6 @@ controllerConfig:
+   # Headlamp deep link to the env pod's dev-container logs (Headlamp ≥0.42 ?view=logs
+   # deep-link; the pod name IS the env id, in the release namespace).
+   headlampLogsUrl: "http://headlamp/c/main/pods/kubecoder-dev/{env_id}?view=logs&container=dev"
+-  images:
+-    worker: registry:5000/kubecoder-worker:dev-latest
+-    vsix: registry:5000/kubecoder-vsix:dev-latest
+   storage:
+     # Node path of this stage's ZFS dataset — must stay in sync with the stage-derived
+     # "kubecoder-${var.stage}" dataset name in ../_shared/infrastructure.tf.
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index a76a4d1..db4dd1b 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -12,13 +12,6 @@ service:
+     serverName: kubecoder-mcp.ginbov.nl
+     isPublic: yes
+ 
+-images:
+-  controller: :prd-latest
+-  bot: :prd-latest
+-  mcp: :prd-latest
+-  ingress: :prd-latest
+-  manual: :prd-latest
+-
+ controller:
+   # Both stages run on the same MicroK8s cluster, whose API-server CA certificate carries no
+   # keyUsage extension — the X.509 verification in the controller's runtime rejects it. The API
+@@ -55,9 +48,6 @@ controllerConfig:
+   # Headlamp deep link to the env pod's dev-container logs (Headlamp ≥0.42 ?view=logs
+   # deep-link; the pod name IS the env id, in the release namespace).
+   headlampLogsUrl: "http://headlamp/c/main/pods/kubecoder-prd/{env_id}?view=logs&container=dev"
+-  images:
+-    worker: registry:5000/kubecoder-worker:prd-latest
+-    vsix: registry:5000/kubecoder-vsix:prd-latest
+ 
+   # The in-pod SSH transport (slice 170): deployment-wide, no per-env override — every env pod
+   # this controller composes gets an unprivileged sshd and port 22 on its LoadBalancer Service.
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 9ea8683..8eafa06 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -57,6 +57,23 @@ NAMESPACED = {
+     ("rbac.authorization.k8s.io", "Role"),
+     ("rbac.authorization.k8s.io", "RoleBinding"),
+ }
++# The seven images KubeCoder's Build-Main pushes as `:dev-<build>` (settled 8). The five
++# Deployment containers, as (Deployment, container), take a tag from `images.<key>`; the two
++# controller ImageVolumes take a whole reference from `controllerConfig.images.<key>`.
++PINNED_CONTAINERS = {
++    "controller": ("kubecoder-controller", "kubecoder-controller"),
++    "ingress": ("kubecoder-controller", "ingress"),
++    "manual": ("kubecoder-controller", "manual"),
++    "bot": ("kubecoder-bot", "kubecoder-bot"),
++    "mcp": ("kubecoder-mcp", "kubecoder-mcp"),
++}
++PINNED_VOLUMES = ("worker", "vsix")
++PIN = re.compile(r"registry:5000/kubecoder-(?P<name>[a-z]+):dev-(?P<build>[0-9]+)")
++# A DockerImages image, floating as copied from HelmCharts (R13).
++TUNNEL_RECLAIM = "registry:5000/kube-coder-tunnel-reclaim:latest"
++# The controllerConfig keys holding a raw container spec, each stating `imagePullPolicy: Always`
++# while its image floats (D145, ruling D3).
++CONFIG_CONTAINERS = ("container", "mainContainer")
+ 
+ failures = []
+ 
+@@ -114,6 +131,42 @@ def label(doc):
+     return f"{doc['kind']}/{metadata.get('name') or metadata.get('generateName')}"
+ 
+ 
++def entries(node, path=()):
++    """Every (key path, value) under a parsed YAML node, depth first."""
++    if isinstance(node, dict):
++        pairs = node.items()
++    elif isinstance(node, list):
++        pairs = enumerate(node)
++    else:
++        return
++    for key, value in pairs:
++        yield (*path, key), value
++        yield from entries(value, (*path, key))
++
++
++def dotted(path):
++    return ".".join(map(str, path))
++
++
++def container(docs, deployment, name):
++    for spec in find(docs, "Deployment", deployment)["spec"]["template"]["spec"]["containers"]:
++        if spec["name"] == name:
++            return spec
++    return None
++
++
++def pinned_references():
++    values = yaml.safe_load((CHART / "values.yaml").read_text())
++    references = {
++        key: f"registry:5000/kubecoder-{key}{values['images'][key]}" for key in PINNED_CONTAINERS
++    }
++    references.update({key: values["controllerConfig"]["images"][key] for key in PINNED_VOLUMES})
++    references["tunnelReclaim"] = (
++        f"registry:5000/kube-coder-tunnel-reclaim{values['images']['tunnelReclaim']}"
++    )
++    return references
++
++
+ def check_library():
+     chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
+     check(
+@@ -132,12 +185,41 @@ def check_library():
+     check(not tracked, f"the built dependency is committed: {tracked}")
+ 
+ 
++def check_pins():
++    references = pinned_references()
++    builds = set()
++    for key in (*PINNED_CONTAINERS, *PINNED_VOLUMES):
++        match = PIN.fullmatch(references[key])
++        check(
++            match is not None and match["name"] == key,
++            f"chart/values.yaml pins {key} to {references[key]!r}, not a Build-Main "
++            "`:dev-<build>` tag (R11, R12)",
++        )
++        if match is not None:
++            builds.add(match["build"])
++    check(
++        len(builds) == 1,
++        f"the seven Build-Main pins name builds {sorted(builds)}, not one (settled 8)",
++    )
++    check(
++        references["tunnelReclaim"] == TUNNEL_RECLAIM,
++        f"images.tunnelReclaim names {references['tunnelReclaim']}, not the floating "
++        f"{TUNNEL_RECLAIM} (R13)",
++    )
++
++
+ def check_stage_values(stage):
+     values = yaml.safe_load((REPO / "config" / stage / "values.yaml").read_text())
+     check(
+         (values.get("global") or {}).get("environment") == stage,
+         f"config/{stage}/values.yaml does not set global.environment to {stage!r} (R4)",
+     )
++    overrides = [dotted(path) for path, _ in entries(values) if path[-1] in ("image", "images")]
++    check(
++        not overrides,
++        f"config/{stage}/values.yaml sets image references {overrides}; both stages render the "
++        "chart's pins (settled 8)",
++    )
+ 
+ 
+ def check_namespace_manifest(stage, docs):
+@@ -226,6 +308,51 @@ def check_deployment_identity(stage, docs):
+     )
+ 
+ 
++def check_images(stage, docs):
++    references = pinned_references()
++    for key, (deployment, name) in PINNED_CONTAINERS.items():
++        spec = container(docs, deployment, name)
++        check(spec is not None, f"{stage}: Deployment/{deployment} has no container {name}")
++        if spec is None:
++            continue
++        check(
++            spec.get("image") == references[key],
++            f"{stage}: {deployment}/{name} runs {spec.get('image')}, not the chart's pin "
++            f"{references[key]} (settled 8)",
++        )
++        check(
++            spec.get("imagePullPolicy") != "Always",
++            f"{stage}: {deployment}/{name} runs a pinned image but still pulls Always (R14)",
++        )
++    reclaim = container(docs, "kubecoder-controller", "tunnel-reclaim") or {}
++    check(
++        reclaim.get("image") == TUNNEL_RECLAIM and reclaim.get("imagePullPolicy") == "Always",
++        f"{stage}: the tunnel-reclaim container runs {reclaim.get('image')} pulling "
++        f"{reclaim.get('imagePullPolicy')}, not {TUNNEL_RECLAIM} pulling Always (R13, R14)",
++    )
++
++    config = yaml.safe_load(
++        find(docs, "ConfigMap", "kubecoder-controller-config")["data"]["controller.yaml"]
++    )
++    for key in PINNED_VOLUMES:
++        check(
++            config["images"].get(key) == references[key],
++            f"{stage}: the controller ConfigMap's images.{key} is {config['images'].get(key)}, "
++            f"not the chart's pin {references[key]} (R12)",
++        )
++    policies = {
++        dotted(path): spec.get("imagePullPolicy")
++        for path, spec in entries(config)
++        if path[-1] in CONFIG_CONTAINERS
++    }
++    drifted = sorted(path for path, policy in policies.items() if policy != "Always")
++    check(
++        policies and not drifted,
++        f"{stage}: controllerConfig container specs not pulling Always: "
++        f"{drifted if policies else 'none rendered'} (ruling D3)",
++    )
++
++
+ def check_hook_job(stage, docs):
+     jobs = [doc for doc in docs if doc["kind"] == "Job"]
+     check(len(jobs) == 1, f"{stage}: renders {len(jobs)} Jobs, not the one PreSync hook (R6)")
+@@ -284,6 +411,7 @@ def check_render_stable(first):
+ 
+ def main():
+     check_library()
++    check_pins()
+     first = {}
+     for stage in STAGES:
+         first[stage] = render(stage)
+@@ -292,6 +420,7 @@ def main():
+         check_namespace_manifest(stage, docs)
+         check_stage_identity(stage, docs)
+         check_deployment_identity(stage, docs)
++        check_images(stage, docs)
+         check_hook_job(stage, docs)
+         check_scope(stage, docs)
+     check_render_stable(first)
+
+/work/KubeCoderDeploy — P5: git diff 6002b6404e0c..9d6c448e8234
+
+.gitignore                     |  3 +++
+ .kubecoder/project.yaml        |  7 +++--
+ chart/templates/zfs-pvc.yaml   |  2 +-
+ chart/values.yaml              |  4 +--
+ config/dev/terraform.tfvars    |  8 ++++++
+ config/dev/values.yaml         |  4 +--
+ config/prd/terraform.tfvars    |  8 ++++++
+ terraform/providers.tf         | 33 +++++++++++++++++++++++
+ terraform/storage.tf           | 63 ++++++++++++++++++++++++++++++++++++++++++++
+ terraform/tests/dev.tftest.hcl | 88 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ terraform/tests/prd.tftest.hcl | 65 ++++++++++++++++++++++++++++++++++++++++++++++
+ terraform/variables.tf         | 39 ++++++++++++++++++++++++++++
+ terraform/webhook.tf           | 16 ++++++++++++
+ tests/terraform.sh             | 19 ++++++++++++++
+ 14 files changed, 352 insertions(+), 7 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index 9d3beaa..f342d61 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,3 +1,6 @@
+ # The pinned library chart is resolved by `helm dependency build` from chart/Chart.lock, here
+ # and on Argo's repo-server alike; the tarball is never committed.
+ /chart/charts/
++# tests/terraform.sh's `terraform init`; the hook initialises its own clone.
++/terraform/.terraform/
++/terraform/.terraform.lock.hcl
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 974f159..a97d6a5 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -19,8 +19,11 @@ projects:
+       - >-
+         cexec iac helm lint chart --values config/prd/values.yaml
+         --set hook.repo=https://github.com/pvginkel/KubeCoderDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=kubecoder-prd
+-    # The gate is the render: tests/render-chart.py renders both stages as the
+-    # ApplicationSet does and asserts against the objects helm produces.
++      - cexec iac terraform fmt -check -diff -recursive
++    # tests/render-chart.py renders both stages as the ApplicationSet does and
++    # asserts against the objects helm produces; tests/terraform.sh checks
++    # terraform/ and plans each stage's tfvars against mocked providers.
+     test:
+       - cexec iac tests/build-deps.sh
+       - cexec iac tests/render-chart.py
++      - cexec iac tests/terraform.sh
+diff --git a/chart/templates/zfs-pvc.yaml b/chart/templates/zfs-pvc.yaml
+index 3c27e85..fe1073a 100644
+--- a/chart/templates/zfs-pvc.yaml
++++ b/chart/templates/zfs-pvc.yaml
+@@ -1,4 +1,4 @@
+-# Claims the TF-owned ZFS local PV (static-zfs-pv in infrastructure.tf). The PV carries
++# Claims the TF-owned ZFS local PV (terraform/storage.tf). The PV carries
+ # node-affinity to the pool's node, so mounting this PVC is what pins the controller.
+ apiVersion: v1
+ kind: PersistentVolumeClaim
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 3e5c6fc..f7b064f 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -755,8 +755,8 @@ service:
+ 
+ storage:
+   zfs:
+-    # k8s capacity accounting only; the ZFS dataset quota (infrastructure.tf) is the
+-    # real bound. The PVC pre-binds the TF-owned PV by volumeName.
++    # k8s capacity accounting only; the ZFS dataset quota (zfs_quota in
++    # config/<stage>/terraform.tfvars) is the real bound. The PVC pre-binds the TF-owned PV by volumeName.
+     size: 80Gi
+ 
+ # Per-container resources, keyed <deployment>.<container>. Filled per-stage by
+diff --git a/config/dev/terraform.tfvars b/config/dev/terraform.tfvars
+new file mode 100644
+index 0000000..30c49c9
+--- /dev/null
++++ b/config/dev/terraform.tfvars
+@@ -0,0 +1,8 @@
++# Mounted at /zpool5/kubecoder-dev, the controllerConfig.storage.zfsHostPath in values.yaml
++# beside this file.
++zfs_dataset = "kubecoder-dev"
++zfs_quota   = "20G"
++zfs_size    = "20Gi"
++
++# dev owns the repository's webhook; no other stage may.
++manage_webhook = true
+diff --git a/config/dev/values.yaml b/config/dev/values.yaml
+index 7cf0e6e..7d4c3a2 100644
+--- a/config/dev/values.yaml
++++ b/config/dev/values.yaml
+@@ -29,8 +29,8 @@ controllerConfig:
+   # deep-link; the pod name IS the env id, in the release namespace).
+   headlampLogsUrl: "http://headlamp/c/main/pods/kubecoder-dev/{env_id}?view=logs&container=dev"
+   storage:
+-    # Node path of this stage's ZFS dataset — must stay in sync with the stage-derived
+-    # "kubecoder-${var.stage}" dataset name in ../_shared/infrastructure.tf.
++    # Node path of this stage's ZFS dataset — must stay in sync with zfs_dataset in
++    # terraform.tfvars beside this file.
+     zfsHostPath: /zpool5/kubecoder-dev
+   # prd + dev share srvk8s4; the env-count caps split the node between them (D124).
+   nodes:
+diff --git a/config/prd/terraform.tfvars b/config/prd/terraform.tfvars
+new file mode 100644
+index 0000000..1d660e6
+--- /dev/null
++++ b/config/prd/terraform.tfvars
+@@ -0,0 +1,8 @@
++# The live dataset's bare name, mounted at /zpool5/kubecoder, the chart's default
++# controllerConfig.storage.zfsHostPath. Renaming it trips prevent_destroy.
++zfs_dataset = "kubecoder"
++zfs_quota   = "80G"
++zfs_size    = "80Gi"
++
++# config/dev/ owns the repository's webhook.
++manage_webhook = false
+diff --git a/terraform/providers.tf b/terraform/providers.tf
+new file mode 100644
+index 0000000..9921d1c
+--- /dev/null
++++ b/terraform/providers.tf
+@@ -0,0 +1,33 @@
++# Applied only by the Argo CD PreSync hook (/work/ArgoCDTools/presync), from its own clone. It
++# fills the empty http backend at init, exports its environment (TF_VAR_*, HOMELAB_*,
++# GITHUB_TOKEN, KUBE_CONFIG_PATH) and passes config/<stage>/*.tfvars at apply.
++
++terraform {
++  required_providers {
++    github = {
++      source = "integrations/github"
++    }
++    homelab = {
++      source = "pvginkel/homelab"
++    }
++    kubernetes = {
++      source = "hashicorp/kubernetes"
++    }
++  }
++
++  backend "http" {}
++}
++
++# zfs_pools is a provider attribute with no environment fallback; every other homelab setting is
++# read from HOMELAB_*.
++provider "homelab" {
++  zfs_pools = var.zfs_pools
++}
++
++# Follows KUBE_CONFIG_PATH, a kubeconfig the hook mints from its own ServiceAccount.
++provider "kubernetes" {}
++
++# Authenticates with GITHUB_TOKEN.
++provider "github" {
++  owner = "pvginkel"
++}
+diff --git a/terraform/storage.tf b/terraform/storage.tf
+new file mode 100644
+index 0000000..0d46bfb
+--- /dev/null
++++ b/terraform/storage.tf
+@@ -0,0 +1,63 @@
++# KubeCoder's env-storage share on zpool5. The PV's node affinity is the placement anchor:
++# mounting the PVC (chart/templates/zfs-pvc.yaml) pins the controller to the pool's node, and the
++# controller stamps the same node onto env pods. The share also holds the single shared env home
++# at <share>/system/home.
++#
++# The dataset is managed through the iac-provisioner agent on the pool's node, so an apply needs
++# that agent up.
++
++locals {
++  zfs_pool = "zpool5"
++}
++
++resource "homelab_zfs_dataset" "env_storage" {
++  pool  = local.zfs_pool
++  name  = var.zfs_dataset
++  quota = var.zfs_quota
++
++  lifecycle {
++    prevent_destroy = true
++  }
++}
++
++resource "kubernetes_persistent_volume_v1" "env_storage" {
++  metadata {
++    name = "${var.namespace}-zfs-pv"
++  }
++
++  spec {
++    access_modes                     = ["ReadWriteOnce"]
++    persistent_volume_reclaim_policy = "Retain"
++    storage_class_name               = ""
++    volume_mode                      = "Filesystem"
++
++    capacity = {
++      storage = var.zfs_size
++    }
++
++    # The chart's PVC, which names this PV as its volumeName.
++    claim_ref {
++      name      = "${var.namespace}-zfs-pvc"
++      namespace = var.namespace
++    }
++
++    persistent_volume_source {
++      local {
++        path = homelab_zfs_dataset.env_storage.mountpoint_resolved
++      }
++    }
++
++    # A local volume exists only on the node carrying its pool.
++    node_affinity {
++      required {
++        node_selector_term {
++          match_expressions {
++            key      = "kubernetes.io/hostname"
++            operator = "In"
++            values   = [var.zfs_pools[local.zfs_pool]]
++          }
++        }
++      }
++    }
++  }
++}
+diff --git a/terraform/tests/dev.tftest.hcl b/terraform/tests/dev.tftest.hcl
+new file mode 100644
+index 0000000..69a853d
+--- /dev/null
++++ b/terraform/tests/dev.tftest.hcl
+@@ -0,0 +1,88 @@
++# config/dev/ describes the live kubecoder-dev dataset and PV exactly as HelmCharts' module.zfs
++# manages them, and owns the repository's webhook. Run by tests/terraform.sh with
++# config/dev/*.tfvars.
++
++mock_provider "github" {}
++mock_provider "homelab" {}
++mock_provider "kubernetes" {}
++
++# What the hook's environment supplies.
++variables {
++  namespace             = "kubecoder-dev"
++  zfs_pools             = { zpool2 = "srvk8s1", zpool3 = "srvk8s2", zpool4 = "srvk8s3", zpool5 = "srvk8s4" }
++  github_webhook_secret = "shared-webhook-secret"
++}
++
++run "storage" {
++  command = plan
++
++  assert {
++    condition     = homelab_zfs_dataset.env_storage.pool == "zpool5" && homelab_zfs_dataset.env_storage.name == "kubecoder-dev"
++    error_message = "dev's dataset is not zpool5/kubecoder-dev"
++  }
++
++  assert {
++    condition     = homelab_zfs_dataset.env_storage.quota == "20G"
++    error_message = "dev's dataset quota is not 20G"
++  }
++
++  assert {
++    condition     = kubernetes_persistent_volume_v1.env_storage.metadata[0].name == "kubecoder-dev-zfs-pv"
++    error_message = "dev's PV is not kubecoder-dev-zfs-pv"
++  }
++
++  assert {
++    condition     = kubernetes_persistent_volume_v1.env_storage.spec[0].capacity["storage"] == "20Gi"
++    error_message = "dev's PV capacity is not 20Gi"
++  }
++
++  assert {
++    condition = (
++      kubernetes_persistent_volume_v1.env_storage.spec[0].claim_ref[0].name == "kubecoder-dev-zfs-pvc"
++      && kubernetes_persistent_volume_v1.env_storage.spec[0].claim_ref[0].namespace == "kubecoder-dev"
++    )
++    error_message = "dev's PV is not claimed by kubecoder-dev/kubecoder-dev-zfs-pvc"
++  }
++
++  assert {
++    condition     = kubernetes_persistent_volume_v1.env_storage.spec[0].persistent_volume_reclaim_policy == "Retain"
++    error_message = "dev's PV is not Retain"
++  }
++
++  assert {
++    condition     = toset(kubernetes_persistent_volume_v1.env_storage.spec[0].node_affinity[0].required[0].node_selector_term[0].match_expressions[0].values) == toset(["srvk8s4"])
++    error_message = "dev's PV is not pinned to zpool5's node"
++  }
++}
++
++run "webhook" {
++  command = plan
++
++  assert {
++    condition     = length(github_repository_webhook.argocd) == 1
++    error_message = "dev does not own the repository's webhook"
++  }
++
++  assert {
++    condition = (
++      github_repository_webhook.argocd[0].repository == "KubeCoderDeploy"
++      && github_repository_webhook.argocd[0].active
++      && toset(github_repository_webhook.argocd[0].events) == toset(["push"])
++    )
++    error_message = "the webhook is not an active push hook on KubeCoderDeploy"
++  }
++
++  assert {
++    condition = (
++      github_repository_webhook.argocd[0].configuration[0].url == "https://deploy-hooks.webathome.org/api/webhook"
++      && github_repository_webhook.argocd[0].configuration[0].content_type == "json"
++      && !github_repository_webhook.argocd[0].configuration[0].insecure_ssl
++    )
++    error_message = "the webhook does not deliver JSON to the relay over verified TLS"
++  }
++
++  assert {
++    condition     = nonsensitive(github_repository_webhook.argocd[0].configuration[0].secret == var.github_webhook_secret)
++    error_message = "the webhook is not signed with the hook environment's shared secret"
++  }
++}
+diff --git a/terraform/tests/prd.tftest.hcl b/terraform/tests/prd.tftest.hcl
+new file mode 100644
+index 0000000..745eeb5
+--- /dev/null
++++ b/terraform/tests/prd.tftest.hcl
+@@ -0,0 +1,65 @@
++# config/prd/ describes the live kubecoder-prd dataset and PV exactly as HelmCharts' module.zfs
++# manages them, and leaves the repository's webhook to dev. Run by tests/terraform.sh with
++# config/prd/*.tfvars.
++
++mock_provider "github" {}
++mock_provider "homelab" {}
++mock_provider "kubernetes" {}
++
++# What the hook's environment supplies.
++variables {
++  namespace             = "kubecoder-prd"
++  zfs_pools             = { zpool2 = "srvk8s1", zpool3 = "srvk8s2", zpool4 = "srvk8s3", zpool5 = "srvk8s4" }
++  github_webhook_secret = "shared-webhook-secret"
++}
++
++run "storage" {
++  command = plan
++
++  assert {
++    condition     = homelab_zfs_dataset.env_storage.pool == "zpool5" && homelab_zfs_dataset.env_storage.name == "kubecoder"
++    error_message = "prd's dataset is not zpool5/kubecoder"
++  }
++
++  assert {
++    condition     = homelab_zfs_dataset.env_storage.quota == "80G"
++    error_message = "prd's dataset quota is not 80G"
++  }
++
++  assert {
++    condition     = kubernetes_persistent_volume_v1.env_storage.metadata[0].name == "kubecoder-prd-zfs-pv"
++    error_message = "prd's PV is not kubecoder-prd-zfs-pv"
++  }
++
++  assert {
++    condition     = kubernetes_persistent_volume_v1.env_storage.spec[0].capacity["storage"] == "80Gi"
++    error_message = "prd's PV capacity is not 80Gi"
++  }
++
++  assert {
++    condition = (
++      kubernetes_persistent_volume_v1.env_storage.spec[0].claim_ref[0].name == "kubecoder-prd-zfs-pvc"
++      && kubernetes_persistent_volume_v1.env_storage.spec[0].claim_ref[0].namespace == "kubecoder-prd"
++    )
++    error_message = "prd's PV is not claimed by kubecoder-prd/kubecoder-prd-zfs-pvc"
++  }
++
++  assert {
++    condition     = kubernetes_persistent_volume_v1.env_storage.spec[0].persistent_volume_reclaim_policy == "Retain"
++    error_message = "prd's PV is not Retain"
++  }
++
++  assert {
++    condition     = toset(kubernetes_persistent_volume_v1.env_storage.spec[0].node_affinity[0].required[0].node_selector_term[0].match_expressions[0].values) == toset(["srvk8s4"])
++    error_message = "prd's PV is not pinned to zpool5's node"
++  }
++}
++
++run "webhook" {
++  command = plan
++
++  assert {
++    condition     = length(github_repository_webhook.argocd) == 0
++    error_message = "prd claims the repository's webhook, which dev owns"
++  }
++}
+diff --git a/terraform/variables.tf b/terraform/variables.tf
+new file mode 100644
+index 0000000..7fb88bf
+--- /dev/null
++++ b/terraform/variables.tf
+@@ -0,0 +1,39 @@
++# From the hook's environment.
++
++variable "namespace" {
++  description = "The Application's destination namespace, kubecoder-<stage> (TF_VAR_namespace). The chart creates it; nothing here does."
++  type        = string
++}
++
++variable "zfs_pools" {
++  description = "ZFS pool to node hostname on the prd cluster (TF_VAR_zfs_pools)."
++  type        = map(string)
++}
++
++variable "github_webhook_secret" {
++  description = "Argo CD's shared webhook secret, the one the relay verifies deliveries against (TF_VAR_github_webhook_secret)."
++  type        = string
++  sensitive   = true
++}
++
++# From config/<stage>/*.tfvars.
++
++variable "zfs_dataset" {
++  description = "Dataset name within the pool. Renaming it forces a destroy, which prevent_destroy refuses."
++  type        = string
++}
++
++variable "zfs_quota" {
++  description = "ZFS quota on the dataset: the real bound on env storage."
++  type        = string
++}
++
++variable "zfs_size" {
++  description = "PV capacity. Kubernetes accounting only."
++  type        = string
++}
++
++variable "manage_webhook" {
++  description = "Whether this stage's state owns the repository's GitHub webhook. True in exactly one stage: the webhook is per repository and the state per stage, so a second owner's apply fails on GitHub's hook-already-exists."
++  type        = bool
++}
+diff --git a/terraform/webhook.tf b/terraform/webhook.tf
+new file mode 100644
+index 0000000..64245ca
+--- /dev/null
++++ b/terraform/webhook.tf
+@@ -0,0 +1,16 @@
++# This repository's push deliveries, to the webhook relay, which verifies the signature and
++# forwards each delivery to argocd-server (D39, D49).
++resource "github_repository_webhook" "argocd" {
++  count = var.manage_webhook ? 1 : 0
++
++  repository = "KubeCoderDeploy"
++  active     = true
++  events     = ["push"]
++
++  configuration {
++    url          = "https://deploy-hooks.webathome.org/api/webhook"
++    content_type = "json"
++    insecure_ssl = false
++    secret       = var.github_webhook_secret
++  }
++}
+diff --git a/tests/terraform.sh b/tests/terraform.sh
+new file mode 100755
+index 0000000..9d194b3
+--- /dev/null
++++ b/tests/terraform.sh
+@@ -0,0 +1,19 @@
++#!/bin/sh
++# terraform/ is formatted and valid, and each stage's tfvars, passed as the hook passes them,
++# plan the objects terraform/tests/<stage>.tftest.hcl asserts. No backend and no credentials:
++# `terraform test` keeps its state in memory and mock providers answer every call.
++set -eu
++
++cd "$(dirname "$0")/.."
++
++terraform fmt -check -diff -recursive
++terraform -chdir=terraform init -backend=false -input=false -no-color
++terraform -chdir=terraform validate -no-color
++
++for stage in dev prd; do
++  set --
++  for file in config/"$stage"/*.tfvars; do
++    set -- "$@" "-var-file=../$file"
++  done
++  terraform -chdir=terraform test -no-color "-filter=tests/$stage.tftest.hcl" "$@"
++done

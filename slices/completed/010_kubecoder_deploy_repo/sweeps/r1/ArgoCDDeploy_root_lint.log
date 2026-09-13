@@ -1,0 +1,2 @@
+root: cexec iac tests/build-deps.sh    [  OK  ]
+root: cexec iac helm lint chart --values config/prd/values.yaml    [  OK  ]

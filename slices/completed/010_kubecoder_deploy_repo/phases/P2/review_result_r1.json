@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "audit-prd-orphans now reads reconciler: correctly. An Argo-owned entry is no longer a desired or missing Helm release, its namespace and storage stay desired, and its live release (argocd-prd, confirmed live) is listed apart and never as an orphan. The tests are non-vacuous under mutation; one advisory test-adequacy note.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "No test pins that the uninstall guard keys on ownership: a guard narrowed to the name argocd-prd passes all four tests"
+    }
+  ]
+}
