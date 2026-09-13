@@ -106,3 +106,16 @@ Slice 012's planning should decide where an Argo-managed app's architecture mapp
 
 **Provenance:** read — plan-writer, plan pass r1; HelmCharts tools/chart_tools/gen_architecture.py:574,585
 **Disposition:**
+
+### S2 — audit-prd-orphans reads desired storage only from HelmCharts' _shared/*.tf, so a migrated app's storage becomes an orphan candidate once _shared/ is deleted
+
+`desired_state()` builds its desired RBD, CephFS, S3 and zpool2 sets only from `configs/prd/<chart>/_shared/*.tf` (`/work/HelmCharts/tools/chart_tools/audit_prd_orphans.py:132-167`). `_diff` then lists `live - desired` as ORPHAN CANDIDATES (`:301-306`).
+
+An Argo-migrated app's Terraform lives in its deploy repo, and slice 012's requirement 6 deletes `_shared/` once both stages are over. Plan P2 (settled 6) makes the audit reconciler-aware for Helm releases and says an Argo-owned app's Terraform-declared storage stays desired. That holds only while HelmCharts still carries the old `_shared/*.tf`.
+
+KubeCoder is not exposed: its dataset is on zpool5, and the audit collects zpool2 only (`:42-48` of the live-state reader). A later migration with zpool2, RBD, CephFS or S3 storage is exposed.
+
+**Consequence:** After a later migration deletes its _shared/*.tf, a hand-run audit-prd-orphans lists that app's live volumes and buckets as orphan candidates, even though the deploy repo's Terraform still owns them.
+
+**Provenance:** read — plan-reviewer, plan review r1; HelmCharts tools/chart_tools/audit_prd_orphans.py, slices/backlog/012_kubecoder_argo_cutover/slice.md requirement 6
+**Disposition:**
