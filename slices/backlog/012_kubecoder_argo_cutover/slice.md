@@ -229,6 +229,36 @@ first sync restarts every env pod in the stage, including whichever session is d
   plus the registry commit and the post-cutover deletions; you execute the keystrokes against
   it."*
 
+## Carried in from slice 010's planning (2026-09-13)
+
+Slice 010's refinement moved these here; the operator agreed in chat ("Your suggestions seem
+fine." — "It doesn't hurt anything I think. You're good to go.").
+
+- **The controller half of the D145 retirement — sharpens requirement 13.** Slice 010 drops
+  `imagePullPolicy: Always` only on KubeCoderDeploy's five pinned chart Deployments (controller,
+  ingress, manual, mcp, bot). The controller's own worker and vsix ImageVolume
+  `pullPolicy: "Always"` lines (`/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725`,
+  checked 2026-09-13) cannot go until **both** stages run from pins: until then their live tags
+  are `dev-latest` / `prd-latest`, which Kubernetes defaults to `IfNotPresent`, and every KubeCoder
+  push deploys live — removing them early brings back the stale-worker bug D145 fixed. Remove them
+  after prd's cutover and update D145 (`/work/KubeCoderSpecs/decisions.md`) then. It retires only
+  in part — the dev container, services, toolchains, samba, kaniko and localHome images stay
+  floating and keep `Always` — and its checklist is stale: the third from-scratch container is
+  `_image_builder_sidecar`, not `_busybox_share_init`, and `vsix` carries an ImageVolume
+  `pullPolicy` too.
+- **Re-sync the chart before the dev cutover.** Slice 010 *copies* `charts/kubecoder` and the stage
+  values out of HelmCharts rather than moving them — HelmCharts keeps deploying KubeCoder until
+  cutover, and the chart changes there about fifteen times a month. KubeCoderDeploy records the
+  HelmCharts commit it copied; replay whatever landed in `charts/kubecoder/` and
+  `configs/prd/kubecoder/` since, before requirement 8's diff review.
+- **Requirement 8's expected diff grows.** Beyond image references, the deployment annotation and
+  the namespace's tracking annotation: the five pinned containers lose `imagePullPolicy: Always`,
+  and the bot and MCP Deployments lose the deployment annotation (the controller's becomes the
+  controllerConfig checksum).
+- **Before KubeCoder's first dev sync, the operator syncs Argo itself** — slice 010 gives the
+  hook a webhook-secret environment value in ArgoCDDeploy, which KubeCoderDeploy's webhook
+  Terraform reads. The dev stage owns the webhook; the `prd` branch is born at prd's cutover.
+
 ## Subsumes
 
 Trello **#124** — "ArgoCD migration — Jenkins-orchestrated push → ArgoCD CD" (the project's
