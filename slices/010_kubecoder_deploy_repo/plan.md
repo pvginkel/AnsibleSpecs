@@ -476,7 +476,7 @@ Record:
 - `chart/values.yaml:72-80` (the D145 interim comment) is unchanged: its containers still float.
 - Nine mutations each turned the gate red: an image override in dev or prd, `Always` back on bot, vsix on another build, controller on `:latest`, `tunnelReclaim` pinned, and `Always` dropped from tunnel-reclaim, a toolchain and `mainContainer`. Lint and test are green.
 
-### P5 — KubeCoderDeploy: Terraform rebuilt to the ZFS PV, stage tfvars, the repo's webhook
+### P5 — KubeCoderDeploy: Terraform rebuilt to the ZFS PV, stage tfvars, the repo's webhook ✅ DONE 2026-09-13
 
 Target: ../KubeCoderDeploy
 
