@@ -148,3 +148,30 @@ In HelmCharts the chart's CA file is a symlink to the repo's canonical homelab-r
 
 **Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
 **Disposition:**
+
+### S5 — KubeCoderDeploy chart/values.yaml pin comment says worker/vsix take the default pull policy; the controller still pulls them Always · minor
+
+chart/values.yaml:8-10, added by P4, groups controllerConfig.images.{worker,vsix} with the five pinned containers as taking the kubelet's default pull policy. The controller mounts both as ImageVolumes with an explicit pullPolicy Always (/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725). Those lines stay by ruling D3, and slice 012 removes them.
+
+**Consequence:** A reader of the chart believes worker/vsix are no longer re-pulled on every env pod start until slice 012 lands; nothing is misconfigured.
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md
+**Disposition:**
+
+### S6 — KubeCoderDeploy terraform/ constrains no provider versions and commits no lock file, so every PreSync init takes the newest providers · minor
+
+terraform/providers.tf names integrations/github, hashicorp/kubernetes and pvginkel/homelab with no version constraint, and .gitignore drops .terraform.lock.hcl. This follows HelmCharts' _providers/ and .gitignore. The hook's init in its fresh clone resolves the latest release every sync; the P5 gate's init resolved github 6.13.0, kubernetes 3.2.1 and homelab 0.1.31. Either pessimistic constraints (~> major) or a committed lock (linux_amd64; the homelab provider comes from tfmirror.home, so only local checksums) would make an upgrade a reviewed commit. The choice is estate-wide: every later deploy repo copies this one.
+
+**Consequence:** A breaking major release of one of the three providers reaches KubeCoder's next sync without review, and a failed PreSync apply blocks that sync.
+
+**Provenance:** read, code-writer, P5, r1, KubeCoderDeploy terraform/providers.tf
+**Disposition:**
+
+### S7 — Slice 012 state mv targets for KubeCoder's ZFS objects are homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage · nit
+
+Slice 012 requirement 3 moves HelmCharts' module.zfs.homelab_zfs_dataset.this and module.zfs.kubernetes_persistent_volume_v1.this onto KubeCoderDeploy's rebuilt addresses, per stage: homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage (terraform/storage.tf). module.namespace has no counterpart; requirement 2 removes it. github_repository_webhook.argocd[0] is new in dev's state; no hand-made KubeCoderDeploy hook may exist when dev first syncs, or the create collides.
+
+**Consequence:** Without these names, slice 012's state surgery has to rediscover them in terraform/, and a wrong target plans a create against the live dataset.
+
+**Provenance:** read, code-writer, P5, r1, plan.md P5 done-record
+**Disposition:**

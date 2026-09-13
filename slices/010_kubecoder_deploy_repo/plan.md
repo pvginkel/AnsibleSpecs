@@ -523,6 +523,38 @@ Target: ../KubeCoderDeploy
     says the `repo` scope covers it). Slice 012's first dev sync is the proof.
 - **Gate.** It adds Terraform formatting and validation.
 
+**Done (P5).** `terraform/` declares `homelab_zfs_dataset.env_storage` (zpool5, `prevent_destroy`)
+and `kubernetes_persistent_volume_v1.env_storage` inline, with static-zfs-pv's attribute set, plus
+`github_repository_webhook.argocd`, counted on `manage_webhook`. `config/{dev,prd}/terraform.tfvars`
+carry `zfs_dataset`, `zfs_quota`, `zfs_size` and `manage_webhook`, which is true in dev only. Gate:
+`tests/terraform.sh` runs `fmt -check`, `validate` and a mocked-provider `terraform test` per stage.
+`kc project lint` also runs `fmt -check`. Landed as KubeCoderDeploy `9d6c448` on `phase/010-P5`.
+
+Later phases: none affected.
+
+Record:
+
+- Slice 012's `state mv` targets: `module.zfs.homelab_zfs_dataset.this` → `homelab_zfs_dataset.env_storage`
+  and `module.zfs.kubernetes_persistent_volume_v1.this` → `kubernetes_persistent_volume_v1.env_storage`.
+  `module.namespace` has no counterpart. Also a close-out suggestion.
+- Variables have no defaults: `namespace`, `zfs_pools` and `github_webhook_secret` (sensitive) come from
+  the hook, the four stage inputs from tfvars. A missing hook value fails the plan by name.
+- `var.stage` is not declared, so the hook's `TF_VAR_stage` goes unread. PV and claim names derive from
+  `var.namespace`, and the pool is a local.
+- Providers: `homelab { zfs_pools = var.zfs_pools }` (F2), bare `kubernetes {}`, `github { owner = "pvginkel" }`.
+  As in HelmCharts, there are no version constraints and `.terraform.lock.hcl` is gitignored. The gate's
+  init took github 6.13.0, kubernetes 3.2.1 and homelab 0.1.31. Close-out suggestion filed.
+- Webhook: on `KubeCoderDeploy`, active, `push` only, JSON to the relay URL, `insecure_ssl = false`,
+  signed with `var.github_webhook_secret`.
+- The stage tests are `terraform/tests/{dev,prd}.tftest.hcl`: `terraform test` refuses a test directory
+  outside the configuration, and the hook's apply never loads them. They assert the live names, sizes,
+  node and webhook owner. Breaking dev's quota or prd's `manage_webhook` fails its run.
+- Updated the copied comments: `config/dev/values.yaml:32-33` and `chart/values.yaml:758-759` point to the
+  tfvars, `chart/templates/zfs-pvc.yaml:1` to `terraform/storage.tf`.
+- Live PVs are unreadable with the read-only kubeconfig. Both PVCs are Bound (20Gi dev, 80Gi prd), so the
+  attribute match rests on the module source.
+- `kc project test` and `kc project lint` are green.
+
 ### P7 — Ansible runbook: preview a deploy repo's diff before its cutover
 
 Target: root
