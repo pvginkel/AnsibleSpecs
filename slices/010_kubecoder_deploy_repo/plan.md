@@ -263,6 +263,35 @@ This phase makes two changes to what a PreSync run holds. The repo's render gate
   - The gate rejects a namespace grant instead of requiring one (`tests/render-chart.py:112,1166`).
   - The comments that justify the grant describe only the kinds that remain.
 
+**Done (P1).** `argocd-hook-credentials` carries `TF_VAR_github_webhook_secret`, fetched from
+`eso/prd/argocd/prd/webhook#github_secret`. The `tf-presync` ClusterRole grants only
+`persistentvolumes` and `secrets`. Landed as ArgoCDDeploy `d2aa093` on `phase/010-P1`.
+
+Later phases:
+
+- P5: the webhook signs with `var.github_webhook_secret`, the variable the hook's
+  `TF_VAR_github_webhook_secret` fills (P5's text now says so). `terraform validate` does not check
+  the variable name against that key.
+- Nothing here reaches the cluster until the operator syncs `argocd-prd` by hand (close-out A2).
+
+Record:
+
+- The key is a leaf in `config/prd/values.yaml` `hooks.environment.leaves`, next to
+  `GITHUB_TOKEN`, not a literal, so `COMMITTED_LITERALS` is unchanged.
+- Gate, in `tests/render-chart.py`:
+  - `HOOK_LEAVES` gains the key, so the exact key-set assertion covers it.
+  - `check_hook_environment(docs, materialised)` also checks that the key's leaf and property are
+    the ones `argocd-secret`'s `webhook.github.secret` reference resolves to. The hook therefore
+    signs with the value the relay and both receivers verify.
+  - `HOOK_MANAGED` is now `(persistentvolumes, secrets)`. `HOOK_REFUSED = ("namespaces",)` fails
+    the gate if any ClusterRole rule names `namespaces`, whatever its verbs.
+- Each check was proved against a temporary change, then reverted. Re-adding `namespaces` to the
+  rule fails the gate. Pointing the key at another leaf fails it too: both the leaf check and the
+  binding check fire.
+- `hook-namespace.yaml`: the rule's comment now speaks of Secrets only. The ClusterRoleBinding
+  comment still holds and is unchanged.
+- `kc project test` and `kc project lint` are green.
+
 ### P2 — HelmCharts: `audit-prd-orphans` reads the reconciler
 
 Target: ../HelmCharts
@@ -400,7 +429,8 @@ Target: ../KubeCoderDeploy
 - **The repo's own webhook (R9, settled 7).** A `github_repository_webhook` on KubeCoderDeploy,
   created only where `manage_webhook` is true: `config/dev/` and nowhere else.
   - It sends push deliveries as JSON to `https://deploy-hooks.webathome.org/api/webhook`, signed
-    with the shared secret read through P1's hook-environment key (`design.md:288-313`). The
+    with the shared secret P1 added to the hook environment as `TF_VAR_github_webhook_secret`, so
+    the Terraform declares `variable "github_webhook_secret"` (`design.md:288-313`). The
     equivalent hand-made hook is described at `/work/Ansible/docs/runbooks/argocd.md:115-119`.
   - The GitHub provider authenticates with the hook's `GITHUB_TOKEN` (`config/prd/values.yaml:214`)
     and installs from the public registry (`/work/ArgoCDTools/image/terraform.rc` mirrors only
