@@ -237,7 +237,7 @@ makes KubeCoder the pilot that later migrations' deploy repos are modelled on.
   synced, deleted afterwards). P1 reaches the cluster only when the operator syncs `argocd-prd`
   by hand (D3), and that sync is owed before KubeCoder's first dev sync.
 
-### P1 — ArgoCDDeploy: the hook environment carries the webhook secret, and the hook loses its namespace grant
+### P1 — ArgoCDDeploy: the hook environment carries the webhook secret, and the hook loses its namespace grant ✅ DONE 2026-09-13
 
 Target: ../ArgoCDDeploy
 
