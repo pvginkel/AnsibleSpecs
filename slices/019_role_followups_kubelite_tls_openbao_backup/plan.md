@@ -182,6 +182,28 @@ R5, to the D2 ruling above. After `Restart microk8s kubelite`, a node gives up i
 - **Workers.** A worker has no local control plane, and its 16443 is the apiserver-proxy (:56-59). Its Ready condition reads stale straight after a kubelet restart. `playbooks/tasks/wait-node-ready.yml:19-28` records why that flow checks the node lease's `renewTime` before Ready, reading both through the primary. If reading this from inside the single throttled task proves impractical, the ruling's fallback applies: workers keep the kubelet health check and the comment says so.
 - **Check mode.** P3's announcement is the separate `debug` handler `Report the kubelite restart a real run would perform (check mode)`, with `listen: Restart microk8s kubelite`, placed just above the restart. It keeps working as long as the restart handler keeps its name.
 
+**Done (P4).** `Restart microk8s kubelite` keeps its name, its `throttle: 1` and its single restart-and-wait task. It now waits for readiness within `microk8s_kubelite_ready_timeout`:
+- An apiserver node waits for HTTP 200 from `https://127.0.0.1:16443/readyz`, with no credentials, as `/livez` was probed.
+- A worker reads its own Node through the local apiserver-proxy with `credentials/kubelet.config`. It waits for `Ready=True` with a `lastHeartbeatTime` later than the second the restart returned.
+- On timeout the handler fails with `kubelite restarted, but got no <what it awaited> within <N>s (last seen: …)`.
+
+Per the ruling on P4's r1 question, `playbooks/renew-internal-tls.yml` is two plays. The first covers `proxmox:openbao`, un-serialised as before. The second covers `k8s` alone, under `serial: 1`, and runs last. Both keep `force_handlers: true`. The handler comment and both play comments say what the wait checks, and that only a `serial: 1` play stops at the failure.
+
+Later phases:
+- P5: see its "The renewal run's two plays" bullet.
+- Test phase: for the certs path, V12 rests on the playbook split, not the handler; `site-k8s.yml` was already `serial: 1`. V11–V13 are not live-proven: they need an operator run that restarts kubelite on an apiserver node and on a worker.
+- Doc phase: `roles/microk8s/README.md:117` (the `/livez`/`healthz` probe, "one un-serialised play") and `AnsibleSpecs/decisions.md:26` ("carries no `serial:`") are stale (close-out N3).
+
+Record:
+- r1, scratch runs on ansible-core 2.20.5: under `throttle: 1`, a host failing a handler does not stop the other notified hosts of an un-serialised play. That holds with `any_errors_fatal` unset, task-level or play-level. `serial: 1` stops.
+- r1: the wait passed a stub harness (8 scenarios), and read-only probes on srvk8s1 and srvk8s4 matched. Before the restart the worker's Ready condition reads True, so only the post-restart heartbeat counts; both timestamps come from the node's own clock. The lease check from `wait-node-ready.yml` is not used. `defaults/main.yml`'s timeout comment now says "ready".
+- r2 harness: stand-in roles run under a copy of the real playbook, with a local connection.
+  - k2 not ready: k1 restarted and was ready, k2 failed, k3 and kd were never renewed. Every proxmox and openbao host renewed and reloaded. rc 2.
+  - `--limit k8s_dev`: play 1 reported "no hosts matched" and kd renewed. rc 0.
+  - p1's renewal failed: every other host renewed, all k8s nodes included. rc 2.
+  - A clean run: rc 0.
+- `--list-hosts` on prd: play 1 has pve, pve1, pve2 and srvvault1–3; play 2 has srvk8s1–4 and srvk8sdev. `--limit k8s_dev` leaves play 1 empty.
+
 ### P5 — A runbook recovers a lapsed internal_tls leaf
 
 **Target:** `root`
@@ -199,6 +221,7 @@ For the OpenBao listener leaf, the runbook also covers renewing it by hand while
 - **The premise.** Grounding's "R6, re-issue logic", "R6, the lapsed-leaf question is answered" and "R6, consumers and dependencies" bullets carry it. It was proven against step 0.30.6 and a throwaway CA, not a real host.
 - **The by-hand run is not worked out yet.** How a hand run gets its credentials with OpenBao down is still open. Work it out from `docs/runbooks/iac-cold-boot.md` and `docs/live-infra-access.md`, and check that nothing on the renewal path itself needs OpenBao.
 - **Grounded steps only.** The runbook is read under outage pressure, so it gives no recovery step the repo does not ground. An ungrounded step is why slice 016 did not write it (016-B10).
+- **The renewal run's two plays (P4).** `renew-internal-tls.yml` renews the pveproxy and OpenBao leaves in one un-serialised play, then the k8s leaves in a last play under `serial: 1`. That play stops at the first failed or unreachable k8s node, and a lapsed leaf on a later node is not reached; `--limit <node>` reaches it. When every proxmox and openbao host fails, the k8s play never runs.
 
 ### P6 — A whole-cluster recovery delivers the backup credential after the restore
 

@@ -44,6 +44,24 @@ code-reviewer, P1 r1, 2026-09-14 — The operator's checkout does hold a staged 
 **Provenance:** witnessed — code-writer, P1, r1, OpenBao dev server in the iac sidecar; plan.md P1 done-record
 **Disposition:**
 
+### N2 — P4 r2 printed the ansible-vault password into its session output while probing the iac sidecar's environment
+
+To find how ansible-playbook is reached in the iac sidecar, P4 r2 ran `cexec iac sh -c 'env | grep ^ANSIBLE'`. That printed ANSIBLE_VAULT_PASSWORD's value into the session output. The value is not repeated in any slice artifact, commit or verdict.
+
+**Consequence:** The ansible-vault password sits in P4 r2's session transcript, wherever transcripts are kept; whether to rotate it is the operator's call.
+
+**Provenance:** witnessed, code-writer, P4, r2, the P4 r2 session transcript
+**Disposition:**
+
+### N3 — renew-internal-tls.yml now renews the k8s leaves in a separate last play under serial: 1, reversing decisions.md's 'carries no serial:' for k8s
+
+Per the 2026-09-14 ruling on P4's question (Split k8s play, serial 1). AnsibleSpecs/decisions.md:26 still says the playbook carries no serial: and that the handler's throttle: 1 carries the one-at-a-time limit. ansible/roles/microk8s/README.md:117 still says the handler polls /livez (/healthz on a worker) and that this lets the playbook run the whole k8s group in one un-serialised play. The proxmox and openbao leaves keep the un-serialised play, so roles/openbao/README.md:31 stays true.
+
+**Consequence:** Until decisions.md:26 and the microk8s README are brought up to date, doctrine describes a single un-serialised renewal play and a liveness wait that no longer exist.
+
+**Provenance:** read, code-writer, P4, r2, ansible/playbooks/renew-internal-tls.yml
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -59,6 +77,15 @@ Under --check the secret_id mint (roles/openbao/tasks/approle.yml:329-347, a uri
 **Consequence:** The operator applies the rotation run that P1's rejection names, minting never-expiring secret_ids for all six AppRoles, with no dry run. Its --check fails, and tells them to pass a flag they already passed.
 
 **Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### B2 — Ansible — the OpenBao backup wrapper fails the whole backup when any KV-v2 secret is soft-deleted · minor
+
+OpenBao 2.5.4 keeps listing a soft-deleted key under kv/metadata/, but its data read answers 404 (data null, deletion_time set). The wrapper's KV walk exempts 404 only for the LIST (openbao-backup.sh.j2:118-120); the data read at :128 ends the run on any non-2xx. Reproduced on a bao dev server: after bao kv delete kv/a, the P2 wrapper exits 1 with 'GET kv/data/a failed: HTTP 404'. The pre-P2 wrapper also exits 1 ('KV walk failed'), so this predates slice 019; P2 only makes the journal name the cause.
+
+**Consequence:** One routine bao kv delete (the default soft delete) on any KV path stops every nightly OpenBao backup until the secret is undeleted or destroyed, and nothing alerts on it before slice 023's freshness check.
+
+**Provenance:** witnessed — code-reviewer, P2, round 1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
 ## Open questions and rulings
