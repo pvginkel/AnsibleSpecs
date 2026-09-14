@@ -445,6 +445,33 @@ The build this push triggers redeploys every prd release (`Jenkinsfile:94-99`): 
 and every release without S3 plan no change. This phase is the second HelmCharts push (Ordering
 constraints).
 
+**Done (P4).** `terraform-modules/s3-storage` sets `grant_backup_reader = endswith(var.namespace, "-prd") ? true : null`
+on `homelab_s3_storage`. The prd `env` in `_providers/clusters.yaml` names
+`HOMELAB_S3_BACKUP_READER: backup-reader`; dev names none. No call site changed. Committed on
+HelmCharts `phase/022-P4`.
+
+Later phases:
+- Test phase (V08, V09): in the prd build's plans, `iot-prd`, `electronics-inventory-prd` and
+  `design-assistant-prd` each show one in-place update, only `grant_backup_reader = true` added;
+  `design-assistant-{dev,tst,uat}` show no change.
+- Test phase: the module's lines moved. `homelab_s3_storage` is at `main.tf:52-65`, `prevent_destroy` at
+  `:62-64`, the Secret at `:67-77`. V01, V09 and V19 cite the old lines.
+- Test phase: the module has not been checked against the provider schema. `terraform validate` needs
+  the published provider, so the prd deploy is the first check.
+- Close-out A1 (dev deploy): expect one in-place `grant_backup_reader` null → true on
+  `homelab_s3_storage.this`, no policy written, then an empty plan. This is noted on A1.
+
+Record:
+- The ask reads `var.namespace`, not `var.name` as the phase text had it. The two are equal at every
+  call site, and the namespace is the one the chart must match to read its Secret.
+- `tests/test_s3_storage_backup_grant.py` (2 tests, real tree, no terraform). It pins the ask's shape
+  (suffix test, `true`, `null`, one assignment). It follows every prd stage's s3-storage call through its
+  namespace module to `var.namespace` and asserts the ask holds exactly on stage `prd` for the deploy
+  CLI's resolved namespace. It also asserts that prd names the reader the storage release's
+  `homelab_s3_reader` creates and that no other cluster names one.
+- `terraform console`: `iot-prd` → `true`, `design-assistant-{dev,uat}` → `tobool(null)`.
+  `terraform fmt -check` clean; `kc project test` green.
+
 ### P5 — An operator can restore a bucket from the mirror, and the drill is written down
 
 Target: root
@@ -465,7 +492,7 @@ A runbook in `docs/runbooks/` beside `openbao.md` (settled 10) that an operator 
   and user; and a drill log the operator's output fills.
 
 The runbook names where each credential it needs actually lives (ruling B2): the app's key pair in
-the Terraform-written Secret in the app's namespace (HelmCharts `terraform-modules/s3-storage/main.tf:62-72`;
+the Terraform-written Secret in the app's namespace (HelmCharts `terraform-modules/s3-storage/main.tf:67-77`;
 there is no OpenBao copy), `backup-reader`'s key in P2's Terraform-written Secret
 `backup-reader-credentials` in `storage-prd`,
 the crypt password and salt in OpenBao `eso/prd/storage/prd/s3-mirror` and in Roboform, and the

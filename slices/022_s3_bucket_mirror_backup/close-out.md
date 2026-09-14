@@ -27,6 +27,8 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 Ruling A1. Dev-cluster releases also run stage prd and every deploy floats to the newest provider, so after P4 each S3 release on the dev cluster asks for the backup-reader grant against a provider with no reader configured. The run proves that case only through the provider tests kc project test runs (acceptance tests skip without TF_ACC). The live proof is one manual dev deploy of iot, electronics-inventory or design-assistant after P4, while srvk8sdev is started for the restore drill; it is the operator's keystroke and no test phase can close it.
 
+executor P4 r1, 2026-09-14 — Every dev-cluster S3 release runs stage prd, so terraform-modules/s3-storage asks for the grant there too. The first deploy against the new module is expected to plan one in-place update on homelab_s3_storage.this, grant_backup_reader null to true, and write no bucket policy. The plan after it is empty (provider test TestStorageGrantWithoutReaderIsInert). Any other change in that plan is a defect.
+
 **Consequence:** Until it is done, a defect in the no-reader path first shows on the next manual dev deploy of an S3 release.
 
 **Provenance:** read, plan-writer, planning, r2, plan_review_r1.md A1
@@ -81,4 +83,40 @@ DockerImages `rclone-backup/src/docker-entrypoint.sh` syncs every remote named i
 **Consequence:** zpool2 holds the mirror's size plus up to 60 days of its churn; no exposure, since it is ciphertext.
 
 **Provenance:** read, plan-writer, planning r1, DockerImages rclone-backup/src/docker-entrypoint.sh
+**Disposition:**
+
+### S2 — HomelabTerraformProvider: no test grants the backup reader on a bucket added to an already-granted homelab_s3_storage · minor
+
+Update grants over planBuckets (internal/s3storage/resource.go:275), which is correct, but every unit and acceptance fixture has a single fixed bucket; mutating it to stateBuckets passes the suite. A regression would leave a newly added prd bucket without its policy until a later deploy refreshes the drift and re-applies.
+
+**Consequence:** None today; a future regression on this path would make the mirror fail on a newly added prd bucket until that release's next deploy.
+
+**Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### S3 — HomelabTerraformProvider: homelab_s3_storage Create's no-reader guard has no test · nit
+
+Every protocol-level apply in internal/s3storage/resource_test.go starts from a non-null prior, so Create never runs under kc project test; removing HasReader from Create's guard (resource.go:175) passes the suite. The no-reader case is proven only for existing releases (Update).
+
+**Consequence:** None today; a future regression would fail creation of a new S3 release on the dev cluster.
+
+**Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
+**Disposition:**
+
+### S4 — HelmCharts storage s3-mirror: keepArchives 0 keeps every archive folder instead of none · nit
+
+s3_mirror.py:83 prunes folders[:-keep], and with KEEP_ARCHIVES=0 that slice is empty, so nothing is pruned. values.yaml:41-43 describes the value as the number of archive folders kept per bucket. One possible fix is to reject a value below 1 in the script or the template.
+
+**Consequence:** None at the deployed value 30. Setting it to 0 would let archives grow without bound instead of keeping none.
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### S5 — HelmCharts prometheus: S3MirrorStale is silent when the s3-mirror CronJob or kube-state-metrics series are absent · minor
+
+The rule computes age from kube_cronjob_status_last_successful_time or kube_cronjob_created for storage-prd/s3-mirror; with neither series present (s3Mirror.enabled turned off in prd values, the CronJob deleted, or kube-state-metrics down) the expression is empty and nothing fires. P3 covered the two edges of ruling D2 only; an absent() companion or a KSM up-alert would close it.
+
+**Consequence:** None while the CronJob is deployed and kube-state-metrics is up; if either disappears, the mirror can stop with no alert.
+
+**Provenance:** read, code-writer, P3, r1, HelmCharts configs/prd/prometheus/prd/values.yaml S3MirrorStale
 **Disposition:**
