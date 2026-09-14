@@ -172,7 +172,7 @@ Record:
 - A separate listener rather than a check-mode branch inside the restart task: nothing that runs under `--check` touches a restart command.
 - Not live-proven. V08–V10 need the operator's `site-k8s.yml --check --diff` against a node where a notifier has drift.
 
-### P4 — The kubelite restart waits for readiness
+### P4 — The kubelite restart waits for readiness ✅ DONE 2026-09-14
 
 **Target:** `ansible`
 
