@@ -4,137 +4,202 @@
       "id": "V01",
       "area": "R1 — destroy guard filter",
       "description": "\"Fix jq (contains([\"delete\"]))\" — the Jenkins destroy guard fails on every plan action that deletes a prd VM, including Terraform's default replace ordering [\"delete\",\"create\"], which it misses today (support/iac-agent/bin/check-protected-vms.sh:30-34 matches only [\"delete\"] and [\"create\",\"delete\"]). As ruled (plan review r1, 2026-09-14), it is the second rail: while prevent_destroy is in the config Terraform refuses such a plan first (V04), so the guard is reachable only for a config without it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The commit's guard now matches any actions list containing \"delete\" via jq's any(...), so the default replace ordering [\"delete\",\"create\"] is caught along with a bare [\"delete\"]. The delete-catching branch itself is proven by P2's offline repro (stand-in resource, plan.md P2 record) since provoking a real delete/replace against a live prd VM is exactly what the slice exists to prevent and was not attempted. The commit copy ran cleanly (rc 0) against a real no-op prd plan.json in this pass.",
+      "evidence": [
+        "support/iac-agent/bin/check-protected-vms.sh:36-41 — jq filter: select(.type == \"proxmox_virtual_environment_vm\") | select(any(.change.actions[]; . == \"delete\"))",
+        "plan.md P2 record: offline repro with a for_each stand-in resource gave guard rc 1 naming all five instances with prevent_destroy=false, and rc 0 once dropped from state (destroy-on-Proxmox case)",
+        "This pass: cexec iac run of the commit's check-protected-vms.sh against a real terraform show -json of a no-change terraform/prd plan → rc 0 (no VM changes, so the delete-catching branch itself is not exercised here — see P2 offline repro above for that)"
+      ]
     },
     {
       "id": "V02",
       "area": "R1 — protection extended",
       "description": "\"extend protection (srvvault1-3+)\" — as ruled (D1, 2026-09-14): the guard fails on any delete or replace of any prd VM, with no name list, in all three jobs that run it. Today each passes the single name srviac: Jenkinsfile.iac-on-push:47, Jenkinsfile.iac-apply:73, Jenkinsfile.iac-scheduled-drift:181. Each job reaches the guard only for a plan Terraform did not refuse (Jenkinsfile.iac-apply:71, Jenkinsfile.iac-on-push:45, Jenkinsfile.iac-scheduled-drift:183-184 exit on any other plan return code).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "All three Jenkinsfiles call check-protected-vms.sh with the plan JSON only — no VM name argument, so every prd VM is covered, not just srviac. The script itself takes exactly one argument and rejects anything else (exit 2). Confirmed live: build #164's failure was precisely a 1-argument call rejected by the still-old 2-argument script, proving the new caller shape reached Jenkins.",
+      "evidence": [
+        "Jenkinsfile.iac-on-push: `check-protected-vms.sh /tmp/plan.json` (Plan + destroy check stage)",
+        "Jenkinsfile.iac-apply: `check-protected-vms.sh /tmp/plan.json` (Terraform plan + destroy check + apply (prd) stage)",
+        "Jenkinsfile.iac-scheduled-drift: `check-protected-vms.sh /tmp/plan.json` inside the Terraform drift (prd) stage's rc==2 branch, no `|| true`",
+        "support/iac-agent/bin/check-protected-vms.sh:22-26 — `[[ $# -ne 1 ]]` → usage, exit 2",
+        "IaC/Build-Main #164 (https://jenkins.webathome.org/job/IaC/job/Build-Main/164/): failed with \"Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...]\" — the OLD 2-arg script rejecting the NEW 1-arg call, live confirmation the caller passes no name list"
+      ]
     },
     {
       "id": "V03",
       "area": "R1 — rails and VM removal",
       "description": "The apply job stays the operator's tool for creating and removing VMs, with no guard override (F1 ruling). After a VM is destroyed on Proxmox, neither Terraform's refusal nor the guard stops the plan that recreates it. Once its vms.tf entry is gone, neither stops the plan that deletes its non-VM companions, such as its DNS reservation (terraform/modules/managed-vm/main.tf:39): both rails act on the VM resource only (terraform/modules/managed-vm/main.tf:52).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Static design fact, verified by reading: the guard's jq filter keys on `.type == \"proxmox_virtual_environment_vm\"` only, and prevent_destroy sits in the lifecycle block of that same resource, not on homelab_dns_reservation.this (a separate resource in the module). Neither rail therefore touches the DNS reservation delete that follows a vms.tf entry removal. No override flag exists in either script or Jenkinsfile. Not live-tested (would require actually removing a real VM's companion resources against prod), consistent with V11 being operator-owed for the end-to-end path.",
+      "evidence": [
+        "support/iac-agent/bin/check-protected-vms.sh:36-38 — filter keys on type == proxmox_virtual_environment_vm",
+        "terraform/modules/managed-vm/main.tf:39 — homelab_dns_reservation.this, a separate resource from the VM",
+        "terraform/modules/managed-vm/main.tf:208-214 — lifecycle{prevent_destroy} sits on proxmox_virtual_environment_vm.this only",
+        "grep of Jenkinsfile.iac-apply/-on-push/-scheduled-drift and check-protected-vms.sh: no override/skip flag anywhere"
+      ]
     },
     {
       "id": "V04",
       "area": "R1 — prevent_destroy",
       "description": "\"add prevent_destroy\" — as ruled (D1): prevent_destroy is on the VM resource in the shared managed-vm module (terraform/modules/managed-vm/main.tf:52, lifecycle block at :208). That covers every prd VM, with no module split and no state move, so a plan that would destroy or replace any prd VM fails, in Jenkins or locally. It fails at plan time (Error: Instance cannot be destroyed; terraform plan exits 1), so every job stops before terraform show and the guard (Jenkinsfile.iac-apply:71, Jenkinsfile.iac-on-push:45, Jenkinsfile.iac-scheduled-drift:183-184). terraform/scratch is unaffected.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified live against real infrastructure, safely and read-only (terraform plan, no -out, no apply): a forced-replace plan against the real srviac VM was refused by Terraform itself with exactly the documented error, before reaching check-protected-vms.sh. terraform/scratch has its own resource and its lifecycle block is untouched by this diff.",
+      "evidence": [
+        "terraform/modules/managed-vm/main.tf:208-214 — `lifecycle { prevent_destroy = true ... }` with a comment naming the destroy-on-Proxmox-first path",
+        "This pass, live: `cexec iac terraform plan -replace='module.vm[\"srviac\"].proxmox_virtual_environment_vm.this' -no-color` against the real terraform/prd (no -out, nothing applied) → \"Plan: 1 to add, 0 to change, 1 to destroy.\" then \"Error: Instance cannot be destroyed ... Resource module.vm[\\\"srviac\\\"].proxmox_virtual_environment_vm.this has lifecycle.prevent_destroy set, but the plan calls for this resource to be destroyed.\"",
+        "git diff bf11aa5..2738c38 -- terraform/scratch: no changes"
+      ]
     },
     {
       "id": "V05",
       "area": "R1 — no-op landing",
       "description": "Landing the slice's Terraform change alters no VM: the first terraform/prd plan after the push (iac-on-push) proposes no change caused by it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified twice against real infrastructure: locally before the push, and by CI (IaC/Build-Main #164) after it. Both show zero drift.",
+      "evidence": [
+        "This pass, live, before push: `cexec iac terraform plan -no-color -detailed-exitcode` against terraform/prd at commit 2738c38 → \"No changes. Your infrastructure matches the configuration.\" rc 0",
+        "IaC/Build-Main #164 log (https://jenkins.webathome.org/job/IaC/job/Build-Main/164/), \"Plan + destroy check\" stage: \"No changes. Your infrastructure matches the configuration.\" — the same real result from CI, on the pushed commit"
+      ]
     },
     {
       "id": "V06",
       "area": "R1 — doctrine matches implementation",
       "description": "\"zero prevent_destroy despite decisions.md:512-513 claiming it\" — AnsibleSpecs decisions.md's guard doctrine (now :575-576, which claims prevent_destroy on srviac and each srvvaultN) states the rails that exist after this slice and the destroy-on-Proxmox-first path they impose. It records that prevent_destroy stops the plan, not the apply, with the guard as the second rail for a config without it; today :576 says \"the lifecycle block stops apply, the plan check stops the run before it ever reaches apply\". Its guidance that rebuilds a prd VM by Terraform replace (:52, :236, :482, :571) follows.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "decisions.md's \"Production execution model\" section (now ~:573-579) opens with D1's rule, lists the two rails in the order they act with prevent_destroy stopping the plan (not the apply) first and the name-free guard second, names the drift job's protected-VM signal, and gives the destroy-on-Proxmox-first path. Read in full this pass; matches the shipped implementation with no stale claim of prevent_destroy on named VMs remaining in that section.",
+      "evidence": [
+        "AnsibleSpecs decisions.md (commit 0ac839e / a1f3350): \"Terraform never destroys a VM, in Jenkins or locally\", rails 1-2 in order, \"Both rails cover the VM resource only\", \"A prd VM is rebuilt or removed by destroying it on Proxmox first\""
+      ]
     },
     {
       "id": "V07",
       "area": "R1 — apply the checked plan",
       "description": "\"checked plan ≠ applied plan\" / \"single iac invocation applying the saved plan\" — iac-apply plans, runs the guard and applies that saved plan inside one iac invocation, in one stage. The plan file never leaves the container, and a plan Terraform refuses, or one the guard fails, applies nothing. Today Jenkinsfile.iac-apply:60-77 plans and checks, then :79-90 re-plans and applies in a fresh container (:10-11). Live proof is one operator run of iac-apply.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Statically verified: Jenkinsfile.iac-apply's \"Terraform plan + destroy check + apply (prd)\" stage is one `iac -c` call running init, plan -out, show -json, check-protected-vms.sh and apply of the saved .tfplan under set -e, matching P3's offline shell-level repro (create/no-change/replace-refused/guard-rc1/guard-rc2/late-resource cases, plan.md P3 record). Deliberately not run live here: iac-apply converges real prd (site.yml, site-openbao.yml, site-k8s.yml, an actual terraform apply) — that is exactly the operator's keystroke this slice does not change, and it would also currently fail at the same stale-srviac-guard usage error as V02/V10 until A1 is done.",
+      "evidence": [
+        "Jenkinsfile.iac-apply: one stage, one `iac -c '...'` running terraform init, plan -out=/tmp/plan.tfplan -detailed-exitcode, show -json, check-protected-vms.sh /tmp/plan.json, terraform apply -input=false -no-color /tmp/plan.tfplan",
+        "plan.md P3 record: offline repro of this exact stage body (awk-extracted) against a local Terraform config — create, no-change, refused-replace, guard-rc1, guard-rc2 and late-resource-added cases all behaved as designed",
+        "Owed command: operator runs the `IaC/Apply` Jenkins job (manual-only, no trigger) — only after A1 (srviac's guard reinstalled), or it fails at the same usage error build #164 hit"
+      ]
     },
     {
       "id": "V08",
       "area": "R1 — drift job guard result and protected-VM signal",
       "description": "\"drop `|| true` in drift job\" — the drift job no longer swallows the guard's result (Jenkinsfile.iac-scheduled-drift:181). As ruled (plan review r1, 2026-09-14), Terraform's plan-time refusal is the protected-VM signal: a refused VM delete or replace names itself in the drift job's build description instead of reading as ordinary drift. Today driftSummary's resource-header match (Jenkinsfile.iac-scheduled-drift:82) and items ?: errors (:106) would record it as module.vm[\"srvX\"].proxmox_virtual_environment_vm.this must be replaced. A VM left tainted by a failed create (docs/runbooks/vm-rebuild.md:135) takes this path on every daily run.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Statically verified and now also confirmed against the real refusal's exact text (this pass's V04 live check): driftSummary's refusal regex `Resource\\s+(\\S+)\\s+has\\s+lifecycle\\.prevent_destroy\\s+set` matches the live srviac error's wrapped \"Resource module.vm[\\\"srviac\\\"]...this has\\nlifecycle.prevent_destroy set\" text verbatim. The `|| true` is gone from the drift job's guard call. What remains unproven is the Groovy itself running under the real Jenkins CPS sandbox (Matcher.find(), recordDrift, currentBuild.description) — no JVM is reachable from this pod; P6 review r1 already proved both Jenkinsfiles parse (CompilationUnit.compile). Live proof needs a real drift build that hits a refusal, which this pass deliberately did not provoke (drift is read-only by design, but forcing a refusal into the scheduled job means editing vms.tf, out of scope for a read-only test pass) — it settles on the daily 11:00 schedule once a refusal or the operator's own drift trigger occurs, or sooner if the operator runs `IaC/Scheduled-Drift` by hand.",
+      "evidence": [
+        "Jenkinsfile.iac-scheduled-drift: prdCheck() calls the guard with no `|| true`; driftSummary()'s terraform branch matches `check-protected-vms:` lines and the prevent_destroy refusal regex before drift items",
+        "This pass's V04 live output: \"Resource module.vm[\\\"srviac\\\"].proxmox_virtual_environment_vm.this has\\nlifecycle.prevent_destroy set\" — matches the regex's wrapped-address shape exactly",
+        "plan.md P2 record: Python port of driftSummary's terraform path over captured logs put refusals first; P6 review r1: both Jenkinsfiles pass CompilationUnit.compile(Phases.CONVERSION); no JVM in this pod for CPS/sandbox proof",
+        "Owed: the next scheduled `IaC/Scheduled-Drift` run (daily 11:00), or an operator-triggered run"
+      ]
     },
     {
       "id": "V09",
       "area": "R1 — runbooks switch to destroy-on-Proxmox-first",
       "description": "Runbooks that use terraform apply -replace on prd VMs switch to destroy-on-Proxmox-first (D1 ruling). That covers OpenBao single-node and whole-cluster recovery (docs/runbooks/openbao.md:98,148), the srviac rebuild (docs/runbooks/iac-agent.md:170), the cluster-member rebuild flow and its recovery notes including the tainted VM a failed create leaves (docs/runbooks/vm-rebuild.md:91,132-136), and the Terraform comments that direct the same (terraform/modules/managed-vm/main.tf:213,223; terraform/prd/main.tf:111). The scratch flows keep -replace (docs/runbooks/scratch-vm.md:29, docs/runbooks/vm-rebuild.md:51).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Full diff of the four runbooks and the two Terraform files read this pass. Every prd rebuild step now reads `qm destroy` then a plain `terraform apply`; the scratch flows (scratch-vm.md:29, vm-rebuild.md:51 and its recovery bullets) are untouched and keep -replace. Beyond the plan's list, k8s-rebuild.md:248 also gained the tainted-VM clause, matching the plan's \"Beyond the plan's list\" note.",
+      "evidence": [
+        "git diff bf11aa5..2738c38 -- docs/runbooks/{openbao,iac-agent,vm-rebuild,k8s-rebuild}.md: openbao.md step 1 now `qm stop/destroy` + apply (both single-node and whole-cluster); iac-agent.md srviac rebuild now `qm shutdown/destroy` (vm_id 920) + apply, from wrkdev not iac-apply; vm-rebuild.md step 4 and its recovery section split into scratch (-replace, unchanged) vs prd (destroy-on-Proxmox, unchanged tainted-VM note extended); k8s-rebuild.md:248 gained the tainted-VM `qm destroy <new-vmid>` clause",
+        "terraform/modules/managed-vm/main.tf:213,223 and terraform/prd/main.tf:111 comments now say \"destroy the VM on Proxmox, then apply\" (read directly this pass)",
+        "docs/runbooks/scratch-vm.md:29 and vm-rebuild.md:51 unchanged in the diff — scratch flows keep -replace"
+      ]
     },
     {
       "id": "V10",
       "area": "R1 — guard rollout",
       "description": "The new guard reaches the jobs only once the iac_agent role reinstalls it on srviac (support/iac-agent/install.sh:49, bind-mounted by support/iac-agent/bin/iac:49). Until then a job fails rather than passing a plan unchecked. The operator is handed the order: push, iac_agent role on srviac, iac-on-push re-run.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Live-confirmed by this pass's push: ansible ad-hoc read against srviac shows the OLD 2-arg script still installed there, and IaC/Build-Main #164 (post-push) failed at the guard call with a usage error rather than silently applying an unchecked plan — exactly the fail-closed behaviour this criterion describes. The order handed to the operator (push done here; role next; then a re-run) is recorded below and in close-out A1.",
+      "evidence": [
+        "This pass, live: `ansible srviac -m command -a \"cat /usr/local/bin/check-protected-vms.sh\"` → the old script (Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...], `[[ $# -lt 2 ]]`)",
+        "IaC/Build-Main #164 (post-push, https://jenkins.webathome.org/job/IaC/job/Build-Main/164/): FAILURE, \"Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...]\", ERROR: script returned exit code 2 — the job failed rather than passing the plan unchecked",
+        "support/iac-agent/install.sh:49 installs bin/check-protected-vms.sh to /usr/local/bin/; support/iac-agent/bin/iac:49 bind-mounts it into the container",
+        "Owed operator command: `ansible-playbook playbooks/site.yml --limit srviac --check --diff` then without --check (installs the iac_agent role's updated script), then re-run `IaC/Build-Main` (iac-on-push) — recorded in close-out.md A1"
+      ]
     },
     {
       "id": "V11",
       "area": "R1 — destroy-on-Proxmox-first end to end",
       "description": "Destroy-on-Proxmox-first works through the apply job. A VM destroyed with qm destroy is recreated by the next apply. A VM whose vms.tf entry is removed after that destroy is forgotten, with no destroy planned for it. Owed to the operator's first real use.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Deliberately not exercised live — proving this end-to-end means actually destroying a real prd VM on Proxmox and running a real terraform apply, unambiguously the operator's keystroke and out of this pass's read-only remit. P1's grounding explicitly flags this as \"Not verified\" by design (a live proof needs an operator-run apply).",
+      "evidence": [
+        "plan.md grounding: \"Not verified: that removing a vms.tf entry for a VM already destroyed on Proxmox plans with no destroy ... A live proof needs an operator-run apply.\"",
+        "Owed command: on the operator's next real VM rebuild or removal — `qm destroy <vm_id>` on the owning PVE node, then `IaC/Apply` (or, for removal, first drop the VM's vms.tf entry, commit/push, then IaC/Apply)"
+      ]
     },
     {
       "id": "V12",
       "area": "R2 — certs job stage coupling",
       "description": "\"a failed SSH host-cert stage aborts iac-scheduled-certs before either leaf stage runs\" — every stage of iac-scheduled-certs runs whatever an earlier stage did, and the build still goes red if any prd stage failed. Today its stages are plain declarative stages with no catchError (Jenkinsfile.iac-scheduled-certs:78-164).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Statically verified: every prd stage now runs its playbook through prdStage(cost, shellScript), which uses sh(returnStatus:true) then catchError(buildResult:'FAILURE', stageResult:'FAILURE') around error() on a non-zero exit — the sh call itself sits outside catchError so an abort still stops the build, and stages after a failed one still execute (declarative `stages` runs each stage in sequence regardless of an earlier stage's FAILURE result once it's set via catchError rather than an uncaught throw). No JVM/Jenkins is reachable from this pod to execute the Groovy; P6 review r1 already proved both Jenkinsfiles parse. Live proof is the job's own next scheduled run.",
+      "evidence": [
+        "Jenkinsfile.iac-scheduled-certs: def prdStage(cost, shellScript) { ... catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') { error(...) } }; \"Host certs (excl. k8s dev)\" and \"TLS leaves (excl. k8s dev)\" both call prdStage(); no stage-level post{failure}",
+        "Owed: `IaC/Scheduled-Certs`'s next Friday 04:00 run, or an operator-triggered run, ideally with a forced failure to exercise the path"
+      ]
     },
     {
       "id": "V13",
       "area": "R2 — drift job stage coupling",
       "description": "\"S4's warning about the certs job applies to the drift job too, and it is happening now rather than hypothetically\" — every stage of iac-scheduled-drift runs whatever an earlier stage did, and the build still goes red if any prd stage failed. A red Terraform drift stage (Jenkinsfile.iac-scheduled-drift:159) no longer skips the Ansible and CA stages.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Statically verified: the Terraform drift, Ansible drift (excl. iac_agent), Ansible drift (k8s prd), Ansible drift (openbao) and Homelab CA root drift stages all run through prdCheck(), same catchError shape as certs; the k8s-dev and ceph-dev stages keep their own unstable()-only skip path, unaffected. Terraform drift no longer exits the whole build on its own rc — it now records and continues. Not run live for the same reason as V12.",
+      "evidence": [
+        "Jenkinsfile.iac-scheduled-drift: def prdCheck(stage, log, tool, shellScript) { ... catchError(...) { error(...) } }; all five prd stages call it; the drift job's elif rc==2 branch inside the sh script still runs check-protected-vms.sh and exits 1 on drift, but that non-zero is now caught by prdCheck rather than failing the whole `sh` step of the pipeline",
+        "Owed: `IaC/Scheduled-Drift`'s next 11:00 daily run"
+      ]
     },
     {
       "id": "V14",
       "area": "R2 — bounds and dev skip",
       "description": "Stage bounds in both scheduled jobs stay in shell timeouts, never a Jenkins timeout() inside catchError (Jenkinsfile.iac-apply:152-157, build #113). A powered-off srvk8sdev still skips its dev stages as UNSTABLE, without a warning.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by reading: neither Jenkinsfile.iac-scheduled-certs nor -drift contains a Jenkins timeout() step; the dev-stage bounds use `timeout --kill-after=1m Nm` inside the shell script, same idiom as iac-apply's existing dev stage. devUp() is unchanged in both files and its false branch still only calls unstable(...) with no notify.warning.",
+      "evidence": [
+        "grep -n \"timeout(\" Jenkinsfile.iac-scheduled-certs Jenkinsfile.iac-scheduled-drift: no matches (only shell `timeout --kill-after`)",
+        "Jenkinsfile.iac-scheduled-certs \"Host certs (k8s dev)\"/\"TLS leaves (k8s dev)\" and Jenkinsfile.iac-scheduled-drift \"Ansible drift (k8s dev)\"/\"(ceph dev)\": `if (!devUp()) { unstable('...'); return }` — no notify.warning on the skip path"
+      ]
     },
     {
       "id": "V15",
       "area": "R2/R3 — build descriptions",
       "description": "When several stages fail, their build descriptions are combined rather than the last overwriting the others. Today certs assigns at Jenkinsfile.iac-scheduled-certs:91,160 while drift appends at Jenkinsfile.iac-scheduled-drift:129-138. A stage that passed adds no entry, and no entry claims that a later stage did not run when it now does (certs :91).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by reading: certs' prdStage appends `cost` to currentBuild.description with a newline separator if one already exists, never overwrites; drift's recordDrift does the same with a blank-line separator. Both only fire on a stage's own non-zero exit — a passing stage adds nothing. The old \"TLS leaf renewal did not run\" wording is gone from certs per the plan's done-record and confirmed absent by grep.",
+      "evidence": [
+        "Jenkinsfile.iac-scheduled-certs prdStage(): `currentBuild.description = currentBuild.description ? \"${currentBuild.description}\\n${cost}\" : cost`",
+        "Jenkinsfile.iac-scheduled-drift recordDrift(): `currentBuild.description = currentBuild.description ? \"${currentBuild.description}\\n\\n${entry}\" : entry`",
+        "grep -i \"did not run\" Jenkinsfile.iac-scheduled-certs: no match"
+      ]
     },
     {
       "id": "V16",
       "area": "R3 — dev-stage warning",
       "description": "\"a dev-stage failure in iac-scheduled-certs loses its Telegram warning when a later prd stage then reds the build\" — in both scheduled jobs the dev-stage warning is raised at the point the dev stage fails, once per failure, not only from post { unstable } (Jenkinsfile.iac-scheduled-certs:208-220, Jenkinsfile.iac-scheduled-drift:403-412). It therefore reaches Telegram whatever the final build result. notify.warning only writes a log marker (/work/JenkinsPipelineUtils/vars/notify.groovy:46-48), and the bot raises every marker in a finished build's log (/work/DockerImages/jenkins-telegram-bot/app/bot.py:136-137,142-165).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by reading both Jenkinsfiles: each dev stage that fails (non-devUp() skip aside) calls notify.warning(...) inline at the point of failure, then unstable(...); there is no longer a post{unstable} block or DEV_STAGE_FAILED variable in either file, so a later prd FAILURE cannot suppress a dev warning that already fired. JenkinsPipelineUtils' notify.warning and the telegram bot's per-marker scan were read to confirm the marker reaches Telegram independent of final build result (unchanged by this slice, cited for completeness).",
+      "evidence": [
+        "Jenkinsfile.iac-scheduled-certs \"Host certs (k8s dev)\"/\"TLS leaves (k8s dev)\": `if (rc != 0) { notify.warning(message); unstable(message) }` inline; grep -n \"post {\\|DEV_STAGE_FAILED\" Jenkinsfile.iac-scheduled-certs: no matches",
+        "Jenkinsfile.iac-scheduled-drift \"Ansible drift (k8s dev)\"/\"(ceph dev)\": `notify.warning(\"detected drift on srvk8sdev\\n\\n${entry}\")` inline; grep -n \"post {\\|DEV_STAGE_FAILED\" Jenkinsfile.iac-scheduled-drift: no matches",
+        "/work/JenkinsPipelineUtils/vars/notify.groovy:46-48 and /work/DockerImages/jenkins-telegram-bot/app/bot.py:136-165 (read this pass, unchanged by this slice): every [raisealert] marker in a finished build's log is sent regardless of build result"
+      ]
     },
     {
       "id": "V17",
       "area": "R4 — description outside stages",
       "description": "\"iac-scheduled-certs no longer sets any build description when the failure is outside its two prd stages\" — closed by the D2 ruling (2026-09-14: \"Don't worry about it. This is best effort.\") without a code change: no fallback build description is added to either scheduled job.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Closed by ruling, no implementing work owed. Confirmed no fallback description mechanism (e.g. a post{failure} at the pipeline level) was added to either scheduled Jenkinsfile.",
+      "evidence": [
+        "plan.md Ruling (2026-09-14, R4 — refinement D2): \"Don't worry about it. This is best effort. I need to look at a red build regardless.\"",
+        "grep -n \"post {\" Jenkinsfile.iac-scheduled-certs Jenkinsfile.iac-scheduled-drift: no pipeline-level post block in either file"
+      ]
     }
   ]
 }

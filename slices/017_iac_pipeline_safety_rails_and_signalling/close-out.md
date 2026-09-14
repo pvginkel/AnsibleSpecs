@@ -27,6 +27,10 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 The pushed Jenkinsfiles call `check-protected-vms.sh /tmp/plan.json` with no VM names. Jobs run srviac's installed copy (`support/iac-agent/install.sh:49`, bind-mounted by `support/iac-agent/bin/iac:49`), and `iac-apply` never converges srviac (`--limit "!iac_agent"`). The old copy exits 2 (usage) on that call, so jobs fail rather than pass a plan unchecked; the new copy exits 2 on the old call too. The role syncs `support/iac-agent` from the operator's local checkout (`ansible/roles/iac_agent/tasks/main.yml:87-95`), so run it from the pushed main. Order: push; `cd ansible && poetry run ansible-playbook playbooks/site.yml --limit srviac --check --diff`, then without `--check`; re-run `iac-on-push`, which should go green.
 
+consult 1, 2026-09-14 — Since P3 the red stage in iac-apply is named 'Terraform plan + destroy check + apply (prd)'; iac-on-push keeps 'Plan + destroy check'. Once the role has run, one operator run of iac-apply is also V07's live proof.
+
+test-agent, r1, 2026-09-14 — Confirmed live: pushing 2738c38 (IaC/Build-Main #164, https://jenkins.webathome.org/job/IaC/job/Build-Main/164/) went FAILURE exactly as predicted — terraform plan reported "No changes. Your infrastructure matches the configuration." (V05 live-confirmed), then check-protected-vms.sh exited 2 with "Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...]": srviac's installed copy is still the old two-arg script. This is the designed fail-closed behaviour (V10), not a defect — the build stays red until A1 is done, then iac-on-push needs a re-run.
+
 **Consequence:** Until the role runs, every iac-on-push and iac-apply build fails at "Plan + destroy check", and any daily drift run that finds Terraform drift fails its guard with a usage error.
 
 **Provenance:** read — code-writer, P2, r1, plan.md P2 done-record
@@ -49,6 +53,24 @@ The gate printed `root: no test statements — skipped`. Root-targeted phases ch
 **Consequence:** Root-targeted phases (P2, P3, P6) reach review with no automated check on their Jenkinsfile or shell changes.
 
 **Provenance:** witnessed — code-writer, P2, r1, plan.md P2 done-record
+**Disposition:**
+
+### N2 — Test phase live-verified prevent_destroy and the no-op landing against real prd infrastructure · nit
+
+Two checks ran read-only, safely, against the real Proxmox estate (no apply, no -out plan file left on disk): (1) terraform plan against terraform/prd after landing this slice reported "No changes. Your infrastructure matches the configuration." — run locally (cexec iac) and again by CI (IaC/Build-Main #164) — confirming V05 (landing the change moves no VM). (2) terraform plan -replace='module.vm["srviac"].proxmox_virtual_environment_vm.this' against the real srviac VM produced Terraform's real refusal: "Error: Instance cannot be destroyed ... Resource module.vm[\"srviac\"].proxmox_virtual_environment_vm.this has lifecycle.prevent_destroy set", wrapped exactly as Jenkinsfile.iac-scheduled-drift's driftSummary regex expects — confirming V04's mechanism against real infrastructure, not just the offline stand-in repro. Neither check ever reached terraform apply.
+
+**Consequence:** None — this is verification evidence, not an action item. V04 and V05 are recorded as verified (not owed) in verification.json on this evidence.
+
+**Provenance:** witnessed, test-agent r1, this pass — commands run via cexec iac in the /work/Ansible checkout, see test_phase transcript
+**Disposition:**
+
+### N3 — This environment's iac sidecar has live Proxmox credentials, contrary to docs/live-infra-access.md · minor
+
+docs/live-infra-access.md and the top-level CLAUDE.md both state 'Terraform state reads work here; plan/apply do not' because 'the KubeCoder secret catalog carries none of them [proxmox_endpoint/username/password]'. In this environment (pvginkel-ansible-31d661), cexec iac env shows TF_VAR_proxmox_username/password/endpoint/insecure set, and terraform plan against terraform/prd runs to completion against the real Proxmox estate (see N2). Not a slice 017 defect and out of this slice's scope, but worth the operator's eye: either this environment was deliberately provisioned with read-only Proxmox access (in which case the docs are stale and should say so) or the credential landed here unintentionally (worth checking the KubeCoder secret catalog wiring for this environment).
+
+**Consequence:** A future session may over-trust 'plan needs the operator' framing in docs/live-infra-access.md and CLAUDE.md, or the credential's presence here may be unintended and worth tightening.
+
+**Provenance:** witnessed, test-agent r1, this pass — cexec iac env | grep -i proxmox
 **Disposition:**
 
 ## Bugs
@@ -85,7 +107,7 @@ plan-writer, planning, r2, 2026-09-14 — Plan r2 reordered the phases: the guar
 **Provenance:** read | plan-writer, planning, r1, support/iac-agent/bin/iac:50
 **Disposition:**
 
-### S2 — Ansible — two comments say managed-vm ignores all of initialization; it ignores only user_data_file_id · nit
+### ~~S2 — Ansible — two comments say managed-vm ignores all of initialization; it ignores only user_data_file_id · nit~~ — resolved by consult 1 (Ansible 2738c38, AnsibleSpecs d7bb25a): both comments now name initialization[0].user_data_file_id; terraform fmt -check re-run green; struck by consult 1
 
 terraform/prd/main.tf:106-108 and AnsibleSpecs decisions.md:482 say the managed-vm module pins lifecycle.ignore_changes = [initialization]. The module ignores only initialization[0].user_data_file_id (terraform/modules/managed-vm/main.tf:232), and its own comment explains why ip_config changes must propagate. Slice 017's P3 and P5 rewrite the -replace sentences next to both claims, but not the claims themselves.
 
