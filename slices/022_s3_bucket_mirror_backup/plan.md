@@ -377,7 +377,7 @@ Record:
   (rclone v1.75.1 crypt over local dirs, mock admin API) exercised upload, archive, prune-to-N and a
   failing bucket.
 
-### P3 — The mirror raises a critical alert after two days without a successful run
+### P3 — The mirror raises a critical alert after two days without a successful run ✅ DONE 2026-09-14
 
 Target: ../HelmCharts
 
