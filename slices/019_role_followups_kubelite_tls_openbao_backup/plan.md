@@ -138,7 +138,7 @@ Record:
 - After every case the work dir was gone. No output held the root token, role_id, secret_id, upload token, a KV value, a body marker, policy HCL or a token-shaped string.
 - The harness is not committed: the repo has no runnable suite. `bash -n` passed; shellcheck is not in the sidecar. Not live-proven.
 
-### P3 — Check-mode runs name the restarts they would perform
+### P3 — Check-mode runs name the restarts they would perform ✅ DONE 2026-09-14
 
 **Target:** `ansible`
 
