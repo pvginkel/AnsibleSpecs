@@ -33,6 +33,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — Ansible — the backup AppRole policy gains auth/token/revoke-self, so the proving login can revoke its own token
+
+P1's proof of a staged backup secret_id logs in and then revokes the returned token. The backup AppRole sets token_no_default_policy, and OpenBao 2.5.4 answers revoke-self from such a token with 403 until its policy grants it (dev server, 2026-09-14). roles/openbao/templates/backup-policy.hcl.j2 therefore now grants update on auth/token/revoke-self. The policy is no longer strictly read-only. The grant lands on the next site-openbao.yml apply, through approle.yml's policy write on the bootstrap host.
+
+**Consequence:** The next site-openbao.yml apply reports the backup policy changed. Until then, a --check or --tags openbao_backup run from a checkout holding a live staged secret_id fails at the token revoke with HTTP 403; the nightly drift job never holds one.
+
+**Provenance:** witnessed — code-writer, P1, r1, OpenBao dev server in the iac sidecar; plan.md P1 done-record
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence

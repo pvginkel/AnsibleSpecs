@@ -78,6 +78,34 @@ R1, to the settled rulings above. Today `roles/openbao/tasks/backup.yml:92-100` 
 - **A fresh cluster before its restore.** A whole-cluster recovery converges an empty cluster before the snapshot restore (`docs/runbooks/openbao.md:151-170`). That cluster has no AppRole auth method at all. `init.yml` provisions no auth, and enabling AppRole sits inside `approle.yml`'s token-gated block (:35-36, :55-65), where the token is empty (`auth-token.yml:12-18`). Such a run neither installs the staged secret_id nor fails; it says the backup credential was not delivered. Recognising this case must never let a dead secret_id pass as "not delivered" when a live `backup` role exists.
 - **Check mode.** Under `--check` the check's calls run for real (`check_mode: false`, as the admin login does at `auth-token.yml:43`). A dry run from a checkout holding a dead staged secret_id therefore reports the failure. The nightly drift job clones fresh and never holds a staged secret_id, so its runs are unchanged.
 
+**Done (P1).** When both staged files exist, each node's `backup.yml` pass logs in with the staged backup role_id and secret_id at `openbao_admin_api_addr`, the leader-tracking VIP. The call runs under `--check` too, with `no_log`, and `failed_when: false` hands the result to explicit fail tasks. The login's answer decides the rest:
+- 200: the token is revoked via `auth/token/revoke-self` and the secret_id is delivered.
+- 400: the run fails, naming `-e openbao_rotate_secret_ids=true`.
+- 403 `["permission denied"]` (no AppRole mount): a "Backup AppRole secret_id not delivered … converge again after the restore" message; nothing installed, the run goes on.
+- Anything else (unreachable, sealed): the run fails with the status and OpenBao's error text.
+
+`templates/backup-policy.hcl.j2` now grants `auth/token/revoke-self`.
+
+Later phases:
+- P2: the backup token is allowed `auth/token/revoke-self`.
+- P6: see its "What that converge can deliver" bullet, updated for what P1 shipped.
+- Test phase: the policy grant takes effect on the first apply, when approle.yml's policy write reports changed. Until then, a `--check` or `--tags openbao_backup` run from a checkout holding a live staged secret_id fails at `Fail when the proving login's token was not revoked` with HTTP 403. A dead one still fails first, at the rejection.
+
+Record:
+- Classification grounded 2026-09-14 against OpenBao 2.5.4 `bao server -dev` in the iac sidecar. A login with no AppRole mount at `approle/` gets 403 `permission denied`. A bad role_id or secret_id gets 400 `invalid role or secret ID`, a missing secret_id 400, a sealed server 503. A backup-policy token (`token_no_default_policy`) gets 403 on revoke-self without the grant, and 204 with it. A secret_id survives repeated logins.
+- `backup.yml` was run via `include_role tasks_from: backup` against that dev server (localhost, no real host):
+  - nothing staged: the generic skip, no login;
+  - no mount, check and apply: not delivered, failed=0;
+  - dead secret_id, check and apply: the rejection message;
+  - live secret_id, `--check`: login and revoke report `ok`, the token count stays the same, delivery is reached;
+  - policy without the grant: the 403 fail;
+  - unreachable: HTTP -1 fail; sealed: HTTP 503 fail.
+
+  No token or secret_id appeared in any output.
+- `_openbao_backup_ready` now needs a proven staged secret_id or a node file (before: the staged file existing), so the no-AppRole case installs no timer and leaves no failing unit. The generic skip message is suppressed in that case.
+- The bootstrap host (sorted-first, `elect-bootstrap.yml`) is also the first `serial: 1` batch (inventory srvvault1–3), so a rotation run re-stages before any node proves the file.
+- Not live-proven. V03 needs the operator's rotation run.
+
 ### P2 — Every call the backup wrapper makes names itself on failure
 
 **Target:** `ansible`
@@ -139,7 +167,7 @@ For the OpenBao listener leaf, the runbook also covers renewing it by hand while
 
 R1, to the settled "a fresh cluster before its restore" ruling above. Today `docs/runbooks/openbao.md` §3 (whole-cluster loss) goes converge (step 3, :151-163), restore (4, :165-177) and verify (5, :179-191), and nothing after the restore delivers the backup credential. After this phase §3 carries a converge after the restore, and says why it is there. The pre-restore converge had no `backup` AppRole to prove the staged secret_id against, so it did not deliver it (P1). Against the restored role, the new converge proves and delivers it.
 
-- **What that converge can deliver.** The rebuilt VMs hold no secret_id, so the outcome depends on the checkout. A staged secret_id is proven and delivered. With none staged, the pipeline self-skips and names the rotation run it needs (`ansible/roles/openbao/tasks/backup.yml:48-68`). The step covers both cases, as P1 shipped them.
+- **What that converge can deliver.** The rebuilt VMs hold no secret_id, so the outcome depends on the checkout. A staged secret_id the restored `backup` role accepts is proven and delivered. A staged one it rejects fails the converge, naming `-e openbao_rotate_secret_ids=true`. With none staged, the pipeline self-skips and names the rotation run it needs (the `Skip the backup pipeline until its inputs exist` task in `ansible/roles/openbao/tasks/backup.yml`). The pre-restore converge (step 3) prints `Backup AppRole secret_id not delivered … Converge site-openbao.yml again after the restore` in place of that skip message. The step covers all three cases, as P1 shipped them.
 
 ## Not in scope
 
