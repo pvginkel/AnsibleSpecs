@@ -56,7 +56,7 @@ pre-settled — the rulings fix every mechanism (prevent_destroy on the shared `
 
 - P2's naming of a refused VM destroy in the drift job lands after P1's `prevent_destroy`, so it is built and reviewed against the refusal in place (B1 ruling).
 
-### P1 — Terraform refuses to destroy any prd VM
+### P1 — Terraform refuses to destroy any prd VM ✅ DONE 2026-09-14
 
 Target: terraform
 
@@ -72,6 +72,7 @@ The Terraform comments that direct a `-replace` of a prd VM (`terraform/modules/
 Later phases:
 - P2: the refusal exists in config from this commit. Reproduce it offline with a stand-in resource, as planned — no prd plan refuses anything yet.
 - P4/doc phase: `terraform/README.md` and `terraform/prd/README.md` were not touched and say nothing about `-replace`. The stale `ignore_changes = [initialization]` wording at `terraform/prd/main.tf:106` is left as is (close-out S2).
+- Doc phase (P1 review r1): `terraform/README.md:5` still says "Terraform creates and destroys VMs", which is no longer true for VMs.
 
 Record:
 - Gate: `kc project test --project terraform` (`terraform fmt -check -recursive`) green. Also `terraform validate` on `managed-vm` in the `iac` sidecar (`TF_DATA_DIR` in `/tmp`, generated lock file removed): valid.
