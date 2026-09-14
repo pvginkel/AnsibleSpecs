@@ -119,6 +119,21 @@ Target: root
 - The plan file never leaves the container, because plan files hold secret values.
 - The job stays manual with no approval step; it never had one.
 
+**Done (P3).** `Jenkinsfile.iac-apply`'s two Terraform stages are now one, `Terraform plan + destroy check + apply (prd)`, inside one `iac -c`. It runs `terraform init`, then `plan -out=/tmp/plan.tfplan -detailed-exitcode`, exiting on any rc other than 0 or 2. Then come `show -json`, `check-protected-vms.sh /tmp/plan.json` and `terraform apply -input=false -no-color /tmp/plan.tfplan`. A saved plan needs no `-auto-approve`. A no-change plan (rc 0) is still applied, as `0 added`. Under `set -e`, a refused plan or a guard exit of 1 or 2 stops before apply. The plan file stays in the container. The header comment says why plan, check and apply share one call. The Ansible stages are unchanged, and there is no approval step.
+
+Later phases:
+- Operator: close-out A1 names the stage "Plan + destroy check". In `iac-apply` that stage is now `Terraform plan + destroy check + apply (prd)`; `iac-on-push` keeps the old name. The live proof of V07 is one operator run of `iac-apply` after A1.
+- Doc phase: nothing outside the Jenkinsfiles names either old `iac-apply` stage (grep).
+
+Record:
+- Gate: `kc project test --project root` printed `root: no test statements — skipped` (N1).
+- Offline test (`iac` sidecar, Terraform 1.16.2, dash): the stage body, taken from the Jenkinsfile by awk, ran against a local config whose `terraform_data.vm` has `prevent_destroy`.
+  - Create: rc 0, 1 added. No change: plan rc 0, apply `0 added`, rc 0.
+  - Replace (input change): rc 1, `Error: Instance cannot be destroyed`, no apply, state unchanged.
+  - Stub guard exiting 1, then 2, on a plan that adds a resource: rc 1, then rc 2. No apply ran and the resource is not in state.
+  - A stub guard that appends a resource to `main.tf` after the plan, then exits 0: apply added only the planned resource, and the late one is not in state. The applied plan is the checked plan (V07).
+- There is no JVM here, so the Groovy is proven only by the operator's `iac-apply` run.
+
 ### P4 — Runbooks rebuild prd VMs by destroying them on Proxmox first
 
 Target: root
