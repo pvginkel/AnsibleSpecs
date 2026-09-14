@@ -68,6 +68,15 @@ HelmCharts CLAUDE.md (recommend-resources) states the window is nominally 5 days
 **Provenance:** read, plan-writer, planning r1, HelmCharts CLAUDE.md + live Prometheus query
 **Disposition:**
 
+### B3 — Ansible docs: k8s-rebuild.md and pre-drain-handoff.yml still name keycloak-db as a pre-drain opt-in that no longer exists · minor
+
+docs/runbooks/k8s-rebuild.md:35 describes a keycloak-db Deployment (Recreate, ~30 s outage) handed off before every drain, and ansible/playbooks/tasks/pre-drain-handoff.yml:22 lists 'keycloak, keycloak-db (HelmCharts)'. In HelmCharts only charts/keycloak/templates/keycloak-deployment.yaml:7,22 carries iac.webathome.org/pre-drain, and the live keycloak-prd namespace runs a single keycloak Deployment (Keycloak's database is postgres-pas, charts/keycloak/values.yaml:9).
+
+**Consequence:** An operator reading the runbook before a node drain expects a keycloak-db hand-off and outage that no longer happens; the stale line can survive when slice 018's doc phase rewrites keycloak's entry for the stop-before-start rollout.
+
+**Provenance:** read, plan-writer, planning r2, plan.md P4
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->

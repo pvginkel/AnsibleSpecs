@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — memory-stall alerts and delivery (#625)",
-      "description": "R1 (#625): \"NodeMemoryStalled (critical) and NodeMemoryStallElevated (warning) have both been firing on srvk8s3 since ~2026-08-13, across 485 five-minute buckets.\" / \"Alertmanager still has no receiver configured, so none of it was sent anywhere.\" / \"Two coupled facets: the alert rules trust a counter that can wedge, and there is no delivery path to notice when they misfire — or when they fire for real.\" Both facets are closed on production: the two stall alerts no longer fire on a wedged counter alone (today they read the stall rate and nothing else — HelmCharts configs/prd/prometheus/prd/values.yaml:75-90), and Alertmanager, on the chart's stock receiver with no configuration today (values.yaml:120-130 sets none), delivers alerts to Telegram.",
+      "description": "R1 (#625): \"NodeMemoryStalled (critical) and NodeMemoryStallElevated (warning) have both been firing on srvk8s3 since ~2026-08-13, across 485 five-minute buckets.\" / \"Alertmanager still has no receiver configured, so none of it was sent anywhere.\" / \"Two coupled facets: the alert rules trust a counter that can wedge, and there is no delivery path to notice when they misfire — or when they fire for real.\" Both facets are closed on production: the two stall alerts no longer fire on a wedged counter alone (today they read the stall rate and nothing else — HelmCharts configs/prd/prometheus/prd/values.yaml:75-97), and Alertmanager, on the chart's stock receiver with no configuration today (values.yaml:120-130 sets none), delivers alerts to Telegram.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -11,7 +11,7 @@
     {
       "id": "V02",
       "area": "R2 — Grafana and pgAdmin on Keycloak (#575)",
-      "description": "R2 (#575): \"Put Grafana and pgAdmin behind the homelab Keycloak (`homelab` realm at https://auth.ginbov.nl/realms/homelab) instead of their app-local logins, same shape as dnsmasq / electronics-inventory / iot / guacamole / open-webui / zigbee2mqtt already use\" — per-app confidential client, secret in OpenBao at eso/<cluster>/<app>/<stage>/oidc, materialised by ESO, OIDC config in the chart/release values (the dnsmasq shape: HelmCharts configs/prd/dnsmasq/prd/values.yaml:19-51). Holds on both clusters, the dev-cluster copies against the dev Keycloak's homelab-dev realm; no client secret appears in any committed file.",
+      "description": "R2 (#575): \"Put Grafana and pgAdmin behind the homelab Keycloak (`homelab` realm at https://auth.ginbov.nl/realms/homelab) instead of their app-local logins, same shape as dnsmasq / electronics-inventory / iot / guacamole / open-webui / zigbee2mqtt already use\" — per-app confidential client, secret in OpenBao at eso/<cluster>/<app>/<stage>/oidc, materialised by ESO, OIDC config in the chart/release values (the dnsmasq shape: HelmCharts configs/prd/dnsmasq/prd/values.yaml:19-51). Holds for production's Grafana and pgAdmin (ruling D6), with their secrets at eso/prd/grafana/prd/oidc and eso/prd/pgadmin/prd/oidc; no client secret appears in any committed file.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R3 — Keycloak upgrade (ruling U1)",
-      "description": "R3: \"a Keycloak upgrade would be warrented\" — Keycloak is built at 26.7.3 in DockerImages (26.5.1 today, keycloak/build-matrix.json:5) and every charts/keycloak release runs it (HelmCharts charts/keycloak/values.yaml:22 pins 26.5.1 today), with a backup of Keycloak's database taken before the push that deploys it.",
+      "description": "R3: \"a Keycloak upgrade would be warrented\" — Keycloak is built at 26.7.3 in DockerImages (26.5.1 today, keycloak/build-matrix.json:5), every charts/keycloak release is pinned to it (HelmCharts charts/keycloak/values.yaml:22 pins 26.5.1 today) and both production Keycloak stages, auth.ginbov.nl and keycloak-dev.home, run it, with a backup of Keycloak's database taken before the push that deploys it. The dev-cluster release's deploy waits on srvk8sdev (fact F3).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -67,7 +67,7 @@
     {
       "id": "V09",
       "area": "D3 / F1 — Grafana gate",
-      "description": "On both clusters, an account holding the grafana Keycloak client's admin role signs in to Grafana through Keycloak as Grafana Admin, and a realm account without that role — F1's friend — cannot log in.",
+      "description": "On production, an account holding the grafana Keycloak client's admin role signs in to Grafana through Keycloak as Grafana Admin, and a homelab-realm account without that role — F1's friend — cannot log in.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -75,7 +75,7 @@
     {
       "id": "V10",
       "area": "D3 / F1 — pgAdmin gate",
-      "description": "On both clusters, an account holding the pgadmin Keycloak client's admin role signs in to pgAdmin through Keycloak as a pgAdmin administrator that already lists and can connect to the chart's postgres-pas server (HelmCharts charts/pgadmin/files/servers.json), and a realm account without that role cannot log in.",
+      "description": "On production, an account holding the pgadmin Keycloak client's admin role signs in to pgAdmin through Keycloak as a pgAdmin administrator that already lists and can connect to the chart's postgres-pas server (HelmCharts charts/pgadmin/files/servers.json), and a homelab-realm account without that role cannot log in.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -83,23 +83,31 @@
     {
       "id": "V11",
       "area": "D4 — break-glass",
-      "description": "Grafana and pgAdmin each keep their local admin and login form as break-glass; Keycloak is an additional login button, with no automatic redirect.",
+      "description": "Production's Grafana and pgAdmin each keep their local admin and login form as break-glass; Keycloak is an additional login button, with no automatic redirect.",
       "verdict": null,
       "rationale": "",
       "evidence": []
     },
     {
       "id": "V12",
-      "area": "U1 — safe Keycloak rollout",
-      "description": "The rollout that deploys Keycloak 26.7.3 never runs a 26.5.1 and a 26.7.3 pod against the same database at once (Keycloak upgrading guide, \"Migrating to 26.6.0\"; the chart surges a second pod today — HelmCharts charts/keycloak/templates/keycloak-deployment.yaml:10-14), and keycloak-dev.home runs 26.7.3 healthily before auth.ginbov.nl does.",
+      "area": "D6 — dev-cluster copies keep local login",
+      "description": "The dev-cluster copies of Grafana and pgAdmin keep their local login: the dev Grafana release is unchanged, and the dev pgAdmin release rendered from the changed chart shows no Keycloak login and references no OIDC secret.",
       "verdict": null,
       "rationale": "",
       "evidence": []
     },
     {
       "id": "V13",
+      "area": "D5 / U1 — Keycloak never runs beside an older version",
+      "description": "Every Keycloak rollout stops the old pod before the new one starts (ruling D5; the chart surges a second pod today — HelmCharts charts/keycloak/templates/keycloak-deployment.yaml:10-14), so the rollout that deploys 26.7.3 never runs a 26.5.1 and a 26.7.3 pod against the same database at once (Keycloak upgrading guide, \"Migrating to 26.6.0\"), and keycloak-dev.home runs 26.7.3 healthily before auth.ginbov.nl does.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
       "area": "U1 — Keycloak after the upgrade",
-      "description": "After the upgrade, the homelab and homelab-dev login pages render with the deployed themes, and a sign-in through an app already on Keycloak succeeds on each realm.",
+      "description": "After the upgrade, the homelab and homelab-dev login pages render with the deployed themes; a sign-in through an app already on Keycloak succeeds on homelab, and a sign-in to the account console succeeds on homelab-dev (no production-cluster app uses that realm).",
       "verdict": null,
       "rationale": "",
       "evidence": []
