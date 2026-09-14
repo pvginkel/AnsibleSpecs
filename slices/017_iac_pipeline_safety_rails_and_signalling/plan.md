@@ -135,7 +135,7 @@ Record:
   - A stub guard that appends a resource to `main.tf` after the plan, then exits 0: apply added only the planned resource, and the late one is not in state. The applied plan is the checked plan (V07).
 - There is no JVM here, so the Groovy is proven only by the operator's `iac-apply` run.
 
-### P4 — Runbooks rebuild prd VMs by destroying them on Proxmox first
+### P4 — Runbooks rebuild prd VMs by destroying them on Proxmox first ✅ DONE 2026-09-14
 
 Target: root
 
