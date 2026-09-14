@@ -221,7 +221,9 @@ fleet-wide read-only RGW user as a recorded exception to per-app credentials).
   in one build and attaches the policies. Until the second push lands, the mirror fails on every
   unreadable prd bucket; that is expected. AnsibleSpecs and Ansible pushes deploy nothing.
 - The first mirror run and the restore drill follow the second push; the drill needs srvk8sdev
-  started by the operator.
+  started by the operator. While it is up, one manual dev-cluster deploy of an S3 release against
+  the new provider and module is the live proof that dev-cluster releases still deploy — an
+  operator action outside the loop (ruling A1), carried in `close-out.md`.
 
 ### P1 — The provider mints a read-only bucket reader and grants it read on request
 
@@ -247,13 +249,17 @@ nothing pins the provider and every deploy floats to the newest published build 
   (HelmCharts `CLAUDE.md:45`) against a dev Ceph that has no reader. So the reader is cluster-level
   configuration with a `HOMELAB_*` env fallback like the other S3 settings
   (`internal/provider/provider.go:166-182`, `:270-274`), and a resource asking for the grant on a
-  provider with no reader configured grants nothing.
+  provider with no reader configured grants nothing and plans no change: no policy is put, refresh
+  finds no drift to restore, and the only difference such a release ever plans is the ask being
+  added.
 - Principals are `arn:aws:iam:::user/<id>` (every live bucket's tenant is empty). RGW is documented
   to reject a policy naming a user that does not exist — unverified, and the reason for the push
   order.
 - Tests in the package's own style: client behaviour against `httptest`, plus the acceptance pair the
   repo's layout convention asks for (`CLAUDE.md`, "Mirror the existing resource layout"), which skips
-  without `TF_ACC`.
+  without `TF_ACC`. The acceptance tests are the operator's keystroke — `kc project test` never sets
+  `TF_ACC` (`CLAUDE.md:45-47`) — so the no-reader case (grants nothing, plans no change) is shown by
+  the tests that command runs; it is all the loop has for the dev cluster (ruling A1).
 
 ### P2 — The storage release mirrors every production bucket to Drive nightly
 
@@ -289,7 +295,10 @@ nothing changes.
   - A bucket gone from RGW is never visited, so its mirror stays untouched; nothing deletes a whole
     bucket's mirror.
   - Any rclone error fails the Job; a successful Job means every prd bucket was mirrored and pruned.
-    Runs never overlap.
+    Runs never overlap, and every run ends — succeeded or failed, retries included — within a fixed
+    time bound shorter than P3's margin; a run that reaches the bound fails. No existing job has
+    such a bound to copy: the storage jobs set none, and `postgres-backup` sets only `Forbid` and
+    one retry (`charts/postgres-pas/templates/backup-cronjob.yaml:9-12`).
 - **Shared rclone config.** The Drive remote and its OAuth token come from the bare config file on
   `rclone-backup-pvc`, which `storage-sync-cronjob` and `storage-refresh-keys-cronjob` also use and
   whose every section they treat as a remote to pull down or refresh
@@ -310,10 +319,18 @@ Target: ../HelmCharts
 
 Ruling D2: a critical rule in `configs/prd/prometheus/prd/values.yaml`'s
 `serverFiles.alerting_rules.yml` (from `:61`), beside the node rules, on kube-state-metrics' record of
-P2's CronJob's last successful run. It fires once two days have passed without one — including a
-mirror that has never succeeded, whose series does not exist yet. The mirror only: `postgres-backup`
-is not added. No Alertmanager change (slice 018). Slice 018, planned, edits the same file; whichever
-lands second rebases, and neither waits on the other.
+P2's CronJob's last successful run. Both edges bind, and the rule is judged on both:
+
+- **One missed night stays quiet, however long the following run takes.** The last-successful time
+  is the Job's completion, not its schedule (live prd 2026-09-14: `storage-sync-cronjob` scheduled
+  00:10:00Z, last success 00:13:25Z), so after one failed night the age of the last success passes
+  48 h while the next run is still going. The threshold is two days plus a margin of a few hours
+  that covers P2's run bound and the rule's own evaluation delay.
+- **Two consecutive missed nights fire**, a few hours after the second failed run. So does a mirror
+  that has never succeeded, whose series does not exist yet, counted from when it was deployed.
+
+The mirror only: `postgres-backup` is not added. No Alertmanager change (slice 018). Slice 018,
+planned, edits the same file; whichever lands second rebases, and neither waits on the other.
 
 ### P4 — Every production bucket carries the reader's grant
 
@@ -339,17 +356,23 @@ Target: root
 A runbook in `docs/runbooks/` beside `openbao.md` (settled 10) that an operator follows cold:
 
 - restoring a bucket from the mirror — whole, or single objects and earlier versions from the
-  archive — with the app's own credentials;
+  archive — writing into the production bucket with the app's own key;
 - reading the mirror with no cluster at all: the Drive login plus the crypt password and salt from
   Roboform, the whole-site case this backup exists for;
-- the acceptance drill (R3): with srvk8sdev started, restore `iot-prd-attachments` from Drive into a
-  scratch bucket on dev Ceph (`ceph_dev`, RGW on port 80 —
-  `ansible/inventories/prd/group_vars/ceph_dev.yml:28-29`), `rclone check` it against the live
-  bucket, remove the scratch bucket; and a drill log the operator's output fills.
+- the acceptance drill (R3): with srvk8sdev started, create a scratch user and bucket on dev Ceph
+  (`ceph_dev`, RGW on port 80 — `ansible/inventories/prd/group_vars/ceph_dev.yml:28-29`), restore
+  `iot-prd-attachments` from Drive into it, `rclone check` it against the live bucket read with
+  `backup-reader`'s read-only key — never the app's read-write key — then remove the scratch bucket
+  and user; and a drill log the operator's output fills.
 
-Every command is the operator's keystroke, and every credential it reads names its OpenBao path —
-values are read with the operator's permission (`CLAUDE.md`, "What Claude doesn't read on its own").
-The drill's acceptance closes only on the operator's output, after the first successful mirror run.
+The runbook names where each credential it needs actually lives (ruling B2): the app's key pair in
+the Terraform-written Secret in the app's namespace (HelmCharts `terraform-modules/s3-storage/main.tf:62-72`;
+there is no OpenBao copy), `backup-reader`'s key in P2's Terraform-written Secret in `storage-prd`,
+the crypt password and salt in OpenBao `eso/prd/storage/prd/s3-mirror` and in Roboform, and the
+scratch user's key as the drill creates it on dev Ceph. Every command is the operator's keystroke,
+and reading any of those values — OpenBao or Kubernetes Secret alike — is the operator's keystroke
+or needs the operator's permission (`CLAUDE.md`, "What Claude doesn't read on its own"). The drill's
+acceptance closes only on the operator's output, after the first successful mirror run.
 
 ### P6 — The decision record carries the mirror
 

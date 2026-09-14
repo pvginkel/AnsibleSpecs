@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — HelmCharts dev cluster: one manual deploy of an S3 release against slice 022's provider and module, while srvk8sdev is up for the drill · minor
+
+Ruling A1. Dev-cluster releases also run stage prd and every deploy floats to the newest provider, so after P4 each S3 release on the dev cluster asks for the backup-reader grant against a provider with no reader configured. The run proves that case only through the provider tests kc project test runs (acceptance tests skip without TF_ACC). The live proof is one manual dev deploy of iot, electronics-inventory or design-assistant after P4, while srvk8sdev is started for the restore drill; it is the operator's keystroke and no test phase can close it.
+
+**Consequence:** Until it is done, a defect in the no-reader path first shows on the next manual dev deploy of an S3 release.
+
+**Provenance:** read, plan-writer, planning, r2, plan_review_r1.md A1
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->

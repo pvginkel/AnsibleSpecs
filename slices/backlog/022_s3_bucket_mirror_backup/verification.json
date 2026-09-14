@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R3 — restore drill",
-      "description": "\"restore drill is part of acceptance (lesson from slice 005).\" — after the first successful mirror run the operator has run the drill from the runbook in `/work/Ansible/docs/runbooks/`: `iot-prd-attachments` restored from Drive into a scratch bucket on dev Ceph, and `rclone check` against the live bucket reports no differences. Closes only on the operator's output, never on a green gate.",
+      "description": "\"restore drill is part of acceptance (lesson from slice 005).\" — after the first successful mirror run the operator has run the drill from the runbook in `/work/Ansible/docs/runbooks/`: `iot-prd-attachments` restored from Drive into a scratch bucket on dev Ceph, and `rclone check` against the live bucket, read with `backup-reader`'s read-only key, reports no differences. Closes only on the operator's output, never on a green gate.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,7 +59,7 @@
     {
       "id": "V08",
       "area": "Ruling T3 / settled 4 — grant scope",
-      "description": "The grant is on every prd-stage bucket on the prd cluster and nowhere else. The prd cluster's `design-assistant-dev`, `-tst` and `-uat` buckets carry no policy and are not mirrored. Releases on the dev cluster, which also run stage `prd` (HelmCharts `CLAUDE.md:45`), get no grant and still deploy. No `terraform-modules/s3-storage` call site sets anything for it.",
+      "description": "The grant is on every prd-stage bucket on the prd cluster and nowhere else. The prd cluster's `design-assistant-dev`, `-tst` and `-uat` buckets carry no policy and are not mirrored. No `terraform-modules/s3-storage` call site sets anything for it. Releases on the dev cluster also run stage `prd` (HelmCharts `CLAUDE.md:45`) against a provider with no reader configured: the provider tests that `kc project test` runs (acceptance tests skip without `TF_ACC`, HomelabTerraformProvider `CLAUDE.md:45-47`) show that such a provider grants nothing and plans no change (ruling A1). The live proof, one manual dev deploy of an S3 release while srvk8sdev is up, is an outstanding operator action and not part of this criterion.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -99,7 +99,7 @@
     {
       "id": "V13",
       "area": "Ruling D2 — freshness alert",
-      "description": "A critical Prometheus rule in the production Prometheus release, beside the other rules (HelmCharts `configs/prd/prometheus/prd/values.yaml:61`), fires once the mirror has gone two days without a successful run, including a mirror that has never succeeded. `postgres-backup` is not added to it.",
+      "description": "A critical Prometheus rule in the production Prometheus release, beside the other rules (HelmCharts `configs/prd/prometheus/prd/values.yaml:61`), on the mirror job's last successful run. Both edges of ruling D2 hold. One missed night stays quiet, however long the following run takes: the last-successful time is the Job's completion, not its schedule (live prd 2026-09-14: `storage-sync-cronjob` scheduled 00:10:00Z, last success 00:13:25Z), so the threshold carries a margin of a few hours, and every mirror run ends, succeeded or failed, within a bound inside that margin. Two consecutive missed nights fire, a few hours after the second failed run, and so does a mirror that has never succeeded. `postgres-backup` is not added to it.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -147,7 +147,7 @@
     {
       "id": "V19",
       "area": "Restore runbook",
-      "description": "The runbook beside `openbao.md` covers restoring a bucket from the mirror (whole, or single objects and earlier versions from the archive) with the app's own credentials. It also covers reading the mirror with no cluster, from the Drive login and the Roboform-held crypt password and salt.",
+      "description": "The runbook beside `openbao.md` covers restoring a bucket from the mirror (whole, or single objects and earlier versions from the archive), writing into the production bucket with the app's own key. It also covers reading the mirror with no cluster, from the Drive login and the Roboform-held crypt password and salt. It names where each credential it needs actually lives (ruling B2): the app's key pair in the Terraform-written Secret in the app's namespace (HelmCharts `terraform-modules/s3-storage/main.tf:62-72`), `backup-reader`'s key in the Terraform-written Secret in `storage-prd`, the crypt password and salt in OpenBao `eso/prd/storage/prd/s3-mirror` and Roboform, and the scratch user the drill creates on dev Ceph. Reading any of those values is the operator's keystroke or needs the operator's permission, and the drill reads the live bucket with `backup-reader`'s read-only key, never the app's.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -155,7 +155,7 @@
     {
       "id": "V20",
       "area": "Provider tests",
-      "description": "The provider's reader user and bucket-grant behaviour carry unit tests in the `internal/s3storage` package's existing style, plus acceptance tests that skip without `TF_ACC`.",
+      "description": "The provider's reader user and bucket-grant behaviour carry unit tests in the `internal/s3storage` package's existing style, plus acceptance tests that skip without `TF_ACC`. The tests `kc project test` runs include the no-reader case V08 rests on: a resource asking for the grant on a provider with no reader configured grants nothing and plans no change.",
       "verdict": null,
       "rationale": "",
       "evidence": []
