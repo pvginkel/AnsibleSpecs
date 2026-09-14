@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Install P2's destroy guard on srviac after the push, then re-run iac-on-push
+
+The pushed Jenkinsfiles call `check-protected-vms.sh /tmp/plan.json` with no VM names. Jobs run srviac's installed copy (`support/iac-agent/install.sh:49`, bind-mounted by `support/iac-agent/bin/iac:49`), and `iac-apply` never converges srviac (`--limit "!iac_agent"`). The old copy exits 2 (usage) on that call, so jobs fail rather than pass a plan unchecked; the new copy exits 2 on the old call too. The role syncs `support/iac-agent` from the operator's local checkout (`ansible/roles/iac_agent/tasks/main.yml:87-95`), so run it from the pushed main. Order: push; `cd ansible && poetry run ansible-playbook playbooks/site.yml --limit srviac --check --diff`, then without `--check`; re-run `iac-on-push`, which should go green.
+
+**Consequence:** Until the role runs, every iac-on-push and iac-apply build fails at "Plan + destroy check", and any daily drift run that finds Terraform drift fails its guard with a usage error.
+
+**Provenance:** read — code-writer, P2, r1, plan.md P2 done-record
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -32,6 +41,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      the sidecar, a wait that hit a cap, a call the harness refused. What happened, when, how it
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
+
+### N1 — P2's named gate kc project test --project root ran nothing: root has no test statements
+
+The gate printed `root: no test statements — skipped`. Root-targeted phases change Jenkinsfiles and `support/iac-agent` scripts that no configured gate checks. P2's evidence is an offline Terraform repro in the `iac` sidecar, shellcheck, and a Python port of `driftSummary` (plan.md P2 record).
+
+**Consequence:** Root-targeted phases (P2, P3, P6) reach review with no automated check on their Jenkinsfile or shell changes.
+
+**Provenance:** witnessed — code-writer, P2, r1, plan.md P2 done-record
+**Disposition:**
 
 ## Bugs
 

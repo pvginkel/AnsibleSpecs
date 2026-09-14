@@ -93,6 +93,23 @@ Today it would read as drift. Terraform still renders the plan body before the e
 - The jobs run srviac's installed copy of the script, not the commit's. The `iac_agent` role installs it (`support/iac-agent/install.sh:49`) and `iac` bind-mounts it into the container (`support/iac-agent/bin/iac:49`). The Jenkinsfiles on `main` take effect at push, but `iac-apply` never converges srviac (`--limit "!iac_agent"`, `Jenkinsfile.iac-apply:98`), so installing the new script is an operator run of the role.
 - Between the push and that role run, a caller and script that disagree must fail the job, never pass a plan unchecked. The done-record names the order the operator owes: push, then the `iac_agent` role on srviac, then an `iac-on-push` re-run.
 
+**Done (P2).** `check-protected-vms.sh <plan.json>` takes exactly one argument. It fails (exit 1) on any `proxmox_virtual_environment_vm` change whose actions contain `delete`, printing one `check-protected-vms: plan deletes or replaces prd VM <address> (<actions>)` line per VM. It exits 2 on usage, a missing plan or unreadable JSON; the old `if jq -e` passed a jq error as safe. All three callers pass only the plan JSON, and the drift job's `|| true` is gone. The drift job's `driftSummary` now lists each `Terraform refused to destroy <address> (prevent_destroy)` first, matched across the whole output, then the guard's verdicts, then plan headers or errors as before.
+
+Later phases:
+- Operator, after the push: the `iac_agent` role on srviac (`site.yml --limit srviac`, `--check --diff` first). It syncs from the local checkout, so run it from the pushed main. Then re-run `iac-on-push`. Until then the old installed script exits 2 on the one-argument call, so `iac-on-push` and `iac-apply` are red at "Plan + destroy check" (close-out outstanding action).
+- P3: call `check-protected-vms.sh /tmp/plan.json`; under `set -e` its exit 1 or 2 stops the script before `terraform apply`.
+- P6: the Terraform drift stage now exits with the guard's code under `set -e` before its own `exit 1`, red either way. `recordDrift` is unchanged.
+- Doc phase: `support/iac-agent/README.md:12` still says the guard checks "the named VMs".
+
+Record:
+- Gate: `kc project test --project root` printed `root: no test statements — skipped` (close-out notable event). `shellcheck` (shellcheck-py via `uvx` in the `iac` sidecar) on the guard: clean.
+- Offline repro (`iac` sidecar, Terraform 1.16.2): a `for_each` module `vm` whose `terraform_data.this` has `prevent_destroy`, behind a `terraform_data.dns` companion. One key gives an address as long as `module.vm["srvk8sdev"].proxmox_virtual_environment_vm.this` (58 chars); one is longer. A config replace, a removed key and a taint each gave `plan` rc 1, a rendered body and one `Error: Instance cannot be destroyed` per instance. Output wraps at 78 columns when not on a TTY, and the longer address sat alone between `Resource` and `has`; hence the whole-output match.
+- The same changes with `prevent_destroy = false`, plan JSON re-typed to the VM type: guard rc 1, naming all five VM instances and no DNS companion (V01, V02).
+- Stand-ins dropped from state (the destroy-on-Proxmox case), one key removed: plan rc 2 with only a VM create and that key's DNS delete; guard rc 0 (V03).
+- No-change plan: 10 `no-op` `resource_changes`, guard rc 0. New guard called with `… srviac`: rc 2. The HEAD guard called with the plan only: rc 2 (V10).
+- A Python port of `driftSummary`'s terraform path over the captured logs put the refusals first on the refused log and the verdicts first on a guard-hit log. The environment has no JVM, so the Groovy itself, including `Matcher.find()` under the sandbox, is proven only by a drift run on a refusal (V08).
+- Drift `elif` branch under `sh` with `set -eu`: a failing guard exits 1 before `exit 1`.
+
 ### P3 — iac-apply applies the plan it checked
 
 Target: root
@@ -117,6 +134,7 @@ Constraints:
 - The scratch flows keep `-replace` (`docs/runbooks/scratch-vm.md:29`, `docs/runbooks/vm-rebuild.md:51`). Where one section serves both Terraform roots, only the prd path changes.
 - srviac cannot rebuild itself. Its apply stays on the operator-workstation path (AnsibleSpecs `decisions.md:571`), not the apply job.
 - Ceph's OSD disks are passthrough `/dev/disk/by-id` paths on srvceph1-3 (`terraform/prd/vms.tf:210-277`), not Proxmox storage volumes. A Proxmox destroy leaves them in place, as a Terraform replace did.
+- `docs/runbooks/iac-agent.md:23` says the guard checks `srviac` "or any other VM name" given to it. Since P2 it takes no names and fails on any delete or replace of any prd VM.
 
 ### P5 — Doctrine records that Terraform never destroys a VM
 
