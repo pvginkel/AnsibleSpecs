@@ -164,7 +164,7 @@ Record:
 - `vm-rebuild.md`, cluster-member flow: step 4 is destroy on Proxmox, then apply. It notes that a step-2 commit that replaces the VM fails every plan until the destroy, and that `qm destroy` leaves the Ceph passthrough OSD disks in place. "If a rebuild goes sideways" is split into a scratch path (unchanged) and a prd path. The `site.yml` note covers both roots.
 - Beyond the plan's list: `k8s-rebuild.md:248` ("TF errors at create") gained the same clause for a tainted VM, `qm destroy <new-vmid>` before retrying, because a plain retry is now refused.
 
-### P5 — Doctrine records that Terraform never destroys a VM
+### P5 — Doctrine records that Terraform never destroys a VM ✅ DONE 2026-09-14
 
 Target: ../AnsibleSpecs
 
