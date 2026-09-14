@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "P1 meets its outcome: a read-only homelab_s3_reader and an opt-in, owner-signed reader grant that is inert without a configured reader, with protocol-level tests proving the no-ask and no-reader cases plan no change. Two advisory test gaps on paths the code handles correctly today.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "No test covers granting a bucket added to an already-granted release; a planBuckets->stateBuckets mutation survives the suite."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "Create's no-reader guard is untested; removing HasReader from Create survives the suite (only Update's no-reader path is covered)."
+    }
+  ]
+}

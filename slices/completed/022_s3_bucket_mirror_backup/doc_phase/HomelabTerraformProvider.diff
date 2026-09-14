@@ -1,0 +1,1885 @@
+/work/HomelabTerraformProvider — P1: git diff 33bb16fd9d40..c1badcb8b70e
+
+go.mod                                  |   2 +-
+ internal/provider/provider.go           |  43 ++++--
+ internal/s3reader/acc_helpers_test.go   |  48 +++++++
+ internal/s3reader/client.go             |  78 +++++++++++
+ internal/s3reader/client_test.go        | 147 ++++++++++++++++++++
+ internal/s3reader/errors.go             |  12 ++
+ internal/s3reader/models.go             |   9 ++
+ internal/s3reader/resource.go           | 181 ++++++++++++++++++++++++
+ internal/s3reader/resource_acc_test.go  |  81 +++++++++++
+ internal/s3storage/acc_helpers_test.go  |  19 +++
+ internal/s3storage/client.go            |  33 +++--
+ internal/s3storage/client_test.go       | 189 ++++++++++++++++++++++++-
+ internal/s3storage/errors.go            |   8 ++
+ internal/s3storage/policy.go            | 110 +++++++++++++++
+ internal/s3storage/resource.go          |  57 +++++++-
+ internal/s3storage/resource_acc_test.go | 129 +++++++++++++++++
+ internal/s3storage/resource_test.go     | 392 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 17 files changed, 1511 insertions(+), 27 deletions(-)
+
+diff --git a/go.mod b/go.mod
+index 590b587..03aa591 100644
+--- a/go.mod
++++ b/go.mod
+@@ -7,6 +7,7 @@ require (
+ 	github.com/aws/aws-sdk-go-v2/config v1.32.24
+ 	github.com/aws/aws-sdk-go-v2/credentials v1.19.23
+ 	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.3
++	github.com/aws/smithy-go v1.27.1
+ 	github.com/ceph/go-ceph v0.39.0
+ 	github.com/hashicorp/terraform-plugin-framework v1.13.0
+ 	github.com/hashicorp/terraform-plugin-go v0.25.0
+@@ -31,7 +32,6 @@ require (
+ 	github.com/aws/aws-sdk-go-v2/service/sso v1.31.3 // indirect
+ 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.6 // indirect
+ 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.3 // indirect
+-	github.com/aws/smithy-go v1.27.1 // indirect
+ 	github.com/cloudflare/circl v1.6.3 // indirect
+ 	github.com/fatih/color v1.18.0 // indirect
+ 	github.com/golang/protobuf v1.5.4 // indirect
+diff --git a/internal/provider/provider.go b/internal/provider/provider.go
+index 038c408..8be4145 100644
+--- a/internal/provider/provider.go
++++ b/internal/provider/provider.go
+@@ -19,6 +19,7 @@ import (
+ 	"github.com/pvginkel/HomelabTerraformProvider/internal/dnsreservation"
+ 	"github.com/pvginkel/HomelabTerraformProvider/internal/httplog"
+ 	"github.com/pvginkel/HomelabTerraformProvider/internal/rbdimage"
++	"github.com/pvginkel/HomelabTerraformProvider/internal/s3reader"
+ 	"github.com/pvginkel/HomelabTerraformProvider/internal/s3storage"
+ 	"github.com/pvginkel/HomelabTerraformProvider/internal/zfsdataset"
+ )
+@@ -35,6 +36,7 @@ const (
+ 	envS3Endpoint  = "HOMELAB_S3_ENDPOINT"
+ 	envS3AccessKey = "HOMELAB_S3_ADMIN_ACCESS_KEY"
+ 	envS3SecretKey = "HOMELAB_S3_ADMIN_SECRET_KEY"
++	envS3Reader    = "HOMELAB_S3_BACKUP_READER"
+ 	envIACToken    = "HOMELAB_IAC_PROVISIONER_TOKEN"
+ 
+ 	defaultIACProvisionerPort = 9655
+@@ -58,6 +60,7 @@ type homelabProviderModel struct {
+ 	S3Endpoint  types.String `tfsdk:"s3_endpoint"`
+ 	S3AccessKey types.String `tfsdk:"s3_admin_access_key"`
+ 	S3SecretKey types.String `tfsdk:"s3_admin_secret_key"`
++	S3Reader    types.String `tfsdk:"s3_backup_reader"`
+ 
+ 	ZFSPools            types.Map    `tfsdk:"zfs_pools"`
+ 	IACProvisionerToken types.String `tfsdk:"iac_provisioner_token"`
+@@ -68,11 +71,12 @@ type homelabProviderModel struct {
+ // via ResourceData. Any client may be nil when its provider group was left
+ // unset; the resource itself reports the missing configuration.
+ type providerClients struct {
+-	dns    *dnsreservation.Client
+-	backup *backupcredential.Client
+-	ceph   *cephconn.Conn
+-	s3     *s3storage.Client
+-	zfs    *zfsdataset.Client
++	dns      *dnsreservation.Client
++	backup   *backupcredential.Client
++	ceph     *cephconn.Conn
++	s3       *s3storage.Client
++	s3Reader *s3reader.Client
++	zfs      *zfsdataset.Client
+ }
+ 
+ func (p *providerClients) DNSReservationClient() *dnsreservation.Client {
+@@ -91,6 +95,10 @@ func (p *providerClients) S3StorageClient() *s3storage.Client {
+ 	return p.s3
+ }
+ 
++func (p *providerClients) S3ReaderClient() *s3reader.Client {
++	return p.s3Reader
++}
++
+ func (p *providerClients) ZFSDatasetClient() *zfsdataset.Client {
+ 	return p.zfs
+ }
+@@ -101,6 +109,7 @@ var (
+ 	_ rbdimage.ProviderData         = (*providerClients)(nil)
+ 	_ cephfssubvolume.ProviderData  = (*providerClients)(nil)
+ 	_ s3storage.ProviderData        = (*providerClients)(nil)
++	_ s3reader.ProviderData         = (*providerClients)(nil)
+ 	_ zfsdataset.ProviderData       = (*providerClients)(nil)
+ )
+ 
+@@ -164,8 +173,8 @@ func (p *HomelabProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
+ 				Optional:            true,
+ 			},
+ 			"s3_endpoint": schema.StringAttribute{
+-				Description:         "RGW endpoint URL (e.g. http://ceph:7480). Falls back to HOMELAB_S3_ENDPOINT. Required together with s3_admin_access_key and s3_admin_secret_key for the s3 resource.",
+-				MarkdownDescription: "RGW endpoint URL (e.g. `http://ceph:7480`). Falls back to `HOMELAB_S3_ENDPOINT`. Required together with `s3_admin_access_key` and `s3_admin_secret_key` for the s3 resource.",
++				Description:         "RGW endpoint URL (e.g. http://ceph:7480). Falls back to HOMELAB_S3_ENDPOINT. Required together with s3_admin_access_key and s3_admin_secret_key for the s3 resources.",
++				MarkdownDescription: "RGW endpoint URL (e.g. `http://ceph:7480`). Falls back to `HOMELAB_S3_ENDPOINT`. Required together with `s3_admin_access_key` and `s3_admin_secret_key` for the s3 resources.",
+ 				Optional:            true,
+ 			},
+ 			"s3_admin_access_key": schema.StringAttribute{
+@@ -180,6 +189,11 @@ func (p *HomelabProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
+ 				Optional:            true,
+ 				Sensitive:           true,
+ 			},
++			"s3_backup_reader": schema.StringAttribute{
++				Description:         "RGW user id the bucket policies of homelab_s3_storage's grant_backup_reader name (e.g. backup-reader). Falls back to HOMELAB_S3_BACKUP_READER. The s3 group's one optional member: unset, grant_backup_reader writes, deletes and checks nothing.",
++				MarkdownDescription: "RGW user id the bucket policies of `homelab_s3_storage`'s `grant_backup_reader` name (e.g. `backup-reader`). Falls back to `HOMELAB_S3_BACKUP_READER`. The s3 group's one optional member: unset, `grant_backup_reader` writes, deletes and checks nothing.",
++				Optional:            true,
++			},
+ 			"zfs_pools": schema.MapAttribute{
+ 				Description:         "Map of ZFS pool name -> node hostname (.home). The provider resolves a dataset's pool to a node and addresses that node's iac-provisioner agent. Required together with iac_provisioner_token for the homelab_zfs_dataset resource.",
+ 				MarkdownDescription: "Map of ZFS pool name -> node hostname (`.home`). The provider resolves a dataset's `pool` to a node and addresses that node's iac-provisioner agent. Required together with `iac_provisioner_token` for the `homelab_zfs_dataset` resource.",
+@@ -211,7 +225,7 @@ func (p *HomelabProvider) Configure(ctx context.Context, req provider.ConfigureR
+ 	// Defer until plan-time when these come from another resource's output.
+ 	if cfg.DNSURL.IsUnknown() || cfg.DNSToken.IsUnknown() || cfg.BackupURL.IsUnknown() || cfg.BackupToken.IsUnknown() ||
+ 		cfg.CephMonHost.IsUnknown() || cfg.CephUser.IsUnknown() || cfg.CephKey.IsUnknown() || cfg.CephPool.IsUnknown() ||
+-		cfg.S3Endpoint.IsUnknown() || cfg.S3AccessKey.IsUnknown() || cfg.S3SecretKey.IsUnknown() ||
++		cfg.S3Endpoint.IsUnknown() || cfg.S3AccessKey.IsUnknown() || cfg.S3SecretKey.IsUnknown() || cfg.S3Reader.IsUnknown() ||
+ 		cfg.ZFSPools.IsUnknown() || cfg.IACProvisionerToken.IsUnknown() || cfg.IACProvisionerPort.IsUnknown() {
+ 		return
+ 	}
+@@ -227,6 +241,7 @@ func (p *HomelabProvider) Configure(ctx context.Context, req provider.ConfigureR
+ 	s3Endpoint := resolveStringConfig(cfg.S3Endpoint, envS3Endpoint)
+ 	s3AccessKey := resolveStringConfig(cfg.S3AccessKey, envS3AccessKey)
+ 	s3SecretKey := resolveStringConfig(cfg.S3SecretKey, envS3SecretKey)
++	s3Reader := resolveStringConfig(cfg.S3Reader, envS3Reader)
+ 	iacToken := resolveStringConfig(cfg.IACProvisionerToken, envIACToken)
+ 
+ 	zfsPools := map[string]string{}
+@@ -294,12 +309,21 @@ func (p *HomelabProvider) Configure(ctx context.Context, req provider.ConfigureR
+ 		clients.ceph = conn
+ 	}
+ 	if s3Set {
+-		s3c, err := s3storage.NewClient(s3Endpoint, s3AccessKey, s3SecretKey, p.version)
++		// s3_backup_reader stays out of validateGroup, which would make it
++		// mandatory; it is ignored with the rest of a disabled s3 group.
++		s3c, err := s3storage.NewClient(s3Endpoint, s3AccessKey, s3SecretKey, s3Reader, p.version)
+ 		if err != nil {
+ 			resp.Diagnostics.AddError("Failed to initialize S3 client", err.Error())
+ 			return
+ 		}
+ 		clients.s3 = s3c
++
++		readerClient, err := s3reader.NewClient(s3Endpoint, s3AccessKey, s3SecretKey)
++		if err != nil {
++			resp.Diagnostics.AddError("Failed to initialize S3 reader client", err.Error())
++			return
++		}
++		clients.s3Reader = readerClient
+ 	}
+ 	if zfsSet {
+ 		clients.zfs = zfsdataset.NewClient(zfsPools, iacToken, iacPort, p.version)
+@@ -348,6 +372,7 @@ func (p *HomelabProvider) Resources(_ context.Context) []func() resource.Resourc
+ 		rbdimage.NewResource,
+ 		cephfssubvolume.NewResource,
+ 		s3storage.NewResource,
++		s3reader.NewResource,
+ 		zfsdataset.NewResource,
+ 	}
+ }
+diff --git a/internal/s3reader/acc_helpers_test.go b/internal/s3reader/acc_helpers_test.go
+new file mode 100644
+index 0000000..04a0bf7
+--- /dev/null
++++ b/internal/s3reader/acc_helpers_test.go
+@@ -0,0 +1,48 @@
++package s3reader_test
++
++import (
++	"net/http"
++	"os"
++	"testing"
++
++	"github.com/ceph/go-ceph/rgw/admin"
++	"github.com/hashicorp/terraform-plugin-framework/providerserver"
++	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
++
++	"github.com/pvginkel/HomelabTerraformProvider/internal/provider"
++)
++
++var s3EnvVars = []string{
++	"HOMELAB_S3_ENDPOINT",
++	"HOMELAB_S3_ADMIN_ACCESS_KEY",
++	"HOMELAB_S3_ADMIN_SECRET_KEY",
++}
++
++func testAccPreCheck(t *testing.T) {
++	t.Helper()
++	for _, v := range s3EnvVars {
++		if os.Getenv(v) == "" {
++			t.Fatalf("%s must be set for acceptance tests", v)
++		}
++	}
++}
++
++// liveAdmin reads the user record the resource does not expose (caps,
++// max_buckets).
++func liveAdmin(t *testing.T) *admin.API {
++	t.Helper()
++	api, err := admin.New(
++		os.Getenv("HOMELAB_S3_ENDPOINT"),
++		os.Getenv("HOMELAB_S3_ADMIN_ACCESS_KEY"),
++		os.Getenv("HOMELAB_S3_ADMIN_SECRET_KEY"),
++		&http.Client{},
++	)
++	if err != nil {
++		t.Fatalf("build rgw admin client: %v", err)
++	}
++	return api
++}
++
++var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
++	"homelab": providerserver.NewProtocol6WithError(provider.New("test")()),
++}
+diff --git a/internal/s3reader/client.go b/internal/s3reader/client.go
+new file mode 100644
+index 0000000..3cf1b13
+--- /dev/null
++++ b/internal/s3reader/client.go
+@@ -0,0 +1,78 @@
++package s3reader
++
++import (
++	"context"
++	"fmt"
++	"net/http"
++	"time"
++
++	"github.com/ceph/go-ceph/rgw/admin"
++)
++
++const (
++	httpTimeout = 30 * time.Second
++
++	// readerCaps lets the user enumerate buckets through the Admin Ops API;
++	// S3 ListBuckets returns only the buckets the caller owns.
++	readerCaps = "buckets=read"
++)
++
++// Client manages reader users over the RGW Admin Ops API.
++type Client struct {
++	api *admin.API
++}
++
++// NewClient builds a Client against the given RGW endpoint and admin keys.
++func NewClient(endpoint, adminAccessKey, adminSecretKey string) (*Client, error) {
++	api, err := admin.New(endpoint, adminAccessKey, adminSecretKey, &http.Client{Timeout: httpTimeout})
++	if err != nil {
++		return nil, fmt.Errorf("init rgw admin api: %w", err)
++	}
++	return &Client{api: api}, nil
++}
++
++// Create makes the RGW user with max_buckets=-1 (can never create buckets) and
++// the buckets=read admin capability, and captures its minted key.
++func (c *Client) Create(ctx context.Context, name string) (*Reader, error) {
++	neg := -1
++	u, err := c.api.CreateUser(ctx, admin.User{ID: name, DisplayName: name, MaxBuckets: &neg, UserCaps: readerCaps})
++	if err != nil {
++		return nil, fmt.Errorf("create rgw user %q: %w", name, err)
++	}
++	if len(u.Keys) == 0 {
++		return nil, fmt.Errorf("rgw user %q was created without a key", name)
++	}
++	return &Reader{Name: name, AccessKeyID: u.Keys[0].AccessKey, SecretAccessKey: u.Keys[0].SecretKey}, nil
++}
++
++// Read returns the user's key matching accessKey, or its first key when none
++// matches. The bool is false when the user is gone.
++func (c *Client) Read(ctx context.Context, name, accessKey string) (*Reader, bool, error) {
++	u, err := c.api.GetUser(ctx, admin.User{ID: name})
++	if err != nil {
++		if IsNotFound(err) {
++			return nil, false, nil
++		}
++		return nil, false, fmt.Errorf("read rgw user %q: %w", name, err)
++	}
++
++	rd := &Reader{Name: name}
++	for _, k := range u.Keys {
++		if k.AccessKey == accessKey {
++			rd.AccessKeyID, rd.SecretAccessKey = k.AccessKey, k.SecretKey
++			return rd, true, nil
++		}
++	}
++	if len(u.Keys) > 0 {
++		rd.AccessKeyID, rd.SecretAccessKey = u.Keys[0].AccessKey, u.Keys[0].SecretKey
++	}
++	return rd, true, nil
++}
++
++// Delete removes the user. A missing user is treated as success.
++func (c *Client) Delete(ctx context.Context, name string) error {
++	if err := c.api.RemoveUser(ctx, admin.User{ID: name}); err != nil && !IsNotFound(err) {
++		return fmt.Errorf("remove rgw user %q: %w", name, err)
++	}
++	return nil
++}
+diff --git a/internal/s3reader/client_test.go b/internal/s3reader/client_test.go
+new file mode 100644
+index 0000000..2db0f07
+--- /dev/null
++++ b/internal/s3reader/client_test.go
+@@ -0,0 +1,147 @@
++package s3reader
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/ceph/go-ceph/rgw/admin"
++)
++
++func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
++	t.Helper()
++	srv := httptest.NewServer(handler)
++	t.Cleanup(srv.Close)
++
++	api, err := admin.New(srv.URL, "admin-ak", "admin-sk", srv.Client())
++	if err != nil {
++		t.Fatalf("admin.New: %v", err)
++	}
++	return &Client{api: api}
++}
++
++func writeJSON(t *testing.T, w http.ResponseWriter, v any) {
++	t.Helper()
++	if err := json.NewEncoder(w).Encode(v); err != nil {
++		t.Errorf("encode response: %v", err)
++	}
++}
++
++func writeStatusError(w http.ResponseWriter, status int, code string) {
++	w.WriteHeader(status)
++	_ = json.NewEncoder(w).Encode(map[string]string{"Code": code})
++}
++
++func TestClientCreate(t *testing.T) {
++	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		if r.Method != http.MethodPut || r.URL.Path != "/admin/user" {
++			t.Errorf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
++			return
++		}
++		q := r.URL.Query()
++		if q.Get("uid") != "backup-reader" {
++			t.Errorf("uid = %q", q.Get("uid"))
++		}
++		if q.Get("max-buckets") != "-1" {
++			t.Errorf("max-buckets = %q, want -1", q.Get("max-buckets"))
++		}
++		if q.Get("user-caps") != "buckets=read" {
++			t.Errorf("user-caps = %q, want buckets=read", q.Get("user-caps"))
++		}
++		writeJSON(t, w, admin.User{
++			ID:   "backup-reader",
++			Keys: []admin.UserKeySpec{{User: "backup-reader", AccessKey: "AKIA", SecretKey: "secret"}},
++			Caps: []admin.UserCapSpec{{Type: "buckets", Perm: "read"}},
++		})
++	})
++
++	rd, err := client.Create(context.Background(), "backup-reader")
++	if err != nil {
++		t.Fatalf("Create: %v", err)
++	}
++	if rd.Name != "backup-reader" || rd.AccessKeyID != "AKIA" || rd.SecretAccessKey != "secret" {
++		t.Errorf("unexpected reader: %+v", rd)
++	}
++}
++
++func TestClientCreateWithoutKey(t *testing.T) {
++	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		writeJSON(t, w, admin.User{ID: "backup-reader"})
++	})
++
++	if _, err := client.Create(context.Background(), "backup-reader"); err == nil {
++		t.Fatal("Create succeeded for a user returned without a key")
++	}
++}
++
++func TestClientReadFound(t *testing.T) {
++	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		if r.Method != http.MethodGet || r.URL.Path != "/admin/user" {
++			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
++			return
++		}
++		writeJSON(t, w, admin.User{
++			ID: "backup-reader",
++			Keys: []admin.UserKeySpec{
++				{User: "backup-reader", AccessKey: "OTHER", SecretKey: "others"},
++				{User: "backup-reader", AccessKey: "AKIA", SecretKey: "secret"},
++			},
++		})
++	})
++
++	rd, found, err := client.Read(context.Background(), "backup-reader", "AKIA")
++	if err != nil {
++		t.Fatalf("Read: %v", err)
++	}
++	if !found {
++		t.Fatal("found = false, want true")
++	}
++	if rd.AccessKeyID != "AKIA" || rd.SecretAccessKey != "secret" {
++		t.Errorf("selected wrong key: %+v", rd)
++	}
++}
++
++func TestClientReadNotFound(t *testing.T) {
++	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		writeStatusError(w, http.StatusNotFound, "NoSuchUser")
++	})
++
++	_, found, err := client.Read(context.Background(), "backup-reader", "AKIA")
++	if err != nil {
++		t.Fatalf("Read: %v", err)
++	}
++	if found {
++		t.Error("found = true, want false")
++	}
++}
++
++func TestClientDelete(t *testing.T) {
++	var removed string
++	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		if r.Method != http.MethodDelete || r.URL.Path != "/admin/user" {
++			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
++			return
++		}
++		removed = r.URL.Query().Get("uid")
++		w.WriteHeader(http.StatusOK)
++	})
++
++	if err := client.Delete(context.Background(), "backup-reader"); err != nil {
++		t.Fatalf("Delete: %v", err)
++	}
++	if removed != "backup-reader" {
++		t.Errorf("removed uid = %q, want backup-reader", removed)
++	}
++}
++
++func TestClientDeleteMissing(t *testing.T) {
++	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		writeStatusError(w, http.StatusNotFound, "NoSuchUser")
++	})
++
++	if err := client.Delete(context.Background(), "backup-reader"); err != nil {
++		t.Fatalf("Delete of a missing user: %v", err)
++	}
++}
+diff --git a/internal/s3reader/errors.go b/internal/s3reader/errors.go
+new file mode 100644
+index 0000000..2f477b0
+--- /dev/null
++++ b/internal/s3reader/errors.go
+@@ -0,0 +1,12 @@
++package s3reader
++
++import (
++	"errors"
++
++	"github.com/ceph/go-ceph/rgw/admin"
++)
++
++// IsNotFound reports whether err means the RGW user is absent.
++func IsNotFound(err error) bool {
++	return errors.Is(err, admin.ErrNoSuchUser)
++}
+diff --git a/internal/s3reader/models.go b/internal/s3reader/models.go
+new file mode 100644
+index 0000000..8b983c5
+--- /dev/null
++++ b/internal/s3reader/models.go
+@@ -0,0 +1,9 @@
++package s3reader
++
++// Reader is an RGW user that owns no buckets, can create none, and holds only
++// the buckets=read admin capability, with its minted credential.
++type Reader struct {
++	Name            string
++	AccessKeyID     string
++	SecretAccessKey string
++}
+diff --git a/internal/s3reader/resource.go b/internal/s3reader/resource.go
+new file mode 100644
+index 0000000..b0a8dc4
+--- /dev/null
++++ b/internal/s3reader/resource.go
+@@ -0,0 +1,181 @@
++package s3reader
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/hashicorp/terraform-plugin-framework/path"
++	"github.com/hashicorp/terraform-plugin-framework/resource"
++	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
++	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
++	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
++	"github.com/hashicorp/terraform-plugin-framework/types"
++)
++
++var (
++	_ resource.Resource                = (*s3ReaderResource)(nil)
++	_ resource.ResourceWithConfigure   = (*s3ReaderResource)(nil)
++	_ resource.ResourceWithImportState = (*s3ReaderResource)(nil)
++)
++
++// ProviderData is the interface the provider's wiring satisfies so this package
++// can pick up its client without importing the provider.
++type ProviderData interface {
++	S3ReaderClient() *Client
++}
++
++func NewResource() resource.Resource {
++	return &s3ReaderResource{}
++}
++
++type s3ReaderResource struct {
++	client *Client
++}
++
++type s3ReaderModel struct {
++	ID              types.String `tfsdk:"id"`
++	Name            types.String `tfsdk:"name"`
++	AccessKeyID     types.String `tfsdk:"access_key_id"`
++	SecretAccessKey types.String `tfsdk:"secret_access_key"`
++}
++
++func (r *s3ReaderResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
++	resp.TypeName = req.ProviderTypeName + "_s3_reader"
++}
++
++func (r *s3ReaderResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
++	resp.Schema = schema.Schema{
++		Description: "An RGW user that owns no buckets, can create none, and holds only the admin capability buckets=read. " +
++			"It reads the buckets of every homelab_s3_storage with grant_backup_reader set, on a provider whose s3_backup_reader names it.",
++		MarkdownDescription: "An RGW user that owns no buckets, can create none, and holds only the admin capability `buckets=read`. " +
++			"It reads the buckets of every `homelab_s3_storage` with `grant_backup_reader` set, on a provider whose `s3_backup_reader` names it.",
++		Attributes: map[string]schema.Attribute{
++			"id": schema.StringAttribute{
++				Description:         "Resource ID. Equals the name (the RGW user id).",
++				MarkdownDescription: "Resource ID. Equals the name (the RGW user id).",
++				Computed:            true,
++				PlanModifiers: []planmodifier.String{
++					stringplanmodifier.UseStateForUnknown(),
++				},
++			},
++			"name": schema.StringAttribute{
++				Description:         "RGW user id. Renaming forces destroy and recreate.",
++				MarkdownDescription: "RGW user id. Renaming forces destroy and recreate.",
++				Required:            true,
++				PlanModifiers: []planmodifier.String{
++					stringplanmodifier.RequiresReplace(),
++				},
++			},
++			"access_key_id": schema.StringAttribute{
++				Description:         "Minted S3 access key id of the reader.",
++				MarkdownDescription: "Minted S3 access key id of the reader.",
++				Computed:            true,
++				PlanModifiers: []planmodifier.String{
++					stringplanmodifier.UseStateForUnknown(),
++				},
++			},
++			"secret_access_key": schema.StringAttribute{
++				Description:         "Minted S3 secret access key of the reader.",
++				MarkdownDescription: "Minted S3 secret access key of the reader.",
++				Computed:            true,
++				Sensitive:           true,
++				PlanModifiers: []planmodifier.String{
++					stringplanmodifier.UseStateForUnknown(),
++				},
++			},
++		},
++	}
++}
++
++func (r *s3ReaderResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
++	if req.ProviderData == nil {
++		return
++	}
++	data, ok := req.ProviderData.(ProviderData)
++	if !ok {
++		resp.Diagnostics.AddError(
++			"Unexpected provider data type",
++			fmt.Sprintf("Expected s3reader.ProviderData, got %T. Please report this as a provider bug.", req.ProviderData),
++		)
++		return
++	}
++	client := data.S3ReaderClient()
++	if client == nil {
++		resp.Diagnostics.AddError(
++			"S3 not configured",
++			"homelab_s3_reader requires s3_endpoint, s3_admin_access_key and s3_admin_secret_key to be set on the provider block, "+
++				"or the matching HOMELAB_S3_* environment variables.",
++		)
++		return
++	}
++	r.client = client
++}
++
++func (r *s3ReaderResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
++	var plan s3ReaderModel
++	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
++	if resp.Diagnostics.HasError() {
++		return
++	}
++
++	rd, err := r.client.Create(ctx, plan.Name.ValueString())
++	if err != nil {
++		resp.Diagnostics.AddError("Failed to create S3 reader", err.Error())
++		return
++	}
++
++	plan.ID = types.StringValue(rd.Name)
++	plan.AccessKeyID = types.StringValue(rd.AccessKeyID)
++	plan.SecretAccessKey = types.StringValue(rd.SecretAccessKey)
++	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
++}
++
++func (r *s3ReaderResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
++	var state s3ReaderModel
++	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
++	if resp.Diagnostics.HasError() {
++		return
++	}
++
++	rd, found, err := r.client.Read(ctx, state.Name.ValueString(), state.AccessKeyID.ValueString())
++	if err != nil {
++		resp.Diagnostics.AddError("Failed to read S3 reader", err.Error())
++		return
++	}
++	if !found {
++		resp.State.RemoveResource(ctx)
++		return
++	}
++
++	state.ID = types.StringValue(rd.Name)
++	state.AccessKeyID = types.StringValue(rd.AccessKeyID)
++	state.SecretAccessKey = types.StringValue(rd.SecretAccessKey)
++	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
++}
++
++// Update has nothing to change on the user: name forces replacement and every
++// other attribute is computed.
++func (r *s3ReaderResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
++	var plan s3ReaderModel
++	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
++	if resp.Diagnostics.HasError() {
++		return
++	}
++	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
++}
++
++func (r *s3ReaderResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
++	var state s3ReaderModel
++	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
++	if resp.Diagnostics.HasError() {
++		return
++	}
++
++	if err := r.client.Delete(ctx, state.Name.ValueString()); err != nil {
++		resp.Diagnostics.AddError("Failed to delete S3 reader", err.Error())
++	}
++}
++
++func (r *s3ReaderResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
++	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
++}
+diff --git a/internal/s3reader/resource_acc_test.go b/internal/s3reader/resource_acc_test.go
+new file mode 100644
+index 0000000..786173f
+--- /dev/null
++++ b/internal/s3reader/resource_acc_test.go
+@@ -0,0 +1,81 @@
++package s3reader_test
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/ceph/go-ceph/rgw/admin"
++	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
++	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
++	"github.com/hashicorp/terraform-plugin-testing/terraform"
++)
++
++func readerConfig(name string) string {
++	return fmt.Sprintf(`
++provider "homelab" {}
++
++resource "homelab_s3_reader" "test" {
++  name = %q
++}
++`, name)
++}
++
++func TestAccS3Reader_basic(t *testing.T) {
++	name := "tfacc-" + strings.ToLower(acctest.RandString(8))
++
++	resource.Test(t, resource.TestCase{
++		PreCheck:                 func() { testAccPreCheck(t) },
++		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
++		CheckDestroy:             testAccCheckReaderDestroyed(t, name),
++		Steps: []resource.TestStep{
++			{
++				Config: readerConfig(name),
++				Check: resource.ComposeAggregateTestCheckFunc(
++					resource.TestCheckResourceAttr("homelab_s3_reader.test", "id", name),
++					resource.TestCheckResourceAttrSet("homelab_s3_reader.test", "access_key_id"),
++					resource.TestCheckResourceAttrSet("homelab_s3_reader.test", "secret_access_key"),
++					testAccCheckReaderUser(t, name),
++				),
++			},
++			{
++				ResourceName:      "homelab_s3_reader.test",
++				ImportState:       true,
++				ImportStateVerify: true,
++			},
++		},
++	})
++}
++
++// testAccCheckReaderUser checks the live user holds buckets=read and no other
++// capability, and can create no bucket.
++func testAccCheckReaderUser(t *testing.T, name string) resource.TestCheckFunc {
++	return func(_ *terraform.State) error {
++		u, err := liveAdmin(t).GetUser(context.Background(), admin.User{ID: name})
++		if err != nil {
++			return fmt.Errorf("read rgw user %q: %v", name, err)
++		}
++		if len(u.Caps) != 1 || u.Caps[0].Type != "buckets" || u.Caps[0].Perm != "read" {
++			return fmt.Errorf("rgw user %q caps = %+v, want only buckets=read", name, u.Caps)
++		}
++		if u.MaxBuckets == nil || *u.MaxBuckets != -1 {
++			return fmt.Errorf("rgw user %q max_buckets = %v, want -1", name, u.MaxBuckets)
++		}
++		return nil
++	}
++}
++
++func testAccCheckReaderDestroyed(t *testing.T, name string) resource.TestCheckFunc {
++	return func(_ *terraform.State) error {
++		_, err := liveAdmin(t).GetUser(context.Background(), admin.User{ID: name})
++		if errors.Is(err, admin.ErrNoSuchUser) {
++			return nil
++		}
++		if err != nil {
++			return fmt.Errorf("unexpected error checking destroyed reader %q: %v", name, err)
++		}
++		return fmt.Errorf("rgw user %q still exists after destroy", name)
++	}
++}
+diff --git a/internal/s3storage/acc_helpers_test.go b/internal/s3storage/acc_helpers_test.go
+index 4124ccb..8c09c1f 100644
+--- a/internal/s3storage/acc_helpers_test.go
++++ b/internal/s3storage/acc_helpers_test.go
+@@ -4,6 +4,9 @@ import (
+ 	"os"
+ 	"testing"
+ 
++	"github.com/aws/aws-sdk-go-v2/aws"
++	"github.com/aws/aws-sdk-go-v2/credentials"
++	"github.com/aws/aws-sdk-go-v2/service/s3"
+ 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+ 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+ 
+@@ -32,6 +35,7 @@ func liveClient(t *testing.T) *s3storage.Client {
+ 		os.Getenv("HOMELAB_S3_ENDPOINT"),
+ 		os.Getenv("HOMELAB_S3_ADMIN_ACCESS_KEY"),
+ 		os.Getenv("HOMELAB_S3_ADMIN_SECRET_KEY"),
++		"",
+ 		"acctest",
+ 	)
+ 	if err != nil {
+@@ -40,6 +44,21 @@ func liveClient(t *testing.T) *s3storage.Client {
+ 	return client
+ }
+ 
++type keyPair struct {
++	access, secret string
++}
++
++// liveS3 is an S3 client signing with key, for acting as an owner or reader.
++func liveS3(key keyPair) *s3.Client {
++	return s3.New(s3.Options{
++		Region:                     "us-east-1",
++		Credentials:                credentials.NewStaticCredentialsProvider(key.access, key.secret, ""),
++		BaseEndpoint:               aws.String(os.Getenv("HOMELAB_S3_ENDPOINT")),
++		UsePathStyle:               true,
++		RequestChecksumCalculation: aws.RequestChecksumCalculationWhenRequired,
++	})
++}
++
+ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
+ 	"homelab": providerserver.NewProtocol6WithError(provider.New("test")()),
+ }
+diff --git a/internal/s3storage/client.go b/internal/s3storage/client.go
+index ade50c6..a1542b7 100644
+--- a/internal/s3storage/client.go
++++ b/internal/s3storage/client.go
+@@ -25,14 +25,18 @@ type bucketCreator interface {
+ }
+ 
+ // Client composes the RGW Admin Ops API (user/key/bucket ownership) with a
+-// bucket creator (the only path that needs real S3).
++// bucket creator (the only path that needs real S3), and writes the reader's
++// bucket policies over S3 with each owner's key.
+ type Client struct {
+-	api *admin.API
+-	s3  bucketCreator
++	api      *admin.API
++	s3       bucketCreator
++	endpoint string
++	reader   string
+ }
+ 
+ // NewClient builds a Client against the given RGW endpoint and admin keys.
+-func NewClient(endpoint, adminAccessKey, adminSecretKey, version string) (*Client, error) {
++// reader is the RGW user id a grant names; empty means no grant is written.
++func NewClient(endpoint, adminAccessKey, adminSecretKey, reader, version string) (*Client, error) {
+ 	httpClient := &http.Client{Timeout: httpTimeout}
+ 
+ 	api, err := admin.New(endpoint, adminAccessKey, adminSecretKey, httpClient)
+@@ -40,20 +44,29 @@ func NewClient(endpoint, adminAccessKey, adminSecretKey, version string) (*Clien
+ 		return nil, fmt.Errorf("init rgw admin api: %w", err)
+ 	}
+ 
+-	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
++	s3c, err := newS3Client(context.Background(), endpoint, adminAccessKey, adminSecretKey)
++	if err != nil {
++		return nil, err
++	}
++
++	return &Client{api: api, s3: &awsBucketCreator{client: s3c}, endpoint: endpoint, reader: reader}, nil
++}
++
++// newS3Client builds a path-style S3 client against the RGW endpoint that signs
++// with the given key.
++func newS3Client(ctx context.Context, endpoint, accessKey, secretKey string) (*s3.Client, error) {
++	cfg, err := awsconfig.LoadDefaultConfig(ctx,
+ 		awsconfig.WithRegion("us-east-1"),
+ 		awsconfig.WithCredentialsProvider(
+-			credentials.NewStaticCredentialsProvider(adminAccessKey, adminSecretKey, "")),
++			credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
+ 	)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("load aws config: %w", err)
+ 	}
+-	s3c := s3.NewFromConfig(cfg, func(o *s3.Options) {
++	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+ 		o.BaseEndpoint = aws.String(endpoint)
+ 		o.UsePathStyle = true
+-	})
+-
+-	return &Client{api: api, s3: &awsBucketCreator{client: s3c}}, nil
++	}), nil
+ }
+ 
+ // awsBucketCreator is the production bucketCreator over aws-sdk-go-v2.
+diff --git a/internal/s3storage/client_test.go b/internal/s3storage/client_test.go
+index 0a1da30..1e993d9 100644
+--- a/internal/s3storage/client_test.go
++++ b/internal/s3storage/client_test.go
+@@ -3,9 +3,12 @@ package s3storage
+ import (
+ 	"context"
+ 	"encoding/json"
++	"fmt"
++	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"sort"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/ceph/go-ceph/rgw/admin"
+@@ -37,7 +40,28 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *fakeBucket
+ 		t.Fatalf("admin.New: %v", err)
+ 	}
+ 	fake := &fakeBucketCreator{}
+-	return &Client{api: api, s3: fake}, fake
++	return &Client{api: api, s3: fake, endpoint: srv.URL, reader: "backup-reader"}, fake
++}
++
++// policyBucket reports the bucket of an S3 bucket-policy request with the given
++// method.
++func policyBucket(r *http.Request, method string) (string, bool) {
++	if _, ok := r.URL.Query()["policy"]; !ok || r.Method != method {
++		return "", false
++	}
++	return strings.TrimPrefix(r.URL.Path, "/"), true
++}
++
++// signingKey is the access key id in a SigV4 Authorization header.
++func signingKey(r *http.Request) string {
++	_, cred, _ := strings.Cut(r.Header.Get("Authorization"), "Credential=")
++	key, _, _ := strings.Cut(cred, "/")
++	return key
++}
++
++func writeS3Error(w http.ResponseWriter, status int, code string) {
++	w.WriteHeader(status)
++	_, _ = fmt.Fprintf(w, "<Error><Code>%s</Code></Error>", code)
+ }
+ 
+ func writeJSON(t *testing.T, w http.ResponseWriter, v any) {
+@@ -218,6 +242,169 @@ func TestClientDelete(t *testing.T) {
+ 	}
+ }
+ 
++func TestClientGrantReader(t *testing.T) {
++	type statement struct {
++		Effect    string
++		Principal map[string][]string
++		Action    []string
++		Resource  []string
++	}
++	policies := map[string][]statement{}
++	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		bucket, ok := policyBucket(r, http.MethodPut)
++		if !ok {
++			t.Errorf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
++			return
++		}
++		if got := signingKey(r); got != "OWNER" {
++			t.Errorf("policy on %q signed with %q, want the owner's key", bucket, got)
++		}
++		var doc struct {
++			Version   string
++			Statement []statement
++		}
++		dec := json.NewDecoder(r.Body)
++		dec.DisallowUnknownFields()
++		if err := dec.Decode(&doc); err != nil {
++			t.Errorf("decode policy on %q: %v", bucket, err)
++		}
++		policies[bucket] = doc.Statement
++		w.WriteHeader(http.StatusNoContent)
++	})
++
++	if err := client.GrantReader(context.Background(), "OWNER", "owner-secret", []string{"b1", "b2"}); err != nil {
++		t.Fatalf("GrantReader: %v", err)
++	}
++	if len(policies) != 2 {
++		t.Fatalf("policies written on %d buckets, want 2", len(policies))
++	}
++	for bucket, statements := range policies {
++		want := map[string]string{
++			"s3:ListBucket": "arn:aws:s3:::" + bucket,
++			"s3:GetObject":  "arn:aws:s3:::" + bucket + "/*",
++		}
++		for _, s := range statements {
++			principal := s.Principal["AWS"]
++			if s.Effect != "Allow" || len(s.Principal) != 1 || len(principal) != 1 || principal[0] != "arn:aws:iam:::user/backup-reader" {
++				t.Errorf("bucket %q: statement %+v does not allow exactly the reader", bucket, s)
++			}
++			if len(s.Action) != 1 || len(s.Resource) != 1 || want[s.Action[0]] != s.Resource[0] {
++				t.Errorf("bucket %q: statement grants %v on %v", bucket, s.Action, s.Resource)
++				continue
++			}
++			delete(want, s.Action[0])
++		}
++		if len(want) != 0 {
++			t.Errorf("bucket %q: policy does not grant %v", bucket, want)
++		}
++	}
++}
++
++func TestClientRevokeReader(t *testing.T) {
++	var revoked []string
++	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++		bucket, ok := policyBucket(r, http.MethodDelete)
++		if !ok {
++			t.Errorf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
++			return
++		}
++		if got := signingKey(r); got != "OWNER" {
++			t.Errorf("policy delete on %q signed with %q, want the owner's key", bucket, got)
++		}
++		revoked = append(revoked, bucket)
++		if bucket == "no-policy" {
++			writeS3Error(w, http.StatusNotFound, "NoSuchBucketPolicy")
++			return
++		}
++		w.WriteHeader(http.StatusNoContent)
++	})
++
++	if err := client.RevokeReader(context.Background(), "OWNER", "owner-secret", []string{"b1", "no-policy"}); err != nil {
++		t.Fatalf("RevokeReader: %v", err)
++	}
++	sort.Strings(revoked)
++	if len(revoked) != 2 || revoked[0] != "b1" || revoked[1] != "no-policy" {
++		t.Errorf("revoked buckets = %v", revoked)
++	}
++}
++
++func TestClientReaderGranted(t *testing.T) {
++	// The reader policy re-laid out, as a store that does not keep the written
++	// bytes would return it.
++	stored := func(reader, bucket string) string {
++		var doc any
++		if err := json.Unmarshal([]byte(readerPolicy(reader, bucket)), &doc); err != nil {
++			t.Fatalf("unmarshal reader policy: %v", err)
++		}
++		out, err := json.MarshalIndent(doc, "", "  ")
++		if err != nil {
++			t.Fatalf("marshal reader policy: %v", err)
++		}
++		return string(out)
++	}
++
++	cases := []struct {
++		name    string
++		b2      func(w http.ResponseWriter)
++		want    bool
++		wantErr bool
++	}{
++		{
++			name: "every bucket granted",
++			b2:   func(w http.ResponseWriter) { _, _ = io.WriteString(w, stored("backup-reader", "b2")) },
++			want: true,
++		},
++		{
++			name: "a bucket without a policy",
++			b2:   func(w http.ResponseWriter) { writeS3Error(w, http.StatusNotFound, "NoSuchBucketPolicy") },
++		},
++		{
++			name: "a policy naming another user",
++			b2:   func(w http.ResponseWriter) { _, _ = io.WriteString(w, stored("someone-else", "b2")) },
++		},
++		{
++			name: "another bucket's policy",
++			b2:   func(w http.ResponseWriter) { _, _ = io.WriteString(w, stored("backup-reader", "b1")) },
++		},
++		{
++			name:    "policy read refused",
++			b2:      func(w http.ResponseWriter) { writeS3Error(w, http.StatusForbidden, "AccessDenied") },
++			wantErr: true,
++		},
++	}
++
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
++				bucket, ok := policyBucket(r, http.MethodGet)
++				if !ok {
++					t.Errorf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
++					return
++				}
++				if got := signingKey(r); got != "OWNER" {
++					t.Errorf("policy read on %q signed with %q, want the owner's key", bucket, got)
++				}
++				switch bucket {
++				case "b1":
++					_, _ = io.WriteString(w, stored("backup-reader", "b1"))
++				case "b2":
++					tc.b2(w)
++				default:
++					t.Errorf("unexpected bucket %q", bucket)
++				}
++			})
++
++			granted, err := client.ReaderGranted(context.Background(), "OWNER", "owner-secret", []string{"b1", "b2"})
++			if (err != nil) != tc.wantErr {
++				t.Fatalf("ReaderGranted error = %v, wantErr %v", err, tc.wantErr)
++			}
++			if granted != tc.want {
++				t.Errorf("ReaderGranted = %v, want %v", granted, tc.want)
++			}
++		})
++	}
++}
++
+ func TestDiffBuckets(t *testing.T) {
+ 	added, removed := diffBuckets([]string{"a", "b", "c"}, []string{"b", "c", "d"})
+ 	sort.Strings(added)
+diff --git a/internal/s3storage/errors.go b/internal/s3storage/errors.go
+index 3ac44c8..35700d3 100644
+--- a/internal/s3storage/errors.go
++++ b/internal/s3storage/errors.go
+@@ -3,6 +3,7 @@ package s3storage
+ import (
+ 	"errors"
+ 
++	"github.com/aws/smithy-go"
+ 	"github.com/ceph/go-ceph/rgw/admin"
+ )
+ 
+@@ -15,3 +16,10 @@ func IsNotFound(err error) bool {
+ func isNoSuchBucket(err error) bool {
+ 	return errors.Is(err, admin.ErrNoSuchBucket)
+ }
++
++// isNoSuchBucketPolicy reports whether err is S3's answer for a bucket that has
++// no policy; the SDK has no typed error for it.
++func isNoSuchBucketPolicy(err error) bool {
++	var apiErr smithy.APIError
++	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucketPolicy"
++}
+diff --git a/internal/s3storage/policy.go b/internal/s3storage/policy.go
+new file mode 100644
+index 0000000..89c136b
+--- /dev/null
++++ b/internal/s3storage/policy.go
+@@ -0,0 +1,110 @@
++package s3storage
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"reflect"
++
++	"github.com/aws/aws-sdk-go-v2/aws"
++	"github.com/aws/aws-sdk-go-v2/service/s3"
++)
++
++type policyDocument struct {
++	Version   string            `json:"Version"`
++	Statement []policyStatement `json:"Statement"`
++}
++
++type policyStatement struct {
++	Effect    string              `json:"Effect"`
++	Principal map[string][]string `json:"Principal"`
++	Action    []string            `json:"Action"`
++	Resource  []string            `json:"Resource"`
++}
++
++// readerPolicy is the whole policy a granted bucket carries: the reader may
++// list the bucket and get its objects, and nothing that writes or deletes.
++func readerPolicy(reader, bucket string) string {
++	principal := map[string][]string{"AWS": {"arn:aws:iam:::user/" + reader}}
++	doc := policyDocument{
++		Version: "2012-10-17",
++		Statement: []policyStatement{
++			{Effect: "Allow", Principal: principal, Action: []string{"s3:ListBucket"}, Resource: []string{"arn:aws:s3:::" + bucket}},
++			{Effect: "Allow", Principal: principal, Action: []string{"s3:GetObject"}, Resource: []string{"arn:aws:s3:::" + bucket + "/*"}},
++		},
++	}
++	// Marshalling a document of strings, slices and string maps cannot fail.
++	out, _ := json.Marshal(doc)
++	return string(out)
++}
++
++// policyEqual compares two policy documents as JSON values, ignoring layout
++// and key order.
++func policyEqual(a, b string) bool {
++	var av, bv any
++	if json.Unmarshal([]byte(a), &av) != nil || json.Unmarshal([]byte(b), &bv) != nil {
++		return false
++	}
++	return reflect.DeepEqual(av, bv)
++}
++
++// HasReader reports whether the provider names a reader. Without one the grant
++// is never written, removed or checked.
++func (c *Client) HasReader() bool {
++	return c.reader != ""
++}
++
++// GrantReader writes the reader policy on each bucket, replacing any policy the
++// bucket had. RGW takes a bucket policy only from the bucket's owner, so the
++// owning user's key signs the request.
++func (c *Client) GrantReader(ctx context.Context, accessKey, secretKey string, buckets []string) error {
++	s3c, err := newS3Client(ctx, c.endpoint, accessKey, secretKey)
++	if err != nil {
++		return err
++	}
++	for _, b := range buckets {
++		if _, err := s3c.PutBucketPolicy(ctx, &s3.PutBucketPolicyInput{
++			Bucket: aws.String(b),
++			Policy: aws.String(readerPolicy(c.reader, b)),
++		}); err != nil {
++			return fmt.Errorf("put reader policy on bucket %q: %w", b, err)
++		}
++	}
++	return nil
++}
++
++// RevokeReader deletes each bucket's policy. A bucket without one is already
++// revoked.
++func (c *Client) RevokeReader(ctx context.Context, accessKey, secretKey string, buckets []string) error {
++	s3c, err := newS3Client(ctx, c.endpoint, accessKey, secretKey)
++	if err != nil {
++		return err
++	}
++	for _, b := range buckets {
++		if _, err := s3c.DeleteBucketPolicy(ctx, &s3.DeleteBucketPolicyInput{Bucket: aws.String(b)}); err != nil && !isNoSuchBucketPolicy(err) {
++			return fmt.Errorf("delete policy of bucket %q: %w", b, err)
++		}
++	}
++	return nil
++}
++
++// ReaderGranted reports whether every bucket carries exactly the reader policy.
++func (c *Client) ReaderGranted(ctx context.Context, accessKey, secretKey string, buckets []string) (bool, error) {
++	s3c, err := newS3Client(ctx, c.endpoint, accessKey, secretKey)
++	if err != nil {
++		return false, err
++	}
++	for _, b := range buckets {
++		out, err := s3c.GetBucketPolicy(ctx, &s3.GetBucketPolicyInput{Bucket: aws.String(b)})
++		if err != nil {
++			if isNoSuchBucketPolicy(err) {
++				return false, nil
++			}
++			return false, fmt.Errorf("read policy of bucket %q: %w", b, err)
++		}
++		if !policyEqual(aws.ToString(out.Policy), readerPolicy(c.reader, b)) {
++			return false, nil
++		}
++	}
++	return true, nil
++}
+diff --git a/internal/s3storage/resource.go b/internal/s3storage/resource.go
+index e6af7cf..f55e3cd 100644
+--- a/internal/s3storage/resource.go
++++ b/internal/s3storage/resource.go
+@@ -34,12 +34,13 @@ type s3StorageResource struct {
+ }
+ 
+ type s3StorageModel struct {
+-	ID              types.String `tfsdk:"id"`
+-	Name            types.String `tfsdk:"name"`
+-	Buckets         types.Set    `tfsdk:"buckets"`
+-	KeyRotation     types.String `tfsdk:"key_rotation"`
+-	AccessKeyID     types.String `tfsdk:"access_key_id"`
+-	SecretAccessKey types.String `tfsdk:"secret_access_key"`
++	ID                types.String `tfsdk:"id"`
++	Name              types.String `tfsdk:"name"`
++	Buckets           types.Set    `tfsdk:"buckets"`
++	KeyRotation       types.String `tfsdk:"key_rotation"`
++	GrantBackupReader types.Bool   `tfsdk:"grant_backup_reader"`
++	AccessKeyID       types.String `tfsdk:"access_key_id"`
++	SecretAccessKey   types.String `tfsdk:"secret_access_key"`
+ }
+ 
+ func (r *s3StorageResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+@@ -78,6 +79,15 @@ func (r *s3StorageResource) Schema(_ context.Context, _ resource.SchemaRequest,
+ 				MarkdownDescription: "Opaque rotation trigger. Changing this value regenerates the access key on the same user; buckets and objects are untouched.",
+ 				Optional:            true,
+ 			},
++			"grant_backup_reader": schema.BoolAttribute{
++				Description: "When true, every bucket carries a bucket policy letting the provider's s3_backup_reader user list it and get its objects, and nothing more; " +
++					"the provider owns each bucket's whole policy. A policy removed out of band shows as drift. Unsetting it deletes the policies. " +
++					"On a provider with no s3_backup_reader it writes, deletes and checks nothing.",
++				MarkdownDescription: "When `true`, every bucket carries a bucket policy letting the provider's `s3_backup_reader` user list it and get its objects, and nothing more; " +
++					"the provider owns each bucket's whole policy. A policy removed out of band shows as drift. Unsetting it deletes the policies. " +
++					"On a provider with no `s3_backup_reader` it writes, deletes and checks nothing.",
++				Optional: true,
++			},
+ 			"access_key_id": schema.StringAttribute{
+ 				Description:         "Minted S3 access key id for this allocation.",
+ 				MarkdownDescription: "Minted S3 access key id for this allocation.",
+@@ -162,6 +172,13 @@ func (r *s3StorageResource) Create(ctx context.Context, req resource.CreateReque
+ 		return
+ 	}
+ 
++	if plan.GrantBackupReader.ValueBool() && r.client.HasReader() {
++		if err := r.client.GrantReader(ctx, st.AccessKeyID, st.SecretAccessKey, buckets); err != nil {
++			resp.Diagnostics.AddError("Failed to grant the backup reader", err.Error())
++			return
++		}
++	}
++
+ 	plan.ID = types.StringValue(st.Name)
+ 	plan.AccessKeyID = types.StringValue(st.AccessKeyID)
+ 	plan.SecretAccessKey = types.StringValue(st.SecretAccessKey)
+@@ -200,6 +217,19 @@ func (r *s3StorageResource) Read(ctx context.Context, req resource.ReadRequest,
+ 	}
+ 	state.Buckets = bucketSet
+ 
++	// A bucket missing the grant records the ask as unmet, so the next plan
++	// updates in place and writes the policy again.
++	if state.GrantBackupReader.ValueBool() && r.client.HasReader() {
++		granted, err := r.client.ReaderGranted(ctx, st.AccessKeyID, st.SecretAccessKey, st.Buckets)
++		if err != nil {
++			resp.Diagnostics.AddError("Failed to read S3 bucket policies", err.Error())
++			return
++		}
++		if !granted {
++			state.GrantBackupReader = types.BoolValue(false)
++		}
++	}
++
+ 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+ }
+ 
+@@ -239,6 +269,21 @@ func (r *s3StorageResource) Update(ctx context.Context, req resource.UpdateReque
+ 		access, secret = newAccess, newSecret
+ 	}
+ 
++	if r.client.HasReader() {
++		switch {
++		case plan.GrantBackupReader.ValueBool():
++			if err := r.client.GrantReader(ctx, access, secret, planBuckets); err != nil {
++				resp.Diagnostics.AddError("Failed to grant the backup reader", err.Error())
++				return
++			}
++		case !state.GrantBackupReader.IsNull():
++			if err := r.client.RevokeReader(ctx, access, secret, planBuckets); err != nil {
++				resp.Diagnostics.AddError("Failed to revoke the backup reader", err.Error())
++				return
++			}
++		}
++	}
++
+ 	plan.ID = types.StringValue(name)
+ 	plan.AccessKeyID = types.StringValue(access)
+ 	plan.SecretAccessKey = types.StringValue(secret)
+diff --git a/internal/s3storage/resource_acc_test.go b/internal/s3storage/resource_acc_test.go
+index 7fd5aed..4300bda 100644
+--- a/internal/s3storage/resource_acc_test.go
++++ b/internal/s3storage/resource_acc_test.go
+@@ -2,12 +2,17 @@ package s3storage_test
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"fmt"
+ 	"strings"
+ 	"testing"
+ 
++	"github.com/aws/aws-sdk-go-v2/aws"
++	"github.com/aws/aws-sdk-go-v2/service/s3"
++	"github.com/aws/smithy-go"
+ 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
+ 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
++	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+ 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+ )
+ 
+@@ -69,6 +74,130 @@ func TestAccS3Storage_basic(t *testing.T) {
+ 	})
+ }
+ 
++func grantConfig(name, reader string, grant bool) string {
++	grantLine := ""
++	if grant {
++		grantLine = "  grant_backup_reader = true\n"
++	}
++	return fmt.Sprintf(`
++provider "homelab" {
++  s3_backup_reader = %q
++}
++
++resource "homelab_s3_reader" "reader" {
++  name = %q
++}
++
++resource "homelab_s3_storage" "test" {
++  name       = %q
++  buckets    = [%q]
++  depends_on = [homelab_s3_reader.reader]
++%s}
++`, reader, reader, name, name+"-one", grantLine)
++}
++
++func TestAccS3Storage_readerGrant(t *testing.T) {
++	name := "tfacc-" + strings.ToLower(acctest.RandString(8))
++	reader := name + "-reader"
++	bucket := name + "-one"
++
++	var owner, readerKey keyPair
++
++	resource.Test(t, resource.TestCase{
++		PreCheck:                 func() { testAccPreCheck(t) },
++		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
++		CheckDestroy:             testAccCheckStorageDestroyed(t, name),
++		Steps: []resource.TestStep{
++			{
++				Config: grantConfig(name, reader, true),
++				Check: resource.ComposeAggregateTestCheckFunc(
++					captureKeys("homelab_s3_storage.test", &owner),
++					captureKeys("homelab_s3_reader.reader", &readerKey),
++					testAccCheckReaderReadOnly(bucket, &owner, &readerKey),
++				),
++			},
++			{
++				// A policy removed out of band is drift the apply restores in place.
++				PreConfig: func() {
++					if _, err := liveS3(owner).DeleteBucketPolicy(context.Background(), &s3.DeleteBucketPolicyInput{Bucket: aws.String(bucket)}); err != nil {
++						t.Fatalf("delete policy of %s out of band: %v", bucket, err)
++					}
++				},
++				Config: grantConfig(name, reader, true),
++				ConfigPlanChecks: resource.ConfigPlanChecks{
++					PreApply: []plancheck.PlanCheck{
++						plancheck.ExpectResourceAction("homelab_s3_storage.test", plancheck.ResourceActionUpdate),
++					},
++				},
++				Check: testAccCheckReaderReadOnly(bucket, &owner, &readerKey),
++			},
++			{
++				Config: grantConfig(name, reader, false),
++				Check:  testAccCheckNoPolicy(bucket, &owner),
++			},
++		},
++	})
++}
++
++func captureKeys(resourceName string, dst *keyPair) resource.TestCheckFunc {
++	return func(s *terraform.State) error {
++		rs, ok := s.RootModule().Resources[resourceName]
++		if !ok {
++			return fmt.Errorf("resource %s not in state", resourceName)
++		}
++		dst.access = rs.Primary.Attributes["access_key_id"]
++		dst.secret = rs.Primary.Attributes["secret_access_key"]
++		return nil
++	}
++}
++
++func hasErrorCode(err error, code string) bool {
++	var apiErr smithy.APIError
++	return errors.As(err, &apiErr) && apiErr.ErrorCode() == code
++}
++
++// testAccCheckReaderReadOnly checks the reader lists the bucket and gets an
++// object the owner wrote, and is refused a write and a delete.
++func testAccCheckReaderReadOnly(bucket string, owner, reader *keyPair) resource.TestCheckFunc {
++	return func(_ *terraform.State) error {
++		ctx := context.Background()
++		if _, err := liveS3(*owner).PutObject(ctx, &s3.PutObjectInput{
++			Bucket: aws.String(bucket), Key: aws.String("probe"), Body: strings.NewReader("probe"),
++		}); err != nil {
++			return fmt.Errorf("owner put into %s: %v", bucket, err)
++		}
++
++		rc := liveS3(*reader)
++		if _, err := rc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{Bucket: aws.String(bucket)}); err != nil {
++			return fmt.Errorf("reader list %s: %v", bucket, err)
++		}
++		obj, err := rc.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String("probe")})
++		if err != nil {
++			return fmt.Errorf("reader get from %s: %v", bucket, err)
++		}
++		_ = obj.Body.Close()
++		if _, err := rc.PutObject(ctx, &s3.PutObjectInput{
++			Bucket: aws.String(bucket), Key: aws.String("reader-write"), Body: strings.NewReader("x"),
++		}); !hasErrorCode(err, "AccessDenied") {
++			return fmt.Errorf("reader put into %s: err = %v, want AccessDenied", bucket, err)
++		}
++		if _, err := rc.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String("probe")}); !hasErrorCode(err, "AccessDenied") {
++			return fmt.Errorf("reader delete in %s: err = %v, want AccessDenied", bucket, err)
++		}
++		return nil
++	}
++}
++
++func testAccCheckNoPolicy(bucket string, owner *keyPair) resource.TestCheckFunc {
++	return func(_ *terraform.State) error {
++		_, err := liveS3(*owner).GetBucketPolicy(context.Background(), &s3.GetBucketPolicyInput{Bucket: aws.String(bucket)})
++		if !hasErrorCode(err, "NoSuchBucketPolicy") {
++			return fmt.Errorf("policy of %s after dropping the ask: err = %v, want NoSuchBucketPolicy", bucket, err)
++		}
++		return nil
++	}
++}
++
+ func captureAttr(resourceName, attr string, dst *string) resource.TestCheckFunc {
+ 	return func(s *terraform.State) error {
+ 		rs, ok := s.RootModule().Resources[resourceName]
+diff --git a/internal/s3storage/resource_test.go b/internal/s3storage/resource_test.go
+new file mode 100644
+index 0000000..82cb2f6
+--- /dev/null
++++ b/internal/s3storage/resource_test.go
+@@ -0,0 +1,392 @@
++package s3storage_test
++
++import (
++	"context"
++	"encoding/json"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync"
++	"testing"
++
++	"github.com/ceph/go-ceph/rgw/admin"
++	"github.com/hashicorp/terraform-plugin-framework/providerserver"
++	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
++	"github.com/hashicorp/terraform-plugin-go/tftypes"
++
++	"github.com/pvginkel/HomelabTerraformProvider/internal/provider"
++)
++
++// These tests drive homelab_s3_storage through the provider's protocol server
++// the way Terraform does — upgrade, refresh, plan, apply — against a fake RGW,
++// so they run without TF_ACC.
++
++const (
++	storageType = "homelab_s3_storage"
++	testOwner   = "release-prd"
++	testBucket  = "release-prd-data"
++)
++
++// preGrantStateJSON is the state of a release deployed before
++// grant_backup_reader existed.
++const preGrantStateJSON = `{"id":"release-prd","name":"release-prd","buckets":["release-prd-data"],"key_rotation":null,"access_key_id":"OWNER","secret_access_key":"owner-secret"}`
++
++var (
++	grantAsked    = tftypes.NewValue(tftypes.Bool, true)
++	grantUnset    = tftypes.NewValue(tftypes.Bool, nil)
++	grantUnmet    = tftypes.NewValue(tftypes.Bool, false)
++	bucketSetType = tftypes.Set{ElementType: tftypes.String}
++)
++
++// fakeRGW answers the Admin Ops reads a refresh makes for testOwner and keeps
++// bucket policies, recording every policy request.
++type fakeRGW struct {
++	*httptest.Server
++	mu          sync.Mutex
++	policies    map[string]string
++	policyCalls []string
++}
++
++func newFakeRGW(t *testing.T) *fakeRGW {
++	t.Helper()
++	f := &fakeRGW{policies: map[string]string{}}
++	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if _, ok := r.URL.Query()["policy"]; ok {
++			f.servePolicy(t, w, r)
++			return
++		}
++		var body any
++		switch {
++		case r.Method == http.MethodGet && r.URL.Path == "/admin/user":
++			body = admin.User{ID: testOwner, Keys: []admin.UserKeySpec{{User: testOwner, AccessKey: "OWNER", SecretKey: "owner-secret"}}}
++		case r.Method == http.MethodGet && r.URL.Path == "/admin/bucket":
++			body = admin.Bucket{Bucket: r.URL.Query().Get("bucket"), Owner: testOwner}
++		default:
++			t.Errorf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
++			w.WriteHeader(http.StatusBadRequest)
++			return
++		}
++		if err := json.NewEncoder(w).Encode(body); err != nil {
++			t.Errorf("encode response: %v", err)
++		}
++	}))
++	t.Cleanup(f.Close)
++	return f
++}
++
++func (f *fakeRGW) servePolicy(t *testing.T, w http.ResponseWriter, r *http.Request) {
++	bucket := strings.TrimPrefix(r.URL.Path, "/")
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.policyCalls = append(f.policyCalls, r.Method+" "+bucket)
++	switch r.Method {
++	case http.MethodGet:
++		policy, ok := f.policies[bucket]
++		if !ok {
++			w.WriteHeader(http.StatusNotFound)
++			_, _ = io.WriteString(w, "<Error><Code>NoSuchBucketPolicy</Code></Error>")
++			return
++		}
++		_, _ = io.WriteString(w, policy)
++	case http.MethodPut:
++		policy, err := io.ReadAll(r.Body)
++		if err != nil {
++			t.Errorf("read policy body: %v", err)
++		}
++		f.policies[bucket] = string(policy)
++		w.WriteHeader(http.StatusNoContent)
++	case http.MethodDelete:
++		delete(f.policies, bucket)
++		w.WriteHeader(http.StatusNoContent)
++	default:
++		t.Errorf("unexpected policy request %s %s", r.Method, r.URL)
++		w.WriteHeader(http.StatusBadRequest)
++	}
++}
++
++func (f *fakeRGW) hasPolicy(bucket string) bool {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	_, ok := f.policies[bucket]
++	return ok
++}
++
++func (f *fakeRGW) removePolicy(bucket string) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	delete(f.policies, bucket)
++}
++
++func (f *fakeRGW) calls() []string {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	return append([]string(nil), f.policyCalls...)
++}
++
++// harness is a configured provider server with homelab_s3_storage's type.
++type harness struct {
++	t      *testing.T
++	ctx    context.Context
++	server tfprotov6.ProviderServer
++	typ    tftypes.Object
++}
++
++// newHarness configures the provider's s3 group against endpoint, naming reader
++// as s3_backup_reader unless it is empty.
++func newHarness(t *testing.T, endpoint, reader string) *harness {
++	t.Helper()
++	// Other groups' triggers and the reader fallback come from the environment
++	// unless cleared.
++	for _, env := range []string{"HOMELAB_DNS_RESERVATION_URL", "HOMELAB_BACKUP_SERVER_URL", "HOMELAB_CEPH_MON_HOST", "HOMELAB_S3_BACKUP_READER"} {
++		t.Setenv(env, "")
++	}
++
++	h := &harness{t: t, ctx: context.Background(), server: providerserver.NewProtocol6(provider.New("test")())()}
++	schemas, err := h.server.GetProviderSchema(h.ctx, &tfprotov6.GetProviderSchemaRequest{})
++	if err != nil {
++		t.Fatalf("GetProviderSchema: %v", err)
++	}
++	h.requireNoErrors("GetProviderSchema", schemas.Diagnostics)
++	h.typ = schemas.ResourceSchemas[storageType].ValueType().(tftypes.Object)
++
++	attrs := map[string]tftypes.Value{
++		"s3_endpoint":         tftypes.NewValue(tftypes.String, endpoint),
++		"s3_admin_access_key": tftypes.NewValue(tftypes.String, "admin-ak"),
++		"s3_admin_secret_key": tftypes.NewValue(tftypes.String, "admin-sk"),
++	}
++	if reader != "" {
++		attrs["s3_backup_reader"] = tftypes.NewValue(tftypes.String, reader)
++	}
++	providerTyp := schemas.Provider.ValueType().(tftypes.Object)
++	resp, err := h.server.ConfigureProvider(h.ctx, &tfprotov6.ConfigureProviderRequest{
++		TerraformVersion: "1.9.0",
++		Config:           h.dynamic(objectValue(providerTyp, attrs)),
++	})
++	if err != nil {
++		t.Fatalf("ConfigureProvider: %v", err)
++	}
++	h.requireNoErrors("ConfigureProvider", resp.Diagnostics)
++	return h
++}
++
++func objectValue(typ tftypes.Object, attrs map[string]tftypes.Value) tftypes.Value {
++	vals := make(map[string]tftypes.Value, len(typ.AttributeTypes))
++	for name, attrTyp := range typ.AttributeTypes {
++		vals[name] = tftypes.NewValue(attrTyp, nil)
++	}
++	for name, v := range attrs {
++		vals[name] = v
++	}
++	return tftypes.NewValue(typ, vals)
++}
++
++// state is testOwner's resource state with the given grant_backup_reader. With
++// every computed attribute already known it is also the proposed new state for
++// a config carrying that grant.
++func (h *harness) state(grant tftypes.Value) tftypes.Value {
++	return objectValue(h.typ, map[string]tftypes.Value{
++		"id":                  tftypes.NewValue(tftypes.String, testOwner),
++		"name":                tftypes.NewValue(tftypes.String, testOwner),
++		"buckets":             tftypes.NewValue(bucketSetType, []tftypes.Value{tftypes.NewValue(tftypes.String, testBucket)}),
++		"access_key_id":       tftypes.NewValue(tftypes.String, "OWNER"),
++		"secret_access_key":   tftypes.NewValue(tftypes.String, "owner-secret"),
++		"grant_backup_reader": grant,
++	})
++}
++
++// config is testOwner's resource as written in HCL.
++func (h *harness) config(grant tftypes.Value) tftypes.Value {
++	return objectValue(h.typ, map[string]tftypes.Value{
++		"name":                tftypes.NewValue(tftypes.String, testOwner),
++		"buckets":             tftypes.NewValue(bucketSetType, []tftypes.Value{tftypes.NewValue(tftypes.String, testBucket)}),
++		"grant_backup_reader": grant,
++	})
++}
++
++func (h *harness) dynamic(v tftypes.Value) *tfprotov6.DynamicValue {
++	h.t.Helper()
++	dv, err := tfprotov6.NewDynamicValue(v.Type(), v)
++	if err != nil {
++		h.t.Fatalf("encode %s: %v", v, err)
++	}
++	return &dv
++}
++
++func (h *harness) value(op string, dv *tfprotov6.DynamicValue) tftypes.Value {
++	h.t.Helper()
++	if dv == nil {
++		h.t.Fatalf("%s returned no state", op)
++	}
++	v, err := dv.Unmarshal(h.typ)
++	if err != nil {
++		h.t.Fatalf("%s: decode state: %v", op, err)
++	}
++	return v
++}
++
++func (h *harness) requireNoErrors(op string, diags []*tfprotov6.Diagnostic) {
++	h.t.Helper()
++	for _, d := range diags {
++		if d.Severity == tfprotov6.DiagnosticSeverityError {
++			h.t.Fatalf("%s: %s: %s", op, d.Summary, d.Detail)
++		}
++	}
++}
++
++func (h *harness) upgrade(rawJSON string) tftypes.Value {
++	h.t.Helper()
++	resp, err := h.server.UpgradeResourceState(h.ctx, &tfprotov6.UpgradeResourceStateRequest{
++		TypeName: storageType,
++		RawState: &tfprotov6.RawState{JSON: []byte(rawJSON)},
++	})
++	if err != nil {
++		h.t.Fatalf("UpgradeResourceState: %v", err)
++	}
++	h.requireNoErrors("UpgradeResourceState", resp.Diagnostics)
++	return h.value("UpgradeResourceState", resp.UpgradedState)
++}
++
++func (h *harness) read(current tftypes.Value) tftypes.Value {
++	h.t.Helper()
++	resp, err := h.server.ReadResource(h.ctx, &tfprotov6.ReadResourceRequest{
++		TypeName:     storageType,
++		CurrentState: h.dynamic(current),
++	})
++	if err != nil {
++		h.t.Fatalf("ReadResource: %v", err)
++	}
++	h.requireNoErrors("ReadResource", resp.Diagnostics)
++	return h.value("ReadResource", resp.NewState)
++}
++
++// plan plans prior towards a config carrying grant and fails on a replacement.
++func (h *harness) plan(prior, grant tftypes.Value) tftypes.Value {
++	h.t.Helper()
++	resp, err := h.server.PlanResourceChange(h.ctx, &tfprotov6.PlanResourceChangeRequest{
++		TypeName:         storageType,
++		PriorState:       h.dynamic(prior),
++		ProposedNewState: h.dynamic(h.state(grant)),
++		Config:           h.dynamic(h.config(grant)),
++	})
++	if err != nil {
++		h.t.Fatalf("PlanResourceChange: %v", err)
++	}
++	h.requireNoErrors("PlanResourceChange", resp.Diagnostics)
++	if len(resp.RequiresReplace) != 0 {
++		h.t.Fatalf("plan replaces the resource over %v", resp.RequiresReplace)
++	}
++	return h.value("PlanResourceChange", resp.PlannedState)
++}
++
++func (h *harness) apply(prior, planned, grant tftypes.Value) tftypes.Value {
++	h.t.Helper()
++	resp, err := h.server.ApplyResourceChange(h.ctx, &tfprotov6.ApplyResourceChangeRequest{
++		TypeName:     storageType,
++		PriorState:   h.dynamic(prior),
++		PlannedState: h.dynamic(planned),
++		Config:       h.dynamic(h.config(grant)),
++	})
++	if err != nil {
++		h.t.Fatalf("ApplyResourceChange: %v", err)
++	}
++	h.requireNoErrors("ApplyResourceChange", resp.Diagnostics)
++	return h.value("ApplyResourceChange", resp.NewState)
++}
++
++// A release that does not ask for the grant — every release before the grant
++// existed — refreshes and plans no change, whether or not the provider names a
++// reader, and no bucket policy is touched.
++func TestStorageWithoutAskPlansNoChange(t *testing.T) {
++	for _, tc := range []struct{ name, reader string }{
++		{name: "no reader", reader: ""},
++		{name: "reader configured", reader: "backup-reader"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			rgw := newFakeRGW(t)
++			h := newHarness(t, rgw.URL, tc.reader)
++
++			prior := h.upgrade(preGrantStateJSON)
++			if want := h.state(grantUnset); !prior.Equal(want) {
++				t.Fatalf("upgraded state = %s, want %s", prior, want)
++			}
++			refreshed := h.read(prior)
++			if !refreshed.Equal(prior) {
++				t.Errorf("refresh changed state to %s", refreshed)
++			}
++			if planned := h.plan(refreshed, grantUnset); !planned.Equal(refreshed) {
++				t.Errorf("plan is not empty: %s", planned)
++			}
++			if calls := rgw.calls(); len(calls) != 0 {
++				t.Errorf("bucket policy requests: %v", calls)
++			}
++		})
++	}
++}
++
++// A release asking for the grant on a provider with no reader — the dev
++// cluster — plans only the ask being added; the apply and every later refresh
++// write, delete and check no bucket policy, and the next plan is empty.
++func TestStorageGrantWithoutReaderIsInert(t *testing.T) {
++	rgw := newFakeRGW(t)
++	h := newHarness(t, rgw.URL, "")
++
++	prior := h.upgrade(preGrantStateJSON)
++	planned := h.plan(prior, grantAsked)
++	if want := h.state(grantAsked); !planned.Equal(want) {
++		t.Fatalf("planned %s, want only the ask added: %s", planned, want)
++	}
++	applied := h.apply(prior, planned, grantAsked)
++	if !applied.Equal(planned) {
++		t.Fatalf("applied state %s differs from the plan %s", applied, planned)
++	}
++
++	refreshed := h.read(applied)
++	if !refreshed.Equal(applied) {
++		t.Errorf("refresh changed state to %s", refreshed)
++	}
++	if replanned := h.plan(refreshed, grantAsked); !replanned.Equal(refreshed) {
++		t.Errorf("plan after apply is not empty: %s", replanned)
++	}
++	if calls := rgw.calls(); len(calls) != 0 {
++		t.Errorf("bucket policy requests: %v", calls)
++	}
++}
++
++// With a reader configured, the ask updates an existing release in place and
++// writes the policy; a policy removed out of band refreshes as drift and the
++// next apply restores it; dropping the ask deletes it.
++func TestStorageGrantWithReader(t *testing.T) {
++	rgw := newFakeRGW(t)
++	h := newHarness(t, rgw.URL, "backup-reader")
++
++	prior := h.upgrade(preGrantStateJSON)
++	state := h.apply(prior, h.plan(prior, grantAsked), grantAsked)
++	if !rgw.hasPolicy(testBucket) {
++		t.Fatal("apply wrote no policy on the bucket")
++	}
++	if refreshed := h.read(state); !refreshed.Equal(state) {
++		t.Errorf("refresh of a granted bucket changed state to %s", refreshed)
++	}
++
++	rgw.removePolicy(testBucket)
++	drifted := h.read(state)
++	if want := h.state(grantUnmet); !drifted.Equal(want) {
++		t.Fatalf("refresh after the policy was removed = %s, want %s", drifted, want)
++	}
++	state = h.apply(drifted, h.plan(drifted, grantAsked), grantAsked)
++	if !rgw.hasPolicy(testBucket) {
++		t.Fatal("apply did not restore the removed policy")
++	}
++	if refreshed := h.read(state); !refreshed.Equal(state) {
++		t.Errorf("refresh after restore changed state to %s", refreshed)
++	}
++
++	state = h.apply(state, h.plan(state, grantUnset), grantUnset)
++	if rgw.hasPolicy(testBucket) {
++		t.Error("dropping the ask left the policy in place")
++	}
++	if refreshed := h.read(state); !refreshed.Equal(state) {
++		t.Errorf("refresh after revoke changed state to %s", refreshed)
++	}
++}

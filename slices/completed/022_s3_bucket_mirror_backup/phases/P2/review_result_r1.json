@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "P2 delivers its outcome: the prd storage release creates backup-reader and its Secret, and runs a Forbid, 2 h-bounded s3-mirror CronJob. The CronJob mirrors every -prd-owned bucket through a crypt remote, archives replaced and deleted objects per run and keeps 30 archive folders. The dev render is unchanged and nothing under terraform-modules/ or _providers/ changes. One advisory Minor finding.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor",
+               "impact": "advisory",
+               "category": "functional",
+               "anchor": "none",
+               "summary": "keepArchives: 0 prunes nothing (folders[:-0] is empty) instead of keeping no archive folders"}]}

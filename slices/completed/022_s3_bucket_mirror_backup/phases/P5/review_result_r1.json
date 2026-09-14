@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "The runbook delivers P5: whole, single-object and earlier-version restores with the app's key, a no-cluster read, the dev-Ceph drill checked with backup-reader's key, and the B2 credential table. Its crypt settings, Secret names and paths match HelmCharts, and its restore steps behaved as written in a local rclone v1.75.1 test. Two Minor advisory findings, nothing blocking.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "failing-test",
+   "summary": "§1 step 1's no-browser Drive login (config_is_local=false) prints no rclone authorize command and saves a remote without a token"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "§2's rule to replay archive folders stamped after the loss skips a run still in progress when the loss happened; step 6's one-way check cannot show it"}
+ ]}

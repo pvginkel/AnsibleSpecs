@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "S3MirrorStale meets ruling D2 on both edges: one missed night stays quiet through the 2 h run bound and the autumn DST change, and two missed nights fire 3-7 h after the second run. The live label parity of both KSM series and a 53 h mutation back the rule and its tests. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

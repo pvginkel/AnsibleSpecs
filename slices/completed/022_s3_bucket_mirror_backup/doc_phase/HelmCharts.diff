@@ -1,0 +1,936 @@
+/work/HelmCharts — P2: git diff 2480baefafa1..6f1b5c067435
+
+charts/storage/files/s3-mirror/s3_mirror.py     | 119 +++++++++++++++++++++++
+ charts/storage/templates/s3-mirror-cronjob.yaml | 102 ++++++++++++++++++++
+ charts/storage/values.yaml                      |  24 +++++
+ configs/prd/storage/_shared/infrastructure.tf   |  24 ++++-
+ configs/prd/storage/prd/values.yaml             |  20 ++++
+ tests/conftest.py                               |   3 +-
+ tests/test_storage_s3_mirror.py                 | 228 ++++++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 517 insertions(+), 3 deletions(-)
+
+diff --git a/charts/storage/files/s3-mirror/s3_mirror.py b/charts/storage/files/s3-mirror/s3_mirror.py
+new file mode 100644
+index 0000000..bc8ab09
+--- /dev/null
++++ b/charts/storage/files/s3-mirror/s3_mirror.py
+@@ -0,0 +1,119 @@
++"""Nightly encrypted mirror of every prd-stage RGW bucket to Google Drive.
++
++Run by the s3-mirror CronJob. Two rclone remotes come from the environment:
++`rgw`, the object gateway read with backup-reader's key, and `mirror`, a crypt
++remote over the Drive folder. The Drive remote and its OAuth token come from a
++private copy of the shared rclone config, so this job never writes the file
++storage-sync-cronjob and storage-refresh-keys-cronjob read.
++
++Each bucket owned by a prd-stage user is mirrored to
++
++    mirror:current/<bucket>/<key>              live state
++    mirror:archive/<bucket>/<run stamp>/<key>  what the run replaced or deleted
++
++and then keeps its KEEP_ARCHIVES newest archive folders. A bucket that fails is
++not pruned; the run carries on with the other buckets and then fails.
++"""
++import json
++import os
++import shutil
++import subprocess
++import sys
++import time
++
++PRD_OWNER_SUFFIX = "-prd"
++RCLONE_EXIT_DIR_NOT_FOUND = 3
++
++
++def rclone(*args):
++    subprocess.run(["rclone", *args], check=True)
++
++
++def obscure(secret):
++    return subprocess.run(
++        ["rclone", "obscure", "-"],
++        input=secret, check=True, text=True, stdout=subprocess.PIPE,
++    ).stdout.strip()
++
++
++def prd_buckets(endpoint, access_key, secret_key):
++    """Every bucket owned by a prd-stage user, from the RGW admin API.
++
++    S3 ListBuckets returns only the caller's own buckets; the admin listing
++    needs backup-reader's buckets=read cap.
++    """
++    proc = subprocess.run(
++        ["curl", "--silent", "--show-error", "--fail-with-body", "--config", "-",
++         "--aws-sigv4", "aws:amz:default:s3",
++         endpoint + "/admin/bucket?format=json&stats=true"],
++        input='user = "%s:%s"\n' % (access_key, secret_key),
++        text=True, stdout=subprocess.PIPE,
++    )
++    if proc.returncode != 0:
++        sys.exit("listing buckets failed (curl exit %d): %s" % (proc.returncode, proc.stdout.strip()))
++    buckets = sorted(b["bucket"] for b in json.loads(proc.stdout) if b["owner"].endswith(PRD_OWNER_SUFFIX))
++    if not buckets:
++        sys.exit("no bucket is owned by a prd-stage user")
++    return buckets
++
++
++def sync(bucket, stamp):
++    rclone(
++        "sync", "rgw:" + bucket, "mirror:current/" + bucket,
++        "--backup-dir", "mirror:archive/%s/%s" % (bucket, stamp),
++        "--verbose",
++    )
++
++
++def prune(bucket, keep):
++    """Purge all but the `keep` newest archive folders of a bucket.
++
++    rclone creates a run's archive folder only when it moves an object into
++    it, so every folder counted is a run that replaced or deleted something.
++    """
++    listing = subprocess.run(
++        ["rclone", "lsf", "--dirs-only", "mirror:archive/" + bucket],
++        text=True, capture_output=True,
++    )
++    if listing.returncode == RCLONE_EXIT_DIR_NOT_FOUND:
++        return
++    sys.stderr.write(listing.stderr)
++    listing.check_returncode()
++    folders = sorted(line.rstrip("/") for line in listing.stdout.splitlines())
++    for folder in folders[:-keep]:
++        print("  pruning archive", folder, flush=True)
++        rclone("purge", "mirror:archive/%s/%s" % (bucket, folder))
++
++
++def main():
++    env = os.environ
++    shutil.copyfile(env["SHARED_RCLONE_CONFIG"], env["RCLONE_CONFIG"])
++    env["RCLONE_CONFIG_MIRROR_PASSWORD"] = obscure(env.pop("CRYPT_PASSWORD"))
++    env["RCLONE_CONFIG_MIRROR_PASSWORD2"] = obscure(env.pop("CRYPT_SALT"))
++    keep = int(env["KEEP_ARCHIVES"])
++
++    buckets = prd_buckets(
++        env["RCLONE_CONFIG_RGW_ENDPOINT"],
++        env["RCLONE_CONFIG_RGW_ACCESS_KEY_ID"],
++        env["RCLONE_CONFIG_RGW_SECRET_ACCESS_KEY"],
++    )
++    print("buckets to mirror:", ", ".join(buckets), flush=True)
++
++    # UTC and fixed width, so lexical order is chronological order.
++    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
++    failures = []
++    for bucket in buckets:
++        print("==> mirroring", bucket, flush=True)
++        try:
++            sync(bucket, stamp)
++            prune(bucket, keep)
++        except subprocess.CalledProcessError as exc:
++            print("ERROR: %s: %s" % (bucket, exc), file=sys.stderr, flush=True)
++            failures.append(bucket)
++    if failures:
++        sys.exit("FAILED buckets: " + ", ".join(failures))
++    print("all buckets mirrored", flush=True)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/charts/storage/templates/s3-mirror-cronjob.yaml b/charts/storage/templates/s3-mirror-cronjob.yaml
+new file mode 100644
+index 0000000..a9d1441
+--- /dev/null
++++ b/charts/storage/templates/s3-mirror-cronjob.yaml
+@@ -0,0 +1,102 @@
++{{- if .Values.s3Mirror.enabled }}
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: s3-mirror-script
++data:
++  s3_mirror.py: |
++{{ .Files.Get "files/s3-mirror/s3_mirror.py" | indent 4 }}
++
++---
++
++apiVersion: batch/v1
++kind: CronJob
++metadata:
++  name: s3-mirror
++spec:
++  schedule: {{ .Values.s3Mirror.schedule | quote }}
++  concurrencyPolicy: Forbid
++  jobTemplate:
++    spec:
++      backoffLimit: 1
++      # Bounds the whole Job, retries included; the prd Prometheus release's
++      # S3 mirror freshness threshold carries this bound in its margin.
++      activeDeadlineSeconds: {{ .Values.s3Mirror.activeDeadlineSeconds }}
++      template:
++        metadata:
++          annotations:
++            {{ include "deployment.timestamp" . }}
++        spec:
++          restartPolicy: Never
++          containers:
++            - name: s3-mirror
++              image: registry:5000/rclone-backup{{ .Values.images.rcloneBackup }}
++              command: ["python3", "/scripts/s3_mirror.py"]
++              env:
++                - name: SHARED_RCLONE_CONFIG
++                  value: /data/rclone.conf
++                - name: RCLONE_CONFIG
++                  value: /work/rclone.conf
++                - name: KEEP_ARCHIVES
++                  value: {{ .Values.s3Mirror.keepArchives | quote }}
++                - name: RCLONE_CONFIG_RGW_TYPE
++                  value: s3
++                - name: RCLONE_CONFIG_RGW_PROVIDER
++                  value: Ceph
++                - name: RCLONE_CONFIG_RGW_ENDPOINT
++                  value: {{ required "s3Mirror.s3Endpoint is required" .Values.s3Mirror.s3Endpoint | quote }}
++                - name: RCLONE_CONFIG_RGW_ACCESS_KEY_ID
++                  valueFrom:
++                    secretKeyRef:
++                      name: {{ .Values.s3Mirror.readerSecret }}
++                      key: access_key_id
++                - name: RCLONE_CONFIG_RGW_SECRET_ACCESS_KEY
++                  valueFrom:
++                    secretKeyRef:
++                      name: {{ .Values.s3Mirror.readerSecret }}
++                      key: secret_access_key
++                # A restore reads the mirror only with these crypt settings and
++                # the same password and salt.
++                - name: RCLONE_CONFIG_MIRROR_TYPE
++                  value: crypt
++                - name: RCLONE_CONFIG_MIRROR_REMOTE
++                  value: {{ required "s3Mirror.driveRemote is required" .Values.s3Mirror.driveRemote | quote }}
++                - name: RCLONE_CONFIG_MIRROR_FILENAME_ENCRYPTION
++                  value: standard
++                - name: RCLONE_CONFIG_MIRROR_FILENAME_ENCODING
++                  value: base32
++                - name: RCLONE_CONFIG_MIRROR_DIRECTORY_NAME_ENCRYPTION
++                  value: "true"
++                - name: CRYPT_PASSWORD
++                  valueFrom:
++                    secretKeyRef:
++                      name: {{ .Values.s3Mirror.cryptSecret }}
++                      key: password
++                - name: CRYPT_SALT
++                  valueFrom:
++                    secretKeyRef:
++                      name: {{ .Values.s3Mirror.cryptSecret }}
++                      key: salt
++{{- with index .Values.resources "s3-mirror" "s3-mirror" }}
++              resources:
++                {{- toYaml . | nindent 16 }}
++{{- end }}
++              volumeMounts:
++                - name: scripts
++                  mountPath: /scripts
++                - name: rclone-backup-data
++                  mountPath: /data
++                  readOnly: true
++                - name: work
++                  mountPath: /work
++          volumes:
++            - name: scripts
++              configMap:
++                name: s3-mirror-script
++            - name: rclone-backup-data
++              persistentVolumeClaim:
++                claimName: rclone-backup-pvc
++                readOnly: true
++            - name: work
++              emptyDir: {}
++{{- end }}
+diff --git a/charts/storage/values.yaml b/charts/storage/values.yaml
+index 6d23bb9..bef5f3c 100644
+--- a/charts/storage/values.yaml
++++ b/charts/storage/values.yaml
+@@ -25,6 +25,28 @@ backupServer:
+   rcloneRemote:
+   managementToken:
+ 
++# Nightly encrypted mirror of every prd-stage RGW bucket to Drive. Off by
++# default: only the prd cluster's values turn it on, and only its Terraform
++# creates the backup-reader user and Secret the job reads with.
++s3Mirror:
++  enabled: false
++  # Clear of storage-refresh-keys-cronjob (on the hour), which rewrites the
++  # shared rclone config the job copies when it starts.
++  schedule: "30 3 * * *"
++  # The RGW S3 endpoint, which also serves the admin API.
++  s3Endpoint:
++  # rclone path of the Drive folder the crypt remote wraps. A different folder,
++  # password or salt re-uploads every bucket.
++  driveRemote:
++  # Archive folders kept per bucket; one folder per run that replaced or
++  # deleted something.
++  keepArchives: 30
++  activeDeadlineSeconds: 7200
++  # Terraform-written (keys access_key_id / secret_access_key).
++  readerSecret: backup-reader-credentials
++  # ESO-materialized (keys password / salt).
++  cryptSecret: storage-s3-mirror
++
+ nodeAffinity:
+   requireStorageZpool2: false
+ 
+@@ -44,6 +66,8 @@ resources:
+     samba:
+   backup-server:
+     backup-server:
++  s3-mirror:
++    s3-mirror:
+ 
+ externalSecrets:
+   refreshInterval: 1h
+diff --git a/configs/prd/storage/_shared/infrastructure.tf b/configs/prd/storage/_shared/infrastructure.tf
+index 98c3f16..11912d5 100644
+--- a/configs/prd/storage/_shared/infrastructure.tf
++++ b/configs/prd/storage/_shared/infrastructure.tf
+@@ -1,7 +1,8 @@
+ # Durable resources for storage on the prd cluster: namespace, the two
+ # CephFS static PVs on the prd Ceph cluster, the zpool2 dataset the
+-# rclone-backup cronjobs snapshot, and the zpool2 dataset behind the
+-# Samba Software/Backups shares.
++# rclone-backup cronjobs snapshot, the zpool2 dataset behind the
++# Samba Software/Backups shares, and the backup-reader RGW user the
++# s3-mirror CronJob reads buckets with.
+ 
+ module "namespace" {
+   source = "./terraform-modules/namespace"
+@@ -58,3 +59,22 @@ resource "homelab_zfs_dataset" "share" {
+     prevent_destroy = true
+   }
+ }
++
++# One fleet-wide reader, so its id is fixed rather than namespace-derived:
++# bucket grants name this user id. values.yaml's s3Mirror.readerSecret must
++# equal the Secret name.
++resource "homelab_s3_reader" "backup_reader" {
++  name = "backup-reader"
++}
++
++resource "kubernetes_secret_v1" "backup_reader" {
++  metadata {
++    name      = "backup-reader-credentials"
++    namespace = module.namespace.name
++  }
++
++  data = {
++    access_key_id     = homelab_s3_reader.backup_reader.access_key_id
++    secret_access_key = homelab_s3_reader.backup_reader.secret_access_key
++  }
++}
+diff --git a/configs/prd/storage/prd/values.yaml b/configs/prd/storage/prd/values.yaml
+index 2866e58..6eeaccd 100644
+--- a/configs/prd/storage/prd/values.yaml
++++ b/configs/prd/storage/prd/values.yaml
+@@ -15,6 +15,13 @@ backupServer:
+   rcloneRemote: gdrive-pieter:Homelab Backups
+   # managementToken materialised by ESO; see externalSecrets.secrets.backup-server below.
+ 
++# backup-reader and its Secret are created in _shared/infrastructure.tf; the
++# crypt password and salt come from externalSecrets.secrets.s3-mirror below.
++s3Mirror:
++  enabled: true
++  s3Endpoint: http://ceph:7480
++  driveRemote: gdrive-pieter:Homelab Backups/s3-mirror
++
+ nodeAffinity:
+   requireStorageZpool2: true
+ 
+@@ -40,6 +47,10 @@ resources:
+     backup-server:
+       requests:
+         memory: 80Mi
++  s3-mirror:
++    s3-mirror:
++      requests:
++        memory: 64Mi
+ externalSecrets:
+   secrets:
+     samba-users:
+@@ -57,3 +68,12 @@ externalSecrets:
+         - secretKey: management_token
+           path: eso/prd/storage/prd/backup-server
+           property: management_token
++    s3-mirror:
++      targetName: storage-s3-mirror
++      data:
++        - secretKey: password
++          path: eso/prd/storage/prd/s3-mirror
++          property: password
++        - secretKey: salt
++          path: eso/prd/storage/prd/s3-mirror
++          property: salt
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 73ac3fc..9504556 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -2,7 +2,8 @@
+ 
+ Tests build a synthetic repo under tmp_path rather than reading the real
+ configs/ and charts/ trees — except test_prd_tree.py, which reads the real
+-tree on purpose and writes nothing.
++tree on purpose and writes nothing, and test_storage_s3_mirror.py, which
++imports the storage chart's mirror script.
+ """
+ 
+ import pytest
+diff --git a/tests/test_storage_s3_mirror.py b/tests/test_storage_s3_mirror.py
+new file mode 100644
+index 0000000..f534c05
+--- /dev/null
++++ b/tests/test_storage_s3_mirror.py
+@@ -0,0 +1,228 @@
++"""The storage chart's s3-mirror script, driven with a fake subprocess.run.
++
++The script ships in charts/storage/files/ and runs in the s3-mirror CronJob;
++it is imported from there, and nothing here calls rclone or curl.
++"""
++
++import importlib.util
++import json
++import os
++import re
++import subprocess
++from pathlib import Path
++
++import pytest
++
++SCRIPT = Path(__file__).resolve().parents[1] / "charts" / "storage" / "files" / "s3-mirror" / "s3_mirror.py"
++
++SECRETS = {
++    "RCLONE_CONFIG_RGW_ACCESS_KEY_ID": "AKREADER",
++    "RCLONE_CONFIG_RGW_SECRET_ACCESS_KEY": "SKREADER",
++    "CRYPT_PASSWORD": "crypt-password",
++    "CRYPT_SALT": "crypt-salt",
++}
++
++LIVE_BUCKETS = [
++    {"bucket": "iot-prd-attachments", "owner": "iot-prd"},
++    {"bucket": "design-assistant-dev", "owner": "design-assistant-dev"},
++    {"bucket": "design-assistant-uat", "owner": "design-assistant-uat"},
++    {"bucket": "electronics-inventory-prd-part-attachments", "owner": "electronics-inventory-prd"},
++    {"bucket": "design-assistant-prd", "owner": "design-assistant-prd"},
++]
++
++
++@pytest.fixture
++def s3_mirror():
++    spec = importlib.util.spec_from_file_location("s3_mirror", SCRIPT)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++class FakeRun:
++    """Stands in for subprocess.run; answers by the command it is given."""
++
++    def __init__(self, buckets=LIVE_BUCKETS, curl_exit=0, failing_syncs=(), archives=None):
++        self.buckets = buckets
++        self.curl_exit = curl_exit
++        self.failing_syncs = set(failing_syncs)
++        self.archives = archives or {}
++        self.calls = []
++
++    def __call__(self, argv, input=None, check=False, text=None, stdout=None, capture_output=False):
++        self.calls.append((argv, input))
++        rc, out = self._answer(argv, input)
++        err = "error listing: directory not found\n" if rc else ""
++        if check and rc:
++            raise subprocess.CalledProcessError(rc, argv, out, err)
++        return subprocess.CompletedProcess(argv, rc, out, err)
++
++    def _answer(self, argv, input):
++        if argv[0] == "curl":
++            if self.curl_exit:
++                return self.curl_exit, '{"Code":"AccessDenied"}'
++            return 0, json.dumps(self.buckets)
++        verb = argv[1]
++        if verb == "obscure":
++            return 0, "obscured(%s)\n" % input
++        if verb == "sync":
++            return (1 if argv[2][len("rgw:"):] in self.failing_syncs else 0), None
++        if verb == "lsf":
++            bucket = argv[3][len("mirror:archive/"):]
++            if bucket not in self.archives:
++                return 3, ""
++            return 0, "".join(folder + "/\n" for folder in self.archives[bucket])
++        if verb == "purge":
++            return 0, None
++        raise AssertionError("unexpected command %r" % argv)
++
++    def commands(self, verb):
++        return [argv for argv, _ in self.calls if argv[0] == "rclone" and argv[1] == verb]
++
++
++@pytest.fixture
++def job_env(tmp_path, monkeypatch):
++    shared = tmp_path / "data" / "rclone.conf"
++    shared.parent.mkdir()
++    shared.write_text("[gdrive-pieter]\ntype = drive\n")
++    private = tmp_path / "work" / "rclone.conf"
++    private.parent.mkdir()
++    env = {
++        "SHARED_RCLONE_CONFIG": str(shared),
++        "RCLONE_CONFIG": str(private),
++        "KEEP_ARCHIVES": "30",
++        "RCLONE_CONFIG_RGW_ENDPOINT": "http://ceph:7480",
++        # Set so monkeypatch removes what the script writes here.
++        "RCLONE_CONFIG_MIRROR_PASSWORD": "",
++        "RCLONE_CONFIG_MIRROR_PASSWORD2": "",
++        **SECRETS,
++    }
++    for name, value in env.items():
++        monkeypatch.setenv(name, value)
++    return env
++
++
++def run_job(s3_mirror, monkeypatch, fake):
++    monkeypatch.setattr(s3_mirror.subprocess, "run", fake)
++    s3_mirror.main()
++
++
++def test_mirrors_every_bucket_owned_by_a_prd_stage_user_and_nothing_else(s3_mirror, job_env, monkeypatch):
++    fake = FakeRun()
++    run_job(s3_mirror, monkeypatch, fake)
++
++    syncs = fake.commands("sync")
++    assert [argv[2] for argv in syncs] == [
++        "rgw:design-assistant-prd",
++        "rgw:electronics-inventory-prd-part-attachments",
++        "rgw:iot-prd-attachments",
++    ]
++    stamps = set()
++    for argv in syncs:
++        bucket = argv[2][len("rgw:"):]
++        assert argv[3] == "mirror:current/" + bucket
++        backup_dir = argv[argv.index("--backup-dir") + 1]
++        prefix = "mirror:archive/%s/" % bucket
++        assert backup_dir.startswith(prefix)
++        stamps.add(backup_dir[len(prefix):])
++    assert len(stamps) == 1
++    assert re.fullmatch(r"\d{8}T\d{6}Z", stamps.pop())
++
++
++def test_buckets_are_listed_through_the_admin_api_with_the_key_off_the_command_line(s3_mirror, job_env, monkeypatch):
++    fake = FakeRun()
++    run_job(s3_mirror, monkeypatch, fake)
++
++    (argv, stdin), = [call for call in fake.calls if call[0][0] == "curl"]
++    assert argv[-1] == "http://ceph:7480/admin/bucket?format=json&stats=true"
++    assert "AKREADER:SKREADER" in stdin
++    for argv, _ in fake.calls:
++        assert not any(secret in arg for secret in SECRETS.values() for arg in argv)
++
++
++def test_the_crypt_password_and_salt_reach_rclone_only_obscured(s3_mirror, job_env, monkeypatch):
++    run_job(s3_mirror, monkeypatch, FakeRun())
++
++    assert os.environ["RCLONE_CONFIG_MIRROR_PASSWORD"] == "obscured(crypt-password)"
++    assert os.environ["RCLONE_CONFIG_MIRROR_PASSWORD2"] == "obscured(crypt-salt)"
++    assert "CRYPT_PASSWORD" not in os.environ
++    assert "CRYPT_SALT" not in os.environ
++
++
++def test_rclone_reads_a_private_copy_of_the_shared_config(s3_mirror, job_env, monkeypatch):
++    run_job(s3_mirror, monkeypatch, FakeRun())
++
++    assert Path(job_env["RCLONE_CONFIG"]).read_text() == Path(job_env["SHARED_RCLONE_CONFIG"]).read_text()
++
++
++def test_a_bucket_that_fails_to_sync_fails_the_run_after_the_others_are_mirrored_and_is_not_pruned(
++        s3_mirror, job_env, monkeypatch):
++    fake = FakeRun(failing_syncs={"electronics-inventory-prd-part-attachments"})
++
++    with pytest.raises(SystemExit) as exc:
++        run_job(s3_mirror, monkeypatch, fake)
++
++    assert "electronics-inventory-prd-part-attachments" in str(exc.value.code)
++    assert len(fake.commands("sync")) == 3
++    assert [argv[3] for argv in fake.commands("lsf")] == [
++        "mirror:archive/design-assistant-prd",
++        "mirror:archive/iot-prd-attachments",
++    ]
++
++
++def test_a_failed_bucket_listing_fails_the_run_before_any_sync(s3_mirror, job_env, monkeypatch):
++    fake = FakeRun(curl_exit=22)
++
++    with pytest.raises(SystemExit) as exc:
++        run_job(s3_mirror, monkeypatch, fake)
++
++    assert "AccessDenied" in str(exc.value.code)
++    assert fake.commands("sync") == []
++
++
++def test_no_bucket_owned_by_a_prd_stage_user_fails_the_run(s3_mirror, job_env, monkeypatch):
++    fake = FakeRun(buckets=[{"bucket": "design-assistant-dev", "owner": "design-assistant-dev"}])
++
++    with pytest.raises(SystemExit):
++        run_job(s3_mirror, monkeypatch, fake)
++
++    assert fake.commands("sync") == []
++
++
++def test_each_bucket_keeps_its_newest_archive_folders_and_purges_the_rest(s3_mirror, job_env, monkeypatch):
++    folders = ["202609%02dT013000Z" % day for day in range(1, 31)] + ["20260831T013000Z", "20260830T013000Z"]
++    fake = FakeRun(archives={"iot-prd-attachments": list(reversed(folders)),
++                             "design-assistant-prd": folders[:30]})
++
++    run_job(s3_mirror, monkeypatch, fake)
++
++    assert [argv[2] for argv in fake.commands("purge")] == [
++        "mirror:archive/iot-prd-attachments/20260830T013000Z",
++        "mirror:archive/iot-prd-attachments/20260831T013000Z",
++    ]
++
++
++def test_a_bucket_with_no_archive_yet_purges_nothing(s3_mirror, job_env, monkeypatch):
++    fake = FakeRun()
++
++    run_job(s3_mirror, monkeypatch, fake)
++
++    assert len(fake.commands("lsf")) == 3
++    assert fake.commands("purge") == []
++
++
++def test_an_archive_listing_error_other_than_a_missing_folder_fails_the_bucket(s3_mirror, job_env, monkeypatch):
++    fake = FakeRun()
++    answer = fake._answer
++
++    def listing_fails(argv, input):
++        if argv[0] == "rclone" and argv[1] == "lsf" and argv[3].endswith("/iot-prd-attachments"):
++            return 1, ""
++        return answer(argv, input)
++
++    fake._answer = listing_fails
++
++    with pytest.raises(SystemExit) as exc:
++        run_job(s3_mirror, monkeypatch, fake)
++
++    assert str(exc.value.code) == "FAILED buckets: iot-prd-attachments"
+
+/work/HelmCharts — P3: git diff 6f1b5c067435..32d40de57d83
+
+configs/prd/prometheus/prd/values.yaml   | 28 +++++++++++++++
+ tests/conftest.py                        |  6 ++--
+ tests/test_prometheus_s3_mirror_alert.py | 99 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 131 insertions(+), 2 deletions(-)
+
+diff --git a/configs/prd/prometheus/prd/values.yaml b/configs/prd/prometheus/prd/values.yaml
+index 516d947..2fa4f32 100644
+--- a/configs/prd/prometheus/prd/values.yaml
++++ b/configs/prd/prometheus/prd/values.yaml
+@@ -117,6 +117,34 @@ serverFiles:
+                 control-plane node) kubelite. Re-run site-k8s.yml against the
+                 node; check whether a snap refresh rewrote args/kubelet.
+ 
++      # The storage chart's s3-mirror CronJob sets no timeZone, so it runs at
++      # 03:30 node-local (Europe/Amsterdam); every Job ends within its 2 h
++      # activeDeadlineSeconds. The last-successful time is the Job's completion,
++      # so after one failed night the age reaches 51 h before the next run's
++      # success lands: 48 h, 1 h more across the autumn DST change, and the
++      # 2 h bound. 52 h stays quiet there and fires 3-7 h after the second
++      # failed night's 03:30. A CronJob that has never succeeded has no
++      # last-successful series; its creation time stands in.
++      # tests/test_prometheus_s3_mirror_alert.py holds both edges.
++      - name: s3-mirror
++        rules:
++          - alert: S3MirrorStale
++            expr: |
++              time() - max by (namespace, cronjob) (
++                kube_cronjob_status_last_successful_time{namespace="storage-prd",cronjob="s3-mirror"}
++                  or kube_cronjob_created{namespace="storage-prd",cronjob="s3-mirror"}
++              ) > 52 * 3600
++            labels:
++              severity: critical
++            annotations:
++              summary: 'S3 bucket mirror has not succeeded for {{ $value | humanizeDuration }}'
++              description: >-
++                Two nightly runs of the s3-mirror CronJob in storage-prd have
++                failed, so the Google Drive copy of the prd buckets is no longer
++                refreshed. Read the latest s3-mirror Job's logs: a bucket it
++                cannot list or read, an rclone error, or the 2 h deadline each
++                fail the run.
++
+ alertmanager:
+   # See https://github.com/prometheus-community/helm-charts/blob/main/charts/alertmanager/values.yaml
+   persistence:
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 9504556..0d8ce8f 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -2,8 +2,10 @@
+ 
+ Tests build a synthetic repo under tmp_path rather than reading the real
+ configs/ and charts/ trees — except test_prd_tree.py, which reads the real
+-tree on purpose and writes nothing, and test_storage_s3_mirror.py, which
+-imports the storage chart's mirror script.
++tree on purpose and writes nothing, test_storage_s3_mirror.py, which
++imports the storage chart's mirror script, and
++test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
++storage chart's values.
+ """
+ 
+ import pytest
+diff --git a/tests/test_prometheus_s3_mirror_alert.py b/tests/test_prometheus_s3_mirror_alert.py
+new file mode 100644
+index 0000000..667d35a
+--- /dev/null
++++ b/tests/test_prometheus_s3_mirror_alert.py
+@@ -0,0 +1,99 @@
++"""The prd Prometheus release's S3 mirror freshness alert, against the storage
++chart's s3-mirror CronJob it watches.
++
++Reads the real prometheus and storage values and the CronJob template; writes
++nothing. Both edges of the rule are walked night by night across a year, so
++both DST changes fall inside the window.
++"""
++
++import re
++from datetime import date, datetime, timedelta, timezone
++from pathlib import Path
++from zoneinfo import ZoneInfo
++
++import pytest
++import yaml
++
++ROOT = Path(__file__).resolve().parents[1]
++ALERTS = ROOT / "configs" / "prd" / "prometheus" / "prd" / "values.yaml"
++STORAGE_CHART = ROOT / "charts" / "storage"
++STORAGE_PRD_VALUES = ROOT / "configs" / "prd" / "storage" / "prd" / "values.yaml"
++
++SELECTOR = 'namespace="storage-prd",cronjob="s3-mirror"'
++# The CronJob sets no timeZone, so its schedule is in the nodes' zone: the
++# Ansible baseline role's baseline_timezone.
++NODE_ZONE = ZoneInfo("Europe/Amsterdam")
++# From a Job's completion to the alert seeing it: the kube-state-metrics scrape
++# and rule evaluation intervals (1m each on prd), plus controller latency.
++LAG = timedelta(minutes=5)
++NIGHTS = [date(2026, 9, 1) + timedelta(days=n) for n in range(400)]
++
++
++@pytest.fixture(scope="module")
++def rule():
++    groups = yaml.safe_load(ALERTS.read_text())["serverFiles"]["alerting_rules.yml"]["groups"]
++    (found,) = [r for g in groups for r in g["rules"] if r.get("alert") == "S3MirrorStale"]
++    return found
++
++
++@pytest.fixture(scope="module")
++def threshold(rule):
++    match = re.search(r"\)\s*>\s*(\d+)\s*\*\s*3600\s*$", rule["expr"].strip())
++    assert match, rule["expr"]
++    return timedelta(hours=int(match.group(1)))
++
++
++@pytest.fixture(scope="module")
++def mirror():
++    chart = yaml.safe_load((STORAGE_CHART / "values.yaml").read_text())["s3Mirror"]
++    prd = yaml.safe_load(STORAGE_PRD_VALUES.read_text())["s3Mirror"]
++    return {**chart, **prd}
++
++
++@pytest.fixture(scope="module")
++def run_start(mirror):
++    minute, hour, *daily = mirror["schedule"].split()
++    assert daily == ["*", "*", "*"], mirror["schedule"]
++
++    def _start(night):
++        local = datetime(night.year, night.month, night.day, int(hour), int(minute), tzinfo=NODE_ZONE)
++        return local.astimezone(timezone.utc)
++
++    return _start
++
++
++@pytest.fixture(scope="module")
++def run_bound(mirror):
++    return timedelta(seconds=int(mirror["activeDeadlineSeconds"]))
++
++
++def test_rule_is_critical_and_watches_the_prd_mirror_only(rule, mirror):
++    template = (STORAGE_CHART / "templates" / "s3-mirror-cronjob.yaml").read_text()
++    assert re.search(r"kind: CronJob\nmetadata:\n  name: s3-mirror\n", template)
++    assert mirror["enabled"] is True
++
++    assert rule["labels"]["severity"] == "critical"
++    series = re.findall(r"(kube_cronjob_\w+)\{([^}]*)\}", rule["expr"])
++    assert sorted(series) == [
++        ("kube_cronjob_created", SELECTOR),
++        ("kube_cronjob_status_last_successful_time", SELECTOR),
++    ]
++    assert re.search(r"kube_cronjob_status_last_successful_time\{[^}]*\}\s+or\s+kube_cronjob_created", rule["expr"])
++    assert "postgres-backup" not in rule["expr"]
++
++
++def test_one_missed_night_stays_quiet_however_long_the_next_run_takes(threshold, run_start, run_bound):
++    for night in NIGHTS:
++        fastest_success = run_start(night)
++        slowest_success_two_nights_on = run_start(night + timedelta(days=2)) + run_bound
++        assert slowest_success_two_nights_on + LAG - fastest_success < threshold, night
++
++
++def test_two_missed_nights_fire_hours_after_the_second(threshold, run_start, run_bound):
++    for night in NIGHTS:
++        second_failed = run_start(night + timedelta(days=2))
++        third_run = run_start(night + timedelta(days=3))
++        for last_success in (run_start(night), run_start(night) + run_bound):
++            fires = last_success + threshold + LAG
++            assert fires - second_failed <= timedelta(hours=7) + LAG, night
++            assert fires < third_run, night
+
+/work/HelmCharts — P4: git diff 32d40de57d83..a1f643231743
+
+_providers/clusters.yaml              |  4 +++
+ terraform-modules/s3-storage/main.tf  |  5 ++++
+ tests/conftest.py                     |  5 ++--
+ tests/test_s3_storage_backup_grant.py | 90 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 102 insertions(+), 2 deletions(-)
+
+diff --git a/_providers/clusters.yaml b/_providers/clusters.yaml
+index e75aaf2..0423867 100644
+--- a/_providers/clusters.yaml
++++ b/_providers/clusters.yaml
+@@ -20,6 +20,10 @@ prd:
+     # The Keepalived VIP — never a per-node hostname (decisions.md "RGW
+     # placement").
+     HOMELAB_S3_ENDPOINT: http://ceph:7480
++    # The RGW user homelab_s3_storage's grant_backup_reader names in each
++    # bucket policy; the prd storage release creates it. dev names none, so a
++    # grant asked there writes nothing.
++    HOMELAB_S3_BACKUP_READER: backup-reader
+     # Backup-server management API (nginx-fronted, SSL). The homelab provider
+     # mints per-scope upload credentials (homelab_backup_credential) here; the
+     # management token is a secret, exported by setup-env.sh as
+diff --git a/terraform-modules/s3-storage/main.tf b/terraform-modules/s3-storage/main.tf
+index 39d7459..1f8dd5a 100644
+--- a/terraform-modules/s3-storage/main.tf
++++ b/terraform-modules/s3-storage/main.tf
+@@ -54,6 +54,11 @@ resource "homelab_s3_storage" "this" {
+   buckets      = var.buckets
+   key_rotation = var.key_rotation
+ 
++  # Keyed to the release namespace's stage suffix, so no call site can miss or
++  # skip it. Otherwise null, never false: states from before the grant hold
++  # null, and false would plan an in-place change on every non-prd release.
++  grant_backup_reader = endswith(var.namespace, "-prd") ? true : null
++
+   lifecycle {
+     prevent_destroy = true
+   }
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 0d8ce8f..4583263 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -3,9 +3,10 @@
+ Tests build a synthetic repo under tmp_path rather than reading the real
+ configs/ and charts/ trees — except test_prd_tree.py, which reads the real
+ tree on purpose and writes nothing, test_storage_s3_mirror.py, which
+-imports the storage chart's mirror script, and
++imports the storage chart's mirror script,
+ test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
+-storage chart's values.
++storage chart's values, and test_s3_storage_backup_grant.py, which reads the
++s3-storage module, the prd release trees and clusters.yaml.
+ """
+ 
+ import pytest
+diff --git a/tests/test_s3_storage_backup_grant.py b/tests/test_s3_storage_backup_grant.py
+new file mode 100644
+index 0000000..7369c5e
+--- /dev/null
++++ b/tests/test_s3_storage_backup_grant.py
+@@ -0,0 +1,90 @@
++"""The backup reader's grant through terraform-modules/s3-storage.
++
++Reads the real module, the prd release trees and _providers/clusters.yaml;
++writes nothing and runs no terraform. The module's ask is matched in the one
++shape the provider needs — the namespace's stage suffix, else null — and that
++suffix is applied to every prd stage's resolved namespace.
++"""
++
++import re
++
++import yaml
++
++from deploy_cli.release import repo_root, resolve
++
++ASK = re.compile(
++    r"^\s*grant_backup_reader\s*=\s*"
++    r'endswith\(var\.namespace,\s*"([^"]+)"\)\s*\?\s*true\s*:\s*null\s*$',
++    re.M,
++)
++MODULE_BLOCK = re.compile(r'^module "(?P<label>[^"]+)" \{\n(?P<body>.*?)^\}', re.M | re.S)
++S3_STORAGE_SOURCE = '"./terraform-modules/s3-storage"'
++
++
++def _arg(body, key):
++    match = re.search(rf"^\s*{key}\s*=\s*(.+?)\s*$", body, re.M)
++    return match.group(1) if match else None
++
++
++def _ask_suffix(root):
++    text = (root / "terraform-modules" / "s3-storage" / "main.tf").read_text()
++    assert len(re.findall(r"^\s*grant_backup_reader\s*=", text, re.M)) == 1
++    (suffix,) = ASK.findall(text)
++    return suffix
++
++
++def _s3_storage_namespace_args(stage_dir):
++    """The namespace argument of every s3-storage call in a stage's Terraform,
++    followed through the file's namespace module."""
++    found = []
++    for tf in sorted([*(stage_dir.parent / "_shared").glob("*.tf"), *stage_dir.glob("*.tf")]):
++        modules = {m["label"]: m["body"] for m in MODULE_BLOCK.finditer(tf.read_text())}
++        for body in modules.values():
++            if _arg(body, "source") != S3_STORAGE_SOURCE:
++                continue
++            namespace = _arg(body, "namespace")
++            if namespace == "module.namespace.name":
++                namespace = _arg(modules["namespace"], "name")
++            found.append(namespace)
++    return found
++
++
++def test_a_prd_stage_release_asks_for_the_grant_and_every_other_leaves_it_null():
++    """var.namespace is the resolved release namespace (the deploy CLI exports
++    it as TF_VAR_namespace), so the suffix decides per stage directory."""
++    root = repo_root()
++    suffix = _ask_suffix(root)
++    asks = {}
++
++    for chart in sorted((root / "configs" / "prd").iterdir()):
++        if not chart.is_dir():
++            continue
++        for stage_dir in sorted(chart.iterdir()):
++            if not stage_dir.is_dir() or stage_dir.name == "_shared":
++                continue
++            namespaces = _s3_storage_namespace_args(stage_dir)
++            if not namespaces:
++                continue
++            assert set(namespaces) == {"var.namespace"}, stage_dir
++            namespace = resolve(f"prd/{chart.name}", stage_dir.name).namespace
++            asks[namespace] = namespace.endswith(suffix)
++
++            assert asks[namespace] == (stage_dir.name == "prd"), namespace
++
++    assert True in asks.values()
++    assert False in asks.values()
++
++
++def test_only_the_prd_cluster_names_the_reader_its_storage_release_creates():
++    root = repo_root()
++    clusters = yaml.safe_load((root / "_providers" / "clusters.yaml").read_text())
++    storage_tf = (root / "configs" / "prd" / "storage" / "_shared" / "infrastructure.tf").read_text()
++    (created,) = re.findall(
++        r'^resource "homelab_s3_reader" "[^"]+" \{\n\s*name\s*=\s*"([^"]+)"', storage_tf, re.M
++    )
++
++    assert clusters["prd"]["env"]["HOMELAB_S3_BACKUP_READER"] == created
++    others = {name: cfg for name, cfg in clusters.items() if name != "prd"}
++    assert others
++    for name, cfg in others.items():
++        assert "HOMELAB_S3_BACKUP_READER" not in ((cfg or {}).get("env") or {}), name

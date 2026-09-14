@@ -1,7 +1,8 @@
 # Close-out — slice 022 s3_bucket_mirror_backup
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-14 15:09 → 18:06 · 6 phases · 1 bail-out · 1 test round · doc phase done · $84.76
+(planner 17 %, research 4 %, rework 0 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,12 +14,11 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 022 gives every production-stage RGW bucket an encrypted off-cluster copy. The homelab provider gained `homelab_s3_reader` and `homelab_s3_storage`'s `grant_backup_reader`. Every `-prd` release's buckets now carry a read-only policy for `backup-reader`, which the prd `storage` release creates. That release's nightly `s3-mirror` CronJob syncs each bucket into an rclone crypt remote on Google Drive. Each run keeps what it replaced or deleted in an archive folder, 30 folders per bucket. `S3MirrorStale` fires critical after 52 h without a successful run. The restore runbook and drill are in Ansible `docs/runbooks/s3-mirror.md`. `decisions.md` records the reader exception, the endpoint, the crypt key's failure domain and backup coverage. When the test phase checked, the mirror had not run yet; the drill is owed to the operator.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: Start srvk8sdev once for three things: A1's dev deploy, A2's acceptance tests, and the s3-mirror.md §5 restore drill (R3's acceptance), run after the first successful 03:30 run. A2 is less urgent than its Consequence reads: prd build #6466 already applied the grant in place on `iot-prd` and `electronics-inventory-prd`. A3 is done apart from the Roboform copy, which the drill proves.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -56,7 +56,7 @@ test-agent, test phase, round 1, 2026-09-14 — Confirmed live post-push: kubect
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: No entries: the run recorded no bail-out, appended phase or harness surprise. The one live surprise, IaC/Build-Main failing on this slice's push, predates the slice and is B4.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -66,15 +66,26 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B4 is the worst (major, witnessed) but not this slice's code: srviac's stale script fails IaC/Build-Main on every Ansible push until the operator re-runs the iac_agent role. The slice's own three are minor doc defects. B1 (witnessed) and B2 (read) are in Ansible's s3-mirror.md, and B1 is now fixed apart from an unverified remote-setup path. B3 (read) is in AnsibleSpecs decisions.md. Two of the four are witnessed, and none is in the provider, chart or alert code.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
+
+### B4 — Ansible support/iac-agent: srviac's check-protected-vms.sh is stale, so IaC/Build-Main (iac-on-push) fails on every push since slice 017's Jenkinsfile/script split — unrelated to slice 022 · major
+
+Pushing this slice's own docs-only Ansible commit (af72e23) triggered IaC/Build-Main #166. terraform plan on terraform/prd showed "No changes. Your infrastructure matches the configuration." — clean. The pipeline then ran check-protected-vms.sh /tmp/plan.json (the plan path only), which is what slice 017's Jenkinsfile.iac-on-push now sends and what the repo's committed support/iac-agent/bin/check-protected-vms.sh now expects (its own usage comment reads "Usage: check-protected-vms.sh <plan.json>"). But the build failed with "Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...]", exit 2 — the pre-slice-017 calling convention. support/iac-agent/ only reaches srviac through the iac_agent Ansible role's rsync + install.sh (ansible/roles/iac_agent/tasks/main.yml), an operator-run ansible-playbook; nobody has re-run it since slice 017 landed, so the live script on srviac disagrees with the live Jenkinsfile. Build #165, for the immediately preceding commit 818d528 (slice 017's own doc-phase commit, pushed before this test phase started), shows the identical failure — confirming the break predates and is independent of slice 022's push. No file slice 022 touched is implicated.
+
+test-agent, test phase, round 1, 2026-09-14 — Same root cause as slice 017's close-out A1 (Install P2's destroy guard on srviac after the push, then re-run iac-on-push), which is still open there (Disposition blank) — slice 017's own test-agent already witnessed the identical failure on IaC/Build-Main #164. This is not a new defect; it is that operator action, still outstanding, surfacing again on this slice's push. One ansible-playbook run against srviac (per slice 017 A1's exact command) fixes both.
+
+**Consequence:** Until an operator re-runs the iac_agent role against srviac (ansible-playbook against real infra, per CLAUDE.md an operator action), IaC/Build-Main shows FAILURE on every push to Ansible main, hiding the "push is green" signal slice-testing-strategy.md §4 calls worth recording. Terraform's own prevent_destroy still blocks a real destructive plan at plan time regardless — the unavailable part is the redundant second rail's confirmation, not the underlying protection.
+
+**Provenance:** witnessed, test-agent, test phase, round 1, https://jenkins.webathome.org/job/IaC/job/Build-Main/166/ (and /165/ for the prior commit)
+**Disposition:**
 
 ### B1 — Ansible docs/runbooks/s3-mirror.md: the no-browser Drive login (§1 step 1, config_is_local=false) prints no rclone authorize command and saves a remote without a token · minor
 
 s3-mirror.md:65-66 says to add config_is_local=false and run the rclone authorize command it prints. Under rclone v1.75.1 with a pseudo-terminal, `rclone config create gdrive-pieter drive scope=drive config_is_local=false` exits 0 at once, prints no authorize command, and saves [gdrive-pieter] with no token: config create takes each question's default, and config_token's default is empty. Without config_is_local=false, the command does enter the OAuth wait.
+
+doc-writer, doc phase r1, 2026-09-14 — Fixed in the doc phase. s3-mirror.md §1 step 1 no longer tells a host without a browser to add config_is_local=false. It now says what that flag does, as witnessed here: no rclone authorize command, and the remote is saved without a token. It then points at rclone's remote setup page (https://rclone.org/remote_setup/). That path, rclone authorize on a host with a browser and the token pasted into this host's config, was not run and is not written out as steps. So §4's whole-site case on a host without a browser still has no verified procedure.
 
 **Consequence:** An operator on a host without a browser, for instance in §4's whole-site case, gets no instruction to follow. The Drive remote then fails at the first rclone lsf mirror:. The browser path works.
 
@@ -99,20 +110,9 @@ decisions.md:91 is headed "The admin key is not an app credential" and says kv/s
 **Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
 **Disposition:**
 
-### B4 — Ansible support/iac-agent: srviac's check-protected-vms.sh is stale, so IaC/Build-Main (iac-on-push) fails on every push since slice 017's Jenkinsfile/script split — unrelated to slice 022 · major
-
-Pushing this slice's own docs-only Ansible commit (af72e23) triggered IaC/Build-Main #166. terraform plan on terraform/prd showed "No changes. Your infrastructure matches the configuration." — clean. The pipeline then ran check-protected-vms.sh /tmp/plan.json (the plan path only), which is what slice 017's Jenkinsfile.iac-on-push now sends and what the repo's committed support/iac-agent/bin/check-protected-vms.sh now expects (its own usage comment reads "Usage: check-protected-vms.sh <plan.json>"). But the build failed with "Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...]", exit 2 — the pre-slice-017 calling convention. support/iac-agent/ only reaches srviac through the iac_agent Ansible role's rsync + install.sh (ansible/roles/iac_agent/tasks/main.yml), an operator-run ansible-playbook; nobody has re-run it since slice 017 landed, so the live script on srviac disagrees with the live Jenkinsfile. Build #165, for the immediately preceding commit 818d528 (slice 017's own doc-phase commit, pushed before this test phase started), shows the identical failure — confirming the break predates and is independent of slice 022's push. No file slice 022 touched is implicated.
-
-test-agent, test phase, round 1, 2026-09-14 — Same root cause as slice 017's close-out A1 (Install P2's destroy guard on srviac after the push, then re-run iac-on-push), which is still open there (Disposition blank) — slice 017's own test-agent already witnessed the identical failure on IaC/Build-Main #164. This is not a new defect; it is that operator action, still outstanding, surfacing again on this slice's push. One ansible-playbook run against srviac (per slice 017 A1's exact command) fixes both.
-
-**Consequence:** Until an operator re-runs the iac_agent role against srviac (ansible-playbook against real infra, per CLAUDE.md an operator action), IaC/Build-Main shows FAILURE on every push to Ansible main, hiding the "push is green" signal slice-testing-strategy.md §4 calls worth recording. Terraform's own prevent_destroy still blocks a real destructive plan at plan time regardless — the unavailable part is the redundant second rail's confirmation, not the underlying protection.
-
-**Provenance:** witnessed, test-agent, test phase, round 1, https://jenkins.webathome.org/job/IaC/job/Build-Main/166/ (and /165/ for the prior commit)
-**Disposition:**
-
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Nothing in the mirror turns on Q1. Settle it together with B3 before anyone rotates or revokes the RGW admin key: the answer decides which pipelines the record must name as readers of that key.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -129,8 +129,7 @@ P6 rewrote the section in the present tense from what the code and live metadata
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S7 and S8 need another change to carry them: S7 the first change that migrates an S3 release to Argo CD, S8 any rebuild of the rclone-backup image. If either is missed, the mirror fails and `S3MirrorStale` fires. S5 is the case where even that alert stays silent. S2 and S3, both missing provider tests, are the witnessed ones; the rest are read.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -195,4 +194,13 @@ P4 added HOMELAB_S3_BACKUP_READER: backup-reader to HelmCharts _providers/cluste
 **Consequence:** None today. After an S3 release migrates to Argo CD, a prd bucket it adds is never granted to backup-reader, so every mirror run fails on that bucket and S3MirrorStale fires two days later.
 
 **Provenance:** read, completion consult 1, ArgoCDDeploy config/prd/values.yaml hooks.environment.literals and tests/render-chart.py HOOK_ENV_LITERALS
+**Disposition:**
+
+### S8 — DockerImages rclone-backup: the s3-mirror job needs python3 and a SigV4-capable curl from the image, which the Dockerfile does not install by name and the README does not mention · minor
+
+HelmCharts charts/storage/templates/s3-mirror-cronjob.yaml runs registry:5000/rclone-backup with the command python3 /scripts/s3_mirror.py, and the script lists buckets with curl --aws-sigv4, which needs curl 7.75 or later. DockerImages rclone-backup/Dockerfile is FROM debian, untagged. It installs zfsutils-linux, curl and unzip by name, and rclone through install.sh. It does not name python3, so python3 arrives only as a dependency of another package. plan.md:347 records a live probe on 2026-09-14 that found Debian 13.6, curl 8.14.1 and python3. rclone-backup/README.md documents only the ZFS-snapshot entrypoint, so nothing tells whoever maintains the image that a second consumer depends on python3 and a recent curl. The doc phase did not edit that README, because a push under rclone-backup/ could rebuild the image. One possible fix: install python3 by name in the Dockerfile, and add a README line naming the s3-mirror job as a consumer.
+
+**Consequence:** None today. If a rebuild of the image drops python3, every s3-mirror run fails at start, and S3MirrorStale fires two days later.
+
+**Provenance:** read, doc-writer, doc phase, r1, DockerImages rclone-backup/Dockerfile and README.md, plan.md:347
 **Disposition:**
