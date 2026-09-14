@@ -254,3 +254,7 @@
     [plan-writer r3] [0s] [init] Session started (claude-opus-5)
     [plan-writer r3] [3s] [tool_use: Bash] Show uncommitted files in the slice folder
     [plan-writer r3] [8s] [tool_use: Bash] Commit verdict and plan loop state files
+    [plan-writer r3] [11s] [text] I committed the three files left in the slice folder as `273cd86`, staging each…
+    [plan-writer r3] [11s] [result] Done (11.7s): I committed the three files left in the slice folder as `273cd86`, staging each…
+[13:30:30] [plan-writer r3] → done: Plan r3 committed (dc0372a) with the review r1 rulings applied: P2 inhibits a wedged node's two stall alerts. P1's wedge warning carries node and, once firing, 
+[13:30:30] plan complete: 3 writer pass(es), review on file
