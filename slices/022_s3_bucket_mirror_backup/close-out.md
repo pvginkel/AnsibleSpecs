@@ -32,6 +32,15 @@ Ruling A1. Dev-cluster releases also run stage prd and every deploy floats to th
 **Provenance:** read, plan-writer, planning, r2, plan_review_r1.md A1
 **Disposition:**
 
+### A2 — HomelabTerraformProvider: run the TF_ACC acceptance tests TestAccS3Reader_basic and TestAccS3Storage_readerGrant against a live RGW · minor
+
+P1's acceptance tests skip without TF_ACC, which kc project test never sets, so they have not run. They create a reader, grant it on a scratch bucket, check it can list and get but not put or delete, restore a policy removed out of band, and revoke. Run them from /work/HomelabTerraformProvider with HOMELAB_S3_ENDPOINT and HOMELAB_S3_ADMIN_* set, e.g. against dev Ceph while srvk8sdev is up for the drill: TF_ACC=1 go test ./internal/s3reader/ ./internal/s3storage/ -run TestAcc.
+
+**Consequence:** Until they run, the first live proof that RGW reef accepts the grant's bucket policy is P4's prd deploy; a rejection there fails every prd S3 release's apply.
+
+**Provenance:** read, code-writer, P1, r1, plan.md P1 done-record
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->

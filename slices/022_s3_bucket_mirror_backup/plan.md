@@ -261,6 +261,37 @@ nothing pins the provider and every deploy floats to the newest published build 
   `TF_ACC` (`CLAUDE.md:45-47`) — so the no-reader case (grants nothing, plans no change) is shown by
   the tests that command runs; it is all the loop has for the dev cluster (ruling A1).
 
+**Done (P1).** The provider has a new `homelab_s3_reader` resource (package `internal/s3reader`), a
+`grant_backup_reader` attribute on `homelab_s3_storage`, and a provider attribute `s3_backup_reader`
+(env `HOMELAB_S3_BACKUP_READER`). Committed on HomelabTerraformProvider `phase/022-P1`.
+
+Later phases:
+- P2: `homelab_s3_reader { name = "backup-reader" }` needs only the s3 group (endpoint and admin keys).
+  It exports `id`, `access_key_id` and `secret_access_key` (sensitive). It has no rotation argument.
+- P2 mirror: the reader may only `s3:ListBucket` the bucket and `s3:GetObject` its objects (HEAD is
+  covered by the GetObject grant). Bucket enumeration goes through the admin API (`buckets=read`).
+- P4: `grant_backup_reader = true` for a prd release, `null` otherwise, never `false`. prd env
+  `HOMELAB_S3_BACKUP_READER: backup-reader`; dev sets nothing. The grant owns the bucket's whole policy.
+- Test phase: `TestAccS3Reader_basic` and `TestAccS3Storage_readerGrant` are unrun (`TF_ACC`, operator).
+
+Record:
+- Reader: CreateUser sends `max-buckets=-1` and `user-caps=buckets=read`; Read tracks existence and
+  key only (caps not drift-checked, like `homelab_s3_storage`'s max_buckets).
+- Policy: two Allow statements naming `arn:aws:iam:::user/<reader>` — `s3:ListBucket` on
+  `arn:aws:s3:::<bucket>`, `s3:GetObject` on `arn:aws:s3:::<bucket>/*` — put and deleted over S3 with
+  the owner's key (the new key after a rotation). Update deletes it when the ask is dropped (prior
+  non-null, plan not true); a delete finding no policy counts as done.
+- Refresh with `true` compares each owned bucket's policy as JSON; missing or different sets `false`,
+  so the plan updates in place. No reader configured: no policy request, ever. `s3_backup_reader`
+  stays out of `validateGroup` (it would become mandatory) and is ignored when the s3 group is off.
+- `newS3Client` lifted out of `NewClient` (admin creator built as before); `smithy-go` is now direct.
+- `resource_test.go` drives the protocol server from pre-grant state JSON through refresh, plan and
+  apply: no ask ± reader → empty plan, no policy request; ask without reader → only the ask planned,
+  then empty; ask with reader → in-place update, drift restored, revoke. `client_test.go` checks the
+  signing key and the exact statements.
+- Not verified live: RGW reef accepting this policy and the SDK's PutBucketPolicy request; the
+  acceptance tests cover both.
+
 ### P2 — The storage release mirrors every production bucket to Drive nightly
 
 Target: ../HelmCharts
@@ -272,9 +303,10 @@ only under `configs/prd/`. The chart also deploys on the dev cluster (`configs/d
 nothing changes.
 
 - **Reader.** `configs/prd/storage/_shared/infrastructure.tf` creates the RGW user `backup-reader`
-  with P1's resource — that exact id (ruling T1), outside the `<namespace>-<short>` naming convention
-  because it is fleet-wide — and writes its key pair to a Terraform-managed Secret in `storage-prd`,
-  as `terraform-modules/s3-storage/main.tf:62-72` does for the apps.
+  with P1's `homelab_s3_reader` resource (`name = "backup-reader"`) — that exact id (ruling T1),
+  outside the `<namespace>-<short>` naming convention because it is fleet-wide — and writes its
+  `access_key_id` / `secret_access_key` to a Terraform-managed Secret in `storage-prd`, as
+  `terraform-modules/s3-storage/main.tf:62-72` does for the apps.
 - **Encryption key.** The crypt password and salt reach the job through the chart's ExternalSecret
   values (`configs/prd/storage/prd/values.yaml:43-59`) from OpenBao `eso/prd/storage/prd/s3-mirror`,
   keys `password` and `salt`, stored plain (the pre-run list above).
@@ -338,9 +370,12 @@ Target: ../HelmCharts
 
 `terraform-modules/s3-storage` asks for P1's grant when its release is a prd-stage one — the module
 has no stage input, its `name` is the release namespace (`main.tf:25-28`), and the root's `cluster`
-and `stage` variables (`_providers/providers.tf:79-92`) do not reach a module — and the prd cluster's
-deploy configuration (`_providers/clusters.yaml`) names `backup-reader` as the provider's reader; the
-dev cluster's names none. No module call site changes, so a new prd bucket cannot miss the grant
+and `stage` variables (`_providers/providers.tf:79-92`) do not reach a module. The ask is
+`grant_backup_reader = true` on `homelab_s3_storage`, and `null` — never `false` — otherwise: every
+existing state holds `null`, so a `false` plans an in-place change on `design-assistant-{dev,tst,uat}`.
+The prd cluster's deploy configuration names `backup-reader` as the provider's reader
+(`_providers/clusters.yaml` prd `env`: `HOMELAB_S3_BACKUP_READER: backup-reader`); the dev cluster's
+names none. No module call site changes, so a new prd bucket cannot miss the grant
 (settled 4). The CI validation users in `configs/dev/_ci/` call the provider resource directly and
 stay as they are.
 
