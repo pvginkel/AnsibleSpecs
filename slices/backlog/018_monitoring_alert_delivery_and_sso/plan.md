@@ -209,6 +209,51 @@ Deploys:
   unreachable from this pod (no route to `10.1.3.3:16443`); how `configs/dev/` releases deploy and are
   verified is for the planner to establish from the repo's docs.
 
+## Task shape
+
+cross-cutting — slice.md's two requirements and ruling U1 land in two sibling repos (DockerImages'
+Keycloak build; HelmCharts' prometheus, keycloak, grafana and pgadmin releases on both clusters),
+and the rulings leave the alert thresholds, secret paths and rollout order to the plan.
+
+## Operator pre-run checklist
+
+Work through this before `/dev:run-slice`, in order: a release whose ExternalSecret names an
+OpenBao path that does not exist yet fails to start when the run's push deploys it. The phases build
+against these names, and a later keycloak-tf slice imports the clients as recorded here. Write
+secrets with the stdin / `@file` forms in `/work/Ansible/docs/live-infra-access.md` ("Writing
+OpenBao secrets"), mount `kv`.
+
+1. **Telegram.** Create a new bot with BotFather and the chat the alerts go to, add the bot to it,
+   and note the numeric chat id. OpenBao `eso/prd/prometheus/prd/telegram`, keys `bot_token` and
+   `chat_id`.
+2. **Keycloak clients.** Four confidential OpenID Connect clients — client authentication on,
+   standard flow only, default client scopes left as they are (the `roles` scope puts client roles
+   in the access token):
+
+   | Keycloak | Realm | Client ID | Valid redirect URI | Client role | Mapper |
+   |---|---|---|---|---|---|
+   | `auth.ginbov.nl` | `homelab` | `grafana` | `http://grafana.home/login/generic_oauth` | `admin` | — |
+   | `auth.ginbov.nl` | `homelab` | `pgadmin` | `http://pgadmin.home/oauth2/authorize` | `admin` | User Client Role — client `pgadmin`, token claim `pgadmin_roles`, multivalued, added to ID token and userinfo |
+   | `keycloak-dev.home` | `homelab-dev` | `grafana` | `http://<dev Grafana address>/login/generic_oauth` | `admin` | — |
+   | `keycloak-dev.home` | `homelab-dev` | `pgadmin` | `http://<dev pgAdmin address>/oauth2/authorize` | `admin` | as the `homelab` `pgadmin` client |
+
+   The two dev addresses are `plan_questions_r1.md` Q2.
+3. **Role assignment.** In each realm, assign both clients' `admin` role to your own user and to no
+   one else. pgAdmin identifies a Keycloak sign-in by its email and P6 pre-creates the account as
+   `pvginkel@gmail.com` (`charts/pgadmin/values.yaml:8`), so your user carries that email in both
+   realms.
+4. **Client secrets.** OpenBao `eso/prd/grafana/prd/oidc`, `eso/prd/pgadmin/prd/oidc`,
+   `eso/dev/grafana/prd/oidc`, `eso/dev/pgadmin/prd/oidc`, keys `client_id` and `client_secret`.
+5. **Existing clients against Keycloak 26.6–26.7** (upstream upgrading guide). In both realms: no
+   client's valid redirect URIs relies on a hostname wildcard (`https://host*` now means
+   `https://host/*`, 26.6.3) or carries `state`/`code`/`session_state` (rejected, 26.7.3), and no
+   client has "Always use lightweight access token" on (userinfo rejects those tokens, 26.6.2).
+   Fix any hit in Keycloak before the run.
+6. **Keycloak database backup — last, immediately before starting the run**, so it holds steps 2–5:
+   `kubectl --kubeconfig ~/.kube/config-prd-write -n postgres-pas-prd create job
+   --from=cronjob/postgres-backup postgres-backup-pre-keycloak-26-7`. Its log lists
+   `keycloak_prd_db` and `keycloak_dev_db` and ends `all databases backed up`.
+
 ## Ordering constraints
 
 - The operator's pre-run keystrokes (settled item 5) precede any HelmCharts push that deploys a
@@ -216,6 +261,146 @@ Deploys:
   `/dev:run-slice`.
 - The Keycloak upgrade (ruling U1): the DockerImages build before the HelmCharts tag bump, and both
   before the Grafana and pgAdmin phases; the database backup precedes the push that deploys it.
+- **Push order** (the test phase's). DockerImages first. HelmCharts only after DockerImages' pipeline
+  has published `registry:5000/keycloak:26.7.3-postgres-health-ispn`, or the Keycloak releases
+  deploy a tag that does not exist. HelmCharts then goes out in two pushes: up to P4's commit that
+  moves only the `keycloak-dev` stage, and — once `keycloak-dev.home` runs 26.7.3 healthily (login
+  page renders, a `homelab-dev` sign-in works) — the rest.
+- The `configs/dev/` releases (Grafana, pgAdmin, the dev-cluster Keycloak) deploy on no push: the
+  operator runs `poetry run deploy dev/<chart>` once the checklist is done, and the dev-cluster
+  outcomes are owed to that.
+
+### P1 — The memory-stall alerts stop trusting a wedged counter
+
+Target: ../HelmCharts
+
+The production Prometheus release's `node-memory-pressure` group
+(`configs/prd/prometheus/prd/values.yaml:73-97`) takes ruling D2's shape. `NodeMemoryStalled` and
+`NodeMemoryStallElevated` keep their stall thresholds, severities and `for:` windows, and fire only
+when the same node is also short of memory or thrashing. A new warning-level alert fires on a node
+whose stall counter looks wedged; its message names the node and says the stall alerts on it are
+blind until it is rebooted. The dev release carries no rules and stays that way.
+
+Thresholds, settled from the incident record and a replay of production Prometheus over
+2026-09-07 09:41 → 09-14 UTC. Retention is a week, so srvk8s2's wedge ages out by 09-20 and these
+figures are the evidence:
+
+- **Short of memory or thrashing** — the node-exporter mixin's conventional signals at its defaults:
+  `MemAvailable` under 10% of `MemTotal`, or major page faults above 500/s. The 2026-08-02 incident
+  had both — 0.62–0.9 GiB of a 15.6 GiB node, 670–770 faults/s
+  (`/work/AnsibleSpecs/handovers/memory-issues/02-measurements.md:136`, `06-eviction.md:73`). In
+  the replay the corroborated rules match no bucket on any node, where the current rules matched
+  srvk8s2's entire wedge (1663 five-minute buckets). Neither signal alerts alone: srvk8s4 dipped to
+  5% available and 842 faults/s that week with its stall rate under 0.007.
+- **Wedged** — stall rate above 0.02 while `MemAvailable` is above 25% of `MemTotal` and major
+  faults average under 50/s over an hour, held for at least an hour. Both recorded wedges qualify
+  (srvk8s3 at 5.3 GiB and 2.2 faults/s; srvk8s2 never under 37% available). The replay holds it on
+  srvk8s2 for 1641 of the 1663 wedge buckets with one dropout (a 30-minute fault window gives two),
+  and on no other node.
+
+Not visible from the repo: the node-exporter chart upgrade that week left two overlapping series per
+node, differing only in `helm_sh_chart`, and a join on `instance` then fails evaluation
+("many-to-many matching not allowed"). The rules must evaluate cleanly through that churn; the
+replay aggregated per `node`.
+
+### P2 — Alertmanager delivers to Telegram
+
+Target: ../HelmCharts
+
+Production Alertmanager — the `alertmanager` subchart of the same release
+(`configs/prd/prometheus/prd/values.yaml:120-130`), today on the chart's stock route to a receiver
+with no configuration — delivers every alert to the checklist's Telegram chat, per ruling D1:
+critical loud, warning silent, resolved notices sent, one node's fault one thread. The bot token and
+chat id come from OpenBao `eso/prd/prometheus/prd/telegram` through an ExternalSecret in the
+release's `manifests.yaml` (upstream chart, so no `shared.externalsecrets` helper;
+`configs/prd/ceph-csi-rbd/prd/manifests.yaml` is the in-repo shape). They reach Alertmanager as
+files, which v0.34 reads for both (`bot_token_file`, `chat_id_file`), so neither value lands in git
+or in the rendered configuration.
+
+Design reference: the configuration half of `/work/DockerImages/docs/alert-manager/plan.md`
+(§2.8–2.9, Part A), metrics row only — no `source="smtp"` routes or event receivers, and its
+`kv/shared/prd/telegram-infra-alerts` path gives way to the ESO path above. Its reasons still bind:
+plain-text parse mode (expressions and annotations carry raw `<`), one receiver per severity (loud
+versus silent is a static per-receiver flag), and `NodeKubeReservedMissing` alerts carry `node` but
+no `instance`. No Alertmanager ingress; the dev release is untouched.
+
+### P3 — Keycloak 26.7.3 image
+
+Target: ../DockerImages
+
+`keycloak/build-matrix.json` (`"KEYCLOAK_VERSION": "26.5.1"`, line 5) builds 26.7.3, producing
+`registry:5000/keycloak:26.7.3-postgres-health-ispn` with the image's build options unchanged.
+Keycloak's upgrading guide for 26.5.2–26.7.3 changes none of the options this image bakes in
+(`KC_DB=postgres`, `KC_HEALTH_ENABLED`, `KC_CACHE=ispn`, `start --optimized`) and sets no new
+Postgres minimum.
+
+### P4 — Every Keycloak release runs 26.7.3, never beside 26.5.1
+
+Target: ../HelmCharts
+
+Every release of `charts/keycloak` runs the P3 image — `configs/prd/keycloak/prd` (the public
+`auth.ginbov.nl`), `configs/prd/keycloak/dev` (`keycloak-dev.home`, home of `homelab-dev`) and
+`configs/dev/keycloak` — with the chart pinning that tag (`charts/keycloak/values.yaml:22`).
+
+- **No overlap.** Keycloak's upgrading guide ("Migrating to 26.6.0") requires downtime for this
+  jump: 26.6+ must not run alongside an older version against the same database, during or after
+  its migration, and its Infinispan 16 upgrade breaks the embedded cache between versions; rolling
+  updates are supported only within a patch stream. The chart surges a new pod beside the old
+  (`charts/keycloak/templates/keycloak-deployment.yaml:10-14`). From this phase on, a Keycloak
+  rollout stops the old pod before the new one starts (Q1, recommendation A). HelmCharts
+  CLAUDE.md's server-side-apply hazard ("Adding a field that is mutually exclusive with a server
+  default") is the known trap for a strategy change on a live Deployment.
+- **Dev stage first.** The phase leaves a HelmCharts commit in which only the `keycloak-dev` stage
+  runs 26.7.3, with the no-overlap change already in effect, followed by the commit that moves every
+  release; the push order in Ordering constraints rides on it. That also puts 26.7.0's FreeMarker
+  and login-theme changes against the mounted themes (`/opt/keycloak/themes`) on
+  `keycloak-dev.home` before `auth.ginbov.nl`.
+- Bootstrap admin, hostname and proxy settings stay as they are (Triage #1003).
+
+### P5 — Grafana signs in through Keycloak, gated by a client role
+
+Target: ../HelmCharts
+
+Both Grafana releases — `configs/prd/grafana/prd` on `grafana.home` against
+`https://auth.ginbov.nl/realms/homelab`, and `configs/dev/grafana/prd` against
+`http://keycloak-dev/realms/homelab-dev` (the dev copies' issuer, e.g.
+`configs/dev/electronics-inventory/prd/values.yaml:18`) — offer Keycloak sign-in through Grafana's
+generic OAuth with the checklist's `grafana` client, per rulings D3, D4 and F1:
+
+- Only an account holding the client's `admin` role signs in, and it signs in as Grafana Admin; any
+  other realm account is refused. Grafana reads client roles from the access token
+  (`resource_access.grafana.roles`), and `role_attribute_strict` refuses a login that maps to no
+  role.
+- The local admin and its login form stay; no automatic redirect to Keycloak.
+- Client id and secret come from `eso/<cluster>/grafana/prd/oidc` through an ExternalSecret in each
+  release's `manifests.yaml` (upstream chart; neither release has one yet) and land in no committed
+  file.
+- Grafana builds its redirect from its root URL, which is therefore the address the checklist
+  registered: `http://grafana.home/` on production, the Q2 address on the dev cluster.
+
+### P6 — pgAdmin signs in through Keycloak, gated by a client role
+
+Target: ../HelmCharts
+
+`charts/pgadmin` and both releases (`configs/prd/pgadmin/prd` on `pgadmin.home`,
+`configs/dev/pgadmin/prd`) offer a Keycloak button beside the internal login with the checklist's
+`pgadmin` client, issuers as P5, per rulings D3, D4 and F1:
+
+- A Keycloak sign-in whose ID token lacks `admin` in the top-level `pgadmin_roles` claim is refused.
+  `OAUTH2_ADDITIONAL_CLAIMS` matches top-level claims only, hence the checklist's mapper.
+- The operator's Keycloak account is a pgAdmin administrator before its first sign-in, sees the
+  chart's server list (`files/servers.json`, re-imported on every start for the local admin today —
+  `charts/pgadmin/templates/pgadmin-deployment.yaml:78-81`) and connects to it. Upstream pgAdmin
+  keys an OAuth2 account on (username, `auth_source='oauth2'`): a separate account from the
+  same-email local admin, auto-created non-admin with no servers, with no claim-to-admin mapping;
+  `setup.py add-external-user … --admin` and `load-servers --auth-source` are the pre-creation path
+  (`web/setup.py`, `web/pgadmin/authenticate/oauth2.py`). The server password today comes from a
+  passfile the init container builds under the local admin's storage directory
+  (`pgadmin-deployment.yaml:21-39`).
+- The local admin and its login form stay; no automatic redirect.
+- The OAuth settings ship with the chart as `config_local.py` (card #575); the client secret reaches
+  pgAdmin from `eso/<cluster>/pgadmin/prd/oidc` through the chart's `shared.externalsecrets` as an
+  environment variable, never in the ConfigMap or git.
 
 ## Not in scope
 
@@ -227,3 +412,6 @@ Deploys:
 - The long-term Keycloak access model and the hardening list — Jenkins authorization, the bootstrap
   admin, brute-force protection, admin-console exposure, `iotsupport-admin`'s scope, password grants,
   Guacamole's flow: Triage #1003 (Operator Actions).
+- The node-exporter mixin's standalone memory alerts (`NodeMemoryHighUtilization`,
+  `NodeMemoryMajorPagesFaults`): their signals only corroborate here, and on their own they would
+  have fired on srvk8s4 in an ordinary week.

@@ -33,6 +33,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — srvk8s4 ran at 5% MemAvailable and up to 842 major faults/s during 2026-09-07 → 09-14, without memory stall · minor
+
+Replay for P1's thresholds: min(MemAvailable/MemTotal) 0.050 and max rate(node_vmstat_pgmajfault[5m]) 842/s on srvk8s4 (20 GiB node), p99 faults ~258–317/s, while its stall rate never exceeded 0.007. The other three nodes stayed above 17% available and under 192 faults/s. No alert covers this by design (the mixin's standalone memory alerts are out of scope).
+
+**Consequence:** srvk8s4 runs close to its memory ceiling with no alert on it; a capacity look may be due.
+
+**Provenance:** witnessed, plan-writer, planning r1, live production Prometheus queries 2026-09-14
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -40,6 +49,24 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
      slice's repos, which elsewhere -->
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
+
+### B1 — HelmCharts: an OpenAI API key is committed in plaintext in configs/dev/electronics-inventory/prd/values.yaml:15 · major
+
+The file's header accepts inline dev secrets because the dev cluster is isolated, but an OpenAI project key (sk-proj-…) is a third-party credential usable from anywhere — the isolation argument does not cover it. Seen while surveying dev-cluster OIDC precedent for slice 018; nothing in this slice touches that release.
+
+**Consequence:** A working OpenAI key sits in HelmCharts' git history for anyone with repo read access; rotating it and materialising it from OpenBao is owed.
+
+**Provenance:** read, plan-writer, planning r1, HelmCharts configs/dev/electronics-inventory/prd/values.yaml
+**Disposition:**
+
+### B2 — HelmCharts CLAUDE.md: says prd Prometheus retains ~2 days (retentionSize: 2GB); the release sets 7d / 10GB · minor
+
+HelmCharts CLAUDE.md (recommend-resources) states the window is nominally 5 days but Prometheus retains ~2 (retentionSize: 2GB). configs/prd/prometheus/prd/values.yaml:3-4 sets retention: 7d, retentionSize: 10GB, and a 7-day range query answered with a full week of data on 2026-09-14.
+
+**Consequence:** recommend-resources' documented measurement window is wrong; a reader sizing resources or an investigation trusts a 2-day window that is really 5.
+
+**Provenance:** read, plan-writer, planning r1, HelmCharts CLAUDE.md + live Prometheus query
+**Disposition:**
 
 ## Open questions and rulings
 
@@ -55,3 +82,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — Point the keycloak-tf placeholder at slice 018's hand-made client table · minor
+
+The #575 forward constraint says keycloak-tf must import these clients, never recreate them; the record of the four clients (ids, redirect URIs, admin roles, the pgadmin_roles mapper) lives in slice 018's plan.md pre-run checklist. Slice documents are compressed at close (design-philosophy.md), and change_requests/keycloak_tf/keycloak-tf.md does not reference it.
+
+**Consequence:** The keycloak-tf slice may not find the client inventory it must import once slice 018 is compressed.
+
+**Provenance:** read, plan-writer, planning r1, AnsibleSpecs change_requests/keycloak_tf/keycloak-tf.md
+**Disposition:**
