@@ -120,3 +120,12 @@ The rule computes age from kube_cronjob_status_last_successful_time or kube_cron
 
 **Provenance:** read, code-writer, P3, r1, HelmCharts configs/prd/prometheus/prd/values.yaml S3MirrorStale
 **Disposition:**
+
+### S6 — HelmCharts storage s3-mirror: whether a restored object keeps its Content-Type and S3 user metadata is unchecked · minor
+
+The restore drill (Ansible docs/runbooks/s3-mirror.md §5) compares object contents only (rclone check --download). The mirror job runs rclone sync without --metadata, and the round trip goes S3 → crypt over Drive → S3. Whether a restored object keeps its original Content-Type and x-amz-meta-* headers is not established. Nothing checks it either: no test and no drill step.
+
+**Consequence:** None until a restore. After one, an app that serves attachments by their stored Content-Type or reads user metadata can serve restored objects with a guessed type or without that metadata.
+
+**Provenance:** read, code-writer, P5, r1, docs/runbooks/s3-mirror.md
+**Disposition:**

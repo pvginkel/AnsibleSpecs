@@ -501,6 +501,35 @@ and reading any of those values — OpenBao or Kubernetes Secret alike — is th
 or needs the operator's permission (`CLAUDE.md`, "What Claude doesn't read on its own"). The drill's
 acceptance closes only on the operator's output, after the first successful mirror run.
 
+**Done (P5).** The restore runbook is `docs/runbooks/s3-mirror.md`, beside `openbao.md`. It holds the
+mirror layout and a credential table (ruling B2), then five sections: §1 remotes, §2 whole-bucket
+restore, §3 single object or earlier version, §4 no-cluster read, §5 restore drill. A drill log
+closes it. Committed on Ansible `phase/022-P5`.
+
+Later phases:
+- P6: the §"Backup" coverage entry for the mirror can point at `docs/runbooks/s3-mirror.md`.
+- Test phase (V03): the drill is §5. Its `## Drill log` entry is a pending placeholder until the
+  operator fills it with the drill's output.
+- Test phase (V19): the drill cannot run from the KubeCoder pod, which has no rclone and does not
+  reach srvk8sdev. It runs on an operator host with rclone, kubectl, jq, curl, ssh and a browser.
+
+- Remotes come from `RCLONE_CONFIG_*` environment variables, as the job's do, so no S3 or crypt key
+  is written to disk. The Drive login is the one on-disk entry
+  (`rclone config create gdrive-pieter drive scope=drive`), deleted at the end. With `scope=drive`
+  a fresh login sees files from any OAuth client, so the same step works with or without a cluster.
+- The crypt password and salt are typed from Roboform through `read -rs` into `rclone obscure -`.
+  The drill deliberately uses the Roboform copy, so it proves the whole-site custody. OpenBao appears
+  only in the credential table.
+- §2 suspends the `s3-mirror` CronJob, then `rclone copy`s `current/` (never `sync`). It copies each
+  archive folder stamped after the loss, newest first, verifies with
+  `rclone check --one-way --download` and resumes the CronJob.
+- §5 checks with `rclone check --download drill:restore-drill reader:iot-prd-attachments`, byte for
+  byte: multipart ETags carry no MD5. The scratch user is `restore-drill`, removed with
+  `radosgw-admin user rm --purge-data`. srvk8sdev starts and stops via `ssh root@pve qm start|shutdown 919`.
+- Close-out S6: the drill compares contents only; restored Content-Type and user metadata are unchecked.
+- Gate: `kc project test --project root` has no test statements (skipped), and no gate lints the
+  Markdown. Nothing in the runbook has been run live.
+
 ### P6 — The decision record carries the mirror
 
 Target: ../AnsibleSpecs
