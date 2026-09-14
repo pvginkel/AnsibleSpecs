@@ -225,7 +225,7 @@ fleet-wide read-only RGW user as a recorded exception to per-app credentials).
   the new provider and module is the live proof that dev-cluster releases still deploy — an
   operator action outside the loop (ruling A1), carried in `close-out.md`.
 
-### P1 — The provider mints a read-only bucket reader and grants it read on request
+### P1 — The provider mints a read-only bucket reader and grants it read on request ✅ DONE 2026-09-14
 
 Target: ../HomelabTerraformProvider
 
