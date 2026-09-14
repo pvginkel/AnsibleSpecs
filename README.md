@@ -39,6 +39,7 @@ Triaged on 2026-09-14 from the Inbox — the work outside the Argo CD project:
 - **[019](slices/backlog/019_role_followups_kubelite_tls_openbao_backup/slice.md)** — Ansible role follow-ups: the OpenBao backup can install a dead credential and fail silently, the kubelite restart is invisible under `--check` and its wait checks liveness, and an expired `internal_tls` leaf has no recovery runbook (major; #573, 016 close-out B3/S2/B10).
 - **[020](slices/backlog/020_ci_quality_gates/slice.md)** — CI quality gates: lint, validate and test gates on the push-to-prod pipelines, plus trivy (test gap; #129).
 - **[021](slices/backlog/021_build_and_deploy_pipeline_reliability/slice.md)** — Build and deploy pipeline reliability: conditional image builds skip the rebuild the version poller asked for, and HelmCharts deploys fail on a transient provider checksum fetch (minor; #581, #567).
+- **[022](slices/backlog/022_s3_bucket_mirror_backup/slice.md)** — S3 bucket mirror backup: every prd RGW bucket gets an incremental, encrypted off-cluster copy on Google Drive with a dated archive and a restore drill — today the buckets have no copy off the Ceph cluster at all (feature; #48).
 
 ## Completed
 

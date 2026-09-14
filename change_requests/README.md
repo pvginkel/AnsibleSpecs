@@ -25,7 +25,6 @@ Cards on the Triage board carrying the «CR» label have a bundle here.
 | `ci_quality_gates/` | #129 | Lint/validate/test gates on every push-to-prod pipeline + trivy. *(2026-07 triage)* |
 | `eso_subpath_mounts/` | #54 #55 #56 | Rotating ESO Secrets still on subPath mounts — pgadmin, mydownloads, kibana. *(2026-07 triage)* |
 | `k8s_roll_pipeline/` | #50 | On-demand Jenkins pipeline for the drain-aware rolling roll, with `--limit`. *(2026-07 triage)* |
-| `s3_ceph_backup/` | #48 | Backup automation for RGW/S3 buckets + Ceph-backed data. *(2026-07 triage)* |
 | `helmcharts_architecture_modeling/` | #80 #104 | Keycloak admin-API interface + upstream-product DB-consumption modeling. *(2026-07 triage)* |
 | `managed_vm_mac_derivation/` | #574 | Derive the deterministic MAC instead of writing it per NIC; where the derivation lives is reopened by the host_vars SoT move. *(was slice 002)* |
 | `oidc_app_rollout/` | #575 #576 #577 | Keycloak OIDC for Grafana/pgAdmin (chart-side), the apiserver-OIDC decision behind Headlamp, and Jenkins via `oic-auth`. *(was slice 004)* |
