@@ -131,7 +131,7 @@ than what ships, and the deferred monitoring slice
 **Consequence:** Anyone reading decisions.md concludes every internal_tls leaf's expiry is observable in Prometheus. For the kube-apiserver SNI leaves on srvk8s1, srvk8s2, srvk8s3 and srvk8sdev no gauge is written at all, and no alert exists on any leaf — so a stalled renewer on 4 of the 10 leaves is invisible except through the daily drift red.
 
 **Provenance:** read, plan-reviewer, plan phase, round 1, plan_review_r1.md finding F4 (AnsibleSpecs/decisions.md:145, Ansible roles/internal_tls/tasks/metric.yml:23-32)
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — to the straightforward-changes handover `handovers/triage_2026-09-14_straightforward_changes.md`, tracked on Operator Actions
 
 ### B3 — Ansible — the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml · minor
 
@@ -140,7 +140,7 @@ P1 changed 'Restart microk8s kubelite' from ansible.builtin.systemd to ansible.b
 **Consequence:** An operator running the docs/design-philosophy.md-mandated --check --diff before an iac-apply of site-k8s.yml sees three changed lineinfile tasks and no mention of the kubelite restart they notify — the most disruptive action in the role, a bounce of each prd control-plane node, is the one thing the dry run does not name.
 
 **Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — folded into slice 019 (`slices/backlog/019_role_followups_kubelite_tls_openbao_backup/`)
 
 ### B6 — Ansible — a dev-stage failure in iac-scheduled-certs loses its Telegram warning when a later prd stage then reds the build · minor
 
@@ -149,7 +149,7 @@ notify.warning only echoes a [raisealert|type=warning] marker into the build log
 **Consequence:** srvk8sdev is up, its host-cert renewal fails (build UNSTABLE, flag set), then the prd leaf run fails on an unreachable host (build FAILURE). The unstable handler never runs, so no warning marker reaches the log and the operator's only push is the bot's FAILURE report for the leaf stage — the dev failure, and the genuinely-failed-vs-powered-off distinction, survive only in the build log.
 
 **Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — folded into slice 017 (`slices/backlog/017_iac_pipeline_safety_rails_and_signalling/`)
 
 ### B10 — Ansible — docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery · minor
 
@@ -158,7 +158,7 @@ The SSH side has a full runbook: symptom, the job that should have prevented it,
 **Consequence:** An operator facing an expired homelab leaf — Proxmox UI, kubernetes-api.home or the OpenBao listener — finds no runbook, and has to work out from the role's source whether a plain renewal run recovers a certificate that has already lapsed or whether the leaf must be removed first.
 
 **Provenance:** read, doc-writer, doc phase, docs/runbooks/ inventory and roles/internal_tls/tasks/issue.yml:26-70
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — folded into slice 019 (`slices/backlog/019_role_followups_kubelite_tls_openbao_backup/`)
 
 ### B4 — Ansible — ansible/playbooks/README.md catalogues playbooks but lists none of the certificate ones · nit
 
@@ -169,7 +169,7 @@ doc-writer, doc phase, 2026-08-30 — Fixed in the doc phase, for the certificat
 **Consequence:** An operator scanning ansible/playbooks/README.md for what renews certificates finds nothing and concludes no scheduled renewal playbook exists — the belief this whole slice is closing for the leaves, now reproduced one directory up.
 
 **Provenance:** witnessed | code-writer, P2, r1 — read while placing renew-internal-tls.yml; ansible/playbooks/README.md:15-22
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — to the straightforward-changes handover `handovers/triage_2026-09-14_straightforward_changes.md`, tracked on Operator Actions
 
 ### B7 — Ansible — iac-scheduled-certs no longer sets any build description when the failure is outside its two prd stages · nit
 
@@ -178,7 +178,7 @@ P3 removed the job-level post { failure } that unconditionally set currentBuild.
 **Consequence:** A red iac-scheduled-certs whose failure is infrastructural rather than in a renewal stage produces a Telegram FAILURE message with no cost line appended — the job name and build link only, where before it read 'host certs may lapse'.
 
 **Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — folded into slice 017 (`slices/backlog/017_iac_pipeline_safety_rails_and_signalling/`)
 
 ### ~~B2 — Ansible — roles/proxmox_host/README.md:55 says the pveproxy leaf is renewed on each iac-scheduled-drift cycle, which drift cannot do · minor~~ — closed at triage 2026-09-14 — operator: "Close". Invalid on the report itself: fixed in the doc phase (the entry's own 2026-08-30 note).; struck by triage 2026-09-14
 
@@ -280,7 +280,7 @@ roles/microk8s/handlers/main.yml:65,73-75 releases the throttle slot when https:
 **Consequence:** None observed. With three prd control-plane members the VIP still has a healthy peer if one node is live-but-not-ready while the next is restarting, and the plan asked only that the wait last until the apiserver 'answers again', which /livez satisfies. Worth knowing before anyone treats the comment as a guarantee.
 
 **Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — folded into slice 019 (`slices/backlog/019_role_followups_kubelite_tls_openbao_backup/`)
 
 ### S3 — Ansible — Reload openbao now carries throttle 1 but Restart openbao, in the same role, still does not · nit
 
@@ -289,7 +289,7 @@ roles/openbao/handlers/main.yml:23 puts throttle: 1 on Reload openbao and its co
 **Consequence:** Nothing today: the ruling asked only about the reload, and P2's renewal path enters at tasks_from: internal_tls, which notifies Reload openbao and nothing else. It becomes real the first time a driver enters the openbao role at an entry point touching config or the hardening drop-in without arranging serial itself — all three peers would restart at once.
 
 **Provenance:** witnessed | code-reviewer, P1, round 1 — phases/P1/code_review_r1.md F3
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — to the straightforward-changes handover `handovers/triage_2026-09-14_straightforward_changes.md`, tracked on Operator Actions
 
 ### S4 — Ansible — a failed SSH host-cert stage aborts iac-scheduled-certs before either leaf stage runs · minor
 
@@ -298,7 +298,7 @@ The four stages are plain declarative stages, so the two prd ones fail the pipel
 **Consequence:** One unreachable host during the host-cert stage silently costs all ten internal_tls leaves their weekly renewal. The build is red and pages, so it is visible; but two consecutive red Fridays inside a leaf's 14-day window would let that leaf lapse while the operator is still chasing the host-cert failure.
 
 **Provenance:** witnessed | code-writer, P3, r1, Jenkinsfile.iac-scheduled-certs stages block
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — folded into slice 017 (`slices/backlog/017_iac_pipeline_safety_rails_and_signalling/`)
 
 ### S5 — AnsibleSpecs — slices/deferred/internal-tls-monitoring.md still argues its urgency from 'no detector exists', which this slice changed · nit
 
@@ -307,4 +307,4 @@ The deferred monitoring design says that until the expiry gauge and alert land, 
 **Consequence:** Whoever reactivates the deferred monitoring work reads a risk argument written before the renewal had a schedule, and either over-rates the urgency or dismisses the file as stale; the genuine remaining gap — no gauge on the k8s leaves, no alert on any leaf — is in the same file and easy to lose with it.
 
 **Provenance:** read, doc-writer, doc phase, slices/deferred/internal-tls-monitoring.md:10-17 and Jenkinsfile.iac-scheduled-certs:195-217
-**Disposition:**
+**Disposition:** Agree (operator, triage 2026-09-14) — to the straightforward-changes handover `handovers/triage_2026-09-14_straightforward_changes.md`, tracked on Operator Actions

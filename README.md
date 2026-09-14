@@ -32,6 +32,14 @@ Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.
 - **[012](slices/backlog/012_kubecoder_argo_cutover/slice.md)** — KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124).
 - **[014](slices/backlog/014_deploy_repo_architecture_producers/slice.md)** — Architecture producers for the deploy repos: each deploy repo gains its own `Jenkinsfile.architecture`, HelmCharts' generator stops emitting for migrated app-stages, so a migrated app does not vanish from the federated model (major; settles the `gen-architecture` half of O2; needs 009+010, lands before 012; #124).
 
+Triaged on 2026-09-14 from the Inbox — the work outside the Argo CD project:
+
+- **[017](slices/backlog/017_iac_pipeline_safety_rails_and_signalling/slice.md)** — IaC pipeline safety rails and failure signalling: the destroy guard's holes, no `prevent_destroy`, a checked plan that is not the applied plan, and scheduled jobs where one failed stage costs the others their run or their warning (major; #127, 016 close-out S4/B6/B7).
+- **[018](slices/backlog/018_monitoring_alert_delivery_and_sso/slice.md)** — Monitoring stack: Alertmanager delivers no alert, the node-memory stall alerts trust a PSI counter that wedged, and Grafana and pgAdmin still use app-local logins (major; #625, #575).
+- **[019](slices/backlog/019_role_followups_kubelite_tls_openbao_backup/slice.md)** — Ansible role follow-ups: the OpenBao backup can install a dead credential and fail silently, the kubelite restart is invisible under `--check` and its wait checks liveness, and an expired `internal_tls` leaf has no recovery runbook (major; #573, 016 close-out B3/S2/B10).
+- **[020](slices/backlog/020_ci_quality_gates/slice.md)** — CI quality gates: lint, validate and test gates on the push-to-prod pipelines, plus trivy (test gap; #129).
+- **[021](slices/backlog/021_build_and_deploy_pipeline_reliability/slice.md)** — Build and deploy pipeline reliability: conditional image builds skip the rebuild the version poller asked for, and HelmCharts deploys fail on a transient provider checksum fetch (minor; #581, #567).
+
 ## Completed
 
 | Slice | Was | Depends on | Consumed by |
