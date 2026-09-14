@@ -472,7 +472,7 @@ Record:
 - `terraform console`: `iot-prd` → `true`, `design-assistant-{dev,uat}` → `tobool(null)`.
   `terraform fmt -check` clean; `kc project test` green.
 
-### P5 — An operator can restore a bucket from the mirror, and the drill is written down
+### P5 — An operator can restore a bucket from the mirror, and the drill is written down ✅ DONE 2026-09-14
 
 Target: root
 
