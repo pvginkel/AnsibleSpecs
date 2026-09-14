@@ -530,7 +530,7 @@ Later phases:
 - Gate: `kc project test --project root` has no test statements (skipped), and no gate lints the
   Markdown. Nothing in the runbook has been run live.
 
-### P6 — The decision record carries the mirror
+### P6 — The decision record carries the mirror ✅ DONE 2026-09-14
 
 Target: ../AnsibleSpecs
 
