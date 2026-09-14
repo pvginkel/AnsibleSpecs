@@ -67,6 +67,17 @@ The Terraform comments that direct a `-replace` of a prd VM (`terraform/modules/
 - `terraform/scratch` has its own VM resource and keeps its `-replace` flow.
 - The gate is `terraform fmt -check`. The no-op plan and a refused destroy against prd are proven only by the pushed `iac-on-push` plan and by the operator, so they are owed, not verified.
 
+**Done (P1).** `prevent_destroy = true` is the first line of the existing `lifecycle` block on `proxmox_virtual_environment_vm.this` (`terraform/modules/managed-vm/main.tf`, block now at :208, `ignore_changes` unchanged below it), with a comment stating the rule and the destroy-on-Proxmox-first path. The three prd `-replace` comments (module `disk[0].file_id` and `user_data_file_id` entries, `terraform/prd/main.tf:110-111`) now say destroy the VM on Proxmox, then apply. Nothing else changed in `terraform/`; `terraform/scratch` is untouched.
+
+Later phases:
+- P2: the refusal exists in config from this commit. Reproduce it offline with a stand-in resource, as planned — no prd plan refuses anything yet.
+- P4/doc phase: `terraform/README.md` and `terraform/prd/README.md` were not touched and say nothing about `-replace`. The stale `ignore_changes = [initialization]` wording at `terraform/prd/main.tf:106` is left as is (close-out S2).
+
+Record:
+- Gate: `kc project test --project terraform` (`terraform fmt -check -recursive`) green. Also `terraform validate` on `managed-vm` in the `iac` sidecar (`TF_DATA_DIR` in `/tmp`, generated lock file removed): valid.
+- `managed-vm`'s only caller is still `terraform/prd/main.tf:152`.
+- Owed to the operator / pushed `iac-on-push`: the no-op prd plan (V05), a refused prd VM destroy (V04), and V11's recreate/forget path.
+
 ### P2 — The drift job names Terraform's refusal, and the destroy guard stays as the second rail
 
 Target: root
