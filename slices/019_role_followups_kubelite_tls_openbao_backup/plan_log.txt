@@ -118,3 +118,7 @@
 [14:16:07] [plan-writer r2] nudging the session (resume)
     [plan-writer r2] [0s] [init] Session started (claude-opus-5)
     [plan-writer r2] [4s] [tool_use: Bash] Commit remaining slice folder files by name
+    [plan-writer r2] [6s] [text] I committed the three files that were still uncommitted in slice 019's folder, …
+    [plan-writer r2] [6s] [result] Done (7.0s): I committed the three files that were still uncommitted in slice 019's folder, …
+[14:16:15] [plan-writer r2] → done: Plan r1 rulings applied (commit c4264cb). P1 now proves the staged secret_id with a per-node AppRole login and, before a restore, skips delivery without failing
+[14:16:15] plan complete: 2 writer pass(es), review on file
