@@ -345,6 +345,38 @@ nothing changes.
 - Nothing under `terraform-modules/` or `_providers/` changes here: a change there redeploys every
   prd release (`Jenkinsfile:94-99`) and belongs to the second push (P4).
 
+**Done (P2).** The prd `storage` release creates `backup-reader` (`homelab_s3_reader`) and its Secret
+`backup-reader-credentials`. It also runs the `s3-mirror` CronJob from the chart script
+`charts/storage/files/s3-mirror/s3_mirror.py`; the job is on only in prd values. Committed on HelmCharts `phase/022-P2`.
+
+Later phases:
+- P3: series `kube_cronjob_status_last_successful_time{namespace="storage-prd",cronjob="s3-mirror"}`;
+  schedule `30 3 * * *`, cluster-local time. Every Job, retry included, ends within 2 h
+  (`activeDeadlineSeconds: 7200`, chart value `s3Mirror.activeDeadlineSeconds`). The template's
+  comment names the rule's margin as covering that bound.
+- P5: crypt remote `type=crypt`, `remote=gdrive-pieter:Homelab Backups/s3-mirror`,
+  `filename_encryption=standard`, `filename_encoding=base32`, `directory_name_encryption=true`;
+  password and salt are the plain OpenBao values put through `rclone obscure`. Reader key: Secret
+  `backup-reader-credentials` in `storage-prd` (keys `access_key_id`/`secret_access_key`). Crypt
+  Secret: `storage-s3-mirror` (keys `password`/`salt`). Archive folders are named `YYYYMMDDTHHMMSSZ`
+  (UTC). A pruned folder goes to Drive's trash (rclone's drive default).
+- Test phase: not verified live. Two things are unproven: RGW `GET /admin/bucket?format=json&stats=true`
+  signed by curl `--aws-sigv4 aws:amz:default:s3` (go-ceph's admin region) returning `bucket`/`owner`
+  objects, and rclone against real RGW and Drive.
+
+Record:
+- Enumeration keeps owners ending `-prd`; a failed listing or no prd bucket exits non-zero before
+  any sync. The reader's key pair reaches curl on stdin.
+- Per bucket: `rclone sync rgw:<b> mirror:current/<b> --backup-dir mirror:archive/<b>/<stamp>` (one
+  stamp per run), then `lsf --dirs-only` (exit 3: no archive yet) and `purge` of all but the 30
+  newest. rclone creates the backup-dir only when it moves an object (checked locally), so there is
+  no empty-folder cleanup. A failing bucket is not pruned; the others continue; the run exits 1.
+- `rclone-backup-pvc` is mounted `readOnly`; rclone runs on a copy of `/data/rclone.conf` in an
+  emptyDir. Remotes are `RCLONE_CONFIG_*` env vars; the plain crypt values leave the env once obscured.
+- Tests: `tests/test_storage_s3_mirror.py` (10, fake `subprocess.run`). A local end-to-end run
+  (rclone v1.75.1 crypt over local dirs, mock admin API) exercised upload, archive, prune-to-N and a
+  failing bucket.
+
 ### P3 — The mirror raises a critical alert after two days without a successful run
 
 Target: ../HelmCharts
@@ -360,6 +392,9 @@ P2's CronJob's last successful run. Both edges bind, and the rule is judged on b
   that covers P2's run bound and the rule's own evaluation delay.
 - **Two consecutive missed nights fire**, a few hours after the second failed run. So does a mirror
   that has never succeeded, whose series does not exist yet, counted from when it was deployed.
+
+P2's CronJob is `s3-mirror` in `storage-prd`, scheduled `30 3 * * *` (cluster-local). Its run bound is
+2 h (`activeDeadlineSeconds: 7200`, retries included) — the margin covers that.
 
 The mirror only: `postgres-backup` is not added. No Alertmanager change (slice 018). Slice 018,
 planned, edits the same file; whichever lands second rebases, and neither waits on the other.
@@ -393,7 +428,10 @@ A runbook in `docs/runbooks/` beside `openbao.md` (settled 10) that an operator 
 - restoring a bucket from the mirror — whole, or single objects and earlier versions from the
   archive — writing into the production bucket with the app's own key;
 - reading the mirror with no cluster at all: the Drive login plus the crypt password and salt from
-  Roboform, the whole-site case this backup exists for;
+  Roboform, the whole-site case this backup exists for. The crypt remote must match P2's exactly:
+  `remote = gdrive-pieter:Homelab Backups/s3-mirror`, `filename_encryption = standard`,
+  `filename_encoding = base32`, `directory_name_encryption = true`, password and salt `rclone obscure`d;
+  earlier versions sit under `archive/<bucket>/<YYYYMMDDTHHMMSSZ>/`;
 - the acceptance drill (R3): with srvk8sdev started, create a scratch user and bucket on dev Ceph
   (`ceph_dev`, RGW on port 80 — `ansible/inventories/prd/group_vars/ceph_dev.yml:28-29`), restore
   `iot-prd-attachments` from Drive into it, `rclone check` it against the live bucket read with
@@ -402,7 +440,8 @@ A runbook in `docs/runbooks/` beside `openbao.md` (settled 10) that an operator 
 
 The runbook names where each credential it needs actually lives (ruling B2): the app's key pair in
 the Terraform-written Secret in the app's namespace (HelmCharts `terraform-modules/s3-storage/main.tf:62-72`;
-there is no OpenBao copy), `backup-reader`'s key in P2's Terraform-written Secret in `storage-prd`,
+there is no OpenBao copy), `backup-reader`'s key in P2's Terraform-written Secret
+`backup-reader-credentials` in `storage-prd`,
 the crypt password and salt in OpenBao `eso/prd/storage/prd/s3-mirror` and in Roboform, and the
 scratch user's key as the drill creates it on dev Ceph. Every command is the operator's keystroke,
 and reading any of those values — OpenBao or Kubernetes Secret alike — is the operator's keystroke
