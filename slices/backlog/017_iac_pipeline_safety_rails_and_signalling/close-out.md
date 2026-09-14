@@ -55,3 +55,21 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — Ansible — the IaC jobs run srviac's installed destroy guard, not the copy in the commit they check · minor
+
+Jenkinsfile.iac-apply:13-16 re-runs the guard because "a guard that runs in a different build against a different commit is not a guard". Yet the guard script is never the commit's copy. iac bind-mounts /usr/local/bin/check-protected-vms.sh from the srviac host (support/iac-agent/bin/iac:50). install.sh:49 puts it there when the iac_agent role's handler runs, and iac-apply excludes iac_agent (Jenkinsfile.iac-apply:98). check-ansible-drift.sh has the same split. Slice 017's P1 only covers the one-time window its own guard change opens; the split between the Jenkinsfiles on main and the host-installed checks remains.
+
+**Consequence:** A guard change merged to main but never installed on srviac leaves every IaC job checking plans against the old rule, with no signal that the installed copy is stale.
+
+**Provenance:** read | plan-writer, planning, r1, support/iac-agent/bin/iac:50
+**Disposition:**
+
+### S2 — Ansible — two comments say managed-vm ignores all of initialization; it ignores only user_data_file_id · nit
+
+terraform/prd/main.tf:106-108 and AnsibleSpecs decisions.md:482 say the managed-vm module pins lifecycle.ignore_changes = [initialization]. The module ignores only initialization[0].user_data_file_id (terraform/modules/managed-vm/main.tf:232), and its own comment explains why ip_config changes must propagate. Slice 017's P3 and P5 rewrite the -replace sentences next to both claims, but not the claims themselves.
+
+**Consequence:** A reader who trusts either comment expects a vms.tf ip_config change to be ignored on an existing VM, when it lands in the VM's pending config.
+
+**Provenance:** read | plan-writer, planning, r1, terraform/modules/managed-vm/main.tf:232
+**Disposition:**
