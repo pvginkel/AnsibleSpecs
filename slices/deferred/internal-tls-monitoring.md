@@ -10,11 +10,19 @@ on `pve`). That part is unaffected by this deferral.
 Parked is the rest of §J: the Prometheus **alert rule**, the
 **in-cluster metric**, and the **k8s API server cert's metric path**
 (the k8s nodes have no textfile collector — see below). Until they
-land, no expiry alert fires — a silent renewer failure would surface
-only when a leaf actually expires. Acceptable for now: 47-day leaves, a
-working renewer, and a small fleet. Reactivate before that risk grows —
-e.g. when more consumers join, or ahead of the OpenBao listener certs
-in the next phase.
+land, no alert fires on any leaf, and the four kube-apiserver leaves
+(srvk8s1–3, srvk8sdev) publish no gauge at all.
+
+That is not the same as having no detector. Since slice 016 the
+renewer runs on a schedule — the weekly `iac-scheduled-certs` job —
+rather than waiting for someone to start an apply, and a red or
+unstable build of that job reaches the operator by Telegram well ahead
+of any leaf expiring. What the job catches is a renewal that fails
+loudly; a renewal that silently stops covering a host leaves it green,
+and that is the gap the gauge and alert close. Acceptable for now:
+47-day leaves, a scheduled renewer that fails loudly, and a small
+fleet. Reactivate before that risk grows — e.g. when more consumers
+join.
 
 ## Scope
 
