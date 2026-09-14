@@ -96,6 +96,8 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 
 The #575 forward constraint says keycloak-tf must import these clients, never recreate them; the record of the four clients (ids, redirect URIs, admin roles, the pgadmin_roles mapper) lives in slice 018's plan.md pre-run checklist. Slice documents are compressed at close (design-philosophy.md), and change_requests/keycloak_tf/keycloak-tf.md does not reference it.
 
+plan-reviewer r1, 2026-09-14 — Since ruling D6 the plan's pre-run checklist records two hand-made clients (grafana, pgadmin — production homelab realm only), not four; the keycloak-tf pointer should name those two.
+
 **Consequence:** The keycloak-tf slice may not find the client inventory it must import once slice 018 is compressed.
 
 **Provenance:** read, plan-writer, planning r1, AnsibleSpecs change_requests/keycloak_tf/keycloak-tf.md
