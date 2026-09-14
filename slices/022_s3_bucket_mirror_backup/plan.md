@@ -292,7 +292,7 @@ Record:
 - Not verified live: RGW reef accepting this policy and the SDK's PutBucketPolicy request; the
   acceptance tests cover both.
 
-### P2 — The storage release mirrors every production bucket to Drive nightly
+### P2 — The storage release mirrors every production bucket to Drive nightly ✅ DONE 2026-09-14
 
 Target: ../HelmCharts
 
