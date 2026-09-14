@@ -548,6 +548,38 @@ Target: ../AnsibleSpecs
 - §"Backup" (`:587-593`) gains the coverage list and the line on what is knowingly not covered, in
   place of "Offsite for production is a later item" (R2, settled 9).
 
+**Done (P6).** `decisions.md` now covers the mirror in four places. §"Ceph RGW credentials" reads
+in the present tense, with `backup-reader` as its one exception. The S3 endpoint convention names
+`http://ceph:7480`, with no TLS on the VIP. The failure domains carry the crypt key and W1's
+trade-off. §"Backup" has the coverage list and the not-covered line. Committed on AnsibleSpecs
+`phase/022-P6`.
+
+Later phases:
+- Test phase (V02, V14, V15, V16): the cited `decisions.md` lines moved. §"Ceph RGW credentials" is
+  now `:86-93`, failure domains `:106`, the endpoint sentence is inside `:260`, and §"Backup"'s
+  coverage list and not-covered line are `:594-598`.
+- Close-out Q1: three claims in the old RGW text could not be checked read-only, so they were left
+  out, not restated.
+
+- RGW section, checked in code and live metadata:
+  - Per-release users are named after the namespace. Their keys are in Secret `s3-credentials`, with
+    no OpenBao copy.
+  - The admin key `kv/shared/<cluster>/ceph-rgw/s3` is read by the `jenkins` and `iac-agent`
+    AppRoles (`openbao.yml`) and by the Argo CD PreSync hook (live `argocd-hooks` ExternalSecret).
+  - The `configs/dev/_ci/` validation users are listed.
+  - The exception's reason: without the reader, the mirror would need every app's read-write key or
+    the admin key.
+- Q1's three claims: Jenkins artifact pipelines using the admin key, deletion of the old
+  `kv/shared/ceph-rgw/s3` credential, and workstation `.env` files. The pod cannot check them: bao
+  gets connection refused on 127.0.0.1:8200, and the app repos are not cloned here.
+- Coverage list:
+  - OpenBao: scope `openbao`, retention 14 (Ansible `terraform/prd/openbao.tf`).
+  - `postgres-pas`: scope `postgres-pas`, retention 90.
+  - The mirror.
+  - The vzdump, cloud-sync and Git bullets are unchanged.
+- Endpoint: from the pod, `ceph` resolves to `ceph.home` (10.1.0.38).
+- Gate: AnsibleSpecs has no lint or test gate; `git diff --check` is clean.
+
 ## Not in scope
 
 - RBD images and CephFS subvolumes (ruling T2); dev, tst and uat-stage buckets, and every bucket on

@@ -61,6 +61,24 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — Ansible docs/runbooks/s3-mirror.md: the no-browser Drive login (§1 step 1, config_is_local=false) prints no rclone authorize command and saves a remote without a token · minor
+
+s3-mirror.md:65-66 says to add config_is_local=false and run the rclone authorize command it prints. Under rclone v1.75.1 with a pseudo-terminal, `rclone config create gdrive-pieter drive scope=drive config_is_local=false` exits 0 at once, prints no authorize command, and saves [gdrive-pieter] with no token: config create takes each question's default, and config_token's default is empty. Without config_is_local=false, the command does enter the OAuth wait.
+
+**Consequence:** An operator on a host without a browser, for instance in §4's whole-site case, gets no instruction to follow. The Drive remote then fails at the first rclone lsf mirror:. The browser path works.
+
+**Provenance:** witnessed — code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
+### B2 — Ansible docs/runbooks/s3-mirror.md: §2's rule to replay archive folders stamped after the loss skips a run still in progress when the loss happened · minor
+
+s3-mirror.md:139-140,153-155 pick archive folders by stamp later than the loss. The stamp is the run's start (HelmCharts s3_mirror.py:103); buckets then sync one after another (:105-109) within a Job bounded at 2 h. Suppose the loss happens after stamp S but before that run reaches the bucket. The pre-loss versions then land in archive/<bucket>/<S>/, which the rule excludes. Step 6's one-way check against current/ (:164) does not show the miss.
+
+**Consequence:** A restore of a loss that happened while a mirror run was in progress finishes with those keys still lost or damaged, and the check does not show it. In a normal incremental night the window is short.
+
+**Provenance:** read — code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -68,6 +86,15 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
+
+### Q1 — AnsibleSpecs decisions.md §Ceph RGW credentials: three claims of the old text could not be checked read-only and are left out of the rewrite · minor
+
+P6 rewrote the section in the present tense from what the code and live metadata show. Three claims of the old text could not be checked from the pod and are raised, not restated. (1) Jenkins artifact-upload pipelines read the RGW admin key kv/shared/prd/ceph-rgw/s3: the jenkins AppRole policy grants it, and its comment (Ansible ansible/inventories/prd/group_vars/openbao.yml, openbao_jenkins_kv_paths) names those pipelines, but they live in app repos not cloned here, and JenkinsPipelineUtils has no reference. (2) The cluster-agnostic god leaf kv/shared/ceph-rgw/s3 is deleted: no policy in openbao.yml grants it any more, but bao in the iac sidecar gets connection refused on 127.0.0.1:8200, and slices/completed/helm-tf-deploy-harness-ceph-changes.md:8 left its delete as a manual step. (3) DesignAssistant workstation .env files held prd Ceph keys: csi-prd is deleted, so any such key is dead, but nothing checkable records whether workstations now use a dedicated dev account.
+
+**Consequence:** None for the mirror. The record is silent on whether artifact pipelines hold the admin key, whether the god leaf is gone, and whether workstations use a dev account, so a live RGW admin key in pipelines or on workstations goes unrecorded.
+
+**Provenance:** read — code-writer, P6, r1, decisions.md §Ceph RGW credentials
+**Disposition:**
 
 ## Suggestions
 
