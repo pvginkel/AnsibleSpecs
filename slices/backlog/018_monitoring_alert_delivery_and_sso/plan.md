@@ -54,8 +54,13 @@ The operator ruled in `refinement.md`.
   faults are high as well** (thresholds set from the 2026-08-02 incident record, see Grounding),
   and **a new warning-level alert fires when the stall rate is high while memory is plentiful and
   major faults are near zero for a sustained period**, saying the stall alerts on that node are
-  blind until it is rebooted. "Best practice" is the operator's steer: prefer the conventional
-  node-exporter memory signals and alert shape over invented ones.
+  blind until it is rebooted. **While that warning fires for a node, Alertmanager inhibits that
+  node's two stall alerts**, so "blind" is literally true — on a wedged node the corroborated
+  alerts would otherwise fire on the corroborating signal alone (plan review r1, Q1; operator:
+  "Agree"). Accepted cost: a real memory stall on a wedged node goes unannounced until the reboot;
+  the wedge warning, delivered silently like every warning, is the prompt. "Best practice" is the
+  operator's steer: prefer the conventional node-exporter memory signals and alert shape over
+  invented ones.
 - Ruling D3 — who may log in, and admin rights (R2). Operator, on refinement.md: "I do want to
   ensure that not everyone can login. I see role mappings for my user. I think that's how I've done
   this. … Is it maybe smarter if I create a separate realm for infrastructure stuff so that I don't
@@ -82,6 +87,11 @@ The operator ruled in `refinement.md`.
   no keystroke at push time, the run pushes as usual. Accepted cost: every Keycloak rollout — a
   deploy, an image rebuild, the node-update hand-off — is a sign-in outage of roughly Keycloak's start
   time (~30 s); apps with a session keep working, new sign-ins and token fetches in that window fail.
+  Plan review r1 (Q2) overturned a premise D5 was weighed against: there is no `keycloak-db` workload
+  that already blinks during node updates — Keycloak's database is the CNPG `postgres-pas` cluster —
+  so today a node update costs sign-in nothing beyond a possible database switchover, and after this
+  change it costs ~30 s whenever Keycloak's pod is on the drained node. Told that, the operator:
+  "Agree" — D5 stands.
 - Ruling D6 — the dev-cluster copies (R2; plan question Q2, round 1). Operator: "Agree" to: **the
   dev-cluster copies of Grafana and pgAdmin keep their local login; only production's Grafana and
   pgAdmin move to Keycloak** — two clients and two OpenBao secrets, no dev addresses to find. This
@@ -98,6 +108,12 @@ The operator ruled in `refinement.md`.
   is in the mail :). You can (request to) turn it on if you need it." srvk8sdev (VM 919) is off by
   design for now; nothing on the dev cluster is verified by this run, and turning it on is a request
   to the operator, not a run step.
+- Review adjudication r1, advisories. Operator: "Agree" to both defaults. **A1**: V06 must not fail
+  because a counter happens to wedge during the run — the wedge warning firing on a genuinely wedged
+  node is correct behaviour — and its overlapping-series clause is checked by reading the rules once
+  the overlap has aged out of the 7-day retention. **A2**: the pre-run checklist states the backup
+  scope's retention and has the operator set the pre-upgrade `keycloak_prd_db` dump aside, outside
+  the count-pruned set, until 26.7.3 is verified working.
 
 #### Settled items (in refinement.md, not objected to)
 
@@ -223,7 +239,9 @@ Keycloak upgrade:
   today is `RollingUpdate` `maxSurge: 1` / `maxUnavailable: 0` and carries
   `iac.webathome.org/pre-drain: "true"`: `ansible/playbooks/tasks/pre-drain-handoff.yml` rollout-restarts
   it when its pod is on the node being drained, and `docs/runbooks/k8s-rebuild.md` ("Pre-drain
-  hand-off") describes its surge window. `keycloak-db` there is already `Recreate` with a ~30 s outage.
+  hand-off") describes its surge window. Keycloak's database is the CNPG `postgres-pas` cluster behind
+  `postgres-pooler-rw` (2 replicas); no `keycloak-db` workload exists (checked 2026-09-14), and the
+  runbook's stale `keycloak-db` opt-in was removed in Ansible `568419f`.
   Keycloak on production took 30 s from start to ready (2026-09-13).
 
 Deploys:

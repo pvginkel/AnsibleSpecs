@@ -35,6 +35,7 @@
 **If this is wrong.** A real memory starvation could go unannounced — the failure these alerts exist for; mitigated by the recorded incident having moved both corroborating signals.
 
 **Operator.** I don't know. I have to follow your recommendation. Just implement best practice. If I want it changed, I'll raise a card.
+Amended at plan review, 2026-09-14 — "Agree": on a node whose counter has wedged, the corroborated alerts would still fire on low memory or heavy faults alone, so while the wedge warning fires for a node, that node's two stall alerts are muted; a real stall there goes unannounced until the reboot.
 
 ## D3 — Admin rights come from your own account, named in each app's configuration; no Keycloak group
 
@@ -90,6 +91,7 @@ Ruled in chat, 2026-09-14, after a Keycloak investigation — "do we now just do
 **If this is wrong.** An outage of about 30 seconds per node update that you would rather not have — reversible by switching the chart back; nothing lost.
 
 **Operator.** Agreed
+Premise corrected at plan review, 2026-09-14: the database outage cited above does not exist — Keycloak's database is a replicated cluster, so today node updates cost sign-in nothing, and after this change they cost about 30 seconds whenever Keycloak's pod is on the drained node. Told that — "Agree": this decision stands.
 
 ## D6 — The dev-cluster copies of Grafana and pgAdmin stay on their local login; only production moves to Keycloak
 
