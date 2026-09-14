@@ -191,7 +191,7 @@ Record:
   - :106-107, OpenBao "Terraform recreates": true once the VM is gone, and `openbao.md` carries the `qm destroy`.
   - :480, the reservation's "destroy reverses it": the apply that forgets a removed VM deletes it.
 
-### P6 — The scheduled certs and drift jobs run every stage and keep every signal
+### P6 — The scheduled certs and drift jobs run every stage and keep every signal ✅ DONE 2026-09-14
 
 Target: root
 
@@ -223,6 +223,7 @@ A dev stage that fails calls `notify.warning` right there, then `unstable()`.
 Later phases:
 - Test phase: V12–V16 are owed to the next scheduled runs (drift daily at 11:00, certs Friday at 04:00). No Groovy parser or Jenkins linter is reachable here. A Jenkinsfile that fails to load shows first as a red build. Drift is read-only, so a drift build the operator starts after the push proves both edits load sooner.
 - Doc phase: nothing outside the two Jenkinsfiles describes the stage coupling, `DEV_STAGE_FAILED` or the `post { unstable }` warning. Grep covered `docs/`, the role READMEs and `support/iac-agent/README.md`.
+- Test phase (P6 review r1): a Groovy parser is obtainable. The network reaches Adoptium and Maven Central, so Temurin 11 plus `groovy-all-2.4.21` can be downloaded. Both Jenkinsfiles pass `CompilationUnit.compile(Phases.CONVERSION)`, and a copy of each with one delimiter broken fails. A syntax-level load failure is ruled out. CPS, sandbox and declarative validation still need a build.
 
 Record:
 - Gate: `kc project test --project root` skips ("no test statements", close-out N1). `git diff --check` is clean. Brace, parenthesis and triple-quote counts balance in both files. The `iac` sidecar has no groovy or java.
