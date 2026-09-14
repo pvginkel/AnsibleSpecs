@@ -70,12 +70,22 @@ The operator ruled in `refinement.md`.
   practice the operator's own apps already use, and it must hold under either long-term model on
   Triage #1003 (one realm with a Keycloak-side gate, or a separate infrastructure realm — a later
   move is new clients and a changed issuer). No realm-wide change (no group claim, no realm roles)
-  in this slice; the same gate applies to the dev-cluster copies on `homelab-dev`.
+  in this slice.
 - Ruling U1 — Keycloak upgrade (R3). Operator: "Agree" to: **the upgrade goes into this slice as two
   small phases before the Grafana and pgAdmin work** — the version in DockerImages' build list
   (26.5.1 → 26.7.3, the latest release on 2026-09-14), then the image tag in HelmCharts. Keycloak
   migrates its database on first start and cannot be downgraded, so **a database backup goes into
   the operator's pre-run checklist, before the push that deploys the new version**.
+- Ruling D5 — how Keycloak rolls out (R3; plan question Q1, round 1). Operator: "Agreed" to: **the
+  Keycloak chart stops the old pod before starting the new one, on every rollout from now on**, so
+  26.7.3 never runs beside 26.5.1 against the same database and every later minor upgrade is covered;
+  no keystroke at push time, the run pushes as usual. Accepted cost: every Keycloak rollout — a
+  deploy, an image rebuild, the node-update hand-off — is a sign-in outage of roughly Keycloak's start
+  time (~30 s); apps with a session keep working, new sign-ins and token fetches in that window fail.
+- Ruling D6 — the dev-cluster copies (R2; plan question Q2, round 1). Operator: "Agree" to: **the
+  dev-cluster copies of Grafana and pgAdmin keep their local login; only production's Grafana and
+  pgAdmin move to Keycloak** — two clients and two OpenBao secrets, no dev addresses to find. This
+  replaces the first round's settled item 4 (edited in place below).
 - Ruling D4 — local admin (R2). Operator: "Agreed." **Each app keeps its local admin and its login
   form as break-glass**; Keycloak is an additional login button, with **no automatic redirect**.
 - Fact F1 — other realm users. Operator: "A friend. He should not have access to infrastructure
@@ -84,6 +94,10 @@ The operator ruled in `refinement.md`.
 - Fact F2 — which bot. Operator: "A new one." Alerts come from **a new, dedicated Telegram bot**
   the operator creates; neither existing bot token (`eso/prd/jenkins-telegram-bot`,
   `eso/prd/telegram-mcp`) is reused.
+- Fact F3 — the dev cluster's VM. Operator: "It is because of memory conservation. Additional memory
+  is in the mail :). You can (request to) turn it on if you need it." srvk8sdev (VM 919) is off by
+  design for now; nothing on the dev cluster is verified by this run, and turning it on is a request
+  to the operator, not a run step.
 
 #### Settled items (in refinement.md, not objected to)
 
@@ -93,12 +107,12 @@ The operator ruled in `refinement.md`.
    leaves it open).
 3. The suspected kernel bug is not chased — no kernel change; the wedge warning names the node to
    reboot.
-4. Grafana and pgAdmin move to Keycloak on **both clusters**, like the six apps: the dev-cluster
-   copies use the dev Keycloak's `homelab-dev` realm — **four clients and four OpenBao secrets**.
+4. **Only production's** Grafana and pgAdmin move to Keycloak (ruling D6) — **two clients and two
+   OpenBao secrets**; the dev-cluster copies keep their local login.
 5. **The operator's keystrokes come before the run starts**, from a list the plan spells out
-   exactly: the Telegram bot and chat and their OpenBao secret, the four Keycloak clients (internal
+   exactly: the Telegram bot and chat and their OpenBao secret, the two Keycloak clients (internal
    `.home` hostnames as redirect addresses), their client roles and the role assignment to the
-   operator's user (ruling D3), pgAdmin's role mapper, the four client secrets in OpenBao, and a
+   operator's user (ruling D3), pgAdmin's role mapper, the two client secrets in OpenBao, and a
    backup of Keycloak's database (ruling U1) — because a release whose ExternalSecret points at a
    path that does not exist yet fails to start when the run's push deploys it.
 6. The Alertmanager web UI stays unexposed, as today (no ingress).
@@ -202,6 +216,15 @@ Keycloak upgrade:
   this deployment (hostname/proxy options, bootstrap admin, the `kc.sh build` options).
 - The chart also hardcodes `KC_BOOTSTRAP_ADMIN_USERNAME`/`PASSWORD` as `admin`/`admin`; changing that
   is Triage #1003's, not this slice's.
+- For ruling D5 (verified 2026-09-14): Keycloak's upgrading guide, 26.6 — "This migration requires
+  downtime. Do not run Keycloak 26.6 alongside older versions during or after this migration." — and
+  "Shut down Keycloak if no rolling update is supported, for example if you perform a minor or major
+  upgrade"; zero-downtime rolling updates cover patch releases within one minor stream only. The chart
+  today is `RollingUpdate` `maxSurge: 1` / `maxUnavailable: 0` and carries
+  `iac.webathome.org/pre-drain: "true"`: `ansible/playbooks/tasks/pre-drain-handoff.yml` rollout-restarts
+  it when its pod is on the node being drained, and `docs/runbooks/k8s-rebuild.md` ("Pre-drain
+  hand-off") describes its surge window. `keycloak-db` there is already `Recreate` with a ~30 s outage.
+  Keycloak on production took 30 s from start to ready (2026-09-13).
 
 Deploys:
 

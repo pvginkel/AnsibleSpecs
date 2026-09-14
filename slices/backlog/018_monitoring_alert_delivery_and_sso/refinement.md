@@ -73,6 +73,42 @@ Ruled in chat, 2026-09-14, after a Keycloak investigation — "do we now just do
 
 **Operator.** Agreed.
 
+## D5 — The Keycloak chart stops the old pod before starting the new one, on every rollout from now on
+
+**Context.** Since the first round you ruled that the Keycloak upgrade, 26.5.1 to 26.7.3, joins this slice as two small phases before the Grafana and pgAdmin work, with a database backup before it deploys. The plan now has six phases — the stall alerts, Telegram delivery, the 26.7.3 image, the Keycloak rollout, Grafana on Keycloak, pgAdmin on Keycloak — and stopped on how that rollout happens. Today the Keycloak chart rolls out by starting the new pod beside the old one and stopping the old one once the new one is ready; and before every node drain, the hand-off playbook restarts Keycloak if its pod is on that node, precisely so the move costs no sign-in outage.
+
+**The ask.** Deploy 26.7.3 to production without running it beside 26.5.1.
+
+**Background.** Keycloak's upgrading guide says the 26.6 migration adds a column older versions do not fill and requires downtime — do not run 26.6 alongside an older version during or after it; rolling updates without downtime are supported only between patch releases of one minor version, and the same release moves the embedded cache to a new major version. As agreed, the rollout would run both versions against the same database while the new pod starts and migrates; the backup makes a failure recoverable, not impossible. Keycloak took about 30 seconds from start to ready at its last production restart. Keycloak's database already stops then starts during the same hand-off, with a documented outage of about that length, so sign-in already blinks when the database's node is drained. Minor releases come several times a year, each a stop-start by upstream's rule.
+
+**Why yours.** It trades a short sign-in outage on every Keycloak rollout, node updates included, against a manual step at push time — a procedure and an availability property you set deliberately.
+
+**Recommendation.** From now on the chart stops the old Keycloak pod before starting the new one, on every rollout: no keystroke at push time, the run stays autonomous, and every later minor upgrade is covered. Trade-off: every Keycloak rollout — a deploy, an image rebuild, the node-update hand-off — becomes a sign-in outage of roughly 30 seconds; apps with a session keep working, but new sign-ins and token fetches in that window fail. The hand-off's zero-downtime move of Keycloak is lost, though sign-in already blinks for the database during node updates.
+
+**The other way.** Keep today's rolling start and make this upgrade a one-off manual stop — immediately before the push that deploys 26.7.3 you scale Keycloak to zero and the deploy brings it back on the new version. The run then cannot push HelmCharts on its own, so its live checks of the alerting, Grafana and pgAdmin work wait for your push, and the next minor upgrade needs the same manual step.
+
+**If this is wrong.** An outage of about 30 seconds per node update that you would rather not have — reversible by switching the chart back; nothing lost.
+
+**Operator.** Agreed
+
+## D6 — The dev-cluster copies of Grafana and pgAdmin stay on their local login; only production moves to Keycloak
+
+**Context.** The first round settled that Grafana and pgAdmin move to Keycloak on both clusters, the dev copies on the dev Keycloak's dev realm with internal hostnames as their sign-in return addresses — four clients and four secrets. The plan is drafted on that: its pre-run checklist's two dev return addresses and the dev Grafana's fixed address wait on the answer here. The dev copies have no internal hostname. Dev-cluster services are reached on addresses handed out from the dev network pool, and the dev copies of the apps already on Keycloak register exactly that bare address; those addresses are not pinned — only the database and the DNS service pin theirs.
+
+**The ask.** The address each dev copy registers with Keycloak — or whether they register at all.
+
+**Background.** Grafana needs its address fixed in its settings to build the sign-in return address; pgAdmin works it out from the request. The dev cluster's VM is not running today, so the two addresses cannot be read, and nothing in the run can verify a dev-cluster change: production deploys go through Jenkins, and the dev cluster is not in that path. The dev cluster is for chart development and is disposable by design. The dev realm is separate from the production realm your friend is in; not verified: that he has no dev-realm account.
+
+**Why yours.** It reverses a settled item you saw, and turns on how far you want the dev cluster to mirror production.
+
+**Recommendation.** The dev copies keep their local login; only production's Grafana and pgAdmin move to Keycloak — two clients and two secrets instead of four, and no addresses to find. Trade-off: the dev copies no longer exercise the Keycloak sign-in path, so a chart change to it is first seen working on production.
+
+**The other way.** Keep the dev copies on the dev realm at their current pool addresses, which you look up once the dev VM is running and give before the run; the addresses can change on reinstall, and dev sign-in then breaks until the client and settings are updated. Pinning the addresses instead adds work to two phases.
+
+**If this is wrong.** The dev copies can be moved to Keycloak later in a small change; nothing lost.
+
+**Operator.** Agree
+
 ## Open facts — questions only you can answer
 
 **F1.** Besides you, who has an account in the homelab realm, and should any of them reach Grafana or pgAdmin? (Settles whether D3's "others get Viewer, nobody else reaches pgAdmin" matters.)
@@ -82,6 +118,10 @@ Ruled in chat, 2026-09-14, after a Keycloak investigation — "do we now just do
 **F2.** Which Telegram bot should deliver the alerts, and into which chat? OpenBao holds Jenkins's and the Telegram MCP's bot tokens today and no alerts bot. (Settles your keystrokes before the run and the secret delivery reads.)
 
 **Operator.** A new one.
+
+**F3.** Is the dev cluster's VM off on purpose, and does it stay off for now? (Settles whether D6's alternative is workable before the run, and whether anything dev-side can be checked at all.)
+
+**Operator.** It is because of memory conservation. Additional memory is in the mail :). You can (request to) turn it on if you need it.
 
 ## Settled
 
