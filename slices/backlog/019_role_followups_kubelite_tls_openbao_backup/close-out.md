@@ -64,3 +64,12 @@ roles/microk8s/handlers/main.yml:2-16 runs 'microk8s kubectl apply' as ansible.b
 
 **Provenance:** read | plan-writer, planning, round 1 — roles/microk8s/handlers/main.yml:2-16
 **Disposition:**
+
+### S2 — Ansible — microceph's memory-target Set tasks are skipped under --check, so no dry run or drift job ever reports osd_memory_target / mds_cache_memory_limit drift · nit
+
+roles/microceph/tasks/config.yml:90-95 and :107-112 set the caps with ansible.builtin.command, changed_when: true, no check_mode: false and no check-mode report task. Under --check a command task is skipped (reproduced 2026-09-14 in the iac sidecar), ansible.cfg:12 hides the skip, and check-ansible-drift.sh sums recap changed= counts, so a drifted cap adds nothing. Only inventories/prd/group_vars/ceph_dev.yml:23-24 sets them. Broader than slice 019's R4 handler announcement, which plan_review_r1.md F2 raises separately.
+
+**Consequence:** A drifted OSD or MDS memory cap on ceph_dev is never named by a --check preview or the daily drift job; only an apply notices and fixes it.
+
+**Provenance:** witnessed | plan-reviewer, plan review, round 1 — plan_review_r1.md F2
+**Disposition:**
