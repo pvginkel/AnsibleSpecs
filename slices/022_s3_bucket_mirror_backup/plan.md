@@ -425,7 +425,7 @@ Record:
   CronJob's series and extra labels do not leak in. Mutations fail the checks: promtool at 50 h,
   pytest at 51 h (quiet edge) and 60 h (fire edge).
 
-### P4 — Every production bucket carries the reader's grant
+### P4 — Every production bucket carries the reader's grant ✅ DONE 2026-09-14
 
 Target: ../HelmCharts
 
