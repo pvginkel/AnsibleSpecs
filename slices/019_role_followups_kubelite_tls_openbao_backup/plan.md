@@ -106,7 +106,7 @@ Record:
 - The bootstrap host (sorted-first, `elect-bootstrap.yml`) is also the first `serial: 1` batch (inventory srvvault1–3), so a rotation run re-stages before any node proves the file.
 - Not live-proven. V03 needs the operator's rotation run.
 
-### P2 — Every call the backup wrapper makes names itself on failure
+### P2 — Every call the backup wrapper makes names itself on failure ✅ DONE 2026-09-14
 
 **Target:** `ansible`
 
