@@ -260,6 +260,22 @@ R1, to the settled "a fresh cluster before its restore" ruling above. Today `doc
 
 - **What that converge can deliver.** The rebuilt VMs hold no secret_id, so the outcome depends on the checkout. A staged secret_id the restored `backup` role accepts is proven and delivered. A staged one it rejects fails the converge, naming `-e openbao_rotate_secret_ids=true`. With none staged, the pipeline self-skips and names the rotation run it needs (the `Skip the backup pipeline until its inputs exist` task in `ansible/roles/openbao/tasks/backup.yml`). The pre-restore converge (step 3) prints `Backup AppRole secret_id not delivered … Converge site-openbao.yml again after the restore` in place of that skip message. The step covers all three cases, as P1 shipped them.
 
+**Done (P6).** `docs/runbooks/openbao.md` §3 now runs converge (3), restore (4), converge again (5), verify (6).
+- Step 3 says its converge leaves the backup pipeline unconfigured and quotes both messages it can print: `Backup AppRole secret_id not delivered`, or `OpenBao backup pipeline not configured` when nothing is staged.
+- Step 5 says why it is there: the rebuilt nodes hold no backup secret_id, and step 3 had no `backup` AppRole to prove one against. It gives the three outcomes by the checkout's `tmp/openbao-backup-secret-id`. Accepted: delivered, timer enabled. Rejected: fails at `Refuse a staged backup secret_id the backup AppRole rejects`, naming the flag. None staged: completes with the skip message.
+- Both of the last two are fixed by one `-e openbao_rotate_secret_ids=true` converge. The step names its cost: a fresh never-expiring secret_id for all six AppRoles, none revoked. Consumers keep their restored pairs, and the staged capture files are wiped with the `shred -u` the run prints.
+- Step 6 adds one manual backup run on the leader, expecting `openbao-backup: backup uploaded (…)`.
+
+Later phases:
+- Test phase: V18 is checked by reading §3 steps 3, 5 and 6 against `roles/openbao/tasks/backup.yml`'s task names and messages. The recovery itself is not live-proven; that needs a whole-cluster drill.
+- Doc phase: §3's verify moved from step 5 to step 6. Nothing in `docs/`, `ansible/` or `decisions.md` cites §3 steps by number. Step 6's "the five role policies" is stale; the role writes six (close-out bug).
+
+Record:
+- Beyond the plan: step 3's note and step 6's backup run.
+- Post-restore order, grounded by reading. `auth-token.yml` falls back to the ansible-vault'd `openbao-admin` AppRole, which the snapshot restores. `openbao/tasks/main.yml` runs `approle.yml` (:145) before `backup.yml` (:165), so the bootstrap host, the first `serial: 1` batch, re-stages the restored role_id before any node's proving login. It also rewrites any policy whose text differs, which covers P1's revoke-self grant for a snapshot taken before it.
+- Step 3's "not delivered" line prints only when a role_id and a secret_id are both staged; otherwise the generic skip prints. Hence both are quoted.
+- Gate: `kc project test --project root` gives "root: no test statements — skipped".
+
 ## Not in scope
 
 - R3's backup freshness — backup-server metadata, metrics, alert rules and the wrapper's validity field — which is slice 023 (ruling above).
