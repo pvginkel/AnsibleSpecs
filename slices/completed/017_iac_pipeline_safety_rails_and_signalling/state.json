@@ -1,0 +1,686 @@
+{
+  "slice": "017_iac_pipeline_safety_rails_and_signalling",
+  "created_at": "2026-09-14T14:52:10.938720+02:00",
+  "plugin_version": "0.9.36",
+  "orchestrator": {
+    "session": "86ef9799-0272-444b-8058-08b81dd86c0c",
+    "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/86ef9799-0272-444b-8058-08b81dd86c0c.jsonl"
+  },
+  "run_phase": "done",
+  "bases": {
+    "/work/Ansible": "main",
+    "/work/AnsibleSpecs": "main"
+  },
+  "known_phases": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+  ],
+  "phases": {
+    "1": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/017-P1",
+      "target": "terraform",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "b495c24a8215228978908cf810fcd1da12df5368",
+      "gate_green_log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/phases/P1/gate_r1.log",
+      "reviewed_head": "b495c24a8215228978908cf810fcd1da12df5368",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "bf11aa5a18a4accafc9c418b547c13d6655fcd99",
+        "head": "b495c24a8215228978908cf810fcd1da12df5368"
+      }
+    },
+    "2": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/017-P2",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "82d34acec7e1e4f34b770c48b17ad7cc5a89daa9",
+      "gate_green_log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/phases/P2/gate_r1.log",
+      "reviewed_head": "82d34acec7e1e4f34b770c48b17ad7cc5a89daa9",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "b495c24a8215228978908cf810fcd1da12df5368",
+        "head": "82d34acec7e1e4f34b770c48b17ad7cc5a89daa9"
+      }
+    },
+    "3": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/017-P3",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "ddca1078d1d88bf2cec15e5d294cb87166602a1b",
+      "gate_green_log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/phases/P3/gate_r1.log",
+      "reviewed_head": "ddca1078d1d88bf2cec15e5d294cb87166602a1b",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "82d34acec7e1e4f34b770c48b17ad7cc5a89daa9",
+        "head": "ddca1078d1d88bf2cec15e5d294cb87166602a1b"
+      }
+    },
+    "4": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/017-P4",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "b681222eb1b1ca518ccdac3ce6e2e64a6176b4ea",
+      "gate_green_log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/phases/P4/gate_r1.log",
+      "reviewed_head": "b681222eb1b1ca518ccdac3ce6e2e64a6176b4ea",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "ddca1078d1d88bf2cec15e5d294cb87166602a1b",
+        "head": "b681222eb1b1ca518ccdac3ce6e2e64a6176b4ea"
+      }
+    },
+    "5": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/017-P5",
+      "target": "../AnsibleSpecs",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 0,
+      "gate_green_commit": null,
+      "gate_green_log": null,
+      "reviewed_head": "a1f335016c6b1711c1bd0fbd25955f166fc3e886",
+      "landed": {
+        "root": "/work/AnsibleSpecs",
+        "base": "0eadd603b28ef1f65fd6eead2ad1a38ec850beec",
+        "head": "a1f335016c6b1711c1bd0fbd25955f166fc3e886"
+      }
+    },
+    "6": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/017-P6",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "1352e68c824e08683dcdb27a041c75468b19e010",
+      "gate_green_log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/phases/P6/gate_r1.log",
+      "reviewed_head": "1352e68c824e08683dcdb27a041c75468b19e010",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "b681222eb1b1ca518ccdac3ce6e2e64a6176b4ea",
+        "head": "1352e68c824e08683dcdb27a041c75468b19e010"
+      }
+    }
+  },
+  "generation": 0,
+  "test_rounds": 1,
+  "sweep_runs": 2,
+  "gate_sweep": {
+    "run": 2,
+    "commits": {
+      "/work/Ansible": "2738c38433bbfb957a82856033f53c9788cdec25"
+    },
+    "green": true,
+    "ran_at": "2026-09-14T15:56:33.083458+02:00",
+    "results": [
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_root_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_root_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_root_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_ansible_lint.log",
+        "duration_s": 16
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_ansible_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_ansible_test.log",
+        "duration_s": 17
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_terraform_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_terraform_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_terraform_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "lint",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_architecture_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "build",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_architecture_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "test",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/017_iac_pipeline_safety_rails_and_signalling/sweeps/r2/Ansible_architecture_test.log",
+        "duration_s": 0
+      }
+    ]
+  },
+  "consult_seq": 1,
+  "in_flight": null,
+  "bailouts": [],
+  "appended_phases": [],
+  "history": [
+    {
+      "ts": "2026-09-14T14:54:07.076969+02:00",
+      "phase": "1",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "prevent_destroy = true is on the managed-vm VM resource's lifecycle block, covering every prd VM, and the three prd -replace comments now direct qm destroy on Proxmox then apply. The terraform gate (fmt -check) is green and terraform validate on the module passes; the no-op prd plan and a refused destroy are owed to iac-on-push and the operator. Code is b495c24 on phase/017-P1, and the done-record is committed in AnsibleSpecs.",
+      "session": "c71d8319-cee9-4007-b601-f85796e027f5",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/c71d8319-cee9-4007-b601-f85796e027f5.jsonl",
+      "duration_s": 115
+    },
+    {
+      "ts": "2026-09-14T14:54:07.150357+02:00",
+      "phase": "1",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "terraform: cexec iac terraform fmt -check -recursive    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-14T14:57:47.542637+02:00",
+      "phase": "1",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "prevent_destroy is on the managed-vm VM resource, covering every prd VM through its only caller, and the three prd -replace comments now direct destroy-on-Proxmox-first. An offline repro on Terraform 1.16.2 confirmed the comment's mechanics: plan-time refusal, then recreate or forget once the object is gone. No findings.",
+      "session": "e4883586-2f64-41c6-9ce6-872250cbff2a",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/e4883586-2f64-41c6-9ce6-872250cbff2a.jsonl",
+      "duration_s": 220
+    },
+    {
+      "ts": "2026-09-14T15:07:13.662133+02:00",
+      "phase": "2",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "check-protected-vms.sh now takes only the plan JSON and fails on any prd VM delete or replace, including [\"delete\",\"create\"]. All three jobs call it that way, and the drift job no longer swallows its result. The drift job's description leads with each VM destroy Terraform refused under prevent_destroy, then the guard's verdicts. Evidence is an offline Terraform repro in the iac sidecar, shellcheck and a Python port of driftSummary; the named root gate runs nothing (close-out N1). The operator's rollout order is close-out A1.",
+      "session": "7d561aa5-51ef-42a4-ab98-558cc164d58d",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/7d561aa5-51ef-42a4-ab98-558cc164d58d.jsonl",
+      "duration_s": 565
+    },
+    {
+      "ts": "2026-09-14T15:07:13.675294+02:00",
+      "phase": "2",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-14T15:11:39.436201+02:00",
+      "phase": "2",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "The name-free guard now fails every prd VM delete or replace, including Terraform's default delete,create, and lets the DNS companion's delete through. A caller and script that disagree exit 2 under set -e, so the job goes red rather than passing a plan unchecked. The drift job no longer swallows the guard and lists Terraform's prevent_destroy refusals first. No findings; running the Groovy under the Jenkins sandbox stays owed to a live drift run (V08).",
+      "session": "b065e508-8fa3-46cb-b54a-0df7c526c868",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/b065e508-8fa3-46cb-b54a-0df7c526c868.jsonl",
+      "duration_s": 265
+    },
+    {
+      "ts": "2026-09-14T15:14:52.959770+02:00",
+      "phase": "3",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Jenkinsfile.iac-apply now plans terraform/prd, runs check-protected-vms.sh and applies that saved /tmp/plan.tfplan in one stage and one iac call, so a refused plan or a failing guard applies nothing. An offline sidecar test of the body taken from the Jenkinsfile passed every case: create, no change, refused replace, guard exit 1 and 2, and a config edited after the plan that stayed out of the apply. The root gate has no test statements, so it skipped.",
+      "session": "ba732e39-7cb7-46cb-943a-36171c194d8e",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/ba732e39-7cb7-46cb-943a-36171c194d8e.jsonl",
+      "duration_s": 192
+    },
+    {
+      "ts": "2026-09-14T15:14:52.973018+02:00",
+      "phase": "3",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-14T15:18:42.782575+02:00",
+      "phase": "3",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "iac-apply now plans, guards and applies the saved plan in one stage and one iac -c under set -e, so a refused plan or a failing guard applies nothing and the applied plan is the checked plan. A verbatim run of the stage body in the iac sidecar applied both a no-change and a changed plan cleanly with env-sourced variables. No findings.",
+      "session": "0fbfaee0-4ef5-47d4-b699-0e8e15aed58a",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/0fbfaee0-4ef5-47d4-b699-0e8e15aed58a.jsonl",
+      "duration_s": 229
+    },
+    {
+      "ts": "2026-09-14T15:24:14.922787+02:00",
+      "phase": "4",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "No runbook rebuilds a prd VM with -replace any more: the OpenBao recovery, srviac rebuild and cluster-member flows destroy the VM on Proxmox with qm destroy, then apply, and the prd recovery notes (vm-rebuild.md, plus k8s-rebuild.md:248) clear a tainted VM the same way. The scratch flows keep -replace, and iac-agent.md's guard description no longer names VMs. Committed b681222 on phase/017-P4; the root gate has no test statements and ran nothing.",
+      "session": "00701ffe-5f8a-4b25-83a7-9f2696332334",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/00701ffe-5f8a-4b25-83a7-9f2696332334.jsonl",
+      "duration_s": 331
+    },
+    {
+      "ts": "2026-09-14T15:24:14.945125+02:00",
+      "phase": "4",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-14T15:29:05.405395+02:00",
+      "phase": "4",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "Every prd-VM -replace step named in P4 now destroys the VM on Proxmox and then runs a plain apply; the scratch flows keep -replace, and iac-agent.md describes the rails in the right order. The cited VM ids and vms.tf keys, the passthrough-disk and HA/replication concerns, and the tainted-VM recovery text all hold; no findings.",
+      "session": "10a25ee7-cb31-45b5-a114-0ff24afda18a",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/10a25ee7-cb31-45b5-a114-0ff24afda18a.jsonl",
+      "duration_s": 290
+    },
+    {
+      "ts": "2026-09-14T15:35:29.913620+02:00",
+      "phase": "5",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "decisions.md's guard doctrine now opens with D1's rule, Terraform never destroys a VM. Its rails are listed in the order they act: prevent_destroy on managed-vm stops the plan, and the name-free guard is the second rail. A new paragraph gives the destroy-on-Proxmox-first path. The :52, :236, :482 and :571 guidance destroys on Proxmox instead of using a Terraform replace. git diff --check is clean, and the done-record and commits are in AnsibleSpecs on phase/017-P5.",
+      "session": "b92dfbb7-e80b-4ca3-b48c-e847013f735b",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/b92dfbb7-e80b-4ca3-b48c-e847013f735b.jsonl",
+      "duration_s": 188
+    },
+    {
+      "ts": "2026-09-14T15:39:51.501263+02:00",
+      "phase": "5",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "decisions.md now opens its guard doctrine with D1's rule and lists the rails in the order they act: prevent_destroy stops the plan, then the name-free guard. The text matches the P1\u2013P4 code in Ansible, and the :52, :236, :482 and :571 guidance destroys the VM on Proxmox first. No findings.",
+      "session": "340f3f79-551b-4a1a-bc66-a87baf3496ec",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/340f3f79-551b-4a1a-bc66-a87baf3496ec.jsonl",
+      "duration_s": 261
+    },
+    {
+      "ts": "2026-09-14T15:46:06.278217+02:00",
+      "phase": "6",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Both scheduled jobs now run every stage. A failed prd stage appends its description entry and turns its stage and the build red via catchError around error(); the sh stays outside catchError. A failing dev stage raises notify.warning where it fails, and the post { unstable } blocks and DEV_STAGE_FAILED are gone. Committed as Ansible 1352e68; the root gate has no test statements, so it skips.",
+      "session": "8d9bbb9d-5d1c-4b38-acb1-2e27b4d1581a",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/8d9bbb9d-5d1c-4b38-acb1-2e27b4d1581a.jsonl",
+      "duration_s": 374
+    },
+    {
+      "ts": "2026-09-14T15:46:06.291999+02:00",
+      "phase": "6",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-14T15:52:41.111715+02:00",
+      "phase": "6",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "Both scheduled jobs run every stage through a returnStatus sh plus catchError(FAILURE) helper, append only failed stages' entries, and raise the dev warning where the dev stage fails; no findings. Both Jenkinsfiles parse under Groovy 2.4.21 (a mutated copy of each fails) and the shell bodies are unchanged apart from indentation.",
+      "session": "a27060ca-cc58-46d7-a491-6ddace74c855",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/a27060ca-cc58-46d7-a491-6ddace74c855.jsonl",
+      "duration_s": 394
+    },
+    {
+      "ts": "2026-09-14T15:53:15.586481+02:00",
+      "phase": null,
+      "role": "sweep",
+      "round": 1,
+      "outcome": "green",
+      "summary": "12 command(s)",
+      "session": null,
+      "transcript": null,
+      "duration_s": 34
+    },
+    {
+      "ts": "2026-09-14T15:55:58.906323+02:00",
+      "phase": null,
+      "role": "consult",
+      "round": 1,
+      "outcome": "complete",
+      "summary": "Every acceptance criterion has implementing work on main. V01-V04 and V08-V10 are P1/P2's prevent_destroy, name-free guard (all three callers, no `|| true`) and the drift job's refusal naming. V06 is P5's doctrine, V07 is P3's single-call plan/guard/apply, V09 is P4's runbooks plus P1's comments, V12-V16 are P6's catchError helpers, and V17 closed by ruling. V05, V07's live proof, V10's rollout and V11 are operator- or run-owed verification rather than unbuilt work; the remaining stale docs (terraform/README.md:5, support/iac-agent/README.md:12, iac-agent.md:26-37) are routed to the enabled doc phase, and a grep finds no other guard caller passing names and no prd -replace left. The one mechanical residue, close-out S2's two comments claiming managed-vm ignores all of initialization, is fixed in Ansible 2738c38 and AnsibleSpecs d7bb25a and struck.",
+      "session": "cc76f97c-635b-4316-810b-6e4b60adc376",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/cc76f97c-635b-4316-810b-6e4b60adc376.jsonl",
+      "duration_s": 163
+    },
+    {
+      "ts": "2026-09-14T15:56:33.083497+02:00",
+      "phase": null,
+      "role": "sweep",
+      "round": 2,
+      "outcome": "green",
+      "summary": "12 command(s)",
+      "session": null,
+      "transcript": null,
+      "duration_s": 34
+    },
+    {
+      "ts": "2026-09-14T16:07:50.053362+02:00",
+      "phase": null,
+      "role": "test-agent",
+      "round": 1,
+      "outcome": "clean",
+      "summary": "Ran the slice-testing-strategy procedure: gates already established GREEN per the driver's r2 sweep, static verification of every phase's diff (no idempotence/check-mode issues \u2014 no Ansible tasks changed; cluster-serial safety unaffected, site-k8s.yml's serial:1 confirmed intact), and pushed 2738c38 to main (bf11aa5..2738c38 -> main). Live-verified V04 and V05 with safe read-only checks against real prd infrastructure: `terraform plan -replace` on the real srviac VM was refused with Terraform's own prevent_destroy error, and two real no-op plans (local + IaC/Build-Main #164) confirm landing the change moved nothing. Build #164 went FAILURE exactly as close-out A1 predicts (srviac's installed guard is still the old 2-arg script) \u2014 recorded as live confirmation, not a new finding. All 17 verification.json items are checked off: 12 pass, 5 owed to the operator (V07 iac-apply run, V08/V12/V13 next scheduled certs/drift build, V11 next real VM destroy-then-apply). Operator commands owed: (1) `cd ansible && cexec iac poetry run ansible-playbook playbooks/site.yml --limit srviac --check --diff` then without --check, to reinstall P2's guard on srviac, then re-run IaC/Build-Main; (2) once that's green, `IaC/Apply` (Jenkinsfile.iac-apply) settles V07; (3) the next scheduled IaC/Scheduled-Certs (Fri 04:00) and IaC/Scheduled-Drift (daily 11:00) runs settle V08/V12/V13; (4) V11 settles on the operator's next real prd VM rebuild/removal. No finding cleared the generation bar; close-out.md gained N2 (live verification evidence), N3 (this environment's iac sidecar unexpectedly carries live Proxmox credentials, contrary to docs/live-infra-access.md \u2014 worth the operator's eye) and a note on A1.",
+      "session": "ad12d51e-c366-4413-8ae8-db8ccb0f4643",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/ad12d51e-c366-4413-8ae8-db8ccb0f4643.jsonl",
+      "duration_s": 341
+    },
+    {
+      "ts": "2026-09-14T16:14:02.478028+02:00",
+      "phase": null,
+      "role": "doc-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Updated terraform/README.md and terraform/prd/README.md (Terraform never destroys a prd VM; qm destroy first, with a new rebuild/removal section), support/iac-agent/README.md (guard has no name list and is the second rail; iac-apply plans, checks and applies in one iac call), docs/runbooks/iac-agent.md (iac-apply's plan, check and apply are one stage) and docs/runbooks/k8s-rebuild.md (a leftover orphan VM now fails the plan); decisions.md needed no further edit. kc project lint green and git diff --check clean, committed 818d528 on phase/017-docs. One claim left unverified: that removing a Proxmox-destroyed VM's vms.tf entry plans no VM destroy (V11), so the prd README gives only the order of steps, and close-out A2 records it.",
+      "session": "f16d3b97-975b-46b8-9213-896101038a48",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/f16d3b97-975b-46b8-9213-896101038a48.jsonl",
+      "duration_s": 371
+    },
+    {
+      "ts": "2026-09-14T16:14:37.154016+02:00",
+      "phase": null,
+      "role": "doc-gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "architecture: cexec iac ./scripts/arch-validate.py docs/architecture/ansible-architecture.yaml    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 34
+    }
+  ],
+  "updated_at": "2026-09-14T16:14:39.087058+02:00",
+  "doc_phase": {
+    "stage": "done",
+    "gate_runs": 1,
+    "nudges": 0,
+    "session": "f16d3b97-975b-46b8-9213-896101038a48"
+  },
+  "cost": {
+    "ts": "2026-09-14T16:14:49+02:00",
+    "cost_usd": 36.88,
+    "planner_cost_usd": 12.75,
+    "planner_share": 0.346,
+    "research_cost_usd": 1.66,
+    "research_share": 0.045,
+    "consult_cost_usd": 1.47,
+    "consult_share": 0.04,
+    "rework_cost_usd": 0,
+    "rework_share": 0.0,
+    "turns": {
+      "sessions": 25,
+      "turns": 334,
+      "cost_per_turn_usd": 0.1104,
+      "retry_fumble_turns": 17,
+      "batchable_strict_turns": 1,
+      "avoidable_turns": 18,
+      "avoidable_share": 0.054,
+      "avoidable_cost_usd": 1.99,
+      "by_role": {
+        "code-writer": {
+          "n": 6,
+          "turns": 65,
+          "cost_usd": 8.42,
+          "tools_per_turn": 2.72,
+          "reads_per_turn": 2.32,
+          "orient_turns": 4,
+          "ctx_first": 35136,
+          "ctx_mean": 70466,
+          "ctx_max": 117466,
+          "retry_fumble_turns": 3,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "code-reviewer": {
+          "n": 6,
+          "turns": 47,
+          "cost_usd": 7.52,
+          "tools_per_turn": 2.36,
+          "reads_per_turn": 3.28,
+          "orient_turns": 4,
+          "ctx_first": 25542,
+          "ctx_mean": 64910,
+          "ctx_max": 113735,
+          "retry_fumble_turns": 4,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "orchestrator:plan": {
+          "n": 1,
+          "turns": 41,
+          "cost_usd": 5.29,
+          "tools_per_turn": 1.37,
+          "reads_per_turn": 1.51,
+          "orient_turns": 23,
+          "ctx_first": 34225,
+          "ctx_mean": 114492,
+          "ctx_max": 188159,
+          "retry_fumble_turns": 2,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "plan-writer": {
+          "n": 2,
+          "turns": 28,
+          "cost_usd": 4.79,
+          "tools_per_turn": 1.75,
+          "reads_per_turn": 3.21,
+          "orient_turns": 6,
+          "ctx_first": 25086,
+          "ctx_mean": 96570,
+          "ctx_max": 137047,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "plan-reviewer": {
+          "n": 1,
+          "turns": 10,
+          "cost_usd": 2.67,
+          "tools_per_turn": 3.2,
+          "reads_per_turn": 5.6,
+          "orient_turns": 7,
+          "ctx_first": 24504,
+          "ctx_mean": 109275,
+          "ctx_max": 167321,
+          "retry_fumble_turns": 5,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "test-agent": {
+          "n": 1,
+          "turns": 52,
+          "cost_usd": 2.2,
+          "tools_per_turn": 1.33,
+          "reads_per_turn": 1.02,
+          "orient_turns": 10,
+          "ctx_first": 27012,
+          "ctx_mean": 119921,
+          "ctx_max": 172779,
+          "retry_fumble_turns": 1,
+          "batchable_strict_turns": 1,
+          "breaks": 0
+        },
+        "doc-writer": {
+          "n": 1,
+          "turns": 12,
+          "cost_usd": 2.17,
+          "tools_per_turn": 3.17,
+          "reads_per_turn": 4.25,
+          "orient_turns": 4,
+          "ctx_first": 36168,
+          "ctx_mean": 109270,
+          "ctx_max": 148282,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "consult": {
+          "n": 1,
+          "turns": 13,
+          "cost_usd": 1.47,
+          "tools_per_turn": 2.0,
+          "reads_per_turn": 3.0,
+          "orient_turns": 6,
+          "ctx_first": 26329,
+          "ctx_mean": 81238,
+          "ctx_max": 106129,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "subagent:general-purpose": {
+          "n": 4,
+          "turns": 57,
+          "cost_usd": 1.4,
+          "tools_per_turn": 1.91,
+          "reads_per_turn": 2.18,
+          "orient_turns": 14,
+          "ctx_first": 18662,
+          "ctx_mean": 56037,
+          "ctx_max": 94934,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "subagent:dev:refinement-writer": {
+          "n": 1,
+          "turns": 3,
+          "cost_usd": 0.5,
+          "tools_per_turn": 1.0,
+          "reads_per_turn": 0.67,
+          "orient_turns": 1,
+          "ctx_first": 14401,
+          "ctx_mean": 24266,
+          "ctx_max": 34193,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "orchestrator:run": {
+          "n": 1,
+          "turns": 6,
+          "cost_usd": 0.45,
+          "tools_per_turn": 1.5,
+          "reads_per_turn": 1.0,
+          "orient_turns": 6,
+          "ctx_first": 31607,
+          "ctx_mean": 37830,
+          "ctx_max": 41604,
+          "retry_fumble_turns": 2,
+          "batchable_strict_turns": 0,
+          "breaks": 1
+        }
+      }
+    },
+    "warnings": []
+  }
+}

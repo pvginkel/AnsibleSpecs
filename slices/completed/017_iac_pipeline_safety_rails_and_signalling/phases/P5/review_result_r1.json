@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "decisions.md now opens its guard doctrine with D1's rule and lists the rails in the order they act: prevent_destroy stops the plan, then the name-free guard. The text matches the P1–P4 code in Ansible, and the :52, :236, :482 and :571 guidance destroys the VM on Proxmox first. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

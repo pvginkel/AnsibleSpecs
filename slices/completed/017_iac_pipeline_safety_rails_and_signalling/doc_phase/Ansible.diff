@@ -1,0 +1,900 @@
+/work/Ansible — P1: git diff bf11aa5a18a4..b495c24a8215
+
+terraform/modules/managed-vm/main.tf | 12 +++++++++---
+ terraform/prd/main.tf                |  4 ++--
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/terraform/modules/managed-vm/main.tf b/terraform/modules/managed-vm/main.tf
+index 91bcfcf..891b7ff 100644
+--- a/terraform/modules/managed-vm/main.tf
++++ b/terraform/modules/managed-vm/main.tf
+@@ -206,11 +206,17 @@ resource "proxmox_virtual_environment_vm" "this" {
+   }
+ 
+   lifecycle {
++    # Terraform never destroys a VM: a plan that would delete or replace
++    # one fails with "Instance cannot be destroyed". To rebuild or remove
++    # a VM, destroy it on Proxmox first (`qm destroy`); the next apply
++    # recreates it, or forgets it once its vms.tf entry is gone.
++    prevent_destroy = true
++
+     ignore_changes = [
+       # Cloud image rolls forward under `current/`; ignore so a newer
+       # Canonical point release doesn't make every plan want to rebuild
+-      # the VM. Pick up a new image deliberately via `terraform apply
+-      # -replace`. No-op on adopted VMs (no file_id on disk[0]).
++      # the VM. Pick up a new image deliberately by destroying the VM on
++      # Proxmox and applying. No-op on adopted VMs (no file_id on disk[0]).
+       disk[0].file_id,
+       # Cloud-init user-data is a first-boot artefact — re-rendering
+       # its snippet for a running VM accomplishes nothing operational.
+@@ -220,7 +226,7 @@ resource "proxmox_virtual_environment_vm" "this" {
+       # template would rebuild every from-scratch VM. Drift on the
+       # written netplan after first boot is Ansible's job (see
+       # `static_netplan` in the baseline role). Pick up a template
+-      # change deliberately via `terraform apply -replace=<vm>`.
++      # change deliberately by destroying the VM on Proxmox and applying.
+       #
+       # Narrowed to user_data_file_id specifically (rather than the
+       # whole `initialization` block) so that `ip_config` changes do
+diff --git a/terraform/prd/main.tf b/terraform/prd/main.tf
+index b45cc1e..99a93ac 100644
+--- a/terraform/prd/main.tf
++++ b/terraform/prd/main.tf
+@@ -107,8 +107,8 @@ resource "tls_private_key" "host_ed25519" {
+ # on the VM resource so a template edit re-renders this snippet but does
+ # not recreate the VM; the `static_netplan` task in the baseline role
+ # re-asserts the netplan from inventory data (`static_netplan` host_var).
+-# To pick up a snippet change on first boot, rebuild via
+-# `terraform apply -replace='module.vm["<name>"]'`.
++# To pick up a snippet change on first boot, rebuild the VM: destroy it on
++# Proxmox (`qm destroy`), then apply.
+ resource "proxmox_virtual_environment_file" "cloud_init" {
+   for_each     = local.vms_from_scratch
+   content_type = "snippets"
+
+/work/Ansible — P2: git diff b495c24a8215..82d34acec7e1
+
+Jenkinsfile.iac-apply                        |  4 ++--
+ Jenkinsfile.iac-on-push                      |  2 +-
+ Jenkinsfile.iac-scheduled-drift              | 26 +++++++++++++++++-------
+ support/iac-agent/bin/check-protected-vms.sh | 51 ++++++++++++++++++++++++++++--------------------
+ 4 files changed, 52 insertions(+), 31 deletions(-)
+
+diff --git a/Jenkinsfile.iac-apply b/Jenkinsfile.iac-apply
+index 1d374d3..22fb8a8 100644
+--- a/Jenkinsfile.iac-apply
++++ b/Jenkinsfile.iac-apply
+@@ -12,7 +12,7 @@
+ //
+ // The plan + destroy check is repeated here rather than trusted from
+ // the validate run: check-protected-vms.sh is the guard that stops an
+-// apply destroying srviac, and a guard that runs in a different build
++// apply destroying a prd VM, and a guard that runs in a different build
+ // against a different commit is not a guard.
+ //
+ // All ansible stages run with `--skip-tags os_update`: apt cache
+@@ -70,7 +70,7 @@ pipeline {
+                         # the iac image sh (dash), where [[ is "not found".
+                         if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then exit "$rc"; fi
+                         terraform show -json /tmp/plan.tfplan > /tmp/plan.json
+-                        check-protected-vms.sh /tmp/plan.json srviac
++                        check-protected-vms.sh /tmp/plan.json
+                     '
+                 '''
+             }
+diff --git a/Jenkinsfile.iac-on-push b/Jenkinsfile.iac-on-push
+index 225425b..a34b446 100644
+--- a/Jenkinsfile.iac-on-push
++++ b/Jenkinsfile.iac-on-push
+@@ -44,7 +44,7 @@ pipeline {
+                         # the iac image sh (dash), where [[ is "not found".
+                         if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then exit "$rc"; fi
+                         terraform show -json /tmp/plan.tfplan > /tmp/plan.json
+-                        check-protected-vms.sh /tmp/plan.json srviac
++                        check-protected-vms.sh /tmp/plan.json
+                     '
+                 '''
+             }
+diff --git a/Jenkinsfile.iac-scheduled-drift b/Jenkinsfile.iac-scheduled-drift
+index f4b6657..253fad5 100644
+--- a/Jenkinsfile.iac-scheduled-drift
++++ b/Jenkinsfile.iac-scheduled-drift
+@@ -61,9 +61,10 @@ def certDriftArgs = '-e internal_tls_renewal_threshold_days=7'
+ // of the check's. (iac is itself a bash script on this agent.)
+ 
+ // Pulls the lines that name the drift out of a check's teed output:
+-//   terraform  each resource header of the plan ("<address> will be
+-//              updated in-place"), check-protected-vms' verdict, and
+-//              the Error: lines when the plan itself broke
++//   terraform  first each VM destroy Terraform refused (prevent_destroy)
++//              and each of check-protected-vms' verdicts, then each
++//              resource header of the plan ("<address> will be updated
++//              in-place"), or the Error: lines when the plan itself broke
+ //   ansible    each task that came back changed, failed or unreachable,
+ //              as "<host>: <role : task> (<what>)"
+ //   otherwise  the stage's own DRIFT: lines
+@@ -72,6 +73,7 @@ def certDriftArgs = '-e internal_tls_renewal_threshold_days=7'
+ // sweeping change still reads as a message.
+ @NonCPS
+ String driftSummary(String output, String tool) {
++    def verdicts = new LinkedHashSet<String>()
+     def items = new LinkedHashSet<String>()
+     def errors = new LinkedHashSet<String>()
+     String task = null
+@@ -82,7 +84,7 @@ String driftSummary(String output, String tool) {
+             if ((m = line =~ /^\s*# (\S+ (?:is tainted, so )?(?:will|must) be .+)$/)) {
+                 items << m.group(1)
+             } else if ((m = line =~ /^check-protected-vms: (.+?):?$/)) {
+-                items << m.group(1)
++                verdicts << m.group(1)
+             } else if ((m = line =~ /^\W*Error: (.+)$/)) {
+                 errors << m.group(1)
+             }
+@@ -103,7 +105,18 @@ String driftSummary(String output, String tool) {
+         }
+     }
+ 
+-    List<String> lines = new ArrayList<String>(items ?: errors)
++    List<String> lines = new ArrayList<String>()
++    if (tool == 'terraform') {
++        // A refused plan still renders its body, so the refused VM's
++        // header alone reads as drift. The diagnostic wraps at 78 columns,
++        // splitting a long address from "Resource" and "has".
++        def refusal = output =~ /Resource\s+(\S+)\s+has\s+lifecycle\.prevent_destroy\s+set/
++        while (refusal.find()) {
++            lines.add("Terraform refused to destroy ${refusal.group(1)} (prevent_destroy)".toString())
++        }
++    }
++    lines.addAll(verdicts)
++    lines.addAll(items ?: errors)
+     if (lines.isEmpty()) {
+         for (String line : outputLines) {
+             if (line.trim()) {
+@@ -176,9 +189,8 @@ pipeline {
+                             exit 0
+                         elif [ "$rc" -eq 2 ]; then
+                             echo "DRIFT: terraform plan proposes changes against prd" >&2
+-                            # Also flag any protected-VM destroy/replace explicitly.
+                             terraform show -json /tmp/plan.tfplan > /tmp/plan.json
+-                            check-protected-vms.sh /tmp/plan.json srviac || true
++                            check-protected-vms.sh /tmp/plan.json
+                             exit 1
+                         else
+                             exit $rc
+diff --git a/support/iac-agent/bin/check-protected-vms.sh b/support/iac-agent/bin/check-protected-vms.sh
+index c9da7d9..58b4c5b 100755
+--- a/support/iac-agent/bin/check-protected-vms.sh
++++ b/support/iac-agent/bin/check-protected-vms.sh
+@@ -1,41 +1,50 @@
+ #!/usr/bin/env bash
+-# check-protected-vms.sh — fail if a terraform plan proposes destroy
+-# or replace on any of the protected VMs named in the args.
++# check-protected-vms.sh — fail if a terraform/prd plan deletes or
++# replaces a VM.
+ #
+-# Usage: check-protected-vms.sh <plan.json> <vm1> [vm2 ...]
++# Usage: check-protected-vms.sh <plan.json>
+ #
+-# Exits 0 when the plan is safe, 1 when any protected VM is slated for
+-# destroy/replace, 2 on usage/parse errors.
++# <plan.json> is `terraform show -json` of the plan. Exits 0 when the
++# plan deletes no VM, 1 when it deletes or replaces one, 2 on usage or
++# parse errors.
+ #
+-# Used by the iac-on-push and iac-scheduled-drift Jenkins jobs.
++# The second rail: while the managed-vm module's VM resource carries
++# prevent_destroy, `terraform plan` refuses such a plan before this
++# script runs. It keys on the VM resource type, not on everything under
++# module.vm: the module's DNS reservation is deleted once a VM's vms.tf
++# entry is gone, and that delete must pass.
++#
++# Used by the iac-on-push, iac-apply and iac-scheduled-drift Jenkins jobs.
+ 
+ set -euo pipefail
+ 
+-if [[ $# -lt 2 ]]; then
+-    echo "Usage: $(basename "$0") <plan.json> <vm-name> [vm-name ...]" >&2
++# Exactly one argument: a caller still passing VM names disagrees with
++# this script, and must fail rather than have its plan pass unchecked.
++if [[ $# -ne 1 ]]; then
++    echo "Usage: $(basename "$0") <plan.json>" >&2
+     exit 2
+ fi
+ 
+ plan_json=$1
+-shift
+ 
+ if [[ ! -f "$plan_json" ]]; then
+     echo "$(basename "$0"): $plan_json does not exist" >&2
+     exit 2
+ fi
+ 
+-# Build a jq alternation pattern for the VM names.
+-vm_alt=$(printf "%s|" "$@" | sed 's/|$//')
+-
+-jq_filter='
+-    .resource_changes[] | select(
+-        (.change.actions == ["delete"] or .change.actions == ["create", "delete"])
+-        and (.address | test("module\\.vm\\[\"(" + $vms + ")\"\\]"))
+-    )
+-'
++if ! vms=$(jq -r '
++    .resource_changes[]
++    | select(.type == "proxmox_virtual_environment_vm")
++    | select(any(.change.actions[]; . == "delete"))
++    | .address + " (" + (.change.actions | join(",")) + ")"
++' "$plan_json"); then
++    echo "$(basename "$0"): cannot read $plan_json" >&2
++    exit 2
++fi
+ 
+-if jq -e --arg vms "$vm_alt" "$jq_filter" "$plan_json" >/dev/null; then
+-    echo "check-protected-vms: plan proposes destroy/replace on a protected VM:" >&2
+-    jq -r --arg vms "$vm_alt" "$jq_filter | \"  - \" + .address + \" (\" + (.change.actions | join(\",\")) + \")\"" "$plan_json" >&2
++if [[ -n "$vms" ]]; then
++    while IFS= read -r vm; do
++        echo "check-protected-vms: plan deletes or replaces prd VM $vm" >&2
++    done <<<"$vms"
+     exit 1
+ fi
+
+/work/Ansible — P3: git diff 82d34acec7e1..ddca1078d1d8
+
+Jenkinsfile.iac-apply | 24 ++++++++----------------
+ 1 file changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/Jenkinsfile.iac-apply b/Jenkinsfile.iac-apply
+index 22fb8a8..6625e56 100644
+--- a/Jenkinsfile.iac-apply
++++ b/Jenkinsfile.iac-apply
+@@ -3,7 +3,7 @@
+ // to main validates (Jenkinsfile.iac-on-push); converging prd is a
+ // deliberate act someone starts.
+ //
+-// Sequential, fail-fast on prd: plan + destroy-check, apply, site (sans
++// Sequential, fail-fast on prd: plan + destroy-check + apply, site (sans
+ // iac_agent), site-openbao, site-k8s (prd). A trailing dev stage
+ // (srvk8sdev: site-k8s dev + site-ceph) can only ever downgrade the
+ // build to UNSTABLE — see devUp() below. Each stage wraps its work in a
+@@ -13,7 +13,9 @@
+ // The plan + destroy check is repeated here rather than trusted from
+ // the validate run: check-protected-vms.sh is the guard that stops an
+ // apply destroying a prd VM, and a guard that runs in a different build
+-// against a different commit is not a guard.
++// against a different commit is not a guard. For the same reason the
++// plan, the check and the apply of that saved plan share one `iac`
++// call: a second call would plan again in a new clone.
+ //
+ // All ansible stages run with `--skip-tags os_update`: apt cache
+ // refresh + dist-upgrade are patch posture, owned by
+@@ -57,7 +59,9 @@ pipeline {
+     }
+ 
+     stages {
+-        stage('Plan + destroy check') {
++        // The plan file stays inside the iac container: a saved plan holds
++        // the secret values it would write.
++        stage('Terraform plan + destroy check + apply (prd)') {
+             steps {
+                 sh '''
+                     iac -c '
+@@ -71,19 +75,7 @@ pipeline {
+                         if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then exit "$rc"; fi
+                         terraform show -json /tmp/plan.tfplan > /tmp/plan.json
+                         check-protected-vms.sh /tmp/plan.json
+-                    '
+-                '''
+-            }
+-        }
+-
+-        stage('Terraform apply (prd)') {
+-            steps {
+-                sh '''
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/terraform/prd
+-                        terraform init -input=false -no-color
+-                        terraform apply -auto-approve -no-color
++                        terraform apply -input=false -no-color /tmp/plan.tfplan
+                     '
+                 '''
+             }
+
+/work/Ansible — P4: git diff ddca1078d1d8..b681222eb1b1
+
+docs/runbooks/iac-agent.md   | 10 ++++++----
+ docs/runbooks/k8s-rebuild.md |  2 +-
+ docs/runbooks/openbao.md     | 17 +++++++++++------
+ docs/runbooks/vm-rebuild.md  | 12 +++++++++---
+ 4 files changed, 27 insertions(+), 14 deletions(-)
+
+diff --git a/docs/runbooks/iac-agent.md b/docs/runbooks/iac-agent.md
+index 01f8bfc..375ed5b 100644
+--- a/docs/runbooks/iac-agent.md
++++ b/docs/runbooks/iac-agent.md
+@@ -20,8 +20,9 @@ See [`/work/AnsibleSpecs/phases/completed/iac-agent.md`](../../../AnsibleSpecs/p
+ 
+ **Pushing and applying are two acts.** A merge to `main` on `pvginkel/Ansible` triggers
+ `iac-on-push`, which is read-only: it plan-checks `terraform/prd` and fails fast if the plan
+-proposes `replace`/`destroy` on `srviac` (or any other VM name in `check-protected-vms.sh`'s
+-argument list). Nothing converges. A red build means the commit would not apply cleanly; the estate
++deletes or replaces any prd VM. Terraform refuses such a plan itself (`prevent_destroy` in the
++`managed-vm` module); `check-protected-vms.sh` fails it for a config without that line. Nothing
++converges. A red build means the commit would not apply cleanly; the estate
+ is untouched either way.
+ 
+ Convergence is `iac-apply`, started by hand once the validation is green. The job, inside one
+@@ -164,10 +165,11 @@ This is the sequence to stand `srviac` up the first time, after all the source c
+ 
+ ### Rebuild `srviac` from scratch
+ 
+-From `wrkdev`:
++From `wrkdev`, not `iac-apply`, which runs on `srviac`. Terraform refuses to replace a prd VM, so destroy `srviac` on Proxmox first (`vm_id` 920 on `pve`, from `terraform/prd/vms.tf`); the apply then finds it gone and recreates it:
+ 
+ ```sh
+-cd terraform/prd && terraform apply -replace='module.vm["srviac"]'
++ssh root@pve 'qm shutdown 920 ; sleep 5 ; qm destroy 920'
++cd terraform/prd && terraform apply
+ cd ../../ansible && poetry run ansible-playbook playbooks/site.yml --limit srviac
+ # then re-populate /etc/iac/secrets.yaml as in step 3 of cutover
+ ```
+diff --git a/docs/runbooks/k8s-rebuild.md b/docs/runbooks/k8s-rebuild.md
+index 1a7c6e6..a8c97b0 100644
+--- a/docs/runbooks/k8s-rebuild.md
++++ b/docs/runbooks/k8s-rebuild.md
+@@ -245,7 +245,7 @@ The role-wide cordon-safety pass is queued as a slice; only bites on partial-rer
+ 
+ There's no "uncordon to roll back" — by the time `terraform apply` runs the old VM is already destroyed. Recovery is forward. The last safe abort point is *before* step 2: while the node is evicted and has `microk8s leave`'d but the VM still exists, you can `qm start <vmid>` + `microk8s reset` + `microk8s join` it back as a fresh member.
+ 
+-- **TF errors at create:** fix the TF error, retry the targeted apply. The old VM is gone — fix forward only.
++- **TF errors at create:** fix the TF error, retry the targeted apply. The old VM is gone — fix forward only. If the failed create left a VM on Proxmox, Terraform holds it tainted and refuses the replace (`Error: Instance cannot be destroyed`): `qm destroy <new-vmid>` before retrying.
+ - **Cloud-init never finishes (TF times out waiting for IP):** `qm console <new-vmid>` on PVE to inspect; usually the snippet's `qemu-guest-agent` install failed. Fix the snippet, then destroy and recreate exactly as in steps 2 → 4 (`qm destroy <new-vmid>`, then `terraform apply -target='module.vm["<target>"]'`).
+ - **`rebuild-k8s.yml` fails on cluster-join:** the new VM exists but isn't in the cluster. `microk8s status` on the rebuild target tells you what's happening. Common cause: stale `/var/snap/microk8s/common/var/lib/dqlite` from a half-completed prior attempt. `microk8s reset` on the new node, re-run the playbook.
+ - **`zpool import zpool2` fails on `srvk8s1`:** the role passes `-f` because rebuilds always cross hostids (the new VM has a different ZFS hostid than the destroyed one). The multi-mount risk that `-f` overrides cannot apply because the source VM is destroyed before the NVMe is reattached. If a future rebuild surfaces a different import failure, fix forward — `microk8s reset` on the new node and re-run the playbook is the reset hammer.
+diff --git a/docs/runbooks/openbao.md b/docs/runbooks/openbao.md
+index d6b4771..84c34aa 100644
+--- a/docs/runbooks/openbao.md
++++ b/docs/runbooks/openbao.md
+@@ -91,11 +91,14 @@ The other two hold quorum, the VIP rides the surviving leader, and
+ clients are unaffected. Goal: rebuild the node and return it to a
+ voter.
+ 
+-1. **Recreate the VM.** Find the resource address and replace it:
++1. **Recreate the VM.** Terraform refuses to replace a prd VM, so
++   destroy it on Proxmox first if it is still there, then apply —
++   Terraform's refresh finds it gone and recreates it. Its `vm_id` and
++   `pve_node` are under its key in `terraform/prd/vms.tf`:
+ 
+    ```bash
+-   cd terraform/prd && terraform state list | grep -i srvvault
+-   cd terraform/prd && terraform apply -replace='<srvvaultN address>'
++   ssh root@<pve_node> 'qm stop <vm_id> && qm destroy <vm_id>'
++   cd terraform/prd && terraform apply
+    ```
+ 
+ 2. **Converge the node.** A full run is safe — the two healthy nodes
+@@ -141,11 +144,13 @@ and the latest backup's Raft snapshot is restored into it.
+    tar xzf openbao-backup.tgz        # yields raft.snap + *.json
+    ```
+ 
+-2. **Rebuild all three VMs.**
++2. **Rebuild all three VMs.** Destroy each `srvvaultN` still on
++   Proxmox (`vm_id` and `pve_node` under its key in
++   `terraform/prd/vms.tf`), then apply; Terraform recreates the three:
+ 
+    ```bash
+-   cd terraform/prd && terraform apply \
+-       -replace='<srvvault1>' -replace='<srvvault2>' -replace='<srvvault3>'
++   ssh root@<pve_node> 'qm stop <vm_id> && qm destroy <vm_id>'   # each srvvaultN still on Proxmox
++   cd terraform/prd && terraform apply
+    ```
+ 
+ 3. **Converge a fresh empty cluster.** Same seal key, so it
+diff --git a/docs/runbooks/vm-rebuild.md b/docs/runbooks/vm-rebuild.md
+index 3c4dc5c..af94db3 100644
+--- a/docs/runbooks/vm-rebuild.md
++++ b/docs/runbooks/vm-rebuild.md
+@@ -88,7 +88,7 @@ The full procedure lands when Phase 4 (k8s) and Phase 5 (Ceph) need it. Outline
+    - Switch from BC:24:11:... MAC to deterministic `02:A7:F3:VV:VV:EE` (decisions.md "MAC addressing"). VMID likely also moves into the 900-and-up range; if so, the deterministic MAC moves accordingly.
+    - **Keep or add `passthrough_disks`** on the VM's TF entry — TF attaches them atomically with the VM, no staged Ansible reattach.
+ 3. **dnsmasq reservation update.** New MAC → new reservation (or new IP allocation). Must land before `terraform apply` so the first DHCP lease on the rebuilt VM lands correctly.
+-4. **`terraform apply -replace`** on the VM resource. Same shape as the scratch flow above.
++4. **Destroy the VM on Proxmox, then `terraform apply`.** `qm destroy` on the PVE node that owns it; Terraform's refresh finds the VM gone and recreates it under its `vm_id` — the shape of [k8s-rebuild.md](k8s-rebuild.md) steps 2 and 4. The scratch flow's `-replace` does not carry over: Terraform refuses to destroy or replace a prd VM (`prevent_destroy` in `managed-vm`), so until the destroy, any plan in which step 2's commit replaces the VM fails with `Error: Instance cannot be destroyed`. A Ceph node's OSD disks are passthrough `/dev/disk/by-id` paths, not Proxmox volumes: `qm destroy` leaves them in place and the new VM reattaches them from `passthrough_disks`.
+ 5. **`site.yml`** — bootstrap + baseline + microk8s/microceph role lands the cluster bits.
+ 6. **Re-join the cluster.** k8s: uncordon. Ceph: `noout` lifted, OSDs come back, wait for `HEALTH_OK`.
+ 7. **Verify zero residual** with `--check` against the rebuilt host.
+@@ -129,11 +129,17 @@ The Ceph side (re-adding the OSD on top of the new disk, balancing) is owned by
+ 
+ ## If a rebuild goes sideways
+ 
+-`terraform apply -replace` is destructive once Terraform commits to the destroy phase. If it fails after destroy and before create, the VM is gone but state may be partially written.
++**Scratch VM (`terraform apply -replace`).** `-replace` is destructive once Terraform commits to the destroy phase. If it fails after destroy and before create, the VM is gone but state may be partially written.
+ 
+ - **TF errors before destroy:** safe — no live impact, fix the error and retry.
+ - **TF errors during create:** state may have a tainted resource. `terraform plan` will surface a `-/+` (replace) on the next run. Fix the underlying cause (image download, network, snippet upload) and `terraform apply` again.
+ - **VM created but cloud-init never finished:** Terraform times out waiting for the IP. SSH to the PVE host and `qm console <vmid>` or check `journalctl -u cloud-init` on the VM. Usually `qemu-guest-agent` failing to install — fix the snippet, `terraform apply -replace` again.
+-- **`site.yml` fails on the rebuilt VM:** the VM exists, just isn't fully roled. Fix the role and re-run; cloud-init has done its part (`ansible` user + host key) and bootstrap can re-run idempotently.
++
++**Prd VM (destroyed on Proxmox, then `terraform apply`).** The old VM is gone before Terraform runs; recovery is forward.
++
++- **TF errors before the VM is created:** fix the error and `terraform apply` again.
++- **TF errors during create, or VM created but cloud-init never finished:** a VM the failed create left on Proxmox is tainted in state, and Terraform refuses the replace it needs (`Error: Instance cannot be destroyed`). Every `terraform/prd` plan fails on it, the daily drift run's included, until it is cleared. Find the cause as for scratch (`qm console <vmid>`, `journalctl -u cloud-init`) and fix it, then `qm destroy <vmid>` on the PVE host and `terraform apply` again.
++
++**`site.yml` fails on the rebuilt VM** (either root): the VM exists, just isn't fully roled. Fix the role and re-run; cloud-init has done its part (`ansible` user + host key) and bootstrap can re-run idempotently.
+ 
+ For cluster members, leave the node cordoned/drained until `site.yml --check` reports zero changes. Only then bring it back to the cluster.
+
+/work/Ansible — P6: git diff b681222eb1b1..1352e68c824e
+
+Jenkinsfile.iac-scheduled-certs | 101 ++++++++++++-------------
+ Jenkinsfile.iac-scheduled-drift | 243 +++++++++++++++++++++++++++---------------------------------
+ 2 files changed, 156 insertions(+), 188 deletions(-)
+
+diff --git a/Jenkinsfile.iac-scheduled-certs b/Jenkinsfile.iac-scheduled-certs
+index f237774..630bd00 100644
+--- a/Jenkinsfile.iac-scheduled-certs
++++ b/Jenkinsfile.iac-scheduled-certs
+@@ -53,6 +53,31 @@ def devUp() {
+     ) == 0
+ }
+ 
++// jenkins-telegram-bot reports a FAILURE by itself and appends the build
++// description to that message, so a prd stage that fails adds what its
++// failure costs as a line of its own. UNSTABLE the bot stays quiet about, so
++// a dev stage that genuinely fails raises its own warning where it fails: the
++// bot sends every marker in a finished build's log whatever the build result.
++
++// Runs a prd stage's playbook. A non-zero exit appends `cost` to the build
++// description and marks the stage and the build FAILURE without throwing, so
++// the stages after it still run. The sh stays outside catchError: an abort or
++// a timeout() caught inside it sets the build ABORTED whatever buildResult
++// says (iac-apply build #113).
++def prdStage(String cost, String shellScript) {
++    int rc = sh(returnStatus: true, script: shellScript)
++    if (rc != 0) {
++        if (currentBuild.description) {
++            currentBuild.description = "${currentBuild.description}\n${cost}".toString()
++        } else {
++            currentBuild.description = cost
++        }
++        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
++            error("${env.STAGE_NAME} failed (exit ${rc})")
++        }
++    }
++}
++
+ pipeline {
+     agent { label 'iac-controller' }
+ 
+@@ -77,19 +102,14 @@ pipeline {
+         // here is genuinely urgent — it fails the build and pages.
+         stage('Host certs (excl. k8s dev)') {
+             steps {
+-                sh '''
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/ansible
+-                        ansible-playbook --diff playbooks/renew-host-certs.yml --limit "!k8s_dev"
+-                    '
+-                '''
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        currentBuild.description = 'host certs may lapse; TLS leaf renewal did not run'
+-                    }
++                script {
++                    prdStage('host certs may lapse', '''
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible/ansible
++                            ansible-playbook --diff playbooks/renew-host-certs.yml --limit "!k8s_dev"
++                        '
++                    ''')
+                 }
+             }
+         }
+@@ -120,8 +140,9 @@ pipeline {
+                         '''
+                     )
+                     if (rc != 0) {
+-                        env.DEV_STAGE_FAILED = 'true'
+-                        unstable("dev host cert renewal failed on srvk8sdev (exit ${rc})")
++                        String message = "dev host cert renewal failed on srvk8sdev (exit ${rc})"
++                        notify.warning(message)
++                        unstable(message)
+                     }
+                 }
+             }
+@@ -146,19 +167,14 @@ pipeline {
+         // such a run mid-roll, leaving a node's kubelite down.
+         stage('TLS leaves (excl. k8s dev)') {
+             steps {
+-                sh '''
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/ansible
+-                        ansible-playbook --diff playbooks/renew-internal-tls.yml --limit "!k8s_dev"
+-                    '
+-                '''
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        currentBuild.description = 'internal_tls leaves may lapse'
+-                    }
++                script {
++                    prdStage('internal_tls leaves may lapse', '''
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible/ansible
++                            ansible-playbook --diff playbooks/renew-internal-tls.yml --limit "!k8s_dev"
++                        '
++                    ''')
+                 }
+             }
+         }
+@@ -188,35 +204,12 @@ pipeline {
+                         '''
+                     )
+                     if (rc != 0) {
+-                        env.DEV_STAGE_FAILED = 'true'
+-                        unstable("dev TLS leaf renewal failed on srvk8sdev (exit ${rc})")
++                        String message = "dev TLS leaf renewal failed on srvk8sdev (exit ${rc})"
++                        notify.warning(message)
++                        unstable(message)
+                     }
+                 }
+             }
+         }
+     }
+-
+-    post {
+-        // jenkins-telegram-bot watches every build and reports FAILURE loudly
+-        // by itself, job name and build link included — so all a failure has
+-        // to add is what a red build of *this* job costs, which the bot
+-        // appends to that message from the description. The two classes of
+-        // certificate cost different things, so each prd stage writes its own
+-        // description rather than one handler guessing here. UNSTABLE the bot
+-        // deliberately stays quiet about — an accepted warning is exactly what
+-        // unstable means — so the dev stages say so themselves.
+-        unstable {
+-            // Page only when srvk8sdev was up and a renewal genuinely
+-            // failed; either dev stage sets the flag. A dev box that is
+-            // simply off yellows the build without pushing a
+-            // notification — its certificates lapsing is a known,
+-            // accepted consequence (see above). Which renewal failed is
+-            // in the stage's own unstable message.
+-            script {
+-                if (env.DEV_STAGE_FAILED == 'true') {
+-                    notify.warning('dev certificate renewal failed on srvk8sdev')
+-                }
+-            }
+-        }
+-    }
+ }
+diff --git a/Jenkinsfile.iac-scheduled-drift b/Jenkinsfile.iac-scheduled-drift
+index 253fad5..d3a987e 100644
+--- a/Jenkinsfile.iac-scheduled-drift
++++ b/Jenkinsfile.iac-scheduled-drift
+@@ -2,10 +2,10 @@
+ // Push-notifies on detected changes or non-zero exit. Read-only; no
+ // terraform apply, no ansible run without --check.
+ //
+-// Stages run sequentially so a failure in one doesn't mask findings
+-// in the others. All stages are inside the same Jenkins build, so
+-// however many of them fail, the build goes red once and is reported
+-// once.
++// Every stage runs whatever an earlier one did, so a failure in one
++// doesn't mask findings in the others. All stages are inside the same
++// Jenkins build, so however many of them fail, the build goes red once
++// and is reported once.
+ //
+ // Controller config:
+ //   - SCM: pvginkel/Ansible, branch main
+@@ -54,7 +54,7 @@ def certDriftArgs = '-e internal_tls_renewal_threshold_days=7'
+ // every check tees its output to drift-logs/<name>.log, and a check that
+ // goes wrong records the lines naming the drift in the build
+ // description: jenkins-telegram-bot appends that to its FAILURE
+-// message, and the dev stages' UNSTABLE warning carries it too.
++// message, and a dev stage's warning carries its own entry.
+ //
+ // The tee is why every check's script opens with a bash shebang: the
+ // pipe needs pipefail, or the step would report tee's status instead
+@@ -137,8 +137,8 @@ String driftSummary(String output, String tool) {
+ }
+ 
+ // Records a check that went wrong in the build description, under its
+-// stage name. Appends rather than overwrites: a dev stage can record its
+-// drift before a later prd stage fails.
++// stage name, and returns that entry. Appends rather than overwrites, so
++// every failed check's entry survives.
+ def recordDrift(String stage, String log, String tool) {
+     def path = "drift-logs/${log}.log"
+     def output = fileExists(path) ? readFile(path) : ''
+@@ -148,6 +148,26 @@ def recordDrift(String stage, String log, String tool) {
+     } else {
+         currentBuild.description = entry
+     }
++    return entry
++}
++
++// jenkins-telegram-bot reports a FAILURE by itself, with the build
++// description on the lines under it. UNSTABLE it stays quiet about, so a
++// dev check that genuinely fails raises its own warning where it fails: the
++// bot sends every marker in a finished build's log whatever the build result.
++
++// Runs a prd check. A check that fails records its drift and marks its stage
++// and the build FAILURE without throwing, so the checks after it still run.
++// The sh stays outside catchError: an abort or a timeout() caught inside it
++// sets the build ABORTED whatever buildResult says (iac-apply build #113).
++def prdCheck(String stage, String log, String tool, String shellScript) {
++    int rc = sh(returnStatus: true, script: shellScript)
++    if (rc != 0) {
++        recordDrift(stage, log, tool)
++        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
++            error("${stage} reported drift or failed (exit ${rc})")
++        }
++    }
+ }
+ 
+ pipeline {
+@@ -171,38 +191,33 @@ pipeline {
+     stages {
+         stage('Terraform drift (prd)') {
+             steps {
+-                sh '''#!/usr/bin/env bash
+-                    set -o pipefail
+-                    mkdir -p drift-logs
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/terraform/prd
+-                        terraform init -input=false -no-color
+-                        rc=0
+-                        terraform plan -out=/tmp/plan.tfplan -no-color -detailed-exitcode || rc=$?
+-                        # POSIX test, not [[ ]]: iac -c runs the script under
+-                        # the iac image sh (dash), where [[ is "not found".
+-                        # Both branches used to fall through to the else, so a
+-                        # drifting plan exited 2 with no DRIFT line and no
+-                        # protected-VM check.
+-                        if [ "$rc" -eq 0 ]; then
+-                            exit 0
+-                        elif [ "$rc" -eq 2 ]; then
+-                            echo "DRIFT: terraform plan proposes changes against prd" >&2
+-                            terraform show -json /tmp/plan.tfplan > /tmp/plan.json
+-                            check-protected-vms.sh /tmp/plan.json
+-                            exit 1
+-                        else
+-                            exit $rc
+-                        fi
+-                    ' 2>&1 | tee drift-logs/tf-prd.log
+-                '''
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        recordDrift('Terraform drift (prd)', 'tf-prd', 'terraform')
+-                    }
++                script {
++                    prdCheck('Terraform drift (prd)', 'tf-prd', 'terraform', '''#!/usr/bin/env bash
++                        set -o pipefail
++                        mkdir -p drift-logs
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible/terraform/prd
++                            terraform init -input=false -no-color
++                            rc=0
++                            terraform plan -out=/tmp/plan.tfplan -no-color -detailed-exitcode || rc=$?
++                            # POSIX test, not [[ ]]: iac -c runs the script under
++                            # the iac image sh (dash), where [[ is "not found".
++                            # Both branches used to fall through to the else, so a
++                            # drifting plan exited 2 with no DRIFT line and no
++                            # protected-VM check.
++                            if [ "$rc" -eq 0 ]; then
++                                exit 0
++                            elif [ "$rc" -eq 2 ]; then
++                                echo "DRIFT: terraform plan proposes changes against prd" >&2
++                                terraform show -json /tmp/plan.tfplan > /tmp/plan.json
++                                check-protected-vms.sh /tmp/plan.json
++                                exit 1
++                            else
++                                exit $rc
++                            fi
++                        ' 2>&1 | tee drift-logs/tf-prd.log
++                    ''')
+                 }
+             }
+         }
+@@ -215,21 +230,16 @@ pipeline {
+                 // posture, not drift; the scheduled-update pipeline owns
+                 // applying it. Drop the skip once those tasks leave
+                 // site.yml (see decisions.md "OS updates").
+-                sh """#!/usr/bin/env bash
+-                    set -o pipefail
+-                    mkdir -p drift-logs
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/ansible
+-                        check-ansible-drift.sh playbooks/site.yml --limit "!iac_agent" --skip-tags os_update ${certDriftArgs}
+-                    ' 2>&1 | tee drift-logs/site.log
+-                """
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        recordDrift('Ansible drift (excl. iac_agent)', 'site', 'ansible')
+-                    }
++                script {
++                    prdCheck('Ansible drift (excl. iac_agent)', 'site', 'ansible', """#!/usr/bin/env bash
++                        set -o pipefail
++                        mkdir -p drift-logs
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible/ansible
++                            check-ansible-drift.sh playbooks/site.yml --limit "!iac_agent" --skip-tags os_update ${certDriftArgs}
++                        ' 2>&1 | tee drift-logs/site.log
++                    """)
+                 }
+             }
+         }
+@@ -242,21 +252,16 @@ pipeline {
+                 // to CI. Limited to k8s_prd; the dev node is gated below
+                 // (offline most of the time). --check only; same
+                 // --skip-tags os_update rationale as the stage above.
+-                sh """#!/usr/bin/env bash
+-                    set -o pipefail
+-                    mkdir -p drift-logs
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/ansible
+-                        check-ansible-drift.sh playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update ${certDriftArgs}
+-                    ' 2>&1 | tee drift-logs/k8s-prd.log
+-                """
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        recordDrift('Ansible drift (k8s prd)', 'k8s-prd', 'ansible')
+-                    }
++                script {
++                    prdCheck('Ansible drift (k8s prd)', 'k8s-prd', 'ansible', """#!/usr/bin/env bash
++                        set -o pipefail
++                        mkdir -p drift-logs
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible/ansible
++                            check-ansible-drift.sh playbooks/site-k8s.yml --limit k8s_prd --skip-tags os_update ${certDriftArgs}
++                        ' 2>&1 | tee drift-logs/k8s-prd.log
++                    """)
+                 }
+             }
+         }
+@@ -287,8 +292,8 @@ pipeline {
+                         """
+                     )
+                     if (rc != 0) {
+-                        env.DEV_STAGE_FAILED = 'true'
+-                        recordDrift('Ansible drift (k8s dev)', 'k8s-dev', 'ansible')
++                        String entry = recordDrift('Ansible drift (k8s dev)', 'k8s-dev', 'ansible')
++                        notify.warning("detected drift on srvk8sdev\n\n${entry}")
+                         unstable("dev k8s drift check reported changes or failed (exit ${rc})")
+                     }
+                 }
+@@ -304,21 +309,16 @@ pipeline {
+                 // change is invisible to site.yml drift, so this stage
+                 // covers it. --skip-tags os_update for the same patch-
+                 // posture reason.
+-                sh """#!/usr/bin/env bash
+-                    set -o pipefail
+-                    mkdir -p drift-logs
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible/ansible
+-                        check-ansible-drift.sh playbooks/site-openbao.yml --skip-tags os_update ${certDriftArgs}
+-                    ' 2>&1 | tee drift-logs/openbao.log
+-                """
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        recordDrift('Ansible drift (openbao)', 'openbao', 'ansible')
+-                    }
++                script {
++                    prdCheck('Ansible drift (openbao)', 'openbao', 'ansible', """#!/usr/bin/env bash
++                        set -o pipefail
++                        mkdir -p drift-logs
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible/ansible
++                            check-ansible-drift.sh playbooks/site-openbao.yml --skip-tags os_update ${certDriftArgs}
++                        ' 2>&1 | tee drift-logs/openbao.log
++                    """)
+                 }
+             }
+         }
+@@ -350,8 +350,8 @@ pipeline {
+                         '''
+                     )
+                     if (rc != 0) {
+-                        env.DEV_STAGE_FAILED = 'true'
+-                        recordDrift('Ansible drift (ceph dev)', 'ceph-dev', 'ansible')
++                        String entry = recordDrift('Ansible drift (ceph dev)', 'ceph-dev', 'ansible')
++                        notify.warning("detected drift on srvk8sdev\n\n${entry}")
+                         unstable("dev ceph drift check reported changes or failed (exit ${rc})")
+                     }
+                 }
+@@ -373,52 +373,27 @@ pipeline {
+                 // has been re-issued under a new root the repo does not
+                 // yet trust (curl exits non-zero before we ever read
+                 // the body).
+-                sh '''#!/usr/bin/env bash
+-                    set -o pipefail
+-                    mkdir -p drift-logs
+-                    iac -c '
+-                        set -euo pipefail
+-                        cd /work/Ansible
+-                        expected=ansible/roles/baseline/files/homelab-root.crt
+-                        tmp=$(mktemp)
+-                        trap "rm -f $tmp" EXIT
+-                        if ! curl --cacert "$expected" --silent --fail --show-error \
+-                                https://ca.home/roots.pem -o "$tmp"; then
+-                            echo "DRIFT: could not fetch https://ca.home/roots.pem with the in-repo root as the trust anchor — CA may have been rotated" >&2
+-                            exit 1
+-                        fi
+-                        if ! diff -u "$expected" "$tmp"; then
+-                            echo "DRIFT: https://ca.home/roots.pem differs from $expected" >&2
+-                            exit 1
+-                        fi
+-                    ' 2>&1 | tee drift-logs/ca-root.log
+-                '''
+-            }
+-            post {
+-                failure {
+-                    script {
+-                        recordDrift('Homelab CA root drift', 'ca-root', 'plain')
+-                    }
+-                }
+-            }
+-        }
+-    }
+-
+-    post {
+-        // No failure handler: jenkins-telegram-bot watches every build and
+-        // reports FAILURE loudly by itself, job name and build link included,
+-        // with the build description (recordDrift) on the lines under it.
+-        // The old handler claimed "detected drift" on any red build, which
+-        // this job's own name says better and its failure modes contradict —
+-        // a host it could not reach fails it just as readily. UNSTABLE the bot
+-        // deliberately stays quiet about, so the dev stage says so itself.
+-        unstable {
+-            // Only the dev stages can make this build unstable. Page on
+-            // real dev drift; stay silent when srvk8sdev was simply off,
+-            // which on a daily job would otherwise be a daily false page.
+-            script {
+-                if (env.DEV_STAGE_FAILED == 'true') {
+-                    notify.warning("detected drift on srvk8sdev\n\n${currentBuild.description}")
++                script {
++                    prdCheck('Homelab CA root drift', 'ca-root', 'plain', '''#!/usr/bin/env bash
++                        set -o pipefail
++                        mkdir -p drift-logs
++                        iac -c '
++                            set -euo pipefail
++                            cd /work/Ansible
++                            expected=ansible/roles/baseline/files/homelab-root.crt
++                            tmp=$(mktemp)
++                            trap "rm -f $tmp" EXIT
++                            if ! curl --cacert "$expected" --silent --fail --show-error \
++                                    https://ca.home/roots.pem -o "$tmp"; then
++                                echo "DRIFT: could not fetch https://ca.home/roots.pem with the in-repo root as the trust anchor — CA may have been rotated" >&2
++                                exit 1
++                            fi
++                            if ! diff -u "$expected" "$tmp"; then
++                                echo "DRIFT: https://ca.home/roots.pem differs from $expected" >&2
++                                exit 1
++                            fi
++                        ' 2>&1 | tee drift-logs/ca-root.log
++                    ''')
+                 }
+             }
+         }

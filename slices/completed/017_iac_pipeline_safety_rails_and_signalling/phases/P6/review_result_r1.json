@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Both scheduled jobs run every stage through a returnStatus sh plus catchError(FAILURE) helper, append only failed stages' entries, and raise the dev warning where the dev stage fails; no findings. Both Jenkinsfiles parse under Groovy 2.4.21 (a mutated copy of each fails) and the shell bodies are unchanged apart from indentation.",
+ "details": "code_review_r1.md",
+ "findings": []}
