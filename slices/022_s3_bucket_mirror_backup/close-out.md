@@ -79,6 +79,15 @@ s3-mirror.md:139-140,153-155 pick archive folders by stamp later than the loss. 
 **Provenance:** read — code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
 **Disposition:**
 
+### B3 — AnsibleSpecs decisions.md §Ceph RGW credentials: the admin-key bullet says the key is not an app credential and gives its readers as a complete list, but the Ansible policy comment names another reader · minor
+
+decisions.md:91 is headed "The admin key is not an app credential" and says kv/shared/<cluster>/ceph-rgw/s3 is read by the HelmCharts deploy (jenkins and iac-agent AppRoles) and by the Argo CD PreSync hook. The jenkins policy comment in Ansible ansible/inventories/prd/group_vars/openbao.yml:66-68 says Jenkins reads it for artifact-upload pipelines as well as the HelmCharts deploy, and HelmCharts configs/dev/_ci/README.md:40-45 says the app validation pipelines keep reading an RGW admin credential until their cutover. Q1 raises that use as uncheckable and calls the record silent on it, but the bullet asserts the opposite as fact.
+
+**Consequence:** None for the mirror. Someone rotating or revoking the admin key from the record would miss artifact or validation pipelines that still read it, and those pipelines would break without warning.
+
+**Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
