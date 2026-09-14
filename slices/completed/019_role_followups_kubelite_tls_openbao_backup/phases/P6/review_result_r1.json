@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "openbao.md §3 now converges again after the restore and says why. Each outcome it describes, every task name and message it quotes, the rotation run's cost and the step-6 journal line match backup.yml, approle.yml, auth-token.yml and the wrapper. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "Every HTTP call in the backup wrapper now names itself on failure, with its status or curl exit code, plus OpenBao's error strings for OpenBao calls. No body, token or secret_id is logged, and a follower still exits 0. shellcheck is clean. One advisory finding: a soft-deleted KV secret fails the backup, which the old wrapper also did.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor",
+               "impact": "advisory",
+               "category": "functional",
+               "anchor": "repro-trace",
+               "summary": "A soft-deleted KV-v2 secret (data read 404) fails every leader backup; the old wrapper also failed, now the line names the call"}]}

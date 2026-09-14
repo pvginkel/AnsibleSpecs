@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "backup.yml proves the staged backup secret_id by AppRole login before delivery and handles 200/400/403-no-mount/other as the Done record states, with the proving token revoked and revoke-self granted. Nothing is blocking; two advisory findings ride along in the close-out.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "repro-trace",
+   "summary": "--check of the rotation remedy fails: non-bootstrap nodes hit P1's rejection naming the flag already passed; bootstrap host already failed at approle.yml staging (pre-existing)"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "plan.md:51 says no staged secret_id in /work/Ansible/tmp; one exists (2026-08-13), so N1's pre-apply --check failure will happen from the operator's checkout"}
+ ]}

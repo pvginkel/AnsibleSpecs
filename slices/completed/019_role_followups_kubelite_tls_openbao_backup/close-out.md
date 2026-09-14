@@ -1,7 +1,8 @@
 # Close-out — slice 019 role_followups_kubelite_tls_openbao_backup
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-14 15:00 → 17:59 · 6 phases · 2 bail-outs (1 operator question) · 1 test round ·
+doc phase done · $58.64 (planner 29 %, research 9 %, rework 0 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,19 +14,37 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 019 closes #573's backup-credential and diagnosis gaps and slice 016's kubelite and TLS
+follow-ups: R1, R2 and R4–R6. R3, backup freshness, moved to slice 023. Shipped in Ansible:
+- Each node's `backup.yml` pass proves a staged backup secret_id by AppRole login before installing
+  it. A dead one fails the run, naming `-e openbao_rotate_secret_ids=true`.
+- Every call the backup wrapper makes names itself on failure, with its HTTP status and OpenBao's
+  error text.
+- Under `--check`, the microk8s restart handlers report the restarts a real run would perform.
+- The kubelite restart waits for readiness, and `renew-internal-tls.yml` renews the k8s leaves in a
+  last `serial: 1` play.
+- A new `internal-tls-expiry.md` runbook recovers a lapsed leaf, and `openbao.md` §3 converges again
+  after the restore.
+
+None of it is live-proven. The doc phase brought `decisions.md`, the microk8s and openbao READMEs,
+`openbao.md`, `ssh-host-cert-expiry.md` and the certs Jenkinsfile comments up to date.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: No entries, but nothing is live-proven yet. The next plain `site-openbao.yml` apply lands the
+backup policy's revoke-self grant (N1). Still owed: a rotation run (V03), a `site-k8s.yml --check
+--diff` against a node with drift (V08–V10), and a kubelite restart on an apiserver node and on a
+worker (V11–V13).
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: Six phases. The surprise was P4 r1 finding that `throttle: 1` cannot stop an un-serialised
+play, which became the operator's split-play ruling (N3, now in the docs); a completion consult fixed
+B5–B7. N1 bites until the next apply, N2 (the vault password in a transcript) is the operator's
+rotation call, and N4 leaves Build-Main #167 unconfirmed.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -59,6 +78,8 @@ To find how ansible-playbook is reached in the iac sidecar, P4 r2 ran `cexec iac
 
 Per the 2026-09-14 ruling on P4's question (Split k8s play, serial 1). AnsibleSpecs/decisions.md:26 still says the playbook carries no serial: and that the handler's throttle: 1 carries the one-at-a-time limit. ansible/roles/microk8s/README.md:117 still says the handler polls /livez (/healthz on a worker) and that this lets the playbook run the whole k8s group in one un-serialised play. The proxmox and openbao leaves keep the un-serialised play, so roles/openbao/README.md:31 stays true.
 
+doc-writer, doc phase r1, 2026-09-14 — Resolved in the doc phase. decisions.md 'Cluster changes are serialized' now says renew-internal-tls.yml renews the pveproxy and OpenBao leaves in an un-serialised play and the k8s leaves in a last play under serial: 1, and why a throttled handler cannot stop the roll. The RBAC section adds that stopping the roll is serial: 1's job. ansible/roles/microk8s/README.md now describes the /readyz and worker Ready-heartbeat wait and the split play. The Jenkinsfile.iac-scheduled-certs comments match.
+
 **Consequence:** Until decisions.md:26 and the microk8s README are brought up to date, doctrine describes a single un-serialised renewal play and a liveness wait that no longer exist.
 
 **Provenance:** read, code-writer, P4, r2, ansible/playbooks/renew-internal-tls.yml
@@ -75,9 +96,10 @@ Pushing d1c935e triggered IaC/Build-Main #167, but it sat queued ("Waiting for n
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B2 first, witnessed: one routine soft `bao kv delete` stops every nightly OpenBao backup, and
+nothing alerts until slice 023 (it predates this slice). Then B4 (a lapsed SSH host cert on a PVE
+node has no recovery, read), B3 (a hung worker probe outlives the kubelite timeout, read) and B1 (no
+dry run of the rotation run, witnessed). Two of the four open bugs are witnessed; all are in Ansible.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -103,6 +125,8 @@ OpenBao 2.5.4 keeps listing a soft-deleted key under kv/metadata/, but its data 
 
 roles/microk8s/handlers/main.yml:106-110 runs kubectl get node with no --request-timeout, and kubectl's default is 0, which never times out. The deadline is checked only between attempts (:122-126). The apiserver branch bounds each attempt with curl -m 5 (:117). kube-apiserver's server-side request timeout (1m by default) ends an ordinary slow-apiserver request, so an unbounded hang needs a proxy backend that stops answering below HTTP.
 
+doc-writer, doc phase r1, 2026-09-14 — The doc phase left two sentences as written: microk8s_kubelite_ready_timeout's comment in defaults/main.yml and its row in the microk8s README both say the timeout bounds what a wedged node costs the roll. That holds on apiserver nodes (curl -m 5 per attempt). On workers it holds once B3 is fixed. The README's handler bullet says only that the deadline is checked between attempts.
+
 **Consequence:** A worker whose local apiserver-proxy accepts but never answers leaves a site-k8s.yml or update-k8s.yml run hung in the kubelite handler past its 180s timeout, holding the roll, instead of failing it red.
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
@@ -119,6 +143,8 @@ renew-host-certs.yml renews SSH host certificates on managed:!ceph_prd, and the 
 
 ### ~~B5 — Ansible — internal-tls-expiry.md tells a KubeCoder operator to prefix its 'cd ansible && poetry run …' commands with cexec iac, which runs poetry outside the iac sidecar · minor~~ — resolved by consult 1 (3a4848f): internal-tls-expiry.md's header now gives the 'cd ansible && cexec iac poetry run …' shape from live-infra-access.md; struck by consult 1
 
+<details><summary>struck — body kept for the record</summary>
+
 docs/runbooks/internal-tls-expiry.md:6 says to prefix each command with cexec iac; the step 1 and step 3 commands (:49, :85) start 'cd ansible && poetry run', so a literal prefix leaves poetry running in the dev container, where it is not installed. The working shape is 'cd ansible && cexec iac poetry run …' (docs/live-infra-access.md:64-66), which the runbook's own KubeCoder block uses at :151.
 
 **Consequence:** An operator copying step 1 or step 3 with the prefix as instructed gets 'poetry: command not found' and has to work out the right command shape mid-outage.
@@ -126,7 +152,11 @@ docs/runbooks/internal-tls-expiry.md:6 says to prefix each command with cexec ia
 **Provenance:** read, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
 **Disposition:**
 
+</details>
+
 ### ~~B6 — Ansible — internal-tls-expiry.md step 1 reads a srvk8sdev connection failure as the box being off, but srvk8sdev is unreachable from any KubeCoder pod · nit~~ — resolved by consult 1 (3a4848f): step 1 now says a timeout means off only from srviac, that a KubeCoder environment cannot reach srvk8sdev (live-infra-access.md), and to renew its leaf from srviac (Jenkinsfile.iac-scheduled-certs:50, :186); struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 docs/runbooks/internal-tls-expiry.md:56 says a connection timeout on srvk8sdev only means it is off. docs/live-infra-access.md:116-118 records that srvk8sdev answers on neither 22 nor 16443 from a KubeCoder pod (a probe from the P5 review pod got 'No route to host'), and the runbook's KubeCoder route is that setting.
 
@@ -135,7 +165,11 @@ docs/runbooks/internal-tls-expiry.md:56 says a connection timeout on srvk8sdev o
 **Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
 **Disposition:**
 
+</details>
+
 ### ~~B7 — Ansible — openbao.md §3's verify step expects 'the five role policies', but the role writes six · cosmetic~~ — resolved by consult 1 (3a4848f): openbao.md §3 step 6 now expects six role policies, matching approle.yml:184-192; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 docs/runbooks/openbao.md §3 step 6 (step 5 before P6) annotates `bao policy list` with '# the five role policies present'. ansible/roles/openbao/tasks/approle.yml:184-192 writes six: openbao-admin, iac-agent, jenkins, eso, eso-dev and backup. P6 renumbered the step and left that line as it was.
 
@@ -144,9 +178,12 @@ docs/runbooks/openbao.md §3 step 6 (step 5 before P6) annotates `bao policy lis
 **Provenance:** read, executor, P6, r1, ansible/roles/openbao/tasks/approle.yml:184-192
 **Disposition:**
 
+</details>
+
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: None open. The run's one mid-run question, splitting P4's renewal play, was ruled on
+2026-09-14 and is in plan.md's rulings.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -154,8 +191,9 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S4 (minor, read) is the one worth acting on: the backup secret_id and tokens sit in curl's
+argv. It fits slice 023, which reworks the wrapper. S1–S3 are nit-level check-mode blind spots that
+R4's ruling left out; only S2 is witnessed.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 

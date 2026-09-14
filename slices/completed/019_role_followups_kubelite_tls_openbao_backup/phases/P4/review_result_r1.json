@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "The kubelite restart waits for readiness: /readyz on apiserver nodes, and a post-restart Ready heartbeat on workers, which kubelet v1.35.6 source confirms a restarted kubelet always posts. Every notifier now reaches the handler from a one-node-at-a-time play, the certs playbook split included, so V11–V13 are met in code. One advisory finding: the worker probe's kubectl call has no per-attempt timeout.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "Worker readiness probe calls kubectl with no --request-timeout (default: none), so a hung request can outlast microk8s_kubelite_ready_timeout without failing the handler"}
+ ]}

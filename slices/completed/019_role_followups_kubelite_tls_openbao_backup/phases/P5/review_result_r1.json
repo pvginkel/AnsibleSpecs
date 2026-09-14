@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "internal-tls-expiry.md meets P5's outcome and V14–V16: SSH reachability first, a symptom per consumer, the Friday job, renew-internal-tls.yml as the recovery, a grounded by-hand OpenBao listener renewal, and openbao.md now links it. Checked against the repo, no claim mismatched. Two minor wording defects remain, both advisory.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Header's 'prefix each command with cexec iac' breaks the runbook's own 'cd ansible && poetry run' commands; the working shape is 'cd ansible && cexec iac …'"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Step 1 reads a srvk8sdev connection failure as 'off', but srvk8sdev is unreachable from any KubeCoder pod"}
+ ]}

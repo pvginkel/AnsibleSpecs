@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The three check-mode-only debug listeners report each would-be microk8s, coredns and kubelite restart as a change under --check and leave the real handlers untouched. Scratch runs confirmed this on ansible-core 2.20.5 with the handlers loaded as role handlers through both roles: and import_role. Outside check mode ok/changed are unchanged and only skipped rises. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
