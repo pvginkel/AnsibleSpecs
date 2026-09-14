@@ -206,6 +206,28 @@ A dev stage that genuinely fails raises its warning at the point it fails, once,
 - No fallback description is added for a failure outside every stage (R4 ruling).
 - These jobs can only be proven by their next scheduled runs, which are owed.
 
+**Done (P6).** Both scheduled jobs now run every stage, whatever an earlier stage did.
+
+Each prd stage runs its script through a helper: `prdStage(cost, shellScript)` in certs, `prdCheck(stage, log, tool, shellScript)` in drift. The helper calls `sh(returnStatus: true)`. On a non-zero exit it appends the stage's description entry, then runs `error()` inside `catchError(buildResult: 'FAILURE', stageResult: 'FAILURE')`. The stage and the build go red and the later stages still run. The `sh` stays outside `catchError`, so an abort still stops the build. No Jenkins `timeout()` was added.
+
+Stage-level `post { failure }` is gone from both files. An entry is added only on that stage's own non-zero exit.
+- Certs appends one line per failed prd stage: `host certs may lapse` or `internal_tls leaves may lapse`. The "TLS leaf renewal did not run" claim is gone.
+- Drift: `recordDrift` now returns its entry.
+
+A dev stage that fails calls `notify.warning` right there, then `unstable()`.
+- Certs sends the stage's own unstable message.
+- Drift sends `detected drift on srvk8sdev` plus that stage's entry, not the whole description.
+
+`DEV_STAGE_FAILED` and both `post { unstable }` blocks are deleted. A powered-off srvk8sdev still only calls `unstable()`.
+
+Later phases:
+- Test phase: V12–V16 are owed to the next scheduled runs (drift daily at 11:00, certs Friday at 04:00). No Groovy parser or Jenkins linter is reachable here. A Jenkinsfile that fails to load shows first as a red build. Drift is read-only, so a drift build the operator starts after the push proves both edits load sooner.
+- Doc phase: nothing outside the two Jenkinsfiles describes the stage coupling, `DEV_STAGE_FAILED` or the `post { unstable }` warning. Grep covered `docs/`, the role READMEs and `support/iac-agent/README.md`.
+
+Record:
+- Gate: `kc project test --project root` skips ("no test statements", close-out N1). `git diff --check` is clean. Brace, parenthesis and triple-quote counts balance in both files. The `iac` sidecar has no groovy or java.
+- The stage shell scripts changed only in indentation. The CA-root script's trailing `\` continuation is still inside a `'''` literal, as before.
+
 ## Not in scope
 
 - The change-request bundle's extra Telegram message on any plan with destroys (`change_requests/tf_safety_rails/`) — not in the card's fix list.
