@@ -43,6 +43,17 @@ P1's acceptance tests skip without TF_ACC, which kc project test never sets, so 
 **Provenance:** read, code-writer, P1, r1, plan.md P1 done-record
 **Disposition:**
 
+### A3 — OpenBao: confirm the pre-run crypt key leaf eso/prd/storage/prd/s3-mirror (password, salt) exists, with its Roboform copy, before the first HelmCharts push · minor
+
+plan.md Ordering constraints make writing the crypt password and salt an operator keystroke before /dev:run-slice. They go to OpenBao kv eso/prd/storage/prd/s3-mirror, keys password and salt, stored plain, and to Roboform next to the age key. The completion consult could not confirm the leaf exists. A metadata-only read from the iac sidecar (bao kv metadata get -mount=kv eso/prd/storage/prd/s3-mirror) got connection refused on 127.0.0.1:8200, as P6 did. The ESO AppRole's eso/prd/* glob (Ansible ansible/inventories/prd/group_vars/openbao.yml) already covers the leaf, so no policy change is owed. Only the value write is.
+
+test-agent, test phase, round 1, 2026-09-14 — Confirmed live post-push: kubectl -n storage-prd get externalsecret storage-s3-mirror shows STATUS SecretSynced, READY True (16m old at check time), and the target Secret storage-s3-mirror holds 2 keys. The OpenBao leaf eso/prd/storage/prd/s3-mirror already carries both password and salt — the ExternalSecret cannot report SecretSynced otherwise. The pre-run keystroke this entry tracks is done; only the Roboform copy (unverifiable from here) is still the operator's to confirm.
+
+**Consequence:** Without the leaf, the first HelmCharts push deploys an ExternalSecret that cannot sync. The s3-mirror pods then never start, and S3MirrorStale fires 52 h after the CronJob is created. Changing either value after the first upload leaves the mirror unreadable to the job and forces a full re-upload.
+
+**Provenance:** read, completion consult 1, plan.md Ordering constraints and a bao metadata read attempt
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -86,6 +97,17 @@ decisions.md:91 is headed "The admin key is not an app credential" and says kv/s
 **Consequence:** None for the mirror. Someone rotating or revoking the admin key from the record would miss artifact or validation pipelines that still read it, and those pipelines would break without warning.
 
 **Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
+**Disposition:**
+
+### B4 — Ansible support/iac-agent: srviac's check-protected-vms.sh is stale, so IaC/Build-Main (iac-on-push) fails on every push since slice 017's Jenkinsfile/script split — unrelated to slice 022 · major
+
+Pushing this slice's own docs-only Ansible commit (af72e23) triggered IaC/Build-Main #166. terraform plan on terraform/prd showed "No changes. Your infrastructure matches the configuration." — clean. The pipeline then ran check-protected-vms.sh /tmp/plan.json (the plan path only), which is what slice 017's Jenkinsfile.iac-on-push now sends and what the repo's committed support/iac-agent/bin/check-protected-vms.sh now expects (its own usage comment reads "Usage: check-protected-vms.sh <plan.json>"). But the build failed with "Usage: check-protected-vms.sh <plan.json> <vm-name> [vm-name ...]", exit 2 — the pre-slice-017 calling convention. support/iac-agent/ only reaches srviac through the iac_agent Ansible role's rsync + install.sh (ansible/roles/iac_agent/tasks/main.yml), an operator-run ansible-playbook; nobody has re-run it since slice 017 landed, so the live script on srviac disagrees with the live Jenkinsfile. Build #165, for the immediately preceding commit 818d528 (slice 017's own doc-phase commit, pushed before this test phase started), shows the identical failure — confirming the break predates and is independent of slice 022's push. No file slice 022 touched is implicated.
+
+test-agent, test phase, round 1, 2026-09-14 — Same root cause as slice 017's close-out A1 (Install P2's destroy guard on srviac after the push, then re-run iac-on-push), which is still open there (Disposition blank) — slice 017's own test-agent already witnessed the identical failure on IaC/Build-Main #164. This is not a new defect; it is that operator action, still outstanding, surfacing again on this slice's push. One ansible-playbook run against srviac (per slice 017 A1's exact command) fixes both.
+
+**Consequence:** Until an operator re-runs the iac_agent role against srviac (ansible-playbook against real infra, per CLAUDE.md an operator action), IaC/Build-Main shows FAILURE on every push to Ansible main, hiding the "push is green" signal slice-testing-strategy.md §4 calls worth recording. Terraform's own prevent_destroy still blocks a real destructive plan at plan time regardless — the unavailable part is the redundant second rail's confirmation, not the underlying protection.
+
+**Provenance:** witnessed, test-agent, test phase, round 1, https://jenkins.webathome.org/job/IaC/job/Build-Main/166/ (and /165/ for the prior commit)
 **Disposition:**
 
 ## Open questions and rulings
@@ -164,4 +186,13 @@ The restore drill (Ansible docs/runbooks/s3-mirror.md §5) compares object conte
 **Consequence:** None until a restore. After one, an app that serves attachments by their stored Content-Type or reads user metadata can serve restored objects with a guessed type or without that metadata.
 
 **Provenance:** read, code-writer, P5, r1, docs/runbooks/s3-mirror.md
+**Disposition:**
+
+### S7 — ArgoCDDeploy hook environment: the Argo CD PreSync Terraform env does not carry P4's HOMELAB_S3_BACKUP_READER · minor
+
+P4 added HOMELAB_S3_BACKUP_READER: backup-reader to HelmCharts _providers/clusters.yaml prd.env. ArgoCDDeploy config/prd/values.yaml hooks.environment.literals says it copies that env verbatim, because the hook runs Terraform without the deploy CLI. It has no such key, and tests/render-chart.py HOOK_ENV_LITERALS pins only four fixed keys, so its gate does not notice. Today nothing is affected. Only argocd itself carries a non-jenkins reconciler under HelmCharts configs/prd/, and no .tf outside HelmCharts calls s3-storage. Once an S3 release moves to Argo CD, its hook Terraform still asks for the grant, finds no reader configured, and so writes no policy. Existing policies stay, but a bucket added there gets none. The fix is one literal in values.yaml plus the key in HOOK_ENV_LITERALS; it belongs to whichever change migrates the first S3 release.
+
+**Consequence:** None today. After an S3 release migrates to Argo CD, a prd bucket it adds is never granted to backup-reader, so every mirror run fails on that bucket and S3MirrorStale fires two days later.
+
+**Provenance:** read, completion consult 1, ArgoCDDeploy config/prd/values.yaml hooks.environment.literals and tests/render-chart.py HOOK_ENV_LITERALS
 **Disposition:**

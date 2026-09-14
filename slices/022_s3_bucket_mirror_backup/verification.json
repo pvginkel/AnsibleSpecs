@@ -4,161 +4,243 @@
       "id": "V01",
       "area": "R1 — off-cluster copy",
       "description": "\"Automated backups for RGW/S3 buckets and Ceph-backed data — today redundancy exists but no copy-off-cluster.\" — narrowed by ruling T2 to RGW/S3 buckets and by ruling T3 to prd-stage buckets: every prd-stage bucket on the prd Ceph cluster has an automatically refreshed copy on Google Drive. After the first successful nightly run, `iot-prd-attachments`, `electronics-inventory-prd-part-attachments` and the `design-assistant-prd` bucket are all in the mirror, and a bucket a prd release adds later through `terraform-modules/s3-storage` (HelmCharts `terraform-modules/s3-storage/main.tf:52-60`) is mirrored with nothing set per app.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "The mechanism is live and structurally correct — the `s3-mirror` CronJob is deployed and enabled in `storage-prd` (`schedule: 30 3 * * *`), enumerates buckets by the `-prd` owner suffix through the admin API, and the shared-module grant lands on every current prd-stage S3 release (confirmed live: V08/V09). But the schedule has not fired yet (deployed 2026-09-14 ~15:26 UTC; next run 03:30 cluster-local/01:30 UTC the following night), so no bucket has actually landed on Drive. `kubectl -n storage-prd get cronjob s3-mirror` shows `LAST SCHEDULE <none>` as of 15:48 UTC. Closes on the operator's read of the first run's outcome.",
+      "evidence": [
+        "live: `kubectl -n storage-prd get cronjob s3-mirror` — schedule `30 3 * * *`, LAST SCHEDULE none, 2026-09-14",
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:39-57` — `prd_buckets()` lists via the admin API, filters `owner.endswith(\"-prd\")`",
+        "operator command to settle: after 03:30 cluster-local, `kubectl -n storage-prd get jobs` for a `s3-mirror-*` Job, then `kubectl -n storage-prd logs job/<name>` for \"all buckets mirrored\"; reading the mirror itself (`rclone lsf` against the Drive crypt remote) is the operator's Roboform-gated keystroke per the runbook"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — backup coverage inventory",
       "description": "\"inventory what app-level backups already cover\" — `decisions.md` §\"Backup\" carries a coverage list: each off-cluster mechanism, what it covers, how much history and which key, including the `postgres-pas` dumps through backup-server (scope `postgres-pas`, retention 90, HelmCharts `configs/prd/postgres-pas/_shared/infrastructure.tf:71-74`) and this mirror. It also has one line naming what is knowingly not covered (RBD volumes, CephFS, non-prd buckets), in place of \"Offsite for production is a later item\" (`decisions.md:593`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Read directly, pushed and live on AnsibleSpecs main. The coverage list names OpenBao (scope `openbao`, retention 14), `postgres-pas` (scope `postgres-pas`, retention 90) and the mirror (bucket-owner scoped, 30 newest archive folders, key location), and a `Knowingly not covered` bullet names RBD volumes, CephFS subvolumes and every non-prd bucket including all of the dev cluster's Ceph, citing rulings T2/T3. The old \"Offsite for production is a later item\" line is gone.",
+      "evidence": [
+        "AnsibleSpecs `decisions.md:594-598` (§\"Backup\"), read 2026-09-14 post-push"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — restore drill",
       "description": "\"restore drill is part of acceptance (lesson from slice 005).\" — after the first successful mirror run the operator has run the drill from the runbook in `/work/Ansible/docs/runbooks/`: `iot-prd-attachments` restored from Drive into a scratch bucket on dev Ceph, and `rclone check` against the live bucket, read with `backup-reader`'s read-only key, reports no differences. Closes only on the operator's output, never on a green gate.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "The runbook (`docs/runbooks/s3-mirror.md` §5) and its drill log placeholder are written and pushed, but the drill needs a successful mirror run first (V01, not yet happened) and srvk8sdev started (it is powered off). Nothing in the test phase can close this by design — the doc is explicit that it closes only on the operator's drill output.",
+      "evidence": [
+        "Ansible `docs/runbooks/s3-mirror.md` §5 \"Restore drill\", read 2026-09-14",
+        "live: srvk8sdev's dev apiserver is unreachable from this pod (powered off), consistent with the grounding"
+      ]
     },
     {
       "id": "V04",
       "area": "R4 — Postgres pattern",
       "description": "\"we should at least consider following the pattern set for Postgres.\" — the mirror follows the Postgres pattern for ownership. It is a production-gated job in the substrate's own chart (`storage`): off by default in the chart, on only in the prd cluster's values, its Terraform only under `configs/prd/`, as `postgres-backup` is (HelmCharts `charts/postgres-pas/values.yaml:100-101`, `configs/prd/postgres-pas/prd/values.yaml:53-54`, `configs/prd/postgres-pas/_shared/infrastructure.tf:71-74`). The dev cluster's storage release (`configs/dev/storage/`) deploys nothing new.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Chart default is `s3Mirror.enabled: false` (`charts/storage/values.yaml:31-32`, comment: \"only the prd cluster's values turn it on\"); only `configs/prd/storage/prd/values.yaml` sets `enabled: true`. `configs/dev/storage/prd/values.yaml` sets nothing for `s3Mirror`. `homelab_s3_reader` (the backup-reader user) is created only in `configs/prd/storage/_shared/infrastructure.tf`. Live: the prd deploy created `backup-reader` and rolled out the CronJob; the dev cluster's storage release was untouched by this push (no s3Mirror value there to trigger a diff).",
+      "evidence": [
+        "HelmCharts `charts/storage/values.yaml:29-32` — chart default `s3Mirror.enabled: false`",
+        "HelmCharts `configs/prd/storage/prd/values.yaml` — `s3Mirror.enabled: true`",
+        "HelmCharts `configs/dev/storage/prd/values.yaml` — no `s3Mirror` key",
+        "HelmCharts `configs/prd/storage/_shared/infrastructure.tf` — `homelab_s3_reader.backup_reader`, prd-only",
+        "live: IaC/HelmCharts build #6464, \"Deploying storage@prd\" stage — `homelab_s3_reader.backup_reader: Creation complete`"
+      ]
     },
     {
       "id": "V05",
       "area": "R5 — incremental, not daily snapshots",
       "description": "\"It feels like it's unrealistic to want to do a daily snapshot of all S3 data keeping a history of 5 snapshots. Although, I do have 80 Gb available. Regardless I feel like this may need some smarts.\" — the mirror is incremental. A run over unchanged buckets uploads nothing and leaves no archive folder, and Drive holds the live data plus replaced or deleted objects only, never a full copy per run.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`sync()` is a single `rclone sync rgw:<bucket> mirror:current/<bucket> --backup-dir mirror:archive/<bucket>/<stamp>` per bucket — rclone's own incremental transfer, and `--backup-dir` only ever receives what a sync would otherwise overwrite or delete, so an unchanged bucket produces no archive folder (rclone creates the directory lazily, on first write into it) and `prune()`'s own `lsf --dirs-only` exits 3 (\"no archive yet\") in that case, confirmed read. The unit suite drives this logic against fake `subprocess.run` calls (10 tests) and P2's done-record additionally reports a local end-to-end run with real rclone v1.75.1 over local dirs (crypt, upload, archive, prune-to-N, a failing bucket) — behavioural evidence, not a lint pass. The first live run (V01) is the remaining empirical confirmation against real Drive/RGW.",
+      "evidence": [
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:60-65` (`sync`), `:68-85` (`prune`)",
+        "HelmCharts `tests/test_storage_s3_mirror.py` — 10 tests over a fake `subprocess.run`",
+        "plan.md P2 record — local end-to-end run with real rclone v1.75.1"
+      ]
     },
     {
       "id": "V06",
       "area": "R6 — the accepted sync design",
       "description": "\"A sync sounds perfect.\" — each prd-stage bucket is mirrored by an incremental, encrypted `rclone sync` to the existing Google Drive remote (`gdrive-pieter:Homelab Backups`, HelmCharts `configs/prd/storage/prd/values.yaml:15`), run from the `storage` chart. On Drive, file and folder names and contents are encrypted. Decrypted, the mirror holds `current/<bucket>/<object key path>` as live state and `archive/<bucket>/<run timestamp>/<object key path>` for what each run replaced or deleted (ruling W1).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The CronJob template sets the crypt remote's `RCLONE_CONFIG_MIRROR_REMOTE` from `.Values.s3Mirror.driveRemote` (`gdrive-pieter:Homelab Backups/s3-mirror`), `filename_encryption=standard`, `filename_encoding=base32`, `directory_name_encryption=true`, matching W1 and the runbook exactly. The script's `sync()`/`prune()` write `current/<bucket>/...` and `archive/<bucket>/<stamp>/...` as designed. Live: the CronJob and its ConfigMap-shipped script are deployed in `storage-prd` with these exact env values (confirmed by reading the deployed template source; the mirror's first run — V01 — is the remaining live proof of actual Drive content).",
+      "evidence": [
+        "HelmCharts `charts/storage/templates/s3-mirror-cronjob.yaml:60-69`",
+        "HelmCharts `configs/prd/storage/prd/values.yaml` — `s3Mirror.driveRemote: gdrive-pieter:Homelab Backups/s3-mirror`",
+        "Ansible `docs/runbooks/s3-mirror.md` \"Mirror layout\" section — same layout, read 2026-09-14"
+      ]
     },
     {
       "id": "V07",
       "area": "Ruling T1 — read-only reader",
       "description": "One fleet-wide, read-only `backup-reader` RGW user, granted per bucket by a provider-attached bucket policy: `backup-reader` exists on prd with the admin capability `buckets=read` and nothing more, owns no bucket and cannot create one. It can list and read every prd-stage bucket, and every write or delete it attempts is refused.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Live-created: `homelab_s3_reader.backup_reader` (IaC/HelmCharts build #6464) completed in 1s with `id=backup-reader`, owning no bucket (the resource carries no `buckets` argument at all). The provider's `CreateUser` call sends exactly `max-buckets=-1, user-caps=buckets=read` (read, `internal/s3reader`) — no bucket-write or bucket-create capability. The bucket policy the grant writes (`internal/s3storage/policy.go:31-34`) names exactly two `Allow` statements — `s3:ListBucket` and `s3:GetObject` — nothing else, and is the bucket's *whole* policy (an in-place `Modifying...`/`Modifications complete` on the owning resource, not a merge), so nothing outside those two actions is ever granted; RGW's default is deny. `client_test.go` pins this exact statement shape. The empirical negative test (`backup-reader`'s key actually gets a 403 on a PUT/DELETE) is the unrun TF_ACC acceptance suite (close-out A2) — not run in this pass, since it needs a scratch bucket and the acceptance harness the doc reserves for the operator.",
+      "evidence": [
+        "internal/s3reader `resource.go`, `client.go` — `max-buckets=-1`, `user-caps=buckets=read`",
+        "internal/s3storage `policy.go:31-34` — two `Allow` statements, `s3:ListBucket` + `s3:GetObject` only",
+        "internal/s3storage `client_test.go:264-284` — pins the exact statement shape",
+        "live: IaC/HelmCharts build #6464 \"Deploying storage@prd\" — `homelab_s3_reader.backup_reader: Creation complete after 1s [id=backup-reader]`",
+        "live: `kubectl -n storage-prd get secret backup-reader-credentials` — Opaque, 2 keys (existence only; values not read)",
+        "not run: TF_ACC acceptance tests `TestAccS3Reader_basic`/`TestAccS3Storage_readerGrant` — tracked as close-out A2"
+      ]
     },
     {
       "id": "V08",
       "area": "Ruling T3 / settled 4 — grant scope",
       "description": "The grant is on every prd-stage bucket on the prd cluster and nowhere else. The prd cluster's `design-assistant-dev`, `-tst` and `-uat` buckets carry no policy and are not mirrored. No `terraform-modules/s3-storage` call site sets anything for it. Releases on the dev cluster also run stage `prd` (HelmCharts `CLAUDE.md:45`) against a provider with no reader configured: the provider tests that `kc project test` runs (acceptance tests skip without `TF_ACC`, HomelabTerraformProvider `CLAUDE.md:45-47`) show that such a provider grants nothing and plans no change (ruling A1). The live proof, one manual dev deploy of an S3 release while srvk8sdev is up, is an outstanding operator action and not part of this criterion.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`terraform-modules/s3-storage/main.tf` sets `grant_backup_reader = endswith(var.namespace, \"-prd\") ? true : null` — no call site override exists (confirmed by reading every `configs/prd/*/**.tf` s3-storage call). `tests/test_s3_storage_backup_grant.py::test_a_prd_stage_release_asks_for_the_grant_and_every_other_leaves_it_null` follows every prd-stage release's s3-storage call to its resolved namespace and asserts the ask holds exactly on stage `prd`; `kc project test` runs this and it is green per the dispatch's sweep. Live, the push (IaC/HelmCharts build #6466) confirmed the positive case twice, identically: `iot-prd` and `electronics-inventory-prd` each planned and applied exactly `+ grant_backup_reader = true` with 0 add/0 destroy. `design-assistant-{dev,tst,uat,prd}` are all Helm-`disabled: true` today (`configs/prd/design-assistant/*/release.yaml`) — predating this slice — so the build's per-release loop only ran `deploy uninstall` (Helm-only; `helmops.py:219-230` never touches the release's own Terraform state) for each of them; none of the four had its Terraform evaluated in this push, so the \"carries no policy\" half of this criterion for design-assistant rests on the module's uniform, tested suffix logic rather than a fresh live plan for that chart specifically. The dev-cluster no-reader case (ruling A1) is unchanged by this pass — still an outstanding operator action per A1, not required here.",
+      "evidence": [
+        "HelmCharts `terraform-modules/s3-storage/main.tf:57-59` — `grant_backup_reader = endswith(var.namespace, \"-prd\") ? true : null`",
+        "HelmCharts `tests/test_s3_storage_backup_grant.py` — asserts the ask on every prd-stage call site",
+        "live: IaC/HelmCharts build #6466 — `iot-prd`: \"Plan: 0 to add, 1 to change, 0 to destroy\", `+ grant_backup_reader = true`, `Modifications complete`",
+        "live: IaC/HelmCharts build #6466 — `electronics-inventory-prd`: identical plan/apply shape",
+        "HelmCharts `configs/prd/design-assistant/{dev,tst,uat,prd}/release.yaml` — `disabled: true`, all four",
+        "live: IaC/HelmCharts build #6466 — `design-assistant@{dev,prd,tst,uat}` stages each ran `deploy uninstall` / \"not installed — nothing to do\", no terraform evaluated",
+        "close-out A1 — the dev-cluster no-reader live proof stays an outstanding operator action"
+      ]
     },
     {
       "id": "V09",
       "area": "Provider inertness",
       "description": "The new provider is inert for existing callers: a release that does not ask for the grant plans no change under it (every deploy floats to the newest provider, HelmCharts `tools/deploy/deploy_cli/tf.py:129-146`). When the grant lands, `iot-prd`, `electronics-inventory-prd` and `design-assistant-prd` update in place: no resource replaced, no bucket or object deleted (`terraform-modules/s3-storage/main.tf:57-59` keeps `prevent_destroy`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Confirmed live for two of the three releases the plan named: `iot-prd` and `electronics-inventory-prd` each planned \"0 to add, 1 to change, 0 to destroy\" — `homelab_s3_storage.this` updated in place, only `grant_backup_reader` added, `prevent_destroy` intact and never invoked. Every other prd-stage and non-prd release this build touched (all of them — the shared-module change redeploys the whole fleet) planned \"No changes\" on its own infra where S3 was not involved, and no S3 release outside iot/electronics-inventory exists live today to plan against: `design-assistant-prd` is Helm-disabled (see V08), so its own Terraform was not evaluated by this push and its in-place update is unconfirmed live, not false — the module's logic is identical for it. No bucket, object or resource was replaced or destroyed anywhere in this build.",
+      "evidence": [
+        "live: IaC/HelmCharts build #6466 — `iot-prd` and `electronics-inventory-prd`, each \"Plan: 0 to add, 1 to change, 0 to destroy\", `Apply complete! Resources: 0 added, 1 changed, 0 destroyed`",
+        "HelmCharts `terraform-modules/s3-storage/main.tf:61-63` — `lifecycle { prevent_destroy = true }` on `homelab_s3_storage.this`",
+        "design-assistant-prd Helm-disabled (V08) — its own plan was not run in this push"
+      ]
     },
     {
       "id": "V10",
       "area": "Settled 4 — no silent skip",
       "description": "A prd-stage bucket the mirror cannot list or read fails the run (the Job fails), never a skip; any rclone error fails the Job.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`prd_buckets()` exits non-zero (`sys.exit`) on a non-2xx admin-API response or an empty bucket list, before any sync starts. Inside the per-bucket loop, `sync`/`prune` raise `CalledProcessError` on any rclone failure (`rclone()` uses `check=True`); `main()` catches it, appends the bucket to `failures` and continues with the rest, then `sys.exit(\"FAILED buckets: ...\")` if `failures` is non-empty — the process exits non-zero, so the Kubernetes Job is marked Failed. Covered by `tests/test_storage_s3_mirror.py`'s failing-bucket case. Not yet exercised live (no run has happened — V01).",
+      "evidence": [
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:52-56` (listing failure), `:104-115` (`main`, per-bucket try/except, final `sys.exit`)",
+        "HelmCharts `tests/test_storage_s3_mirror.py` — failing-bucket case"
+      ]
     },
     {
       "id": "V11",
       "area": "Settled 8 — vanished bucket",
       "description": "A bucket that disappears from RGW keeps its mirror copy untouched; the job never deletes a whole bucket's mirror.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The script only ever iterates `buckets` returned by `prd_buckets()` (the current RGW listing); nothing in `sync`, `prune` or `main` reads or purges any `mirror:current/<bucket>` or `mirror:archive/<bucket>` tree for a bucket absent from that list. There is no delete/purge call anywhere outside `prune()`'s own per-bucket archive-folder purge, which only ever touches the buckets in that run's `buckets` list.",
+      "evidence": [
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:88-115` (`main`) — no code path reachable for a bucket outside the current `prd_buckets()` result"
+      ]
     },
     {
       "id": "V12",
       "area": "Ruling D1 — archive expiry",
       "description": "After each successful sync the mirror keeps the 30 newest archive folders per bucket and prunes the rest. A run that moved nothing leaves no archive folder, so history is counted in changes, not days.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`prune(bucket, keep)` lists `archive/<bucket>` folders (or returns immediately on rclone's \"directory not found\" exit code 3 — no folder yet), sorts them lexically (the `YYYYMMDDTHHMMSSZ` stamp sorts chronologically), and purges every folder but the newest `keep`. `KEEP_ARCHIVES` is `30` in the chart's default values (`charts/storage/values.yaml:43`) and unmodified in prd. `--backup-dir` only creates a folder when a sync moves something (rclone's own behaviour, read in the code comment and confirmed by the local end-to-end run in P2's record), so an unchanged run adds nothing to prune.",
+      "evidence": [
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:68-85` (`prune`)",
+        "HelmCharts `charts/storage/values.yaml:43` — `keepArchives: 30`",
+        "HelmCharts `configs/prd/storage/prd/values.yaml` — no override, so 30 is the deployed value",
+        "HelmCharts `tests/test_storage_s3_mirror.py` — prune-to-N test case; P2 record's local rclone e2e run"
+      ]
     },
     {
       "id": "V13",
       "area": "Ruling D2 — freshness alert",
       "description": "A critical Prometheus rule in the production Prometheus release, beside the other rules (HelmCharts `configs/prd/prometheus/prd/values.yaml:61`), on the mirror job's last successful run. Both edges of ruling D2 hold. One missed night stays quiet, however long the following run takes: the last-successful time is the Job's completion, not its schedule (live prd 2026-09-14: `storage-sync-cronjob` scheduled 00:10:00Z, last success 00:13:25Z), so the threshold carries a margin of a few hours, and every mirror run ends, succeeded or failed, within a bound inside that margin. Two consecutive missed nights fire, a few hours after the second failed run, and so does a mirror that has never succeeded. `postgres-backup` is not added to it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The rule is deployed live in the prd Prometheus release: `GET /api/v1/rules?type=alert` against the running `prometheus-prd-server` pod shows group `s3-mirror`, rule `S3MirrorStale`, expression matching the plan exactly (`time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{...} or kube_cronjob_created{...}) > 52 * 3600`), `state: inactive`, `health: ok` — loaded and evaluating cleanly, not yet firing (correct: the CronJob was created ~20 minutes before the check, nowhere near the 52 h bound). The margin arithmetic (48 h + run-length + DST + evaluation lag < 52 h) is walked night-by-night over 400 nights by `tests/test_prometheus_s3_mirror_alert.py`, which `kc project test` runs. `postgres-backup` does not appear in the rule's selector.",
+      "evidence": [
+        "live: `kubectl -n prometheus-prd exec deploy/prometheus-prd-server -- wget -qO- http://localhost:9090/api/v1/rules?type=alert` — group `s3-mirror`, rule `S3MirrorStale`, `state: inactive`, `health: ok`, 2026-09-14 15:42 UTC",
+        "HelmCharts `configs/prd/prometheus/prd/values.yaml:131-146` — the rule as deployed",
+        "HelmCharts `tests/test_prometheus_s3_mirror_alert.py` — walks both edges over 400 nights"
+      ]
     },
     {
       "id": "V14",
       "area": "Settled 6 — encryption key custody",
       "description": "The rclone crypt password and salt are in OpenBao `eso/prd/storage/prd/s3-mirror` and in Roboform next to the age key. The job reads them through the storage chart's ExternalSecret values (HelmCharts `configs/prd/storage/prd/values.yaml:43-59`) and never writes them to `rclone-backup-pvc`. `decisions.md`'s failure-domain inventory (`:108`) gains the key.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Live: the `storage-s3-mirror` ExternalSecret in `storage-prd` reports `STATUS SecretSynced, READY True` — it can only reach that state if the OpenBao leaf `eso/prd/storage/prd/s3-mirror` carries both `password` and `salt` (the operator confirmed mid-run they had written it; plan.md's mid-run note records this). The target Secret `storage-s3-mirror` exists with 2 keys (existence checked only, values not read). The CronJob template mounts `CRYPT_PASSWORD`/`CRYPT_SALT` from that Secret via env, and `main()` pops both out of `env` before writing `SHARED_RCLONE_CONFIG`'s copy to `RCLONE_CONFIG` — the crypt values never reach the PVC-backed file. `decisions.md`'s OpenBao failure-domain bullet (§\"OpenBao backup / DR\", read above) names the crypt password/salt in both the cluster-plus-backups domain and Roboform. The Roboform copy itself is unverifiable from this pod.",
+      "evidence": [
+        "live: `kubectl -n storage-prd get externalsecret storage-s3-mirror` — `SecretSynced`, `READY True`, 16m old",
+        "live: `kubectl -n storage-prd get secret storage-s3-mirror` — Opaque, 2 keys",
+        "AnsibleSpecs `plan.md` Ordering constraints — mid-run operator note, leaf created 13:22 UTC before any HelmCharts push",
+        "HelmCharts `charts/storage/templates/s3-mirror-cronjob.yaml:70-79` — `CRYPT_PASSWORD`/`CRYPT_SALT` from `.Values.s3Mirror.cryptSecret`",
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:90-92` — `env.pop(\"CRYPT_PASSWORD\")`/`env.pop(\"CRYPT_SALT\")`, obscured into `RCLONE_CONFIG_MIRROR_PASSWORD{,2}`, never written to the PVC copy",
+        "AnsibleSpecs `decisions.md:106` (§\"OpenBao backup / DR\" failure domains) — names the crypt password/salt"
+      ]
     },
     {
       "id": "V15",
       "area": "Settled 1 — RGW credential record",
       "description": "`decisions.md` §\"Ceph RGW credentials\" (`:86-95`, which today calls `csi-prd` the live posture at `:88`) reads in the present tense: per-app users are live and `csi-prd` is gone. `backup-reader` is its one recorded exception, with the reason.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Read directly, pushed and live. §\"Ceph RGW credentials — per-app, minted by TF\" (`decisions.md:86-93`) opens \"Every release that talks to S3 owns its own RGW user... The shared csi-prd and csi-dev users are deleted\" and its third bullet is the `backup-reader` exception with its reason (a per-app user reads only its own buckets; without the reader the mirror would need every app's key or the admin key).",
+      "evidence": [
+        "AnsibleSpecs `decisions.md:86-93`, read 2026-09-14 post-push"
+      ]
     },
     {
       "id": "V16",
       "area": "Settled 2 — S3 endpoint",
       "description": "The mirror uses the apps' endpoint `http://ceph:7480` (HelmCharts `_providers/clusters.yaml:22`), and `decisions.md`'s S3 endpoint convention (`:262`) states that endpoint instead of `https://ceph.home`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`configs/prd/storage/prd/values.yaml` sets `s3Mirror.s3Endpoint: http://ceph:7480`, matching `_providers/clusters.yaml`'s `HOMELAB_S3_ENDPOINT`. `decisions.md`'s Ceph §\"S3 endpoint convention\" paragraph (inside the microceph memory-targets section) states `http://ceph:7480` over plain HTTP and explains the VIP carries no TLS.",
+      "evidence": [
+        "HelmCharts `configs/prd/storage/prd/values.yaml` — `s3Mirror.s3Endpoint: http://ceph:7480`",
+        "AnsibleSpecs `decisions.md` (Ceph §, \"S3 endpoint convention\" paragraph), read 2026-09-14"
+      ]
     },
     {
       "id": "V17",
       "area": "Settled 12 — no new image",
       "description": "The mirror runs on the existing `registry:5000/rclone-backup` image with its script shipped in the chart; no new image is built. A live probe on 2026-09-14 found Debian 13.6, rclone v1.75.1, curl 8.14.1 and python3 in the image.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The CronJob template's image is `registry:5000/rclone-backup{{ .Values.images.rcloneBackup }}` — the same image `storage-sync-cronjob`/`storage-refresh-keys-cronjob` already use — with the script shipped via a ConfigMap mounted at `/scripts`. Live: the deploy resolved and pulled `images.rcloneBackup` at a digest during the `storage@prd` stage (IaC/HelmCharts build #6464); no separate image build ran for this slice.",
+      "evidence": [
+        "HelmCharts `charts/storage/templates/s3-mirror-cronjob.yaml:1-9,33`",
+        "live: IaC/HelmCharts build #6464 \"Deploying storage@prd\" — `helm upgrade` sets `images.rcloneBackup=@sha256:...`, the same digest form as the existing cronjobs"
+      ]
     },
     {
       "id": "V18",
       "area": "Existing storage jobs unaffected",
       "description": "`storage-sync-cronjob` and `storage-refresh-keys-cronjob` keep completing as before. The shared rclone config on `rclone-backup-pvc` gains no section, since both jobs treat every section there as a remote (DockerImages `rclone-backup/src/docker-entrypoint.sh:3`), and the mirror's schedule does not overlap theirs (HelmCharts `charts/storage/templates/storage-cronjobs.yaml:11-15`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Live, post-deploy: `kubectl -n storage-prd get jobs` shows `storage-refresh-keys-cronjob` and `storage-sync-cronjob` runs Complete both before and after this push (most recent refresh-keys run 48 minutes old, most recent sync run 15 hours old at check time) — neither broke. The s3-mirror job mounts its own private copy of the shared rclone config (`rclone-backup-pvc` mounted `readOnly`, copied to an emptyDir at `/work/rclone.conf`) and only ever reads it via `SHARED_RCLONE_CONFIG`; nothing in `s3_mirror.py` writes back to `/data`. Schedules: sync `02:10`, refresh-keys hourly on the hour, mirror `03:30` — no overlap.",
+      "evidence": [
+        "live: `kubectl -n storage-prd get jobs` — `storage-sync-cronjob-*` and `storage-refresh-keys-cronjob-*` all Complete, both before and after this push, 2026-09-14 15:48 UTC",
+        "HelmCharts `charts/storage/templates/s3-mirror-cronjob.yaml:84-101` — `rclone-backup-pvc` mounted `readOnly: true`; the private copy goes to an `emptyDir`",
+        "HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py:90` — `shutil.copyfile(env[\"SHARED_RCLONE_CONFIG\"], env[\"RCLONE_CONFIG\"])`, one-way"
+      ]
     },
     {
       "id": "V19",
       "area": "Restore runbook",
       "description": "The runbook beside `openbao.md` covers restoring a bucket from the mirror (whole, or single objects and earlier versions from the archive), writing into the production bucket with the app's own key. It also covers reading the mirror with no cluster, from the Drive login and the Roboform-held crypt password and salt. It names where each credential it needs actually lives (ruling B2): the app's key pair in the Terraform-written Secret in the app's namespace (HelmCharts `terraform-modules/s3-storage/main.tf:62-72`), `backup-reader`'s key in the Terraform-written Secret in `storage-prd`, the crypt password and salt in OpenBao `eso/prd/storage/prd/s3-mirror` and Roboform, and the scratch user the drill creates on dev Ceph. Reading any of those values is the operator's keystroke or needs the operator's permission, and the drill reads the live bucket with `backup-reader`'s read-only key, never the app's.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`docs/runbooks/s3-mirror.md` is written and pushed, beside `openbao.md` as required. It has the mirror layout, a credential table (ruling B2), §2 whole-bucket restore (suspends the CronJob, `rclone copy`s `current/` then replays archive folders newest-first, verifies with `rclone check --one-way --download`, resumes the CronJob), §3 single object/earlier version, §4 no-cluster read (Drive login + Roboform crypt values via `rclone obscure`), and §5 the restore drill with a drill-log placeholder. Every command is framed as the operator's keystroke; credential provenance matches the description exactly.",
+      "evidence": [
+        "Ansible `docs/runbooks/s3-mirror.md`, full read 2026-09-14 post-push"
+      ]
     },
     {
       "id": "V20",
       "area": "Provider tests",
       "description": "The provider's reader user and bucket-grant behaviour carry unit tests in the `internal/s3storage` package's existing style, plus acceptance tests that skip without `TF_ACC`. The tests `kc project test` runs include the no-reader case V08 rests on: a resource asking for the grant on a provider with no reader configured grants nothing and plans no change.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`internal/s3storage/resource_test.go` carries `TestStorageWithoutAskPlansNoChange`, `TestStorageGrantWithoutReaderIsInert` (the no-reader case) and `TestStorageGrantWithReader`; `internal/s3storage/client_test.go` and `internal/s3reader/client_test.go` cover the client behaviour (`TestClientGrantReader`, `TestClientRevokeReader`, `TestClientReaderGranted`, `TestDiffBuckets`, etc.) against `httptest`. `internal/s3reader/resource_acc_test.go::TestAccS3Reader_basic` and `internal/s3storage/resource_acc_test.go::TestAccS3Storage_readerGrant`/`TestAccS3Storage_basic` are the acceptance pair, gated on `TF_ACC`. `kc project test` for HomelabTerraformProvider is green per the dispatch's established sweep (does not set `TF_ACC`, so only the unit suite ran); the acceptance pair stays close-out A2.",
+      "evidence": [
+        "HomelabTerraformProvider `internal/s3storage/resource_test.go:300,330,359` — the three plan-shape tests",
+        "HomelabTerraformProvider `internal/s3storage/client_test.go`, `internal/s3reader/client_test.go` — client-level tests",
+        "HomelabTerraformProvider `internal/s3reader/resource_acc_test.go:26`, `internal/s3storage/resource_acc_test.go:38,99` — the `TF_ACC`-gated acceptance pair",
+        "dispatch sweep: HomelabTerraformProvider root lint/build/test GREEN at c1badcb8b70e"
+      ]
     }
   ]
 }
