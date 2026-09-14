@@ -55,6 +55,11 @@ vulnerable at the moment. There is no backup of this stuff."
   missed night stays quiet, two alert — slice 023's tolerance, replacing the proposal's 26 hours).
   The rule covers the mirror only: `postgres-backup` is **not** added to it; slice 023 owns
   freshness for uploads through backup-server. Delivery arrives with slice 018.
+  Both edges bind (plan review r1 B1, operator **"Agree"**): a single missed night never fires,
+  however long the following run takes — kube-state-metrics' last-successful time is the Job's
+  *completion*, not its schedule, so the threshold carries a margin of a few hours for run length;
+  two consecutive missed nights do fire, a few hours after the second failed run. The phase and its
+  criterion state both edges.
 - Ruling W1 — the design as walked through (chat, 2026-09-14). The operator asked what actually
   lands in the backup folder; the session described one rclone `crypt` remote over the Drive
   remote holding `current/<bucket>/<object key path>` (one file per object, live state, key
@@ -64,6 +69,22 @@ vulnerable at the moment. There is no backup of this stuff."
   symmetric — the job holds a key that also decrypts, unlike backup-server's age public key, so
   cluster access plus the Drive login can read the mirror. Operator: **"Yes, it looks like a very
   solid solution."** Exact folder names are the plan's.
+
+#### Plan review rulings (r1, 2026-09-14, operator: "Agree")
+
+- Ruling B2 — where the runbook's credentials live. The restore runbook names where each credential
+  it needs actually lives: the app's key pair in the Terraform-written Kubernetes Secret in the
+  app's namespace; `backup-reader`'s key in the Terraform-written Secret in `storage-prd`; the crypt
+  password and salt in OpenBao and Roboform; and the scratch user the drill creates on dev Ceph.
+  Reading any of those values — OpenBao or Kubernetes Secret alike — is the operator's keystroke or
+  needs the operator's permission. The drill's `rclone check` against the live
+  `iot-prd-attachments` reads with the read-only `backup-reader` key, not the app's read-write key;
+  a real restore into a production bucket writes with the app's own key.
+- Ruling A1 — the dev-cluster clause. The criterion that dev-cluster releases get no grant and
+  still deploy rests on what the run can check: the provider's tests show a provider with no reader
+  configured grants nothing and plans no change. The live proof — one manual dev deploy of an S3
+  release while srvk8sdev is up for the drill — is an outstanding operator action, not a criterion
+  the test phase can close.
 
 #### Settled by the session — shown to the operator in `refinement.md`, not objected to
 
