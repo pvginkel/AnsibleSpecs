@@ -43,7 +43,9 @@ out-of-band PVE-only rotation.
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Rotate the PVE leaves by hand if this slice slips past ~Sep 8 2026
+### ~~A1 — Rotate the PVE leaves by hand if this slice slips past ~Sep 8 2026~~ — closed at triage 2026-09-14 — operator: "Close". Invalid on the report itself: N1 superseded this manual-rotation fallback.; struck by triage 2026-09-14
+
+<details><summary>struck — body kept for the record</summary>
 
 At triage the operator declined a pre-emptive hand-run `iac-apply` on the grounds that the
 slice starts today, and at planning chose natural phase ordering over sequencing the
@@ -58,6 +60,8 @@ inside the plan's rulings.
 **Provenance:** read, plan-writer, plan phase, round 1, plan.md rulings section and slices/backlog/016_internal_tls_scheduled_renewal/slice.md
 **Disposition:**
 
+</details>
+
 ## Notable events
 
 Focus: N1 first — the fleet's live state, six of ten leaves already inside their window, is what
@@ -69,7 +73,9 @@ puts a date on this slice. N2 is one missing CI signal, not a failure.
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — Test phase (r1): six of ten internal_tls leaves are already inside their renewal window in prod, right now · major
+### ~~N1 — Test phase (r1): six of ten internal_tls leaves are already inside their renewal window in prod, right now · major~~ — closed at triage 2026-09-14 — operator: "Scheduled certs is running successfully. I'd say close and if something goes wrong again, I'll reraise."; struck by triage 2026-09-14
+
+<details><summary>struck — body kept for the record</summary>
 
 Live --check --diff against the whole reachable prd fleet (2026-08-30) plus direct openssl reads confirm this is not hypothetical: pve/pve1/pve2 (notAfter Sep 10 20:37:42 2026 GMT), srvk8s1 (Sep 12 08:35:38), srvk8s2 (Sep 12 08:37:26) and srvk8s3 (Sep 10 20:45:27) are all inside the 14-day renewal window today, and playbooks/renew-internal-tls.yml correctly flags all six for reissue under --check. srvvault1/2/3 (Sep 16) are not yet due; srvk8s4 correctly has no leaf. b7de205 is pushed to main. The Friday 2026-09-04 04:00 UTC iac-scheduled-certs cron will pick these six up with six days of margin before the PVE expiry, or the operator can run it now: cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook --diff playbooks/renew-internal-tls.yml --limit '!k8s_dev' --check, then the same command with --check deleted. See verification.json V01 for the full evidence.
 
@@ -78,7 +84,11 @@ Live --check --diff against the whole reachable prd fleet (2026-08-30) plus dire
 **Provenance:** witnessed, test-agent r1, live --check --diff + direct SSH cert reads against the prd fleet, 2026-08-30
 **Disposition:**
 
-### N2 — Test phase (r1): iac-on-push's result for b7de205 could not be confirmed -- Jenkins MCP was down · minor
+</details>
+
+### ~~N2 — Test phase (r1): iac-on-push's result for b7de205 could not be confirmed -- Jenkins MCP was down · minor~~ — closed at triage 2026-09-14 — operator: "Close. I think this is done now. You could still check the JENKINS_TOKEN. We should have that as a secret in this environment." Checked 2026-09-14: no JENKINS_TOKEN in this environment's env, none projected in Ansible .kubecoder/config.yaml.; struck by triage 2026-09-14
+
+<details><summary>struck — body kept for the record</summary>
 
 Push (d4e5a60..b7de205) completed and is pre-authorized under the devlock hold. Per slice-testing-strategy.md section 4 the pushed commit should be confirmed against iac-on-push (terraform plan + protected-VM destroy check), but the jenkins MCP server returned 502 for the whole test-phase pass and this pod carries no JENKINS_TOKEN for the track_build.py CLI fallback (env checked directly: only GH_TOKEN, KUBECODER_*, TF_VAR_* tokens are projected). This does not block the certs renewal itself -- iac-scheduled-certs is a separate cron-triggered job with no dependency on iac-on-push's result -- but the operator should glance at the iac-on-push build for b7de205 before assuming main is plan-clean.
 
@@ -86,6 +96,8 @@ Push (d4e5a60..b7de205) completed and is pre-authorized under the devlock hold. 
 
 **Provenance:** witnessed, test-agent r1, jenkins MCP 502 + empty JENKINS_TOKEN env, 2026-08-30
 **Disposition:**
+
+</details>
 
 ## Bugs
 
@@ -119,17 +131,6 @@ than what ships, and the deferred monitoring slice
 **Consequence:** Anyone reading decisions.md concludes every internal_tls leaf's expiry is observable in Prometheus. For the kube-apiserver SNI leaves on srvk8s1, srvk8s2, srvk8s3 and srvk8sdev no gauge is written at all, and no alert exists on any leaf — so a stalled renewer on 4 of the 10 leaves is invisible except through the daily drift red.
 
 **Provenance:** read, plan-reviewer, plan phase, round 1, plan_review_r1.md finding F4 (AnsibleSpecs/decisions.md:145, Ansible roles/internal_tls/tasks/metric.yml:23-32)
-**Disposition:**
-
-### B2 — Ansible — roles/proxmox_host/README.md:55 says the pveproxy leaf is renewed on each iac-scheduled-drift cycle, which drift cannot do · minor
-
-The line reads: "**Renewal** is threshold-gated by `internal_tls` (re-issue under 14 days left) on each `iac-scheduled-drift` cycle." The drift job runs `ansible-playbook --check` (check-ansible-drift.sh), so it can report a due re-issue and can never sign one — the premise of this whole slice. The line is outside P1's diff (no task file I touched contains it), so the slice's diff-based doc phase can miss it; it should end up naming the weekly certs job P3 adds instead. The equivalent microk8s README lines (:26, :114) are accurate and need nothing.
-
-doc-writer, doc phase, 2026-08-30 — Fixed in the doc phase. roles/proxmox_host/README.md now says the leaf is threshold-gated by internal_tls and driven by the weekly iac-scheduled-certs job running playbooks/renew-internal-tls.yml against every PVE node, and that iac-scheduled-drift is --check-only and never signs. The same false driver claim appeared in three more places and was corrected with it: roles/internal_tls/README.md's cadence section (which still said nothing calls the role on a schedule), AnsibleSpecs decisions.md:140, and two 'run the drift cycle' instructions in docs/runbooks/step-ca-bootstrap.md.
-
-**Consequence:** An operator reading the proxmox_host role README concludes the pveproxy leaves are already renewed daily and stops looking — the exact belief that let the pve/pve1/pve2 leaves run to within 14 days of expiry with nothing signing them.
-
-**Provenance:** read, code-writer, P1, r1, ansible/roles/proxmox_host/README.md:55
 **Disposition:**
 
 ### B3 — Ansible — the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml · minor
@@ -178,6 +179,21 @@ P3 removed the job-level post { failure } that unconditionally set currentBuild.
 
 **Provenance:** read, code-reviewer, P3 round 1, phases/P3/code_review_r1.md F2
 **Disposition:**
+
+### ~~B2 — Ansible — roles/proxmox_host/README.md:55 says the pveproxy leaf is renewed on each iac-scheduled-drift cycle, which drift cannot do · minor~~ — closed at triage 2026-09-14 — operator: "Close". Invalid on the report itself: fixed in the doc phase (the entry's own 2026-08-30 note).; struck by triage 2026-09-14
+
+<details><summary>struck — body kept for the record</summary>
+
+The line reads: "**Renewal** is threshold-gated by `internal_tls` (re-issue under 14 days left) on each `iac-scheduled-drift` cycle." The drift job runs `ansible-playbook --check` (check-ansible-drift.sh), so it can report a due re-issue and can never sign one — the premise of this whole slice. The line is outside P1's diff (no task file I touched contains it), so the slice's diff-based doc phase can miss it; it should end up naming the weekly certs job P3 adds instead. The equivalent microk8s README lines (:26, :114) are accurate and need nothing.
+
+doc-writer, doc phase, 2026-08-30 — Fixed in the doc phase. roles/proxmox_host/README.md now says the leaf is threshold-gated by internal_tls and driven by the weekly iac-scheduled-certs job running playbooks/renew-internal-tls.yml against every PVE node, and that iac-scheduled-drift is --check-only and never signs. The same false driver claim appeared in three more places and was corrected with it: roles/internal_tls/README.md's cadence section (which still said nothing calls the role on a schedule), AnsibleSpecs decisions.md:140, and two 'run the drift cycle' instructions in docs/runbooks/step-ca-bootstrap.md.
+
+**Consequence:** An operator reading the proxmox_host role README concludes the pveproxy leaves are already renewed daily and stops looking — the exact belief that let the pve/pve1/pve2 leaves run to within 14 days of expiry with nothing signing them.
+
+**Provenance:** read, code-writer, P1, r1, ansible/roles/proxmox_host/README.md:55
+**Disposition:**
+
+</details>
 
 ### ~~B5 — Ansible — renew-internal-tls.yml's no-serial comment blames max_fail_percentage, which serial: never sets · minor~~ — resolved by consult 1 (b7de205): the no-serial comment now states the unconditional entire-batch-failed break and that max_fail_percentage cannot lift it; re-read against ansible-core 2.20.5 playbook_executor.py:188-195 and linear.py:336-350, kc project lint+test green; struck by consult 1
 
