@@ -55,3 +55,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — Ansible — the 'Re-apply Calico cni.yaml' handler has the same check-mode blind spot R4 fixes, and R4's ruling does not name it · nit
+
+roles/microk8s/handlers/main.yml:2-16 runs 'microk8s kubectl apply' as ansible.builtin.command with changed_when: true and no check-mode handling, so under --check it is skipped and, with ansible.cfg:12 display_skipped_hosts = False, never shown. The settled R4 ruling extends the check-mode announcement to four named restart handlers (Restart microk8s, Rollout-restart coredns, and the microceph OSD and MDS restarts); this apply handler is not a restart and is not among them, so slice 019 leaves it as it is.
+
+**Consequence:** A --check --diff run that would re-apply Calico's cni.yaml does not say so; the apply is declarative and far less disruptive than the restarts R4 covers.
+
+**Provenance:** read | plan-writer, planning, round 1 — roles/microk8s/handlers/main.yml:2-16
+**Disposition:**

@@ -1,0 +1,132 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "OpenBao backup credential (R1)",
+      "description": "R1 — \"`backup.yml` delivers the staged secret_id on `stat.exists` alone, never checking it against the live role. The staging dir is a persistent per-checkout `tmp/`, so one stale file installs a dead credential permanently.\" Resolved: before a staged backup secret_id is installed on the OpenBao nodes, the run checks it against the live `backup` AppRole, and a dead one fails the run with a message naming `openbao_rotate_secret_ids=true` (today the delivery at ansible/roles/openbao/tasks/backup.yml:92-100 is gated on `_openbao_staged_secret_id.stat.exists` alone).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "OpenBao backup credential (R1)",
+      "description": "There is no silent skip and no automatic re-mint: a staged secret_id is never installed without having been proven against the live role — a run holding no admin token fails rather than installing it unproven — and the check mints, revokes and deletes nothing; minting stays behind the operator's `openbao_rotate_secret_ids=true` (default false, ansible/roles/openbao/defaults/main.yml:87).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "OpenBao backup credential (R1)",
+      "description": "The remedy the failure names works: a `site-openbao.yml -e openbao_rotate_secret_ids=true` run from the checkout holding the dead staged secret_id completes on the serialized apply (ansible/playbooks/site-openbao.yml:171) and leaves every OpenBao node holding a secret_id the live `backup` AppRole accepts.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "OpenBao backup credential (R1)",
+      "description": "Check mode stays meaningful: a `--check` run from a checkout holding a dead staged secret_id reports the failure, and a `--check` run with no staged secret_id (the drift job's fresh clone) behaves as before.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "OpenBao backup wrapper (R2)",
+      "description": "R2 — \"Every leg of the wrapper is a bare `curl -fsS`, so a failure never says which call broke. Cost three months of misdiagnosis.\" Resolved: every call the backup wrapper makes — leader check, AppRole login, snapshot, policy list and reads, KV walk and reads, auth and mount reads, upload (ansible/roles/openbao/templates/openbao-backup.sh.j2:29, :38-44, :46, :52-53, :57-58, :73-82, :102-103, :117-122) — names itself on failure, with the HTTP status and, for OpenBao calls, OpenBao's error text.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "OpenBao backup wrapper (R2)",
+      "description": "The wrapper never prints a token, a secret_id or a response body, on failure or success.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "Backup freshness (R3)",
+      "description": "R3 — \"Followers exit 0 — a dead backup looks healthy fleet-wide. No freshness check anywhere.\" Per the 2026-09-14 ruling, this slice's criterion is that slice 023 carries it (AnsibleSpecs/slices/backlog/023_backup_freshness_alerting/slice.md, requirement 1), and no phase of this slice delivers any part of backup freshness — backup-server, Prometheus, alert rules, or the validity sent with the upload.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "microk8s kubelite restart (R4)",
+      "description": "R4 — \"the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml\". Resolved: in a check-mode run the kubelite restart announces itself as a change on each node it would restart, and check mode still never restarts anything (today ansible/roles/microk8s/handlers/main.yml:60-77 is a `shell` handler with no check-mode handling, hidden by ansible/ansible.cfg:12).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "microk8s and microceph restart handlers (R4)",
+      "description": "The same check-mode announcement covers `Restart microk8s` and `Rollout-restart coredns` (ansible/roles/microk8s/handlers/main.yml:18-38) and `Restart microceph OSD daemon` and `Restart microceph MDS daemon` (ansible/roles/microceph/handlers/main.yml:2-14).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "microk8s and microceph restart handlers (R4)",
+      "description": "Outside check mode the five handlers behave and report as before, and a converged host still reports `changed=0` under `--check`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "microk8s kubelite restart (R5)",
+      "description": "R5 — \"the kubelite wait gates on /livez, which is liveness, not the 'serving again' the handler comment claims\". Resolved: the kubelite restart waits for readiness — the API server's readiness check on control-plane nodes, the node's Ready state on workers (or, if that proves impractical inside the single throttled restart step, the kubelet health check with the handler comment saying so) — within `microk8s_kubelite_ready_timeout` (ansible/roles/microk8s/defaults/main.yml:256; today's probe selection at ansible/roles/microk8s/handlers/main.yml:72-75).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "microk8s kubelite restart (R5)",
+      "description": "A node that comes back alive but not ready within the timeout stops the roll and turns the run red, a Friday certs build included; restart and wait remain one throttled task, so the next node never restarts before this one is ready.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "microk8s kubelite restart (R5)",
+      "description": "The handler comment says what the wait actually checks.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "internal_tls recovery runbook (R6)",
+      "description": "R6 — \"docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery\". Resolved: docs/runbooks/ has that counterpart; it names the symptom of a lapsed leaf on each consumer (Proxmox web UI, kubernetes-api.home, the OpenBao listener) and gives `playbooks/renew-internal-tls.yml` as the recovery, stating that a plain renewal run recovers an already-lapsed leaf.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "internal_tls recovery runbook (R6)",
+      "description": "The runbook spells out that an expired OpenBao listener leaf stops the usual path, because every Jenkins `iac` run fetches its secrets from OpenBao at start, and covers renewing that leaf by hand in that state.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "internal_tls recovery runbook (R6)",
+      "description": "`docs/runbooks/openbao.md`'s \"listener cert expired\" entry (docs/runbooks/openbao.md:266, today unlinked) points to the new runbook.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
