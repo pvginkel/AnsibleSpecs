@@ -210,6 +210,11 @@ fleet-wide read-only RGW user as a recorded exception to per-app credentials).
 
   Neither value changes once the first mirror run has uploaded: a different key leaves everything
   already on Drive unreadable to the job and forces a full re-upload.
+
+  **Done (operator, 2026-09-14, mid-run):** "I forgot to create the secrets in OpenBao at
+  eso/prd/storage/prd/s3-mirror, #password and #salt. I did do this now." The leaf's metadata shows
+  version 1, created 13:22 UTC — before any HelmCharts push. Values were not read; the Roboform copy
+  is the operator's and unverified from here.
 - The provider change is inert for existing callers (no grant unless the module asks), because every
   deploy floats to the newest provider.
 - **Push order** (the test phase's). HomelabTerraformProvider first; HelmCharts only once
