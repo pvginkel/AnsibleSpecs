@@ -223,6 +223,35 @@ For the OpenBao listener leaf, the runbook also covers renewing it by hand while
 - **Grounded steps only.** The runbook is read under outage pressure, so it gives no recovery step the repo does not ground. An ungrounded step is why slice 016 did not write it (016-B10).
 - **The renewal run's two plays (P4).** `renew-internal-tls.yml` renews the pveproxy and OpenBao leaves in one un-serialised play, then the k8s leaves in a last play under `serial: 1`. That play stops at the first failed or unreachable k8s node, and a lapsed leaf on a later node is not reached; `--limit <node>` reaches it. When every proxmox and openbao host fails, the k8s play never runs.
 
+**Done (P5).** `docs/runbooks/internal-tls-expiry.md` is the X.509 counterpart of `ssh-host-cert-expiry.md`. In order, it gives:
+- the symptom on each consumer, with the exact client error text;
+- the Friday job's two failure descriptions;
+- step 1, an Ansible ping that routes `Certificate invalid: expired` to `ssh-host-cert-expiry.md`;
+- step 2, a read-only `openssl s_client` probe for each consumer;
+- step 3, `renew-internal-tls.yml --limit <host>` and its two plays.
+
+A separate section covers renewing the OpenBao listener leaf by hand while `iac-impl`'s login fails. `docs/runbooks/openbao.md`'s Consumer cold-boot intro links to the new runbook.
+
+Later phases:
+- Test phase: V14–V16 are checked by reading the runbook and the openbao.md link. The recovery itself is not live-proven; that needs a lapsed leaf.
+- Doc phase: `openbao.md`'s "Listener cert renewal" bullet (:49-57) and `ssh-host-cert-expiry.md` do not link to the new runbook.
+
+Record:
+- The by-hand run's credentials, settled:
+  - Nothing on the renewal path reads OpenBao. There is no hashi_vault or bao lookup in the inventories, `internal_tls`, `baseline`, the three consumer roles' leaf paths or the playbook.
+  - The controller needs the `ansible` SSH key, the vault passphrase, `step` and `ca.home`.
+  - Two controllers hold these without OpenBao. (a) A KubeCoder environment whose `kubecoder-keys.sh` files are already on disk. Its secret catalog is filled from OpenBao, so the runbook says not to set up a new environment during the outage. (b) srviac under `iac-cold-boot.md` steps 1–4, because `iac-impl:462` builds its OpenBao resolver only when a `!bao` ref is left.
+- Witnessed 2026-09-14, all read-only, from this environment:
+  - `ansible 'proxmox:openbao:k8s_prd' -m ping` reached every host with those keys, and `ca.home/health` answered ok.
+  - The step-2 probe read the live leaves: pve and pve1, SNI `kubernetes-api.home` on srvk8s1 and srvk8s2, and `secrets.home` on srvvault1 and on `secrets.home:443`.
+- Witnessed against a throwaway expired leaf in the iac sidecar; the runbook quotes the output:
+  - the Go error `x509: certificate has expired or is not yet valid` (`bao`, `kubectl`, `step`), curl's `certificate has expired`, and Python's `certificate verify failed: certificate has expired`;
+  - the step-2 probe and `step certificate inspect --insecure` both read the expired leaf.
+- Beyond the plan:
+  - The runbook covers a served leaf that lapsed while the file on disk is fresh (a run killed before its handler) with `-e internal_tls_renewal_threshold_days=48`.
+  - It notes that an expired OpenBao leaf gives the certs job the host-cert description too.
+  - A close-out bug records that `reissue-host-cert.yml` does not cover pve, pve1 or pve2; step 1 of the runbook says so.
+
 ### P6 — A whole-cluster recovery delivers the backup credential after the restore
 
 **Target:** `root`

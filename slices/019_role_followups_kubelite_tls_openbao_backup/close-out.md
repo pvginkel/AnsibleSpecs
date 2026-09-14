@@ -88,6 +88,24 @@ OpenBao 2.5.4 keeps listing a soft-deleted key under kv/metadata/, but its data 
 **Provenance:** witnessed — code-reviewer, P2, round 1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
+### B3 — Ansible — the microk8s kubelite restart's worker readiness probe has no per-attempt timeout, so microk8s_kubelite_ready_timeout does not bound the worker wait · minor
+
+roles/microk8s/handlers/main.yml:106-110 runs kubectl get node with no --request-timeout, and kubectl's default is 0, which never times out. The deadline is checked only between attempts (:122-126). The apiserver branch bounds each attempt with curl -m 5 (:117). kube-apiserver's server-side request timeout (1m by default) ends an ordinary slow-apiserver request, so an unbounded hang needs a proxy backend that stops answering below HTTP.
+
+**Consequence:** A worker whose local apiserver-proxy accepts but never answers leaves a site-k8s.yml or update-k8s.yml run hung in the kubelite handler past its 180s timeout, holding the roll, instead of failing it red.
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
+**Disposition:**
+
+### B4 — Ansible — ssh-host-cert-expiry.md has no fix for an expired SSH host certificate on pve, pve1 or pve2 · minor
+
+renew-host-certs.yml renews SSH host certificates on managed:!ceph_prd, and the proxmox group (pve, pve1, pve2) is in managed. The runbook's only fix, reissue-host-cert.yml, pins the host key from terraform output host_pubkeys and covers only VMs Terraform builds from scratch (ssh-host-cert-expiry.md:57-60); the Proxmox nodes are not among them. P5's internal-tls-expiry.md routes a lapsed SSH host certificate there, and says the PVE nodes are not covered.
+
+**Consequence:** A PVE node whose SSH host certificate lapses is UNREACHABLE to Ansible with no documented recovery, and its pveproxy leaf cannot be renewed until one is worked out during the outage.
+
+**Provenance:** read, code-writer, P5, r1, docs/runbooks/ssh-host-cert-expiry.md and ansible/playbooks/renew-host-certs.yml
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
