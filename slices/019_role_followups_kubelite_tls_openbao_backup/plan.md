@@ -67,7 +67,7 @@ localized — per the F4 ruling: each phase lands inside one component on a patt
 
 - None within this slice. Slice 023 later edits the same backup wrapper (sending a validity with the upload) and builds on whatever this slice leaves there.
 
-### P1 — A staged backup secret_id is proven against the live role before it is installed
+### P1 — A staged backup secret_id is proven against the live role before it is installed ✅ DONE 2026-09-14
 
 **Target:** `ansible`
 
