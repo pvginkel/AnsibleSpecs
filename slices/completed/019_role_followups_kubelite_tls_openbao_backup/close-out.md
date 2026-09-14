@@ -128,7 +128,7 @@ Under --check the secret_id mint (roles/openbao/tasks/approle.yml:329-347, a uri
 **Consequence:** The operator applies the rotation run that P1's rejection names, minting never-expiring secret_ids for all six AppRoles, with no dry run. Its --check fails, and tells them to pass a flag they already passed.
 
 **Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
-**Disposition:** Fix inline please (if feasible) — fixed in Ansible a0e3547: a --check rotation run reports the mint and the backup secret_id delivery instead of failing; not yet run live
+**Disposition:** Fix inline please (if feasible) — fixed in Ansible a0e3547: a --check rotation run reports the mint and the backup secret_id delivery instead of failing; proven by the operator's site-openbao.yml --check -e openbao_rotate_secret_ids=true, 2026-09-14 (failed=0 on srvvault1-3, both reports fired)
 
 </details>
 
