@@ -64,6 +64,15 @@ Per the 2026-09-14 ruling on P4's question (Split k8s play, serial 1). AnsibleSp
 **Provenance:** read, code-writer, P4, r2, ansible/playbooks/renew-internal-tls.yml
 **Disposition:**
 
+### N4 — iac-on-push's result for d1c935e (pushed to main this pass) could not be confirmed within this test-phase session · minor
+
+Pushing d1c935e triggered IaC/Build-Main #167, but it sat queued ("Waiting for next available executor on 'IaC Agent'") for the whole session and never started running, let alone finished — not a red build, just no signal yet. Direct polling via the pod's JENKINS_TOKEN (present in this environment, unexpectedly per docs/live-infra-access.md, same class of gap as 016's N3) confirmed it was still building/queued at session end.
+
+**Consequence:** The operator should check https://jenkins.webathome.org/job/IaC/job/Build-Main/167/ (or its outcome) before treating the push as confirmed clean; if it went red, that is real signal this pass never saw.
+
+**Provenance:** witnessed, test-agent r1
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
