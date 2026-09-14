@@ -204,7 +204,7 @@ Record:
   - A clean run: rc 0.
 - `--list-hosts` on prd: play 1 has pve, pve1, pve2 and srvvault1–3; play 2 has srvk8s1–4 and srvk8sdev. `--limit k8s_dev` leaves play 1 empty.
 
-### P5 — A runbook recovers a lapsed internal_tls leaf
+### P5 — A runbook recovers a lapsed internal_tls leaf ✅ DONE 2026-09-14
 
 **Target:** `root`
 
