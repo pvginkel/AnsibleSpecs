@@ -3,146 +3,222 @@
     {
       "id": "V01",
       "area": "OpenBao backup credential (R1)",
-      "description": "R1 — \"`backup.yml` delivers the staged secret_id on `stat.exists` alone, never checking it against the live role. The staging dir is a persistent per-checkout `tmp/`, so one stale file installs a dead credential permanently.\" Resolved: before a staged backup secret_id is installed on the OpenBao nodes, the run checks it against the live `backup` AppRole, and a dead one fails the run with a message naming `openbao_rotate_secret_ids=true` (today the delivery at ansible/roles/openbao/tasks/backup.yml:92-100 is gated on `_openbao_staged_secret_id.stat.exists` alone).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "R1 \u2014 \"`backup.yml` delivers the staged secret_id on `stat.exists` alone, never checking it against the live role. The staging dir is a persistent per-checkout `tmp/`, so one stale file installs a dead credential permanently.\" Resolved: before a staged backup secret_id is installed on the OpenBao nodes, the run checks it against the live `backup` AppRole, and a dead one fails the run with a message naming `openbao_rotate_secret_ids=true` (today the delivery at ansible/roles/openbao/tasks/backup.yml:92-100 is gated on `_openbao_staged_secret_id.stat.exists` alone).",
+      "verdict": "pass",
+      "rationale": "The login-before-install mechanism is implemented and confirmed working live against the real prd `backup` AppRole. `backup.yml` gates delivery on `_openbao_backup_secret_id_proven` (a real HTTP 200 from the staged role_id/secret_id login), and a 400 response fails the run naming `-e openbao_rotate_secret_ids=true` before any file is copied. This pass ran `ansible-playbook site-openbao.yml --tags openbao_backup --check` against the real srvvault1-3 fleet: the staged credentials in this checkout's `tmp/` logged in successfully (HTTP 200) against the live backup AppRole on all three nodes, proving the check makes a real, meaningful call against the live role exactly as designed (it then failed at the separate revoke-self step \u2014 see V02, a different, already-tracked gap). The dead-secret_id (HTTP 400) and delivery paths were proven in P1's harness against a real OpenBao 2.5.4 dev server (plan.md P1 Record).",
+      "evidence": [
+        "ansible/roles/openbao/tasks/backup.yml:54-69 \u2014 the proving login, check_mode: false, no_log",
+        "ansible/roles/openbao/tasks/backup.yml:82-92 \u2014 400 fails naming -e openbao_rotate_secret_ids=true, before any copy task",
+        "ansible/roles/openbao/tasks/backup.yml:174-193 \u2014 delivery of role_id/secret_id gated on the proven or already-installed secret_id",
+        "Live 2026-09-14: `cd ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml --tags openbao_backup --check` \u2014 task \"Log in with the staged backup AppRole credentials\" -> ok on srvvault1/2/3 (real 200 from the live backup AppRole)",
+        "plan.md P1 Record \u2014 harness against OpenBao 2.5.4 dev server: dead secret_id (check+apply) gives the rejection message; live secret_id (--check) reaches delivery"
+      ]
     },
     {
       "id": "V02",
       "area": "OpenBao backup credential (R1)",
       "description": "There is no silent skip and no automatic re-mint. Each node's own pass installs a staged secret_id only after an AppRole login with the staged role_id and secret_id succeeds; no admin token is needed. A rejected login fails the run, naming `openbao_rotate_secret_ids=true`. The check mints no secret_id, revokes or deletes no credential, and leaves no lasting login token behind. Minting stays behind the operator's `openbao_rotate_secret_ids=true` (default false, ansible/roles/openbao/defaults/main.yml:87).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "The code correctly never installs a secret_id without a successful proving login and mints/revokes nothing extra (confirmed by reading and by P1's harness: 'a secret_id survives repeated logins', 'nothing under roles/openbao/ sets secret_id_num_uses'). But 'no lasting login token behind' does not currently hold on the live cluster: this pass's live run (see V01) proved the login (200), then the self-revoke failed with HTTP 403 permission denied, because the backup-policy currently deployed on prd predates P1's `auth/token/revoke-self` grant (already tracked as close-out N1/B1, not a new finding). The proving login's token was therefore left un-revoked in real prd OpenBao this pass \u2014 no worse than a normal nightly backup run's token (the wrapper itself never revokes its token either; both expire on their default TTL). The run correctly failed loudly rather than silently continuing. This settles itself on the first plain (non-rotation) `site-openbao.yml` apply: each host's own policy-write task (approle.yml, which runs before backup.yml) rewrites the backup policy to include the grant before that host's own proving login runs, per P6's Record ('it also rewrites any policy whose text differs, which covers P1's revoke-self grant for a snapshot taken before it').",
+      "evidence": [
+        "ansible/roles/openbao/tasks/backup.yml:106-129 \u2014 the self-revoke and its fail task",
+        "ansible/roles/openbao/templates/backup-policy.hcl.j2:10-14 \u2014 the revoke-self grant this slice added",
+        "Live 2026-09-14: same run as V01 \u2014 \"Fail when the proving login's token was not revoked\" -> fatal on srvvault1/2/3, HTTP 403 permission denied (currently-deployed policy predates the grant)",
+        "close-out.md N1/B1 \u2014 this exact consequence already flagged by the phase reviewer",
+        "Owed: a plain `cd ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml` apply (no flags needed \u2014 the staged secret_id already logs in live) settles it fleet-wide on the first pass, each host healing its own policy before its own proving login"
+      ]
     },
     {
       "id": "V03",
       "area": "OpenBao backup credential (R1)",
       "description": "The remedy the failure names works. A `site-openbao.yml -e openbao_rotate_secret_ids=true` run from the checkout holding the dead staged secret_id completes on the serialized apply (ansible/playbooks/site-openbao.yml:171): the bootstrap host's pass re-stages a fresh secret_id, and every node's pass, the later ones included, proves it by login. The run leaves every OpenBao node holding a secret_id the live `backup` AppRole accepts. Proving this live takes a rotation run, which mints a fresh never-expiring secret_id for all six AppRoles and revokes none of the old ones (ansible/roles/openbao/tasks/approle.yml:329-347). The test phase names that cost and leaves the run to the operator; it does not present the run as a routine proof.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Per the plan's own instruction, proving this live takes a deliberate rotation run (mints a fresh never-expiring secret_id for all six AppRoles, revokes none of the old) and the test phase is directed to name that cost rather than run it routinely. Not attempted this pass.",
+      "evidence": [
+        "plan.md P1 criterion text: 'The test phase names that cost and leaves the run to the operator; it does not present the run as a routine proof.'",
+        "ansible/roles/openbao/tasks/approle.yml:329-347, :384-395 \u2014 the mint+stage gated on openbao_rotate_secret_ids",
+        "Owed: `cd ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml -e openbao_rotate_secret_ids=true` \u2014 cost: mints a fresh never-expiring secret_id for all six AppRoles, revokes none of the old"
+      ]
     },
     {
       "id": "V04",
       "area": "OpenBao backup credential (R1)",
       "description": "Check mode stays meaningful: a `--check` run from a checkout holding a dead staged secret_id reports the failure, and a `--check` run with no staged secret_id (the drift job's fresh clone) behaves as before.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Confirmed both halves. The check makes a real call rather than being skipped: this pass's live --check run (V01) performed a genuine HTTP login and self-revoke against real prd OpenBao under --check (check_mode: false on both), not a no-op. The dead-secret_id sub-case (a checkout holding a bad staged secret_id fails under --check the same as under apply) was proven in P1's harness against a real OpenBao dev server. The 'no staged secret_id' case is true by construction: the drift job clones fresh so tmp/ is always empty there, so its --check runs are unaffected (nothing new to verify beyond the existing gating on stat.exists, unchanged by this slice for that branch).",
+      "evidence": [
+        "ansible/roles/openbao/tasks/backup.yml:66, :117 \u2014 check_mode: false on the login and revoke",
+        "Live 2026-09-14 (same run as V01/V02): the --check run made real HTTP calls (200 login, 403 revoke) rather than skipping",
+        "plan.md P1 Record: 'dead secret_id, check and apply: the rejection message' (harness against OpenBao 2.5.4 dev server)",
+        "plan.md R1 grounding: 'the nightly drift job runs site-openbao under --check ... Jenkins iac runs clone fresh, so only a hand run from a persistent checkout can carry a leftover staged file'"
+      ]
     },
     {
       "id": "V17",
       "area": "OpenBao backup credential (R1)",
       "description": "A run against a fresh cluster before its snapshot restore, where there is no `backup` AppRole to log in against, neither installs the staged secret_id nor fails; it says the backup credential was not delivered. A dead secret_id against a live `backup` role is never reported that way; it still fails the run. (Before the restore nothing has enabled AppRole auth: ansible/roles/openbao/tasks/approle.yml:35-36, :55-65.)",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The no-AppRole-mount classification (403 'permission denied' with no other detail) is distinct in code from a dead-credential-against-a-live-mount rejection (400), and is proven by the P1 harness against a real OpenBao dev server with no AppRole mounted at approle/ ('no mount, check and apply: not delivered, failed=0'). This scenario needs an OpenBao cluster with no AppRole auth method at all, which does not exist on prd (prd already has a live backup AppRole, confirmed by this pass's V01 live login) \u2014 a whole-cluster-loss drill would be needed to reproduce it live, which the plan does not ask this pass to run (see V18).",
+      "evidence": [
+        "ansible/roles/openbao/tasks/backup.yml:75-80 \u2014 _openbao_backup_no_approle classifies HTTP 403 with errors==['permission denied'] as no-mount",
+        "ansible/roles/openbao/tasks/backup.yml:142-150 \u2014 the not-delivered message printed instead of a fail",
+        "plan.md P1 Record \u2014 harness: 'no mount, check and apply: not delivered, failed=0'"
+      ]
     },
     {
       "id": "V18",
       "area": "OpenBao whole-cluster recovery runbook (R1)",
-      "description": "`docs/runbooks/openbao.md` §3 (whole-cluster loss) carries a converge after the snapshot restore, which proves and delivers the backup credential. Today §3 goes converge (step 3), restore (4), verify (5), with no converge after the restore (docs/runbooks/openbao.md:151-191).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "`docs/runbooks/openbao.md` \u00a73 (whole-cluster loss) carries a converge after the snapshot restore, which proves and delivers the backup credential. Today \u00a73 goes converge (step 3), restore (4), verify (5), with no converge after the restore (docs/runbooks/openbao.md:151-191).",
+      "verdict": "pass",
+      "rationale": "Verified by reading, exactly as the plan directs: openbao.md \u00a73 step 3's quoted messages and step 5's three outcomes match roles/openbao/tasks/backup.yml's actual task names and message text verbatim (both quoted messages, the 'Refuse a staged backup secret_id...' fail task name, and the rotation-flag remedy). Step 6 adds the manual backup-run verification. The recovery path itself needs a whole-cluster drill to live-prove, which this pass does not run.",
+      "evidence": [
+        "docs/runbooks/openbao.md:165-183 \u2014 step 3 (converge, quotes both messages) and step 5 (converge again, three outcomes)",
+        "docs/runbooks/openbao.md:206-234 \u2014 step 6 (verify + manual backup run)",
+        "ansible/roles/openbao/tasks/backup.yml:142-150, :82-92, :152-163 \u2014 the three message/fail paths the runbook quotes, matched verbatim"
+      ]
     },
     {
       "id": "V05",
       "area": "OpenBao backup wrapper (R2)",
-      "description": "R2 — \"Every leg of the wrapper is a bare `curl -fsS`, so a failure never says which call broke. Cost three months of misdiagnosis.\" Resolved: every call the backup wrapper makes — leader check, AppRole login, snapshot, policy list and reads, KV walk and reads, auth and mount reads, upload (ansible/roles/openbao/templates/openbao-backup.sh.j2:29, :38-44, :46, :52-53, :57-58, :73-82, :102-103, :117-122) — names itself on failure, with the HTTP status and, for OpenBao calls, OpenBao's error text.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "R2 \u2014 \"Every leg of the wrapper is a bare `curl -fsS`, so a failure never says which call broke. Cost three months of misdiagnosis.\" Resolved: every call the backup wrapper makes \u2014 leader check, AppRole login, snapshot, policy list and reads, KV walk and reads, auth and mount reads, upload (ansible/roles/openbao/templates/openbao-backup.sh.j2:29, :38-44, :46, :52-53, :57-58, :73-82, :102-103, :117-122) \u2014 names itself on failure, with the HTTP status and, for OpenBao calls, OpenBao's error text.",
+      "verdict": "pass",
+      "rationale": "Read the shipped template: every OpenBao and upload call goes through the request/bao_request/bao_api/bao_check helpers, which name the call (method+path or 'POST <url>/upload'), the HTTP status, and (for OpenBao calls) the collapsed 'errors' text from the JSON body. Functionally proven in P2's 18-case harness against a real OpenBao 2.5.4 server (raft storage) plus Python mocks, covering every named leg: leader check, login, snapshot, policy LIST/read, KV walk/read, sys/auth, sys/mounts, and the upload (401 plain text, unreachable, TLS mismatch, non-JSON 502, truncated body). Not run against real prd OpenBao this pass (that means triggering a real backup run with root/admin privileges on a live node, out of scope for a read-only test pass).",
+      "evidence": [
+        "ansible/roles/openbao/templates/openbao-backup.sh.j2:37-73 \u2014 request/bao_request/bao_check/bao_api",
+        "ansible/roles/openbao/templates/openbao-backup.sh.j2:156-164 \u2014 the upload's failure line",
+        "plan.md P2 Record \u2014 18/18 cases pass against real OpenBao 2.5.4 + Python mocks, covering every named leg"
+      ]
     },
     {
       "id": "V06",
       "area": "OpenBao backup wrapper (R2)",
       "description": "The wrapper never prints a token, a secret_id or a response body, on failure or success.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Read the shipped template end to end: `log()` only ever echoes fixed strings, a call name, an HTTP status, and OpenBao's collapsed 'errors' text \u2014 never a token, secret_id, or response body. The success line reports only byte sizes. P2's harness confirms this: 'After every case the work dir was gone. No output held the root token, role_id, secret_id, upload token, a KV value, a body marker, policy HCL or a token-shaped string.' This pass's own live run (V01/V02) likewise printed no token or secret_id in its output (no_log on both the login and revoke tasks).",
+      "evidence": [
+        "ansible/roles/openbao/templates/openbao-backup.sh.j2:28, :69, :166 \u2014 log() call sites, no secret material",
+        "plan.md P2 Record \u2014 harness confirms nothing secret ever appeared in output",
+        "Live 2026-09-14: this pass's own --check run used no_log on the login/revoke tasks (backup.yml:65, :116); nothing secret appeared in the run's output"
+      ]
     },
     {
       "id": "V07",
       "area": "Backup freshness (R3)",
-      "description": "R3 — \"Followers exit 0 — a dead backup looks healthy fleet-wide. No freshness check anywhere.\" Per the 2026-09-14 ruling, this slice's criterion is that slice 023 carries it (AnsibleSpecs/slices/backlog/023_backup_freshness_alerting/slice.md, requirement 1), and no phase of this slice delivers any part of backup freshness — backup-server, Prometheus, alert rules, or the validity sent with the upload.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "R3 \u2014 \"Followers exit 0 \u2014 a dead backup looks healthy fleet-wide. No freshness check anywhere.\" Per the 2026-09-14 ruling, this slice's criterion is that slice 023 carries it (AnsibleSpecs/slices/backlog/023_backup_freshness_alerting/slice.md, requirement 1), and no phase of this slice delivers any part of backup freshness \u2014 backup-server, Prometheus, alert rules, or the validity sent with the upload.",
+      "verdict": "pass",
+      "rationale": "Confirmed by scope: `git diff bf11aa5..HEAD --stat` for the whole slice touches only ansible/playbooks/renew-internal-tls.yml, ansible/roles/microk8s/{defaults,handlers}, ansible/roles/openbao/{tasks/backup.yml,templates/backup-policy.hcl.j2,templates/openbao-backup.sh.j2}, and docs/runbooks/{internal-tls-expiry.md,openbao.md} \u2014 no backup-server, Prometheus, alert-rule, or upload-validity-field change anywhere in the slice.",
+      "evidence": [
+        "git diff bf11aa5..HEAD --stat (this pass) \u2014 8 files changed, all within the R1/R2/R4/R5/R6 areas; none in DockerImages backup-server, HelmCharts Prometheus config, or the wrapper's upload call body",
+        "slice's own 'Not in scope' section names R3/slice 023 as the owner of backup freshness"
+      ]
     },
     {
       "id": "V08",
       "area": "microk8s kubelite restart (R4)",
-      "description": "R4 — \"the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml\". Resolved: in a check-mode run the kubelite restart announces itself as a change on each node it would restart, and check mode still never restarts anything (today ansible/roles/microk8s/handlers/main.yml:40-77 is a `shell` handler with no check-mode handling, hidden by ansible/ansible.cfg:12).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "R4 \u2014 \"the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml\". Resolved: in a check-mode run the kubelite restart announces itself as a change on each node it would restart, and check mode still never restarts anything (today ansible/roles/microk8s/handlers/main.yml:40-77 is a `shell` handler with no check-mode handling, hidden by ansible/ansible.cfg:12).",
+      "verdict": "owed",
+      "rationale": "The mechanism is implemented and functionally proven off-host (P3's r2 harness imported the real roles/microk8s/handlers/main.yml into a scratch play and notified all three names under --check: each announcement fired changed on both hosts and the real handler was skipped, recap changed=4 skipped=3). This pass's own live --check of renew-internal-tls.yml against real prd hosts (which shares this same handlers file via import_role) ran clean with changed=0 and no announcements, consistent with a converged fleet, but did not exercise a host with real pending drift to see the announcement fire on prd. As the plan itself states, that needs the operator's site-k8s.yml --check --diff against a node with a pending notifier change.",
+      "evidence": [
+        "ansible/roles/microk8s/handlers/main.yml:59-64 \u2014 the kubelite check-mode announcement handler (listen:, changed_when: true, when: ansible_check_mode)",
+        "plan.md P3 Record \u2014 r2 harness: real handlers/main.yml notified by all three names under --check, changed=4 skipped=3 on two throwaway hosts",
+        "Live 2026-09-14: `renew-internal-tls.yml --limit '!k8s_dev' --check` against real prd \u2014 changed=0 across pve/pve1/pve2/srvvault1-3/srvk8s1-4 (no pending drift to exercise the announcement)",
+        "Owed: operator's next `site-k8s.yml --check --diff` (or update-k8s.yml) against a node with a real pending kubelite-restart notifier"
+      ]
     },
     {
       "id": "V09",
       "area": "microk8s restart handlers (R4)",
       "description": "The same check-mode announcement covers `Restart microk8s` and `Rollout-restart coredns` (ansible/roles/microk8s/handlers/main.yml:18-38). By ruling, `Restart microceph OSD daemon` and `Restart microceph MDS daemon` are not covered: their only notifiers are `command` tasks skipped under `--check` (ansible/roles/microceph/tasks/config.yml:90-95, :107-112).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Same mechanism and same evidence as V08, for the other two handlers (`Restart microk8s`, `Rollout-restart coredns`); the microceph exclusion is a static, correctly-scoped ruling (their only notifiers are `command` tasks already skipped under --check, so an announcement there could never fire).",
+      "evidence": [
+        "ansible/roles/microk8s/handlers/main.yml:18-19, :41-46 \u2014 the two other announcement handlers, same shape",
+        "ansible/roles/microceph/tasks/config.yml:90-95, :107-112 \u2014 command tasks with changed_when: true, skipped under --check, confirming the exclusion is correct",
+        "plan.md P3 Record \u2014 same r2 harness, all three names covered",
+        "Owed: same operator command as V08"
+      ]
     },
     {
       "id": "V10",
       "area": "microk8s restart handlers (R4)",
       "description": "Outside check mode the three handlers behave and report as before, and a converged host still reports `changed=0` under `--check`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "'Outside check mode the handlers behave as before' rests on the fact that nothing in the shipped diff touches the real restart tasks or their notifiers, confirmed by reading. 'A converged host still shows changed=0 under --check' was directly reconfirmed live this pass (see V08's live run: changed=0 fleet-wide). What remains unconfirmed against real infra is a host with actual drift showing skipped= go up by exactly one per notified handler, which needs the same operator run named in V08/V09.",
+      "evidence": [
+        "ansible/roles/microk8s/handlers/main.yml:1-83 \u2014 the three real restart tasks (Restart microk8s, Rollout-restart coredns, Restart microk8s kubelite) and their notifiers are unchanged by this slice",
+        "Live 2026-09-14: renew-internal-tls.yml --check against real prd \u2014 changed=0 fleet-wide (a converged/no-drift state), consistent with this criterion's second clause",
+        "Owed: same operator command as V08/V09, to observe skipped= incrementing on a host with real drift"
+      ]
     },
     {
       "id": "V11",
       "area": "microk8s kubelite restart (R5)",
-      "description": "R5 — \"the kubelite wait gates on /livez, which is liveness, not the 'serving again' the handler comment claims\". Resolved: the kubelite restart waits for readiness — the API server's readiness check on control-plane nodes, the node's Ready state on workers (or, if that proves impractical inside the single throttled restart step, the kubelet health check with the handler comment saying so) — within `microk8s_kubelite_ready_timeout` (ansible/roles/microk8s/defaults/main.yml:256; today's probe selection at ansible/roles/microk8s/handlers/main.yml:72-75).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "R5 \u2014 \"the kubelite wait gates on /livez, which is liveness, not the 'serving again' the handler comment claims\". Resolved: the kubelite restart waits for readiness \u2014 the API server's readiness check on control-plane nodes, the node's Ready state on workers (or, if that proves impractical inside the single throttled restart step, the kubelet health check with the handler comment saying so) \u2014 within `microk8s_kubelite_ready_timeout` (ansible/roles/microk8s/defaults/main.yml:256; today's probe selection at ansible/roles/microk8s/handlers/main.yml:72-75).",
+      "verdict": "owed",
+      "rationale": "The readiness-detection logic itself was validated read-only against real prd hosts during planning (srvk8s1 and srvk8s4 probes matched), and the wait's control flow passed an 8-scenario stub harness, but no actual kubelite restart has been triggered against a real apiserver node or worker to see the wait behave end-to-end. That needs an operator-triggered restart.",
+      "evidence": [
+        "ansible/roles/microk8s/handlers/main.yml:84-130 \u2014 the wait logic (readyz for apiserver nodes, Node Ready-condition read via apiserver-proxy for workers)",
+        "plan.md P4 Record \u2014 r1: 'the wait passed a stub harness (8 scenarios), and read-only probes on srvk8s1 and srvk8s4 matched'",
+        "plan.md P4 criterion text: 'V11-V13 are not live-proven: they need an operator run that restarts kubelite on an apiserver node and on a worker'",
+        "Owed: `cd ansible && cexec iac poetry run ansible-playbook playbooks/renew-internal-tls.yml --limit <apiserver-node> -e internal_tls_renewal_threshold_days=48` and the same against a worker (e.g. srvk8s4), or the fleet's next naturally-due Friday certs run"
+      ]
     },
     {
       "id": "V12",
       "area": "microk8s kubelite restart (R5)",
       "description": "A node that comes back alive but not ready within the timeout stops the roll and turns the run red, a Friday certs build included; restart and wait remain one throttled task, so the next node never restarts before this one is ready.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "The static/structural half is confirmed: restart+wait is one throttle:1 shell task (reading the handler), and the k8s leaves now renew in their own last `serial: 1` play (confirmed live this pass \u2014 --list-hosts and --check both show the k8s play as a separate, later play over exactly srvk8s1-4/srvk8sdev). The r2 harness proved the roll-stopping behavior generically (a stand-in not-ready node under serial:1 stopped the play there, rc 2, later nodes unrenewed). What is not yet proven is a real not-ready node during an actual kubelite restart on prd, which needs an operator-triggered restart per V11.",
+      "evidence": [
+        "ansible/roles/microk8s/handlers/main.yml:97-130 \u2014 restart+wait as one throttle:1 task",
+        "ansible/playbooks/renew-internal-tls.yml:90-111 \u2014 the k8s leaf play, serial: 1, last",
+        "Live 2026-09-14: --list-hosts and --check of renew-internal-tls.yml confirm the k8s play is separate and last, over srvk8s1-4 (srvk8sdev excluded via --limit)",
+        "plan.md P4 Record \u2014 r2 harness: 'k2 not ready: k1 restarted and was ready, k2 failed, k3 and kd were never renewed... rc 2'",
+        "Owed: same operator restart as V11"
+      ]
     },
     {
       "id": "V13",
       "area": "microk8s kubelite restart (R5)",
       "description": "The handler comment says what the wait actually checks.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Pure documentation-accuracy check, verifiable by reading alone (no live run needed by its own wording). The handler's comment accurately states what the wait checks: an apiserver node's own /readyz (covering datastore/informer sync that /livez omits), and a worker's Node Ready condition with a post-restart heartbeat, read through the local apiserver-proxy with the kubelet's own credential \u2014 matching exactly what the implementation does.",
+      "evidence": [
+        "ansible/roles/microk8s/handlers/main.yml:84-96 \u2014 the comment block describing the readiness checks per node class",
+        "ansible/roles/microk8s/handlers/main.yml:113-120 \u2014 the implementation matching the comment (readyz for apiserver, Ready+heartbeat for worker)"
+      ]
     },
     {
       "id": "V14",
       "area": "internal_tls recovery runbook (R6)",
-      "description": "R6 — \"docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery\". Resolved: docs/runbooks/ has that counterpart. It first checks that the host is reachable over SSH and routes a lapsed SSH host cert to `ssh-host-cert-expiry.md`. It names the symptom of a lapsed leaf on each consumer (Proxmox web UI, kubernetes-api.home, the OpenBao listener). It gives `playbooks/renew-internal-tls.yml` as the recovery, stating that a plain renewal run recovers an already-lapsed leaf once the host is reachable.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "R6 \u2014 \"docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery\". Resolved: docs/runbooks/ has that counterpart. It first checks that the host is reachable over SSH and routes a lapsed SSH host cert to `ssh-host-cert-expiry.md`. It names the symptom of a lapsed leaf on each consumer (Proxmox web UI, kubernetes-api.home, the OpenBao listener). It gives `playbooks/renew-internal-tls.yml` as the recovery, stating that a plain renewal run recovers an already-lapsed leaf once the host is reachable.",
+      "verdict": "pass",
+      "rationale": "Verified by reading docs/runbooks/internal-tls-expiry.md in full. It opens with the symptom table (Proxmox web UI, kubernetes-api.home, OpenBao listener, with exact client error text), gives the Friday job's two failure descriptions, step 1 is an SSH reachability check routing an expired-cert UNREACHABLE to ssh-host-cert-expiry.md, and step 3 gives playbooks/renew-internal-tls.yml --limit <host> as the recovery, stating a plain run recovers an already-lapsed leaf once the host is reachable.",
+      "evidence": [
+        "docs/runbooks/internal-tls-expiry.md \u2014 Symptom table and Cause section (consumers + Friday job failure descriptions)",
+        "docs/runbooks/internal-tls-expiry.md \u2014 '1 \u2014 Confirm the host is reachable over SSH', routing to ssh-host-cert-expiry.md",
+        "docs/runbooks/internal-tls-expiry.md \u2014 '3 \u2014 Renew': 'Once the host is reachable, a plain renewal run recovers the lapsed leaf' + the two-play breakdown"
+      ]
     },
     {
       "id": "V15",
       "area": "internal_tls recovery runbook (R6)",
       "description": "The runbook spells out that an expired OpenBao listener leaf stops the usual path, because every Jenkins `iac` run fetches its secrets from OpenBao at start, and covers renewing that leaf by hand in that state.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by reading. A dedicated section ('The OpenBao listener leaf: OpenBao is unreachable') explains that every `iac` run resolves !bao refs at start so a lapsed listener leaf stops the usual Jenkins path, and gives the two hand-run credential paths (a KubeCoder environment with keys already on disk, or srviac's cold-boot steps 1-4) plus the exact recovery command for each.",
+      "evidence": [
+        "docs/runbooks/internal-tls-expiry.md \u2014 'The OpenBao listener leaf: OpenBao is unreachable' section, both hand-run paths with commands"
+      ]
     },
     {
       "id": "V16",
       "area": "internal_tls recovery runbook (R6)",
       "description": "`docs/runbooks/openbao.md`'s \"listener cert expired\" entry (docs/runbooks/openbao.md:266, today unlinked) points to the new runbook.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by reading docs/runbooks/openbao.md: the 'Consumer cold-boot' intro's list of degraded-OpenBao scenarios now includes 'listener cert expired', immediately followed by 'An expired listener cert is renewed per internal-tls-expiry.md' with the working link.",
+      "evidence": [
+        "docs/runbooks/openbao.md:314-321 \u2014 the linked sentence"
+      ]
     }
   ]
 }

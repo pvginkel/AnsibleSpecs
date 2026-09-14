@@ -39,6 +39,8 @@ P1's proof of a staged backup secret_id logs in and then revokes the returned to
 
 code-reviewer, P1 r1, 2026-09-14 — The operator's checkout does hold a staged backup secret_id: /work/Ansible/tmp/openbao-backup-secret-id, dated 2026-08-13 20:37, from that day's rotation output. plan.md:51's 'no secret_id file' is wrong. So a --check or --tags openbao_backup site-openbao.yml run from /work/Ansible after merge will fail until an apply writes the policy: with 403 at the revoke if that secret_id is live, or at the rejection if it is dead (code_review_r1.md F2).
 
+test-agent r1, 2026-09-14 — Live-confirmed 2026-09-14: `site-openbao.yml --tags openbao_backup --check` against real prd srvvault1-3 logged in successfully with the checkout's staged backup secret_id (real HTTP 200 against the live backup AppRole — the P1 mechanism itself works), then failed exactly as predicted at "Fail when the proving login's token was not revoked" (HTTP 403 permission denied) because the currently-deployed backup-policy predates this grant. Self-heals on the next plain (non-rotation) site-openbao.yml apply: each host's own policy-write task runs before its own proving login.
+
 **Consequence:** The next site-openbao.yml apply reports the backup policy changed. Until then, a --check or --tags openbao_backup run from a checkout holding a live staged secret_id fails at the token revoke with HTTP 403; the nightly drift job never holds one.
 
 **Provenance:** witnessed — code-writer, P1, r1, OpenBao dev server in the iac sidecar; plan.md P1 done-record
@@ -104,6 +106,33 @@ renew-host-certs.yml renews SSH host certificates on managed:!ceph_prd, and the 
 **Consequence:** A PVE node whose SSH host certificate lapses is UNREACHABLE to Ansible with no documented recovery, and its pveproxy leaf cannot be renewed until one is worked out during the outage.
 
 **Provenance:** read, code-writer, P5, r1, docs/runbooks/ssh-host-cert-expiry.md and ansible/playbooks/renew-host-certs.yml
+**Disposition:**
+
+### ~~B5 — Ansible — internal-tls-expiry.md tells a KubeCoder operator to prefix its 'cd ansible && poetry run …' commands with cexec iac, which runs poetry outside the iac sidecar · minor~~ — resolved by consult 1 (3a4848f): internal-tls-expiry.md's header now gives the 'cd ansible && cexec iac poetry run …' shape from live-infra-access.md; struck by consult 1
+
+docs/runbooks/internal-tls-expiry.md:6 says to prefix each command with cexec iac; the step 1 and step 3 commands (:49, :85) start 'cd ansible && poetry run', so a literal prefix leaves poetry running in the dev container, where it is not installed. The working shape is 'cd ansible && cexec iac poetry run …' (docs/live-infra-access.md:64-66), which the runbook's own KubeCoder block uses at :151.
+
+**Consequence:** An operator copying step 1 or step 3 with the prefix as instructed gets 'poetry: command not found' and has to work out the right command shape mid-outage.
+
+**Provenance:** read, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
+### ~~B6 — Ansible — internal-tls-expiry.md step 1 reads a srvk8sdev connection failure as the box being off, but srvk8sdev is unreachable from any KubeCoder pod · nit~~ — resolved by consult 1 (3a4848f): step 1 now says a timeout means off only from srviac, that a KubeCoder environment cannot reach srvk8sdev (live-infra-access.md), and to renew its leaf from srviac (Jenkinsfile.iac-scheduled-certs:50, :186); struck by consult 1
+
+docs/runbooks/internal-tls-expiry.md:56 says a connection timeout on srvk8sdev only means it is off. docs/live-infra-access.md:116-118 records that srvk8sdev answers on neither 22 nor 16443 from a KubeCoder pod (a probe from the P5 review pod got 'No route to host'), and the runbook's KubeCoder route is that setting.
+
+**Consequence:** Run from a KubeCoder environment, step 1 makes a running srvk8sdev look powered off, and its lapsed dev leaf cannot be renewed from that controller; prd hosts are unaffected.
+
+**Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
+**Disposition:**
+
+### ~~B7 — Ansible — openbao.md §3's verify step expects 'the five role policies', but the role writes six · cosmetic~~ — resolved by consult 1 (3a4848f): openbao.md §3 step 6 now expects six role policies, matching approle.yml:184-192; struck by consult 1
+
+docs/runbooks/openbao.md §3 step 6 (step 5 before P6) annotates `bao policy list` with '# the five role policies present'. ansible/roles/openbao/tasks/approle.yml:184-192 writes six: openbao-admin, iac-agent, jenkins, eso, eso-dev and backup. P6 renumbered the step and left that line as it was.
+
+**Consequence:** An operator verifying a whole-cluster restore counts six role policies against the runbook's five and has to work out whether one is extra; nothing breaks.
+
+**Provenance:** read, executor, P6, r1, ansible/roles/openbao/tasks/approle.yml:184-192
 **Disposition:**
 
 ## Open questions and rulings
