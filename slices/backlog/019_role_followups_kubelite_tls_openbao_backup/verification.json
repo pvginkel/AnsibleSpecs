@@ -11,7 +11,7 @@
     {
       "id": "V02",
       "area": "OpenBao backup credential (R1)",
-      "description": "There is no silent skip and no automatic re-mint: a staged secret_id is never installed without having been proven against the live role — a run holding no admin token fails rather than installing it unproven — and the check mints, revokes and deletes nothing; minting stays behind the operator's `openbao_rotate_secret_ids=true` (default false, ansible/roles/openbao/defaults/main.yml:87).",
+      "description": "There is no silent skip and no automatic re-mint. Each node's own pass installs a staged secret_id only after an AppRole login with the staged role_id and secret_id succeeds; no admin token is needed. A rejected login fails the run, naming `openbao_rotate_secret_ids=true`. The check mints no secret_id, revokes or deletes no credential, and leaves no lasting login token behind. Minting stays behind the operator's `openbao_rotate_secret_ids=true` (default false, ansible/roles/openbao/defaults/main.yml:87).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "OpenBao backup credential (R1)",
-      "description": "The remedy the failure names works: a `site-openbao.yml -e openbao_rotate_secret_ids=true` run from the checkout holding the dead staged secret_id completes on the serialized apply (ansible/playbooks/site-openbao.yml:171) and leaves every OpenBao node holding a secret_id the live `backup` AppRole accepts.",
+      "description": "The remedy the failure names works. A `site-openbao.yml -e openbao_rotate_secret_ids=true` run from the checkout holding the dead staged secret_id completes on the serialized apply (ansible/playbooks/site-openbao.yml:171): the bootstrap host's pass re-stages a fresh secret_id, and every node's pass, the later ones included, proves it by login. The run leaves every OpenBao node holding a secret_id the live `backup` AppRole accepts. Proving this live takes a rotation run, which mints a fresh never-expiring secret_id for all six AppRoles and revokes none of the old ones (ansible/roles/openbao/tasks/approle.yml:329-347). The test phase names that cost and leaves the run to the operator; it does not present the run as a routine proof.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -28,6 +28,22 @@
       "id": "V04",
       "area": "OpenBao backup credential (R1)",
       "description": "Check mode stays meaningful: a `--check` run from a checkout holding a dead staged secret_id reports the failure, and a `--check` run with no staged secret_id (the drift job's fresh clone) behaves as before.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "OpenBao backup credential (R1)",
+      "description": "A run against a fresh cluster before its snapshot restore, where there is no `backup` AppRole to log in against, neither installs the staged secret_id nor fails; it says the backup credential was not delivered. A dead secret_id against a live `backup` role is never reported that way; it still fails the run. (Before the restore nothing has enabled AppRole auth: ansible/roles/openbao/tasks/approle.yml:35-36, :55-65.)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "OpenBao whole-cluster recovery runbook (R1)",
+      "description": "`docs/runbooks/openbao.md` §3 (whole-cluster loss) carries a converge after the snapshot restore, which proves and delivers the backup credential. Today §3 goes converge (step 3), restore (4), verify (5), with no converge after the restore (docs/runbooks/openbao.md:151-191).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,23 +75,23 @@
     {
       "id": "V08",
       "area": "microk8s kubelite restart (R4)",
-      "description": "R4 — \"the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml\". Resolved: in a check-mode run the kubelite restart announces itself as a change on each node it would restart, and check mode still never restarts anything (today ansible/roles/microk8s/handlers/main.yml:60-77 is a `shell` handler with no check-mode handling, hidden by ansible/ansible.cfg:12).",
+      "description": "R4 — \"the kubelite restart no longer shows up in a --check --diff run of site-k8s.yml\". Resolved: in a check-mode run the kubelite restart announces itself as a change on each node it would restart, and check mode still never restarts anything (today ansible/roles/microk8s/handlers/main.yml:40-77 is a `shell` handler with no check-mode handling, hidden by ansible/ansible.cfg:12).",
       "verdict": null,
       "rationale": "",
       "evidence": []
     },
     {
       "id": "V09",
-      "area": "microk8s and microceph restart handlers (R4)",
-      "description": "The same check-mode announcement covers `Restart microk8s` and `Rollout-restart coredns` (ansible/roles/microk8s/handlers/main.yml:18-38) and `Restart microceph OSD daemon` and `Restart microceph MDS daemon` (ansible/roles/microceph/handlers/main.yml:2-14).",
+      "area": "microk8s restart handlers (R4)",
+      "description": "The same check-mode announcement covers `Restart microk8s` and `Rollout-restart coredns` (ansible/roles/microk8s/handlers/main.yml:18-38). By ruling, `Restart microceph OSD daemon` and `Restart microceph MDS daemon` are not covered: their only notifiers are `command` tasks skipped under `--check` (ansible/roles/microceph/tasks/config.yml:90-95, :107-112).",
       "verdict": null,
       "rationale": "",
       "evidence": []
     },
     {
       "id": "V10",
-      "area": "microk8s and microceph restart handlers (R4)",
-      "description": "Outside check mode the five handlers behave and report as before, and a converged host still reports `changed=0` under `--check`.",
+      "area": "microk8s restart handlers (R4)",
+      "description": "Outside check mode the three handlers behave and report as before, and a converged host still reports `changed=0` under `--check`.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -107,7 +123,7 @@
     {
       "id": "V14",
       "area": "internal_tls recovery runbook (R6)",
-      "description": "R6 — \"docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery\". Resolved: docs/runbooks/ has that counterpart; it names the symptom of a lapsed leaf on each consumer (Proxmox web UI, kubernetes-api.home, the OpenBao listener) and gives `playbooks/renew-internal-tls.yml` as the recovery, stating that a plain renewal run recovers an already-lapsed leaf.",
+      "description": "R6 — \"docs/runbooks/ has no X.509 counterpart to ssh-host-cert-expiry.md, so a lapsed internal_tls leaf has no documented recovery\". Resolved: docs/runbooks/ has that counterpart. It first checks that the host is reachable over SSH and routes a lapsed SSH host cert to `ssh-host-cert-expiry.md`. It names the symptom of a lapsed leaf on each consumer (Proxmox web UI, kubernetes-api.home, the OpenBao listener). It gives `playbooks/renew-internal-tls.yml` as the recovery, stating that a plain renewal run recovers an already-lapsed leaf once the host is reachable.",
       "verdict": null,
       "rationale": "",
       "evidence": []

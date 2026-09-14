@@ -73,3 +73,12 @@ roles/microceph/tasks/config.yml:90-95 and :107-112 set the caps with ansible.bu
 
 **Provenance:** witnessed | plan-reviewer, plan review, round 1 — plan_review_r1.md F2
 **Disposition:**
+
+### S3 — Ansible — a pending internal_tls leaf re-issue notifies its reload handler only on apply, so --check cannot announce the kubelite restart it causes · nit
+
+roles/internal_tls/tasks/issue.yml:186 notifies internal_tls_reload_handler from inside the issuance block gated on 'not ansible_check_mode' (:107-110). Under --check the role stops at its report task (:88-98). That task names the pending re-issue as changed but notifies nothing. microk8s passes 'Restart microk8s kubelite' as that handler (roles/microk8s/tasks/internal_tls.yml:40), so a node whose only change is a due leaf shows the re-issue, not the restart. Slice 019's P3 announces the handler whenever something notifies it. This notifier never does under --check, the same class as the microceph memory-target tasks (S2) that the R4 ruling left out. Every internal_tls consumer's reload handler is left un-notified the same way.
+
+**Consequence:** A --check --diff run on a node with a due internal_tls leaf names the re-issue but not the kubelite restart that follows it on apply; the re-issue report itself still shows the node has a change.
+
+**Provenance:** read | plan-writer, planning, fix pass r2 — roles/internal_tls/tasks/issue.yml:88-110 and :186
+**Disposition:**

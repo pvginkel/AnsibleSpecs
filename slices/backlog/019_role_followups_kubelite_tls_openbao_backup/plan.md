@@ -61,7 +61,7 @@ Paths are relative to `/work/Ansible` unless another repo is named.
 
 ## Task shape
 
-pre-settled — the settled rulings fix every mechanism (R1 check-then-fail with no re-mint, R2 per-call status and error text, R4 the check-mode announcement on five named handlers, R5 readiness within the existing timeout with the operator's worker fallback, R6 a grounded premise and the OpenBao exception), and R3 has left for slice 023; planning is transcription.
+localized — per the F4 ruling: each phase lands inside one component on a pattern the repo already has (the check-mode announcement at `join.yml` and `issue.yml`, the readiness wait at `wait-node-ready.yml`, the runbook shape of `ssh-host-cert-expiry.md`), but P5 still works out how a hand run gets its credentials while OpenBao is down, so planning is not transcription.
 
 ## Ordering constraints
 
@@ -71,12 +71,12 @@ pre-settled — the settled rulings fix every mechanism (R1 check-then-fail with
 
 **Target:** `ansible`
 
-R1, to the settled ruling above. Today `roles/openbao/tasks/backup.yml:92-100` installs the staged `openbao-backup-secret-id` on every node whenever the file exists. After this phase no node receives a staged secret_id the live `backup` AppRole does not hold. The run fails before delivery instead, naming `-e openbao_rotate_secret_ids=true`. The check itself mints, revokes and deletes nothing.
+R1, to the settled rulings above. Today `roles/openbao/tasks/backup.yml:92-100` installs the staged `openbao-backup-secret-id` on every node whenever the file exists. After this phase, each node's own pass first proves the staged role_id and secret_id with an AppRole login. A rejected login fails the run before delivery, with a message naming `-e openbao_rotate_secret_ids=true`. The check mints no secret_id and revokes or deletes no credential. The token its login returns does not outlive the check.
 
-- **Where the admin token lives.** Only the bootstrap host's pass holds one. The bootstrap host is the sorted-first `openbao` host (`roles/openbao/tasks/elect-bootstrap.yml:14`). `auth-token.yml` is imported only by `approle.yml` and `oidc.yml`, both gated to that host (`tasks/main.yml:144-158`). `backup.yml` runs on every node, and `no_log` values do not cross hosts (`backup.yml:11-12`). On apply the play is `serial: 1` (`playbooks/site-openbao.yml:171`), and a failing host ends a serial play.
-- **The named remedy must work.** A rotation run from the same checkout mints and re-stages on the bootstrap host's pass (`approle.yml:329-347`, :384-395). It has to get a fresh secret_id delivered to every node, not trip over the stale file it is replacing.
-- **No token means no install.** A run that holds no admin token cannot prove a staged secret_id. That is the fresh-cluster case `auth-token.yml:12-18` lets converge. Such a run does not install the file unproven: it fails as a dead one does, saying why.
-- **Check mode.** Under `--check` the check's read-only calls run for real (`check_mode: false`, as at `auth-token.yml:43`). The nightly drift job clones fresh and never holds a staged secret_id, so its runs are unchanged.
+- **No admin token.** The proof is the same login the wrapper makes (`templates/openbao-backup.sh.j2:36-40`). It therefore works on every node's pass, not only on the bootstrap host, which alone acquires an admin token (`tasks/main.yml:144-158`). The inputs are the controller-side staged files, because `no_log` values do not cross hosts (`backup.yml:11-17`). A proving login does not use the credential up: nothing under `roles/openbao/` sets `secret_id_num_uses`.
+- **The rotation run under `serial: 1`.** On apply the play is serialized (`playbooks/site-openbao.yml:171`), and a failing host ends it. The bootstrap host's pass mints and re-stages the secret_id before its own `backup.yml` runs (`approle.yml:329-347`, :384-395; `tasks/main.yml:144-167`). Every pass after that, on each later node too, proves the fresh file rather than the stale one it replaced.
+- **A fresh cluster before its restore.** A whole-cluster recovery converges an empty cluster before the snapshot restore (`docs/runbooks/openbao.md:151-170`). That cluster has no AppRole auth method at all. `init.yml` provisions no auth, and enabling AppRole sits inside `approle.yml`'s token-gated block (:35-36, :55-65), where the token is empty (`auth-token.yml:12-18`). Such a run neither installs the staged secret_id nor fails; it says the backup credential was not delivered. Recognising this case must never let a dead secret_id pass as "not delivered" when a live `backup` role exists.
+- **Check mode.** Under `--check` the check's calls run for real (`check_mode: false`, as the admin login does at `auth-token.yml:43`). A dry run from a checkout holding a dead staged secret_id therefore reports the failure. The nightly drift job clones fresh and never holds a staged secret_id, so its runs are unchanged.
 
 ### P2 — Every call the backup wrapper makes names itself on failure
 
@@ -92,17 +92,18 @@ R2, to the settled ruling above. When any call in `roles/openbao/templates/openb
 
 **Target:** `ansible`
 
-R4, to the settled ruling above. In a `--check` run, a notified restart handler reports a change on each host it would act on and restarts nothing. Five handlers are covered:
-
-- `Restart microk8s kubelite`, `Restart microk8s` and `Rollout-restart coredns` (`roles/microk8s/handlers/main.yml:18-77`)
-- `Restart microceph OSD daemon` and `Restart microceph MDS daemon` (`roles/microceph/handlers/main.yml:2-14`)
-
-Outside check mode the handlers behave and report exactly as today.
+R4, to the settled rulings above. In a `--check` run, a notified restart handler reports a change on each host it would act on and restarts nothing. Three handlers are covered, all in `roles/microk8s/handlers/main.yml:18-77`: `Restart microk8s kubelite`, `Restart microk8s` and `Rollout-restart coredns`. Outside check mode the handlers behave and report exactly as today.
 
 - **Why they vanish today.** They are `command`/`shell` handlers, so `--check` skips them, and `ansible.cfg:12` (`display_skipped_hosts = False`) hides the skip.
 - **Existing patterns.** A would-be mutation already announces itself as a check-mode change at `roles/internal_tls/tasks/issue.yml:96-98`, and as a report at `roles/microk8s/tasks/join.yml:59-66`.
 - **The kubelite handler's shape.** Its restart and wait stay one throttled task (comment :52-54).
-- **Drift detection.** The handlers are notified only by tasks that already report changed (016-B3). A converged host still shows `changed=0` under `--check`, which the drift job's recap sum relies on.
+- **Where an announcement can fire.** A handler announces only when something notifies it under `--check`. These notifiers do report changed there:
+  - the kubelite restart's `lineinfile` notifiers (`tasks/rbac.yml:19-24`, `tasks/internal_tls.yml:49-54`, `tasks/kubelet-args.yml:40-71`);
+  - the `copy` behind `Restart microk8s` (`tasks/registry-mirrors.yml:20-32`);
+  - the `kubernetes.core.k8s` task behind `Rollout-restart coredns` (`tasks/coredns.yml:35-51`).
+
+  A due internal_tls leaf re-issue does not notify, because its notify sits in the block `--check` skips (`roles/internal_tls/tasks/issue.yml:107-110`, :186). That gap is the notifier's, the same class as the microceph handlers the ruling left out, and it is logged as close-out S3.
+- **Drift detection.** Only a task that itself reports changed notifies a handler. A converged host therefore still shows `changed=0` under `--check`, which the drift job's recap sum relies on.
 
 ### P4 — The kubelite restart waits for readiness
 
@@ -118,21 +119,32 @@ R5, to the D2 ruling above. After `Restart microk8s kubelite`, a node gives up i
 
 **Target:** `root`
 
-R6, to the settled rulings above. `docs/runbooks/` gains the X.509 counterpart of `ssh-host-cert-expiry.md`. An operator facing an expired internal_tls leaf finds three things there:
+R6, to the settled rulings above. `docs/runbooks/` gains the X.509 counterpart of `ssh-host-cert-expiry.md`. An operator facing an expired internal_tls leaf finds four things there:
 
+- first, a check that the host is reachable over SSH, routing a lapsed SSH host cert to `ssh-host-cert-expiry.md`
 - the symptom on each consumer: the Proxmox web UI, `kubernetes-api.home` and the OpenBao listener
 - the scheduled job that should have prevented it
-- `playbooks/renew-internal-tls.yml` as the recovery, because a plain renewal run re-issues an already-lapsed leaf
+- `playbooks/renew-internal-tls.yml` as the recovery once the host is reachable, because a plain renewal run re-issues an already-lapsed leaf
 
 For the OpenBao listener leaf, the runbook also covers renewing it by hand while OpenBao is unreachable and the Jenkins `iac` path cannot start. The "listener cert expired" cause at `docs/runbooks/openbao.md:266` links to the new runbook.
 
+- **Why reachability comes first.** A lapsed leaf most likely means the weekly certs job failed. That job's host-cert stage runs first, and its failure means TLS renewal never ran (`Jenkinsfile.iac-scheduled-certs:78-95`). An expired SSH host cert makes the host UNREACHABLE to Ansible (`docs/runbooks/ssh-host-cert-expiry.md:1-10`), and a renewal run against it fails the same way.
 - **The premise.** Grounding's "R6, re-issue logic", "R6, the lapsed-leaf question is answered" and "R6, consumers and dependencies" bullets carry it. It was proven against step 0.30.6 and a throwaway CA, not a real host.
 - **The by-hand run is not worked out yet.** How a hand run gets its credentials with OpenBao down is still open. Work it out from `docs/runbooks/iac-cold-boot.md` and `docs/live-infra-access.md`, and check that nothing on the renewal path itself needs OpenBao.
 - **Grounded steps only.** The runbook is read under outage pressure, so it gives no recovery step the repo does not ground. An ungrounded step is why slice 016 did not write it (016-B10).
 
+### P6 — A whole-cluster recovery delivers the backup credential after the restore
+
+**Target:** `root`
+
+R1, to the settled "a fresh cluster before its restore" ruling above. Today `docs/runbooks/openbao.md` §3 (whole-cluster loss) goes converge (step 3, :151-163), restore (4, :165-177) and verify (5, :179-191), and nothing after the restore delivers the backup credential. After this phase §3 carries a converge after the restore, and says why it is there. The pre-restore converge had no `backup` AppRole to prove the staged secret_id against, so it did not deliver it (P1). Against the restored role, the new converge proves and delivers it.
+
+- **What that converge can deliver.** The rebuilt VMs hold no secret_id, so the outcome depends on the checkout. A staged secret_id is proven and delivered. With none staged, the pipeline self-skips and names the rotation run it needs (`ansible/roles/openbao/tasks/backup.yml:48-68`). The step covers both cases, as P1 shipped them.
+
 ## Not in scope
 
 - R3's backup freshness — backup-server metadata, metrics, alert rules and the wrapper's validity field — which is slice 023 (ruling above).
+- Check-mode announcements a handler cannot make because nothing notifies it under `--check`: microceph's OSD and MDS restarts (ruling above; close-out S2) and the kubelite restart behind a due internal_tls leaf re-issue (close-out S3). Also the Calico re-apply handler (close-out S1).
 - `throttle: 1` on `Restart openbao` (016-S3) — landed in `8e36117`.
 - Correcting `decisions.md`'s Internal TLS section (016-B1, #667) — the 2026-09-14 straightforward-changes handover.
 - Making step-ca's per-provisioner name controls enforce — #993 (Later).
