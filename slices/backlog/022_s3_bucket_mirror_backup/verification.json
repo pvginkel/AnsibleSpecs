@@ -1,0 +1,164 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — off-cluster copy",
+      "description": "\"Automated backups for RGW/S3 buckets and Ceph-backed data — today redundancy exists but no copy-off-cluster.\" — narrowed by ruling T2 to RGW/S3 buckets and by ruling T3 to prd-stage buckets: every prd-stage bucket on the prd Ceph cluster has an automatically refreshed copy on Google Drive. After the first successful nightly run, `iot-prd-attachments`, `electronics-inventory-prd-part-attachments` and the `design-assistant-prd` bucket are all in the mirror, and a bucket a prd release adds later through `terraform-modules/s3-storage` (HelmCharts `terraform-modules/s3-storage/main.tf:52-60`) is mirrored with nothing set per app.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — backup coverage inventory",
+      "description": "\"inventory what app-level backups already cover\" — `decisions.md` §\"Backup\" carries a coverage list: each off-cluster mechanism, what it covers, how much history and which key, including the `postgres-pas` dumps through backup-server (scope `postgres-pas`, retention 90, HelmCharts `configs/prd/postgres-pas/_shared/infrastructure.tf:71-74`) and this mirror. It also has one line naming what is knowingly not covered (RBD volumes, CephFS, non-prd buckets), in place of \"Offsite for production is a later item\" (`decisions.md:593`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — restore drill",
+      "description": "\"restore drill is part of acceptance (lesson from slice 005).\" — after the first successful mirror run the operator has run the drill from the runbook in `/work/Ansible/docs/runbooks/`: `iot-prd-attachments` restored from Drive into a scratch bucket on dev Ceph, and `rclone check` against the live bucket reports no differences. Closes only on the operator's output, never on a green gate.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R4 — Postgres pattern",
+      "description": "\"we should at least consider following the pattern set for Postgres.\" — the mirror follows the Postgres pattern for ownership. It is a production-gated job in the substrate's own chart (`storage`): off by default in the chart, on only in the prd cluster's values, its Terraform only under `configs/prd/`, as `postgres-backup` is (HelmCharts `charts/postgres-pas/values.yaml:100-101`, `configs/prd/postgres-pas/prd/values.yaml:53-54`, `configs/prd/postgres-pas/_shared/infrastructure.tf:71-74`). The dev cluster's storage release (`configs/dev/storage/`) deploys nothing new.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R5 — incremental, not daily snapshots",
+      "description": "\"It feels like it's unrealistic to want to do a daily snapshot of all S3 data keeping a history of 5 snapshots. Although, I do have 80 Gb available. Regardless I feel like this may need some smarts.\" — the mirror is incremental. A run over unchanged buckets uploads nothing and leaves no archive folder, and Drive holds the live data plus replaced or deleted objects only, never a full copy per run.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R6 — the accepted sync design",
+      "description": "\"A sync sounds perfect.\" — each prd-stage bucket is mirrored by an incremental, encrypted `rclone sync` to the existing Google Drive remote (`gdrive-pieter:Homelab Backups`, HelmCharts `configs/prd/storage/prd/values.yaml:15`), run from the `storage` chart. On Drive, file and folder names and contents are encrypted. Decrypted, the mirror holds `current/<bucket>/<object key path>` as live state and `archive/<bucket>/<run timestamp>/<object key path>` for what each run replaced or deleted (ruling W1).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "Ruling T1 — read-only reader",
+      "description": "One fleet-wide, read-only `backup-reader` RGW user, granted per bucket by a provider-attached bucket policy: `backup-reader` exists on prd with the admin capability `buckets=read` and nothing more, owns no bucket and cannot create one. It can list and read every prd-stage bucket, and every write or delete it attempts is refused.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "Ruling T3 / settled 4 — grant scope",
+      "description": "The grant is on every prd-stage bucket on the prd cluster and nowhere else. The prd cluster's `design-assistant-dev`, `-tst` and `-uat` buckets carry no policy and are not mirrored. Releases on the dev cluster, which also run stage `prd` (HelmCharts `CLAUDE.md:45`), get no grant and still deploy. No `terraform-modules/s3-storage` call site sets anything for it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "Provider inertness",
+      "description": "The new provider is inert for existing callers: a release that does not ask for the grant plans no change under it (every deploy floats to the newest provider, HelmCharts `tools/deploy/deploy_cli/tf.py:129-146`). When the grant lands, `iot-prd`, `electronics-inventory-prd` and `design-assistant-prd` update in place: no resource replaced, no bucket or object deleted (`terraform-modules/s3-storage/main.tf:57-59` keeps `prevent_destroy`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "Settled 4 — no silent skip",
+      "description": "A prd-stage bucket the mirror cannot list or read fails the run (the Job fails), never a skip; any rclone error fails the Job.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Settled 8 — vanished bucket",
+      "description": "A bucket that disappears from RGW keeps its mirror copy untouched; the job never deletes a whole bucket's mirror.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Ruling D1 — archive expiry",
+      "description": "After each successful sync the mirror keeps the 30 newest archive folders per bucket and prunes the rest. A run that moved nothing leaves no archive folder, so history is counted in changes, not days.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Ruling D2 — freshness alert",
+      "description": "A critical Prometheus rule in the production Prometheus release, beside the other rules (HelmCharts `configs/prd/prometheus/prd/values.yaml:61`), fires once the mirror has gone two days without a successful run, including a mirror that has never succeeded. `postgres-backup` is not added to it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "Settled 6 — encryption key custody",
+      "description": "The rclone crypt password and salt are in OpenBao `eso/prd/storage/prd/s3-mirror` and in Roboform next to the age key. The job reads them through the storage chart's ExternalSecret values (HelmCharts `configs/prd/storage/prd/values.yaml:43-59`) and never writes them to `rclone-backup-pvc`. `decisions.md`'s failure-domain inventory (`:108`) gains the key.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "Settled 1 — RGW credential record",
+      "description": "`decisions.md` §\"Ceph RGW credentials\" (`:86-95`, which today calls `csi-prd` the live posture at `:88`) reads in the present tense: per-app users are live and `csi-prd` is gone. `backup-reader` is its one recorded exception, with the reason.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "Settled 2 — S3 endpoint",
+      "description": "The mirror uses the apps' endpoint `http://ceph:7480` (HelmCharts `_providers/clusters.yaml:22`), and `decisions.md`'s S3 endpoint convention (`:262`) states that endpoint instead of `https://ceph.home`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "Settled 12 — no new image",
+      "description": "The mirror runs on the existing `registry:5000/rclone-backup` image with its script shipped in the chart; no new image is built. A live probe on 2026-09-14 found Debian 13.6, rclone v1.75.1, curl 8.14.1 and python3 in the image.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "Existing storage jobs unaffected",
+      "description": "`storage-sync-cronjob` and `storage-refresh-keys-cronjob` keep completing as before. The shared rclone config on `rclone-backup-pvc` gains no section, since both jobs treat every section there as a remote (DockerImages `rclone-backup/src/docker-entrypoint.sh:3`), and the mirror's schedule does not overlap theirs (HelmCharts `charts/storage/templates/storage-cronjobs.yaml:11-15`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "Restore runbook",
+      "description": "The runbook beside `openbao.md` covers restoring a bucket from the mirror (whole, or single objects and earlier versions from the archive) with the app's own credentials. It also covers reading the mirror with no cluster, from the Drive login and the Roboform-held crypt password and salt.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V20",
+      "area": "Provider tests",
+      "description": "The provider's reader user and bucket-grant behaviour carry unit tests in the `internal/s3storage` package's existing style, plus acceptance tests that skip without `TF_ACC`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
