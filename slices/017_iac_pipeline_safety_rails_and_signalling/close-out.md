@@ -91,6 +91,8 @@ terraform/prd/main.tf:106-108 and AnsibleSpecs decisions.md:482 say the managed-
 
 plan-writer, planning, r2, 2026-09-14 — Plan r2 reordered the phases: the prevent_destroy phase this entry calls P3 is now P1; the doctrine phase is still P5.
 
+code-writer P5 r1, 2026-09-14 — AnsibleSpecs `decisions.md` ("Cloud-init is a first-boot artefact", :482) has the same stale wording: it says `managed-vm` pins `lifecycle.ignore_changes = [initialization]`. P5 rewrote only that bullet's rebuild sentence and left this claim as is.
+
 **Consequence:** A reader who trusts either comment expects a vms.tf ip_config change to be ignored on an existing VM, when it lands in the VM's pending config.
 
 **Provenance:** read | plan-writer, planning, r1, terraform/modules/managed-vm/main.tf:232

@@ -175,6 +175,22 @@ Target: ../AnsibleSpecs
 - the cloud-init template pickup (:482)
 - the workstation carve-out's "agent VM replace/destroy" (:571)
 
+**Done (P5).** `decisions.md`'s guard doctrine ("Production execution model", now :573-579) opens with D1's rule: **Terraform never destroys a VM, in Jenkins or locally.** It then lists the rails in the order they act:
+1. `prevent_destroy` on `managed-vm`'s VM resource. It stops the plan, not the apply, and that refusal is the drift job's protected-VM signal.
+2. The name-free destroy guard, reachable only for a config without `prevent_destroy`, with no override. `iac-apply` applies the plan it checked.
+
+Both rails cover the VM resource only, not its DNS reservation or cloud-init snippet. The claim of `prevent_destroy` on srviac and each `srvvaultN` is gone. A new paragraph gives the path: rebuild or remove a prd VM with `qm destroy`, then apply. It notes that passthrough OSD disks survive, covers the tainted-VM case and names the runbooks. The composite-operation example (:52), the Ceph rebuild path (:236), the cloud-init pickup (:482) and the carve-out (:571, now "agent VM rebuild or removal") all destroy on Proxmox first.
+
+Later phases:
+- P6: nothing changes.
+- Doc phase: `decisions.md:482` still says `managed-vm` pins `ignore_changes = [initialization]` (noted on close-out S2).
+
+Record:
+- Gate: AnsibleSpecs has no manifest or lint (plain Markdown). `git diff --check` is clean. Grep finds no Terraform replace of a prd VM left in `decisions.md`; the only `-replace` is the scratch clause.
+- Left as is:
+  - :106-107, OpenBao "Terraform recreates": true once the VM is gone, and `openbao.md` carries the `qm destroy`.
+  - :480, the reservation's "destroy reverses it": the apply that forgets a removed VM deletes it.
+
 ### P6 — The scheduled certs and drift jobs run every stage and keep every signal
 
 Target: root
