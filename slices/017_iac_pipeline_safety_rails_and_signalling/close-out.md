@@ -95,3 +95,12 @@ plan-writer, planning, r2, 2026-09-14 — Plan r2 reordered the phases: the prev
 
 **Provenance:** read | plan-writer, planning, r1, terraform/modules/managed-vm/main.tf:232
 **Disposition:**
+
+### S3 — Ansible — vm-rebuild.md still calls its k8s/Ceph cluster-member flow forward-looking, though k8s-rebuild.md is the concrete k8s flow · nit
+
+docs/runbooks/vm-rebuild.md:78-96 describes converting the prd root from the adoption shape and says the procedure lands when Phase 4 (k8s) and Phase 5 (Ceph) need it. docs/runbooks/k8s-rebuild.md already carries the concrete k8s worker, srvk8s1 and srvk8sdev rebuilds. P4 changed only that section's step 4 to destroy-on-Proxmox-first and left the rest as it was.
+
+**Consequence:** An operator rebuilding a k8s node can open vm-rebuild.md first and read that no playbook-backed procedure exists yet.
+
+**Provenance:** read, code-writer, P4, r1, docs/runbooks/vm-rebuild.md
+**Disposition:**

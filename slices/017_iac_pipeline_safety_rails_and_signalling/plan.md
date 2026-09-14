@@ -152,6 +152,18 @@ Constraints:
 - Ceph's OSD disks are passthrough `/dev/disk/by-id` paths on srvceph1-3 (`terraform/prd/vms.tf:210-277`), not Proxmox storage volumes. A Proxmox destroy leaves them in place, as a Terraform replace did.
 - `docs/runbooks/iac-agent.md:23` says the guard checks `srviac` "or any other VM name" given to it. Since P2 it takes no names and fails on any delete or replace of any prd VM.
 
+**Done (P4).** No runbook rebuilds a prd VM with `-replace` any more. Each prd flow runs `qm destroy` on the VM's PVE node, then a plain `terraform apply` that recreates it. The scratch flows (`scratch-vm.md:29`, `vm-rebuild.md:51` and its recovery bullets) keep `-replace`. The recovery notes for a prd VM that a failed create left tainted say Terraform refuses its replace, and the fix is `qm destroy`, then apply. `iac-agent.md:22-25` now says Terraform refuses any delete or replace of a prd VM, and the guard fails such a plan for a config without `prevent_destroy`.
+
+Later phases:
+- P5: the runbooks now follow the destroy-on-Proxmox-first path the doctrine records. P5's text does not change.
+- Doc phase: `iac-agent.md:28-37` still lists `iac-apply`'s plan + destroy check and its apply as separate steps (P3 review r1). P4 did not touch them.
+
+Record:
+- `openbao.md`: in single-node loss, `qm stop <vm_id> && qm destroy <vm_id>`, with `vm_id`/`pve_node` taken from `vms.tf`, replaces the `terraform state list` address lookup. In whole-cluster loss, the same runs for each `srvvaultN` still on Proxmox. Both then run `terraform apply` from the workstation, as before.
+- `iac-agent.md`, srviac rebuild: `ssh root@pve 'qm shutdown 920 ; sleep 5 ; qm destroy 920'`, then apply, from `wrkdev` and not `iac-apply`.
+- `vm-rebuild.md`, cluster-member flow: step 4 is destroy on Proxmox, then apply. It notes that a step-2 commit that replaces the VM fails every plan until the destroy, and that `qm destroy` leaves the Ceph passthrough OSD disks in place. "If a rebuild goes sideways" is split into a scratch path (unchanged) and a prd path. The `site.yml` note covers both roots.
+- Beyond the plan's list: `k8s-rebuild.md:248` ("TF errors at create") gained the same clause for a tainted VM, `qm destroy <new-vmid>` before retrying, because a plain retry is now refused.
+
 ### P5 — Doctrine records that Terraform never destroys a VM
 
 Target: ../AnsibleSpecs
