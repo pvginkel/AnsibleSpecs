@@ -290,7 +290,18 @@ OpenBao secrets"), mount `kv`.
 6. **Keycloak database backup — last, immediately before starting the run**, so it holds steps 2–5:
    `kubectl --kubeconfig ~/.kube/config-prd-write -n postgres-pas-prd create job
    --from=cronjob/postgres-backup postgres-backup-pre-keycloak-26-7`. Its log lists
-   `keycloak_prd_db` and `keycloak_dev_db` and ends `all databases backed up`.
+   `keycloak_prd_db` and `keycloak_dev_db`, names each stored object
+   (`"object":"postgres-pas/<timestamp>_keycloak_prd_db.dump.age"`) and ends `all databases backed up`.
+   The store does not keep that dump by name: backup-server keeps the newest **90** objects of the
+   `postgres-pas` scope across all nine databases and prunes after every upload (HelmCharts
+   `configs/prd/postgres-pas/_shared/infrastructure.tf:72-73`; DockerImages
+   `backup-server/src/internal/pipeline/prune.go:14-40`), so the nightly runs push it out in about
+   ten days. Set the `keycloak_prd_db` dump aside outside the scope's folder, the only folder
+   pruning lists (`pipeline/backend.go:80-104`), with the file name from that log line:
+   `kubectl --kubeconfig ~/.kube/config-prd-write -n storage-prd exec deploy/backup-server --
+   rclone copyto "gdrive-pieter:Homelab Backups/postgres-pas/<object>"
+   "gdrive-pieter:Homelab Backups/keycloak-pre-26-7/<object>"`. Delete that copy once the run has
+   verified 26.7.3 working.
 
 ## Ordering constraints
 
@@ -321,7 +332,9 @@ The production Prometheus release's `node-memory-pressure` group
 `NodeMemoryStallElevated` keep their stall thresholds, severities and `for:` windows, and fire only
 when the same node is also short of memory or thrashing. A new warning-level alert fires on a node
 whose stall counter looks wedged; its message names the node and says the stall alerts on it are
-blind until it is rebooted. The dev release carries no rules and stays that way.
+blind until it is rebooted. It carries the `node` label the stall alerts carry, which P2's inhibition
+matches on (every series of the stall metric has `node`). The dev release carries no rules and stays
+that way.
 
 Thresholds, settled from the incident record and a replay of production Prometheus over
 2026-09-07 09:41 → 09-14 UTC. Retention is a week, so srvk8s2's wedge ages out by 09-20 and these
@@ -332,13 +345,28 @@ figures are the evidence:
   had both — 0.62–0.9 GiB of a 15.6 GiB node, 670–770 faults/s
   (`/work/AnsibleSpecs/handovers/memory-issues/02-measurements.md:136`, `06-eviction.md:73`). In
   the replay the corroborated rules match no bucket on any node, where the current rules matched
-  srvk8s2's entire wedge (1663 five-minute buckets). Neither signal alerts alone: srvk8s4 dipped to
-  5% available and 842 faults/s that week with its stall rate under 0.007.
+  srvk8s2's entire wedge (1663 five-minute buckets). These signals are not alerts of their own:
+  srvk8s4 dipped under 4% available and to 842 faults/s that week with its stall rate under 0.007,
+  never for more than 5 consecutive minutes at the rules' one-minute evaluation. On a wedged node the
+  stall term always holds and both stall alerts reduce to these signals — hence P2's inhibition.
 - **Wedged** — stall rate above 0.02 while `MemAvailable` is above 25% of `MemTotal` and major
   faults average under 50/s over an hour, held for at least an hour. Both recorded wedges qualify
-  (srvk8s3 at 5.3 GiB and 2.2 faults/s; srvk8s2 never under 37% available). The replay holds it on
-  srvk8s2 for 1641 of the 1663 wedge buckets with one dropout (a 30-minute fault window gives two),
-  and on no other node.
+  (srvk8s3 at 5.3 GiB and 2.2 faults/s; srvk8s2 never under 37% available). The replay holds that
+  condition on srvk8s2 for 1641 of the 1663 wedge buckets with one dropout (a 30-minute fault window
+  gives two), and on no other node.
+- **Once firing, the wedge warning holds** through that node's memory dips and fault bursts for as
+  long as its stall rate stays above 0.02, and resolves when the counter stops (a reboot). Its
+  qualifying condition and the corroboration exclude each other, so a warning that tracks the
+  condition resolves — and lifts the inhibition — exactly when a corroborating episode arrives. In
+  the replay srvk8s1 and srvk8s4 sat at or under 25% available for 62% and 64% of the week, up to
+  47 h and 43 h at a stretch; srvk8s2's stall rate never fell below 0.037 through its wedge, and no
+  healthy node went above 0.011.
+- **First detection is slow on the memory-tight nodes, by choice.** A wedge qualifies only once its
+  node has spent an hour above 25% available: replayed as starting at every minute of the week, it
+  first qualifies 44 h later on average on srvk8s1 and 13 h on srvk8s4 (about an hour on srvk8s2
+  and srvk8s3), and until then its stall alerts are not inhibited. The floor stays at 25% —
+  "plentiful" is ruling D2's word, and a lower floor that qualifies sooner could take a real stall's
+  run-up for a wedge, which the hold would then silence.
 
 Not visible from the repo: the node-exporter chart upgrade that week left two overlapping series per
 node, differing only in `helm_sh_chart`, and a join on `instance` then fails evaluation
@@ -352,7 +380,9 @@ Target: ../HelmCharts
 Production Alertmanager — the `alertmanager` subchart of the same release
 (`configs/prd/prometheus/prd/values.yaml:120-130`), today on the chart's stock route to a receiver
 with no configuration — delivers every alert to the checklist's Telegram chat, per ruling D1:
-critical loud, warning silent, resolved notices sent, one node's fault one thread. The bot token and
+critical loud, warning silent, resolved notices sent, one node's fault one thread. While P1's wedge
+warning fires for a node, Alertmanager inhibits that node's `NodeMemoryStalled` and
+`NodeMemoryStallElevated` (ruling D2), matched on `node`; nothing else is inhibited. The bot token and
 chat id come from OpenBao `eso/prd/prometheus/prd/telegram` through an ExternalSecret in the
 release's `manifests.yaml` (upstream chart, so no `shared.externalsecrets` helper;
 `configs/prd/ceph-csi-rbd/prd/manifests.yaml` is the in-repo shape). They reach Alertmanager as
@@ -395,7 +425,7 @@ the chart pinning that tag (`charts/keycloak/values.yaml:22`).
   `CLAUDE.md:132`) is the known trap for a strategy change on a live Deployment. Ansible's pre-drain
   hand-off needs no change: it waits on the Deployment's own updated/ready/available counts, which
   already covers a stop-before-start rollout
-  (`/work/Ansible/ansible/playbooks/tasks/pre-drain-handoff.yml:123-153`).
+  (`/work/Ansible/ansible/playbooks/tasks/pre-drain-handoff.yml:123-157`).
 - **Dev stage first.** The phase leaves a HelmCharts commit in which only the `keycloak-dev` stage
   runs 26.7.3, with the no-overlap change already in effect, followed by the commit that moves every
   release; the push order in Ordering constraints rides on it. That also puts 26.7.0's FreeMarker

@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R3 — Keycloak upgrade (ruling U1)",
-      "description": "R3: \"a Keycloak upgrade would be warrented\" — Keycloak is built at 26.7.3 in DockerImages (26.5.1 today, keycloak/build-matrix.json:5), every charts/keycloak release is pinned to it (HelmCharts charts/keycloak/values.yaml:22 pins 26.5.1 today) and both production Keycloak stages, auth.ginbov.nl and keycloak-dev.home, run it, with a backup of Keycloak's database taken before the push that deploys it. The dev-cluster release's deploy waits on srvk8sdev (fact F3).",
+      "description": "R3: \"a Keycloak upgrade would be warrented\" — Keycloak is built at 26.7.3 in DockerImages (26.5.1 today, keycloak/build-matrix.json:5), every charts/keycloak release is pinned to it (HelmCharts charts/keycloak/values.yaml:22 pins 26.5.1 today) and both production Keycloak stages, auth.ginbov.nl and keycloak-dev.home, run it, with a backup of Keycloak's database taken before the push that deploys it, and that backup's keycloak_prd_db dump kept outside the postgres-pas backup scope's count-based pruning (the newest 90 objects — HelmCharts configs/prd/postgres-pas/_shared/infrastructure.tf:72-73) until 26.7.3 is verified working. The dev-cluster release's deploy waits on srvk8sdev (fact F3).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -35,7 +35,7 @@
     {
       "id": "V05",
       "area": "D2 — wedged-counter warning",
-      "description": "A new warning-level alert fires when a node's memory stall rate is above 0.02 while MemAvailable is above 25% of MemTotal and major faults average under 50/s over an hour, held for at least an hour; its message names the node and says the stall alerts on that node are blind until it is rebooted.",
+      "description": "A new warning-level alert fires when a node's memory stall rate is above 0.02 while MemAvailable is above 25% of MemTotal and major faults average under 50/s over an hour, held for at least an hour. Once firing it keeps firing through that node's memory dips and fault bursts for as long as the stall rate stays above 0.02, and resolves when the counter stops (a reboot). Its message names the node and says the stall alerts on that node are blind until it is rebooted.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -43,7 +43,7 @@
     {
       "id": "V06",
       "area": "D2 — rule health",
-      "description": "The production alerting rules load and evaluate without errors, including while a node-exporter chart upgrade leaves overlapping series per node, and none of the node-memory-pressure alerts fires on production's nodes as they stand after deploy.",
+      "description": "The production alerting rules load and evaluate without errors. After deploy, neither stall alert fires on a production node whose stall counter is healthy, and the wedge warning fires only on a node whose counter is genuinely wedged — a wedge that happens during the run is the warning working, not a failure. The rules also evaluate cleanly while a node-exporter chart upgrade leaves two overlapping series per node that differ only in helm_sh_chart: checked against data while such an overlap is still within Prometheus's 7-day retention (HelmCharts configs/prd/prometheus/prd/values.yaml:3), and by reading the rules once it has aged out.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -108,6 +108,14 @@
       "id": "V14",
       "area": "U1 — Keycloak after the upgrade",
       "description": "After the upgrade, the homelab and homelab-dev login pages render with the deployed themes; a sign-in through an app already on Keycloak succeeds on homelab, and a sign-in to the account console succeeds on homelab-dev (no production-cluster app uses that realm).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "D2 — stall alerts inhibited on a wedged node",
+      "description": "While the wedge warning fires for a node, Alertmanager inhibits that node's NodeMemoryStalled and NodeMemoryStallElevated, so neither is delivered from a wedged node, including through a memory dip or fault burst on that node long enough to meet the stall alert's for-window; stall alerts on other nodes and every other alert are not inhibited. The inhibition matches on the node label, which every production series of node_pressure_memory_stalled_seconds_total carries (Prometheus series API, 2026-09-14).",
       "verdict": null,
       "rationale": "",
       "evidence": []

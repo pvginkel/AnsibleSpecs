@@ -37,6 +37,8 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
 
 Replay for P1's thresholds: min(MemAvailable/MemTotal) 0.050 and max rate(node_vmstat_pgmajfault[5m]) 842/s on srvk8s4 (20 GiB node), p99 faults ~258–317/s, while its stall rate never exceeded 0.007. The other three nodes stayed above 17% available and under 192 faults/s. No alert covers this by design (the mixin's standalone memory alerts are out of scope).
 
+plan-writer r3, 2026-09-14 — Replayed at the rules' one-minute evaluation over 2026-09-07 09:45 → 09-14: srvk8s4's MemAvailable floor was 3.7% of MemTotal, and srvk8s1 and srvk8s4 sat at or under 25% MemAvailable for 62% and 64% of the week, up to 47 h and 43 h at a stretch. srvk8s1 is memory-tight too, not only srvk8s4.
+
 **Consequence:** srvk8s4 runs close to its memory ceiling with no alert on it; a capacity look may be due.
 
 **Provenance:** witnessed, plan-writer, planning r1, live production Prometheus queries 2026-09-14
@@ -68,7 +70,7 @@ HelmCharts CLAUDE.md (recommend-resources) states the window is nominally 5 days
 **Provenance:** read, plan-writer, planning r1, HelmCharts CLAUDE.md + live Prometheus query
 **Disposition:**
 
-### B3 — Ansible docs: k8s-rebuild.md and pre-drain-handoff.yml still name keycloak-db as a pre-drain opt-in that no longer exists · minor
+### ~~B3 — Ansible docs: k8s-rebuild.md and pre-drain-handoff.yml still name keycloak-db as a pre-drain opt-in that no longer exists · minor~~ — resolved — Ansible 568419f dropped the retired keycloak-db opt-in: docs/runbooks/k8s-rebuild.md:36 and ansible/playbooks/tasks/pre-drain-handoff.yml:22 now name keycloak only (checked 2026-09-14); struck by plan-writer r3
 
 docs/runbooks/k8s-rebuild.md:35 describes a keycloak-db Deployment (Recreate, ~30 s outage) handed off before every drain, and ansible/playbooks/tasks/pre-drain-handoff.yml:22 lists 'keycloak, keycloak-db (HelmCharts)'. In HelmCharts only charts/keycloak/templates/keycloak-deployment.yaml:7,22 carries iac.webathome.org/pre-drain, and the live keycloak-prd namespace runs a single keycloak Deployment (Keycloak's database is postgres-pas, charts/keycloak/values.yaml:9).
 
