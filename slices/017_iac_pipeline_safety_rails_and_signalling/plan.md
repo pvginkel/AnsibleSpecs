@@ -110,7 +110,7 @@ Record:
 - A Python port of `driftSummary`'s terraform path over the captured logs put the refusals first on the refused log and the verdicts first on a guard-hit log. The environment has no JVM, so the Groovy itself, including `Matcher.find()` under the sandbox, is proven only by a drift run on a refusal (V08).
 - Drift `elif` branch under `sh` with `set -eu`: a failing guard exits 1 before `exit 1`.
 
-### P3 — iac-apply applies the plan it checked
+### P3 — iac-apply applies the plan it checked ✅ DONE 2026-09-14
 
 Target: root
 
@@ -124,6 +124,7 @@ Target: root
 Later phases:
 - Operator: close-out A1 names the stage "Plan + destroy check". In `iac-apply` that stage is now `Terraform plan + destroy check + apply (prd)`; `iac-on-push` keeps the old name. The live proof of V07 is one operator run of `iac-apply` after A1.
 - Doc phase: nothing outside the Jenkinsfiles names either old `iac-apply` stage (grep).
+- Doc phase (P3 review r1): `docs/runbooks/iac-agent.md:26-32` still describes `iac-apply` as "one `iac -c '…'` per stage", with the plan + destroy check and the apply as separate steps 1 and 2. They now share one stage and one call.
 
 Record:
 - Gate: `kc project test --project root` printed `root: no test statements — skipped` (N1).
