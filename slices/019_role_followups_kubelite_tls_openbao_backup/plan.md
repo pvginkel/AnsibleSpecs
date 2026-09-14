@@ -155,6 +155,20 @@ R4, to the settled rulings above. In a `--check` run, a notified restart handler
   A due internal_tls leaf re-issue does not notify, because its notify sits in the block `--check` skips (`roles/internal_tls/tasks/issue.yml:107-110`, :186). That gap is the notifier's, the same class as the microceph handlers the ruling left out, and it is logged as close-out S3.
 - **Drift detection.** Only a task that itself reports changed notifies a handler. A converged host therefore still shows `changed=0` under `--check`, which the drift job's recap sum relies on.
 
+**Done (P3).** `roles/microk8s/handlers/main.yml` gains three `debug` handlers. Each is placed just above the handler it covers and listens on that handler's name: `listen: Restart microk8s`, `Rollout-restart coredns` and `Restart microk8s kubelite`. Each runs only when `ansible_check_mode` is set, with `changed_when: true`. A `--check` run therefore reports a changed "A real run would …" line on every notified host, then skips the real handler as before. The notifiers and the three handlers are untouched.
+
+Later phases:
+- P4: rewrite only the `Restart microk8s kubelite` task and keep its name. The announcement is its own handler, tied to the restart by `listen:` on that name.
+- Test phase: outside check mode, a notified host's recap `skipped=` goes up by one per covered handler notified. That is the announcement's `when`; `display_skipped_hosts = False` hides it. `changed=` and every other count are as before. A converged host notifies nothing, so `--check` still shows `changed=0`.
+
+Record:
+- Grounded 2026-09-14 on ansible-core 2.20.5 in the iac sidecar: scratch playbooks, local connection, two throwaway hosts, no real host.
+  - Notifying a name fires both the handler of that name and its `listen:` handler, a templated `notify: "{{ … }}"` included. `throttle: 1` still holds on the named handler.
+  - Without `--check`, the stand-in announcement is skipped, and the named handler runs and reports changed.
+- The role's real handlers file was imported as a play's handlers and notified by all three names under `--check`. Each announcement reported changed on both hosts, and each real handler was skipped (recap `changed=4 skipped=3`).
+- A separate listener rather than a check-mode branch inside the restart task: nothing that runs under `--check` touches a restart command.
+- Not live-proven. V08–V10 need the operator's `site-k8s.yml --check --diff` against a node where a notifier has drift.
+
 ### P4 — The kubelite restart waits for readiness
 
 **Target:** `ansible`
@@ -163,7 +177,7 @@ R5, to the D2 ruling above. After `Restart microk8s kubelite`, a node gives up i
 
 - **Control-plane nodes.** `/readyz` needs no credentials, just like the `/livez` the handler probes today (:65, :72-75). On 2026-09-14 both answered 200 without credentials through `kubernetes-api.home:16443` on prd.
 - **Workers.** A worker has no local control plane, and its 16443 is the apiserver-proxy (:56-59). Its Ready condition reads stale straight after a kubelet restart. `playbooks/tasks/wait-node-ready.yml:19-28` records why that flow checks the node lease's `renewTime` before Ready, reading both through the primary. If reading this from inside the single throttled task proves impractical, the ruling's fallback applies: workers keep the kubelet health check and the comment says so.
-- **Check mode.** P3's check-mode announcement on this handler keeps working.
+- **Check mode.** P3's announcement is the separate `debug` handler `Report the kubelite restart a real run would perform (check mode)`, with `listen: Restart microk8s kubelite`, placed just above the restart. It keeps working as long as the restart handler keeps its name.
 
 ### P5 — A runbook recovers a lapsed internal_tls leaf
 
