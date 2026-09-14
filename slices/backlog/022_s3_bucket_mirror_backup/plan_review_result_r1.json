@@ -1,0 +1,1 @@
+{"outcome": "issues", "summary": "Two blocking findings: P3/V13 drop ruling D2's 'one missed night stays quiet' half, and P5 wrongly assumes the runbook's credentials are in OpenBao when the app and reader keys are Terraform-written Kubernetes Secrets; one advisory on V08's dev-cluster clause having nothing that can check it off."}
