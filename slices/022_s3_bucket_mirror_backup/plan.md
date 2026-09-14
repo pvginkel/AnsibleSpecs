@@ -399,6 +399,32 @@ P2's CronJob is `s3-mirror` in `storage-prd`, scheduled `30 3 * * *` (cluster-lo
 The mirror only: `postgres-backup` is not added. No Alertmanager change (slice 018). Slice 018,
 planned, edits the same file; whichever lands second rebases, and neither waits on the other.
 
+**Done (P3).** The prd Prometheus release has a critical alert `S3MirrorStale` (group `s3-mirror`,
+after `node-reservation`). It fires once the `s3-mirror` CronJob's last success is over 52 h old,
+or, before any success, its creation time. Committed on HelmCharts `phase/022-P3`.
+
+Later phases:
+- Test phase: `tests/test_prometheus_s3_mirror_alert.py` (3 tests) reads the real rule and the storage
+  chart's `schedule`/`activeDeadlineSeconds` and walks both edges night by night over 400 nights.
+  If those values outgrow the 52 h margin, it fails. The rule is not live until the prd `prometheus`
+  release deploys; the live check is the alert listed, inactive, under Prometheus `/alerts`.
+
+Record:
+- Expr: `time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{S} or
+  kube_cronjob_created{S}) > 52 * 3600`, `S` = `namespace="storage-prd",cronjob="s3-mirror"`, no `for:`.
+  Live prd (KSM 2.20.0, Prometheus 3.14.0) exports both series with those labels. The scrape and
+  evaluation intervals are 1m.
+- The CronJob sets no `timeZone`, and the nodes run Europe/Amsterdam (Ansible `baseline_timezone`;
+  `storage-sync-cronjob` `10 2` fired 00:10Z). Across the autumn DST change two nights span 49 h.
+  So the worst quiet case is 48 + 1 + 2 h plus 5 min lag, under 52 h. The alert fires 3–7 h after
+  the second failed night's 03:30, and always before the third run.
+- The never-succeeded case counts from `kube_cronjob_created`, which a helm upgrade does not reset.
+- Checked ad hoc with promtool 3.14.0 `test rules` on the rule extracted from the values file; the
+  check is not committed, since the suite is hermetic and has no promtool. With no success, the rule
+  is quiet at 51h59m and fires at 52h01m. Once a success exists, creation time is ignored. A sibling
+  CronJob's series and extra labels do not leak in. Mutations fail the checks: promtool at 50 h,
+  pytest at 51 h (quiet edge) and 60 h (fire edge).
+
 ### P4 — Every production bucket carries the reader's grant
 
 Target: ../HelmCharts
