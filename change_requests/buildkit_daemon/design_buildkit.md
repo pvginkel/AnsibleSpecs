@@ -190,9 +190,11 @@ These are design targets, not options. Each is feasible; risks are under **Risks
   OpenBao (chicken-and-egg, `decisions.md:143`) — but a *consumer's* provisioner
   credential is not bootstrap-tier and may live in OpenBao→ESO.
 - **Homelab CA, JWK provisioner pattern.** New homelab certs come from step-ca via
-  the JWK provisioner (VMs) or the ACME provisioner (in-cluster HTTP). A new SAN
-  must be allowed by the issuing provisioner's name policy *before* first issuance
-  or step-ca returns "not authorized" (`docs/runbooks/step-ca-bootstrap.md`).
+  the JWK provisioner (VMs) or the ACME provisioner (in-cluster HTTP).
+  *Correction (2026-09-14):* a JWK provisioner's name policy is not enforced —
+  step-ca 0.30.2 ignores per-provisioner name policy in a file-based `ca.json`, so
+  a SAN missing from the list still issues (`decisions.md` §Internal TLS / homelab
+  CA; Trello #993 implements the controls).
 - **cert-manager is NOT deployed.** `decisions.md:139` and `:152` are **stale** —
   they describe a planned cert-manager + ClusterIssuer path that was rejected. The
   as-built in-cluster path is certbot + nginx-configurator HTTP-01 against the
@@ -384,6 +386,10 @@ server + client SANs. This does **not** stop a foreign homelab cert from
 connecting (same root), but it means the *credential that lives in-cluster*
 (Decisions 1/2) can only mint buildkit certs — never pve/ceph/kubernetes-api. This
 is the blast-radius mitigation for putting an issuance credential in the cluster.
+*Correction (2026-09-14):* that scoping does not exist until Trello #993 lands —
+step-ca 0.30.2 ignores per-provisioner name policy in a file-based `ca.json`, so
+today a dedicated provisioner's password would mint any name,
+pve/ceph/kubernetes-api included.
 - *Impact:* a base64 `ca.json` edit in
   `HelmCharts/configs/prd/step-ca/prd/manifests.yaml` + step-ca redeploy; a new
   provisioner password generated and stored in OpenBao (Decision 4). Cheaper than

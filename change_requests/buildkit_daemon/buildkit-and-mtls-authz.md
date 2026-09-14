@@ -88,6 +88,9 @@ future service slices can be authored from it. It's written to hand over to a fr
    password minting pve / ceph / kubernetes-api certs. A provisioner was never the rejected
    "CA hack"; all provisioners sign under the same two-tier chain, so it gives `--tlscacert`
    nothing distinct to pin — it bounds *issuance*, not *connections*.
+   *Correction (2026-09-14):* it bounds issuance only once per-provisioner name policy is
+   enforced, and today it is not — step-ca 0.30.2 ignores it in a file-based `ca.json`
+   (`decisions.md` §Internal TLS / homelab CA; Trello #993).
 6. **Two slices.** (a) **Daemon slice** — HelmCharts chart + Ansible node-prep + cache PV +
    LB/DNS + rootless config; independently testable via a `buildctl` smoke build. (b)
    **Client-enablement slice** — out-of-tree: the `buildkit()` helper in JenkinsPipelineUtils,
