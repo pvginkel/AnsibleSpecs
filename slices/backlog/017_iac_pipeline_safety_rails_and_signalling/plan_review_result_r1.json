@@ -1,0 +1,1 @@
+{"outcome": "issues", "summary": "One blocking finding: once P3 adds prevent_destroy, Terraform rejects a VM delete or replace at plan time, so P1's guard never runs for a VM, and a VM replace in the drift job reads as ordinary drift, against the settled ruling and V08; one advisory on wrong citations."}
