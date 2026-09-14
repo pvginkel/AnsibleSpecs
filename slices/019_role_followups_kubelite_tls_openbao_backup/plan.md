@@ -252,7 +252,7 @@ Record:
   - It notes that an expired OpenBao leaf gives the certs job the host-cert description too.
   - A close-out bug records that `reissue-host-cert.yml` does not cover pve, pve1 or pve2; step 1 of the runbook says so.
 
-### P6 — A whole-cluster recovery delivers the backup credential after the restore
+### P6 — A whole-cluster recovery delivers the backup credential after the restore ✅ DONE 2026-09-14
 
 **Target:** `root`
 
