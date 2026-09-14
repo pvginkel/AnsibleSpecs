@@ -37,6 +37,8 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
 
 P1's proof of a staged backup secret_id logs in and then revokes the returned token. The backup AppRole sets token_no_default_policy, and OpenBao 2.5.4 answers revoke-self from such a token with 403 until its policy grants it (dev server, 2026-09-14). roles/openbao/templates/backup-policy.hcl.j2 therefore now grants update on auth/token/revoke-self. The policy is no longer strictly read-only. The grant lands on the next site-openbao.yml apply, through approle.yml's policy write on the bootstrap host.
 
+code-reviewer, P1 r1, 2026-09-14 — The operator's checkout does hold a staged backup secret_id: /work/Ansible/tmp/openbao-backup-secret-id, dated 2026-08-13 20:37, from that day's rotation output. plan.md:51's 'no secret_id file' is wrong. So a --check or --tags openbao_backup site-openbao.yml run from /work/Ansible after merge will fail until an apply writes the policy: with 403 at the revoke if that secret_id is live, or at the rejection if it is dead (code_review_r1.md F2).
+
 **Consequence:** The next site-openbao.yml apply reports the backup policy changed. Until then, a --check or --tags openbao_backup run from a checkout holding a live staged secret_id fails at the token revoke with HTTP 403; the nightly drift job never holds one.
 
 **Provenance:** witnessed — code-writer, P1, r1, OpenBao dev server in the iac sidecar; plan.md P1 done-record
@@ -49,6 +51,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
      slice's repos, which elsewhere -->
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
+
+### B1 — Ansible — a --check of the openbao_rotate_secret_ids=true run cannot preview it from a checkout holding a dead staged backup secret_id · minor
+
+Under --check the secret_id mint (roles/openbao/tasks/approle.yml:329-347, a uri task with no check_mode override) is skipped, so the staged file is never replaced. On the bootstrap host the run already failed before P1: approle.yml:384-395 renders .json.data.secret_id from the skipped mint's results ('object of type dict has no attribute json'; witnessed with a playbook mirroring both tasks in the iac sidecar). The --check play fans out (playbooks/site-openbao.yml:171). Since P1, the other nodes fail as well, at backup.yml's rejection of the dead secret_id, whose message says to run with -e openbao_rotate_secret_ids=true, the flag the run already carries. The apply of the same command succeeds.
+
+**Consequence:** The operator applies the rotation run that P1's rejection names, minting never-expiring secret_ids for all six AppRoles, with no dry run. Its --check fails, and tells them to pass a flag they already passed.
+
+**Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
 
 ## Open questions and rulings
 
@@ -90,4 +101,13 @@ roles/internal_tls/tasks/issue.yml:186 notifies internal_tls_reload_handler from
 **Consequence:** A --check --diff run on a node with a due internal_tls leaf names the re-issue but not the kubelite restart that follows it on apply; the re-issue report itself still shows the node has a change.
 
 **Provenance:** read | plan-writer, planning, fix pass r2 — roles/internal_tls/tasks/issue.yml:88-110 and :186
+**Disposition:**
+
+### S4 — Ansible — the OpenBao backup wrapper passes the backup secret_id, its login token and the upload bearer on curl's command line · minor
+
+roles/openbao/templates/openbao-backup.sh.j2 sends the AppRole login body (role_id and secret_id) as -d "${login_body}", every OpenBao read as -H "X-Vault-Token: ${token}", and the upload as -H "Authorization: Bearer …". All three sit in curl's argv, readable from /proc/<pid>/cmdline for the length of each call. This predates slice 019. P2 rewrote the calls' failure reporting and kept their argument shapes. curl can read the body and headers from a file or stdin instead (-d @file, -H @file).
+
+**Consequence:** A local process on an OpenBao node that reads /proc during the nightly run can pick up the backup secret_id or a token holding the backup policy's snapshot and full KV read.
+
+**Provenance:** read | code-writer, P2, r1 — ansible/roles/openbao/templates/openbao-backup.sh.j2 (login, bao_api callers, upload)
 **Disposition:**

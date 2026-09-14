@@ -116,6 +116,28 @@ R2, to the settled ruling above. When any call in `roles/openbao/templates/openb
 - **What stays the same.** Any failure still fails the unit, and a follower still exits 0. That follower behaviour belongs to slice 023.
 - **The upload is in scope for its failure report only.** The R3 ruling keeps "the backup wrapper's upload call" out of this slice as freshness work: the validity slice 023 sends with the upload (Not in scope, Ordering constraints).
 
+**Done (P2).** `templates/openbao-backup.sh.j2` sends every call through one helper, `request`: curl `-sS -o FILE -w '%{http_code}'`, with no `-f`.
+- A call with no complete response ends the run, after curl's own stderr line, with `<call> failed: no HTTP response (curl exit N)` or `<call> failed: HTTP <status>, then curl exit N`.
+- OpenBao calls go through `bao_api METHOD PATH OUT` and are named by method and path. Anything but 2xx ends the run with the status and the `errors` strings of OpenBao's JSON body, collapsed to one line. Examples: `POST auth/approle/login failed: HTTP 400: invalid role or secret ID`; a policy denial reads `HTTP 403: 1 error occurred: * permission denied`. A non-JSON error body gives the status only.
+- The upload logs `POST <backup_server_url>/upload failed: HTTP <status>` and nothing more.
+- The KV LIST still takes 404 as "no keys here".
+- Response bodies land in the `/dev/shm` work dir, now created before the leader check. Nothing logs a body, token or secret_id.
+
+Later phases:
+- Test phase: the lines above are the journal's failure lines (`journalctl -u openbao-backup`). The unit and a follower's exit 0 are unchanged.
+
+Record:
+- Settled beyond the plan: the old `kv_walk "" || {…}` ran the walk with `set -e` suspended, so a failing nested LIST or KV read let the backup go on. The walk is now called bare, and a failing call exits from inside the helper.
+- Proven 2026-09-14 in the iac sidecar with the rendered template, against OpenBao 2.5.4 on raft storage (`is_self` true) plus Python mocks. All 18 cases pass:
+  - uploads with an empty KV and with a KV nested two levels deep (201, bundle contents checked);
+  - 403 on the snapshot, policy LIST, policy read, nested KV LIST, KV read, `sys/auth` and `sys/mounts` (deny policy);
+  - dead secret_id (400) and no AppRole mount (403);
+  - upload 401 in plain text (body not echoed);
+  - upload and leader unreachable (curl 7), TLS mismatch (curl 35), non-JSON 502, a truncated body (HTTP 200, then curl 18);
+  - a follower (exit 0).
+- After every case the work dir was gone. No output held the root token, role_id, secret_id, upload token, a KV value, a body marker, policy HCL or a token-shaped string.
+- The harness is not committed: the repo has no runnable suite. `bash -n` passed; shellcheck is not in the sidecar. Not live-proven.
+
 ### P3 — Check-mode runs name the restarts they would perform
 
 **Target:** `ansible`
