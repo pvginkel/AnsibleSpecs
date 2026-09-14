@@ -79,7 +79,7 @@ Record:
 - `managed-vm`'s only caller is still `terraform/prd/main.tf:152`.
 - Owed to the operator / pushed `iac-on-push`: the no-op prd plan (V05), a refused prd VM destroy (V04), and V11's recreate/forget path.
 
-### P2 — The drift job names Terraform's refusal, and the destroy guard stays as the second rail
+### P2 — The drift job names Terraform's refusal, and the destroy guard stays as the second rail ✅ DONE 2026-09-14
 
 Target: root
 
