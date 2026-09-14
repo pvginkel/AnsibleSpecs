@@ -50,41 +50,45 @@
 
 ## Task shape
 
-pre-settled — the rulings fix every mechanism (prevent_destroy on the shared `managed-vm` VM resource, a name-free guard over every prd VM, one `iac` invocation that plans/guards/applies, no `|| true` in drift, every scheduled stage runs with combined descriptions and the dev warning raised at failure, R4 closed by ruling); planning is transcription onto the files the grounding cites.
+pre-settled — the rulings fix every mechanism (prevent_destroy on the shared `managed-vm` VM resource, whose plan-time refusal is the protected-VM signal and names itself in the drift job's description; a name-free guard over every prd VM as the second rail; one `iac` invocation that plans/guards/applies; no `|| true` in drift; every scheduled stage runs with combined descriptions and the dev warning raised at failure; R4 closed by ruling); planning is transcription onto the files the grounding cites.
 
 ## Ordering constraints
 
-### P1 — The destroy guard fails on any delete or replace of any prd VM
+- P2's naming of a refused VM destroy in the drift job lands after P1's `prevent_destroy`, so it is built and reviewed against the refusal in place (B1 ruling).
 
-Target: root
-
-`check-protected-vms.sh` fails a `terraform/prd` plan that deletes or replaces any prd VM. That means every action list containing a delete, including Terraform's default `["delete","create"]` replace, which today's filter misses (`support/iac-agent/bin/check-protected-vms.sh:30-34`). It takes no list of names. All three callers use the new shape: `Jenkinsfile.iac-on-push:47`, `Jenkinsfile.iac-apply:73` and `Jenkinsfile.iac-scheduled-drift:181`.
-
-The drift job stops swallowing the guard's result (`|| true` at :181). A guard hit reads in its build description as a protected-VM destroy, distinct from ordinary drift. That description comes from `driftSummary`, which parses the guard's output (:84).
-
-- The guard keys on the VM resource itself (`proxmox_virtual_environment_vm.this`, `terraform/modules/managed-vm/main.tf:52`), not on everything under `module.vm["…"]`. The module also holds the VM's DNS reservation (:39), and the apply job removes VMs (F1 ruling). Once a VM destroyed on Proxmox has its entry removed from `vms.tf`, the plan deletes that reservation, and the guard must let it through.
-- The jobs run srviac's installed copy of the script, not the commit's. The `iac_agent` role installs it (`support/iac-agent/install.sh:49`) and `iac` bind-mounts it into the container (`support/iac-agent/bin/iac:50`). The Jenkinsfiles on `main` take effect at push, but `iac-apply` never converges srviac (`--limit "!iac_agent"`, `Jenkinsfile.iac-apply:98`), so installing the new script is an operator run of the role.
-- Between the push and that role run, a caller and script that disagree must fail the job, never pass a plan unchecked. The done-record names the order the operator owes: push, then the `iac_agent` role on srviac, then an `iac-on-push` re-run.
-
-### P2 — iac-apply applies the plan it checked
-
-Target: root
-
-`Jenkinsfile.iac-apply` plans `terraform/prd`, runs the guard against that plan and applies that saved plan, all in one stage and one `iac` invocation. This replaces "Plan + destroy check" (:60-77) and "Terraform apply (prd)" (:79-90). Today the apply stage re-plans in a fresh container: every `iac` call is a fresh container and clone (:10-11). A guard failure applies nothing. The Ansible stages after it are unchanged.
-
-- The plan file never leaves the container, because plan files hold secret values.
-- The job stays manual with no approval step; it never had one.
-
-### P3 — Terraform refuses to destroy any prd VM
+### P1 — Terraform refuses to destroy any prd VM
 
 Target: terraform
 
-`prevent_destroy` goes on the VM resource in the shared `managed-vm` module, in its existing `lifecycle` block (`terraform/modules/managed-vm/main.tf:208`). The module's only caller is `terraform/prd/main.tf:151-152`, so every prd VM is refused a destroy or replace by any plan, whether run in Jenkins or locally. There is no module split and no state move, and the change plans as a no-op against every existing VM.
+`prevent_destroy` goes on the VM resource in the shared `managed-vm` module, in its existing `lifecycle` block (`terraform/modules/managed-vm/main.tf:208`). The module's only caller is `terraform/prd/main.tf:151-152`, so every prd VM is refused a destroy or replace by any plan, whether run in Jenkins or locally. The refusal comes at plan time, not at apply: `terraform plan` exits 1 with `Error: Instance cannot be destroyed`. There is no module split and no state move, and the change plans as a no-op against every existing VM.
 
 The Terraform comments that direct a `-replace` of a prd VM (`terraform/modules/managed-vm/main.tf:213,223`, `terraform/prd/main.tf:111`) direct destroy-on-Proxmox-first instead.
 
 - `terraform/scratch` has its own VM resource and keeps its `-replace` flow.
-- The gate is `terraform fmt -check`. The no-op plan and the refused destroy are proven only by the pushed `iac-on-push` plan and by the operator, so they are owed, not verified.
+- The gate is `terraform fmt -check`. The no-op plan and a refused destroy against prd are proven only by the pushed `iac-on-push` plan and by the operator, so they are owed, not verified.
+
+### P2 — The drift job names Terraform's refusal, and the destroy guard stays as the second rail
+
+Target: root
+
+With P1 merged, a plan that deletes or replaces a prd VM fails at `terraform plan`. Every job exits there, before `terraform show` and the guard run (`Jenkinsfile.iac-apply:71`, `Jenkinsfile.iac-on-push:45`, `Jenkinsfile.iac-scheduled-drift:183-184`). That refusal is the protected-VM signal. In the drift job's build description it names itself as a refused VM destroy instead of reading as ordinary drift.
+
+Today it would read as drift. Terraform still renders the plan body before the error ("Terraform planned the following actions, but then encountered a problem:", then `# module.vm["srvX"].proxmox_virtual_environment_vm.this must be replaced`). `driftSummary` matches that header as drift (`Jenkinsfile.iac-scheduled-drift:82`), and `items ?: errors` (:106) then drops the `Error:` line. A VM left tainted by a failed create (`docs/runbooks/vm-rebuild.md:135`) produces this on every daily run until the operator destroys it on Proxmox and applies. Nothing is refused against prd today, so the description is built against the refusal as it reproduces offline: in the `iac` sidecar, with a stand-in resource carrying `prevent_destroy`, as plan review r1 did.
+
+`check-protected-vms.sh` fails a `terraform/prd` plan that deletes or replaces any prd VM. That means every action list containing a delete, including Terraform's default `["delete","create"]` replace, which today's filter misses (`support/iac-agent/bin/check-protected-vms.sh:30-34`). It takes no list of names. All three callers use the new shape: `Jenkinsfile.iac-on-push:47`, `Jenkinsfile.iac-apply:73` and `Jenkinsfile.iac-scheduled-drift:181`. The drift job stops swallowing the guard's result (`|| true` at :181). While `prevent_destroy` is in the config, no VM delete or replace reaches the guard; it catches one only in a config without that line, for example while it is lifted.
+
+- The guard keys on the VM resource itself (`proxmox_virtual_environment_vm.this`, `terraform/modules/managed-vm/main.tf:52`), not on everything under `module.vm["…"]`. The module also holds the VM's DNS reservation (:39), and the apply job removes VMs (F1 ruling). Once a VM destroyed on Proxmox has its entry removed from `vms.tf`, the plan deletes that reservation, and neither rail may stop it: P1's `prevent_destroy` sits on the VM resource only.
+- The jobs run srviac's installed copy of the script, not the commit's. The `iac_agent` role installs it (`support/iac-agent/install.sh:49`) and `iac` bind-mounts it into the container (`support/iac-agent/bin/iac:49`). The Jenkinsfiles on `main` take effect at push, but `iac-apply` never converges srviac (`--limit "!iac_agent"`, `Jenkinsfile.iac-apply:98`), so installing the new script is an operator run of the role.
+- Between the push and that role run, a caller and script that disagree must fail the job, never pass a plan unchecked. The done-record names the order the operator owes: push, then the `iac_agent` role on srviac, then an `iac-on-push` re-run.
+
+### P3 — iac-apply applies the plan it checked
+
+Target: root
+
+`Jenkinsfile.iac-apply` plans `terraform/prd`, runs the guard against that plan and applies that saved plan, all in one stage and one `iac` invocation. This replaces "Plan + destroy check" (:60-77) and "Terraform apply (prd)" (:79-90). Today the apply stage re-plans in a fresh container: every `iac` call is a fresh container and clone (:10-11). A plan Terraform refuses, or one the guard fails, applies nothing. The Ansible stages after it are unchanged.
+
+- The plan file never leaves the container, because plan files hold secret values.
+- The job stays manual with no approval step; it never had one.
 
 ### P4 — Runbooks rebuild prd VMs by destroying them on Proxmox first
 
@@ -94,7 +98,7 @@ Every runbook step that rebuilds a prd VM with `terraform apply -replace` direct
 
 - OpenBao single-node and whole-cluster recovery (`docs/runbooks/openbao.md:98,148`)
 - the srviac rebuild (`docs/runbooks/iac-agent.md:170`)
-- the cluster-member rebuild flow and its recovery notes (`docs/runbooks/vm-rebuild.md:91,132-136`)
+- the cluster-member rebuild flow and its recovery notes (`docs/runbooks/vm-rebuild.md:91,132-136`), including the VM a failed create leaves tainted (:135), whose replace Terraform now refuses
 
 Constraints:
 
@@ -106,7 +110,7 @@ Constraints:
 
 Target: ../AnsibleSpecs
 
-`decisions.md` states the rails this slice ships and the rebuild path they force, per the D1 ruling. The guard doctrine at `decisions.md:575-576` claims a `prevent_destroy` on srviac and each `srvvaultN` that never existed; D1's shape replaces it. Other doctrine that rebuilds a prd VM by Terraform replace changes to match:
+`decisions.md` states the rails this slice ships and the rebuild path they force, per the D1 ruling. The guard doctrine at `decisions.md:575-576` claims a `prevent_destroy` on srviac and each `srvvaultN` that never existed. It also has the order wrong: "the lifecycle block stops apply, the plan check stops the run before it ever reaches apply". `prevent_destroy` refuses the plan itself, before the guard runs, and the guard is the second rail, reachable only for a config without it. The doctrine records D1's shape with the rails in that order. Other doctrine that rebuilds a prd VM by Terraform replace changes to match:
 
 - the composite-operation example (:52)
 - the Ceph rebuild path (:236)
@@ -131,6 +135,7 @@ A dev stage that genuinely fails raises its warning at the point it fails, once,
 ## Not in scope
 
 - The change-request bundle's extra Telegram message on any plan with destroys (`change_requests/tf_safety_rails/`) — not in the card's fix list.
+- A build description naming Terraform's refusal in `iac-apply` or `iac-on-push` — the B1 ruling names the drift job.
 - The scratch Terraform root (`terraform/scratch`) and its `-replace` rebuild flow.
 - A fallback build description for scheduled-job failures outside their stages (R4 ruling).
 - Stage coupling in `IaC/*` jobs other than the scheduled certs and drift jobs.
