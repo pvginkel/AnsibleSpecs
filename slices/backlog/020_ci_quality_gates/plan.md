@@ -50,7 +50,71 @@ History (the harm premise):
 - Provider: June 2026, `17017b0` → `edda641` (config-validation logic, no test before or after, 5 days) and `cbca0e2` → `e1bbbf8` (ZFS "inconsistent result after apply", visible only to `TF_ACC` acceptance tests, 4 days). A bare `go test`/`go vet` gate catches neither.
 - Ansible lint/syntax, Terraform fmt/validate, trivy: no defect found; only lint-baseline drift.
 
+## Task shape
+
+cross-cutting — slice.md's one requirement spans four repos (Ansible, the provider, HelmCharts, DockerImages) with an independent gate in each pipeline, and introduces a pattern the estate lacks (a `values.schema.json` reference chart).
+
 ## Ordering constraints
+
+### P1 — The Ansible lint baseline runs strict
+
+Target: ansible
+
+`ansible-lint` over this component runs with warnings fatal and exits 0, so the push job P2 wires up enforces a green baseline. Today the root `.ansible-lint` keeps `strict: false` behind a "once roles stabilize" comment (`.ansible-lint:20-21`); flag and comment go together. The one warning strict turns fatal — `jinja[spacing]` on the `_microk8s_node_state` expression in `roles/microk8s/tasks/elect-primary.yml` (line 44) — is fixed in the task, not skip-listed or `noqa`'d. That expression classifies each node for the control-plane election and leans on whitespace-control markers inside a folded scalar, so the value it renders must not change.
+
+### P2 — The Ansible push job lints, syntax-checks and validates before it plans
+
+Target: root
+
+`IaC/Build-Main` (`Jenkinsfile.iac-on-push`, a single plan stage today at `:34-51`) runs yamllint, strict ansible-lint, a syntax-check of every playbook, `terraform fmt -check` over the Terraform tree and `terraform validate` on both roots (`terraform/prd`, `terraform/scratch`) ahead of the Terraform plan, cheapest first; a red gate fails the build before `terraform plan` runs. `Jenkinsfile.iac-apply` is untouched.
+
+What the repo does not tell the executor:
+
+- The gates run through `iac -c` like the plan stage. Each call materializes the secrets file's entries, the vault password file among them (`support/iac-agent/bin/iac-impl:267-290`, `support/iac-agent/etc/iac/secrets.example.yaml:69-72`), and the tree still holds vault-encrypted content — lint needs nothing new wired. The iac image already carries ansible-lint and yamllint (`pyproject.toml:12-13`), so no image change. The `iac -c` script runs under dash (`Jenkinsfile.iac-on-push:43-44`).
+- Lint and syntax-check resolve roles only when run beside `ansible/ansible.cfg`, with the root `.yamllint` named explicitly — the dev loop's gate encodes this (`.kubecoder/project.yaml:22-33`); the job and that gate must not disagree about what green means.
+- Three operator playbooks (`evict-k8s.yml`, `rebuild-k8s.yml`, `reissue-host-cert.yml`) guard `hosts:` with mandatory extra vars; `.ansible-lint:10-18` holds the placeholders lint uses.
+- `validate` needs the whole clone, not just `terraform/`: `prd` reads files under `ansible/` through `file()`. The job never initialises `scratch` today.
+- A Jenkinsfile cannot be checked from the pod; the first real build after the test phase's push is the proof.
+
+### P3 — The provider publishes only what passes go vet and its unit tests
+
+Target: ../HomelabTerraformProvider
+
+Every build runs `go vet ./...` and the unit tests (`go test ./...`, no `TF_ACC`) before the publish stage (`Jenkinsfile:70-100`); a failure fails the build and appends nothing to the provider registry. Today the build goes straight from `go build` to publish (`Jenkinsfile:18-54`). The acceptance tests stay a manual run: they skip unless `TF_ACC` is set (`.kubecoder/project.yaml`, the `test:` comment) and the pipeline never sets it. Vet and test are cgo against librados/librbd and need the headers the build stage installs into the `go` container (`Jenkinsfile:35`).
+
+### P4 — HelmCharts gates every release it is about to deploy, before it deploys any
+
+Target: ../HelmCharts
+
+Before the first release deploys, the build lints and renders every release it is about to deploy with the values that release is actually deployed with, and runs kubeconform on the rendered manifests against Kubernetes 1.35 (prd's microk8s channel, `Ansible/ansible/roles/microk8s/defaults/main.yml:5`). Any failure fails the whole build with nothing deployed. The gated set is exactly the deployed set — a release whose chart, config and image digests did not move is neither gated nor deployed, so an unchanged chart never blocks another push. Today's prd releases under it (checked 2026-09-15 with each release's prd values, without post-renderers or digest `--set`s): all 43 renderable releases render and 42 pass `helm lint`. `media` and `mosquitto` fail lint only with chart defaults and are left alone; `storage` fails with its prd values too, on a document separator its cronjob template glues to the next document (`charts/storage/templates/storage-cronjobs.yaml:54-56`) — open question Q1. kubeconform against 1.35 passes every rendered release with custom resources skipped; its strict mode also rejects the duplicate `command` key in `homeassistant-mcp`'s Deployment (`charts/homeassistant-mcp/templates/app-deployment.yaml:21-22`) — open question Q2.
+
+What the repo does not tell the executor:
+
+- Deploy selection lives only in this Jenkinsfile and is interleaved with deploying (`Jenkinsfile:61-88`; `changed()` at `:94-101`; digest-advanced releases arrive with non-empty `args`). The gate needs that selection before the loop. A disabled release being uninstalled has nothing to render.
+- "Deployed values" is what the deploy hands helm, not just `values.yaml`: `helmops.py:173-186` adds `global.environment`, the chart's post-renderer and the release's helm args, and the Jenkinsfile adds `gitToken` and the resolved image-digest `--set`s (`Jenkinsfile:80-81`). `template` (`helmops.py:189-193`) renders through the same invocation.
+- Nine prd releases deploy an upstream chart that has no source under `charts/` (`release.py:84-88`; the `upstream:` blocks in `configs/prd/*/prd/release.yaml`), and local chart dependencies are fetched over the network at render (`helmops.py:58-85`; `mosquitto`'s is not vendored).
+- kubeconform runs from an image pinned by digest. The job's agent already starts sibling containers through the host docker socket (`Ansible/support/iac-agent/bin/jenkins-agent-launch.sh:59-65`; `iac` is itself a `docker run`, `Ansible/support/iac-agent/bin/iac:44-50`), so no iac image change is needed. Kubernetes 1.35 schemas are published at kubeconform's default schema location (checked 2026-09-15); the custom resources in rendered output (e.g. `ExternalSecret`) have none there.
+- Each `iac -c` is a fresh container with a fresh deploy-project install (`Jenkinsfile:33-42`), and the agent's single executor is shared with Ansible's IaC jobs.
+- Python that lands under `tools/` rides with the repo's hermetic unit tests; the Jenkinsfile itself is proven only by a real build.
+
+### P5 — `media` carries a values schema that rejects unknown keys
+
+Target: ../HelmCharts
+
+The `media` chart ships a `values.schema.json` — the reference for the pattern — under which a key the chart does not define is an error at every level the chart defines, so the 2024-08 class fails before deploy: `storage.plex.subvolumeName` (the chart reads only `storage.plex.imageName`, `charts/media/templates/media-pvc.yaml:15`) is rejected by lint and render, and so by P4's gate. Everything legitimate passes: the chart defaults (`charts/media/values.yaml`, whose leaves are mostly empty), prd's deployed values (`configs/prd/media/prd/values.yaml`), and every value the pipeline injects at deploy (see P4 — `global.environment`, `gitToken`, the image-digest `--set`s). Blocks a template hands to Kubernetes wholesale are not re-specified in the schema. Pushing this redeploys `media` in prd (operator-accepted); the rendered prd manifests are identical before and after apart from the render-time `deployment` annotation (`charts/shared/_helpers.tpl:1-3`) that restarts its pods on every deploy.
+
+### P6 — DockerImages scans every image it pushes and alerts on fixable criticals
+
+Target: ../DockerImages
+
+Right after each image is pushed, the build scans it with trivy and prints its CRITICAL and HIGH findings in the build log. An image with at least one CRITICAL that has a fixed version raises exactly one `notify.warning(...)` naming the image (`JenkinsPipelineUtils/vars/notify.groovy:46-48` — a log marker the Telegram bot turns into one message each, with no dedup), never one per CVE. Nothing the scan finds or fails at changes the build status — no `unstable()`, no failure, a scanner error or timeout included — and the Helm deploy trigger after the builds (`Jenkinsfile:116-122`) runs exactly as before. The trivy image is pinned by digest. Scheduled rebuilds are covered by construction: version-poller forces images through this same job (`Jenkinsfile:33-40`).
+
+What the repo does not tell the executor:
+
+- The scanner runs as its own container in the build pod, declared in this Jenkinsfile (`Jenkinsfile:11-13`; sidecar precedent `HomelabTerraformProvider/Jenkinsfile:3-6`) — no JenkinsPipelineUtils change.
+- `kaniko2` pushes straight to `registry:5000` over plain HTTP with no auth and leaves no local tarball (`JenkinsPipelineUtils/vars/helmCharts.groovy:110-119`); the scan pulls what was pushed. Matrix variants push one tag; the rest push the build number and `latest` (`Jenkinsfile:90-105`).
+- The existing 30-minute timeout wraps only the kaniko call (`Jenkinsfile:88`); the scan needs its own. The large toolchain images (android, dotnet, go, java, esp-idf) may scan slowly — untested. The vulnerability database comes from the internet; agent pods have unrestricted egress today.
+- A Jenkinsfile-only push builds no image, so the test phase proves the scan on the next real image build; nothing is force-rebuilt.
 
 ## Not in scope
 
@@ -59,3 +123,7 @@ History (the harm premise):
 - Provider version pinning in consumers (including HelmCharts' floating `init -upgrade`) — the update-train bundle's.
 - Trivy fail-on-critical and the Telegram IaC bot report destination — later bundles.
 - Registry TLS/auth — the internal TLS registry bundle.
+- The provider's acceptance tests in CI (ruled a manual run), and golangci-lint.
+- Values schemas on charts other than `media`; chart unit tests.
+- Gating `Jenkinsfile.iac-apply`.
+- Alerting when a trivy scan fails to run (close-out S1).

@@ -1,0 +1,132 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "Ansible lint baseline",
+      "description": "\"ansible-lint strict (+fix 6 findings)\" — ansible-lint over `ansible/` runs with warnings fatal (today `strict: false`, `.ansible-lint:20-21`) and exits 0; the six findings stay fixed, and the one warning strict turns fatal (`jinja[spacing]`, `ansible/roles/microk8s/tasks/elect-primary.yml:44`) is fixed in the task rather than skip-listed or noqa'd, with the value that expression renders unchanged.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "Ansible push job",
+      "description": "\"+ yamllint + syntax-check\" — `IaC/Build-Main` (`Jenkinsfile.iac-on-push`, a single plan stage today at `:34-51`) runs yamllint, strict ansible-lint and a syntax-check of every playbook ahead of the Terraform plan; a red gate fails the build before `terraform plan` runs.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "Ansible push job",
+      "description": "\"terraform fmt/validate (fmt fails today)\" — the same job runs `terraform fmt -check` over the Terraform tree and `terraform validate` on both `terraform/prd` and `terraform/scratch` ahead of the plan, and lands green (fmt passes today).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "Ansible push job",
+      "description": "The gates run before anything else in the job, cheapest first, and `Jenkinsfile.iac-apply` is unchanged.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "Provider",
+      "description": "\"go test/vet before provider publish (currently untested binaries ship)\" — every HomelabTerraformProvider build runs `go vet ./...` and the unit tests before publishing, and a vet or test failure fails the build with nothing appended to the provider registry (today the build goes from `go build` straight to publish, `HomelabTerraformProvider/Jenkinsfile:18-100`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "Provider",
+      "description": "The acceptance tests (`TF_ACC`, live storage) are not run by the pipeline; they stay a manual run.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "Chart gate",
+      "description": "\"helm lint + kubeconform\" — before any release deploys, the HelmCharts build lints and renders every release it is about to deploy with the values it is deployed with in prd, and runs kubeconform on the rendered manifests against Kubernetes 1.35; any failure fails the whole build with no release deployed (today the loop deploys with no validation, `HelmCharts/Jenkinsfile:61-88`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "Chart gate",
+      "description": "The gated set is exactly the deployed set: a push that moves no release's chart, config, shared Terraform surface or image digest gates nothing, and an unchanged chart never blocks another push (selection at `HelmCharts/Jenkinsfile:74` and `:94-101`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "Chart gate",
+      "description": "The gate passes on every prd release as deployed today, and no prd release is redeployed just to satisfy it; the default-value `helm lint` failures in `media`, `mosquitto` and `storage` are left alone.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "Values schema",
+      "description": "\"values.schema.json reference chart\" — `media` ships a `values.schema.json` that rejects keys the chart does not define; a values file carrying `storage.plex.subvolumeName` (the 2024-08 key — the chart reads `storage.plex.imageName`, `HelmCharts/charts/media/templates/media-pvc.yaml:15`) fails lint and render, and therefore the chart gate.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Values schema",
+      "description": "The chart defaults, prd's deployed values and every value the pipeline injects at deploy (`global.environment`, `gitToken`, the image-digest `--set`s) pass the `media` schema, and the rendered `media` prd manifests are identical before and after it lands, apart from the render-time `deployment` annotation every render stamps (`HelmCharts/charts/shared/_helpers.tpl:1-3`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Trivy",
+      "description": "\"trivy warn-only in DockerImages\" — each image the DockerImages build pushes is scanned by trivy right after the push, and its CRITICAL and HIGH findings are printed in the build log; scheduled rebuilds forced by version-poller are scanned the same way.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Trivy",
+      "description": "An image with a CRITICAL that has a fixed version raises exactly one `notify.warning(...)` alert for that image, never one per CVE (`JenkinsPipelineUtils/vars/notify.groovy:46-48`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "Trivy",
+      "description": "The scan never changes the build status — no `unstable()`, no failure — whatever it finds and whether or not it completes, and the Helm deploy trigger after the builds runs as before (`DockerImages/Jenkinsfile:116-122`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "Supply chain",
+      "description": "The trivy image and the kubeconform image are pinned by digest.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "Proof",
+      "description": "Each pipeline change is proven by a real build after the run pushes all four repos: `IaC/Build-Main` green through its new gates, a HomelabTerraformProvider build green through vet/test and publish, a HelmCharts build that gates and deploys `media`; the trivy scan is proven on the next real DockerImages image build, or left owed to the operator if none runs in the test phase's window.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}

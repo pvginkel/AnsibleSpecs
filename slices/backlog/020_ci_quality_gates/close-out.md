@@ -55,3 +55,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — DockerImages trivy stage: a scan that errors or times out raises no alert · minor
+
+The rulings define one alert — an image with a CRITICAL that has a fixed version — and forbid any build-status change. A scan that cannot complete (vulnerability DB fetch failure, registry pull error, its own timeout on a large toolchain image) is therefore log-only in this slice's P6. If trivy breaks on every build, nothing pages and the scan goes dark unnoticed. Alerting on scan failure (e.g. a notify.warning naming the image) would be a one-line follow-up once first-run behaviour is known.
+
+**Consequence:** A persistently failing trivy stage is visible only by reading DockerImages build logs.
+
+**Provenance:** read, plan-writer, planning r1, plan.md P6
+**Disposition:**
