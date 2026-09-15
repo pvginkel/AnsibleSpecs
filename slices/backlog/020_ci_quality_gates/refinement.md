@@ -55,6 +55,42 @@ Chat, 2026-09-15, after the lift answer (low: one DockerImages pipeline stage pl
 
 **Operator.** Agreed
 
+## D4 — Fix the storage chart's document separator now, which redeploys storage in prd once at the run's push?
+
+**Context.** The plan stands at six phases; everything but the chart-gate phase is settled. That gate lints and renders exactly the releases a build is about to deploy, with their prd values, and fails the whole build — deploying nothing — if any of them fails. You were told in the first round that the three charts failing bare helm lint (media, mosquitto, storage) fail only with chart defaults and render cleanly with their deployed values, so all three are left alone and no prd release is redeployed just to satisfy the gate. That was wrong for storage. The plan-writer re-ran lint with each release's real prd values and the session verified the result: media and mosquitto pass; storage fails lint with its real values too. Its scheduled-jobs template emits a document separator whose whitespace trimming glues the next document onto the separator line — helm template and helm upgrade split that leniently, which is why storage deploys fine, but helm lint rejects it. The earlier grounding had checked storage by render, not by lint; that is how the settled item got it wrong.
+
+**The ask.** Fix the separator in the chart-gate phase — a storage chart change, so the push redeploys storage in prd once: the one redeploy the first round said the gate would not cause.
+
+**Background.** The gate will select storage within days of landing whatever we do: storage is selected whenever its chart or config changes, whenever the shared Terraform surface changes (which selects every release), or whenever the live digest of any of its four images (debian, rclone-backup, samba, backup-server) moves — and those images carry the weekly rebuild stamp that version-poller acts on. A storage deploy is routine: it was last deployed on the 14th by an earlier slice, and every storage deploy restarts its two deployment pods (samba and backup-server) because the chart stamps a render-time annotation. The fix changes no rendered object.
+
+**Why yours.** It overturns what you were told — no prd release redeployed for the gate — and puts a samba and backup-server restart at the run's push rather than at a moment you pick.
+
+**Recommendation.** Fix the separator in the chart-gate phase. The rendered objects do not change; the push redeploys storage in prd once and its two pods restart, as on every storage deploy. Trade-off: that restart happens at the run's push, which the run's test phase watches, not at a time you choose.
+
+**The other way.** Leave storage alone: the gate goes red the first time a build is about to deploy storage — most likely the next weekly rebuild of one of its images, unattended — and that failed build deploys nothing, every other release it selected included, until someone fixes the template. It does not avoid the storage redeploy; it only moves it.
+
+**If this is wrong.** A brief samba and backup-server pod restart at an unplanned moment. Not verified: how long a samba restart interrupts the share.
+
+**Operator.** Agree
+
+## D5 — kubeconform in strict mode, which rejects unknown fields and duplicate keys, or in default mode?
+
+**Context.** The chart gate, settled in the first round, renders each release a build is about to deploy with its prd values and runs kubeconform on the output against prd's Kubernetes 1.35 — with nothing said about strictness. Strict mode additionally rejects fields the schema does not know and keys set twice; default mode lets both through. Chart CI is the gate you said you had no strong feelings about.
+
+**The ask.** Pick the mode the gate runs in — which decides whether it also catches a Kubernetes field a template misspells or places at the wrong level, and whether it lands green without touching another chart.
+
+**Background.** The plan-writer ran both modes over all 43 rendered prd releases, and the session re-verified the one hit. Default mode: every release passes (341 resources valid; 96 custom resources skipped for lack of published schemas). Strict mode: one fails — the Home Assistant MCP server's deployment sets its container command twice, and Kubernetes keeps the second, which is what the live pod runs (read from prd). Deleting the dead first line leaves the live command unchanged. That chart was last deployed on the 14th, and its pod restarts on every deploy because it stamps the same render-time annotation.
+
+**Why yours.** Strict mode is the one that catches the wrong-key class in rendered manifests, but it costs a change and a redeploy of an otherwise-untouched chart — coverage against churn on a gate you were indifferent to is your call.
+
+**Recommendation.** Strict mode, and delete the dead first command line in the chart-gate phase. The gate then also rejects a Kubernetes field a template misspells or puts at the wrong level — the class that cost 23 days in 2024, caught in rendered manifests rather than in values. Trade-off: one redeploy and pod restart of the Home Assistant MCP server at the run's push, with no change to its configuration.
+
+**The other way.** Default mode: lands green with no chart change; a misspelled or misplaced Kubernetes field in a template passes the gate.
+
+**If this is wrong.** In strict mode, a future chart edit Kubernetes would have tolerated turns a build red until the template is corrected; in default mode, a misplaced field ships silently.
+
+**Operator.** Agree
+
 ## Open facts — questions only you can answer
 
 **F1.** Proving the trivy stage needs a real image build, which no pipeline-only push triggers, and any rebuilt image redeploys its app in prd by digest. Which image can be rebuilt for that proof without you caring that its app redeploys — ideally one not deployed at all? It settles how the test phase exercises trivy.
@@ -66,7 +102,7 @@ Chat, 2026-09-15, after the lift answer (low: one DockerImages pipeline stage pl
 
 - The card says terraform fmt fails today; it was fixed the same day the bundle was written and fmt and validate pass on both Terraform roots, so the Terraform gate lands green and nothing already-red turns red.
 - The card's "fix 6 findings" is done: the six ansible-lint findings were fixed in July by a lint-baseline cleanup, one Jinja spacing warning remains, and flipping strict turns that one fatal, so the slice fixes one finding, not six.
-- Bare helm lint with chart defaults is not green — three of the forty charts (media, mosquitto, storage) fail it, all three live prd releases that render cleanly with the values actually deployed — so the chart gate lints and renders each release with its prd values and then runs kubeconform on the output against prd's Kubernetes 1.35 (HelmCharts deploys prd only; there is no dev deploy), which lands green today, catches the render class too, and redeploys no prd release just to satisfy the gate.
+- *Corrected 2026-09-15 — see D4: storage fails helm lint with its real prd values too (media and mosquitto do pass), so the gate does not land green without one chart fix and one storage redeploy.* Bare helm lint with chart defaults is not green — three of the forty charts (media, mosquitto, storage) fail it, all three live prd releases that render cleanly with the values actually deployed — so the chart gate lints and renders each release with its prd values and then runs kubeconform on the output against prd's Kubernetes 1.35 (HelmCharts deploys prd only; there is no dev deploy), which lands green today, catches the render class too, and redeploys no prd release just to satisfy the gate.
 - The chart gate runs over the releases the build is about to deploy and fails the whole build before anything deploys, so a broken chart blocks its own deploy and pages like any failed build while an unchanged chart never blocks someone else's push.
 - The reference chart for the values schema is media — where a wrong key went unnoticed for 23 days; the schema rejects unknown keys, which is the property that catches that class, and its values surface is small (eight top-level keys).
 - The Ansible and Terraform gates go into the push job ahead of the Terraform plan; the manual apply job is untouched, since it runs a commit the push job already gated and gating it too would block a break-glass converge on a style rule.
