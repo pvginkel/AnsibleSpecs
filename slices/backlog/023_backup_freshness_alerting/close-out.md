@@ -41,6 +41,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — HelmCharts CLAUDE.md states Prometheus retains ~2 days (retentionSize 2GB); prd values set 7d / 10GB · nit
+
+HelmCharts CLAUDE.md (recommend-resources entry) says 'Prometheus retains ~2 (`retentionSize: 2GB`), so runs measure roughly the last two days'. configs/prd/prometheus/prd/values.yaml:3-4 sets retention: 7d and retentionSize: 10GB. Not touched by this slice.
+
+**Consequence:** A reader sizing recommend-resources runs underestimates the history Prometheus actually holds.
+
+**Provenance:** read — plan-writer, planning, r1, HelmCharts CLAUDE.md vs configs/prd/prometheus/prd/values.yaml
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -55,3 +64,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — DockerImages declares no kc project components, so the run loop has no deterministic gate for backup-server phases · minor
+
+run_loop.py --dry-run reports P1 and P2 (Target ../DockerImages) as '(no deterministic gate)'; `kc project list` in /work/DockerImages exits 1. backup-server's Go suite (`go test ./...` from backup-server/src, in the `go` tool container) runs only when the executor runs it by hand. The plan names that command in P1; declaring the component would make it the driver's gate.
+
+**Consequence:** A red backup-server suite in a DockerImages phase is not caught by the driver's gate; it rests on the executor and reviewer running it.
+
+**Provenance:** witnessed — plan-writer, planning, r1, run_loop.py --dry-run output
+**Disposition:**

@@ -1,0 +1,156 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — a freshness check exists",
+      "description": "R1 (#573): \"3. Followers exit 0 — a dead backup looks healthy fleet-wide. No freshness check anywhere.\" A freshness check now exists. When the OpenBao backup stops arriving at backup-server, production Alertmanager receives a critical alert, even though every srvvaultN's backup unit still exits successfully (followers exit 0 before login, ansible/roles/openbao/templates/openbao-backup.sh.j2:76-81).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — tracked in the backup service",
+      "description": "R2: \"The better solution would be to track this in the backup service. I feel like the end to end solution would be to add metadata to the upload indicating for how long it's valid (two days in our example). The backup service can then report that it didn't receive (and successfully upload) a backup within that period. For bonus points the check would actually read some JSON file from the backup server containing this metadata. I'm envisioning a .metadata.json file next to the backup, for now containing only this data field.\" Freshness is tracked in backup-server. Each upload declares how long it is valid. backup-server writes that to a .metadata.json file next to the backup, containing only the validity field, and reads those files back from cloud storage. It reports a stream that has received no successfully uploaded backup within the declared period.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — integrated with Alertmanager",
+      "description": "R3: \"I would assume we just integrate it with Alertmanager. I'm also in the process of rolling that out.\" The overdue report reaches the operator through Alertmanager: production Prometheus evaluates rules over backup-server's published freshness and fires the alerts into Alertmanager. backup-server itself sends nothing to Alertmanager.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "Uploaders opted in",
+      "description": "Ruling D1: the postgres-pas nightly per-database dump job declares the same validity as OpenBao, so each database's dump is its own watched stream. The upload is built at charts/postgres-pas/templates/backup-configmap.yaml:42-50 (HelmCharts); the file name is <db>.dump (:63).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "Uploaders opted in",
+      "description": "The declared validity is 52 hours for both the OpenBao backup and the Postgres dumps. One missed night stays quiet; two in a row alert.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "backup-server — metadata",
+      "description": "An upload that declares a validity leaves <backup object name>.metadata.json next to the backup, holding only {\"valid_for\": \"<duration>\"}, written only after the backup has landed in cloud storage. The file is plain JSON that backup-server can read back (it holds only the age public key, decisions.md:100). A validity that is not a positive duration is refused before anything is stored. An upload that declares nothing behaves as before and writes no metadata; today's server reads only filename from the query (DockerImages backup-server/src/internal/handler/handler.go:76).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "backup-server — streams",
+      "description": "A stream is scope + file name. It stays watched while any of its kept backups declares a validity. It is overdue once its newest backup's landing time plus the newest declared validity has passed. A stream with no declaring backup is not watched. A stream whose backups have all been pruned stops being watched, and its alert clears. An uploader that stops declaring keeps its stream watched.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "backup-server — pruning",
+      "description": "Pruning counts backups only: a scope keeps its newest `retention` backups regardless of how many metadata files sit beside them. Each pruned backup's metadata file is deleted with it. Today prune counts every name in the scope (DockerImages backup-server/src/internal/pipeline/prune.go:14-41).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "backup-server — published freshness",
+      "description": "backup-server publishes, per watched stream, when the newest backup landed and until when it is valid, as absolute times. The values come from the metadata files read back from cloud storage. They are refreshed hourly and right after each upload, not on every scrape. After a failed refresh backup-server keeps the last values it read.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "backup-server — published freshness",
+      "description": "The metrics are served only inside the cluster: nothing is answered for them through backup-server.home or the backup-server hostname, which nginx proxies to port 8080 (HelmCharts charts/storage/templates/backup-server-service.yaml:9-13, configs/prd/storage/prd/values.yaml:6). They take no token, and they carry scope, file names and times only.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Prometheus",
+      "description": "Production Prometheus scrapes backup-server's metrics through the Service-annotation pattern (HelmCharts charts/electronics-inventory/templates/app-service.yaml:6-8, the kubernetes-service-endpoints job), and the target is up.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Alerts",
+      "description": "The alert rules sit with the other rules in the production Prometheus release (HelmCharts configs/prd/prometheus/prd/values.yaml, serverFiles.alerting_rules.yml). A stream past its valid-until fires a critical alert that names the scope and file name, delivered loud.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Alerts",
+      "description": "A second critical alert fires when Prometheus cannot scrape backup-server, including when the target is gone entirely, or when backup-server cannot read cloud storage. It waits out a grace period, so a redeploy or a cloud-storage hiccup that clears by itself never pages; it fires once the watching has really been blind for hours.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "Rollout",
+      "description": "The alert rules went live on production only after the new backup-server was serving metrics there, and the dead-watcher alert did not fire during rollout.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "OpenBao wrapper",
+      "description": "The OpenBao followers keep exiting successfully (ansible/roles/openbao/templates/openbao-backup.sh.j2:76-81); no node's unit status is the freshness signal.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "Doctrine",
+      "description": "decisions.md's OpenBao backup section records the freshness contract in place of \"fire-and-forget\". It names the real retention mechanism (backup-server's credential store, set per scope through homelab_backup_credential) instead of the retired tokens.yaml; both stale phrases are at decisions.md:101 today.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "Dev storage release",
+      "description": "The orphaned backup-server-tokens ConfigMap is gone from the dev storage release (HelmCharts configs/dev/storage/prd/manifests.yaml:14-26 today). Deleting the live dev-cluster object is recorded as an operator action if it is not done in the run: manifests.yaml goes through a plain kubectl apply that never prunes (tools/deploy/deploy_cli/helmops.py:202-203).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "Coverage",
+      "description": "backup-server's Go suite and the HelmCharts suite are green. No existing upload, prune or credentials test is lost without a named successor.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "End to end (production)",
+      "description": "After the first nightly runs that follow rollout, backup-server on production publishes a stream for openbao / openbao-backup.tgz and one for each postgres-pas database. Each is valid until 52 hours after its landing, and no backup alert is firing.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}

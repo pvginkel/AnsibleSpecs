@@ -145,14 +145,170 @@ Verified facts the rulings rest on:
 - **Dev node** (from memory, 2026-09-14, not re-checked): srvk8sdev is off by design; a dev deploy
   needs the operator to start it — ask, don't assume.
 
+## Task shape
+
+cross-cutting — the ask spans backup-server (DockerImages), both uploaders (the OpenBao wrapper in
+Ansible, the Postgres dump job in HelmCharts), the production Prometheus rules and the doctrine, and
+sets a new pattern: the first Prometheus metrics endpoint in a DockerImages Go service.
+
 ## Ordering constraints
 
 - **Run only after slice 018 has merged**: both edit HelmCharts `configs/prd/prometheus/prd/values.yaml`,
   and until 018's Telegram receivers exist an overdue alert reaches nobody.
-- backup-server's prune must count backups only no later than it starts writing metadata files.
-- An uploader sends its validity only once the backup-server that accepts it is deployed where that
-  uploader posts (verify how today's server treats an unknown query parameter before relying on it).
-- The production alert rules deploy only after the new backup-server serves metrics on production.
+- **Opting an uploader in has no deploy-order hazard.** Today's server reads only `filename` from the
+  query string and ignores anything else (DockerImages `backup-server/src/internal/handler/handler.go:76`),
+  so an upload that declares a validity to a server predating P1 stores its backup as before, without
+  metadata. P4 and P6 do not wait on the server's rollout; their streams appear once it has rolled out.
+- **Push order (the test phase's).**
+  1. DockerImages first. Its build publishes `registry:5000/backup-server:latest` (DockerImages
+     `Jenkinsfile:99-101`) and then starts `IaC/HelmCharts` (`Jenkinsfile:118`, JenkinsPipelineUtils
+     `vars/cicd.groovy:1-3`), which redeploys the storage release on the digest `:latest` resolves to
+     then (HelmCharts `charts/storage/values.yaml:57`, `tools/chart_tools/resolve_helm_args.py:129-155`).
+     Push HelmCharts only once that build has published the image, or its storage deploy pins the old
+     server.
+  2. HelmCharts in two pushes. First everything through P4. Then confirm on production that the new
+     backup-server runs, Prometheus scrapes its metrics with the target up, and backup-server reports
+     its cloud-storage reads working. Only then push P5, the alert rules.
+  3. Ansible and AnsibleSpecs deploy nothing on push. P6 reaches the OpenBao nodes only through the
+     operator's `openbao` playbook run, check-mode first, any time after step 1.
+
+### P1 — backup-server stores each upload's declared validity next to it and prunes backups only
+
+Target: ../DockerImages
+
+The producer half of the freshness contract (rulings "validity travels with each upload" and "pruning
+counts backups only"). Source: `backup-server/src/`.
+
+- An upload may declare how long it stays valid, as a duration sent alongside `filename` (the rulings'
+  form, `52h`). When it does, and only once the backup has landed, backup-server writes
+  `<backup object name>.metadata.json` into the same scope folder, holding only
+  `{"valid_for": "<duration>"}`. An upload that declares nothing behaves exactly as today and writes no
+  metadata file. A validity that is not a positive duration is refused before anything is stored.
+- The metadata file is plain JSON, not age-encrypted: backup-server holds only the public key
+  (AnsibleSpecs `decisions.md:100`), and P2 reads these files back.
+- Pruning keeps a scope's newest `retention` **backups**; metadata files never count, and each pruned
+  backup's metadata file goes with it. A metadata file whose backup is already gone is cleared by the
+  next prune. Today every name in the scope counts (`src/internal/pipeline/prune.go:14-41`), so without
+  this change a scope would keep half as many backups. Both changes land together: a server that writes
+  metadata never prunes by the old count.
+- Tests follow the packages' existing style: the in-memory backend in `src/internal/handler/handler_test.go`
+  and `src/internal/pipeline/prune_test.go`. The suite is `go test ./...` from `backup-server/src`, run
+  in the `go` tool container.
+
+### P2 — backup-server publishes each watched stream's freshness from the metadata it reads back
+
+Target: ../DockerImages
+
+The watcher half (rulings "a stream is scope + file name", "a stream whose backups have all been
+pruned", "publishes per stream …", "metrics are served only inside the cluster").
+
+- backup-server reads its backups and their metadata files back from cloud storage at startup, hourly,
+  and right after each upload once that upload's prune has run; never per scrape. Today the backend can
+  list names but read nothing (`src/internal/pipeline/backend.go:17-21`, `:80-106`).
+- It reads the scopes that hold a credential in its store (`src/internal/auth/store.go:189`), not every
+  folder under the remote, for two reasons:
+  - The remote root also holds the S3 mirror's tree (HelmCharts `configs/prd/storage/prd/values.yaml:15`, `:23`).
+  - A scope whose credential is deleted has no uploads left to prune its files. Reading only credentialed scopes means it stops being watched instead of alerting forever.
+- For each watched stream it publishes two absolute times, labelled by scope and file name: when the
+  newest backup landed, and until when the stream is valid. Valid-until is that landing time plus the
+  validity of the newest backup that declares one.
+  - A stream stays watched while any kept backup declares a validity.
+  - A stream with none publishes nothing.
+  - A stream whose backups are all gone drops out.
+- The metadata holds only `valid_for`, so the landing time comes from what storage already records for
+  the backup: the object name's timestamp (`src/internal/pipeline/upload.go:52-54`, taken when the
+  request starts, `src/internal/handler/handler.go:95`) or its modification time. Either sits well
+  inside the 52-hour margin.
+- It also publishes whether its cloud-storage reads are working, in a form P5's dead-watcher alert can
+  hold a grace period of hours against. That includes a server that has not completed a read since it
+  started. A failed refresh keeps the last values read (ruling), so a stalled refresh cannot hide an
+  overdue backup while scraping still works.
+- The metrics need no token and carry nothing beyond scope, file names and times. They are served on a
+  listener the ingress hostname cannot reach: production's nginx proxies `backup-server.home` and
+  `backup-server` to the Service's port 8080 (HelmCharts
+  `charts/storage/templates/backup-server-service.yaml:9-13`, `configs/prd/storage/prd/values.yaml:6`).
+- This is the first Prometheus metrics endpoint in a DockerImages Go service (`src/go.mod` depends only
+  on `filippo.io/age`), so there is no house precedent. Tests in the packages' style cover the edges the
+  rulings name: overdue, still watched after the newest backup stops declaring, pruned away, failed
+  refresh.
+
+### P3 — Prometheus scrapes backup-server inside the cluster
+
+Target: ../HelmCharts
+
+- The `storage` chart exposes P2's metrics listener to Prometheus on both clusters, using the
+  Service-annotation pattern (`charts/electronics-inventory/templates/app-service.yaml:6-8`, scraped by
+  the stock `kubernetes-service-endpoints` job). The nginx annotations still proxy only port 8080
+  (`charts/storage/templates/backup-server-service.yaml:9-13`), so the ingress hostname never serves
+  the metrics.
+- The dev storage release drops the orphaned `backup-server-tokens` ConfigMap
+  (`configs/dev/storage/prd/manifests.yaml:14-26`). Nothing mounts it
+  (`charts/storage/templates/backup-server-deployment.yaml:67-76`). The live dev object outlives the
+  edit, for two reasons: `manifests.yaml` goes through a plain `kubectl apply` that never prunes
+  (`tools/deploy/deploy_cli/helmops.py:202-203`), and Jenkins deploys only `configs/prd/`. Removing it
+  from the dev cluster is an operator action while srvk8sdev is up. The node is off by design: ask,
+  don't start it.
+- The suite (`kc project test`) stays green.
+
+### P4 — The Postgres dumps declare a 52-hour validity
+
+Target: ../HelmCharts
+
+- Each database's nightly upload from the `postgres-backup` job declares a validity of 52 hours
+  (rulings D1 and "validity is 52 hours"), through P1's upload parameter. The upload is built at
+  `charts/postgres-pas/templates/backup-configmap.yaml:42-50`. Each database is its own stream, file
+  name `<db>.dump` (`:63`).
+- Only production runs the job (`configs/prd/postgres-pas/prd/values.yaml:53-54`). Its deploy is the
+  `postgres-pas` release in the first HelmCharts push.
+
+### P5 — Production Prometheus raises an overdue backup and a blind watcher
+
+Target: ../HelmCharts
+
+Two critical alerts join the production Prometheus release's rules (`configs/prd/prometheus/prd/values.yaml:58-146`).
+Their severity is labelled the way the existing critical rules label it (`:79`, `:138`), so slice 018's
+routing delivers both loud.
+
+- **Overdue.** A watched stream is past its valid-until. The alert names the scope and file name, and
+  its description points at where that stream's uploader leaves its logs: the leader srvvaultN's
+  `openbao-backup` unit for `openbao`, the `postgres-backup` Job in `postgres-pas-prd` for
+  `postgres-pas`.
+- **Dead watcher.** Prometheus cannot scrape backup-server, or backup-server reports it cannot read
+  cloud storage. "Cannot scrape" includes the target disappearing altogether, not only reporting down.
+  It fires only once the condition has lasted hours, so a redeploy or a self-clearing cloud-storage
+  hiccup never pages. The Deployment is `Recreate`
+  (`charts/storage/templates/backup-server-deployment.yaml:9-10`), so every redeploy has a gap. The
+  rule's comment records why the grace was chosen, as `S3MirrorStale`'s does (`:120-128`). No
+  target-down rule exists in the file to copy.
+- Both rules are held by hermetic tests in the suite, in the manner of
+  `tests/test_prometheus_s3_mirror_alert.py`, which reads the real values and walks the rule's edges.
+- This phase goes out in the second HelmCharts push, after production is confirmed serving metrics
+  (Ordering constraints).
+
+### P6 — The OpenBao backup declares a 52-hour validity
+
+Target: ansible
+
+- The leader's upload declares a validity of 52 hours through P1's upload parameter. The upload call
+  is `ansible/roles/openbao/templates/openbao-backup.sh.j2:167-171`. The 52 hours is sized against the
+  timer's `02:00` start and 1 h randomized delay (`ansible/roles/openbao/defaults/main.yml:225-226`),
+  which do not change.
+- Followers keep exiting successfully before any login (`openbao-backup.sh.j2:76-81`), and the unit's
+  exit status carries no freshness signal (ruling).
+- Deploy-owed: the operator's `openbao` playbook run against the srvvaultN nodes, check-mode first.
+
+### P7 — Doctrine records the backup freshness contract
+
+Target: ../AnsibleSpecs
+
+- In `decisions.md`, the OpenBao backup section replaces "fire-and-forget" with the freshness contract
+  as shipped by P1–P6. It also replaces the retired `tokens.yaml` with where per-scope retention really
+  lives: backup-server's credential store (DockerImages `backup-server/src/internal/auth/store.go:41-46`),
+  set per scope through the provider's `homelab_backup_credential`. Both stale phrases are at
+  `decisions.md:101`.
+- The §Backup list of off-cluster copies already names `S3MirrorStale` for the mirror (`:597`). Its
+  OpenBao and `postgres-pas` entries (`:595-596`) name their freshness alert the same way, since D1
+  opts both in.
 
 ## Not in scope
 
@@ -163,3 +319,4 @@ Verified facts the rulings rest on:
 - Unit-status signalling on the OpenBao nodes (`OnFailure=`, follower exit codes).
 - Restore drills (Operator Actions #1019; OpenBao drills Triage #578) and the Drive client_id
   retirement (Triage #1020).
+- Backup alert rules on the dev cluster's Prometheus.
