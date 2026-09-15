@@ -50,6 +50,13 @@ The operator answered **"Agree"** in chat to D1 and to every settled item below;
   backup's landing time plus the newest declared validity has passed. A stream with no declaring
   backup is not watched. (Replaces 019's "a stream whose newest backup carries no metadata is not
   tracked", so an uploader that stops sending the field stays watched.)
+- Ruling (plan review r1 Q1, 2026-09-15; operator: "Agree") — **the watched set is every scope folder
+  under backup-server's remote that holds declaring backups, whether or not the scope still has a
+  credential.** Watching must not depend on the credential store: that store also authorizes uploads,
+  so a lost store or a removed credential would otherwise stop the uploads and clear their alerts at
+  the same moment — R1's failure again. Accepted cost: a scope retired on purpose alerts critical until
+  its `.metadata.json` files are deleted by hand (its backups may stay); that retirement step is
+  documented in the runbook.
 - Settled — a stream whose backups have all been pruned stops being watched and its alert clears
   (only possible in a multi-stream scope, days after the alert began). Accepted.
 - Settled — **pruning counts backups only** and deletes each backup's metadata file with it (today it
@@ -59,6 +66,12 @@ The operator answered **"Agree"** in chat to D1 and to every settled item below;
   pattern. Values come from the metadata files **read back from cloud storage** (R2's "bonus
   points"), refreshed **hourly and right after each upload**, not per scrape. backup-server keeps
   the last values it read, so a stalled refresh cannot hide an overdue backup while scraping works.
+- Ruling (plan review r1 A1, 2026-09-15; operator: "Agree") — **a refresh's Drive reads are bounded.**
+  A metadata file never changes once written, so each is read once and remembered; a refresh lists each
+  scope folder once and reads only metadata files it has not seen before. A normal night costs a
+  handful of Drive calls, not a re-read of every kept metadata file after each Postgres upload — Drive's
+  per-minute query quota has already failed a backup mid-upload (DockerImages
+  `backup-server/src/internal/pipeline/backend.go:34-38`).
 - Settled — the metrics are **served only inside the cluster, not through backup-server's ingress
   hostname**, take no token, and carry scope, file names and times only.
 - Settled — alert rules sit with the other rules in the production Prometheus release. **A stream past
