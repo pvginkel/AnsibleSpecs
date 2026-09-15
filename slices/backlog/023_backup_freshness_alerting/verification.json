@@ -51,7 +51,7 @@
     {
       "id": "V07",
       "area": "backup-server — streams",
-      "description": "A stream is scope + file name. It stays watched while any of its kept backups declares a validity. It is overdue once its newest backup's landing time plus the newest declared validity has passed. A stream with no declaring backup is not watched. A stream whose backups have all been pruned stops being watched, and its alert clears. An uploader that stops declaring keeps its stream watched.",
+      "description": "A stream is scope + file name. Every scope folder under backup-server's remote that holds declaring backups is watched, whether or not the scope still has a credential, so a lost credential store or a removed credential leaves its streams watched. A stream stays watched while any of its kept backups declares a validity. It is overdue once its newest backup's landing time plus the newest declared validity has passed. A stream with no declaring backup is not watched. A stream whose backups have all been pruned stops being watched, and its alert clears. An uploader that stops declaring keeps its stream watched.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -148,6 +148,22 @@
       "id": "V19",
       "area": "End to end (production)",
       "description": "After the first nightly runs that follow rollout, backup-server on production publishes a stream for openbao / openbao-backup.tgz and one for each postgres-pas database. Each is valid until 52 hours after its landing, and no backup alert is firing.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V20",
+      "area": "backup-server — published freshness",
+      "description": "A refresh's Drive reads are bounded. A refresh lists each scope folder once and reads only metadata files it has not seen before; a metadata file, which never changes once written, is read once and remembered. A normal night costs a handful of Drive calls, not a re-read of every kept metadata file after each Postgres upload. Drive's per-minute query quota has already failed a backup mid-upload (DockerImages backup-server/src/internal/pipeline/backend.go:34-38), and the Postgres job uploads its databases one after another in the same window (HelmCharts charts/postgres-pas/templates/backup-configmap.yaml:57-64).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V21",
+      "area": "Runbook",
+      "description": "A scope retired on purpose alerts critical until its .metadata.json files are deleted by hand; its backups may stay. That retirement step is documented in the operator runbook for the backup alerts, with the other runbooks in Ansible docs/runbooks/.",
       "verdict": null,
       "rationale": "",
       "evidence": []

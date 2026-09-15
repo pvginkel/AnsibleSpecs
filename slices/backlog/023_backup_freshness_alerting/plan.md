@@ -212,16 +212,28 @@ counts backups only"). Source: `backup-server/src/`.
 
 Target: ../DockerImages
 
-The watcher half (rulings "a stream is scope + file name", "a stream whose backups have all been
-pruned", "publishes per stream …", "metrics are served only inside the cluster").
+The watcher half (rulings "a stream is scope + file name", "the watched set is every scope folder",
+"a stream whose backups have all been pruned", "publishes per stream …", "a refresh's Drive reads are
+bounded", "metrics are served only inside the cluster").
 
 - backup-server reads its backups and their metadata files back from cloud storage at startup, hourly,
   and right after each upload once that upload's prune has run; never per scrape. Today the backend can
-  list names but read nothing (`src/internal/pipeline/backend.go:17-21`, `:80-106`).
-- It reads the scopes that hold a credential in its store (`src/internal/auth/store.go:189`), not every
-  folder under the remote, for two reasons:
-  - The remote root also holds the S3 mirror's tree (HelmCharts `configs/prd/storage/prd/values.yaml:15`, `:23`).
-  - A scope whose credential is deleted has no uploads left to prune its files. Reading only credentialed scopes means it stops being watched instead of alerting forever.
+  list a folder's file names but read nothing, and its listing drops folders
+  (`src/internal/pipeline/backend.go:17-21`, `:99-104`).
+- What is watched comes from cloud storage, never from the credential store (ruling): every scope folder
+  directly under the remote that holds declaring backups, whether or not its scope still has a
+  credential. Uploads land at `<remote>/<scope>/<object>` (`src/internal/pipeline/upload.go:56-58`).
+  - The remote root also holds folders backup-server never wrote, the S3 mirror's crypt tree among them
+    (HelmCharts `configs/prd/storage/prd/values.yaml:15`, `:23`). They hold no metadata files, so they
+    publish nothing.
+  - A scope retired on purpose keeps alerting until its metadata files are deleted by hand; P6's runbook
+    documents that step.
+- A refresh's cloud-storage calls are bounded (ruling). It lists each scope folder once and reads only
+  the metadata files it has not read before. A metadata file never changes once written, so it is read
+  once and remembered; only a server that has just started reads every kept one. The bound is sized for
+  the nightly window. The Postgres job uploads its databases one after another (HelmCharts
+  `charts/postgres-pas/templates/backup-configmap.yaml:57-64`), so every post-upload refresh draws on
+  the Drive per-minute quota the remaining dumps still need (`src/internal/pipeline/backend.go:34-38`).
 - For each watched stream it publishes two absolute times, labelled by scope and file name: when the
   newest backup landed, and until when the stream is valid. Valid-until is that landing time plus the
   validity of the newest backup that declares one.
@@ -298,7 +310,7 @@ routing delivers both loud.
 - This phase goes out in the second HelmCharts push, after production is confirmed serving metrics
   (Ordering constraints).
 
-### P6 — The OpenBao backup declares a 52-hour validity
+### P6 — The OpenBao backup declares a 52-hour validity, and a runbook covers the backup alerts
 
 Target: ansible
 
@@ -308,6 +320,12 @@ Target: ansible
   which do not change.
 - Followers keep exiting successfully before any login (`openbao-backup.sh.j2:76-81`), and the unit's
   exit status carries no freshness signal (ruling).
+- The two alerts P5 shipped get an operator runbook in `docs/runbooks/`, read when either fires, as
+  `docs/runbooks/s3-mirror.md` is for `S3MirrorStale` (`:3-6`). No runbook covers them today:
+  `docs/runbooks/openbao.md` restores OpenBao from its backup, but knows nothing of the `postgres-pas`
+  scope or of backup-server's watching. The runbook carries the retirement step the plan review r1 Q1
+  ruling names: a scope retired on purpose alerts critical until its `.metadata.json` files are deleted
+  by hand, and its backups may stay.
 - Deploy-owed: the operator's `openbao` playbook run against the srvvaultN nodes, check-mode first.
 
 ### P7 — Doctrine records the backup freshness contract
