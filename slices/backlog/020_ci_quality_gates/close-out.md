@@ -64,3 +64,12 @@ The rulings define one alert — an image with a CRITICAL that has a fixed versi
 
 **Provenance:** read, plan-writer, planning r1, plan.md P6
 **Disposition:**
+
+### S2 — HomelabTerraformProvider Jenkinsfile: the publish-stage comment describes delivery stages that no longer exist · cosmetic
+
+The comment above the "Publish to provider registry" stage (`HomelabTerraformProvider/Jenkinsfile:56-69`) says the stage "Runs alongside the legacy filesystem-mirror path below" and that "the Ansible-lock and Docker-image-bake stages go away" once consumers switch to the network mirror. Nothing follows that stage — the pipeline ends at `:100-102` — so the comment describes a second delivery path that is gone. Slice 020 P3 edits this file for the vet/test gate but does not own this comment.
+
+**Consequence:** none for the estate; anyone reading the provider pipeline, including the slice's P3 executor, is told there is a second delivery path that is not there
+
+**Provenance:** read, plan-reviewer, planning r1, HomelabTerraformProvider/Jenkinsfile:56-102
+**Disposition:**
