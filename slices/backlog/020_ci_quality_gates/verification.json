@@ -51,7 +51,7 @@
     {
       "id": "V07",
       "area": "Chart gate",
-      "description": "\"helm lint + kubeconform\" — before any release deploys, the HelmCharts build lints and renders every release it is about to deploy with the values it is deployed with in prd, and runs kubeconform on the rendered manifests against Kubernetes 1.35; any failure fails the whole build with no release deployed (today the loop deploys with no validation, `HelmCharts/Jenkinsfile:61-88`).",
+      "description": "\"helm lint + kubeconform\" — before any release deploys, the HelmCharts build lints and renders every release it is about to deploy with the values it is deployed with in prd, and runs kubeconform in strict mode (unknown fields and duplicate keys rejected) on the rendered manifests against Kubernetes 1.35; any failure fails the whole build with no release deployed (today the loop deploys with no validation, `HelmCharts/Jenkinsfile:61-88`).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -67,13 +67,29 @@
     {
       "id": "V09",
       "area": "Chart gate",
-      "description": "The gate passes on every prd release as deployed today, and no prd release is redeployed just to satisfy it; the default-value `helm lint` failures in `media`, `mosquitto` and `storage` are left alone.",
+      "description": "The gate passes on every prd release as deployed; `media` and `mosquitto`, which fail `helm lint` only with chart defaults, are left alone.",
       "verdict": null,
       "rationale": "",
       "evidence": []
     },
     {
       "id": "V10",
+      "area": "Chart gate",
+      "description": "`storage` passes `helm lint` with its prd values: its cronjob template's document separator no longer glues onto the next document (`HelmCharts/charts/storage/templates/storage-cronjobs.yaml:54-56`), and the rendered `storage` objects do not change.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Chart gate",
+      "description": "`homeassistant-mcp` passes strict kubeconform: the dead first `command:` of its Deployment (`HelmCharts/charts/homeassistant-mcp/templates/app-deployment.yaml:21`, duplicated at `:22`) is deleted, and the live container still runs `[\"ha-mcp-web\"]`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
       "area": "Values schema",
       "description": "\"values.schema.json reference chart\" — `media` ships a `values.schema.json` that rejects keys the chart does not define; a values file carrying `storage.plex.subvolumeName` (the 2024-08 key — the chart reads `storage.plex.imageName`, `HelmCharts/charts/media/templates/media-pvc.yaml:15`) fails lint and render, and therefore the chart gate.",
       "verdict": null,
@@ -81,7 +97,7 @@
       "evidence": []
     },
     {
-      "id": "V11",
+      "id": "V13",
       "area": "Values schema",
       "description": "The chart defaults, prd's deployed values and every value the pipeline injects at deploy (`global.environment`, `gitToken`, the image-digest `--set`s) pass the `media` schema, and the rendered `media` prd manifests are identical before and after it lands, apart from the render-time `deployment` annotation every render stamps (`HelmCharts/charts/shared/_helpers.tpl:1-3`).",
       "verdict": null,
@@ -89,7 +105,7 @@
       "evidence": []
     },
     {
-      "id": "V12",
+      "id": "V14",
       "area": "Trivy",
       "description": "\"trivy warn-only in DockerImages\" — each image the DockerImages build pushes is scanned by trivy right after the push, and its CRITICAL and HIGH findings are printed in the build log; scheduled rebuilds forced by version-poller are scanned the same way.",
       "verdict": null,
@@ -97,7 +113,7 @@
       "evidence": []
     },
     {
-      "id": "V13",
+      "id": "V15",
       "area": "Trivy",
       "description": "An image with a CRITICAL that has a fixed version raises exactly one `notify.warning(...)` alert for that image, never one per CVE (`JenkinsPipelineUtils/vars/notify.groovy:46-48`).",
       "verdict": null,
@@ -105,7 +121,7 @@
       "evidence": []
     },
     {
-      "id": "V14",
+      "id": "V16",
       "area": "Trivy",
       "description": "The scan never changes the build status — no `unstable()`, no failure — whatever it finds and whether or not it completes, and the Helm deploy trigger after the builds runs as before (`DockerImages/Jenkinsfile:116-122`).",
       "verdict": null,
@@ -113,7 +129,7 @@
       "evidence": []
     },
     {
-      "id": "V15",
+      "id": "V17",
       "area": "Supply chain",
       "description": "The trivy image and the kubeconform image are pinned by digest.",
       "verdict": null,
@@ -121,9 +137,9 @@
       "evidence": []
     },
     {
-      "id": "V16",
+      "id": "V18",
       "area": "Proof",
-      "description": "Each pipeline change is proven by a real build after the run pushes all four repos: `IaC/Build-Main` green through its new gates, a HomelabTerraformProvider build green through vet/test and publish, a HelmCharts build that gates and deploys `media`; the trivy scan is proven on the next real DockerImages image build, or left owed to the operator if none runs in the test phase's window.",
+      "description": "Each pipeline change is proven by a real build after the run pushes all four repos: `IaC/Build-Main` green through its new gates, a HomelabTerraformProvider build green through vet/test and publish, a HelmCharts build that gates and then deploys `media`, `storage` and `homeassistant-mcp`; the trivy scan is proven on the next real DockerImages image build, or left owed to the operator if none runs in the test phase's window.",
       "verdict": null,
       "rationale": "",
       "evidence": []

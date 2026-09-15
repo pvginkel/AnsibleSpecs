@@ -58,6 +58,8 @@ cross-cutting — slice.md's one requirement spans four repos (Ansible, the prov
 
 ## Ordering constraints
 
+None beyond document order.
+
 ### P1 — The Ansible lint baseline runs strict
 
 Target: ansible
@@ -88,7 +90,14 @@ Every build runs `go vet ./...` and the unit tests (`go test ./...`, no `TF_ACC`
 
 Target: ../HelmCharts
 
-Before the first release deploys, the build lints and renders every release it is about to deploy with the values that release is actually deployed with, and runs kubeconform on the rendered manifests against Kubernetes 1.35 (prd's microk8s channel, `Ansible/ansible/roles/microk8s/defaults/main.yml:5`). Any failure fails the whole build with nothing deployed. The gated set is exactly the deployed set — a release whose chart, config and image digests did not move is neither gated nor deployed, so an unchanged chart never blocks another push. Today's prd releases under it (checked 2026-09-15 with each release's prd values, without post-renderers or digest `--set`s): all 43 renderable releases render and 42 pass `helm lint`. `media` and `mosquitto` fail lint only with chart defaults and are left alone; `storage` fails with its prd values too, on a document separator its cronjob template glues to the next document (`charts/storage/templates/storage-cronjobs.yaml:54-56`) — open question Q1. kubeconform against 1.35 passes every rendered release with custom resources skipped; its strict mode also rejects the duplicate `command` key in `homeassistant-mcp`'s Deployment (`charts/homeassistant-mcp/templates/app-deployment.yaml:21-22`) — open question Q2.
+Before the first release deploys, the build lints and renders every release it is about to deploy with the values that release is actually deployed with, and runs kubeconform in strict mode (unknown fields and duplicate keys rejected) on the rendered manifests against Kubernetes 1.35 (prd's microk8s channel, `Ansible/ansible/roles/microk8s/defaults/main.yml:5`). Any failure fails the whole build with nothing deployed. The gated set is exactly the deployed set — a release whose chart, config and image digests did not move is neither gated nor deployed, so an unchanged chart never blocks another push.
+
+Every prd release passes the gate once this phase fixes two chart defects. Checked 2026-09-15 with each release's prd values, without post-renderers or digest `--set`s: all 43 renderable releases render, and the only failures are these two.
+
+- `storage` fails `helm lint` even with its prd values. Whitespace trimming glues its cronjob template's document separator to the next document (`charts/storage/templates/storage-cronjobs.yaml:54-56`). The fix leaves the rendered objects unchanged.
+- `homeassistant-mcp`'s Deployment sets `command` twice (`charts/homeassistant-mcp/templates/app-deployment.yaml:21-22`), which strict kubeconform rejects. Delete the dead first line. The live container runs the second, `["ha-mcp-web"]`, so its command does not change.
+
+`media` and `mosquitto` fail lint only with chart defaults and are left alone. Pushing this redeploys `storage` and `homeassistant-mcp` in prd once. Their pods restart on the render-time `deployment` annotation (`charts/shared/_helpers.tpl:1-3`), which the operator accepted.
 
 What the repo does not tell the executor:
 
