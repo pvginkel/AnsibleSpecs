@@ -73,3 +73,12 @@ The comment above the "Publish to provider registry" stage (`HomelabTerraformPro
 
 **Provenance:** read, plan-reviewer, planning r1, HomelabTerraformProvider/Jenkinsfile:56-102
 **Disposition:**
+
+### S3 — HelmCharts chart gate: kubectl-applied release manifests are never rendered, so kubeconform never validates them · minor
+
+The deploy applies a release's configs/prd/<chart>/prd/manifests.yaml with kubectl after helm (HelmCharts tools/deploy/deploy_cli/helmops.py:200-203), and post-rollout manifests after the rollout gate (:208-214). Eight prd releases carry manifests.yaml; external-secrets also carries clustersecretstore.yaml as a post-rollout manifest. P4's gate lints and renders each release through helm, as ruled, so these files reach prd without kubeconform.
+
+**Consequence:** A malformed post-helm manifest passes the gate. Its kubectl apply fails mid-deploy, after earlier releases in the same build have already deployed.
+
+**Provenance:** read, plan-writer, planning, r3, plan.md P4
+**Disposition:**

@@ -65,6 +65,14 @@
       "evidence": []
     },
     {
+      "id": "V19",
+      "area": "Chart gate",
+      "description": "kubeconform actually receives the rendered manifests of every release the build gates, although its sibling container sees only host paths (the agent workspace `/home/jenkins/agent` is not a host mount, `Ansible/support/iac-agent/bin/jenkins-agent-launch.sh:15,59-68`; each `iac -c` clone is private to its container, `Ansible/support/iac-agent/bin/iac:46-52`), and a kubeconform run that validates zero resources fails the build.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
       "id": "V09",
       "area": "Chart gate",
       "description": "The gate passes on every prd release as deployed; `media` and `mosquitto`, which fail `helm lint` only with chart defaults, are left alone.",
