@@ -36,7 +36,6 @@ Triaged on 2026-09-14 from the Inbox — the work outside the Argo CD project:
 
 - **[018](slices/backlog/018_monitoring_alert_delivery_and_sso/slice.md)** — Monitoring stack: Alertmanager delivers no alert, the node-memory stall alerts trust a PSI counter that wedged, and Grafana and pgAdmin still use app-local logins (major; #625, #575).
 - **[020](slices/backlog/020_ci_quality_gates/slice.md)** — CI quality gates: lint, validate and test gates on the push-to-prod pipelines, plus trivy (test gap; #129).
-- **[021](slices/backlog/021_build_and_deploy_pipeline_reliability/slice.md)** — Build and deploy pipeline reliability: conditional image builds skip the rebuild the version poller asked for, and HelmCharts deploys fail on a transient provider checksum fetch (minor; #581, #567).
 - **[023](slices/backlog/023_backup_freshness_alerting/slice.md)** — Backup freshness: each upload declares how long it stays valid, backup-server exposes it as metrics, and Alertmanager raises an overdue backup — today nothing notices a backup that stopped arriving (major; #573 item 3, split from 019 at its planning; waits for 018).
 
 ## Completed
@@ -90,3 +89,4 @@ on 2026-06-26.
 | Slice | Status | Notes |
 |---|---|---|
 | [internal-tls-monitoring](slices/deferred/internal-tls-monitoring.md) | deferred | §J cert-expiry alert rule + in-cluster metric. The VM-side metric already shipped; alerting is parked — observability is not a current priority. |
+| [021 build-and-deploy-pipeline-reliability](slices/cancelled/021_build_and_deploy_pipeline_reliability/refinement.md) | cancelled | Cancelled at planning 2026-09-15. The provider-checksum half moved to the Argo CD project (#567); the rest is two straightforward changes — the iac image takes the poller's `image` parameter, the poller retries a rebuild that collided with a running build — in [`handovers/2026-09-15_poller_rebuild_straightforward_changes.md`](handovers/2026-09-15_poller_rebuild_straightforward_changes.md) (Operator Actions #1023). Poller visibility: #1022. |
