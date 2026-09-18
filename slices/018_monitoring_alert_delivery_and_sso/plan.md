@@ -335,7 +335,7 @@ OpenBao secrets"), mount `kv`.
   P6's chart, reach the dev cluster when the operator next deploys them (`poetry run deploy
   dev/keycloak`, `dev/pgadmin`), outside this run.
 
-### P1 — The memory-stall alerts stop trusting a wedged counter
+### P1 — The memory-stall alerts stop trusting a wedged counter ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
