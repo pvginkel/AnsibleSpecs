@@ -479,6 +479,23 @@ Keycloak's upgrading guide for 26.5.2–26.7.3 changes none of the options this 
 (`KC_DB=postgres`, `KC_HEALTH_ENABLED`, `KC_CACHE=ispn`, `start --optimized`) and sets no new
 Postgres minimum.
 
+**Done (P3).** DockerImages `33412e2` on `phase/018-P3`: `keycloak/build-matrix.json` sets
+`KEYCLOAK_VERSION` to `26.7.3`; the Dockerfile is unchanged. The repo's dependency collector
+resolves the variant to tag `26.7.3-postgres-health-ispn`; the image builds with kaniko (`--no-push`).
+
+Later phases:
+- The tag exists in `registry:5000` only after this commit reaches DockerImages `main` and its
+  Jenkins build runs. That build's last stage deploys HelmCharts `main` again, which still pins
+  26.5.1 until P4 is pushed.
+- 26.7.3's `kc.sh build` prints a new `WARN` that `identity-brokering-api:v1` and `twitter-broker:v1`
+  are deprecated features enabled by default. It is not a migration error, so a check of the
+  Keycloak log on its first start must not count it as one.
+
+Record. `kaniko --context keycloak --no-push --build-arg KEYCLOAK_VERSION=26.7.3` completed
+(`kc.sh build`: Quarkus augmentation completed). The same build at 26.5.1 prints the identical
+`run time options … ignored during build time: kc.cache` notice, so that notice predates this
+change. `KC_CACHE` sits only in the builder stage, as before.
+
 ### P4 — Every Keycloak release runs 26.7.3, never beside 26.5.1
 
 Target: ../HelmCharts
