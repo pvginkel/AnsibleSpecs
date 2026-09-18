@@ -13,12 +13,23 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 018 made production alerting both believable and delivered, upgraded Keycloak, and put
+production Grafana and pgAdmin behind Keycloak. In HelmCharts, the two memory-stall alerts now fire
+only when the node is also short of memory or taking heavy major faults. A new warning,
+`NodeMemoryStallCounterWedged`, names the node whose PSI counter has wedged, and Alertmanager
+mutes that node's stall alerts while it fires. Alertmanager now sends alerts through a dedicated
+Telegram bot: critical alerts with sound, everything else silent. Every Keycloak release runs
+26.7.3 (DockerImages, HelmCharts), and the chart now rolls out with `Recreate`. Production Grafana
+and pgAdmin show a Keycloak button beside their local login, and only an account holding the
+client's `admin` role can sign in with it. The dev-cluster copies are unchanged. The doc phase
+updated Ansible's runbooks and playbook comments for the `Recreate` rollout, and the Argo CD
+runbook for Telegram delivery.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: Reboot srvk8s1 (A1): its stall alerts are blind until you do. A2's push has already happened
+(N5). What remains of A2 is two credentialed sign-ins at grafana.home and at pgadmin.home: one with
+your granted account, one with an account that has no role, which must be refused (V09/V10/V14).
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -47,7 +58,10 @@ test-agent, test phase round 1, 2026-09-18 — Pushed (cd /work/HelmCharts && gi
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: All six phases merged in order. Only P6 needed a second review round, for a missing test on
+the username claim, and one completion consult cleared B4. The surprise was at push time: the test
+phase held back HelmCharts' second stage (auth.ginbov.nl, Grafana, pgAdmin) until the driver caught
+it (N4, N5). Keycloak's one-way migration ran with no pre-upgrade dump, as waived (N3).
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -104,9 +118,11 @@ This test phase's first pass left HelmCharts' remaining 5 commits (d53b4e3, de4c
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B5 comes first, and it is the only fully witnessed bug: a loud stall alert that fires before
+its node's wedge warning can sit in the chat without a `[RESOLVED]` notice. B1 is read only and
+predates the slice, but it is serious: a live OpenAI key sits in HelmCharts history. B7 (partly
+witnessed) and B6 break Keycloak sign-in only from the short host names. Every bug is in HelmCharts
+except B8, a stale Ansible comment.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -126,24 +142,6 @@ HelmCharts CLAUDE.md (recommend-resources) states the window is nominally 5 days
 **Consequence:** recommend-resources' documented measurement window is wrong; a reader sizing resources or an investigation trusts a 2-day window that is really 5.
 
 **Provenance:** read, plan-writer, planning r1, HelmCharts CLAUDE.md + live Prometheus query
-**Disposition:**
-
-### ~~B3 — Ansible docs: k8s-rebuild.md and pre-drain-handoff.yml still name keycloak-db as a pre-drain opt-in that no longer exists · minor~~ — resolved — Ansible 568419f dropped the retired keycloak-db opt-in: docs/runbooks/k8s-rebuild.md:36 and ansible/playbooks/tasks/pre-drain-handoff.yml:22 now name keycloak only (checked 2026-09-14); struck by plan-writer r3
-
-docs/runbooks/k8s-rebuild.md:35 describes a keycloak-db Deployment (Recreate, ~30 s outage) handed off before every drain, and ansible/playbooks/tasks/pre-drain-handoff.yml:22 lists 'keycloak, keycloak-db (HelmCharts)'. In HelmCharts only charts/keycloak/templates/keycloak-deployment.yaml:7,22 carries iac.webathome.org/pre-drain, and the live keycloak-prd namespace runs a single keycloak Deployment (Keycloak's database is postgres-pas, charts/keycloak/values.yaml:9).
-
-**Consequence:** An operator reading the runbook before a node drain expects a keycloak-db hand-off and outage that no longer happens; the stale line can survive when slice 018's doc phase rewrites keycloak's entry for the stop-before-start rollout.
-
-**Provenance:** read, plan-writer, planning r2, plan.md P4
-**Disposition:**
-
-### ~~B4 — HelmCharts: the wedge alert's look-back comment and test cite for-grace-period as the restart bound, which does not apply to firing alerts · minor~~ — resolved by consult 1 (HelmCharts 3987dee): values.yaml's hold comment and the test's comment now give the real bound, restart downtime plus a couple of evaluations; the FOR_GRACE_MINUTES < look-back assertion stays as a conservative floor; kc project test re-run green. plan.md's P1 Record (the 10m for-grace-period sentence) still repeats the old reason; struck by consult 1
-
-configs/prd/prometheus/prd/values.yaml:127-130 and tests/test_prometheus_node_memory_alerts.py:37,:133 say the 30m ALERTS look-back must exceed restart downtime plus the 10m rules.alert.for-grace-period, because a restored alert stays pending that long. Prometheus applies the grace period only to alerts that were still pending. A restored alert that was already firing fires again on the first evaluation after restore: witnessed with Prometheus 3.5.0, for 60s and grace 30s, firing again 12s after restart. The real bound is downtime plus about two evaluation intervals, and 30m meets it.
-
-**Consequence:** none — 30m meets the real bound too; only the stated reason, and the test assertion built on it, are wrong
-
-**Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
 **Disposition:**
 
 ### B5 — HelmCharts: a stall alert delivered before its node's wedge warning fires never gets a [RESOLVED] notice once the wedge inhibits it · minor
@@ -175,9 +173,44 @@ pgAdmin builds its OAuth redirect URI from the request's Host header (Flask url_
 **Provenance:** read — code-writer, P6, r1: pgAdmin 9.18 web/pgadmin/authenticate/oauth2.py authenticate() url_for(OAUTH2_AUTHORIZE, _external=True); witness pod redirect_uri followed the Host header
 **Disposition:**
 
+### ~~B3 — Ansible docs: k8s-rebuild.md and pre-drain-handoff.yml still name keycloak-db as a pre-drain opt-in that no longer exists · minor~~ — resolved — Ansible 568419f dropped the retired keycloak-db opt-in: docs/runbooks/k8s-rebuild.md:36 and ansible/playbooks/tasks/pre-drain-handoff.yml:22 now name keycloak only (checked 2026-09-14); struck by plan-writer r3
+
+<details><summary>struck — body kept for the record</summary>
+
+docs/runbooks/k8s-rebuild.md:35 describes a keycloak-db Deployment (Recreate, ~30 s outage) handed off before every drain, and ansible/playbooks/tasks/pre-drain-handoff.yml:22 lists 'keycloak, keycloak-db (HelmCharts)'. In HelmCharts only charts/keycloak/templates/keycloak-deployment.yaml:7,22 carries iac.webathome.org/pre-drain, and the live keycloak-prd namespace runs a single keycloak Deployment (Keycloak's database is postgres-pas, charts/keycloak/values.yaml:9).
+
+**Consequence:** An operator reading the runbook before a node drain expects a keycloak-db hand-off and outage that no longer happens; the stale line can survive when slice 018's doc phase rewrites keycloak's entry for the stop-before-start rollout.
+
+**Provenance:** read, plan-writer, planning r2, plan.md P4
+**Disposition:**
+
+</details>
+
+### ~~B4 — HelmCharts: the wedge alert's look-back comment and test cite for-grace-period as the restart bound, which does not apply to firing alerts · minor~~ — resolved by consult 1 (HelmCharts 3987dee): values.yaml's hold comment and the test's comment now give the real bound, restart downtime plus a couple of evaluations; the FOR_GRACE_MINUTES < look-back assertion stays as a conservative floor; kc project test re-run green. plan.md's P1 Record (the 10m for-grace-period sentence) still repeats the old reason; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+configs/prd/prometheus/prd/values.yaml:127-130 and tests/test_prometheus_node_memory_alerts.py:37,:133 say the 30m ALERTS look-back must exceed restart downtime plus the 10m rules.alert.for-grace-period, because a restored alert stays pending that long. Prometheus applies the grace period only to alerts that were still pending. A restored alert that was already firing fires again on the first evaluation after restore: witnessed with Prometheus 3.5.0, for 60s and grace 30s, firing again 12s after restart. The real bound is downtime plus about two evaluation intervals, and 30m meets it.
+
+**Consequence:** none — 30m meets the real bound too; only the stated reason, and the test assertion built on it, are wrong
+
+**Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+</details>
+
+### B8 — Ansible: update-k8s.yml comments still size drain timeouts by keycloak-db's 600s preStop, and that workload no longer exists · nit
+
+ansible/playbooks/update-k8s.yml ~164 ("The slowest legitimate shutdown here is keycloak-db's 600s preStop") and ~419 ("keycloak-db's 600s preStop + tGPS") justify the pre-drain sweep's grace headroom and the drain timeout by a Deployment that was retired before this slice (Keycloak's database is the CNPG postgres-pas cluster). This predates slice 018. The doc phase found it while reconciling the keycloak comments in the same file and left it: fixing it means re-deriving why those values were chosen, and that is not a doc edit. Only the comments are stale; the timeout values stay as they are.
+
+**Consequence:** Anyone retuning the drain timeouts works from a slow-shutdown workload that is gone. Nothing changes at run time.
+
+**Provenance:** read — doc-writer, doc phase, r1: ansible/playbooks/update-k8s.yml, docs/runbooks/k8s-rebuild.md:36
+**Disposition:**
+
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: None open. Every question this slice raised was ruled on before or during the run.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -185,8 +218,9 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S1 feeds the keycloak-tf slice: it needs the hand-made client table before this slice is
+compressed. S5 affects whoever builds the SMTP gateway from DockerImages' plan. S3 is an
+architecture-model edit. S2 (witnessed) and S4 are HelmCharts test-coverage gaps.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -226,4 +260,13 @@ The keycloak-admin init container's setup-db step (charts/pgadmin/templates/pgad
 **Consequence:** If a later edit drops either line, the suite stays green, and pgAdmin fails to start the next time its PVC is rebuilt or restored empty.
 
 **Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F2 (mutations run)
+**Disposition:**
+
+### S5 — DockerImages: docs/alert-manager/plan.md still calls its Alertmanager Telegram half unimplemented, and gives a different secret path and receiver set from what slice 018 shipped · minor
+
+The plan's header reads "not yet implemented", and Part A (A1-A4) is written as future operator work: the bot token and chat id at OpenBao kv/shared/prd/telegram-infra-alerts, the Secret mounted at /etc/alertmanager/secrets/telegram, and four receivers ({metrics, events} x {critical, warning}). The live production config is HelmCharts configs/prd/prometheus/prd/: the leaf eso/prd/prometheus/prd/telegram, a mount at /etc/secrets/telegram (outside the config ConfigMap's /etc/alertmanager), and two receivers (telegram-critical, telegram-warning: the metrics row only, since the SMTP gateway was not built). The doc phase left it alone because the page is in DockerImages, which is not a surface in Ansible's slice-doc-plan, and is not on the doc branch. Owed: mark Part A done, point it at the shipped config, and restate the events row as what the gateway work adds.
+
+**Consequence:** Anyone building the SMTP gateway from this plan redoes Part A against a config that already exists: a second OpenBao leaf for the same bot and a four-receiver route tree that replaces the live one.
+
+**Provenance:** read — doc-writer, doc phase, r1: DockerImages docs/alert-manager/plan.md lines 1-4 and 237-330 against HelmCharts.diff P2
 **Disposition:**
