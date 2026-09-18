@@ -334,7 +334,7 @@ Record. Settled beyond the plan's text:
   served). `handler_test.go` covers upload-driven refresh and watching after credential deletion. No
   test removed (`TestValidateValidity` became `TestParseValidity`).
 
-### P3 — Prometheus scrapes backup-server inside the cluster
+### P3 — Prometheus scrapes backup-server inside the cluster ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
