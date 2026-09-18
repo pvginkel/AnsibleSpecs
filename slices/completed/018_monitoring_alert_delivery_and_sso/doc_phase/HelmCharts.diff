@@ -1,0 +1,1199 @@
+/work/HelmCharts — P1: git diff 20a6b77742f1..cd51a9cd65c7
+
+configs/prd/prometheus/prd/values.yaml      |  95 +++++++++++++++++++++++++++------
+ tests/conftest.py                           |   3 +-
+ tests/test_prometheus_node_memory_alerts.py | 139 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 219 insertions(+), 18 deletions(-)
+
+diff --git a/configs/prd/prometheus/prd/values.yaml b/configs/prd/prometheus/prd/values.yaml
+index 5ee9e74..254e3d3 100644
+--- a/configs/prd/prometheus/prd/values.yaml
++++ b/configs/prd/prometheus/prd/values.yaml
+@@ -61,40 +61,101 @@ serverFiles:
+   alerting_rules.yml:
+     groups:
+       # Memory PSI "full" — the fraction of wall-time in which every non-idle
+-      # task is stalled waiting on memory. It is the only signal that tracked the
+-      # 2026-08-02 srvk8s1 starvation, where MemAvailable stayed nearly flat while
+-      # the node spent hours in direct reclaim and liveness probes timed out.
+-      # kubelet 1.35.6 cannot evict on PSI, so this is detection only.
++      # task is stalled waiting on memory. kubelet 1.35.6 cannot evict on PSI,
++      # so this is detection only.
+       #
+-      # Thresholds replayed against 2026-07-31..08-02 history: >0.05 sustained 10m
+-      # fires twice inside the incident window and nowhere else; >0.02 sustained
+-      # 15m adds two srvk8s1 episodes the day before, which is the intended early
+-      # warning. 0.02 is also the per-node ceiling the capacity review targets.
++      # The kernel's stall counter can wedge: it keeps reading a stall on a node
++      # with memory to spare and no major faults until the node reboots. So each
++      # stall alert also needs the node-exporter mixin's memory signals at their
++      # defaults on the same node — MemAvailable under 10% of MemTotal, or over
++      # 500 major faults/s. Neither signal alerts on its own: a healthy node
++      # crosses both in an ordinary week, briefly and without stalling.
++      #
++      # Every term aggregates by node. A node-exporter chart upgrade leaves two
++      # series per node for a few minutes, differing only in helm_sh_chart, and
++      # a one-to-one match on instance fails the whole evaluation.
+       - name: node-memory-pressure
+         rules:
+           - alert: NodeMemoryStalled
+-            expr: rate(node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints"}[5m]) > 0.05
++            expr: |
++              max by (node) (rate(node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints"}[5m])) > 0.05
++              and on (node) (
++                  min by (node) (
++                    node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints"}
++                      / node_memory_MemTotal_bytes{job="kubernetes-service-endpoints"}
++                  ) < 0.10
++                or
++                  max by (node) (rate(node_vmstat_pgmajfault{job="kubernetes-service-endpoints"}[5m])) > 500
++              )
+             for: 10m
+             labels:
+               severity: critical
+             annotations:
+               summary: '{{ $labels.node }} stalled on memory {{ $value | humanizePercentage }} of wall-time'
+               description: >-
+-                Sustained full memory-pressure stall. The node is in direct reclaim
+-                and will start losing pods to liveness-probe timeouts long before
+-                kubelet's eviction threshold is reached. Compare per-node memory
+-                requests against actual usage and look for requestless workloads.
++                Sustained full memory-pressure stall while the node is short of
++                memory or thrashing. The node is in direct reclaim and will start
++                losing pods to liveness-probe timeouts long before kubelet's
++                eviction threshold is reached. Compare per-node memory requests
++                against actual usage and look for requestless workloads.
+           - alert: NodeMemoryStallElevated
+-            expr: rate(node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints"}[5m]) > 0.02
++            expr: |
++              max by (node) (rate(node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints"}[5m])) > 0.02
++              and on (node) (
++                  min by (node) (
++                    node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints"}
++                      / node_memory_MemTotal_bytes{job="kubernetes-service-endpoints"}
++                  ) < 0.10
++                or
++                  max by (node) (rate(node_vmstat_pgmajfault{job="kubernetes-service-endpoints"}[5m])) > 500
++              )
+             for: 15m
+             labels:
+               severity: warning
+             annotations:
+               summary: '{{ $labels.node }} under elevated memory pressure ({{ $value | humanizePercentage }} of wall-time stalled)'
+               description: >-
+-                Above the 0.02 s/s ceiling the cluster is sized for. Not yet
+-                service-affecting, but the node has no absorption capacity left
+-                for a drain or a load spike.
++                Above the 0.02 s/s ceiling the cluster is sized for, while the
++                node is short of memory or thrashing. Not yet service-affecting,
++                but the node has no absorption capacity left for a drain or a
++                load spike.
++          # Qualifies on a stall with over 25% of memory available and under 50
++          # major faults/s across the hour. Once firing it holds on its own
++          # ALERTS series for as long as the stall rate stays over 0.02 —
++          # through the memory dips and fault bursts that make the node's stall
++          # alerts fire on the mixin signals alone — and resolves when the
++          # counter stops. The 30m look-back must exceed the downtime of a
++          # Prometheus restart plus rules.alert.for-grace-period (10m), during
++          # which a restored alert is pending, not firing; and it must stay under
++          # `for:`, so a counter that stalls again after the warning resolved
++          # has to qualify afresh.
++          - alert: NodeMemoryStallCounterWedged
++            expr: |
++              max by (node) (rate(node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints"}[5m])) > 0.02
++              and on (node) (
++                  (
++                    min by (node) (
++                      node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints"}
++                        / node_memory_MemTotal_bytes{job="kubernetes-service-endpoints"}
++                    ) > 0.25
++                    and on (node)
++                    max by (node) (rate(node_vmstat_pgmajfault{job="kubernetes-service-endpoints"}[1h])) < 50
++                  )
++                or
++                  max by (node) (max_over_time(ALERTS{alertname="NodeMemoryStallCounterWedged", alertstate="firing"}[30m]))
++              )
++            for: 1h
++            labels:
++              severity: warning
++            annotations:
++              summary: '{{ $labels.node }} memory-stall counter looks wedged; its stall alerts are blind until it is rebooted'
++              description: >-
++                The node reports {{ $value | humanizePercentage }} of wall-time
++                stalled on memory while it has memory to spare and no major
++                faults: the kernel's PSI counter is stuck, not the node.
++                NodeMemoryStalled and NodeMemoryStallElevated cannot tell a real
++                stall on this node from the stuck counter until it is rebooted,
++                which resets the counter and resolves this alert.
+ 
+       # capacity - allocatable is the sum of --kube-reserved and the hard
+       # eviction threshold. Exactly 100Mi means only microk8s' shipped default
+diff --git a/tests/conftest.py b/tests/conftest.py
+index ef53b74..8e1ea33 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -5,7 +5,8 @@ configs/ and charts/ trees — except test_prd_tree.py, which reads the real
+ tree on purpose and writes nothing, test_storage_s3_mirror.py, which
+ imports the storage chart's mirror script,
+ test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
+-storage chart's values, test_youtrack_backup.py, which imports the youtrack
++storage chart's values, test_prometheus_node_memory_alerts.py, which reads
++the real memory-stall alert rules, test_youtrack_backup.py, which imports the youtrack
+ chart's backup script, test_prometheus_youtrack_backup_alert.py, which reads
+ the real alert rule and the youtrack chart's values, and
+ test_s3_storage_backup_grant.py, which reads the s3-storage module, the prd
+diff --git a/tests/test_prometheus_node_memory_alerts.py b/tests/test_prometheus_node_memory_alerts.py
+new file mode 100644
+index 0000000..8997d36
+--- /dev/null
++++ b/tests/test_prometheus_node_memory_alerts.py
+@@ -0,0 +1,139 @@
++"""The prd Prometheus release's node memory-stall alerts, against the episodes
++their thresholds were set from.
++
++Reads the real prometheus values; writes nothing. Each rule's expression is
++matched whole, its thresholds read out of it, and the recorded episodes walked
++through them: the 2026-08-02 starvation meets the stall alerts' memory signals,
++and the wedged counters (srvk8s3 from 2026-08-13, srvk8s2 2026-09-07..13,
++srvk8s1 from 2026-09-16) meet the wedge warning's instead.
++"""
++
++import re
++from dataclasses import dataclass
++from pathlib import Path
++
++import pytest
++import yaml
++
++ROOT = Path(__file__).resolve().parents[1]
++ALERTS = ROOT / "configs" / "prd" / "prometheus" / "prd" / "values.yaml"
++
++JOB = re.escape('{job="kubernetes-service-endpoints"}')
++# Every term aggregates by node, never matching on instance: a node-exporter
++# chart upgrade leaves two series per node that differ only in helm_sh_chart.
++STALL = rf"max by \(node\) \(rate\(node_pressure_memory_stalled_seconds_total{JOB}\[5m\]\)\) > (?P<stall>[\d.]+)"
++AVAILABLE = (
++    rf"min by \(node\) \(\s+node_memory_MemAvailable_bytes{JOB}\s+/ node_memory_MemTotal_bytes{JOB}\s+\)"
++    r" (?P<avail_op>[<>]) (?P<avail>[\d.]+)"
++)
++FAULTS = (
++    rf"max by \(node\) \(rate\(node_vmstat_pgmajfault{JOB}\[(?P<window>\w+)\]\)\)"
++    r" (?P<faults_op>[<>]) (?P<faults>[\d.]+)"
++)
++HOLD = r'max by \(node\) \(max_over_time\(ALERTS\{alertname="(?P<own>\w+)", alertstate="firing"\}\[(?P<look_back>\w+)\]\)\)'
++CORROBORATED = rf"{STALL}\s+and on \(node\) \(\s+{AVAILABLE}\s+or\s+{FAULTS}\s+\)\s*"
++WEDGED = rf"{STALL}\s+and on \(node\) \(\s+\(\s+{AVAILABLE}\s+and on \(node\)\s+{FAULTS}\s+\)\s+or\s+{HOLD}\s+\)\s*"
++# Prometheus' --rules.alert.for-grace-period default; the release does not set it.
++FOR_GRACE_MINUTES = 10
++
++
++@dataclass(frozen=True)
++class Episode:
++    name: str
++    available: float  # MemAvailable / MemTotal
++    faults: float  # major faults/s
++
++
++# AnsibleSpecs handovers/memory-issues/06-eviction.md:73 and
++# 02-measurements.md:136: 0.62 GiB of 15.6, 670-770 major faults/s.
++STARVATION = Episode("2026-08-02 srvk8s1", 0.62 / 15.6, 670)
++# 5.3 GiB of 15.6 at 2.2 faults/s; never under 37% at ~0; 33% at 1.7 faults/s.
++WEDGES = [
++    Episode("srvk8s3 from 2026-08-13", 5.3 / 15.6, 2.2),
++    Episode("srvk8s2 2026-09-07..13", 0.37, 0.0),
++    Episode("srvk8s1 from 2026-09-16", 0.33, 1.7),
++]
++STALL_ALERTS = [("NodeMemoryStalled", 0.05, "10m", "critical"), ("NodeMemoryStallElevated", 0.02, "15m", "warning")]
++WEDGE_ALERT = "NodeMemoryStallCounterWedged"
++
++
++def minutes(duration):
++    value, unit = re.fullmatch(r"(\d+)([mh])", duration).groups()
++    return int(value) * (60 if unit == "h" else 1)
++
++
++def holds(op, value, threshold):
++    return value < threshold if op == "<" else value > threshold
++
++
++def available(terms, episode):
++    return holds(terms["avail_op"], episode.available, float(terms["avail"]))
++
++
++def faulting(terms, episode):
++    return holds(terms["faults_op"], episode.faults, float(terms["faults"]))
++
++
++@pytest.fixture(scope="module")
++def rules():
++    groups = yaml.safe_load(ALERTS.read_text())["serverFiles"]["alerting_rules.yml"]["groups"]
++    (group,) = [g for g in groups if g["name"] == "node-memory-pressure"]
++    return {r["alert"]: r for r in group["rules"]}
++
++
++@pytest.fixture(scope="module")
++def terms(rules):
++    shapes = {name: CORROBORATED for name, *_ in STALL_ALERTS} | {WEDGE_ALERT: WEDGED}
++    found = {}
++    for name, shape in shapes.items():
++        match = re.fullmatch(shape, rules[name]["expr"])
++        assert match, rules[name]["expr"]
++        found[name] = match.groupdict()
++    return found
++
++
++def test_the_group_holds_the_two_stall_alerts_and_the_wedge_warning(rules):
++    assert sorted(rules) == sorted([name for name, *_ in STALL_ALERTS] + [WEDGE_ALERT])
++    for rule in rules.values():
++        assert rule["annotations"]["summary"].startswith("{{ $labels.node }} ")
++
++
++@pytest.mark.parametrize(("name", "stall", "for_", "severity"), STALL_ALERTS)
++def test_stall_alerts_need_the_mixin_memory_signals_on_the_same_node(rules, terms, name, stall, for_, severity):
++    assert float(terms[name]["stall"]) == stall
++    assert rules[name]["for"] == for_
++    assert rules[name]["labels"] == {"severity": severity}
++    assert (terms[name]["avail_op"], float(terms[name]["avail"])) == ("<", 0.10)
++    assert (terms[name]["window"], terms[name]["faults_op"], float(terms[name]["faults"])) == ("5m", ">", 500)
++
++    assert available(terms[name], STARVATION) and faulting(terms[name], STARVATION)
++    for wedge in WEDGES:
++        assert not available(terms[name], wedge) and not faulting(terms[name], wedge), wedge.name
++
++
++def test_wedge_warning_qualifies_on_the_recorded_wedges_and_not_the_starvation(rules, terms):
++    rule, wedged = rules[WEDGE_ALERT], terms[WEDGE_ALERT]
++    assert rule["labels"] == {"severity": "warning"}
++    assert minutes(rule["for"]) >= 60
++    assert (wedged["avail_op"], float(wedged["avail"])) == (">", 0.25)
++    assert (wedged["window"], wedged["faults_op"], float(wedged["faults"])) == ("1h", "<", 50)
++
++    for wedge in WEDGES:
++        assert available(wedged, wedge) and faulting(wedged, wedge), wedge.name
++    assert not available(wedged, STARVATION) and not faulting(wedged, STARVATION)
++
++
++def test_wedge_warning_holds_across_every_stall_either_stall_alert_can_fire_on(rules, terms):
++    rule, wedged = rules[WEDGE_ALERT], terms[WEDGE_ALERT]
++    assert float(wedged["stall"]) <= min(float(terms[name]["stall"]) for name, *_ in STALL_ALERTS)
++    assert wedged["own"] == WEDGE_ALERT
++    # Over the grace period, so a restored alert stays held while pending;
++    # under `for:`, so a counter that stalls again after the warning resolved
++    # has to qualify afresh.
++    assert FOR_GRACE_MINUTES < minutes(wedged["look_back"]) < minutes(rule["for"])
++    server = yaml.safe_load(ALERTS.read_text())["server"]
++    assert "for-grace-period" not in str([server.get("extraArgs"), server.get("extraFlags")])
++
++
++def test_wedge_warning_says_the_stall_alerts_are_blind_until_a_reboot(rules):
++    assert rules[WEDGE_ALERT]["annotations"]["summary"].endswith("its stall alerts are blind until it is rebooted")
+
+/work/HelmCharts — P2: git diff cd51a9cd65c7..e9820f9365b6
+
+configs/prd/prometheus/prd/manifests.yaml      |  28 +++++++++++
+ configs/prd/prometheus/prd/values.yaml         |  70 +++++++++++++++++++++++++++
+ tests/conftest.py                              |   4 +-
+ tests/test_prometheus_alertmanager_telegram.py | 116 +++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 217 insertions(+), 1 deletion(-)
+
+diff --git a/configs/prd/prometheus/prd/manifests.yaml b/configs/prd/prometheus/prd/manifests.yaml
+new file mode 100644
+index 0000000..f45dbfd
+--- /dev/null
++++ b/configs/prd/prometheus/prd/manifests.yaml
+@@ -0,0 +1,28 @@
++# Alertmanager's Telegram bot token and chat id, mounted by values.yaml's
++# alertmanager.extraSecretMounts. The prometheus chart is upstream, so there
++# is no shared.externalsecrets helper to emit this.
++#
++# Applied after `helm upgrade`: on the first deploy the Alertmanager pod
++# waits on the Secret's mount until ESO has synced it.
++
++apiVersion: external-secrets.io/v1
++kind: ExternalSecret
++metadata:
++  name: alertmanager-telegram
++  namespace: prometheus-prd
++spec:
++  refreshInterval: 1h
++  secretStoreRef:
++    name: openbao-prd
++    kind: ClusterSecretStore
++  target:
++    name: alertmanager-telegram
++  data:
++    - secretKey: bot_token
++      remoteRef:
++        key: eso/prd/prometheus/prd/telegram
++        property: bot_token
++    - secretKey: chat_id
++      remoteRef:
++        key: eso/prd/prometheus/prd/telegram
++        property: chat_id
+diff --git a/configs/prd/prometheus/prd/values.yaml b/configs/prd/prometheus/prd/values.yaml
+index 254e3d3..149919c 100644
+--- a/configs/prd/prometheus/prd/values.yaml
++++ b/configs/prd/prometheus/prd/values.yaml
+@@ -247,6 +247,76 @@ alertmanager:
+     requests:
+       memory: 20Mi
+ 
++  # The Telegram bot token and chat id, materialised by ESO from OpenBao in
++  # manifests.yaml. Outside /etc/alertmanager, where the config ConfigMap is
++  # mounted. The receivers read both as files on every send, so neither value
++  # is in the rendered config.
++  extraSecretMounts:
++    - name: telegram
++      mountPath: /etc/secrets/telegram
++      secretName: alertmanager-telegram
++      readOnly: true
++
++  # The chart emits config and templates with plain toYaml (no `tpl`), so the
++  # {{ }} placeholders below reach Alertmanager verbatim.
++  config:
++    route:
++      receiver: telegram-warning
++      # A rule aggregated by node carries node but no instance; a per-target
++      # rule carries instance. Grouping on both keeps one node's fault one
++      # group under either shape.
++      group_by: [alertname, instance, node]
++      group_wait: 30s
++      group_interval: 5m
++      repeat_interval: 12h
++      routes:
++        - matchers: ['severity="critical"']
++          receiver: telegram-critical
++
++    # A wedged PSI counter reads as a stall forever, so on that node both stall
++    # alerts reduce to their memory and fault signals alone.
++    inhibit_rules:
++      - source_matchers: ['alertname="NodeMemoryStallCounterWedged"']
++        target_matchers: ['alertname=~"NodeMemoryStalled|NodeMemoryStallElevated"']
++        equal: [node]
++
++    # disable_notifications is a static flag, not a template, so loud and
++    # silent need a receiver each. parse_mode "" is plain text: expressions and
++    # annotations carry raw `<`, which Telegram's HTML mode rejects.
++    receivers:
++      - name: telegram-critical
++        telegram_configs:
++          - bot_token_file: /etc/secrets/telegram/bot_token
++            chat_id_file: /etc/secrets/telegram/chat_id
++            parse_mode: ""
++            message: '{{ template "telegram.message" . }}'
++            disable_notifications: false
++            send_resolved: true
++      - name: telegram-warning
++        telegram_configs:
++          - bot_token_file: /etc/secrets/telegram/bot_token
++            chat_id_file: /etc/secrets/telegram/chat_id
++            parse_mode: ""
++            message: '{{ template "telegram.message" . }}'
++            disable_notifications: true
++            send_resolved: true
++
++  # Mounted beside alertmanager.yml, which loads /etc/alertmanager/*.tmpl.
++  templates:
++    telegram.tmpl: |-
++      {{ define "telegram.message" -}}
++      {{ range .Alerts -}}
++      {{ if eq .Status "firing" }}[FIRING]{{ else }}[RESOLVED]{{ end }} {{ .Labels.alertname }}
++      {{ if .Labels.node }}host: {{ .Labels.node }}
++      {{ else if .Labels.instance }}host: {{ .Labels.instance }}
++      {{ end -}}
++      {{ .Annotations.summary }}
++      {{ with .Annotations.description }}
++      {{ . }}
++      {{ end }}
++      {{ end -}}
++      {{ end }}
++
+ prometheus-pushgateway:
+   resources:
+     requests:
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 8e1ea33..88704e3 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -6,7 +6,9 @@ tree on purpose and writes nothing, test_storage_s3_mirror.py, which
+ imports the storage chart's mirror script,
+ test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
+ storage chart's values, test_prometheus_node_memory_alerts.py, which reads
+-the real memory-stall alert rules, test_youtrack_backup.py, which imports the youtrack
++the real memory-stall alert rules, test_prometheus_alertmanager_telegram.py,
++which reads the real Alertmanager config, alert rules and manifests.yaml,
++test_youtrack_backup.py, which imports the youtrack
+ chart's backup script, test_prometheus_youtrack_backup_alert.py, which reads
+ the real alert rule and the youtrack chart's values, and
+ test_s3_storage_backup_grant.py, which reads the s3-storage module, the prd
+diff --git a/tests/test_prometheus_alertmanager_telegram.py b/tests/test_prometheus_alertmanager_telegram.py
+new file mode 100644
+index 0000000..3310586
+--- /dev/null
++++ b/tests/test_prometheus_alertmanager_telegram.py
+@@ -0,0 +1,116 @@
++"""The prd Prometheus release's Alertmanager delivery to Telegram, against the
++release's own alert rules.
++
++Reads the real prometheus values and the release's manifests.yaml; writes
++nothing. Every rule is routed through the route tree the way Alertmanager
++matches it (first matching child, anchored regexes), and the inhibition is
++matched against every rule's alertname.
++"""
++
++import re
++from pathlib import Path
++
++import pytest
++import yaml
++
++ROOT = Path(__file__).resolve().parents[1]
++RELEASE = ROOT / "configs" / "prd" / "prometheus" / "prd"
++OPENBAO_PATH = "eso/prd/prometheus/prd/telegram"
++MATCHER = re.compile(r'(?P<name>\w+)(?P<op>=~|!~|!=|=)"(?P<value>.*)"')
++WEDGE_ALERT = "NodeMemoryStallCounterWedged"
++STALL_ALERTS = {"NodeMemoryStalled", "NodeMemoryStallElevated"}
++
++
++@pytest.fixture(scope="module")
++def values():
++    return yaml.safe_load((RELEASE / "values.yaml").read_text())
++
++
++@pytest.fixture(scope="module")
++def alertmanager(values):
++    return values["alertmanager"]
++
++
++@pytest.fixture(scope="module")
++def rule_labels(values):
++    groups = values["serverFiles"]["alerting_rules.yml"]["groups"]
++    return {r["alert"]: {"alertname": r["alert"], **r["labels"]} for g in groups for r in g["rules"]}
++
++
++@pytest.fixture(scope="module")
++def external_secret():
++    (doc,) = [d for d in yaml.safe_load_all((RELEASE / "manifests.yaml").read_text()) if d]
++    assert doc["kind"] == "ExternalSecret"
++    return doc
++
++
++def matches(matcher, labels):
++    m = MATCHER.fullmatch(matcher)
++    assert m, matcher
++    actual = labels.get(m["name"], "")
++    hit = re.fullmatch(m["value"], actual) is not None if "~" in m["op"] else actual == m["value"]
++    return hit != m["op"].startswith("!")
++
++
++def receiver_for(route, labels):
++    for child in route.get("routes") or []:
++        assert not child.get("continue")
++        if all(matches(m, labels) for m in child["matchers"]):
++            return receiver_for(child, labels)
++    return route["receiver"]
++
++
++def telegram(alertmanager, receiver):
++    (found,) = [r for r in alertmanager["config"]["receivers"] if r["name"] == receiver]
++    (config,) = found["telegram_configs"]
++    return config
++
++
++def test_critical_alerts_are_delivered_loud_and_every_other_alert_silent(alertmanager, rule_labels):
++    assert {labels["severity"] for labels in rule_labels.values()} == {"critical", "warning"}
++    route = alertmanager["config"]["route"]
++    for name, labels in rule_labels.items():
++        config = telegram(alertmanager, receiver_for(route, labels))
++        assert config["disable_notifications"] is (labels["severity"] != "critical"), name
++    assert telegram(alertmanager, receiver_for(route, {"alertname": "Unlabelled"}))["disable_notifications"] is True
++
++
++def test_one_nodes_fault_is_one_group(alertmanager):
++    assert {"alertname", "node"} <= set(alertmanager["config"]["route"]["group_by"])
++
++
++def test_every_receiver_sends_plain_text_and_resolved_notices(alertmanager):
++    (template,) = alertmanager["templates"].values()
++    for receiver in alertmanager["config"]["receivers"]:
++        config = telegram(alertmanager, receiver["name"])
++        assert config["parse_mode"] == ""
++        assert config["send_resolved"] is True
++        (name,) = re.fullmatch(r'\{\{ template "([\w.]+)" \. \}\}', config["message"]).groups()
++        assert f'{{{{ define "{name}" -}}}}' in template
++
++
++def test_bot_token_and_chat_id_are_read_from_the_openbao_secret_as_files(alertmanager, external_secret):
++    spec = external_secret["spec"]
++    assert external_secret["metadata"]["namespace"] == "prometheus-prd"
++    assert {d["remoteRef"]["key"] for d in spec["data"]} == {OPENBAO_PATH}
++    assert {d["secretKey"]: d["remoteRef"]["property"] for d in spec["data"]} == {
++        "bot_token": "bot_token",
++        "chat_id": "chat_id",
++    }
++    (mount,) = [m for m in alertmanager["extraSecretMounts"] if m["secretName"] == spec["target"]["name"]]
++    # The config ConfigMap is mounted at /etc/alertmanager.
++    assert not mount["mountPath"].startswith("/etc/alertmanager")
++    for receiver in alertmanager["config"]["receivers"]:
++        config = telegram(alertmanager, receiver["name"])
++        assert not {"bot_token", "chat_id"} & set(config)
++        assert config["bot_token_file"] == f"{mount['mountPath']}/bot_token"
++        assert config["chat_id_file"] == f"{mount['mountPath']}/chat_id"
++
++
++def test_the_wedge_warning_inhibits_only_its_nodes_two_stall_alerts(alertmanager, rule_labels):
++    (rule,) = alertmanager["config"]["inhibit_rules"]
++    assert rule["equal"] == ["node"]
++    sources = {n for n, labels in rule_labels.items() if all(matches(m, labels) for m in rule["source_matchers"])}
++    targets = {n for n, labels in rule_labels.items() if all(matches(m, labels) for m in rule["target_matchers"])}
++    assert sources == {WEDGE_ALERT}
++    assert targets == STALL_ALERTS
+
+/work/HelmCharts — P4: git diff e9820f9365b6..01532e932175
+
+charts/keycloak/templates/keycloak-deployment.yaml |  9 +++++----
+ charts/keycloak/values.yaml                        |  2 +-
+ tests/conftest.py                                  |  2 ++
+ tests/test_keycloak_rollout.py                     | 20 ++++++++++++++++++++
+ 4 files changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/charts/keycloak/templates/keycloak-deployment.yaml b/charts/keycloak/templates/keycloak-deployment.yaml
+index 438c8ed..e62387e 100644
+--- a/charts/keycloak/templates/keycloak-deployment.yaml
++++ b/charts/keycloak/templates/keycloak-deployment.yaml
+@@ -7,11 +7,12 @@ metadata:
+     iac.webathome.org/pre-drain: "true"
+ spec:
+   replicas: {{ .Values.service.keycloak.replicas }}
++  # Keycloak supports a rolling update only between patch releases of one
++  # minor version; across minor versions an older Keycloak must not run beside
++  # a newer one against the same database. Recreate starts the new pod only
++  # once the old one has terminated.
+   strategy:
+-    type: RollingUpdate
+-    rollingUpdate:
+-      maxSurge: 1
+-      maxUnavailable: 0
++    type: Recreate
+   selector:
+     matchLabels:
+       app: keycloak
+diff --git a/charts/keycloak/values.yaml b/charts/keycloak/values.yaml
+index f629cd3..5e7fba8 100644
+--- a/charts/keycloak/values.yaml
++++ b/charts/keycloak/values.yaml
+@@ -19,7 +19,7 @@ storage:
+     subvolumeName:
+ 
+ images:
+-  keycloak: :26.5.1-postgres-health-ispn
++  keycloak: :26.7.3-postgres-health-ispn
+ 
+ global:
+   environment:
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 88704e3..428e364 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -8,6 +8,8 @@ test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
+ storage chart's values, test_prometheus_node_memory_alerts.py, which reads
+ the real memory-stall alert rules, test_prometheus_alertmanager_telegram.py,
+ which reads the real Alertmanager config, alert rules and manifests.yaml,
++test_keycloak_rollout.py, which reads the keycloak chart's deployment
++template,
+ test_youtrack_backup.py, which imports the youtrack
+ chart's backup script, test_prometheus_youtrack_backup_alert.py, which reads
+ the real alert rule and the youtrack chart's values, and
+diff --git a/tests/test_keycloak_rollout.py b/tests/test_keycloak_rollout.py
+new file mode 100644
+index 0000000..6199d32
+--- /dev/null
++++ b/tests/test_keycloak_rollout.py
+@@ -0,0 +1,20 @@
++"""The keycloak chart never runs two Keycloak pods side by side during a
++rollout.
++
++Reads the real chart template; writes nothing.
++"""
++
++import re
++from pathlib import Path
++
++import yaml
++
++TEMPLATE = Path(__file__).resolve().parents[1] / "charts" / "keycloak" / "templates" / "keycloak-deployment.yaml"
++
++
++def test_a_rollout_stops_the_old_pod_before_starting_the_new_one():
++    # Helm actions stripped out leave plain YAML; the strategy block holds none.
++    deployment = yaml.safe_load(re.sub(r"\{\{.*?\}\}", "", TEMPLATE.read_text()))
++
++    assert deployment["kind"] == "Deployment"
++    assert deployment["spec"]["strategy"] == {"type": "Recreate"}
+
+/work/HelmCharts — P5: git diff 01532e932175..aa875f77fa59
+
+configs/prd/grafana/prd/manifests.yaml | 29 +++++++++++++++++++
+ configs/prd/grafana/prd/values.yaml    | 30 ++++++++++++++++++++
+ tests/conftest.py                      |  3 +-
+ tests/test_grafana_keycloak_login.py   | 81 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 142 insertions(+), 1 deletion(-)
+
+diff --git a/configs/prd/grafana/prd/manifests.yaml b/configs/prd/grafana/prd/manifests.yaml
+new file mode 100644
+index 0000000..3d4317f
+--- /dev/null
++++ b/configs/prd/grafana/prd/manifests.yaml
+@@ -0,0 +1,29 @@
++# The grafana client's id and secret for Keycloak sign-in, read by
++# values.yaml's envFromSecret. The grafana chart is upstream, so there is no
++# shared.externalsecrets helper to emit this. The Secret's keys are
++# Grafana's environment overrides of [auth.generic_oauth].
++#
++# Applied after `helm upgrade`: on the first deploy the new Grafana pod
++# waits on the Secret until ESO has synced it.
++
++apiVersion: external-secrets.io/v1
++kind: ExternalSecret
++metadata:
++  name: grafana-oidc
++  namespace: grafana-prd
++spec:
++  refreshInterval: 1h
++  secretStoreRef:
++    name: openbao-prd
++    kind: ClusterSecretStore
++  target:
++    name: grafana-oidc
++  data:
++    - secretKey: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
++      remoteRef:
++        key: eso/prd/grafana/prd/oidc
++        property: client_id
++    - secretKey: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
++      remoteRef:
++        key: eso/prd/grafana/prd/oidc
++        property: client_secret
+diff --git a/configs/prd/grafana/prd/values.yaml b/configs/prd/grafana/prd/values.yaml
+index ed8da21..09a3714 100644
+--- a/configs/prd/grafana/prd/values.yaml
++++ b/configs/prd/grafana/prd/values.yaml
+@@ -7,6 +7,36 @@ service:
+ 
+ fullnameOverride: grafana
+ 
++# Keycloak sign-in beside the local admin's login form. The client id and
++# secret reach Grafana as GF_AUTH_GENERIC_OAUTH_* environment overrides from
++# the grafana-oidc Secret (manifests.yaml).
++envFromSecret: grafana-oidc
++
++grafana.ini:
++  server:
++    # Grafana builds the OAuth redirect URI from this; Keycloak's grafana
++    # client registers http://grafana.home/login/generic_oauth.
++    root_url: http://grafana.home/
++  auth.generic_oauth:
++    enabled: true
++    name: Keycloak
++    allow_sign_up: true
++    scopes: openid email profile
++    auth_url: https://auth.ginbov.nl/realms/homelab/protocol/openid-connect/auth
++    token_url: https://auth.ginbov.nl/realms/homelab/protocol/openid-connect/token
++    api_url: https://auth.ginbov.nl/realms/homelab/protocol/openid-connect/userinfo
++    use_pkce: true
++    # Without a refresh token Grafana ends the session when Keycloak's
++    # access token expires.
++    use_refresh_token: true
++    login_attribute_path: preferred_username
++    # Keycloak puts client roles in the access token only. An account
++    # without the grafana client's admin role maps to no role, and strict
++    # mode refuses its login.
++    role_attribute_path: contains(resource_access.grafana.roles[*], 'admin') && 'GrafanaAdmin'
++    role_attribute_strict: true
++    allow_assign_grafana_admin: true
++
+ persistence:
+   enabled: true
+   type: pvc
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 428e364..939a115 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -9,7 +9,8 @@ storage chart's values, test_prometheus_node_memory_alerts.py, which reads
+ the real memory-stall alert rules, test_prometheus_alertmanager_telegram.py,
+ which reads the real Alertmanager config, alert rules and manifests.yaml,
+ test_keycloak_rollout.py, which reads the keycloak chart's deployment
+-template,
++template, test_grafana_keycloak_login.py, which reads the real prd and dev
++grafana releases,
+ test_youtrack_backup.py, which imports the youtrack
+ chart's backup script, test_prometheus_youtrack_backup_alert.py, which reads
+ the real alert rule and the youtrack chart's values, and
+diff --git a/tests/test_grafana_keycloak_login.py b/tests/test_grafana_keycloak_login.py
+new file mode 100644
+index 0000000..f3666d7
+--- /dev/null
++++ b/tests/test_grafana_keycloak_login.py
+@@ -0,0 +1,81 @@
++"""The prd Grafana release offers Keycloak sign-in, gated by the grafana
++client's admin role, beside its local login; the dev-cluster copy keeps its
++local login only.
++
++Reads the real prd and dev grafana releases; writes nothing.
++"""
++
++from pathlib import Path
++
++import pytest
++import yaml
++
++CONFIGS = Path(__file__).resolve().parents[1] / "configs"
++PRD = CONFIGS / "prd" / "grafana" / "prd"
++DEV = CONFIGS / "dev" / "grafana" / "prd"
++REALM = "https://auth.ginbov.nl/realms/homelab"
++OPENBAO_PATH = "eso/prd/grafana/prd/oidc"
++# Grafana reads GF_<SECTION>_<KEY> environment variables over grafana.ini.
++ENV_PROPERTIES = {
++    "GF_AUTH_GENERIC_OAUTH_CLIENT_ID": "client_id",
++    "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": "client_secret",
++}
++
++
++@pytest.fixture(scope="module")
++def values():
++    return yaml.safe_load((PRD / "values.yaml").read_text())
++
++
++@pytest.fixture(scope="module")
++def oauth(values):
++    return values["grafana.ini"]["auth.generic_oauth"]
++
++
++@pytest.fixture(scope="module")
++def external_secret():
++    (doc,) = [d for d in yaml.safe_load_all((PRD / "manifests.yaml").read_text()) if d]
++    assert doc["kind"] == "ExternalSecret"
++    return doc
++
++
++def test_keycloak_is_a_login_button_beside_the_local_login_form(values, oauth):
++    assert oauth["enabled"] is True
++    assert oauth["name"] == "Keycloak"
++    assert oauth["auth_url"] == f"{REALM}/protocol/openid-connect/auth"
++    assert oauth["token_url"] == f"{REALM}/protocol/openid-connect/token"
++    assert oauth["api_url"] == f"{REALM}/protocol/openid-connect/userinfo"
++    assert not oauth.get("auto_login")
++    assert not values["grafana.ini"].get("auth", {}).get("disable_login_form")
++
++
++def test_only_the_grafana_clients_admin_role_signs_in_and_as_grafana_admin(oauth):
++    # Keycloak puts client roles in the access token only; Grafana 12 reads
++    # the ID token, userinfo and the access token for the role.
++    assert oauth["role_attribute_path"] == "contains(resource_access.grafana.roles[*], 'admin') && 'GrafanaAdmin'"
++    assert oauth["role_attribute_strict"] is True
++    assert oauth["allow_assign_grafana_admin"] is True
++    assert oauth["allow_sign_up"] is True
++    assert not oauth.get("skip_org_role_sync")
++
++
++def test_the_redirect_is_built_from_the_address_keycloak_registered(values):
++    assert values["grafana.ini"]["server"]["root_url"] == "http://grafana.home/"
++    server_names = values["service"]["annotations"]["nginx.webathome.org/server-name"]
++    assert "grafana.home" in [name.strip() for name in server_names.split(",")]
++
++
++def test_client_id_and_secret_come_from_openbao_as_environment_overrides(values, oauth, external_secret):
++    spec = external_secret["spec"]
++    assert external_secret["metadata"]["namespace"] == "grafana-prd"
++    assert spec["secretStoreRef"] == {"name": "openbao-prd", "kind": "ClusterSecretStore"}
++    assert values["envFromSecret"] == spec["target"]["name"]
++    assert {d["remoteRef"]["key"] for d in spec["data"]} == {OPENBAO_PATH}
++    assert {d["secretKey"]: d["remoteRef"]["property"] for d in spec["data"]} == ENV_PROPERTIES
++    assert not {"client_id", "client_secret"} & set(oauth)
++
++
++def test_the_dev_cluster_copy_keeps_its_local_login_only():
++    values = yaml.safe_load((DEV / "values.yaml").read_text())
++    assert not {"grafana.ini", "envFromSecret", "envFromSecrets"} & set(values)
++    assert not (DEV / "manifests.yaml").exists()
+
+/work/HelmCharts — P6: git diff aa875f77fa59..0b35392f44aa
+
+charts/pgadmin/files/config_local.py             |  29 ++++++++
+ charts/pgadmin/templates/pgadmin-configmap.yaml  |   6 +-
+ charts/pgadmin/templates/pgadmin-deployment.yaml |  60 +++++++++++++++
+ charts/pgadmin/values.yaml                       |   5 ++
+ configs/prd/pgadmin/prd/values.yaml              |  12 +++
+ tests/conftest.py                                |   3 +-
+ tests/test_pgadmin_keycloak_login.py             | 170 +++++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 283 insertions(+), 2 deletions(-)
+
+diff --git a/charts/pgadmin/files/config_local.py b/charts/pgadmin/files/config_local.py
+new file mode 100644
+index 0000000..68b31ab
+--- /dev/null
++++ b/charts/pgadmin/files/config_local.py
+@@ -0,0 +1,29 @@
++import os
++
++AUTHENTICATION_SOURCES = ['internal', 'oauth2']
++
++# A Keycloak session's crypt key is its access token rather than a master
++# password it would be asked for first; it can save no server password, and
++# servers.json connects through the pgpassfile. Internal logins keep their
++# login password as the key.
++MASTER_PASSWORD_REQUIRED = False
++
++OAUTH2_CONFIG = [
++    {
++        'OAUTH2_NAME': 'keycloak',
++        'OAUTH2_DISPLAY_NAME': 'Keycloak',
++        'OAUTH2_CLIENT_ID': os.environ['OIDC_CLIENT_ID'],
++        'OAUTH2_CLIENT_SECRET': os.environ['OIDC_CLIENT_SECRET'],
++        'OAUTH2_SERVER_METADATA_URL': '{{ .Values.oidc.issuerUrl }}/.well-known/openid-configuration',
++        'OAUTH2_USERINFO_ENDPOINT': '{{ .Values.oidc.issuerUrl }}/protocol/openid-connect/userinfo',
++        'OAUTH2_SCOPE': 'openid email profile',
++        'OAUTH2_CHALLENGE_METHOD': 'S256',
++        'OAUTH2_RESPONSE_TYPE': 'code',
++        # The deployment's keycloak-admin init container pre-creates the
++        # operator's account under this username.
++        'OAUTH2_USERNAME_CLAIM': 'email',
++        # pgAdmin matches top-level claims only; the pgadmin client's mapper
++        # copies the client's roles into pgadmin_roles.
++        'OAUTH2_ADDITIONAL_CLAIMS': {'pgadmin_roles': ['admin']},
++    },
++]
+diff --git a/charts/pgadmin/templates/pgadmin-configmap.yaml b/charts/pgadmin/templates/pgadmin-configmap.yaml
+index b80c7bb..d21f257 100644
+--- a/charts/pgadmin/templates/pgadmin-configmap.yaml
++++ b/charts/pgadmin/templates/pgadmin-configmap.yaml
+@@ -3,4 +3,8 @@ kind: ConfigMap
+ metadata:
+   name: pgadmin-configmap
+ data:
+-  {{- (.Files.Glob "files/**").AsConfig | nindent 2 }}
++  {{- (.Files.Glob "files/servers.json").AsConfig | nindent 2 }}
++{{- if .Values.oidc.issuerUrl }}
++  config_local.py: |
++    {{- tpl (.Files.Get "files/config_local.py") . | nindent 4 }}
++{{- end }}
+diff --git a/charts/pgadmin/templates/pgadmin-deployment.yaml b/charts/pgadmin/templates/pgadmin-deployment.yaml
+index dafacc6..b10ade9 100644
+--- a/charts/pgadmin/templates/pgadmin-deployment.yaml
++++ b/charts/pgadmin/templates/pgadmin-deployment.yaml
+@@ -53,6 +53,45 @@ spec:
+           volumeMounts:
+             - name: storage-volume
+               mountPath: /var/lib/pgadmin
++{{- if .Values.oidc.issuerUrl }}
++        # pgAdmin keys accounts on (username, auth source), so a Keycloak
++        # sign-in is an account of its own, auto-created non-admin with no
++        # servers. Pre-create it as admin with servers.json, under the local
++        # admin's username: the storage dir, and the pgpassfile in it, is keyed
++        # on the username alone. setup.py needs the configuration database,
++        # which the image's entrypoint creates only after this runs.
++        - name: keycloak-admin
++          image: dpage/pgadmin4{{ .Values.images.pgadmin4 }}
++          command:
++            - sh
++            - -c
++            - |
++              set -eu
++              cd /pgadmin4
++              if [ ! -f /var/lib/pgadmin/pgadmin4.db ]; then
++                /venv/bin/python3 setup.py setup-db
++              fi
++              /venv/bin/python3 setup.py add-external-user "$PGADMIN_EMAIL" --auth-source oauth2 --email "$PGADMIN_EMAIL" --admin
++              /venv/bin/python3 setup.py load-servers servers.json --user "$PGADMIN_EMAIL" --auth-source oauth2 --replace
++          env:
++            - name: PGADMIN_EMAIL
++              value: {{ .Values.pgadmin.defaultEmail }}
++            # setup-db creates the local admin from these.
++            - name: PGADMIN_SETUP_EMAIL
++              value: {{ .Values.pgadmin.defaultEmail }}
++            - name: PGADMIN_SETUP_PASSWORD
++              value: {{ .Values.pgadmin.defaultPassword }}
++          volumeMounts:
++            - name: storage-volume
++              mountPath: /var/lib/pgadmin
++            - name: config
++              mountPath: /pgadmin4/servers.json
++              subPath: servers.json
++            # setup-db creates the log directory, which only the entrypoint's
++            # config_distro.py points elsewhere.
++            - name: setup-log
++              mountPath: /var/log/pgadmin
++{{- end }}
+       containers:
+         - name: pgadmin-app
+           image: dpage/pgadmin4{{ .Values.images.pgadmin4 }}
+@@ -68,6 +107,11 @@ spec:
+             - name: config
+               mountPath: /pgadmin4/servers.json
+               subPath: servers.json
++{{- if .Values.oidc.issuerUrl }}
++            - name: config
++              mountPath: /pgadmin4/config_local.py
++              subPath: config_local.py
++{{- end }}
+           env:
+             - name: PGADMIN_DEFAULT_EMAIL
+               value: {{ .Values.pgadmin.defaultEmail }}
+@@ -79,6 +123,18 @@ spec:
+             # source of truth even though pgAdmin's config DB persists.
+             - name: PGADMIN_REPLACE_SERVERS_ON_STARTUP
+               value: "True"
++{{- if .Values.oidc.issuerUrl }}
++            - name: OIDC_CLIENT_ID
++              valueFrom:
++                secretKeyRef:
++                  name: {{ .Values.externalSecrets.secrets.oidc.targetName }}
++                  key: client_id
++            - name: OIDC_CLIENT_SECRET
++              valueFrom:
++                secretKeyRef:
++                  name: {{ .Values.externalSecrets.secrets.oidc.targetName }}
++                  key: client_secret
++{{- end }}
+       volumes:
+         - name: storage-volume
+           persistentVolumeClaim:
+@@ -86,3 +142,7 @@ spec:
+         - name: config
+           configMap:
+             name: pgadmin-configmap
++{{- if .Values.oidc.issuerUrl }}
++        - name: setup-log
++          emptyDir: {}
++{{- end }}
+diff --git a/charts/pgadmin/values.yaml b/charts/pgadmin/values.yaml
+index 593c5c7..b8afd88 100644
+--- a/charts/pgadmin/values.yaml
++++ b/charts/pgadmin/values.yaml
+@@ -8,6 +8,11 @@ pgadmin:
+   defaultEmail: pvginkel@gmail.com
+   defaultPassword: admin
+ 
++oidc:
++  # Keycloak sign-in beside the internal login, on when set. Needs
++  # externalSecrets.secrets.oidc with keys client_id and client_secret.
++  issuerUrl:
++
+ storage:
+   size:
+   subvolumeName:
+diff --git a/configs/prd/pgadmin/prd/values.yaml b/configs/prd/pgadmin/prd/values.yaml
+index 986c85a..1019e3a 100644
+--- a/configs/prd/pgadmin/prd/values.yaml
++++ b/configs/prd/pgadmin/prd/values.yaml
+@@ -7,8 +7,20 @@ resources:
+       requests:
+         memory: 320Mi
+ 
++oidc:
++  issuerUrl: https://auth.ginbov.nl/realms/homelab
++
+ externalSecrets:
+   secrets:
++    oidc:
++      targetName: pgadmin-oidc
++      data:
++        - secretKey: client_id
++          path: eso/prd/pgadmin/prd/oidc
++          property: client_id
++        - secretKey: client_secret
++          path: eso/prd/pgadmin/prd/oidc
++          property: client_secret
+     pgadmin-admin:
+       data:
+         - secretKey: username
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 939a115..3e960b2 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -10,7 +10,8 @@ the real memory-stall alert rules, test_prometheus_alertmanager_telegram.py,
+ which reads the real Alertmanager config, alert rules and manifests.yaml,
+ test_keycloak_rollout.py, which reads the keycloak chart's deployment
+ template, test_grafana_keycloak_login.py, which reads the real prd and dev
+-grafana releases,
++grafana releases, test_pgadmin_keycloak_login.py, which reads the pgadmin
++chart and its real prd and dev releases,
+ test_youtrack_backup.py, which imports the youtrack
+ chart's backup script, test_prometheus_youtrack_backup_alert.py, which reads
+ the real alert rule and the youtrack chart's values, and
+diff --git a/tests/test_pgadmin_keycloak_login.py b/tests/test_pgadmin_keycloak_login.py
+new file mode 100644
+index 0000000..3a4a41a
+--- /dev/null
++++ b/tests/test_pgadmin_keycloak_login.py
+@@ -0,0 +1,170 @@
++"""The pgadmin chart offers Keycloak sign-in, gated by the pgadmin client's
++admin role, beside the internal login when a release sets oidc.issuerUrl; the
++prd release does, and the dev-cluster copy keeps its internal login only.
++
++Reads the real pgadmin chart and its prd and dev releases; writes nothing.
++"""
++
++import re
++from pathlib import Path
++
++import pytest
++import yaml
++
++ROOT = Path(__file__).resolve().parents[1]
++CHART = ROOT / "charts" / "pgadmin"
++PRD = ROOT / "configs" / "prd" / "pgadmin" / "prd"
++DEV = ROOT / "configs" / "dev" / "pgadmin" / "prd"
++REALM = "https://auth.ginbov.nl/realms/homelab"
++OPENBAO_PATH = "eso/prd/pgadmin/prd/oidc"
++GATE = "{{- if .Values.oidc.issuerUrl }}"
++
++
++def render_text(template, keycloak):
++    """The template with the oidc.issuerUrl blocks kept or dropped, every other
++    block kept, and each remaining Helm expression left as HELM(<expr>)."""
++    kept, stack = [], []
++    for line in (CHART / "templates" / template).read_text().splitlines():
++        action = line.strip()
++        if action.startswith("{{") and re.match(r"\{\{-? *if ", action):
++            stack.append(keycloak if action == GATE else True)
++        elif re.fullmatch(r"\{\{-? *end *-?\}\}", action):
++            stack.pop()
++        elif all(stack):
++            kept.append(re.sub(r"\{\{-? *(.*?) *-?\}\}", r"HELM(\1)", line))
++    assert not stack
++    return "\n".join(kept)
++
++
++def pod(keycloak):
++    return yaml.safe_load(render_text("pgadmin-deployment.yaml", keycloak))["spec"]["template"]["spec"]
++
++
++def by_name(items):
++    return {item["name"]: item for item in items}
++
++
++@pytest.fixture(scope="module")
++def prd_values():
++    return yaml.safe_load((PRD / "values.yaml").read_text())
++
++
++@pytest.fixture
++def config_local(monkeypatch, prd_values):
++    monkeypatch.setenv("OIDC_CLIENT_ID", "client-id-from-env")
++    monkeypatch.setenv("OIDC_CLIENT_SECRET", "client-secret-from-env")
++    source = (CHART / "files" / "config_local.py").read_text()
++    source = source.replace("{{ .Values.oidc.issuerUrl }}", prd_values["oidc"]["issuerUrl"])
++    assert "{{" not in source
++    settings = {}
++    exec(compile(source, "config_local.py", "exec"), settings)
++    return settings
++
++
++def test_keycloak_is_a_login_button_beside_the_internal_login(config_local):
++    assert config_local["AUTHENTICATION_SOURCES"] == ["internal", "oauth2"]
++    (provider,) = config_local["OAUTH2_CONFIG"]
++    assert provider["OAUTH2_NAME"] == "keycloak"
++    assert provider["OAUTH2_DISPLAY_NAME"] == "Keycloak"
++    assert provider["OAUTH2_SERVER_METADATA_URL"] == f"{REALM}/.well-known/openid-configuration"
++    assert provider["OAUTH2_USERINFO_ENDPOINT"] == f"{REALM}/protocol/openid-connect/userinfo"
++    assert provider["OAUTH2_SCOPE"] == "openid email profile"
++
++
++def test_only_the_pgadmin_clients_admin_role_signs_in(config_local):
++    (provider,) = config_local["OAUTH2_CONFIG"]
++    # pgAdmin matches top-level claims only, against the ID token then userinfo.
++    assert provider["OAUTH2_ADDITIONAL_CLAIMS"] == {"pgadmin_roles": ["admin"]}
++
++
++def test_a_keycloak_session_needs_no_master_password(config_local):
++    assert config_local["MASTER_PASSWORD_REQUIRED"] is False
++
++
++def test_client_id_and_secret_come_from_openbao_as_environment(config_local, prd_values):
++    (provider,) = config_local["OAUTH2_CONFIG"]
++    assert provider["OAUTH2_CLIENT_ID"] == "client-id-from-env"
++    assert provider["OAUTH2_CLIENT_SECRET"] == "client-secret-from-env"
++
++    oidc = prd_values["externalSecrets"]["secrets"]["oidc"]
++    assert {d["path"] for d in oidc["data"]} == {OPENBAO_PATH}
++    assert {d["secretKey"]: d["property"] for d in oidc["data"]} == {
++        "client_id": "client_id",
++        "client_secret": "client_secret",
++    }
++    env = by_name(pod(keycloak=True)["containers"][0]["env"])
++    for variable, key in {"OIDC_CLIENT_ID": "client_id", "OIDC_CLIENT_SECRET": "client_secret"}.items():
++        assert env[variable]["valueFrom"]["secretKeyRef"] == {
++            "name": "HELM(.Values.externalSecrets.secrets.oidc.targetName)",
++            "key": key,
++        }
++
++
++def test_the_prd_release_turns_keycloak_on_at_the_address_keycloak_registered(prd_values):
++    assert prd_values["oidc"]["issuerUrl"] == REALM
++    # pgAdmin builds its redirect URI from the request's Host header.
++    server_names = [name.strip() for name in prd_values["service"]["serverName"].split(",")]
++    assert "pgadmin.home" in server_names
++
++
++def test_the_operators_keycloak_account_is_pre_created_as_admin_with_the_servers(config_local):
++    # A Keycloak sign-in lands in the pre-created account only if pgAdmin
++    # resolves the same username: the email the init container creates it as.
++    (provider,) = config_local["OAUTH2_CONFIG"]
++    assert provider["OAUTH2_USERNAME_CLAIM"] == "email"
++    spec = pod(keycloak=True)
++    init = by_name(spec["initContainers"])
++    assert list(init) == ["build-pgpass", "keycloak-admin"]
++    admin = init["keycloak-admin"]
++    assert admin["image"] == spec["containers"][0]["image"]
++    script = admin["command"][-1]
++    assert (
++        'setup.py add-external-user "$PGADMIN_EMAIL" --auth-source oauth2 --email "$PGADMIN_EMAIL" --admin'
++        in script
++    )
++    assert 'setup.py load-servers servers.json --user "$PGADMIN_EMAIL" --auth-source oauth2 --replace' in script
++    # pgAdmin keys the storage dir, and with it the pgpassfile, on the username.
++    email = by_name(admin["env"])["PGADMIN_EMAIL"]["value"]
++    assert email == by_name(init["build-pgpass"]["env"])["PGADMIN_EMAIL"]["value"]
++    assert email == "HELM(.Values.pgadmin.defaultEmail)"
++    mounts = {m["mountPath"]: m for m in admin["volumeMounts"]}
++    assert mounts["/var/lib/pgadmin"]["name"] == "storage-volume"
++    assert mounts["/pgadmin4/servers.json"] == {
++        "name": "config",
++        "mountPath": "/pgadmin4/servers.json",
++        "subPath": "servers.json",
++    }
++
++
++def test_config_local_ships_in_the_configmap_and_is_mounted_where_pgadmin_imports_it():
++    configmap = render_text("pgadmin-configmap.yaml", keycloak=True)
++    assert '  config_local.py: |\n    HELM(tpl (.Files.Get "files/config_local.py") . | nindent 4)' in configmap
++    mounts = {m["mountPath"]: m for m in pod(keycloak=True)["containers"][0]["volumeMounts"]}
++    assert mounts["/pgadmin4/config_local.py"] == {
++        "name": "config",
++        "mountPath": "/pgadmin4/config_local.py",
++        "subPath": "config_local.py",
++    }
++
++
++def test_a_release_without_keycloak_renders_its_internal_login_only():
++    spec = pod(keycloak=False)
++    assert [c["name"] for c in spec["initContainers"]] == ["build-pgpass"]
++    assert [v["name"] for v in spec["volumes"]] == ["storage-volume", "config"]
++    app = spec["containers"][0]
++    assert not {"OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"} & set(by_name(app["env"]))
++    assert "/pgadmin4/config_local.py" not in {m["mountPath"] for m in app["volumeMounts"]}
++    # config_local.py sits in files/ beside servers.json, so no glob may take it.
++    configmap = render_text("pgadmin-configmap.yaml", keycloak=False)
++    assert 'HELM((.Files.Glob "files/servers.json").AsConfig | nindent 2)' in configmap
++    assert "config_local" not in configmap
++
++    chart_values = yaml.safe_load((CHART / "values.yaml").read_text())
++    assert chart_values["oidc"]["issuerUrl"] is None
++    assert "oidc" not in chart_values["externalSecrets"]["secrets"]
++
++
++def test_the_dev_cluster_copy_keeps_its_internal_login_only():
++    values = yaml.safe_load((DEV / "values.yaml").read_text())
++    assert "oidc" not in values
++    assert "oidc" not in values["externalSecrets"]["secrets"]

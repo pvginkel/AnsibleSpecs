@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "The pgadmin chart change meets P6's outcome: it matches the pgAdmin 9.18 source, the prd render is correct and the dev release renders with no OIDC. One blocking gap: the new test does not pin OAUTH2_USERNAME_CLAIM, the key that joins a Keycloak sign-in to the pre-created admin account, and a mutation to that key passes all tests.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "coverage-gap",
+   "summary": "No test pins OAUTH2_USERNAME_CLAIM, the join between the Keycloak login and the pre-created admin account; changing it to preferred_username passes all 9 tests and breaks V10"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "keycloak-admin's fresh-storage bootstrap (setup-db step, setup-log mount) is untested; removing either passes all tests"}
+ ]}

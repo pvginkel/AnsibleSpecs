@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "Production Grafana gets a Keycloak generic-OAuth button beside the local form. The gate is on the access token's resource_access.grafana.roles admin role, which maps to Grafana Admin, and strict mode refuses everyone else; checked against Grafana 12.3.1's source and a rendered template. Client id and secret come only through the grafana-oidc ExternalSecret, and the dev release is untouched. One advisory finding.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "root_url pins grafana.home, so a Keycloak sign-in started at the still-served http://grafana/ short name fails once with 'Missing saved oauth state' (host-only state cookie)"}]}

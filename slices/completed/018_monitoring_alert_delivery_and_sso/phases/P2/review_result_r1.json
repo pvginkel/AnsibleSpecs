@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "Alertmanager's Telegram delivery, severity routing, wedge inhibition and ESO file-based secrets meet P2's outcome; the rendered config passes amtool 0.34.1 and the deploy path cannot deadlock on the post-helm ExternalSecret. One advisory: an inhibited stall alert's resolve is never delivered.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor",
+               "impact": "advisory",
+               "category": "functional",
+               "anchor": "none",
+               "summary": "A stall alert delivered before its node's wedge warning fires never gets a [RESOLVED] notice once inhibited"}]}

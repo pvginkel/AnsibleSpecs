@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round 1's blocking F1 is resolved: the pre-created-account test now asserts OAUTH2_USERNAME_CLAIM == 'email', and mutations to preferred_username, sub or a deleted line now fail it. The one-file test fix adds no new problems.",
+ "details": "code_review_r2.md",
+ "findings": []}

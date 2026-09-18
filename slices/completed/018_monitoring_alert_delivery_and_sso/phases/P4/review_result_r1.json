@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Every keycloak release pins 26.7.3 via the chart; the Deployment recreates instead of surging, and 3d3e883 moves only keycloak-dev first. Live managed fields confirm helm (Apply) owns the old rollingUpdate fields, so the SSA hazard does not bite; the new test catches a reverted strategy. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

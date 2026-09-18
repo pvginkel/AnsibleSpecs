@@ -1,0 +1,18 @@
+/work/DockerImages — P3: git diff d58ad42d584a..33412e210a35
+
+keycloak/build-matrix.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/keycloak/build-matrix.json b/keycloak/build-matrix.json
+index 9da5268..c78dfb2 100644
+--- a/keycloak/build-matrix.json
++++ b/keycloak/build-matrix.json
+@@ -2,7 +2,7 @@
+   {
+     "tag": "$KEYCLOAK_VERSION-postgres-health-ispn",
+     "args": {
+-      "KEYCLOAK_VERSION": "26.5.1"
++      "KEYCLOAK_VERSION": "26.7.3"
+     }
+   }
+ ]

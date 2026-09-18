@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The one-line bump to KEYCLOAK_VERSION 26.7.3 resolves to tag 26.7.3-postgres-health-ispn, triggers the keycloak rebuild and leaves the image's build options unchanged. Keycloak's upgrading guide for 26.5.2-26.7.3 changes none of those options. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

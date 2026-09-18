@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "DockerImages 33412e2 on phase/018-P3 moves keycloak/build-matrix.json to KEYCLOAK_VERSION 26.7.3 (tag 26.7.3-postgres-health-ispn, Dockerfile unchanged). The dependency collector resolves the tag and a kaniko --no-push build passes. Done-record appended to the plan and committed in AnsibleSpecs.", "refuted": []}

@@ -1,0 +1,2 @@
+ansible: cexec iac poetry run yamllint -c ../.yamllint .    [  OK  ]
+ansible: cexec iac poetry run ansible-lint    [  OK  ]

@@ -1,7 +1,8 @@
 # Close-out — slice 018 monitoring_alert_delivery_and_sso
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-18 12:45 → 15:06 · 6 phases · 0 bail-outs · 1 test round · doc phase done · $88.63
+(planner 37 %, research 4 %, rework 1 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -173,6 +174,15 @@ pgAdmin builds its OAuth redirect URI from the request's Host header (Flask url_
 **Provenance:** read — code-writer, P6, r1: pgAdmin 9.18 web/pgadmin/authenticate/oauth2.py authenticate() url_for(OAUTH2_AUTHORIZE, _external=True); witness pod redirect_uri followed the Host header
 **Disposition:**
 
+### B8 — Ansible: update-k8s.yml comments still size drain timeouts by keycloak-db's 600s preStop, and that workload no longer exists · nit
+
+ansible/playbooks/update-k8s.yml ~164 ("The slowest legitimate shutdown here is keycloak-db's 600s preStop") and ~419 ("keycloak-db's 600s preStop + tGPS") justify the pre-drain sweep's grace headroom and the drain timeout by a Deployment that was retired before this slice (Keycloak's database is the CNPG postgres-pas cluster). This predates slice 018. The doc phase found it while reconciling the keycloak comments in the same file and left it: fixing it means re-deriving why those values were chosen, and that is not a doc edit. Only the comments are stale; the timeout values stay as they are.
+
+**Consequence:** Anyone retuning the drain timeouts works from a slow-shutdown workload that is gone. Nothing changes at run time.
+
+**Provenance:** read — doc-writer, doc phase, r1: ansible/playbooks/update-k8s.yml, docs/runbooks/k8s-rebuild.md:36
+**Disposition:**
+
 ### ~~B3 — Ansible docs: k8s-rebuild.md and pre-drain-handoff.yml still name keycloak-db as a pre-drain opt-in that no longer exists · minor~~ — resolved — Ansible 568419f dropped the retired keycloak-db opt-in: docs/runbooks/k8s-rebuild.md:36 and ansible/playbooks/tasks/pre-drain-handoff.yml:22 now name keycloak only (checked 2026-09-14); struck by plan-writer r3
 
 <details><summary>struck — body kept for the record</summary>
@@ -198,15 +208,6 @@ configs/prd/prometheus/prd/values.yaml:127-130 and tests/test_prometheus_node_me
 **Disposition:**
 
 </details>
-
-### B8 — Ansible: update-k8s.yml comments still size drain timeouts by keycloak-db's 600s preStop, and that workload no longer exists · nit
-
-ansible/playbooks/update-k8s.yml ~164 ("The slowest legitimate shutdown here is keycloak-db's 600s preStop") and ~419 ("keycloak-db's 600s preStop + tGPS") justify the pre-drain sweep's grace headroom and the drain timeout by a Deployment that was retired before this slice (Keycloak's database is the CNPG postgres-pas cluster). This predates slice 018. The doc phase found it while reconciling the keycloak comments in the same file and left it: fixing it means re-deriving why those values were chosen, and that is not a doc edit. Only the comments are stale; the timeout values stay as they are.
-
-**Consequence:** Anyone retuning the drain timeouts works from a slow-shutdown workload that is gone. Nothing changes at run time.
-
-**Provenance:** read — doc-writer, doc phase, r1: ansible/playbooks/update-k8s.yml, docs/runbooks/k8s-rebuild.md:36
-**Disposition:**
 
 ## Open questions and rulings
 

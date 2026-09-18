@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The corroborated stall alerts and the self-holding NodeMemoryStallCounterWedged warning match ruling D2 and the P1 thresholds. They pass promtool check and the executor's scenarios on the committed rules, the new test catches mutations, and they evaluate cleanly on live production, including the node-exporter overlap window. One advisory finding.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "The wedge rule comment and test say the look-back must cover restart downtime plus the 10m for-grace-period; Prometheus re-fires an alert that was already firing on the first evaluation after restore, so the stated reason is wrong (the 30m value still meets the real bound)"}]}
