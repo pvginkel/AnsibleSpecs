@@ -238,7 +238,7 @@ Record. Settled beyond the plan's text:
   failure cleans both, and a prune over seeded backups plus
   metadata plus an orphan. No existing test was removed. `handler_test.go` was gofmt-realigned in passing.
 
-### P2 — backup-server publishes each watched stream's freshness from the metadata it reads back
+### P2 — backup-server publishes each watched stream's freshness from the metadata it reads back ✅ DONE 2026-09-18
 
 Target: ../DockerImages
 
