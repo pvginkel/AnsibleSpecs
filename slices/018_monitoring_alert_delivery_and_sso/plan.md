@@ -414,7 +414,7 @@ hold, or a 90m look-back, each fails a scenario. Replayed live over production's
 condition holds only on srvk8s2 (09-11 13:51 → 09-13 04:16) and srvk8s1 (09-16 06:36 → now); every
 expression evaluates cleanly across the 09-13 03:58–04:01 node-exporter 4.56.3/4.57.0 overlap.
 
-### P2 — Alertmanager delivers to Telegram
+### P2 — Alertmanager delivers to Telegram ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
