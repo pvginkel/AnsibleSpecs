@@ -250,6 +250,18 @@ Deploys:
   unreachable from this pod (no route to `10.1.3.3:16443`); how `configs/dev/` releases deploy and are
   verified is for the planner to establish from the repo's docs.
 
+#### Rulings (2026-09-18, pre-run)
+
+- Checklist step 6 waived. Operator: "Don't worry about the backup. The window of data loss is
+  minimal." No pre-upgrade Keycloak database backup is taken or set aside, and the run does not wait
+  on one; the push order is otherwise unchanged. Steps 1–5 verified done on 2026-09-18 (OpenBao leaves
+  present; Keycloak clients, mapper and 26.6–26.7 compatibility on the `homelab` realm audited
+  read-only, via IoTSupport's `eso/prd/iot/prd/keycloak-admin` service-account client — the chart's
+  hardcoded `admin`/`admin` bootstrap credential no longer authenticates), except role assignment
+  (step 3, both clients — 403 Forbidden on role-member and group queries) and `homelab-dev`'s step 5
+  checks (structurally unreachable — that token, scoped to `homelab` on the `keycloak-prd` server, is
+  rejected 401 by the separate `keycloak-dev` server), which stay unverified.
+
 ## Task shape
 
 cross-cutting — slice.md's two requirements and ruling U1 land in two sibling repos (DockerImages'
