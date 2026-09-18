@@ -530,6 +530,24 @@ Target: ../AnsibleSpecs
   OpenBao and `postgres-pas` entries (`:595-596`) name their freshness alert, `BackupOverdue`, the same
   way, since D1 opts both in. Its triage runbook is Ansible `docs/runbooks/backup-freshness.md` (P6).
 
+**Done (P7).** AnsibleSpecs `353f23a` on `phase/023-P7`, `decisions.md` only. In §"OpenBao backup / DR" the
+**Retention** bullet names backup-server's credential store (`credentials.json`, set per scope through
+`homelab_backup_credential`) in place of `tokens.yaml`. A new **Freshness** bullet replaces "fire-and-forget":
+it covers the 52 h declaration, the metadata file, streams, the credential-independent watched set, both
+alerts and the runbook. In the §Backup list, the OpenBao and `postgres-pas` entries name `BackupOverdue` and
+the runbook. `git diff --check` is clean; the repo has no other gate.
+
+Later phases:
+- Doc phase: the §Backup YouTrack entry still says `YouTrackBackupStale` holds "until slice 023 opts the
+  stream in". It is untouched pending close-out Q1. The README catalogue still lists 023 under Pending
+  in `slices/backlog/`.
+
+Record:
+- The Freshness bullet says the alerts are raised "in Alertmanager", not delivered. Receivers and routes
+  are slice 018's.
+- The `postgres-pas` entry records D1's cost: a database dropped on purpose alerts until pruning removes
+  its last dump or its `.metadata.json` files are deleted. No night count is given; the runbook carries it.
+
 ## Not in scope
 
 - Alertmanager receivers, routes and delivery (slice 018).
