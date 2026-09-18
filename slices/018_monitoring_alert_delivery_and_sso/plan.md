@@ -469,7 +469,7 @@ wedge warning while srvk8s1's `NodeKubeReservedMissing` and srvk8s2's stall aler
 sendMessage per group — critical without `disable_notification`, warnings with it, no `parse_mode`,
 and a `[RESOLVED]` notice on resolve. Six config mutations each fail the new test.
 
-### P3 — Keycloak 26.7.3 image
+### P3 — Keycloak 26.7.3 image ✅ DONE 2026-09-18
 
 Target: ../DockerImages
 
