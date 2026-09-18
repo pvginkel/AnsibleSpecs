@@ -67,6 +67,34 @@ Target: ansible
 
 `ansible-lint` over this component runs with warnings fatal and exits 0, so the push job P2 wires up enforces a green baseline. Today the root `.ansible-lint` keeps `strict: false` behind a "once roles stabilize" comment (`.ansible-lint:20-21`); flag and comment go together. The one warning strict turns fatal — `jinja[spacing]` on the `_microk8s_node_state` expression in `roles/microk8s/tasks/elect-primary.yml` (line 44) — is fixed in the task, not skip-listed or `noqa`'d. That expression classifies each node for the control-plane election and leans on whitespace-control markers inside a folded scalar, so the value it renders must not change.
 
+**Done (P1).** `.ansible-lint` sets `strict: true`, and its "once roles stabilize" comment is
+gone. The `_microk8s_node_state` expression in `ansible/roles/microk8s/tasks/elect-primary.yml`
+is rewritten so it passes `jinja[spacing]`, with no skip-list or `noqa`. Gate:
+`kc project test --project ansible` is green, and `ansible-lint` reports 0 failures and
+0 warnings across 187 files under profile production. Ansible `797b530` on `phase/020-P1`.
+
+Later phases:
+- Strictness lives in the root `.ansible-lint`, which ansible-lint finds through the git root.
+  A plain `ansible-lint` run from `ansible/` is therefore strict, and P2 needs no `--strict`
+  flag. The mandatory-var placeholders at `.ansible-lint:10-18` are unchanged.
+
+Record:
+- Layout: the rule's suggested rewrite puts the whole folded scalar on one line. Instead, each
+  branch value now opens its own line and is followed directly by the tag that closes its
+  branch (`worker{%- else -%}`, `in-cluster{%- elif running -%}`). The redundant parentheses
+  around the two `set` right-hand sides are dropped. `|` binds tighter than `=` and `or` binds
+  loosest, so the values are the same. Lint accepts this layout.
+- Render equivalence: the old (HEAD) and new expressions were taken from the task files and
+  rendered side by side under ansible-core 2.20.5 across 14 cases, and each case asserted
+  that the two were equal and in {worker, down, in-cluster, running-solo}. The cases:
+  - the worker flag set to true, "yes" and "no";
+  - a status with stdout missing or empty, a plain message, and a YAML list;
+  - running with 3, 1, null and absent HA nodes;
+  - stopped with 3 nodes;
+  - no `microk8s` key.
+  This was a throwaway playbook and was not committed, because the repo has no runnable test
+  suite (`.kubecoder/project.yaml`'s `test` mirrors `lint`).
+
 ### P2 — The Ansible push job lints, syntax-checks and validates before it plans
 
 Target: root
