@@ -523,6 +523,34 @@ the chart pinning that tag (`charts/keycloak/values.yaml:22`).
   `keycloak-dev.home` before `auth.ginbov.nl`.
 - Bootstrap admin, hostname and proxy settings stay as they are (Triage #1003).
 
+**Done (P4).** HelmCharts on `phase/018-P4`, two commits: `3d3e883` "keycloak: Recreate rollouts;
+keycloak-dev runs 26.7.3 first" — `charts/keycloak/templates/keycloak-deployment.yaml` strategy
+`type: Recreate` (no `rollingUpdate`), `configs/prd/keycloak/dev/values.yaml` sets
+`images.keycloak: :26.7.3-postgres-health-ispn`, new `tests/test_keycloak_rollout.py`; then
+`01532e9` "keycloak: every release runs 26.7.3" — `charts/keycloak/values.yaml:22` pins 26.7.3 and
+the dev override is gone. `kc project test` green.
+
+Later phases:
+- HelmCharts' first push ends at `3d3e883` (by subject, if rebased); `01532e9` follows once
+  `keycloak-dev.home` is healthy on 26.7.3.
+- Each of those pushes also rolls `keycloak-prd` (the pod template's deploy timestamp changes on every
+  render) — the first on 26.5.1 — and under Recreate each roll is ~30 s without auth.ginbov.nl sign-in.
+- V13 live: `spec.strategy` is `{"type":"Recreate"}` on both prd Deployments; the Deployment's events
+  show the old ReplicaSet scaled to 0 before the new one is scaled up.
+- Doc phase: Ansible `docs/runbooks/k8s-rebuild.md:34` and `docs/runbooks/k8s-upgrade.md:211-212`
+  still describe keycloak as `RollingUpdate maxSurge:1/maxUnavailable:0` with a two-pod window (the
+  latter also still names `keycloak-db`); it is now `Recreate`, a sign-in gap of ~30 s and no overlap.
+
+Record:
+- Recreate, not gitblit's zero-surge shape: a zero-surge RollingUpdate creates the new pod once the
+  old ReplicaSet is scaled to 0, while the old pod may still be terminating; Recreate waits for it.
+- The CLAUDE.md server-side-apply hazard does not bite here: field manager `helm` (Apply) owns the
+  `rollingUpdate.maxSurge`/`maxUnavailable` the chart used to set, so the apply removes them.
+  `kubectl apply --server-side --dry-run=server --field-manager=helm` of the rendered Deployment
+  passed against live `keycloak-dev` and `keycloak-prd`, yielding `{"type":"Recreate"}`. The
+  dev-cluster release was not dry-run (srvk8sdev off).
+- The test pins the strategy only, not the version; it reads the template with Helm actions stripped.
+
 ### P5 — Grafana signs in through Keycloak, gated by a client role
 
 Target: ../HelmCharts
