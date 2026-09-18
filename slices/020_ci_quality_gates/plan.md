@@ -265,7 +265,7 @@ Record:
 - `values.yaml` defines `images.debian` and `storage.mydownloads.downloadHostPath`, but no
   template reads either, so the schema admits both (close-out S9).
 
-### P6 — DockerImages scans every image it pushes and alerts on fixable criticals
+### P6 — DockerImages scans every image it pushes and alerts on fixable criticals ✅ DONE 2026-09-18
 
 Target: ../DockerImages
 
