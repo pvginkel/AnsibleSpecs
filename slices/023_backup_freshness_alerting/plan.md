@@ -185,7 +185,7 @@ sets a new pattern: the first Prometheus metrics endpoint in a DockerImages Go s
   3. Ansible and AnsibleSpecs deploy nothing on push. P6 reaches the OpenBao nodes only through the
      operator's `openbao` playbook run, check-mode first, any time after step 1.
 
-### P1 — backup-server stores each upload's declared validity next to it and prunes backups only
+### P1 — backup-server stores each upload's declared validity next to it and prunes backups only ✅ DONE 2026-09-18
 
 Target: ../DockerImages
 
