@@ -91,3 +91,12 @@ The deploy applies a release's configs/prd/<chart>/prd/manifests.yaml with kubec
 
 **Provenance:** read, plan-writer, planning, r3, plan.md P4
 **Disposition:**
+
+### S4 — HomelabTerraformProvider Jenkinsfile: the go-mod build cache holds only build deps, so every build re-downloads the test-only modules · minor
+
+The build stage saves $HOME/go/pkg/mod to the build cache (key: go.sum) right after 'go build'. 'go build' fetches only the modules the binary imports, and P3's new 'Vet and unit tests' stage runs afterwards. So the cache never holds test-only modules such as terraform-plugin-testing, and each build downloads them again. Witnessed with an empty GOMODCACHE: after 'go build .' there is no terraform-plugin-testing; after 'go test ./...' terraform-plugin-testing@v1.10.0 is present. Fix options: run 'go mod download' before the cache-put, or move the cache-put after the tests.
+
+**Consequence:** Each provider build spends extra time and network re-fetching the test modules; the result is still correct.
+
+**Provenance:** witnessed | code-writer, P3, r1, probe in the dev go sidecar
+**Disposition:**

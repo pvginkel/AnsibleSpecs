@@ -141,6 +141,32 @@ Target: ../HomelabTerraformProvider
 
 Every build runs `go vet ./...` and the unit tests (`go test ./...`, no `TF_ACC`) before the publish stage (`Jenkinsfile:70-100`); a failure fails the build and appends nothing to the provider registry. Today the build goes straight from `go build` to publish (`Jenkinsfile:18-54`). The acceptance tests stay a manual run: they skip unless `TF_ACC` is set (`.kubecoder/project.yaml`, the `test:` comment) and the pipeline never sets it. Vet and test are cgo against librados/librbd and need the headers the build stage installs into the `go` container (`Jenkinsfile:35`).
 
+**Done (P3).** The provider `Jenkinsfile` gains a `Vet and unit tests` stage between
+`Build terraform-provider-homelab` and `Publish to provider registry`. It runs `go vet ./...`,
+then `go test ./...`, in the `go` container. Each is a plain `sh` step, so a failure fails the
+build before the publish stage runs. Nothing sets `TF_ACC`. The `.kubecoder/project.yaml`
+`lint:` comment claimed that CI runs no linter, so it now says CI runs the same vet.
+HomelabTerraformProvider `ce5b2bf` on `phase/020-P3`.
+
+Later phases:
+- None of P4–P6 changes. For V18's proof, a green provider build shows four stages:
+  `Cloning repo`, `Build terraform-provider-homelab`, `Vet and unit tests` and
+  `Publish to provider registry`. Its log shows the unit tests passing and the `TestAcc*`
+  tests skipping.
+
+Record:
+- Stage placement: the gate is a separate stage after the build and does not change the build
+  stage. It uses the apt-installed headers and the restored module cache that the build stage
+  leaves in `go`. `archiveArtifacts` still runs in the build stage, so a red gate can leave a
+  Jenkins artifact behind, but nothing reaches the registry.
+- Memory: the pipeline's `go` containerTemplate sets no resources, and prd has no LimitRange. The
+  sidecar's old 1Gi OOM (see `96aadde`) therefore does not apply, and `go test` runs at default
+  parallelism, with no `-p 1`.
+- Gate: `kc project test` and `kc project lint` (vet) are green.
+- Close-out S4: the go-mod build cache holds only build dependencies, so every build downloads
+  the test-only modules again. This was witnessed with an empty GOMODCACHE. S2, the stale
+  comment on the publish stage, is left alone.
+
 ### P4 — HelmCharts gates every release it is about to deploy, before it deploys any
 
 Target: ../HelmCharts
