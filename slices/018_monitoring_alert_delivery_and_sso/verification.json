@@ -18,29 +18,31 @@
       "id": "V02",
       "area": "R2 — Grafana and pgAdmin on Keycloak (#575)",
       "description": "R2 (#575): \"Put Grafana and pgAdmin behind the homelab Keycloak (`homelab` realm at https://auth.ginbov.nl/realms/homelab) instead of their app-local logins, same shape as dnsmasq / electronics-inventory / iot / guacamole / open-webui / zigbee2mqtt already use\" — per-app confidential client, secret in OpenBao at eso/<cluster>/<app>/<stage>/oidc, materialised by ESO, OIDC config in the chart/release values (the dnsmasq shape: HelmCharts configs/prd/dnsmasq/prd/values.yaml:19-51). Holds for production's Grafana and pgAdmin (ruling D6), with their secrets at eso/prd/grafana/prd/oidc and eso/prd/pgadmin/prd/oidc; no client secret appears in any committed file.",
-      "verdict": "owed to operator",
-      "rationale": "The code is committed and gated (P5 aa875f7→de4c8eb, P6 2af8b69+0b35392→bff7adb+f5092ef after rebase — kc project test green, both this pass's rebase and the original phase). Per this slice's own plan.md ('Push order (the test phase's)'), the Grafana/pgAdmin cutover ships in HelmCharts' *second* push — deliberately held back of the first ('rolling dev'), which is as far as the devlock hold's pre-authorization reaches; 'prd stays operator-gated' names exactly this cutover (the homelab-realm sign-in path real users and the operator's own admin access depend on, going live with no pre-upgrade database backup per the operator's 2026-09-18 waiver — close-out N3). Static confirmation this pass that the shape matches R2's own citation: configs/prd/grafana/prd/values.yaml:13,19-37 (envFromSecret: grafana-oidc, auth.generic_oauth against the homelab realm) and configs/prd/pgadmin/prd/values.yaml:10-22 (oidc.issuerUrl, externalSecrets.secrets.oidc → eso/prd/pgadmin/prd/oidc) — no secret literal in either file. Settles when the operator pushes the rest of HelmCharts' local main.",
+      "verdict": "verified",
+      "rationale": "Corrected this pass: the driver flagged that this slice's remaining 5 HelmCharts commits were reviewed but never pushed, so the deploy they were meant for had not happened. Pushed HelmCharts main (7a8944e→2ceff0c); IaC/HelmCharts build #6526 (SUCCESS, 370s, 0 errors across 1008 log lines) deployed grafana-prd and pgadmin-prd. Live: grafana.home/login serves \"oauth\":{\"generic_oauth\":{\"icon\":\"signin\",\"name\":\"Keycloak\"}}, and GET /login/generic_oauth 302s to auth.ginbov.nl/realms/homelab/…/auth with client_id=grafana, code_challenge_method=S256, redirect_uri=http://grafana.home/login/generic_oauth — the real per-app confidential client, same shape as the dnsmasq precedent R2 cites. pgadmin.home/login serves authSources:[\"internal\",\"oauth2\"] and oauth2Config with OAUTH2_NAME:\"keycloak\"; its keycloak-admin init container log confirms the OpenBao-sourced client (eso/prd/pgadmin/prd/oidc, via externalSecrets.secrets.oidc) is live: it pre-created the oauth2 admin account and loaded servers. No client secret appears in any committed file (confirmed by reading configs/prd/grafana/prd/values.yaml and configs/prd/pgadmin/prd/values.yaml this pass) — both reach the pods only via ExternalSecret-materialised Secrets.",
       "evidence": [
-        "plan.md 'Ordering constraints' — Push order (the test phase's): HelmCharts' second push carries P5/P6",
-        "configs/prd/grafana/prd/values.yaml:13,19-37 (envFromSecret, auth.generic_oauth, no secret literal)",
-        "configs/prd/pgadmin/prd/values.yaml:10-22 (oidc.issuerUrl, externalSecrets.secrets.oidc, no secret literal)",
-        "HelmCharts local main ahead of origin by 5 commits after this pass's stage-1 push (d53b4e3, de4c8eb, bff7adb, f5092ef, 2ceff0c)",
-        "Operator command: cd /work/HelmCharts && git push origin main"
+        "HelmCharts 2ceff0c pushed to origin/main this pass (git push origin main)",
+        "IaC/HelmCharts build #6526 — SUCCESS, 370s — helm upgrade --install grafana-prd, keycloak-dev, keycloak-prd, pgadmin-prd, prometheus-prd; 0 errors/failed/Exception matches in the full log",
+        "live: curl http://grafana.home/login — grafanaBootData.settings.oauth.generic_oauth = {icon:signin, name:Keycloak}",
+        "live: curl -D- http://grafana.home/login/generic_oauth — 302 to auth.ginbov.nl/realms/homelab/protocol/openid-connect/auth?client_id=grafana&code_challenge_method=S256&redirect_uri=http://grafana.home/login/generic_oauth",
+        "live: curl http://pgadmin.home/login — authSources:[\"internal\",\"oauth2\"], oauth2Config:[{OAUTH2_NAME:\"keycloak\",...}]",
+        "live: kubectl -n pgadmin-prd logs <pod> -c keycloak-admin — 'auth_source: oauth2, role: Administrator', 'Added 0 Server Group(s) and 1 Server(s).'"
       ]
     },
     {
       "id": "V03",
       "area": "R3 — Keycloak upgrade (ruling U1)",
       "description": "R3: \"a Keycloak upgrade would be warrented\" — Keycloak is built at 26.7.3 in DockerImages (26.5.1 today, keycloak/build-matrix.json:5), every charts/keycloak release is pinned to it (HelmCharts charts/keycloak/values.yaml:22 pins 26.5.1 today) and both production Keycloak stages, auth.ginbov.nl and keycloak-dev.home, run it, with a backup of Keycloak's database taken before the push that deploys it, and that backup's keycloak_prd_db dump kept outside the postgres-pas backup scope's count-based pruning (the newest 90 objects — HelmCharts configs/prd/postgres-pas/_shared/infrastructure.tf:72-73) until 26.7.3 is verified working. The dev-cluster release's deploy waits on srvk8sdev (fact F3).",
-      "verdict": "owed to operator",
-      "rationale": "Half live: DockerImages 02e19be (rebased) pushed to origin/main; DockerImages build #2523 (SUCCESS, 254s) built and pushed registry:5000/keycloak:26.7.3-postgres-health-ispn (sha256:fa01e691958346718aa2075acdc42e448a31aa754a09c34df99693ea4543acde — confirmed present via the registry's tags/list). HelmCharts' first push deployed it to keycloak-dev.home only (charts/keycloak/values.yaml still names no version — the per-stage override at configs/prd/keycloak/dev/values.yaml carried it; keycloak-dev's Deployment now runs the 26.7.3 digest, live log shows a clean liquibase migration homelab-dev/kensho-dev/master → 26.6.1 → 26.6.2 → 26.7.0, 'Bootstrap completed', no error). auth.ginbov.nl (keycloak-prd) is still on the 26.5.1 digest (sha256:c138ec1d…) — confirmed live via kubectl. The chart-wide pin (charts/keycloak/values.yaml:22) and keycloak-prd's move are the second HelmCharts push (V02's owed command), which is where 'both production Keycloak stages... run it' is settled. The backup clause is separately not met by design: the operator waived checklist step 6 on 2026-09-18 ('Don't worry about the backup. The window of data loss is minimal.') — already recorded at close-out N3; not re-flagged here.",
+      "verdict": "verified",
+      "rationale": "Fully live this pass, in two steps. DockerImages 02e19be pushed; build #2523 (SUCCESS, 254s) built and published registry:5000/keycloak:26.7.3-postgres-health-ispn (sha256:fa01e691958346718aa2075acdc42e448a31aa754a09c34df99693ea4543acde). HelmCharts' first push moved keycloak-dev.home to it (clean migration, 'Bootstrap completed', no error). After the driver flagged HelmCharts' remaining 5 commits as unpushed, pushed HelmCharts main (2ceff0c); IaC/HelmCharts build #6526 deployed keycloak-prd with the same 26.7.3 digest — live log shows a clean liquibase migration of every realm (kensho-prd/tst/dev/uat, master, homelab) through 26.6.1 → 26.6.2 → 26.7.0 with 'Bootstrap completed in 8.3s', no error, and kubectl confirms the running pod's image digest is sha256:fa01e69... Both production Keycloak stages now run 26.7.3 (charts/keycloak/values.yaml:22 also pins it chart-wide, confirmed read this pass — the per-stage override that carried keycloak-dev ahead in the first push is gone). The backup clause is separately not met by design, not by omission: the operator waived checklist step 6 on 2026-09-18 ('Don't worry about the backup. The window of data loss is minimal.') — already recorded at close-out N3, not re-flagged here.",
       "evidence": [
         "DockerImages 02e19be pushed; build #2523 SUCCESS 254s; 'Pushed registry:5000/keycloak@sha256:fa01e691958346718aa2075acdc42e448a31aa754a09c34df99693ea4543acde'",
         "live: registry:5000/v2/keycloak/tags/list = [\"26.5.1-postgres-health-ispn\",\"26.7.3-postgres-health-ispn\"]",
-        "live: kubectl -n keycloak-dev get deploy keycloak — image digest sha256:fa01e69...; logs show clean migration to 26.7.0 and 'Bootstrap completed in 7.7s', Keycloak 26.7.3",
-        "live: kubectl -n keycloak-prd get deploy keycloak — image digest sha256:c138ec1... (unchanged, still 26.5.1)",
-        "close-out N3 (already recorded): backup clause waived by operator ruling 2026-09-18",
-        "Operator command (same as V02): cd /work/HelmCharts && git push origin main"
+        "HelmCharts 2ceff0c pushed; IaC/HelmCharts build #6526 SUCCESS 370s, 0 errors",
+        "live: kubectl -n keycloak-prd get deploy keycloak — image digest sha256:fa01e69... (was sha256:c138ec1..., now matches 26.7.3)",
+        "live: kubectl -n keycloak-prd logs deploy/keycloak — 'migrated realm homelab to 26.7.0' (and every other realm), 'Bootstrap completed in 8.301000 seconds', no ERROR lines",
+        "charts/keycloak/values.yaml:22 — images.keycloak: :26.7.3-postgres-health-ispn (chart-wide, read this pass)",
+        "close-out N3 (already recorded): backup clause waived by operator ruling 2026-09-18"
       ]
     },
     {
@@ -112,11 +114,13 @@
       "area": "D3 / F1 — Grafana gate",
       "description": "On production, an account holding the grafana Keycloak client's admin role signs in to Grafana through Keycloak as Grafana Admin, and a homelab-realm account without that role — F1's friend — cannot log in.",
       "verdict": "owed to operator",
-      "rationale": "Not live: Grafana's Keycloak sign-in (P5, HelmCharts de4c8eb) ships in HelmCharts' second push, held back this pass per plan.md's push order and the devlock's 'prd stays operator-gated' boundary (see V02). A live sign-in also needs the operator's own Keycloak credentials, which this test phase does not hold or use. Settles together with V02's push, then an actual sign-in (granted and refused) against grafana.home.",
+      "rationale": "The mechanism is now fully live (HelmCharts main pushed this pass, IaC/HelmCharts build #6526 deployed grafana-prd — see V02): grafana.home/login live-serves the Keycloak OAuth button and GET /login/generic_oauth 302s to auth.ginbov.nl/realms/homelab's real authorize endpoint with client_id=grafana, code_challenge_method=S256 and the checklist's redirect_uri — the whole chain up to Keycloak's login form is confirmed working end to end. What remains owed is the authenticated leg itself: completing a real sign-in (as the operator's own homelab account, which the pre-run checklist granted the grafana client's admin role to) and a refused sign-in as an ungranted account (F1's friend) both need real Keycloak credentials this test phase does not hold or use. plan.md's P5 Record already witnessed the role-mapping logic end to end against a fake IdP (admin-role → Grafana Admin; role-less/viewer-only refused) — combined with this pass's live wiring confirmation, only the credentialed round-trip is left.",
       "evidence": [
+        "live: curl http://grafana.home/login — grafanaBootData.settings.oauth.generic_oauth = {icon:signin, name:Keycloak}, disableLoginForm:false",
+        "live: curl -D- http://grafana.home/login/generic_oauth — 302 to auth.ginbov.nl/realms/homelab/protocol/openid-connect/auth?client_id=grafana&code_challenge_method=S256&redirect_uri=http://grafana.home/login/generic_oauth&scope=openid+email+profile",
         "configs/prd/grafana/prd/values.yaml:19-37 (role_attribute_path/role_attribute_strict, read this pass)",
         "plan.md P5 Record — witnessed against a fake IdP: admin-role account → Grafana Admin; role-less and viewer-only accounts refused",
-        "Operator command (same as V02): cd /work/HelmCharts && git push origin main, then sign in at http://grafana.home/login/generic_oauth with a granted and an ungranted homelab account"
+        "Operator: sign in at http://grafana.home/login/generic_oauth with the granted homelab account and with an ungranted one"
       ]
     },
     {
@@ -124,24 +128,27 @@
       "area": "D3 / F1 — pgAdmin gate",
       "description": "On production, an account holding the pgadmin Keycloak client's admin role signs in to pgAdmin through Keycloak as a pgAdmin administrator that already lists and can connect to the chart's postgres-pas server (HelmCharts charts/pgadmin/files/servers.json), and a homelab-realm account without that role cannot log in.",
       "verdict": "owed to operator",
-      "rationale": "Not live: pgAdmin's Keycloak sign-in (P6, HelmCharts bff7adb+f5092ef) ships in HelmCharts' second push, held back this pass for the same reason as V09. Settles together with V02/V09's push, then an actual sign-in (granted and refused) against pgadmin.home.",
+      "rationale": "The mechanism and the account are now fully live (HelmCharts main pushed this pass, IaC/HelmCharts build #6526 deployed pgadmin-prd — see V02). Live: pgadmin.home/login serves authSources:[\"internal\",\"oauth2\"] and oauth2Config naming the keycloak provider; the keycloak-admin init container's log (this deploy) shows it pre-created auth_source=oauth2 role=Administrator for pvginkel@gmail.com and loaded 'Added 0 Server Group(s) and 1 Server(s).' — the admin account this criterion asks for already exists and already lists the server. What remains owed is the authenticated leg: pgAdmin's login is a React SPA that sets server-side session state (session['oauth2_current_client']) via its own client-side request before redirecting to /oauth2/authorize (the checklist's registered callback URI, confirmed live to behave per its actual source — pgadmin/authenticate/oauth2.py:103-126 — when hit directly with no session state it correctly bounces to /login rather than accepting a bare GET); reproducing that exact request outside a real browser was not pursued further this pass (the driver's push-focused scope), and completing a real sign-in (granted and refused) needs real Keycloak credentials this test phase does not hold. plan.md's P6 Record already witnessed the full login round-trip (including the OAuth redirect) against a fake Keycloak.",
       "evidence": [
+        "live: curl http://pgadmin.home/login — authSources:[\"internal\",\"oauth2\"], oauth2Config:[{OAUTH2_NAME:\"keycloak\",OAUTH2_DISPLAY_NAME:\"Keycloak\"}]",
+        "live: kubectl -n pgadmin-prd logs <pod> -c keycloak-admin (this deploy) — 'Username: pvginkel@gmail.com, auth_source: oauth2, role: Administrator', 'Added 0 Server Group(s) and 1 Server(s).'",
+        "live: kubectl -n pgadmin-prd exec <pod> -c pgadmin-app -- pgadmin/authenticate/oauth2.py:103-137 (read this pass — /oauth2/authorize requires session['oauth2_current_client'], set only by a prior /login POST)",
         "charts/pgadmin/files/config_local.py (OAUTH2_ADDITIONAL_CLAIMS pgadmin_roles, read this pass)",
-        "charts/pgadmin/templates/pgadmin-deployment.yaml:57-97 (keycloak-admin init container, read this pass)",
         "plan.md P6 Record — witnessed against a fake Keycloak + postgres sidecar: admin-role account signs in as admin and connects; claim-less/viewer-only accounts refused, no account created",
-        "Operator command (same as V02): cd /work/HelmCharts && git push origin main, then sign in at http://pgadmin.home/oauth2/authorize with a granted and an ungranted homelab account"
+        "Operator: sign in at http://pgadmin.home/login (Keycloak button) with the granted homelab account and with an ungranted one"
       ]
     },
     {
       "id": "V11",
       "area": "D4 — break-glass",
       "description": "Production's Grafana and pgAdmin each keep their local admin and login form as break-glass; Keycloak is an additional login button, with no automatic redirect.",
-      "verdict": "owed to operator",
-      "rationale": "Statically holds in the committed code, but the live behaviour this criterion asks for (grafana.home and pgadmin.home's login pages, in production, today) is only true once the second HelmCharts push lands (V02) — Grafana currently has no auth.generic_oauth block live at all (keycloak-prd stage of this cutover not yet deployed), so there is nothing to confirm 'stays as break-glass beside' yet. Static: grafana.ini sets auth.generic_oauth.enabled without disable_login_form or auto_login (both default false — configs/prd/grafana/prd/values.yaml:19-37, no such keys present); charts/pgadmin/files/config_local.py sets AUTHENTICATION_SOURCES = ['internal', 'oauth2'] (both sources, not oauth2-only). Settles together with V02's push, then a live check of both login pages.",
+      "verdict": "verified",
+      "rationale": "Live, post-deploy (HelmCharts main pushed this pass, IaC/HelmCharts build #6526 — see V02). grafana.home/login serves disableLoginForm:false alongside the Keycloak oauth block — the local admin form is still the default, Keycloak is additional, confirmed live rather than inferred from values.yaml alone. pgadmin.home/login serves authSources:[\"internal\",\"oauth2\"] — both the local form and Keycloak are present together, and the local admin (PGADMIN_DEFAULT_EMAIL/PASSWORD) is untouched by this slice's diff. Neither login page auto-redirects: both requests returned the login page itself (200), not a redirect to Keycloak, confirming no automatic redirect on page load.",
       "evidence": [
-        "configs/prd/grafana/prd/values.yaml:19-37 (no disable_login_form/auto_login key; both default false)",
-        "charts/pgadmin/files/config_local.py:3 (AUTHENTICATION_SOURCES = ['internal', 'oauth2'])",
-        "Operator command (same as V02): cd /work/HelmCharts && git push origin main, then GET http://grafana.home/login and http://pgadmin.home/login"
+        "live: curl http://grafana.home/login — 200, disableLoginForm:false, oauth.generic_oauth present (no redirect on load)",
+        "live: curl http://pgadmin.home/login — 200, authSources:[\"internal\",\"oauth2\"] (no redirect on load)",
+        "configs/prd/grafana/prd/values.yaml:19-37 (no disable_login_form/auto_login key; both default false, read this pass)",
+        "charts/pgadmin/files/config_local.py:3 (AUTHENTICATION_SOURCES = ['internal', 'oauth2'], read this pass)"
       ]
     },
     {
@@ -175,13 +182,13 @@
       "area": "U1 — Keycloak after the upgrade",
       "description": "After the upgrade, the homelab and homelab-dev login pages render with the deployed themes; a sign-in through an app already on Keycloak succeeds on homelab, and a sign-in to the account console succeeds on homelab-dev (no production-cluster app uses that realm).",
       "verdict": "owed to operator",
-      "rationale": "Partially live, partially owed. homelab-dev (keycloak-dev.home) is upgraded this pass: its discovery document (200, issuer http://keycloak-dev.home/realms/homelab-dev) and its login page (200) both serve cleanly post-migration, and the pod log shows a clean liquibase migration with no error (V03). homelab (auth.ginbov.nl) is NOT upgraded this pass — keycloak-prd is still 26.5.1 (V13) — so 'after the upgrade... a sign-in through an app already on Keycloak succeeds on homelab' cannot yet be true of the upgraded version; its discovery document still serves (200) on the pre-upgrade version, unaffected by today's push. An actual authenticated sign-in (either realm) needs real credentials this test phase does not hold, so even homelab-dev's account-console leg is unexercised beyond the discovery/login-page checks above. Settles once the second HelmCharts push (V02) lands and the operator signs in.",
+      "rationale": "Both realms are now upgraded and live (homelab-dev in this pass's first push, homelab in the second — see V03). homelab (auth.ginbov.nl) discovery document and login rendering: keycloak-prd's pod log shows realm homelab migrated cleanly through 26.6.1 → 26.6.2 → 26.7.0 with no ERROR line and 'Bootstrap completed in 8.3s'; live curl confirms the discovery document still serves 200 post-upgrade. homelab-dev (keycloak-dev.home): discovery document and login page both serve 200, migration log clean (checked in the prior push). What remains owed on both is the authenticated leg this criterion names specifically — 'a sign-in through an app already on Keycloak succeeds on homelab' and 'a sign-in to the account console succeeds on homelab-dev' both need real credentials (an existing app's user on homelab; any homelab-dev account for the account console) this test phase does not hold or use.",
       "evidence": [
+        "live: curl https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration → 200, issuer https://auth.ginbov.nl/realms/homelab (post-upgrade)",
+        "live: kubectl -n keycloak-prd logs deploy/keycloak — 'migrated realm homelab to 26.7.0', 'Bootstrap completed in 8.301000 seconds', no ERROR",
         "live: curl http://keycloak-dev.home/realms/homelab-dev/.well-known/openid-configuration → 200, issuer http://keycloak-dev.home/realms/homelab-dev",
         "live: curl http://keycloak-dev.home/realms/homelab-dev/protocol/openid-connect/auth?... → 200 (login page renders)",
-        "live: curl https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration → 200, issuer unchanged (still pre-upgrade — keycloak-prd on 26.5.1, V13)",
-        "live: keycloak-dev pod log — clean migration to 26.7.0, 'Bootstrap completed', no error",
-        "Operator command (same as V02) for the homelab leg; homelab-dev's account-console sign-in is a separate manual check the operator can do now"
+        "Operator: sign in through an already-Keycloak app (e.g. dnsmasq) on homelab, and to the account console on homelab-dev"
       ]
     },
     {
