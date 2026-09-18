@@ -438,6 +438,37 @@ plain-text parse mode (expressions and annotations carry raw `<`), one receiver 
 versus silent is a static per-receiver flag), and `NodeKubeReservedMissing` alerts carry `node` but
 no `instance`. No Alertmanager ingress; the dev release is untouched.
 
+**Done (P2).** HelmCharts `e9820f9` on `phase/018-P2`: `configs/prd/prometheus/prd/values.yaml`'s
+`alertmanager:` gains `config` (route, one inhibit rule, receivers `telegram-critical` /
+`telegram-warning`), `templates: telegram.tmpl` and an `extraSecretMounts` entry; new
+`configs/prd/prometheus/prd/manifests.yaml` (ExternalSecret `alertmanager-telegram`); new
+`tests/test_prometheus_alertmanager_telegram.py`. `kc project test` green.
+
+Later phases:
+- Anything not `severity: critical` is delivered silent; the new test requires every rule's severity
+  to be `critical` or `warning`.
+- First deploy: `manifests.yaml` is applied after `helm upgrade`, so the rolled Alertmanager pod
+  waits on its `alertmanager-telegram` mount until ESO syncs the Secret — no action needed.
+- Live checks: no ingress; Alertmanager's API (`/api/v2/alerts`, `status.inhibitedBy`) and the
+  image's own `amtool` inside `prometheus-prd-alertmanager-0` show routing and inhibition.
+
+Record. Route: root → `telegram-warning` (`disable_notifications: true`), one child
+`severity="critical"` → `telegram-critical` (loud); `group_by: [alertname, instance, node]`, 30s / 5m /
+12h (the design plan's). Inhibit: source `alertname="NodeMemoryStallCounterWedged"`, target
+`alertname=~"NodeMemoryStalled|NodeMemoryStallElevated"`, `equal: [node]`. Both receivers:
+`bot_token_file` / `chat_id_file` under `/etc/secrets/telegram` (outside `/etc/alertmanager`, the
+config ConfigMap's mount; v0.34.1 reads and trims both on every send), `parse_mode: ""`,
+`send_resolved: true`, message `{{ template "telegram.message" . }}` defined once in `telegram.tmpl`
+(loaded by the chart's default `/etc/alertmanager/*.tmpl`) rather than written out per receiver. The
+alertmanager subchart (1.43.3; live image v0.34.1) emits config and templates via `toYaml` without
+`tpl`, and its `checksum/config` annotation rolls the pod on any change. ExternalSecret: store
+`openbao-prd`, key `eso/prd/prometheus/prd/telegram`, properties `bot_token` / `chat_id`, same keys in
+the Secret. Witnessed: amtool 0.34.1 `check-config` passes on the rendered config; a local
+Alertmanager 0.34.1 on it with a fake Telegram API suppressed srvk8s1's two stall alerts under its
+wedge warning while srvk8s1's `NodeKubeReservedMissing` and srvk8s2's stall alert stayed active; one
+sendMessage per group — critical without `disable_notification`, warnings with it, no `parse_mode`,
+and a `[RESOLVED]` notice on resolve. Six config mutations each fail the new test.
+
 ### P3 — Keycloak 26.7.3 image
 
 Target: ../DockerImages

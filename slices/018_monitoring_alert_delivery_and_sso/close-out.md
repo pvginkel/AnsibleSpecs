@@ -88,6 +88,15 @@ docs/runbooks/k8s-rebuild.md:35 describes a keycloak-db Deployment (Recreate, ~3
 **Provenance:** read, plan-writer, planning r2, plan.md P4
 **Disposition:**
 
+### B4 — HelmCharts: the wedge alert's look-back comment and test cite for-grace-period as the restart bound, which does not apply to firing alerts · minor
+
+configs/prd/prometheus/prd/values.yaml:127-130 and tests/test_prometheus_node_memory_alerts.py:37,:133 say the 30m ALERTS look-back must exceed restart downtime plus the 10m rules.alert.for-grace-period, because a restored alert stays pending that long. Prometheus applies the grace period only to alerts that were still pending. A restored alert that was already firing fires again on the first evaluation after restore: witnessed with Prometheus 3.5.0, for 60s and grace 30s, firing again 12s after restart. The real bound is downtime plus about two evaluation intervals, and 30m meets it.
+
+**Consequence:** none — 30m meets the real bound too; only the stated reason, and the test assertion built on it, are wrong
+
+**Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -121,4 +130,13 @@ The iac sidecar has helm/poetry/ruff but no promtool, so tests/test_prometheus_n
 **Consequence:** A PromQL precedence or matching mistake in an alert rule passes the gate and first shows once Prometheus loads or evaluates it.
 
 **Provenance:** witnessed — code-writer, P1, r1
+**Disposition:**
+
+### S3 — Model Alertmanager's new dependency on the Telegram Bot API in the architecture · minor
+
+P2 makes production Alertmanager (ss:alertmanager in HelmCharts charts/prometheus/architecture.yaml) send to api.telegram.org. The generated architecture has a svc:telegram-bot-api serving edge for jenkins-telegram-bot (DockerImages jenkins-telegram-bot/architecture.yaml:30-32) but nothing declares one for Alertmanager, so the model does not show that alert delivery depends on Telegram.
+
+**Consequence:** The architecture model omits that alert delivery depends on Telegram, so a Telegram outage or bot revocation does not show up as affecting alerting.
+
+**Provenance:** read, code-writer, P2, r1, HelmCharts charts/prometheus/architecture.yaml
 **Disposition:**
