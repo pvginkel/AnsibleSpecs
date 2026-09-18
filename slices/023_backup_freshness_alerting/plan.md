@@ -208,6 +208,35 @@ counts backups only"). Source: `backup-server/src/`.
   and `src/internal/pipeline/prune_test.go`. The suite is `go test ./...` from `backup-server/src`, run
   in the `go` tool container.
 
+**Done (P1).** DockerImages `8ea9e12` on `phase/023-P1`, in `backup-server/src/internal/`. `POST /upload`
+now takes an optional `valid_for` query parameter (Go duration, e.g. `valid_for=52h`); new
+`pipeline/metadata.go` holds `Metadata{ValidFor}`, `MetadataSuffix` (`.metadata.json`), `MetadataName`,
+`IsMetadataName`, `ValidateValidity`, `WriteMetadata`. `pipeline.Prune` counts backups only and clears
+metadata whose backup is not kept. `go vet` and `gofmt` clean; `go test ./...` green (go container).
+
+Later phases:
+- Uploaders (P4, P6) send `&valid_for=52h` beside `filename`. `time.ParseDuration` syntax, positive
+  only: `2d`, `52` and an empty `valid_for=` are refused with 400 and nothing is stored.
+- The metadata file holds the uploader's string verbatim (`{"valid_for":"52h"}`, compact JSON), next to
+  `<object>.age` as `<object>.age.metadata.json`. A kept backup with no metadata file declared nothing.
+- In a scope folder, a name ending `.metadata.json` is metadata and every other name is a backup.
+  Prune deletes backups before metadata, so a prune that fails part-way leaves orphan metadata. P2 must
+  ignore a metadata file whose backup is missing. The next prune clears it.
+
+Record. Settled beyond the plan's text:
+- A `valid_for` key present with an empty value counts as declared and is refused. Only an absent key
+  means "declares nothing".
+- A failed metadata write deletes the partial metadata and then the landed backup, and returns 500.
+  This keeps the existing contract that a non-201 upload stores nothing. Prune runs only after a full
+  success.
+- `retention` still counts backups across the whole scope, not per stream. A pruned count now includes
+  metadata files, so the `prune scope=… deleted=N` log counts objects.
+- Tests. `pipeline/metadata_test.go` covers validity parsing, the name helpers and the exact bytes
+  written. `prune_test.go` adds metadata-not-counted, pruned-backup-metadata-deleted and
+  orphan-cleared cases. `handler_test.go` adds metadata written, none without `valid_for`, invalid
+  validity stores nothing, metadata-write failure cleans both, and a prune over seeded backups plus
+  metadata plus an orphan. No existing test was removed. `handler_test.go` was gofmt-realigned in passing.
+
 ### P2 — backup-server publishes each watched stream's freshness from the metadata it reads back
 
 Target: ../DockerImages
@@ -220,6 +249,12 @@ bounded", "metrics are served only inside the cluster").
   and right after each upload once that upload's prune has run; never per scrape. Today the backend can
   list a folder's file names but read nothing, and its listing drops folders
   (`src/internal/pipeline/backend.go:17-21`, `:99-104`).
+- P1 left the names and format in `src/internal/pipeline/metadata.go`. In a scope folder, a name ending
+  `MetadataSuffix` (`.metadata.json`) is metadata and every other name is a backup. `<object>.metadata.json`
+  decodes into `pipeline.Metadata`, whose `valid_for` is the uploader's string, already accepted by
+  `ValidateValidity` (positive `time.ParseDuration`). A metadata file whose backup is missing is an
+  orphan left by a prune that failed part-way. It declares nothing, and the next prune clears it. The
+  upload's prune runs asynchronously in `Handler.runPrune` (`src/internal/handler/handler.go`).
 - What is watched comes from cloud storage, never from the credential store (ruling): every scope folder
   directly under the remote that holds declaring backups, whether or not its scope still has a
   credential. Uploads land at `<remote>/<scope>/<object>` (`src/internal/pipeline/upload.go:56-58`).
@@ -280,7 +315,8 @@ Target: ../HelmCharts
 Target: ../HelmCharts
 
 - Each database's nightly upload from the `postgres-backup` job declares a validity of 52 hours
-  (rulings D1 and "validity is 52 hours"), through P1's upload parameter. The upload is built at
+  (rulings D1 and "validity is 52 hours"), through P1's `valid_for` query parameter: `&valid_for=52h`
+  beside `filename` (a Go duration; `2d` is refused with 400). The upload is built at
   `charts/postgres-pas/templates/backup-configmap.yaml:42-50`. Each database is its own stream, file
   name `<db>.dump` (`:63`).
 - Only production runs the job (`configs/prd/postgres-pas/prd/values.yaml:53-54`). Its deploy is the
@@ -314,7 +350,8 @@ routing delivers both loud.
 
 Target: ansible
 
-- The leader's upload declares a validity of 52 hours through P1's upload parameter. The upload call
+- The leader's upload declares a validity of 52 hours through P1's `valid_for` query parameter:
+  `&valid_for=52h` beside `filename` (a Go duration; `2d` is refused with 400). The upload call
   is `ansible/roles/openbao/templates/openbao-backup.sh.j2:167-171`. The 52 hours is sized against the
   timer's `02:00` start and 1 h randomized delay (`ansible/roles/openbao/defaults/main.yml:225-226`),
   which do not change.
