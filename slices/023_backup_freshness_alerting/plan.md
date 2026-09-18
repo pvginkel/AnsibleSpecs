@@ -466,7 +466,7 @@ Record:
   (observed runs take about 2 min). Mutating a look-back or the grace fails it. `YouTrackBackupStale`
   is untouched (close-out Q1 note). Close-out S4 records that there is no promtool check.
 
-### P6 — The OpenBao backup declares a 52-hour validity, and a runbook covers the backup alerts
+### P6 — The OpenBao backup declares a 52-hour validity, and a runbook covers the backup alerts ✅ DONE 2026-09-19
 
 Target: ansible
 
