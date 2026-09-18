@@ -208,7 +208,7 @@ counts backups only"). Source: `backup-server/src/`.
   and `src/internal/pipeline/prune_test.go`. The suite is `go test ./...` from `backup-server/src`, run
   in the `go` tool container.
 
-**Done (P1).** DockerImages `8ea9e12` on `phase/023-P1`, in `backup-server/src/internal/`. `POST /upload`
+**Done (P1).** DockerImages `8ea9e12` and review fix `df8448d` on `phase/023-P1`, in `backup-server/src/internal/`. `POST /upload`
 now takes an optional `valid_for` query parameter (Go duration, e.g. `valid_for=52h`); new
 `pipeline/metadata.go` holds `Metadata{ValidFor}`, `MetadataSuffix` (`.metadata.json`), `MetadataName`,
 `IsMetadataName`, `ValidateValidity`, `WriteMetadata`. `pipeline.Prune` counts backups only and clears
@@ -233,8 +233,9 @@ Record. Settled beyond the plan's text:
   metadata files, so the `prune scope=… deleted=N` log counts objects.
 - Tests. `pipeline/metadata_test.go` covers validity parsing, the name helpers and the exact bytes
   written. `prune_test.go` adds metadata-not-counted, pruned-backup-metadata-deleted and
-  orphan-cleared cases. `handler_test.go` adds metadata written, none without `valid_for`, invalid
-  validity stores nothing, metadata-write failure cleans both, and a prune over seeded backups plus
+  orphan-cleared cases. `handler_test.go` adds metadata written after its backup, none without
+  `valid_for`, none attempted when the backup fails, invalid validity stores nothing, metadata-write
+  failure cleans both, and a prune over seeded backups plus
   metadata plus an orphan. No existing test was removed. `handler_test.go` was gofmt-realigned in passing.
 
 ### P2 — backup-server publishes each watched stream's freshness from the metadata it reads back
