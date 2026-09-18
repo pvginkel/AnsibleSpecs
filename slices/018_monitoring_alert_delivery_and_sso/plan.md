@@ -630,7 +630,7 @@ client against `https://auth.ginbov.nl/realms/homelab`, per rulings D3, D4, D6 a
   login: a release that does not turn Keycloak on renders as today, with no Keycloak button and no
   reference to an OIDC secret (`eso/dev/pgadmin/prd/oidc` does not exist).
 
-**Done (P6).** HelmCharts `2af8b69` on `phase/018-P6`: `charts/pgadmin` gains `oidc.issuerUrl`
+**Done (P6).** HelmCharts `2af8b69` + `0b35392` (test pins the username claim) on `phase/018-P6`: `charts/pgadmin` gains `oidc.issuerUrl`
 (off when empty). When set, the ConfigMap carries `files/config_local.py` (mounted at
 `/pgadmin4/config_local.py`), `pgadmin-app` gets `OIDC_CLIENT_ID`/`_SECRET` from
 `externalSecrets.secrets.oidc`, and a `keycloak-admin` init container (pgAdmin image) pre-creates the
