@@ -61,7 +61,7 @@ cross-cutting — slice.md's one requirement spans four repos (Ansible, the prov
 
 None beyond document order.
 
-### P1 — The Ansible lint baseline runs strict
+### P1 — The Ansible lint baseline runs strict ✅ DONE 2026-09-18
 
 Target: ansible
 
