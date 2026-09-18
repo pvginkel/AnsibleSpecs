@@ -352,6 +352,30 @@ Target: ../HelmCharts
   don't start it.
 - The suite (`kc project test`) stays green.
 
+**Done (P3).** HelmCharts `3419695` on `phase/023-P3`. The `backup-server` Service carries
+`prometheus.io/scrape: 'true'`, `prometheus.io/path: /metrics` and `prometheus.io/port: '8081'`,
+unconditionally, so both clusters get them. The pod declares `containerPort: 8081`, named `metrics`. The
+Service's ports and the nginx `target-port` stay on `8080` only. The dev storage release no longer ships
+`backup-server-tokens`. `kc project test` is green and `deploy lint prd/storage` is clean.
+
+Later phases:
+- P5: the live `kubernetes-service-endpoints` job (role `endpointslice`, `honor_labels: true`) labels the
+  target `job="kubernetes-service-endpoints"`, `namespace="storage-prd"`, `service="backup-server"`, plus
+  `node`. backup-server's series carry these beside `scope`/`filename`. A target that is gone altogether
+  leaves no `up{service="backup-server"}` series at all.
+- The live dev `backup-server-tokens` ConfigMap stays until the operator deletes it (close-out A1).
+
+Record:
+- No values key was added. P2's default `METRICS_LISTEN_ADDR` of `:8081` needs no env var.
+- The Service's ports do not include `8081`, so the endpointslice role also discovers `podIP:8081` as a
+  container-port target. After the port rewrite it is identical to the `8080` endpoint's target, and
+  Prometheus scrapes it once.
+- No NetworkPolicy exists in `storage-prd` (read live on prd, 2026-09-18), so Prometheus reaches pod port 8081.
+- `tests/test_storage_backup_server_metrics.py` covers three things: the annotations name the Deployment's
+  `metrics` port (8081); the nginx target-port and the Service's only targetPort are the `http` port; and
+  each storage release's `manifests.yaml` (dev and prd) ships only objects the chart templates name. It
+  fails against the tree as it was before this phase. `tests/conftest.py`'s docstring lists it.
+
 ### P4 — The Postgres dumps declare a 52-hour validity
 
 Target: ../HelmCharts
