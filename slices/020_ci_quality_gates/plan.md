@@ -95,7 +95,7 @@ Record:
   This was a throwaway playbook and was not committed, because the repo has no runnable test
   suite (`.kubecoder/project.yaml`'s `test` mirrors `lint`).
 
-### P2 — The Ansible push job lints, syntax-checks and validates before it plans
+### P2 — The Ansible push job lints, syntax-checks and validates before it plans ✅ DONE 2026-09-18
 
 Target: root
 
