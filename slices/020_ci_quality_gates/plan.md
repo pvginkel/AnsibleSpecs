@@ -135,7 +135,7 @@ Record:
   playbook with an invalid play keyword failed `syntax-check[specific]` (rc 2).
 - The Jenkinsfile itself cannot be checked from the pod; its first real build is the proof.
 
-### P3 — The provider publishes only what passes go vet and its unit tests
+### P3 — The provider publishes only what passes go vet and its unit tests ✅ DONE 2026-09-18
 
 Target: ../HomelabTerraformProvider
 
@@ -153,6 +153,9 @@ Later phases:
   `Cloning repo`, `Build terraform-provider-homelab`, `Vet and unit tests` and
   `Publish to provider registry`. Its log shows the unit tests passing and the `TestAcc*`
   tests skipping.
+- Review r1 (F1): `go test ./...` runs without `-v`, so the log has one `ok <package> <time>`
+  line per package and no per-test PASS or `TestAcc*` SKIP lines. The acceptance tests are kept
+  out because nothing in the pipeline sets `TF_ACC`, not because the log shows them skipping.
 
 Record:
 - Stage placement: the gate is a separate stage after the build and does not change the build
