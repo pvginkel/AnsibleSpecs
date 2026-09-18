@@ -42,6 +42,15 @@ While checking how the vault password reaches ansible-lint, the P2 executor ran 
 **Provenance:** witnessed, code-writer, P2, r1, executor session transcript
 **Disposition:**
 
+### N2 — DockerImages trivy scan: nearly every Debian-based image build will raise a fixable-CRITICAL warning today
+
+Scanned from the pod with the pinned trivy 0.74.0 against registry:5000: python:latest (Debian 13.5) and kube-coder-tunnel-reclaim:latest (Debian 13.6) each carry perl-base CVE-2026-13221, CVE-2026-42496 and CVE-2026-8376, all CRITICAL, fixed in 5.40.1-6+deb13u1. Both build FROM python:slim, and no Dockerfile in the repo runs apt-get upgrade, so an image picks up the fix only when its upstream base does. Per the ruling, each such image raises one notify.warning per build.
+
+**Consequence:** After the push, most DockerImages image builds send one Telegram warning each, and a forced image=all rebuild sends about one per image, until the upstream bases ship the fixed perl-base.
+
+**Provenance:** witnessed, executor, P6, r1, plan.md P6 record
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -153,4 +162,22 @@ charts/media/values.yaml defines images.debian and storage.mydownloads.downloadH
 **Consequence:** Setting downloadHostPath in prd does nothing, and the schema does not flag it. An operator who changes it expects the host path to move, but the pod keeps mounting /<pool>/mydownloads/downloads.
 
 **Provenance:** witnessed, code-writer, P5, r1, grep of charts/media during schema authoring
+**Disposition:**
+
+### S10 — HelmCharts media schema test samples 7 of the schema's 21 closed levels, so reopening any other level passes the suite · minor
+
+tests/test_media_values_schema.py:83-97 checks unknown keys at storage.plex, the top level, global, images, resources.media, one externalSecrets.secrets entry and that entry's data[] items. No case covers service.*, storage.{zfs,media,mydownloads}, nodeAffinity, plex, users, resources.mydownloads, externalSecrets or storeRef. Removing additionalProperties: false from service.plex and storage.zfs left all 9 tests green (mutation run in review r1). The schema is complete today; only the every-level property is unpinned.
+
+**Consequence:** none today; a later schema edit that drops additionalProperties at an unsampled level silently stops catching wrong keys there, and the tests stay green
+
+**Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
+### S11 — DockerImages trivy stage: every build pod downloads the vulnerability DB and, for images with jars, the Java DB · minor
+
+The trivy sidecar starts each build with an empty cache. The first scan downloads the vulnerability DB from mirror.gcr.io (1.4 GB unpacked, about 11 s from the pod). The first scan of an image with jars also downloads the Java DB (1.5 GB unpacked). android-35 took 192 s cold and 28 s with both DBs cached, at 347 MiB peak RSS. A shared cache, like the jenkins chart's build-cache, would remove the repeat downloads.
+
+**Consequence:** Each image-building DockerImages build puts up to about 3 GB into the trivy container's ephemeral storage and spends up to about 3 minutes on DB downloads; the scan result is unaffected.
+
+**Provenance:** witnessed, executor, P6, r1, plan.md P6 record
 **Disposition:**

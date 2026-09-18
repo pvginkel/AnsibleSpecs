@@ -278,6 +278,39 @@ What the repo does not tell the executor:
 - The existing 30-minute timeout wraps only the kaniko call (`Jenkinsfile:88`); the scan needs its own. The large toolchain images (android, dotnet, go, java, esp-idf) may scan slowly — untested. The vulnerability database comes from the internet; agent pods have unrestricted egress today.
 - A Jenkinsfile-only push builds no image, so the test phase proves the scan on the next real image build; nothing is force-rebuilt.
 
+**Done (P6).** The DockerImages `Jenkinsfile` declares a `trivy` sidecar,
+`ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e…87187c1969`. Each building image stage calls a
+top-level `scanImage(pushed)` after its kaniko push. `pushed` is the matrix tag, or else the
+build-number tag, and the kaniko destinations reuse it. The scan runs `trivy image --image-src remote
+--insecure --scanners vuln --severity CRITICAL,HIGH --timeout 15m` into `.trivy.json`, then
+`trivy convert --format table`. A Go template lists the CRITICALs that have a `FixedVersion`. If
+it lists any, one `notify.warning("trivy: <ref> has N CRITICAL findings with a fixed version")`
+fires. All of this sits in `catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS',
+catchInterruptions: false)`. A nonzero trivy exit only echoes `trivy could not scan <ref> (exit
+N); the build result is unchanged`. `Deploy Helm charts` is untouched. DockerImages `cce00ff`
+on `phase/020-P6`.
+
+Later phases:
+- V14–V16 in a real build: the image's stage shows `+ trivy image …` and per-target
+  `Total: N (… HIGH: x, CRITICAL: y)` tables. With a fixable CRITICAL it also shows
+  `[raisealert|type=warning] trivy: registry:5000/<image>:<tag> has N CRITICAL findings …`.
+  Expect that line on nearly every Debian image today (close-out N2).
+- V17: the digest resolves identically on ghcr.io, Docker Hub and public.ecr.aws.
+
+Record:
+- Witnessed against the live `registry:5000`, which this pod reaches, using the pinned image's
+  trivy binary. `scanImage`, cut from the Jenkinsfile, ran through stubbed steps under `sh -xe`.
+  `python:latest` and `kube-coder-tunnel-reclaim:latest` each printed tables and one warning
+  (3 fixable perl-base CRITICALs). A missing tag echoed the exit-1 line, with no exception. The
+  template lists nothing for a report with no CRITICAL, only unfixed CRITICALs, or no `Results`.
+- The Jenkinsfile parses under Groovy 2.4.21. The harness is not committed, because the repo has
+  no Jenkinsfile test tooling. The script sandbox's acceptance is witnessed only by a real build.
+- The scan uses trivy's `--timeout` (default 5m), not `timeout()`, because `catchInterruptions: false`
+  rethrows a `timeout()` expiry, which would abort the build. trivy's deadline covers the DB
+  download, the pull and the analysis (`Run`, `pkg/commands/artifact/run.go`, sets it first).
+- android-35 (2.9 GiB): 192 s cold, of which the Java DB download is most. With both DBs
+  cached it took 28 s at 347 MiB peak RSS. The DB costs are in close-out S11.
+
 ## Not in scope
 
 - The Terraform `apply -auto-approve` / no-plan-gate model (operator: "I'm aware of the auto-apply issue. It's what I chose").
