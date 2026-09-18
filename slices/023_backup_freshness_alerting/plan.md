@@ -388,6 +388,27 @@ Target: ../HelmCharts
 - Only production runs the job (`configs/prd/postgres-pas/prd/values.yaml:53-54`). Its deploy is the
   `postgres-pas` release in the first HelmCharts push.
 
+**Done (P4).** HelmCharts `2ada3db` on `phase/023-P4`. The `postgres-backup` script's upload builds its
+query with `urllib.parse.urlencode({"filename": <db>.dump, "valid_for": VALID_FOR})`, and `VALID_FOR = "52h"`
+is a constant in the script in `charts/postgres-pas/templates/backup-configmap.yaml`. No chart value was added.
+`kc project test` is green and `deploy lint prd/postgres-pas` is clean.
+
+Later phases:
+- P5/V19: production's `postgres-pas` streams are `scope="postgres-pas"`, `filename="<db>.dump"`, one per
+  database that is not excluded (`postgres` and `app` are excluded). Each is valid until 52 h after it lands.
+- A third backup-server uploader exists that the plan does not name: the youtrack chart's `youtrack-backup`
+  CronJob (HelmCharts `fab8483`, 2026-09-17). It sends no `valid_for`. Its interim `YouTrackBackupStale` rule
+  (`configs/prd/prometheus/prd/values.yaml:210-236`) says slice 023 retires it. The operator has not
+  yet ruled on whether YouTrack joins this slice (close-out Q1).
+
+Record:
+- `urlencode` quotes the file name with `quote_plus`, where the old code used `quote`. The two agree on
+  every name backup-server accepts (`[A-Za-z0-9._-]`, DockerImages `pipeline/upload.go:26-50`).
+- `tests/test_postgres_pas_backup.py` loads `backup.py` from the ConfigMap template. It runs `main()` over
+  fake psql, pg_dump and urlopen calls, and asserts that each non-excluded database uploads with exactly
+  `{filename: <db>.dump, valid_for: 52h}`. It fails against the script as it was before this phase.
+  `tests/conftest.py`'s docstring lists it.
+
 ### P5 — Production Prometheus raises an overdue backup and a blind watcher
 
 Target: ../HelmCharts
