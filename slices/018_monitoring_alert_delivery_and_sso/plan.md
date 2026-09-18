@@ -630,6 +630,44 @@ client against `https://auth.ginbov.nl/realms/homelab`, per rulings D3, D4, D6 a
   login: a release that does not turn Keycloak on renders as today, with no Keycloak button and no
   reference to an OIDC secret (`eso/dev/pgadmin/prd/oidc` does not exist).
 
+**Done (P6).** HelmCharts `2af8b69` on `phase/018-P6`: `charts/pgadmin` gains `oidc.issuerUrl`
+(off when empty). When set, the ConfigMap carries `files/config_local.py` (mounted at
+`/pgadmin4/config_local.py`), `pgadmin-app` gets `OIDC_CLIENT_ID`/`_SECRET` from
+`externalSecrets.secrets.oidc`, and a `keycloak-admin` init container (pgAdmin image) pre-creates the
+OAuth2 account `pvginkel@gmail.com` as admin and loads `servers.json` into it. The prd release turns it
+on (ExternalSecret `pgadmin-oidc` ← `eso/prd/pgadmin/prd/oidc`). New `tests/test_pgadmin_keycloak_login.py`.
+`kc project test` green.
+
+Later phases:
+- First deploy: the pod waits on Secret `pgadmin-oidc` (CreateContainerConfigError) until ESO syncs it —
+  no action. `keycloak-admin`'s log shows `auth_source oauth2` / `role Administrator` on its first run,
+  `User already exists.` after, then `Added 0 Server Group(s) and 1 Server(s).`
+- Live checks (V10/V11): `http://pgadmin.home/login` carries `"authSources": ["internal", "oauth2"]` and
+  an `oauth2Config` entry `"OAUTH2_NAME": "keycloak"`; the redirect is `http://pgadmin.home/oauth2/authorize`
+  with `code_challenge_method=S256`. A granted sign-in: `/user_management/current_user.js` has
+  `'is_admin': true` and `'current_auth_source': 'oauth2'`, no master-password prompt, `postgres-pas`
+  listed and connecting. A refusal logs `… is not authorized to access pgAdmin based on OAUTH2 config`
+  and creates no account (`setup.py get-users` in the pod lists only the internal and oauth2 `pvginkel@gmail.com`).
+- Started from `http://pgadmin/`, Keycloak rejects the redirect URI (close-out B7).
+- V12: `poetry run deploy template dev/pgadmin` renders as before bar the deploy timestamp.
+
+Record:
+- pgAdmin 9.18 (live `latest`). Username claim pinned to `email`; `OAUTH2_ADDITIONAL_CLAIMS
+  {'pgadmin_roles': ['admin']}`; discovery URL, absolute userinfo URL, PKCE S256; auto-create left on,
+  so the role alone gates (D3).
+- Beyond the plan: `MASTER_PASSWORD_REQUIRED = False` — with oauth2 among the sources, pgAdmin otherwise
+  asks a Keycloak session for a separate master password before listing any server (`CRYPTKEY_MISSING`).
+  A Keycloak session's key is then its access token (it saves no server password); internal logins keep
+  their login password as the key.
+- The oauth2 account shares the local admin's storage dir (keyed on username alone), so `build-pgpass`'s
+  pgpassfile serves it. `keycloak-admin` runs `setup.py setup-db` when the database is missing (the CLI
+  refuses without one); `setup-db` needs `/var/log/pgadmin`, hence the `setup-log` emptyDir. The
+  ConfigMap glob narrowed to `files/servers.json`, so `config_local.py` reaches Keycloak-on releases only.
+- Witnessed: the rendered prd pod (live image digest, fresh storage, init container run twice) in the prd
+  `development` namespace against a fake Keycloak and a postgres sidecar — the admin-role account signed
+  in as admin and connected via the pgpassfile; a claim-less and a `viewer`-only account were refused, no
+  account created; the local admin still logged in and connected. Eight mutations each fail the new test.
+
 ## Not in scope
 
 - The SMTP gateway and the rest of the DockerImages delivery plan beyond ruling D1.

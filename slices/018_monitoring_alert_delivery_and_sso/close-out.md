@@ -117,6 +117,24 @@ code-reviewer P2 r1, 2026-09-18 — Line citation correction: the inhibit rule i
 **Provenance:** witnessed — code-reviewer, P2 r1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
+### B6 — HelmCharts: prd Grafana's Keycloak sign-in fails on the first try when started from the http://grafana/ short name · minor
+
+configs/prd/grafana/prd/values.yaml pins root_url http://grafana.home/, so the OAuth redirect always goes to grafana.home. The release still serves the short name grafana (values.yaml:6, charts/grafana/architecture.yaml). Grafana keeps its OAuth state in a host-only cookie, so a sign-in started at http://grafana/ comes back to grafana.home with no state and fails with 'Missing saved oauth state' (Grafana 12.3.1 authn/clients/oauth.go:115-117). A retry from grafana.home works, and the local login form works on both names.
+
+**Consequence:** Opening http://grafana/ and clicking Keycloak shows a login error once, until the user retries from grafana.home.
+
+**Provenance:** read, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
+### B7 — HelmCharts: prd pgAdmin's Keycloak sign-in is refused by Keycloak when started from the http://pgadmin/ short name · minor
+
+pgAdmin builds its OAuth redirect URI from the request's Host header (Flask url_for(_external=True); the nginx proxy passes Host $host, pgAdmin sets no fixed root URL). The pgadmin service answers both pgadmin.home and pgadmin (configs/prd/pgadmin/prd/values.yaml serverName), but the pgadmin Keycloak client registers only http://pgadmin.home/oauth2/authorize (pre-run checklist step 2). Started from http://pgadmin/, the Keycloak button sends redirect_uri=http://pgadmin/oauth2/authorize, which Keycloak rejects. Fix on the Keycloak side: add http://pgadmin/oauth2/authorize as a valid redirect URI on the pgadmin client (and record it in the plan's client table for keycloak-tf). Sibling of B6 (Grafana).
+
+**Consequence:** Opening http://pgadmin/ and clicking Keycloak shows Keycloak's invalid redirect_uri error instead of signing in; signing in from pgadmin.home works.
+
+**Provenance:** read — code-writer, P6, r1: pgAdmin 9.18 web/pgadmin/authenticate/oauth2.py authenticate() url_for(OAUTH2_AUTHORIZE, _external=True); witness pod redirect_uri followed the Host header
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
