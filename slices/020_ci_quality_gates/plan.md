@@ -170,7 +170,7 @@ Record:
   the test-only modules again. This was witnessed with an empty GOMODCACHE. S2, the stale
   comment on the publish stage, is left alone.
 
-### P4 — HelmCharts gates every release it is about to deploy, before it deploys any
+### P4 — HelmCharts gates every release it is about to deploy, before it deploys any ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
