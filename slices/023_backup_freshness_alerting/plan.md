@@ -293,7 +293,7 @@ bounded", "metrics are served only inside the cluster").
   rulings name: overdue, still watched after the newest backup stops declaring, pruned away, failed
   refresh.
 
-**Done (P2).** DockerImages `88e329f` on `phase/023-P2`, in `backup-server/`. New package
+**Done (P2).** DockerImages `88e329f` and review fix `0af47c9` on `phase/023-P2`, in `backup-server/`. New package
 `src/internal/freshness` (watcher and collector), on `prometheus/client_golang` v1.23.2 (module stays
 `go 1.24`). `GET /metrics`, and nothing else, is served on its own listener: `METRICS_LISTEN_ADDR`,
 default `:8081` (`EXPOSE 8080 8081`); `:8080` serves no metrics. `gofmt` and `go vet` clean;
@@ -323,6 +323,9 @@ Record. Settled beyond the plan's text:
   even if the prune failed. Refreshes are serialized, 10-minute timeout each.
 - A scope whose listing or newest metadata read/decode fails keeps its last streams and fails the full
   refresh; a failed root listing keeps everything; a folder absent from a good root listing drops out.
+- A listing is empty only on rclone's directory-not-found exit code `3`, and only for a scope folder
+  (`List`); a missing remote root (`ListDirs`) and every other rclone failure is an error, whatever its
+  text (`pipeline/backend_test.go`).
 - `pipeline.ValidateValidity` became `ParseValidity` (returns the duration); `DecodeValidity` is new.
   `backup-server/architecture.yaml` gains interface `GET /metrics` (validator green).
 - Tests: `freshness/watcher_test.go` covers watched set, newest-stops-declaring, orphans, pruned away,
