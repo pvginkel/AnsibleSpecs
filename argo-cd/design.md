@@ -37,7 +37,9 @@ stages migrate — "dev excluded" excludes the `srvk8sdev` cluster, never a stag
 ## The estate today, in one paragraph
 
 Jenkins builds images and calls `cicd.helmDeploy()`, which triggers the `IaC/HelmCharts`
-pipeline; that runs the deploy CLI inside the `iac` container on srviac — `terraform apply` →
+pipeline; that runs the deploy CLI inside the `iac` container on srviac. A gate stage first
+renders every release the build is about to deploy, lints the ones whose chart source is in the
+repo, and runs kubeconform on each render; then each release deploys — `terraform apply` →
 `helm upgrade --install` → config phase (unused estate-wide) — resolving image tags to digests
 at deploy time with nothing written back to git. 45 releases are discovered by walking
 `configs/prd/`. Detail, if ever needed: the archived plan's "Current state" chapter — in git
@@ -537,8 +539,8 @@ The `reconciler:` key is the single ownership fact (D38):
   `upstream: {repo, chart, version}` block — which is what keeps `gen-architecture` running
   across a registered entry rather than failing the whole artifact on it. The migrated app then
   drops out of the model on the falsy chart, as below.
-- Eight deploy-CLI verbs refuse an `argo-cd` release, with a message naming the release, its
-  reconciler and the verb: the Helm-bearing `deploy`, `template`, `stop`, `uninstall`; the
+- Nine deploy-CLI verbs refuse an `argo-cd` release, with a message naming the release, its
+  reconciler and the verb: the Helm-bearing `deploy`, `template`, `lint`, `stop`, `uninstall`; the
   state-mutating `apply`, `destroy`, `import`, which would otherwise write against the old
   HelmCharts state key the app has moved off (D32); and `refresh-secrets`, which rolls the
   namespace's workloads and so writes into pod templates Argo owns. The four read-only verbs —

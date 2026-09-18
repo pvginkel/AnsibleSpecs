@@ -585,6 +585,18 @@ Deferred / revisit:
 
 - **Operator runbook sweep.** `docs/runbooks/adoption.md`, `disk-resize.md`, `k8s-rebuild.md`, `k8s-upgrade.md`, `vm-rebuild.md`, and `scratch-vm.md` describe their procedures as `wrkdev` running TF/Ansible directly. After Phase 1 (iac-agent), the routine path goes through `iac` on srviac instead; `wrkdev` is reserved for srviac mutation + break-glass. Each runbook needs either a "for routine use, run via `iac` on srviac; this runbook documents the operator-workstation path" header, or a rewrite of the steps to use `iac -c '…'`. Mechanical sweep, non-urgent — both paths still work today.
 
+## Push pipelines check before they deploy or publish
+
+Each push-triggered pipeline below runs its checks ahead of the step that changes something, cheapest first, and a failing check fails the build before that step runs:
+
+- **Ansible (`iac-on-push`)**: yamllint, ansible-lint in strict mode and `terraform fmt -check` — the dev loop's `kc project lint`, kept identical — then `terraform validate` on both roots, ahead of the plan. `iac-apply` does not re-run them.
+- **HelmCharts**: every release the build is about to deploy is rendered with the values and `--set` args its deploy uses, and linted where its chart source is in the repo; kubeconform validates each render in strict mode against prd's Kubernetes version (a pin in the `Jenkinsfile` that moves with prd's channel — `docs/runbooks/k8s-upgrade.md`), before the first release deploys or uninstalls.
+- **HomelabTerraformProvider**: `go vet` and the unit tests, before the registry publish. The acceptance tests need live backends and stay a manual run.
+
+**DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert. The scan never changes the build result.
+
+Scanner and validator images are pinned by digest.
+
 ## Backup
 
 - **Cluster vzdump job** — Ansible-managed via the `proxmox_host` role from Phase 2. Daily snapshot-mode dump of every VM to the `local-backup` storage on `pve`, mail-on-failure to the operator, retain three. The job lives in `/etc/pve/jobs.cfg` (cluster-shared via pmxcfs); the role writes it from `pve` only and the cluster propagates.

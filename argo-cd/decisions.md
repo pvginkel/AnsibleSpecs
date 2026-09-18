@@ -408,8 +408,8 @@ check, no `upstream:` check, no chart in the resolved record. That is what lets 
 exit 0 on any entry shape — so `gen-architecture` survives a registered entry instead of losing
 the whole artifact to it — and it means a registry entry needs no `chart:` key. `_UPSTREAM_KEYS`
 stays as it is: it guards a different schema, and widening it to admit Argo's would weaken a
-check the unmigrated releases still depend on. Eight verbs refuse an `argo-cd` release with a
-message naming the release and its reconciler — `deploy`, `template`, `stop`, `uninstall`,
+check the unmigrated releases still depend on. Nine verbs refuse an `argo-cd` release with a
+message naming the release and its reconciler — `deploy`, `template`, `lint`, `stop`, `uninstall`,
 `apply`, `destroy`, `import` (D32 moved the state key out from under the last three) and
 `refresh-secrets` (it rolls Argo-owned workloads); `plan`, `output`, `config` and `wait` only
 look and stay usable. Accepted cost: a typo'd reconciler *value* is caught nowhere — anything

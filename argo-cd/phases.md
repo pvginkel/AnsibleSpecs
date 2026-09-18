@@ -58,7 +58,7 @@ Must land **before** the first `reconciler: argo-cd` entry appears — which is 
 - [ ] `resolve()` stops validating a non-`jenkins` entry as a HelmCharts release, so
       `deploy config` exits 0 with a falsy chart on any entry shape and `gen-architecture`
       survives a registered entry.
-- [ ] Eight verbs refuse an `argo-cd` release — `deploy`, `template`, `stop`, `uninstall`,
+- [ ] Nine verbs refuse an `argo-cd` release — `deploy`, `template`, `lint`, `stop`, `uninstall`,
       `apply`, `destroy`, `import`, `refresh-secrets`; `plan`, `output`, `config` and `wait`
       stay usable.
 
