@@ -33,6 +33,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — P2 executor printed the dev iac sidecar's Ansible vault password into its session transcript
+
+While checking how the vault password reaches ansible-lint, the P2 executor ran `env | grep -i ANSIBLE_VAULT` in the iac sidecar. That matched ANSIBLE_VAULT_PASSWORD as well as ANSIBLE_VAULT_PASSWORD_FILE, and the full passphrase appeared in the tool output. It was not written to any file or commit, and it was not used.
+
+**Consequence:** The Ansible vault passphrase is in this session's transcript and model context. Rotating it is the operator's decision.
+
+**Provenance:** witnessed, code-writer, P2, r1, executor session transcript
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence

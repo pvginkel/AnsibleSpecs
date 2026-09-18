@@ -109,6 +109,32 @@ What the repo does not tell the executor:
 - `validate` needs the whole clone, not just `terraform/`: `prd` reads files under `ansible/` through `file()`. The job never initialises `scratch` today.
 - A Jenkinsfile cannot be checked from the pod; the first real build after the test phase's push is the proof.
 
+**Done (P2).** `Jenkinsfile.iac-on-push` gains two stages ahead of the untouched
+`Plan + destroy check`, each one `iac -c` call under `set -euo pipefail`. `Lint` runs
+`terraform fmt -check -recursive` from `terraform/`, then `yamllint -c ../.yamllint .` and
+`ansible-lint` from `ansible/`. `Terraform validate` runs `init -backend=false` + `validate` on
+`prd`, then `scratch`. The header comment now mentions the gates. `Jenkinsfile.iac-apply` is
+unchanged. Ansible `652e1a5` on `phase/020-P2`.
+
+Later phases:
+- None of P3–P6 changes. For V18's proof, a green `IaC/Build-Main` shows three stages: `Lint`,
+  `Terraform validate`, `Plan + destroy check`. The playbook syntax-check happens inside
+  `ansible-lint`, and its non-verbose log prints only the `Passed: …` summary.
+
+Record:
+- Syntax-check: no separate `ansible-playbook --syntax-check` loop. ansible-lint's unskippable
+  `syntax-check` rule already runs it on all 14 playbooks, with the `.ansible-lint` placeholders
+  (`ansible-lint -v` lists each one). A loop would need a second copy of those placeholders, and
+  it would make the job differ from the dev gate.
+- The job's ansible commands are the same as `.kubecoder/project.yaml`'s `ansible` gate. The
+  Jenkinsfile comment says the two must stay identical.
+- Witnessed: the scripts were taken verbatim from the Jenkinsfile and run under dash in a fresh
+  `--depth 1` clone, with only the path rewritten. There were no local collections, as in CI.
+  Both scripts passed (ansible-lint: 0 failures, 0 warnings, 187 files), and so did `validate`
+  on both roots. Negative runs failed as intended: unformatted HCL made `fmt` exit 3, and a
+  playbook with an invalid play keyword failed `syntax-check[specific]` (rc 2).
+- The Jenkinsfile itself cannot be checked from the pod; its first real build is the proof.
+
 ### P3 — The provider publishes only what passes go vet and its unit tests
 
 Target: ../HomelabTerraformProvider
