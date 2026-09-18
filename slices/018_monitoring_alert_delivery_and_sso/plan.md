@@ -385,6 +385,35 @@ node, differing only in `helm_sh_chart`, and a join on `instance` then fails eva
 ("many-to-many matching not allowed"). The rules must evaluate cleanly through that churn; the
 replay aggregated per `node`.
 
+**Done (P1).** HelmCharts `cd51a9c` on `phase/018-P1`: `configs/prd/prometheus/prd/values.yaml`'s
+`node-memory-pressure` group now holds `NodeMemoryStalled` and `NodeMemoryStallElevated`
+(corroborated: `… and on (node) (MemAvailable/MemTotal < 0.10 or rate(pgmajfault[5m]) > 500)`) and
+the new `NodeMemoryStallCounterWedged` (warning, `for: 1h`); new
+`tests/test_prometheus_node_memory_alerts.py` pins all three expressions whole. `kc project test` green.
+
+Later phases:
+- The wedge warning's alertname is **`NodeMemoryStallCounterWedged`**. All three alerts aggregate
+  `by (node)`, so they carry exactly `node` and `severity` — no `instance`, `helm_sh_chart` or
+  `service`, like `NodeKubeReservedMissing`.
+- srvk8s1's counter is **wedged now** (since 2026-09-16 ~06:00 UTC, close-out A1): after deploy the
+  wedge warning fires on srvk8s1 within the hour and its stall alerts go quiet; P2's delivery sends
+  it (silent), and V06/V15 see it live — the warning working, per A1.
+- The hold reads its own `ALERTS{alertstate="firing"}` over a 30m look-back; nothing else may take
+  that alertname.
+
+Record. The wedge warning is `stall > 0.02 and on (node) ((avail > 0.25 and on (node)
+rate(pgmajfault[1h]) < 50) or max_over_time(ALERTS{own, firing}[30m]))`. The hold keeps it firing
+through dips while the stall term holds; the 30m look-back exceeds a Prometheus restart plus the
+10m `for-grace-period` (a restored alert is pending, not firing, meanwhile), and stays under `for:`
+so a post-reboot stall must re-qualify. Witnessed with promtool 3.5.0 (in /tmp, not in the suite —
+close-out S2): starvation fires both stall alerts; a srvk8s2-shaped wedge fires only the warning,
+held through a 60-min dip + 700 faults/s, resolved by a counter reset; a healthy 3%-available /
+842-faults node stays quiet; doubled `helm_sh_chart` series give one alert per node; dropping the
+hold, or a 90m look-back, each fails a scenario. Replayed live over production's retained week
+(09-11 13:50 → 09-18 10:50, 1m steps): both stall alerts match no minute on any node; the wedge
+condition holds only on srvk8s2 (09-11 13:51 → 09-13 04:16) and srvk8s1 (09-16 06:36 → now); every
+expression evaluates cleanly across the 09-13 03:58–04:01 node-exporter 4.56.3/4.57.0 overlap.
+
 ### P2 — Alertmanager delivers to Telegram
 
 Target: ../HelmCharts
@@ -393,8 +422,9 @@ Production Alertmanager — the `alertmanager` subchart of the same release
 (`configs/prd/prometheus/prd/values.yaml:120-130`), today on the chart's stock route to a receiver
 with no configuration — delivers every alert to the checklist's Telegram chat, per ruling D1:
 critical loud, warning silent, resolved notices sent, one node's fault one thread. While P1's wedge
-warning fires for a node, Alertmanager inhibits that node's `NodeMemoryStalled` and
-`NodeMemoryStallElevated` (ruling D2), matched on `node`; nothing else is inhibited. The bot token and
+warning (`NodeMemoryStallCounterWedged`) fires for a node, Alertmanager inhibits that node's
+`NodeMemoryStalled` and `NodeMemoryStallElevated` (ruling D2), matched on `node`; nothing else is
+inhibited. All three carry only `node` and `severity` (P1 aggregates them `by (node)`). The bot token and
 chat id come from OpenBao `eso/prd/prometheus/prd/telegram` through an ExternalSecret in the
 release's `manifests.yaml` (upstream chart, so no `shared.externalsecrets` helper;
 `configs/prd/ceph-csi-rbd/prd/manifests.yaml` is the in-repo shape). They reach Alertmanager as

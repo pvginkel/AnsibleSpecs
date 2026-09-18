@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — srvk8s1's memory PSI counter has been wedged since 2026-09-16 ~06:00 UTC; reboot srvk8s1 · major
+
+Production Prometheus, 2026-09-18 ~11:00 UTC: srvk8s1's node_pressure_memory_stalled_seconds_total rate has read 0.71-0.97 s/s since 2026-09-16 ~06:00 (booted 2026-09-15 ~17:00), with MemAvailable at 33% of MemTotal and 1.7 major faults/s over the hour. The pre-P1 rules fire NodeMemoryStalled (critical) and NodeMemoryStallElevated on it right now, undelivered. Once P1 deploys, neither stall alert fires on srvk8s1 and NodeMemoryStallCounterWedged fires there within the hour (a replay over the retained week puts its qualifying condition on srvk8s1 from 09-16 06:36 to now, and on srvk8s2 through its recorded wedge, nowhere else). That warning firing is the rule working (review advisory A1), not a V06 failure. A reboot resets the counter and resolves it; until then P2's inhibition blinds srvk8s1's stall alerts.
+
+**Consequence:** A real memory stall on srvk8s1, the node of the 2026-08-02 starvation, goes unannounced until it is rebooted.
+
+**Provenance:** witnessed — code-writer, P1, r1, live production Prometheus queries 2026-09-18
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -103,4 +112,13 @@ plan-reviewer r1, 2026-09-14 — Since ruling D6 the plan's pre-run checklist re
 **Consequence:** The keycloak-tf slice may not find the client inventory it must import once slice 018 is compressed.
 
 **Provenance:** read, plan-writer, planning r1, AnsibleSpecs change_requests/keycloak_tf/keycloak-tf.md
+**Disposition:**
+
+### S2 — Put promtool in the iac toolchain so HelmCharts' suite can unit-test alert rules · minor
+
+The iac sidecar has helm/poetry/ruff but no promtool, so tests/test_prometheus_node_memory_alerts.py pins each memory-stall rule's whole expression and thresholds by regex but evaluates no PromQL. P1 ran promtool 3.5.0 (downloaded to /tmp, not committed) over scenario series: the starvation fires both stall alerts, a srvk8s2-shaped wedge fires only the wedge warning and holds through a 60-minute memory dip, a reboot resolves it, a healthy memory-tight node stays quiet, overlapping helm_sh_chart series evaluate to one alert per node, and a 90m look-back mutation re-fires the warning after a reboot — the suite could carry that as a promtool test file.
+
+**Consequence:** A PromQL precedence or matching mistake in an alert rule passes the gate and first shows once Prometheus loads or evaluates it.
+
+**Provenance:** witnessed — code-writer, P1, r1
 **Disposition:**
