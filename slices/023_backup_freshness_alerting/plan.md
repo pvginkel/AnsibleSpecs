@@ -376,7 +376,7 @@ Record:
   each storage release's `manifests.yaml` (dev and prd) ships only objects the chart templates name. It
   fails against the tree as it was before this phase. `tests/conftest.py`'s docstring lists it.
 
-### P4 — The Postgres dumps declare a 52-hour validity
+### P4 — The Postgres dumps declare a 52-hour validity ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
