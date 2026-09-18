@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "The P1 code meets the phase outcome: valid_for is validated before storing, metadata is written after the backup lands as plain JSON, and prune counts backups only and clears orphans. vet, gofmt and the touched packages' tests pass under -race. No test holds V06's 'written only after the backup has landed' clause: a metadata-first mutation passes the suite.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "coverage-gap",
+   "summary": "No test holds V06's 'metadata written only after the backup has landed'; moving WriteMetadata ahead of pipeline.Upload passes the handler suite"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "Malformed valid_for escape (e.g. 52h%zz) is dropped by r.URL.Query(); the upload is stored undeclared with 201"}
+ ]}

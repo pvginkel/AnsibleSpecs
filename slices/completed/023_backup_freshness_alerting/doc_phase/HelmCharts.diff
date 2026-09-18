@@ -1,0 +1,677 @@
+/work/HelmCharts — P3: git diff 03ea7fb700d4..341969509e5e
+
+charts/storage/templates/backup-server-deployment.yaml |  2 ++
+ charts/storage/templates/backup-server-service.yaml    |  3 ++
+ configs/dev/storage/prd/manifests.yaml                 | 14 ---------
+ tests/conftest.py                                      |  2 ++
+ tests/test_storage_backup_server_metrics.py            | 64 ++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 71 insertions(+), 14 deletions(-)
+
+diff --git a/charts/storage/templates/backup-server-deployment.yaml b/charts/storage/templates/backup-server-deployment.yaml
+index fe5cfe0..30b7daf 100644
+--- a/charts/storage/templates/backup-server-deployment.yaml
++++ b/charts/storage/templates/backup-server-deployment.yaml
+@@ -24,6 +24,8 @@ spec:
+           ports:
+             - name: http
+               containerPort: 8080
++            - name: metrics
++              containerPort: 8081
+           env:
+             - name: RCLONE_REMOTE
+               value: {{ .Values.backupServer.rcloneRemote | quote }}
+diff --git a/charts/storage/templates/backup-server-service.yaml b/charts/storage/templates/backup-server-service.yaml
+index d1fed2d..2de615b 100644
+--- a/charts/storage/templates/backup-server-service.yaml
++++ b/charts/storage/templates/backup-server-service.yaml
+@@ -3,6 +3,9 @@ kind: Service
+ metadata:
+   name: backup-server
+   annotations:
++    prometheus.io/scrape: 'true'
++    prometheus.io/path:   /metrics
++    prometheus.io/port:   '8081'
+ {{ if .Values.service.backupServer.dnsName }}
+     dns.webathome.org/hostname: {{ .Values.service.backupServer.dnsName }}
+ {{ end }}
+diff --git a/configs/dev/storage/prd/manifests.yaml b/configs/dev/storage/prd/manifests.yaml
+index e36926f..4b9a624 100644
+--- a/configs/dev/storage/prd/manifests.yaml
++++ b/configs/dev/storage/prd/manifests.yaml
+@@ -13,20 +13,6 @@ stringData:
+ 
+ ---
+ 
+-apiVersion: v1
+-kind: ConfigMap
+-metadata:
+-  name: backup-server-tokens
+-  namespace: storage-prd
+-data:
+-  tokens.yaml: |
+-    tokens:
+-      - token: "dev-token"
+-        scope: "test"
+-        retention: 5
+-
+----
+-
+ apiVersion: v1
+ kind: ConfigMap
+ metadata:
+diff --git a/tests/conftest.py b/tests/conftest.py
+index cd3d06a..7bf819c 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -4,6 +4,8 @@ Tests build a synthetic repo under tmp_path rather than reading the real
+ configs/ and charts/ trees — except test_prd_tree.py, which reads the real
+ tree on purpose and writes nothing, test_storage_s3_mirror.py, which
+ imports the storage chart's mirror script,
++test_storage_backup_server_metrics.py, which reads the storage chart's
++templates and the real dev and prd storage releases,
+ test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
+ storage chart's values, test_prometheus_node_memory_alerts.py, which reads
+ the real memory-stall alert rules, test_prometheus_alertmanager_telegram.py,
+diff --git a/tests/test_storage_backup_server_metrics.py b/tests/test_storage_backup_server_metrics.py
+new file mode 100644
+index 0000000..69ebb83
+--- /dev/null
++++ b/tests/test_storage_backup_server_metrics.py
+@@ -0,0 +1,64 @@
++"""The storage chart hands backup-server's metrics listener to Prometheus
++inside the cluster and to nothing else, and each storage release's
++manifests.yaml ships only objects the chart reads.
++
++Reads the storage chart's templates and the real dev and prd storage releases;
++writes nothing.
++"""
++
++import re
++from pathlib import Path
++
++import pytest
++import yaml
++
++ROOT = Path(__file__).resolve().parents[1]
++TEMPLATES = ROOT / "charts" / "storage" / "templates"
++RELEASES = [ROOT / "configs" / cluster / "storage" / "prd" for cluster in ("dev", "prd")]
++
++
++def render(template):
++    """The template with every branch of every if-block kept and each remaining
++    Helm expression left as HELM(<expr>)."""
++    kept = []
++    for line in (TEMPLATES / template).read_text().splitlines():
++        if re.fullmatch(r"\{\{-? *(if .*|else|end) *-?\}\}", line.strip()):
++            continue
++        kept.append(re.sub(r"\{\{-? *(.*?) *-?\}\}", r"HELM(\1)", line))
++    return yaml.safe_load("\n".join(kept))
++
++
++@pytest.fixture(scope="module")
++def service():
++    return render("backup-server-service.yaml")
++
++
++@pytest.fixture(scope="module")
++def container_ports():
++    deployment = render("backup-server-deployment.yaml")
++    (container,) = deployment["spec"]["template"]["spec"]["containers"]
++    return {port["name"]: port["containerPort"] for port in container["ports"]}
++
++
++def test_prometheus_scrapes_the_metrics_listener_through_the_service_annotations(service, container_ports):
++    # The stock kubernetes-service-endpoints job keeps a Service annotated
++    # scrape 'true' and rewrites each endpoint's port to the port annotation.
++    annotations = service["metadata"]["annotations"]
++    assert container_ports["metrics"] == 8081
++    assert annotations["prometheus.io/scrape"] == "true"
++    assert annotations["prometheus.io/path"] == "/metrics"
++    assert annotations["prometheus.io/port"] == str(container_ports["metrics"])
++
++
++def test_the_hostname_and_the_service_ports_reach_only_the_api_listener(service, container_ports):
++    assert service["metadata"]["annotations"]["nginx.webathome.org/target-port"] == str(container_ports["http"])
++    assert [port["targetPort"] for port in service["spec"]["ports"]] == [container_ports["http"]]
++
++
++@pytest.mark.parametrize("release", RELEASES, ids=lambda release: release.parts[-3])
++def test_a_storage_release_ships_only_objects_the_chart_reads(release):
++    templates = "\n".join(template.read_text() for template in TEMPLATES.glob("*.yaml"))
++    names = [doc["metadata"]["name"] for doc in yaml.safe_load_all((release / "manifests.yaml").read_text()) if doc]
++    assert names
++    for name in names:
++        assert re.search(rf"^\s*name: {re.escape(name)}$", templates, re.M), name
+
+/work/HelmCharts — P4: git diff 341969509e5e..2ada3db93dbc
+
+charts/postgres-pas/templates/backup-configmap.yaml | 12 +++++--
+ tests/conftest.py                                   |  4 ++-
+ tests/test_postgres_pas_backup.py                   | 72 +++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 84 insertions(+), 4 deletions(-)
+
+diff --git a/charts/postgres-pas/templates/backup-configmap.yaml b/charts/postgres-pas/templates/backup-configmap.yaml
+index 7779078..6b7761e 100644
+--- a/charts/postgres-pas/templates/backup-configmap.yaml
++++ b/charts/postgres-pas/templates/backup-configmap.yaml
+@@ -9,8 +9,9 @@ data:
+ 
+     pg_dump each application database (custom format) and POST the raw dump to
+     the backup-server, which age-encrypts and stores it under the postgres-pas
+-    scope. pg_dump/psql authenticate as the role in the mounted credentials
+-    Secret via the libpq PG* environment. Run by the postgres-backup CronJob.
++    scope, one stream per database. pg_dump/psql authenticate as the role in the
++    mounted credentials Secret via the libpq PG* environment. Run by the
++    postgres-backup CronJob.
+     """
+     import os
+     import subprocess
+@@ -23,6 +24,10 @@ data:
+     BACKUP_TOKEN = os.environ["BACKUP_TOKEN"]
+     EXCLUDE = {d.strip() for d in os.environ.get("EXCLUDE_DBS", "").split(",") if d.strip()}
+     WORKDIR = "/backup"
++    # How long each upload stays valid: backup-server reports a database overdue
++    # once its newest dump is older than this. On the nightly schedule one missed
++    # night stays within it; two do not.
++    VALID_FOR = "52h"
+ 
+ 
+     def databases():
+@@ -40,7 +45,8 @@ data:
+ 
+ 
+     def upload(path, filename):
+-        url = BACKUP_URL + "/upload?filename=" + urllib.parse.quote(filename)
++        query = urllib.parse.urlencode({"filename": filename, "valid_for": VALID_FOR})
++        url = BACKUP_URL + "/upload?" + query
+         with open(path, "rb") as fh:
+             data = fh.read()
+         req = urllib.request.Request(url, data=data, method="POST")
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 7bf819c..639defe 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -15,7 +15,9 @@ template, test_grafana_keycloak_login.py, which reads the real prd and dev
+ grafana releases, test_pgadmin_keycloak_login.py, which reads the pgadmin
+ chart and its real prd and dev releases,
+ test_youtrack_backup.py, which imports the youtrack
+-chart's backup script, test_prometheus_youtrack_backup_alert.py, which reads
++chart's backup script, test_postgres_pas_backup.py, which loads the
++postgres-pas chart's backup script from its ConfigMap template,
++test_prometheus_youtrack_backup_alert.py, which reads
+ the real alert rule and the youtrack chart's values,
+ test_s3_storage_backup_grant.py, which reads the s3-storage module, the prd
+ release trees and clusters.yaml, and test_media_values_schema.py, which reads
+diff --git a/tests/test_postgres_pas_backup.py b/tests/test_postgres_pas_backup.py
+new file mode 100644
+index 0000000..7c63f99
+--- /dev/null
++++ b/tests/test_postgres_pas_backup.py
+@@ -0,0 +1,72 @@
++"""The postgres-pas chart's backup script, driven with fake psql, pg_dump and
++urllib.request.urlopen.
++
++The script ships inline in the chart's postgres-backup-script ConfigMap and is
++loaded from there; nothing here reaches Postgres or the backup-server.
++"""
++
++import io
++import re
++import subprocess
++import types
++import urllib.parse
++import urllib.request
++from pathlib import Path
++
++import pytest
++import yaml
++
++CONFIGMAP = Path(__file__).resolve().parents[1] / "charts" / "postgres-pas" / "templates" / "backup-configmap.yaml"
++
++BACKUP_URL = "http://backup-server.storage-prd.svc.cluster.local:8080"
++DATABASES = ["app", "electronics_inventory", "keycloak", "postgres"]
++
++
++class Response(io.BytesIO):
++    def __init__(self, body, status):
++        super().__init__(body)
++        self.status = status
++
++
++@pytest.fixture
++def uploads(tmp_path, monkeypatch):
++    """Runs the script's main() over DATABASES; returns each upload's parsed query."""
++    lines = [line for line in CONFIGMAP.read_text().splitlines()
++             if not re.fullmatch(r"\{\{-? *(if .*|end) *-?\}\}", line.strip())]
++    source = yaml.safe_load("\n".join(lines))["data"]["backup.py"]
++
++    monkeypatch.setenv("BACKUP_URL", BACKUP_URL + "/")
++    monkeypatch.setenv("BACKUP_TOKEN", "upload-secret")
++    monkeypatch.setenv("EXCLUDE_DBS", "postgres,app")
++    script = types.ModuleType("backup")
++    exec(compile(source, str(CONFIGMAP), "exec"), script.__dict__)
++    script.WORKDIR = str(tmp_path)
++
++    def run(cmd, check, stdout=None, capture_output=False, text=False):
++        if cmd[0] == "psql":
++            return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(DATABASES) + "\n")
++        stdout.write(b"PGDMP " + cmd[cmd.index("-d") + 1].encode())
++        return subprocess.CompletedProcess(cmd, 0)
++
++    queries = []
++
++    def urlopen(req):
++        url = urllib.parse.urlsplit(req.full_url)
++        assert (url.scheme, url.netloc, url.path) == ("http", "backup-server.storage-prd.svc.cluster.local:8080",
++                                                      "/upload")
++        assert req.get_header("Authorization") == "Bearer upload-secret"
++        queries.append(urllib.parse.parse_qs(url.query, strict_parsing=True))
++        return Response(b'{"object": "postgres-pas/x.age"}', status=201)
++
++    monkeypatch.setattr(subprocess, "run", run)
++    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
++    script.main()
++    return queries
++
++
++def test_each_database_is_its_own_stream_declaring_52_hours(uploads):
++    # backup-server parses valid_for with Go's time.ParseDuration: "52h", not "2d".
++    assert uploads == [
++        {"filename": ["electronics_inventory.dump"], "valid_for": ["52h"]},
++        {"filename": ["keycloak.dump"], "valid_for": ["52h"]},
++    ]
+
+/work/HelmCharts — P5: git diff 2ada3db93dbc..93626fcf8e96
+
+configs/prd/prometheus/prd/values.yaml           |  61 +++++++++
+ tests/conftest.py                                |   4 +-
+ tests/test_prometheus_backup_freshness_alerts.py | 294 +++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 358 insertions(+), 1 deletion(-)
+
+diff --git a/configs/prd/prometheus/prd/values.yaml b/configs/prd/prometheus/prd/values.yaml
+index b8b2618..5a64800 100644
+--- a/configs/prd/prometheus/prd/values.yaml
++++ b/configs/prd/prometheus/prd/values.yaml
+@@ -236,6 +236,67 @@ serverFiles:
+                 rejected token, a backup error YouTrack reported, a failed
+                 download or upload, or the 1 h deadline each fail the run.
+ 
++      # backup-server (storage chart) publishes, for each stream (scope and file
++      # name) whose kept backups declared a validity, when that validity runs
++      # out. It re-reads its cloud storage hourly and after each upload, and
++      # keeps the last values it read while a read fails. A fresh process
++      # publishes no stream and a last-success of 0 until its first full read.
++      #
++      # Both rules look back 6 h, the same span, across pods. A scrape gap (every
++      # redeploy: the Deployment is Recreate) or a restart whose first read fails
++      # drops the stream series. The look-back keeps an overdue stream firing
++      # until BackupWatcherBlind has fired. A stream that leaves for good (its
++      # backups all pruned, or its scope's .metadata.json files deleted) clears
++      # 6 h after its last scrape.
++      #
++      # BackupWatcherBlind fires once the newest successful full read that any
++      # scrape in the look-back reported is over 6 h old. A new pod's 0 before
++      # its first read does not fire, and a pod that crashes before completing a
++      # read cannot reset the clock. A healthy server's value is at most
++      # 1 h 10 m old: an hourly read with a 10 m timeout. So 6 h passes up to
++      # four failed reads in a row, or a redeploy and three. A target that is
++      # down or gone leaves no samples. Its last reported value ages the same
++      # way, and absent_over_time takes over when that sample leaves the
++      # look-back.
++      # tests/test_prometheus_backup_freshness_alerts.py holds the edges.
++      - name: backup-freshness
++        rules:
++          - alert: BackupOverdue
++            expr: |
++              time() - max by (scope, filename) (
++                max_over_time(backup_server_stream_valid_until_timestamp_seconds{namespace="storage-prd",service="backup-server"}[6h])
++              ) > 0
++            labels:
++              severity: critical
++            annotations:
++              summary: 'Backup {{ $labels.scope }}/{{ $labels.filename }} is {{ $value | humanizeDuration }} past its validity'
++              description: >-
++                No backup of {{ $labels.filename }} has reached backup-server's
++                {{ $labels.scope }} scope within the validity its uploads
++                declared. Read the uploader's logs. For openbao: the
++                openbao-backup unit's journal on the srvvaultN nodes; only the
++                Raft leader uploads, and the others log "not the Raft leader".
++                For postgres-pas: the latest postgres-backup Job in
++                postgres-pas-prd.
++          - alert: BackupWatcherBlind
++            expr: |
++              time() - max by (namespace, service) (
++                max_over_time(backup_server_refresh_last_success_timestamp_seconds{namespace="storage-prd",service="backup-server"}[6h])
++              ) > 6 * 3600
++              or
++              absent_over_time(backup_server_refresh_last_success_timestamp_seconds{namespace="storage-prd",service="backup-server"}[6h])
++            labels:
++              severity: critical
++            annotations:
++              summary: 'Backup freshness is unwatched: backup-server has not read its cloud storage for over 6h'
++              description: >-
++                No scrape of backup-server in storage-prd in the last 6 h
++                reported a successful read of its cloud storage, so
++                BackupOverdue cannot fire. Either Prometheus cannot scrape it
++                (its pod is down, crash-looping or gone; check the target in
++                Prometheus) or its hourly read fails (its pod logs "freshness
++                refresh:" errors).
++
+ alertmanager:
+   # See https://github.com/prometheus-community/helm-charts/blob/main/charts/alertmanager/values.yaml
+   persistence:
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 639defe..3663533 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -7,7 +7,9 @@ imports the storage chart's mirror script,
+ test_storage_backup_server_metrics.py, which reads the storage chart's
+ templates and the real dev and prd storage releases,
+ test_prometheus_s3_mirror_alert.py, which reads the real alert rule and the
+-storage chart's values, test_prometheus_node_memory_alerts.py, which reads
++storage chart's values, test_prometheus_backup_freshness_alerts.py, which
++reads the real backup freshness rules, the storage chart's backup-server
++Service and the postgres-pas chart's values and templates, test_prometheus_node_memory_alerts.py, which reads
+ the real memory-stall alert rules, test_prometheus_alertmanager_telegram.py,
+ which reads the real Alertmanager config, alert rules and manifests.yaml,
+ test_keycloak_rollout.py, which reads the keycloak chart's deployment
+diff --git a/tests/test_prometheus_backup_freshness_alerts.py b/tests/test_prometheus_backup_freshness_alerts.py
+new file mode 100644
+index 0000000..1383cea
+--- /dev/null
++++ b/tests/test_prometheus_backup_freshness_alerts.py
+@@ -0,0 +1,294 @@
++"""The prd Prometheus release's backup freshness alerts, against the
++backup-server metrics they read and the postgres-pas dumps they watch.
++
++Reads the real prometheus values, the storage chart's backup-server Service
++template and the postgres-pas chart's values, CronJob and backup script;
++writes nothing. Each rule's expression is matched whole and its look-back and
++grace read out of it. Both rules are then evaluated minute by minute over
++simulated backup-server scrape histories: redeploys, failed cloud-storage
++reads, a target gone, a crash loop. The postgres-pas dumps are walked night by
++night across a year, so both DST changes fall inside the window.
++"""
++
++import re
++from bisect import bisect_right
++from dataclasses import dataclass
++from datetime import date, datetime, timedelta, timezone
++from pathlib import Path
++from zoneinfo import ZoneInfo
++
++import pytest
++import yaml
++
++ROOT = Path(__file__).resolve().parents[1]
++ALERTS = ROOT / "configs" / "prd" / "prometheus" / "prd" / "values.yaml"
++SERVICE = ROOT / "charts" / "storage" / "templates" / "backup-server-service.yaml"
++POSTGRES_CHART = ROOT / "charts" / "postgres-pas"
++POSTGRES_PRD_VALUES = ROOT / "configs" / "prd" / "postgres-pas" / "prd" / "values.yaml"
++
++# backup-server's series (DockerImages backup-server/src/internal/freshness/metrics.go),
++# as the kubernetes-service-endpoints job labels its prd target.
++SELECTOR = re.escape('{namespace="storage-prd",service="backup-server"}')
++VALID_UNTIL = rf"backup_server_stream_valid_until_timestamp_seconds{SELECTOR}"
++LAST_READ = rf"backup_server_refresh_last_success_timestamp_seconds{SELECTOR}"
++OVERDUE = (
++    rf"time\(\) - max by \(scope, filename\) \(\s+max_over_time\({VALID_UNTIL}\[(?P<look_back>\d+)h\]\)\s+\)"
++    r" > 0\s*"
++)
++BLIND = (
++    rf"time\(\) - max by \(namespace, service\) \(\s+max_over_time\({LAST_READ}\[(?P<look_back>\d+)h\]\)\s+\)"
++    rf" > (?P<grace>\d+) \* 3600\s+or\s+absent_over_time\({LAST_READ}\[(?P<absent_look_back>\d+)h\]\)\s*"
++)
++
++MINUTE = 60
++HOUR = 60 * MINUTE
++DAY = 24 * HOUR
++# The prometheus chart's global scrape_interval and evaluation_interval; the
++# release sets neither. Scrapes, evaluations and backup-server's whole-second
++# read times never coincide in the real system, so here each keeps its own
++# second past the minute.
++SCRAPE_AT, EVAL_AT = 20, 40
++# backup-server's full read of its cloud storage: at start and hourly after,
++# each bounded by a timeout (DockerImages backup-server/src/internal/freshness/watcher.go).
++READ_INTERVAL = HOUR
++READ_TIMEOUT = 10 * MINUTE
++# The Deployment is Recreate: the old pod is gone before the new one starts.
++REDEPLOY_GAP = 30 * MINUTE
++T0 = int(datetime(2026, 9, 18, tzinfo=timezone.utc).timestamp())
++
++# The postgres-backup CronJob sets no timeZone, so its schedule is in the
++# nodes' zone: the Ansible baseline role's baseline_timezone.
++NODE_ZONE = ZoneInfo("Europe/Amsterdam")
++# The CronJob sets no activeDeadlineSeconds. Its runs, every database dumped
++# and uploaded in turn, finished within 2 minutes on 2026-09-16..18.
++RUN_BOUND = timedelta(hours=1)
++# From an upload to the alert seeing its validity: the post-upload read of the
++# scope, the scrape and rule evaluation intervals, and slack.
++LAG = timedelta(minutes=5)
++NIGHTS = [date(2026, 9, 1) + timedelta(days=n) for n in range(400)]
++
++
++def ticks(start, end, at):
++    first = start - start % MINUTE + at
++    return range(first if first >= start else first + MINUTE, end, MINUTE)
++
++
++def evals(start, end):
++    return ticks(start, end, EVAL_AT)
++
++
++def always_slow(read):
++    return READ_TIMEOUT
++
++
++@dataclass(frozen=True)
++class Pod:
++    """One backup-server process, scraped each minute from a minute after `up`
++    until `down`. Its full reads start at `up` and hourly after; read k
++    succeeds took(k) after its start unless k is in `failed`."""
++
++    up: int
++    down: int
++    failed: range = range(0)
++    took: object = always_slow
++
++    def reads(self):
++        starts = range(self.up, self.down, READ_INTERVAL)
++        done = [(k, start + self.took(k)) for k, start in enumerate(starts) if k not in self.failed]
++        return [at for k, at in done if at < self.down]
++
++    def scrapes(self):
++        return ticks(self.up + MINUTE, self.down, SCRAPE_AT)
++
++    def last_read(self):
++        """Its refresh_last_success: 0 until its first successful read."""
++        reads = self.reads()
++        return [(t, reads[bisect_right(reads, t) - 1] if bisect_right(reads, t) else 0) for t in self.scrapes()]
++
++    def stream(self, valid_until):
++        """One stream's valid-until, published from its first successful read
++        on while valid_until(t) is not None."""
++        first = self.reads()[:1]
++        return [(t, valid_until(t)) for t in self.scrapes() if first and first[0] <= t and valid_until(t) is not None]
++
++
++class Series:
++    """One metric's samples from every pod, merged: each rule aggregates across
++    pods, so a redeploy's new instance label changes nothing."""
++
++    def __init__(self, *pods):
++        self.samples = sorted(sample for pod in pods for sample in pod)
++        self.times = [t for t, _ in self.samples]
++
++    def max_over_time(self, t, look_back):
++        """None when the range (t - look_back, t] holds no sample."""
++        lo, hi = bisect_right(self.times, t - look_back), bisect_right(self.times, t)
++        return max((v for _, v in self.samples[lo:hi]), default=None)
++
++
++@pytest.fixture(scope="module")
++def rules():
++    groups = yaml.safe_load(ALERTS.read_text())["serverFiles"]["alerting_rules.yml"]["groups"]
++    (group,) = [g for g in groups if g["name"] == "backup-freshness"]
++    return {r["alert"]: r for r in group["rules"]}
++
++
++@pytest.fixture(scope="module")
++def overdue(rules):
++    terms = re.fullmatch(OVERDUE, rules["BackupOverdue"]["expr"])
++    assert terms, rules["BackupOverdue"]["expr"]
++    look_back = int(terms["look_back"]) * HOUR
++
++    def _fires(stream, t):
++        newest = stream.max_over_time(t, look_back)
++        return newest is not None and t - newest > 0
++
++    _fires.look_back = look_back
++    return _fires
++
++
++@pytest.fixture(scope="module")
++def blind(rules):
++    terms = re.fullmatch(BLIND, rules["BackupWatcherBlind"]["expr"])
++    assert terms, rules["BackupWatcherBlind"]["expr"]
++    look_back, grace = int(terms["look_back"]) * HOUR, int(terms["grace"]) * HOUR
++    absent_look_back = int(terms["absent_look_back"]) * HOUR
++
++    def _fires(last_read, t):
++        newest = last_read.max_over_time(t, look_back)
++        return (newest is not None and t - newest > grace) or last_read.max_over_time(t, absent_look_back) is None
++
++    _fires.look_back, _fires.grace, _fires.absent_look_back = look_back, grace, absent_look_back
++    return _fires
++
++
++def test_both_rules_are_critical_and_read_the_prd_backup_server_only(rules):
++    service = SERVICE.read_text()
++    assert re.search(r"kind: Service\nmetadata:\n  name: backup-server\n", service)
++    assert "prometheus.io/scrape: 'true'" in service
++    assert set(rules) == {"BackupOverdue", "BackupWatcherBlind"}
++    for rule in rules.values():
++        assert rule["labels"] == {"severity": "critical"}
++        # The simulations below fire each rule on its first true evaluation.
++        assert "for" not in rule
++
++
++def test_the_overdue_alert_names_its_stream_and_its_uploaders_logs(rules):
++    annotations = rules["BackupOverdue"]["annotations"]
++    assert "{{ $labels.scope }}/{{ $labels.filename }}" in annotations["summary"]
++    description = " ".join(annotations["description"].split())
++    assert "For openbao: the openbao-backup unit's journal on the srvvaultN nodes" in description
++    assert "For postgres-pas: the latest postgres-backup Job in postgres-pas-prd" in description
++
++
++def test_the_look_backs_equal_the_blind_grace(overdue, blind):
++    # A shorter look-back drops an overdue stream, or the blind alert's last
++    # sample, before the grace has run out; a longer one only holds a stream
++    # that left for good.
++    assert overdue.look_back == blind.look_back == blind.absent_look_back == blind.grace
++
++
++def test_a_healthy_watcher_is_never_blind(blind):
++    def alternating(read):
++        return READ_TIMEOUT if read % 2 else 0
++
++    def slow_after_the_failures(read):
++        return READ_TIMEOUT if read >= 28 else 0
++
++    healthy = Pod(T0 - DAY, T0 + 3 * DAY, took=alternating)
++    four_failed = Pod(T0 - DAY, T0 + 3 * DAY, failed=range(24, 28), took=slow_after_the_failures)
++    for pod in (healthy, four_failed):
++        last_read = Series(pod.last_read())
++        assert not any(blind(last_read, t) for t in evals(T0, T0 + 2 * DAY))
++
++    for phase in range(0, READ_INTERVAL, 5 * MINUTE):
++        redeploy = T0 + phase
++        old = Pod(T0 - DAY, redeploy, took=lambda read: 0)
++        new = Pod(redeploy + REDEPLOY_GAP, T0 + 2 * DAY, failed=range(3))
++        last_read = Series(old.last_read(), new.last_read())
++        assert not any(blind(last_read, t) for t in evals(T0, T0 + DAY)), phase
++
++
++def test_a_blind_watcher_fires_once_its_newest_read_is_past_the_grace_and_holds(blind):
++    blinded = T0 + 30 * MINUTE
++    healthy_until_blinded = Pod(T0 - DAY, blinded)
++    reads = healthy_until_blinded.reads()
++    storage_unreadable = [Pod(T0 - DAY, T0 + 2 * DAY, failed=range(len(reads), 10**6))]
++    target_gone = [healthy_until_blinded]
++    # Each pod dies before its first read completes, and restarts after a 5 m back-off.
++    crash_loop = [healthy_until_blinded] + [Pod(up, up + 3 * MINUTE) for up in range(blinded, T0 + DAY, 8 * MINUTE)]
++    for pods in (storage_unreadable, target_gone, crash_loop):
++        last_read = Series(*(pod.last_read() for pod in pods))
++        assert not any(blind(last_read, t) for t in evals(T0, reads[-1] + blind.grace))
++        assert all(blind(last_read, t) for t in evals(reads[-1] + blind.grace, T0 + 2 * DAY))
++
++
++def test_an_overdue_stream_fires_once_its_validity_passes_and_clears_when_a_backup_lands(overdue):
++    passed, landed, pruned = T0 + 6 * HOUR, T0 + 20 * HOUR, T0 + 40 * HOUR
++    pod = Pod(T0 - DAY, T0 + 3 * DAY)
++
++    def valid_until(t):
++        return passed if t < landed else landed + 52 * HOUR
++
++    stream = Series(pod.stream(valid_until))
++    assert not any(overdue(stream, t) for t in evals(T0, passed))
++    assert all(overdue(stream, t) for t in evals(passed, landed))
++    assert not any(overdue(stream, t) for t in evals(landed + MINUTE, T0 + 2 * DAY))
++
++    # A stream that leaves for good (its backups pruned, or its metadata
++    # deleted) clears once its last sample leaves the look-back.
++    stream = Series(pod.stream(lambda t: passed if t < pruned else None))
++    assert all(overdue(stream, t) for t in evals(passed, pruned + overdue.look_back - MINUTE))
++    assert not any(overdue(stream, t) for t in evals(pruned + overdue.look_back, T0 + 3 * DAY))
++
++
++def test_an_overdue_stream_stays_alerting_while_the_watcher_goes_blind(overdue, blind):
++    passed = T0 - 12 * HOUR
++    for phase in range(0, READ_INTERVAL, 5 * MINUTE):
++        blinded = T0 + phase
++        old = Pod(T0 - 2 * DAY, blinded)
++        # A redeploy whose reads all fail, so the new pod publishes no stream;
++        # or no new pod at all.
++        new = Pod(blinded + REDEPLOY_GAP, T0 + 2 * DAY, failed=range(10**6))
++        for pods in ([old, new], [old]):
++            stream = Series(*(pod.stream(lambda t: passed) for pod in pods))
++            last_read = Series(*(pod.last_read() for pod in pods))
++            for t in evals(passed + MINUTE, T0 + DAY):
++                assert overdue(stream, t) or blind(last_read, t), (phase, len(pods), t - blinded)
++
++
++@pytest.fixture(scope="module")
++def dumps():
++    chart = yaml.safe_load((POSTGRES_CHART / "values.yaml").read_text())["backup"]
++    prd = yaml.safe_load(POSTGRES_PRD_VALUES.read_text())["backup"]
++    backup = {**chart, **prd}
++    assert backup["enabled"] is True
++    assert "timeZone" not in (POSTGRES_CHART / "templates" / "backup-cronjob.yaml").read_text()
++    minute, hour, *daily = backup["schedule"].split()
++    assert daily == ["*", "*", "*"], backup["schedule"]
++    script = (POSTGRES_CHART / "templates" / "backup-configmap.yaml").read_text()
++    (valid_for,) = re.findall(r'^\s*VALID_FOR = "(\d+)h"$', script, re.M)
++
++    def start(night):
++        local = datetime(night.year, night.month, night.day, int(hour), int(minute), tzinfo=NODE_ZONE)
++        return local.astimezone(timezone.utc)
++
++    start.valid_for = timedelta(hours=int(valid_for))
++    return start
++
++
++def test_one_missed_postgres_night_stays_quiet_however_late_the_next_dump_lands(dumps):
++    for night in NIGHTS:
++        earliest_valid_until = dumps(night) + dumps.valid_for
++        latest_next_landing = dumps(night + timedelta(days=2)) + RUN_BOUND
++        assert latest_next_landing + LAG < earliest_valid_until, night
++
++
++def test_two_missed_postgres_nights_fire_before_the_third_run(dumps):
++    for night in NIGHTS:
++        second_missed_run_ends = dumps(night + timedelta(days=2)) + RUN_BOUND
++        third_run = dumps(night + timedelta(days=3))
++        for landed in (dumps(night), dumps(night) + RUN_BOUND):
++            valid_until = landed + dumps.valid_for
++            assert second_missed_run_ends < valid_until, night
++            assert valid_until + LAG < third_run, night

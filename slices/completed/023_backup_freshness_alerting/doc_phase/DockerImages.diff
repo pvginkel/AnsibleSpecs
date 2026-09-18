@@ -1,0 +1,2207 @@
+/work/DockerImages — P1: git diff beac1e2987c0..df8448d4b316
+
+backup-server/src/internal/handler/handler.go        |  25 ++++-
+ backup-server/src/internal/handler/handler_test.go   | 195 +++++++++++++++++++++++++++++++++++++--
+ backup-server/src/internal/pipeline/metadata.go      |  49 ++++++++++
+ backup-server/src/internal/pipeline/metadata_test.go |  62 +++++++++++++
+ backup-server/src/internal/pipeline/prune.go         |  34 +++++--
+ backup-server/src/internal/pipeline/prune_test.go    | 102 +++++++++++++++++++-
+ 6 files changed, 449 insertions(+), 18 deletions(-)
+
+diff --git a/backup-server/src/internal/handler/handler.go b/backup-server/src/internal/handler/handler.go
+index d581051..a7fff0a 100644
+--- a/backup-server/src/internal/handler/handler.go
++++ b/backup-server/src/internal/handler/handler.go
+@@ -73,7 +73,8 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
+-	filename := r.URL.Query().Get("filename")
++	query := r.URL.Query()
++	filename := query.Get("filename")
+ 	if filename == "" {
+ 		http.Error(w, "missing filename", http.StatusBadRequest)
+ 		return
+@@ -87,6 +88,15 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
++	declared := query.Has("valid_for")
++	validFor := query.Get("valid_for")
++	if declared {
++		if err := pipeline.ValidateValidity(validFor); err != nil {
++			http.Error(w, err.Error(), http.StatusBadRequest)
++			return
++		}
++	}
++
+ 	if r.Body == nil {
+ 		http.Error(w, "missing body", http.StatusBadRequest)
+ 		return
+@@ -114,7 +124,18 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
+-	log.Printf("upload complete scope=%s object=%s size=%d", info.Scope, objname, n)
++	if declared {
++		metaTarget := pipeline.JoinTarget(h.cfg.RcloneRemote, info.Scope, pipeline.MetadataName(objname))
++		if err := pipeline.WriteMetadata(r.Context(), h.backend, metaTarget, pipeline.Metadata{ValidFor: validFor}); err != nil {
++			h.cleanup(metaTarget)
++			h.cleanup(target)
++			log.Printf("metadata write failed scope=%s object=%s: %v", info.Scope, objname, err)
++			http.Error(w, "upload failed", http.StatusInternalServerError)
++			return
++		}
++	}
++
++	log.Printf("upload complete scope=%s object=%s size=%d valid_for=%s", info.Scope, objname, n, validFor)
+ 
+ 	go h.runPrune(info.Scope, info.Retention)
+ 
+diff --git a/backup-server/src/internal/handler/handler_test.go b/backup-server/src/internal/handler/handler_test.go
+index 50537cd..924f982 100644
+--- a/backup-server/src/internal/handler/handler_test.go
++++ b/backup-server/src/internal/handler/handler_test.go
+@@ -9,6 +9,7 @@ import (
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
++	"net/url"
+ 	"os"
+ 	"path/filepath"
+ 	"strings"
+@@ -27,6 +28,8 @@ type memoryBackend struct {
+ 	mu      sync.Mutex
+ 	objects map[string][]byte
+ 	failOn  string
++	// uploaded lists every Upload target in call order, failed ones included.
++	uploaded []string
+ }
+ 
+ func newMemoryBackend() *memoryBackend {
+@@ -34,6 +37,9 @@ func newMemoryBackend() *memoryBackend {
+ }
+ 
+ func (m *memoryBackend) Upload(_ context.Context, target string, body io.Reader) error {
++	m.mu.Lock()
++	m.uploaded = append(m.uploaded, target)
++	m.mu.Unlock()
+ 	if m.failOn != "" && strings.Contains(target, m.failOn) {
+ 		_, _ = io.Copy(io.Discard, body)
+ 		return fmt.Errorf("backend forced failure for %s", target)
+@@ -71,6 +77,12 @@ func (m *memoryBackend) List(_ context.Context, dir string) ([]string, error) {
+ 	return names, nil
+ }
+ 
++func (m *memoryBackend) uploads() []string {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	return append([]string(nil), m.uploaded...)
++}
++
+ func (m *memoryBackend) snapshot() map[string][]byte {
+ 	m.mu.Lock()
+ 	defer m.mu.Unlock()
+@@ -84,15 +96,15 @@ func (m *memoryBackend) snapshot() map[string][]byte {
+ const managementToken = "mgmt-secret"
+ 
+ type testHarness struct {
+-	identity   *age.X25519Identity
+-	store      *auth.Store
+-	backend    *memoryBackend
+-	cfg        *config.Config
+-	handler    *Handler
+-	server     *httptest.Server
+-	uploadTok  string
++	identity    *age.X25519Identity
++	store       *auth.Store
++	backend     *memoryBackend
++	cfg         *config.Config
++	handler     *Handler
++	server      *httptest.Server
++	uploadTok   string
+ 	uploadScope string
+-	now        time.Time
++	now         time.Time
+ }
+ 
+ type seedScope struct {
+@@ -190,6 +202,23 @@ func (th *testHarness) post(t *testing.T, token, filename string, body []byte) *
+ 	return resp
+ }
+ 
++func (th *testHarness) postValidFor(t *testing.T, token, filename, validFor string, body []byte) *http.Response {
++	t.Helper()
++	req, err := http.NewRequest(http.MethodPost,
++		th.server.URL+"/upload?filename="+filename+"&valid_for="+url.QueryEscape(validFor),
++		bytes.NewReader(body))
++	if err != nil {
++		t.Fatalf("new request: %v", err)
++	}
++	req.Header.Set("Authorization", "Bearer "+token)
++	req.Header.Set("Content-Type", "application/octet-stream")
++	resp, err := http.DefaultClient.Do(req)
++	if err != nil {
++		t.Fatalf("do: %v", err)
++	}
++	return resp
++}
++
+ func (th *testHarness) do(t *testing.T, method, path, token string, body any) *http.Response {
+ 	t.Helper()
+ 	var reader io.Reader
+@@ -380,6 +409,156 @@ func TestUpload_Prune(t *testing.T) {
+ 	}
+ }
+ 
++func TestUpload_ValidForWritesMetadata(t *testing.T) {
++	th := newHarness(t, appA())
++	plain := []byte("payload")
++
++	resp := th.postValidFor(t, th.uploadTok, "backup.zip", "52h", plain)
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusCreated {
++		t.Fatalf("got %d, want 201", resp.StatusCode)
++	}
++
++	snap := th.backend.snapshot()
++	target := "memory:bucket/appa/20260507T141502Z_backup.zip.age"
++	metaTarget := target + ".metadata.json"
++	if len(snap) != 2 {
++		t.Fatalf("expected backup and metadata, got %v", keys(snap))
++	}
++	if got, want := string(snap[metaTarget]), `{"valid_for":"52h"}`; got != want {
++		t.Errorf("metadata = %s, want %s", got, want)
++	}
++	if got := th.backend.uploads(); len(got) != 2 || got[0] != target || got[1] != metaTarget {
++		t.Errorf("uploads = %v, want the backup then its metadata", got)
++	}
++
++	r, err := age.Decrypt(bytes.NewReader(snap[target]), th.identity)
++	if err != nil {
++		t.Fatalf("age decrypt backup: %v", err)
++	}
++	round, err := io.ReadAll(r)
++	if err != nil {
++		t.Fatalf("read decrypted: %v", err)
++	}
++	if !bytes.Equal(round, plain) {
++		t.Errorf("decrypted bytes mismatch")
++	}
++}
++
++func TestUpload_WithoutValidForWritesNoMetadata(t *testing.T) {
++	th := newHarness(t, appA())
++
++	resp := th.post(t, th.uploadTok, "backup.zip", []byte("payload"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusCreated {
++		t.Fatalf("got %d, want 201", resp.StatusCode)
++	}
++	snap := th.backend.snapshot()
++	if len(snap) != 1 {
++		t.Errorf("expected only the backup, got %v", keys(snap))
++	}
++}
++
++func TestUpload_ValidForValidation(t *testing.T) {
++	th := newHarness(t, appA())
++
++	for _, validFor := range []string{"", "0s", "-52h", "52", "2d", "soon"} {
++		t.Run(validFor, func(t *testing.T) {
++			resp := th.postValidFor(t, th.uploadTok, "backup.zip", validFor, []byte("x"))
++			resp.Body.Close()
++			if resp.StatusCode != http.StatusBadRequest {
++				t.Errorf("got %d, want 400", resp.StatusCode)
++			}
++			if snap := th.backend.snapshot(); len(snap) != 0 {
++				t.Errorf("expected nothing stored, got %v", keys(snap))
++			}
++		})
++	}
++}
++
++func TestUpload_BackendFailureWritesNoMetadata(t *testing.T) {
++	th := newHarness(t, appA())
++	th.backend.failOn = "appa/"
++
++	resp := th.postValidFor(t, th.uploadTok, "backup.zip", "52h", []byte("data"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusInternalServerError {
++		t.Errorf("got %d, want 500", resp.StatusCode)
++	}
++	if snap := th.backend.snapshot(); len(snap) != 0 {
++		t.Errorf("expected backend empty after failure, got %v", keys(snap))
++	}
++	for _, target := range th.backend.uploads() {
++		if pipeline.IsMetadataName(target) {
++			t.Errorf("metadata write attempted for a backup that did not land: %s", target)
++		}
++	}
++}
++
++func TestUpload_MetadataFailureCleans(t *testing.T) {
++	th := newHarness(t, appA())
++	th.backend.failOn = ".metadata.json"
++
++	resp := th.postValidFor(t, th.uploadTok, "backup.zip", "52h", []byte("data"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusInternalServerError {
++		t.Errorf("got %d, want 500", resp.StatusCode)
++	}
++	if snap := th.backend.snapshot(); len(snap) != 0 {
++		t.Errorf("expected backend empty after failure, got %v", keys(snap))
++	}
++}
++
++func TestUpload_PruneCountsBackupsOnly(t *testing.T) {
++	th := newHarness(t, appA())
++
++	scope := "memory:bucket/appa/"
++	th.backend.mu.Lock()
++	for _, name := range []string{
++		"20260101T000000Z_a.zip.age",
++		"20260102T000000Z_b.zip.age",
++		"20260103T000000Z_c.zip.age",
++		"20260104T000000Z_d.zip.age",
++		"20260105T000000Z_e.zip.age",
++	} {
++		th.backend.objects[scope+name] = []byte{1}
++		th.backend.objects[scope+name+".metadata.json"] = []byte(`{"valid_for":"52h"}`)
++	}
++	th.backend.objects[scope+"20251231T000000Z_gone.zip.age.metadata.json"] = []byte(`{"valid_for":"52h"}`)
++	th.backend.mu.Unlock()
++
++	resp := th.postValidFor(t, th.uploadTok, "fresh.zip", "52h", []byte("payload"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusCreated {
++		t.Fatalf("got %d, want 201", resp.StatusCode)
++	}
++
++	want := []string{
++		scope + "20260104T000000Z_d.zip.age",
++		scope + "20260104T000000Z_d.zip.age.metadata.json",
++		scope + "20260105T000000Z_e.zip.age",
++		scope + "20260105T000000Z_e.zip.age.metadata.json",
++		scope + "20260507T141502Z_fresh.zip.age",
++		scope + "20260507T141502Z_fresh.zip.age.metadata.json",
++	}
++	deadline := time.Now().Add(2 * time.Second)
++	for time.Now().Before(deadline) {
++		if len(th.backend.snapshot()) == len(want) {
++			break
++		}
++		time.Sleep(10 * time.Millisecond)
++	}
++	snap := th.backend.snapshot()
++	if len(snap) != len(want) {
++		t.Fatalf("expected %d objects after prune, got %d: %v", len(want), len(snap), keys(snap))
++	}
++	for _, k := range want {
++		if _, ok := snap[k]; !ok {
++			t.Errorf("expected %s to remain; have %v", k, keys(snap))
++		}
++	}
++}
++
+ func TestHealth(t *testing.T) {
+ 	th := newHarness(t)
+ 
+diff --git a/backup-server/src/internal/pipeline/metadata.go b/backup-server/src/internal/pipeline/metadata.go
+new file mode 100644
+index 0000000..5e20878
+--- /dev/null
++++ b/backup-server/src/internal/pipeline/metadata.go
+@@ -0,0 +1,49 @@
++package pipeline
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"strings"
++	"time"
++)
++
++// MetadataSuffix marks a backup's metadata file, stored beside the backup as
++// "<backup object name>.metadata.json". Backup object names end in ".age", so
++// no backup name carries this suffix.
++const MetadataSuffix = ".metadata.json"
++
++var ErrValidityInvalid = errors.New("valid_for must be a positive duration such as 52h")
++
++// Metadata is the content of a backup's metadata file. Metadata files are
++// plain JSON, not age-encrypted, so a holder of only the public key can read
++// them.
++type Metadata struct {
++	ValidFor string `json:"valid_for"`
++}
++
++func ValidateValidity(s string) error {
++	d, err := time.ParseDuration(s)
++	if err != nil || d <= 0 {
++		return ErrValidityInvalid
++	}
++	return nil
++}
++
++func MetadataName(objname string) string {
++	return objname + MetadataSuffix
++}
++
++func IsMetadataName(name string) bool {
++	return strings.HasSuffix(name, MetadataSuffix)
++}
++
++func WriteMetadata(ctx context.Context, backend Backend, target string, meta Metadata) error {
++	data, err := json.Marshal(meta)
++	if err != nil {
++		return fmt.Errorf("encode metadata: %w", err)
++	}
++	return backend.Upload(ctx, target, bytes.NewReader(data))
++}
+diff --git a/backup-server/src/internal/pipeline/metadata_test.go b/backup-server/src/internal/pipeline/metadata_test.go
+new file mode 100644
+index 0000000..d74b036
+--- /dev/null
++++ b/backup-server/src/internal/pipeline/metadata_test.go
+@@ -0,0 +1,62 @@
++package pipeline
++
++import (
++	"context"
++	"errors"
++	"testing"
++	"time"
++)
++
++func TestValidateValidity(t *testing.T) {
++	cases := []struct {
++		in   string
++		want error
++	}{
++		{"52h", nil},
++		{"1h30m", nil},
++		{"90s", nil},
++		{"", ErrValidityInvalid},
++		{"0", ErrValidityInvalid},
++		{"0s", ErrValidityInvalid},
++		{"-52h", ErrValidityInvalid},
++		{"52", ErrValidityInvalid},
++		{"2d", ErrValidityInvalid},
++		{"soon", ErrValidityInvalid},
++	}
++	for _, tc := range cases {
++		t.Run(tc.in, func(t *testing.T) {
++			if err := ValidateValidity(tc.in); !errors.Is(err, tc.want) {
++				t.Errorf("got %v, want %v", err, tc.want)
++			}
++		})
++	}
++}
++
++func TestMetadataName(t *testing.T) {
++	obj := ObjectName(time.Date(2026, 5, 7, 14, 15, 2, 0, time.UTC), "backup.zip")
++	got := MetadataName(obj)
++	if want := "20260507T141502Z_backup.zip.age.metadata.json"; got != want {
++		t.Errorf("got %q want %q", got, want)
++	}
++	if !IsMetadataName(got) {
++		t.Errorf("IsMetadataName(%q) = false", got)
++	}
++	if IsMetadataName(obj) {
++		t.Errorf("IsMetadataName(%q) = true", obj)
++	}
++	// A filename that itself ends in the suffix still yields a backup name.
++	if tricky := ObjectName(time.Now(), "x.metadata.json"); IsMetadataName(tricky) {
++		t.Errorf("IsMetadataName(%q) = true", tricky)
++	}
++}
++
++func TestWriteMetadata(t *testing.T) {
++	b := newFakePruneBackend()
++	target := "remote:scope/20260507T141502Z_backup.zip.age.metadata.json"
++	if err := WriteMetadata(context.Background(), b, target, Metadata{ValidFor: "52h"}); err != nil {
++		t.Fatalf("write: %v", err)
++	}
++	if got, want := string(b.objects[target]), `{"valid_for":"52h"}`; got != want {
++		t.Errorf("got %s want %s", got, want)
++	}
++}
+diff --git a/backup-server/src/internal/pipeline/prune.go b/backup-server/src/internal/pipeline/prune.go
+index 5cfa5df..3a2f0d8 100644
+--- a/backup-server/src/internal/pipeline/prune.go
++++ b/backup-server/src/internal/pipeline/prune.go
+@@ -4,13 +4,16 @@ import (
+ 	"context"
+ 	"errors"
+ 	"log"
++	"slices"
+ 	"sort"
+ 	"strings"
+ )
+ 
+-// Prune lists objects under dir, sorts ascending (chronological because of the
+-// timestamp prefix), and deletes everything past `retention` keepers.
+-// Returns the number of objects deleted.
++// Prune keeps the newest `retention` backups under dir, sorting names
++// ascending (chronological because of the timestamp prefix). Metadata files
++// never count; one is deleted once its backup is not among the kept ones,
++// including when that backup is already gone. Returns the number of objects
++// deleted.
+ func Prune(ctx context.Context, backend Backend, dir string, retention int) (int, error) {
+ 	if retention <= 0 {
+ 		return 0, nil
+@@ -19,11 +22,28 @@ func Prune(ctx context.Context, backend Backend, dir string, retention int) (int
+ 	if err != nil {
+ 		return 0, err
+ 	}
+-	sort.Strings(names)
+-	if len(names) <= retention {
+-		return 0, nil
++	var backups, metadata []string
++	for _, name := range names {
++		if IsMetadataName(name) {
++			metadata = append(metadata, name)
++		} else {
++			backups = append(backups, name)
++		}
++	}
++	sort.Strings(backups)
++
++	cut := max(len(backups)-retention, 0)
++	toDelete := slices.Clone(backups[:cut])
++	kept := make(map[string]bool, len(backups)-cut)
++	for _, name := range backups[cut:] {
++		kept[name] = true
+ 	}
+-	toDelete := names[:len(names)-retention]
++	for _, name := range metadata {
++		if !kept[strings.TrimSuffix(name, MetadataSuffix)] {
++			toDelete = append(toDelete, name)
++		}
++	}
++
+ 	deleted := 0
+ 	prefix := strings.TrimRight(dir, "/") + "/"
+ 	for _, name := range toDelete {
+diff --git a/backup-server/src/internal/pipeline/prune_test.go b/backup-server/src/internal/pipeline/prune_test.go
+index dba6472..4f34779 100644
+--- a/backup-server/src/internal/pipeline/prune_test.go
++++ b/backup-server/src/internal/pipeline/prune_test.go
+@@ -17,7 +17,16 @@ func newFakePruneBackend() *fakePruneBackend {
+ 	return &fakePruneBackend{objects: map[string][]byte{}}
+ }
+ 
+-func (f *fakePruneBackend) Upload(_ context.Context, _ string, _ io.Reader) error { return nil }
++func (f *fakePruneBackend) Upload(_ context.Context, target string, body io.Reader) error {
++	data, err := io.ReadAll(body)
++	if err != nil {
++		return err
++	}
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.objects[target] = data
++	return nil
++}
+ 
+ func (f *fakePruneBackend) Delete(_ context.Context, target string) error {
+ 	f.mu.Lock()
+@@ -101,3 +110,94 @@ func TestPrune_RetentionZero(t *testing.T) {
+ 		t.Errorf("expected no deletions for retention=0, got %d", deleted)
+ 	}
+ }
++
++func TestPrune_MetadataNotCounted(t *testing.T) {
++	b := newFakePruneBackend()
++	dir := "remote:scope"
++	for _, n := range []string{
++		"20260101T000000Z_a.age",
++		"20260102T000000Z_b.age",
++		"20260103T000000Z_c.age",
++	} {
++		b.objects[dir+"/"+n] = []byte{1}
++		b.objects[dir+"/"+MetadataName(n)] = []byte{1}
++	}
++
++	deleted, err := Prune(context.Background(), b, dir, 3)
++	if err != nil {
++		t.Fatalf("prune: %v", err)
++	}
++	if deleted != 0 {
++		t.Errorf("deleted = %d, want 0; left: %v", deleted, b.objects)
++	}
++	if len(b.objects) != 6 {
++		t.Errorf("objects = %d, want 6", len(b.objects))
++	}
++}
++
++func TestPrune_DeletesPrunedBackupsMetadata(t *testing.T) {
++	b := newFakePruneBackend()
++	dir := "remote:scope"
++	backups := []string{
++		"20260101T000000Z_a.age",
++		"20260102T000000Z_b.age",
++		"20260103T000000Z_c.age",
++		"20260104T000000Z_d.age",
++		"20260105T000000Z_e.age",
++	}
++	for _, n := range backups {
++		b.objects[dir+"/"+n] = []byte{1}
++	}
++	// c declares nothing; the others carry a metadata file.
++	for _, n := range []string{backups[0], backups[1], backups[3], backups[4]} {
++		b.objects[dir+"/"+MetadataName(n)] = []byte{1}
++	}
++
++	deleted, err := Prune(context.Background(), b, dir, 2)
++	if err != nil {
++		t.Fatalf("prune: %v", err)
++	}
++	if deleted != 5 {
++		t.Errorf("deleted = %d, want 5", deleted)
++	}
++	want := map[string]bool{
++		dir + "/20260104T000000Z_d.age":               true,
++		dir + "/20260104T000000Z_d.age.metadata.json": true,
++		dir + "/20260105T000000Z_e.age":               true,
++		dir + "/20260105T000000Z_e.age.metadata.json": true,
++	}
++	for k := range b.objects {
++		if !want[k] {
++			t.Errorf("unexpected object kept: %s", k)
++		}
++	}
++	for k := range want {
++		if _, ok := b.objects[k]; !ok {
++			t.Errorf("expected %s to remain", k)
++		}
++	}
++}
++
++func TestPrune_ClearsOrphanMetadata(t *testing.T) {
++	b := newFakePruneBackend()
++	dir := "remote:scope"
++	kept := "20260102T000000Z_b.age"
++	b.objects[dir+"/"+kept] = []byte{1}
++	b.objects[dir+"/"+MetadataName(kept)] = []byte{1}
++	orphan := dir + "/" + MetadataName("20260101T000000Z_a.age")
++	b.objects[orphan] = []byte{1}
++
++	deleted, err := Prune(context.Background(), b, dir, 5)
++	if err != nil {
++		t.Fatalf("prune: %v", err)
++	}
++	if deleted != 1 {
++		t.Errorf("deleted = %d, want 1", deleted)
++	}
++	if _, ok := b.objects[orphan]; ok {
++		t.Errorf("expected orphan metadata to be cleared")
++	}
++	if len(b.objects) != 2 {
++		t.Errorf("objects = %d, want 2: %v", len(b.objects), b.objects)
++	}
++}
+
+/work/DockerImages — P2: git diff df8448d4b316..0af47c9a646b
+
+backup-server/Dockerfile                             |   2 +-
+ backup-server/architecture.yaml                      |  19 +-
+ backup-server/src/cmd/backup-server/main.go          |  16 +-
+ backup-server/src/go.mod                             |  14 +-
+ backup-server/src/go.sum                             |  44 ++++
+ backup-server/src/internal/config/config.go          |  22 +-
+ backup-server/src/internal/freshness/metrics.go      |  65 ++++++
+ backup-server/src/internal/freshness/watcher.go      | 248 ++++++++++++++++++++
+ backup-server/src/internal/freshness/watcher_test.go | 474 +++++++++++++++++++++++++++++++++++++++
+ backup-server/src/internal/handler/handler.go        |  18 +-
+ backup-server/src/internal/handler/handler_test.go   | 100 ++++++++-
+ backup-server/src/internal/pipeline/backend.go       |  41 +++-
+ backup-server/src/internal/pipeline/backend_test.go  |  77 +++++++
+ backup-server/src/internal/pipeline/metadata.go      |  16 +-
+ backup-server/src/internal/pipeline/metadata_test.go |  58 +++--
+ backup-server/src/internal/pipeline/upload.go        |  21 +-
+ backup-server/src/internal/pipeline/upload_test.go   |  23 ++
+ 17 files changed, 1213 insertions(+), 45 deletions(-)
+
+diff --git a/backup-server/Dockerfile b/backup-server/Dockerfile
+index d77e680..a219f25 100644
+--- a/backup-server/Dockerfile
++++ b/backup-server/Dockerfile
+@@ -24,6 +24,6 @@ COPY --from=builder /out/backup-server /usr/local/bin/backup-server
+ 
+ ENV RCLONE_CONFIG=/data/rclone.conf
+ 
+-EXPOSE 8080
++EXPOSE 8080 8081
+ 
+ ENTRYPOINT ["backup-server"]
+diff --git a/backup-server/architecture.yaml b/backup-server/architecture.yaml
+index 21ab57b..4bb8ce2 100644
+--- a/backup-server/architecture.yaml
++++ b/backup-server/architecture.yaml
+@@ -1,9 +1,10 @@
+ schemaVersion: "0.1"
+ producer: docker-images
+ 
+-# backup-server — exposes one application service with TWO distinct consumers,
+-# so it carries two interfaces: the upload surface (used by backup-producing
+-# workloads) and the credential-management surface (used by Terraform).
++# backup-server — exposes one application service with THREE distinct
++# consumers, so it carries three interfaces: the upload surface (used by
++# backup-producing workloads), the credential-management surface (used by
++# Terraform) and the freshness metrics (scraped by Prometheus).
+ 
+ applicationComponents:
+   - id: app:backup-server,7bb310fa-3c0a-42ee-a70b-d3295d2586dc
+@@ -41,6 +42,14 @@ applicationInterfaces:
+       /credentials[/<scope>]), authenticated with the management token.
+     introduced: 2026-05-07
+     lifecycle: active
++  - id: if:backup-server-metrics,bd15ce5c-0b89-4957-8d26-0c2f6381423a
++    label: GET /metrics
++    summary: >-
++      Prometheus scrape surface on its own listener: per backup stream, when
++      the newest backup was received and until when it is valid, plus when
++      the remote was last read without error.
++    introduced: 2026-09-18
++    lifecycle: active
+ 
+ relations:
+   - id: rel:backup-server-provides-service
+@@ -55,6 +64,10 @@ relations:
+     source: if:backup-server-credentials,b110081b-eb8a-42bc-807e-44c1dcd523d4
+     target: svc:backup-server,0d98747c-6eb7-4e6a-b91d-f09fa6c3ae1f
+     type: Assignment
++  - id: rel:backup-server-metrics-endpoint
++    source: if:backup-server-metrics,bd15ce5c-0b89-4957-8d26-0c2f6381423a
++    target: svc:backup-server,0d98747c-6eb7-4e6a-b91d-f09fa6c3ae1f
++    type: Assignment
+   # Streams backups to object storage; the rclone remote is defined in a
+   # config file (not an env var), so there is no boundBy recipe.
+   - id: rel:backup-server-consumes-object-storage
+diff --git a/backup-server/src/cmd/backup-server/main.go b/backup-server/src/cmd/backup-server/main.go
+index 0b0a29d..3974999 100644
+--- a/backup-server/src/cmd/backup-server/main.go
++++ b/backup-server/src/cmd/backup-server/main.go
+@@ -1,6 +1,7 @@
+ package main
+ 
+ import (
++	"context"
+ 	"errors"
+ 	"log"
+ 	"net/http"
+@@ -11,6 +12,7 @@ import (
+ 	"backup-server/internal/applog"
+ 	"backup-server/internal/auth"
+ 	"backup-server/internal/config"
++	"backup-server/internal/freshness"
+ 	"backup-server/internal/handler"
+ 	"backup-server/internal/pipeline"
+ )
+@@ -43,13 +45,17 @@ func run() error {
+ 	}
+ 
+ 	backend := pipeline.NewRcloneBackend(cfg.SpoolDir)
+-	h := handler.New(cfg, store, backend, recipient)
++	watcher := freshness.New(backend, cfg.RcloneRemote)
++	h := handler.New(cfg, store, backend, recipient, watcher)
+ 
++	go watcher.Run(context.Background(), freshness.RefreshInterval)
++
++	errc := make(chan error, 2)
+ 	log.Printf("listening on %s", cfg.ListenAddr)
+-	if err := http.ListenAndServe(cfg.ListenAddr, h.Routes()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+-		return err
+-	}
+-	return nil
++	go func() { errc <- http.ListenAndServe(cfg.ListenAddr, h.Routes()) }()
++	log.Printf("serving metrics on %s", cfg.MetricsListenAddr)
++	go func() { errc <- http.ListenAndServe(cfg.MetricsListenAddr, watcher.MetricsHandler()) }()
++	return <-errc
+ }
+ 
+ func loadRecipient(path string) (age.Recipient, error) {
+diff --git a/backup-server/src/go.mod b/backup-server/src/go.mod
+index f789c90..9a8c8c1 100644
+--- a/backup-server/src/go.mod
++++ b/backup-server/src/go.mod
+@@ -2,10 +2,22 @@ module backup-server
+ 
+ go 1.24.0
+ 
+-require filippo.io/age v1.3.1
++require (
++	filippo.io/age v1.3.1
++	github.com/prometheus/client_golang v1.23.2
++)
+ 
+ require (
+ 	filippo.io/hpke v0.4.0 // indirect
++	github.com/beorn7/perks v1.0.1 // indirect
++	github.com/cespare/xxhash/v2 v2.3.0 // indirect
++	github.com/kr/text v0.2.0 // indirect
++	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
++	github.com/prometheus/client_model v0.6.2 // indirect
++	github.com/prometheus/common v0.66.1 // indirect
++	github.com/prometheus/procfs v0.16.1 // indirect
++	go.yaml.in/yaml/v2 v2.4.2 // indirect
+ 	golang.org/x/crypto v0.45.0 // indirect
+ 	golang.org/x/sys v0.38.0 // indirect
++	google.golang.org/protobuf v1.36.8 // indirect
+ )
+diff --git a/backup-server/src/go.sum b/backup-server/src/go.sum
+index d649c87..b381982 100644
+--- a/backup-server/src/go.sum
++++ b/backup-server/src/go.sum
+@@ -4,7 +4,51 @@ filippo.io/age v1.3.1 h1:hbzdQOJkuaMEpRCLSN1/C5DX74RPcNCk6oqhKMXmZi0=
+ filippo.io/age v1.3.1/go.mod h1:EZorDTYUxt836i3zdori5IJX/v2Lj6kWFU0cfh6C0D4=
+ filippo.io/hpke v0.4.0 h1:p575VVQ6ted4pL+it6M00V/f2qTZITO0zgmdKCkd5+A=
+ filippo.io/hpke v0.4.0/go.mod h1:EmAN849/P3qdeK+PCMkDpDm83vRHM5cDipBJ8xbQLVY=
++github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
++github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
++github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
++github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
++github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
++github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
++github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
++github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
++github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
++github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
++github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
++github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
++github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
++github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
++github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
++github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
++github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
++github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
++github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
++github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
++github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
++github.com/prometheus/client_golang v1.23.2 h1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=
++github.com/prometheus/client_golang v1.23.2/go.mod h1:Tb1a6LWHB3/SPIzCoaDXI4I8UHKeFTEQ1YCr+0Gyqmg=
++github.com/prometheus/client_model v0.6.2 h1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=
++github.com/prometheus/client_model v0.6.2/go.mod h1:y3m2F6Gdpfy6Ut/GBsUqTWZqCUvMVzSfMLjcu6wAwpE=
++github.com/prometheus/common v0.66.1 h1:h5E0h5/Y8niHc5DlaLlWLArTQI7tMrsfQjHV+d9ZoGs=
++github.com/prometheus/common v0.66.1/go.mod h1:gcaUsgf3KfRSwHY4dIMXLPV0K/Wg1oZ8+SbZk/HH/dA=
++github.com/prometheus/procfs v0.16.1 h1:hZ15bTNuirocR6u0JZ6BAHHmwS1p8B4P6MRqxtzMyRg=
++github.com/prometheus/procfs v0.16.1/go.mod h1:teAbpZRB1iIAJYREa1LsoWUXykVXA1KlTmWl8x/U+Is=
++github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
++github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
++github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
++github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
++go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
++go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
++go.yaml.in/yaml/v2 v2.4.2 h1:DzmwEr2rDGHl7lsFgAHxmNz/1NlQ7xLIrlN2h5d1eGI=
++go.yaml.in/yaml/v2 v2.4.2/go.mod h1:081UH+NErpNdqlCXm3TtEran0rJZGxAYx9hb/ELlsPU=
+ golang.org/x/crypto v0.45.0 h1:jMBrvKuj23MTlT0bQEOBcAE0mjg8mK9RXFhRH6nyF3Q=
+ golang.org/x/crypto v0.45.0/go.mod h1:XTGrrkGJve7CYK7J8PEww4aY7gM3qMCElcJQ8n8JdX4=
+ golang.org/x/sys v0.38.0 h1:3yZWxaJjBmCWXqhN1qh02AkOnCQ1poK6oF+a7xWL6Gc=
+ golang.org/x/sys v0.38.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
++google.golang.org/protobuf v1.36.8 h1:xHScyCOEuuwZEc6UtSOvPbAT4zRh0xcNRYekJwfqyMc=
++google.golang.org/protobuf v1.36.8/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=
++gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
++gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
++gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
++gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
++gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+diff --git a/backup-server/src/internal/config/config.go b/backup-server/src/internal/config/config.go
+index b81a64b..d4f91ff 100644
+--- a/backup-server/src/internal/config/config.go
++++ b/backup-server/src/internal/config/config.go
+@@ -15,7 +15,10 @@ type Config struct {
+ 	ConfDir          string
+ 	ManagementToken  string
+ 	ListenAddr       string
+-	MaxUploadBytes   int64
++	// MetricsListenAddr serves only GET /metrics, apart from ListenAddr so
++	// that whatever proxies ListenAddr does not expose it.
++	MetricsListenAddr string
++	MaxUploadBytes    int64
+ 	// SpoolDir is where uploads are spooled before being copied to the remote;
+ 	// empty means os.TempDir(). It must have room for the largest backup.
+ 	SpoolDir string
+@@ -23,14 +26,15 @@ type Config struct {
+ 
+ func LoadFromEnv() (*Config, error) {
+ 	cfg := &Config{
+-		RcloneConfig:     getenv("RCLONE_CONFIG", "/data/rclone.conf"),
+-		RcloneRemote:     os.Getenv("RCLONE_REMOTE"),
+-		AgeRecipientPath: os.Getenv("AGE_RECIPIENT"),
+-		ConfDir:          os.Getenv("CONF_DIR"),
+-		ManagementToken:  os.Getenv("MANAGEMENT_TOKEN"),
+-		ListenAddr:       getenv("LISTEN_ADDR", ":8080"),
+-		MaxUploadBytes:   defaultMaxUploadBytes,
+-		SpoolDir:         os.Getenv("SPOOL_DIR"),
++		RcloneConfig:      getenv("RCLONE_CONFIG", "/data/rclone.conf"),
++		RcloneRemote:      os.Getenv("RCLONE_REMOTE"),
++		AgeRecipientPath:  os.Getenv("AGE_RECIPIENT"),
++		ConfDir:           os.Getenv("CONF_DIR"),
++		ManagementToken:   os.Getenv("MANAGEMENT_TOKEN"),
++		ListenAddr:        getenv("LISTEN_ADDR", ":8080"),
++		MetricsListenAddr: getenv("METRICS_LISTEN_ADDR", ":8081"),
++		MaxUploadBytes:    defaultMaxUploadBytes,
++		SpoolDir:          os.Getenv("SPOOL_DIR"),
+ 	}
+ 
+ 	if v := os.Getenv("MAX_UPLOAD_BYTES"); v != "" {
+diff --git a/backup-server/src/internal/freshness/metrics.go b/backup-server/src/internal/freshness/metrics.go
+new file mode 100644
+index 0000000..9df314e
+--- /dev/null
++++ b/backup-server/src/internal/freshness/metrics.go
+@@ -0,0 +1,65 @@
++package freshness
++
++import (
++	"net/http"
++	"time"
++
++	"github.com/prometheus/client_golang/prometheus"
++	"github.com/prometheus/client_golang/prometheus/promhttp"
++)
++
++var (
++	lastBackupDesc = prometheus.NewDesc(
++		"backup_server_stream_last_backup_timestamp_seconds",
++		"Unix time the stream's newest kept backup was received, from its object name.",
++		[]string{"scope", "filename"}, nil)
++	validUntilDesc = prometheus.NewDesc(
++		"backup_server_stream_valid_until_timestamp_seconds",
++		"Unix time the stream stops being valid: its newest backup's receipt plus the validity declared by its newest declaring backup.",
++		[]string{"scope", "filename"}, nil)
++	lastRefreshDesc = prometheus.NewDesc(
++		"backup_server_refresh_last_success_timestamp_seconds",
++		"Unix time of the last refresh that read every folder under the remote without error; 0 before the first.",
++		nil, nil)
++	startDesc = prometheus.NewDesc(
++		"backup_server_start_time_seconds",
++		"Unix time the server started.",
++		nil, nil)
++)
++
++// MetricsHandler serves GET /metrics from the values the last refreshes
++// read; a scrape never reads the remote.
++func (w *Watcher) MetricsHandler() http.Handler {
++	reg := prometheus.NewRegistry()
++	reg.MustRegister(collector{w})
++	mux := http.NewServeMux()
++	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
++	return mux
++}
++
++type collector struct{ w *Watcher }
++
++func (c collector) Describe(ch chan<- *prometheus.Desc) {
++	ch <- lastBackupDesc
++	ch <- validUntilDesc
++	ch <- lastRefreshDesc
++	ch <- startDesc
++}
++
++func (c collector) Collect(ch chan<- prometheus.Metric) {
++	streams, lastSuccess := c.w.snapshot()
++	for _, s := range streams {
++		ch <- prometheus.MustNewConstMetric(lastBackupDesc, prometheus.GaugeValue, unixSeconds(s.LastBackup), s.Scope, s.Filename)
++		ch <- prometheus.MustNewConstMetric(validUntilDesc, prometheus.GaugeValue, unixSeconds(s.ValidUntil), s.Scope, s.Filename)
++	}
++	last := 0.0
++	if !lastSuccess.IsZero() {
++		last = unixSeconds(lastSuccess)
++	}
++	ch <- prometheus.MustNewConstMetric(lastRefreshDesc, prometheus.GaugeValue, last)
++	ch <- prometheus.MustNewConstMetric(startDesc, prometheus.GaugeValue, unixSeconds(c.w.started))
++}
++
++func unixSeconds(t time.Time) float64 {
++	return float64(t.Unix())
++}
+diff --git a/backup-server/src/internal/freshness/watcher.go b/backup-server/src/internal/freshness/watcher.go
+new file mode 100644
+index 0000000..e9bc180
+--- /dev/null
++++ b/backup-server/src/internal/freshness/watcher.go
+@@ -0,0 +1,248 @@
++// Package freshness reads back from the backup remote when each stream's
++// newest backup was received and until when the stream is valid, and serves
++// both as Prometheus metrics. A stream is a scope plus a file name.
++package freshness
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"log"
++	"sort"
++	"sync"
++	"time"
++
++	"backup-server/internal/pipeline"
++)
++
++const (
++	RefreshInterval = time.Hour
++	refreshTimeout  = 10 * time.Minute
++)
++
++// Storage is the read side of the backup remote.
++type Storage interface {
++	ListDirs(ctx context.Context, dir string) ([]string, error)
++	List(ctx context.Context, dir string) ([]string, error)
++	Read(ctx context.Context, target string) ([]byte, error)
++}
++
++// Stream is a scope + file name with at least one kept backup that declares
++// a validity.
++type Stream struct {
++	Scope    string
++	Filename string
++	// LastBackup is when the stream's newest backup was received.
++	LastBackup time.Time
++	// ValidUntil is LastBackup plus the validity declared by the stream's
++	// newest declaring backup.
++	ValidUntil time.Time
++}
++
++type Watcher struct {
++	storage Storage
++	remote  string
++	now     func() time.Time
++	started time.Time
++
++	// refreshing serializes refreshes; validities is touched only under it.
++	refreshing sync.Mutex
++	// validities holds, per scope, the validity each stream's newest
++	// declaring metadata file declares. A metadata file never changes once
++	// written, so one held here is not read again.
++	validities map[string]map[string]time.Duration
++
++	// mu guards streams and lastSuccess, which only refreshes write.
++	mu          sync.Mutex
++	streams     map[string][]Stream
++	lastSuccess time.Time
++}
++
++func New(storage Storage, remote string) *Watcher {
++	return &Watcher{
++		storage:    storage,
++		remote:     remote,
++		now:        time.Now,
++		started:    time.Now(),
++		validities: map[string]map[string]time.Duration{},
++		streams:    map[string][]Stream{},
++	}
++}
++
++// Run refreshes at once and then every interval until ctx is done.
++func (w *Watcher) Run(ctx context.Context, interval time.Duration) {
++	ticker := time.NewTicker(interval)
++	defer ticker.Stop()
++	for {
++		if err := w.Refresh(ctx); err != nil {
++			log.Printf("freshness refresh: %v", err)
++		}
++		select {
++		case <-ctx.Done():
++			return
++		case <-ticker.C:
++		}
++	}
++}
++
++// Refresh reads every folder directly under the remote. A folder that is
++// gone drops out; one whose read fails keeps the streams last read for it,
++// and the refresh does not count as a success.
++func (w *Watcher) Refresh(ctx context.Context) error {
++	w.refreshing.Lock()
++	defer w.refreshing.Unlock()
++	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
++	defer cancel()
++
++	scopes, err := w.storage.ListDirs(ctx, w.remote)
++	if err != nil {
++		return fmt.Errorf("list %s: %w", w.remote, err)
++	}
++
++	var errs []error
++	streams := make(map[string][]Stream, len(scopes))
++	validities := make(map[string]map[string]time.Duration, len(scopes))
++	for _, scope := range scopes {
++		found, read, err := w.scan(ctx, scope)
++		if err != nil {
++			errs = append(errs, fmt.Errorf("scope %s: %w", scope, err))
++			found, read = w.streams[scope], w.validities[scope]
++		}
++		if len(found) > 0 {
++			streams[scope] = found
++		}
++		if len(read) > 0 {
++			validities[scope] = read
++		}
++	}
++
++	w.validities = validities
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	w.streams = streams
++	if len(errs) == 0 {
++		w.lastSuccess = w.now()
++	}
++	return errors.Join(errs...)
++}
++
++// RefreshScope re-reads one scope folder. On failure the scope keeps the
++// streams last read for it.
++func (w *Watcher) RefreshScope(ctx context.Context, scope string) error {
++	w.refreshing.Lock()
++	defer w.refreshing.Unlock()
++	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
++	defer cancel()
++
++	found, read, err := w.scan(ctx, scope)
++	if err != nil {
++		return fmt.Errorf("scope %s: %w", scope, err)
++	}
++
++	if len(read) > 0 {
++		w.validities[scope] = read
++	} else {
++		delete(w.validities, scope)
++	}
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	if len(found) > 0 {
++		w.streams[scope] = found
++	} else {
++		delete(w.streams, scope)
++	}
++	return nil
++}
++
++// scan lists one scope folder once. Of the metadata files there, it reads
++// only each stream's newest declaring one, and only if w.validities does not
++// hold it yet. It returns the scope's watched streams and the validities they
++// rest on.
++func (w *Watcher) scan(ctx context.Context, scope string) ([]Stream, map[string]time.Duration, error) {
++	names, err := w.storage.List(ctx, pipeline.ScopeDir(w.remote, scope))
++	if err != nil {
++		return nil, nil, fmt.Errorf("list: %w", err)
++	}
++	present := make(map[string]bool, len(names))
++	for _, name := range names {
++		present[name] = true
++	}
++
++	type newest struct {
++		backup      time.Time
++		declaring   string
++		declaringAt time.Time
++	}
++	byFilename := map[string]*newest{}
++	for _, name := range names {
++		if pipeline.IsMetadataName(name) {
++			continue
++		}
++		received, filename, ok := pipeline.ParseObjectName(name)
++		if !ok {
++			continue
++		}
++		n := byFilename[filename]
++		if n == nil {
++			n = &newest{}
++			byFilename[filename] = n
++		}
++		if received.After(n.backup) {
++			n.backup = received
++		}
++		if present[pipeline.MetadataName(name)] && received.After(n.declaringAt) {
++			n.declaring, n.declaringAt = name, received
++		}
++	}
++
++	known := w.validities[scope]
++	read := map[string]time.Duration{}
++	var streams []Stream
++	for filename, n := range byFilename {
++		if n.declaring == "" {
++			continue
++		}
++		metaName := pipeline.MetadataName(n.declaring)
++		validity, ok := known[metaName]
++		if !ok {
++			target := pipeline.JoinTarget(w.remote, scope, metaName)
++			data, err := w.storage.Read(ctx, target)
++			if err != nil {
++				return nil, nil, fmt.Errorf("read %s: %w", target, err)
++			}
++			if validity, err = pipeline.DecodeValidity(data); err != nil {
++				return nil, nil, fmt.Errorf("%s: %w", target, err)
++			}
++		}
++		read[metaName] = validity
++		streams = append(streams, Stream{
++			Scope:      scope,
++			Filename:   filename,
++			LastBackup: n.backup,
++			ValidUntil: n.backup.Add(validity),
++		})
++	}
++	return streams, read, nil
++}
++
++// Streams returns every watched stream, ordered by scope and file name.
++func (w *Watcher) Streams() []Stream {
++	streams, _ := w.snapshot()
++	return streams
++}
++
++func (w *Watcher) snapshot() ([]Stream, time.Time) {
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	var streams []Stream
++	for _, s := range w.streams {
++		streams = append(streams, s...)
++	}
++	sort.Slice(streams, func(i, j int) bool {
++		if streams[i].Scope != streams[j].Scope {
++			return streams[i].Scope < streams[j].Scope
++		}
++		return streams[i].Filename < streams[j].Filename
++	})
++	return streams, w.lastSuccess
++}
+diff --git a/backup-server/src/internal/freshness/watcher_test.go b/backup-server/src/internal/freshness/watcher_test.go
+new file mode 100644
+index 0000000..a028d3e
+--- /dev/null
++++ b/backup-server/src/internal/freshness/watcher_test.go
+@@ -0,0 +1,474 @@
++package freshness
++
++import (
++	"bufio"
++	"context"
++	"errors"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"reflect"
++	"strconv"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"backup-server/internal/pipeline"
++)
++
++const remote = "gdrive:Homelab Backups"
++
++type fakeStorage struct {
++	mu       sync.Mutex
++	objects  map[string][]byte
++	failDirs error
++	failList map[string]error
++	listDirs int
++	lists    map[string]int
++	reads    []string
++}
++
++func newFakeStorage() *fakeStorage {
++	return &fakeStorage{
++		objects:  map[string][]byte{},
++		failList: map[string]error{},
++		lists:    map[string]int{},
++	}
++}
++
++func (f *fakeStorage) ListDirs(_ context.Context, dir string) ([]string, error) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.listDirs++
++	if f.failDirs != nil {
++		return nil, f.failDirs
++	}
++	prefix := dir + "/"
++	seen := map[string]bool{}
++	var dirs []string
++	for k := range f.objects {
++		rest, ok := strings.CutPrefix(k, prefix)
++		if !ok {
++			continue
++		}
++		if d, _, nested := strings.Cut(rest, "/"); nested && !seen[d] {
++			seen[d] = true
++			dirs = append(dirs, d)
++		}
++	}
++	return dirs, nil
++}
++
++func (f *fakeStorage) List(_ context.Context, dir string) ([]string, error) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.lists[dir]++
++	if err := f.failList[dir]; err != nil {
++		return nil, err
++	}
++	prefix := dir + "/"
++	var names []string
++	for k := range f.objects {
++		if rest, ok := strings.CutPrefix(k, prefix); ok && !strings.Contains(rest, "/") {
++			names = append(names, rest)
++		}
++	}
++	return names, nil
++}
++
++func (f *fakeStorage) Read(_ context.Context, target string) ([]byte, error) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.reads = append(f.reads, target)
++	data, ok := f.objects[target]
++	if !ok {
++		return nil, fmt.Errorf("%s: %w", target, pipeline.ErrNotFound)
++	}
++	return data, nil
++}
++
++// backup stores a backup of filename received at `at`, with a metadata file
++// declaring validFor unless validFor is empty.
++func (f *fakeStorage) backup(scope, filename string, at time.Time, validFor string) string {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	objname := pipeline.ObjectName(at, filename)
++	f.objects[pipeline.JoinTarget(remote, scope, objname)] = []byte("age-encrypted")
++	if validFor != "" {
++		f.objects[pipeline.JoinTarget(remote, scope, pipeline.MetadataName(objname))] = []byte(`{"valid_for":"` + validFor + `"}`)
++	}
++	return objname
++}
++
++func (f *fakeStorage) put(target string, data []byte) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	f.objects[target] = data
++}
++
++func (f *fakeStorage) remove(prefix string) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	for k := range f.objects {
++		if strings.HasPrefix(k, prefix) {
++			delete(f.objects, k)
++		}
++	}
++}
++
++func (f *fakeStorage) counts() (listDirs int, lists map[string]int, reads []string) {
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	lists = map[string]int{}
++	for k, v := range f.lists {
++		lists[k] = v
++	}
++	return f.listDirs, lists, append([]string(nil), f.reads...)
++}
++
++var day = time.Date(2026, 9, 14, 2, 17, 43, 0, time.UTC)
++
++func dayN(n int) time.Time { return day.Add(time.Duration(n) * 24 * time.Hour) }
++
++func newWatcher(s *fakeStorage) *Watcher {
++	w := New(s, remote)
++	w.now = func() time.Time { return dayN(10) }
++	return w
++}
++
++func refresh(t *testing.T, w *Watcher) {
++	t.Helper()
++	if err := w.Refresh(context.Background()); err != nil {
++		t.Fatalf("refresh: %v", err)
++	}
++}
++
++func assertStreams(t *testing.T, w *Watcher, want []Stream) {
++	t.Helper()
++	got := w.Streams()
++	if !reflect.DeepEqual(got, want) {
++		t.Errorf("streams:\n got  %+v\n want %+v", got, want)
++	}
++}
++
++func TestRefresh_PublishesWatchedStreams(t *testing.T) {
++	s := newFakeStorage()
++	for i := 1; i <= 3; i++ {
++		s.backup("openbao", "openbao-backup.tgz", dayN(i), "52h")
++	}
++	s.backup("postgres-pas", "db1.dump", dayN(2), "52h")
++	s.backup("postgres-pas", "db1.dump", dayN(3), "52h")
++	s.backup("postgres-pas", "db2.dump", dayN(3), "")
++	// Folders backup-server never wrote: the S3 mirror's crypt tree.
++	s.put(remote+"/s3-mirror/Q2ZhbmN5IGNyeXB0IG5hbWU", []byte("x"))
++	s.put(remote+"/s3-mirror/dG9w/bmVzdGVk", []byte("x"))
++	// A scope whose uploader never declares.
++	s.backup("legacy", "db.zip", dayN(3), "")
++
++	w := newWatcher(s)
++	refresh(t, w)
++
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(3), ValidUntil: dayN(3).Add(52 * time.Hour)},
++		{Scope: "postgres-pas", Filename: "db1.dump", LastBackup: dayN(3), ValidUntil: dayN(3).Add(52 * time.Hour)},
++	})
++}
++
++func TestRefresh_StillWatchedAfterNewestStopsDeclaring(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("openbao", "openbao-backup.tgz", dayN(1), "52h")
++	s.backup("openbao", "openbao-backup.tgz", dayN(2), "24h")
++	s.backup("openbao", "openbao-backup.tgz", dayN(3), "")
++
++	w := newWatcher(s)
++	refresh(t, w)
++
++	// Newest backup's receipt, plus the newest declared validity.
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(3), ValidUntil: dayN(3).Add(24 * time.Hour)},
++	})
++}
++
++func TestRefresh_OrphanMetadataDeclaresNothing(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("appa", "undeclared.zip", dayN(1), "")
++	orphan := pipeline.MetadataName(pipeline.ObjectName(dayN(2), "undeclared.zip"))
++	s.put(pipeline.JoinTarget(remote, "appa", orphan), []byte(`{"valid_for":"52h"}`))
++
++	s.backup("appa", "declared.zip", dayN(1), "52h")
++	newerOrphan := pipeline.MetadataName(pipeline.ObjectName(dayN(3), "declared.zip"))
++	s.put(pipeline.JoinTarget(remote, "appa", newerOrphan), []byte(`{"valid_for":"1h"}`))
++
++	w := newWatcher(s)
++	refresh(t, w)
++
++	assertStreams(t, w, []Stream{
++		{Scope: "appa", Filename: "declared.zip", LastBackup: dayN(1), ValidUntil: dayN(1).Add(52 * time.Hour)},
++	})
++}
++
++func TestRefresh_PrunedAwayDropsOut(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("openbao", "openbao-backup.tgz", dayN(1), "52h")
++	s.backup("postgres-pas", "db1.dump", dayN(1), "52h")
++	s.backup("postgres-pas", "db2.dump", dayN(1), "52h")
++
++	w := newWatcher(s)
++	refresh(t, w)
++	if got := len(w.Streams()); got != 3 {
++		t.Fatalf("got %d streams before pruning, want 3", got)
++	}
++
++	// Every backup of db2 pruned, and the openbao folder gone entirely.
++	s.remove(remote + "/postgres-pas/" + pipeline.ObjectName(dayN(1), "db2.dump"))
++	s.remove(remote + "/openbao/")
++	refresh(t, w)
++
++	assertStreams(t, w, []Stream{
++		{Scope: "postgres-pas", Filename: "db1.dump", LastBackup: dayN(1), ValidUntil: dayN(1).Add(52 * time.Hour)},
++	})
++}
++
++func TestRefresh_FailureKeepsLastValues(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("openbao", "openbao-backup.tgz", dayN(1), "52h")
++	s.backup("postgres-pas", "db1.dump", dayN(1), "52h")
++
++	w := newWatcher(s)
++	w.now = func() time.Time { return dayN(1) }
++	refresh(t, w)
++
++	s.backup("openbao", "openbao-backup.tgz", dayN(2), "52h")
++	s.backup("postgres-pas", "db1.dump", dayN(2), "52h")
++	s.failList[pipeline.ScopeDir(remote, "openbao")] = errors.New("rate limited")
++	w.now = func() time.Time { return dayN(2) }
++	if err := w.Refresh(context.Background()); err == nil {
++		t.Fatal("refresh with a failing scope: got nil error")
++	}
++	// The failing scope keeps what was last read; the others move on.
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(1), ValidUntil: dayN(1).Add(52 * time.Hour)},
++		{Scope: "postgres-pas", Filename: "db1.dump", LastBackup: dayN(2), ValidUntil: dayN(2).Add(52 * time.Hour)},
++	})
++	if _, last := w.snapshot(); !last.Equal(dayN(1)) {
++		t.Errorf("last success = %v after a failed refresh, want %v", last, dayN(1))
++	}
++
++	delete(s.failList, pipeline.ScopeDir(remote, "openbao"))
++	s.failDirs = errors.New("drive unreachable")
++	s.remove(remote + "/postgres-pas/")
++	if err := w.Refresh(context.Background()); err == nil {
++		t.Fatal("refresh with a failing root listing: got nil error")
++	}
++	if got := len(w.Streams()); got != 2 {
++		t.Errorf("got %d streams after a failed root listing, want the 2 last read", got)
++	}
++
++	// A newest metadata file that does not decode fails its scope too.
++	s.failDirs = nil
++	s.put(pipeline.JoinTarget(remote, "openbao", pipeline.MetadataName(pipeline.ObjectName(dayN(2), "openbao-backup.tgz"))), []byte("garbage"))
++	if err := w.Refresh(context.Background()); err == nil {
++		t.Fatal("refresh with undecodable metadata: got nil error")
++	}
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(1), ValidUntil: dayN(1).Add(52 * time.Hour)},
++	})
++
++	s.backup("openbao", "openbao-backup.tgz", dayN(3), "52h")
++	w.now = func() time.Time { return dayN(3) }
++	refresh(t, w)
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(3), ValidUntil: dayN(3).Add(52 * time.Hour)},
++	})
++	if _, last := w.snapshot(); !last.Equal(dayN(3)) {
++		t.Errorf("last success = %v, want %v", last, dayN(3))
++	}
++}
++
++func TestRefresh_ReadsBounded(t *testing.T) {
++	s := newFakeStorage()
++	for i := 1; i <= 3; i++ {
++		s.backup("openbao", "openbao-backup.tgz", dayN(i), "52h")
++		for db := 1; db <= 9; db++ {
++			s.backup("postgres-pas", fmt.Sprintf("db%d.dump", db), dayN(i), "52h")
++		}
++	}
++	s.put(remote+"/s3-mirror/Q2ZhbmN5IGNyeXB0IG5hbWU", []byte("x"))
++
++	w := newWatcher(s)
++	refresh(t, w)
++	listDirs, lists, reads := s.counts()
++	// A server that has just started reads one metadata file per stream, not
++	// every kept one.
++	if listDirs != 1 || len(reads) != 10 {
++		t.Errorf("first refresh: %d root listings, %d reads; want 1, 10", listDirs, len(reads))
++	}
++	for _, scope := range []string{"openbao", "postgres-pas", "s3-mirror"} {
++		if n := lists[pipeline.ScopeDir(remote, scope)]; n != 1 {
++			t.Errorf("first refresh listed %s %d times, want 1", scope, n)
++		}
++	}
++
++	refresh(t, w)
++	_, lists, reads2 := s.counts()
++	if len(reads2) != len(reads) {
++		t.Errorf("second refresh read again: %v", reads2[len(reads):])
++	}
++	if n := lists[pipeline.ScopeDir(remote, "postgres-pas")]; n != 2 {
++		t.Errorf("after two refreshes postgres-pas listed %d times, want 2", n)
++	}
++
++	// An upload's refresh lists its scope once and reads only the new file.
++	objname := s.backup("postgres-pas", "db4.dump", dayN(4), "52h")
++	if err := w.RefreshScope(context.Background(), "postgres-pas"); err != nil {
++		t.Fatalf("refresh scope: %v", err)
++	}
++	listDirs, lists, reads3 := s.counts()
++	want := []string{pipeline.JoinTarget(remote, "postgres-pas", pipeline.MetadataName(objname))}
++	if got := reads3[len(reads2):]; !reflect.DeepEqual(got, want) {
++		t.Errorf("scope refresh read %v, want %v", got, want)
++	}
++	if listDirs != 2 || lists[pipeline.ScopeDir(remote, "postgres-pas")] != 3 || lists[pipeline.ScopeDir(remote, "openbao")] != 2 {
++		t.Errorf("scope refresh listed beyond its scope: root %d, %v", listDirs, lists)
++	}
++}
++
++func TestRefreshScope(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("openbao", "openbao-backup.tgz", dayN(1), "52h")
++
++	w := newWatcher(s)
++	if err := w.RefreshScope(context.Background(), "openbao"); err != nil {
++		t.Fatalf("refresh scope: %v", err)
++	}
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(1), ValidUntil: dayN(1).Add(52 * time.Hour)},
++	})
++	// Only a refresh of every folder shows the reads are working.
++	if _, last := w.snapshot(); !last.IsZero() {
++		t.Errorf("last success = %v after a scope refresh, want zero", last)
++	}
++
++	s.backup("openbao", "openbao-backup.tgz", dayN(2), "52h")
++	s.failList[pipeline.ScopeDir(remote, "openbao")] = errors.New("rate limited")
++	if err := w.RefreshScope(context.Background(), "openbao"); err == nil {
++		t.Fatal("failing scope refresh: got nil error")
++	}
++	assertStreams(t, w, []Stream{
++		{Scope: "openbao", Filename: "openbao-backup.tgz", LastBackup: dayN(1), ValidUntil: dayN(1).Add(52 * time.Hour)},
++	})
++
++	delete(s.failList, pipeline.ScopeDir(remote, "openbao"))
++	s.remove(remote + "/openbao/")
++	if err := w.RefreshScope(context.Background(), "openbao"); err != nil {
++		t.Fatalf("refresh scope: %v", err)
++	}
++	assertStreams(t, w, nil)
++}
++
++func TestRun_RefreshesAtStartAndEveryInterval(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("openbao", "openbao-backup.tgz", dayN(1), "52h")
++	w := newWatcher(s)
++
++	ctx, cancel := context.WithCancel(context.Background())
++	done := make(chan struct{})
++	go func() {
++		defer close(done)
++		w.Run(ctx, 10*time.Millisecond)
++	}()
++
++	deadline := time.Now().Add(2 * time.Second)
++	for time.Now().Before(deadline) {
++		if n, _, _ := s.counts(); n >= 3 {
++			break
++		}
++		time.Sleep(5 * time.Millisecond)
++	}
++	cancel()
++	select {
++	case <-done:
++	case <-time.After(2 * time.Second):
++		t.Fatal("Run did not return after its context ended")
++	}
++	if n, _, _ := s.counts(); n < 3 {
++		t.Errorf("got %d refreshes, want at least 3", n)
++	}
++	if got := len(w.Streams()); got != 1 {
++		t.Errorf("got %d streams, want 1", got)
++	}
++}
++
++// scrape returns each sample the metrics handler serves, keyed by series.
++func scrape(t *testing.T, h http.Handler) map[string]float64 {
++	t.Helper()
++	rec := httptest.NewRecorder()
++	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
++	if rec.Code != http.StatusOK {
++		t.Fatalf("GET /metrics: %d", rec.Code)
++	}
++	samples := map[string]float64{}
++	sc := bufio.NewScanner(rec.Body)
++	for sc.Scan() {
++		line := sc.Text()
++		if line == "" || strings.HasPrefix(line, "#") {
++			continue
++		}
++		i := strings.LastIndex(line, " ")
++		v, err := strconv.ParseFloat(line[i+1:], 64)
++		if err != nil {
++			t.Fatalf("sample %q: %v", line, err)
++		}
++		samples[line[:i]] = v
++	}
++	return samples
++}
++
++func TestMetrics(t *testing.T) {
++	s := newFakeStorage()
++	s.backup("openbao", "openbao-backup.tgz", dayN(1), "52h")
++	w := newWatcher(s)
++	h := w.MetricsHandler()
++
++	// Before the first refresh: no streams, and no read has succeeded.
++	want := map[string]float64{
++		"backup_server_refresh_last_success_timestamp_seconds": 0,
++		"backup_server_start_time_seconds":                     float64(w.started.Unix()),
++	}
++	if got := scrape(t, h); !reflect.DeepEqual(got, want) {
++		t.Errorf("before refresh:\n got  %v\n want %v", got, want)
++	}
++
++	// Refreshed on day 10, the stream's valid-until is long past: overdue.
++	refresh(t, w)
++	want = map[string]float64{
++		`backup_server_stream_last_backup_timestamp_seconds{filename="openbao-backup.tgz",scope="openbao"}`: float64(dayN(1).Unix()),
++		`backup_server_stream_valid_until_timestamp_seconds{filename="openbao-backup.tgz",scope="openbao"}`: float64(dayN(1).Add(52 * time.Hour).Unix()),
++		"backup_server_refresh_last_success_timestamp_seconds":                                              float64(dayN(10).Unix()),
++		"backup_server_start_time_seconds":                                                                  float64(w.started.Unix()),
++	}
++	listDirs, lists, reads := s.counts()
++	if got := scrape(t, h); !reflect.DeepEqual(got, want) {
++		t.Errorf("after refresh:\n got  %v\n want %v", got, want)
++	}
++
++	// A scrape never reads the remote.
++	listDirs2, lists2, reads2 := s.counts()
++	if listDirs2 != listDirs || !reflect.DeepEqual(lists2, lists) || len(reads2) != len(reads) {
++		t.Errorf("scrape touched storage")
++	}
++
++	// GET /metrics is all the handler serves.
++	for _, req := range []*http.Request{
++		httptest.NewRequest(http.MethodPost, "/upload?filename=x", nil),
++		httptest.NewRequest(http.MethodGet, "/credentials", nil),
++		httptest.NewRequest(http.MethodGet, "/health/healthz", nil),
++	} {
++		rec := httptest.NewRecorder()
++		h.ServeHTTP(rec, req)
++		if rec.Code != http.StatusNotFound {
++			t.Errorf("%s %s: got %d, want 404", req.Method, req.URL.Path, rec.Code)
++		}
++	}
++}
+diff --git a/backup-server/src/internal/handler/handler.go b/backup-server/src/internal/handler/handler.go
+index a7fff0a..4731fe1 100644
+--- a/backup-server/src/internal/handler/handler.go
++++ b/backup-server/src/internal/handler/handler.go
+@@ -15,6 +15,7 @@ import (
+ 
+ 	"backup-server/internal/auth"
+ 	"backup-server/internal/config"
++	"backup-server/internal/freshness"
+ 	"backup-server/internal/pipeline"
+ )
+ 
+@@ -28,15 +29,17 @@ type Handler struct {
+ 	store     *auth.Store
+ 	backend   pipeline.Backend
+ 	recipient age.Recipient
++	watcher   *freshness.Watcher
+ 	now       func() time.Time
+ }
+ 
+-func New(cfg *config.Config, store *auth.Store, backend pipeline.Backend, recipient age.Recipient) *Handler {
++func New(cfg *config.Config, store *auth.Store, backend pipeline.Backend, recipient age.Recipient, watcher *freshness.Watcher) *Handler {
+ 	return &Handler{
+ 		cfg:       cfg,
+ 		store:     store,
+ 		backend:   backend,
+ 		recipient: recipient,
++		watcher:   watcher,
+ 		now:       time.Now,
+ 	}
+ }
+@@ -91,7 +94,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
+ 	declared := query.Has("valid_for")
+ 	validFor := query.Get("valid_for")
+ 	if declared {
+-		if err := pipeline.ValidateValidity(validFor); err != nil {
++		if _, err := pipeline.ParseValidity(validFor); err != nil {
+ 			http.Error(w, err.Error(), http.StatusBadRequest)
+ 			return
+ 		}
+@@ -137,7 +140,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
+ 
+ 	log.Printf("upload complete scope=%s object=%s size=%d valid_for=%s", info.Scope, objname, n, validFor)
+ 
+-	go h.runPrune(info.Scope, info.Retention)
++	go h.afterUpload(info.Scope, info.Retention)
+ 
+ 	w.Header().Set("Content-Type", "application/json")
+ 	w.WriteHeader(http.StatusCreated)
+@@ -155,6 +158,15 @@ func (h *Handler) cleanup(target string) {
+ 	}
+ }
+ 
++// afterUpload prunes the scope, then re-reads its freshness from what the
++// prune left.
++func (h *Handler) afterUpload(scope string, retention int) {
++	h.runPrune(scope, retention)
++	if err := h.watcher.RefreshScope(context.Background(), scope); err != nil {
++		log.Printf("freshness refresh scope=%s: %v", scope, err)
++	}
++}
++
+ func (h *Handler) runPrune(scope string, retention int) {
+ 	ctx, cancel := context.WithTimeout(context.Background(), pruneTimeout)
+ 	defer cancel()
+diff --git a/backup-server/src/internal/handler/handler_test.go b/backup-server/src/internal/handler/handler_test.go
+index 924f982..a5506c2 100644
+--- a/backup-server/src/internal/handler/handler_test.go
++++ b/backup-server/src/internal/handler/handler_test.go
+@@ -12,6 +12,7 @@ import (
+ 	"net/url"
+ 	"os"
+ 	"path/filepath"
++	"reflect"
+ 	"strings"
+ 	"sync"
+ 	"testing"
+@@ -21,6 +22,7 @@ import (
+ 
+ 	"backup-server/internal/auth"
+ 	"backup-server/internal/config"
++	"backup-server/internal/freshness"
+ 	"backup-server/internal/pipeline"
+ )
+ 
+@@ -77,6 +79,35 @@ func (m *memoryBackend) List(_ context.Context, dir string) ([]string, error) {
+ 	return names, nil
+ }
+ 
++func (m *memoryBackend) ListDirs(_ context.Context, dir string) ([]string, error) {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	prefix := strings.TrimRight(dir, "/") + "/"
++	seen := map[string]bool{}
++	var dirs []string
++	for k := range m.objects {
++		rest, ok := strings.CutPrefix(k, prefix)
++		if !ok {
++			continue
++		}
++		if d, _, nested := strings.Cut(rest, "/"); nested && !seen[d] {
++			seen[d] = true
++			dirs = append(dirs, d)
++		}
++	}
++	return dirs, nil
++}
++
++func (m *memoryBackend) Read(_ context.Context, target string) ([]byte, error) {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	data, ok := m.objects[target]
++	if !ok {
++		return nil, pipeline.ErrNotFound
++	}
++	return data, nil
++}
++
+ func (m *memoryBackend) uploads() []string {
+ 	m.mu.Lock()
+ 	defer m.mu.Unlock()
+@@ -100,6 +131,7 @@ type testHarness struct {
+ 	store       *auth.Store
+ 	backend     *memoryBackend
+ 	cfg         *config.Config
++	watcher     *freshness.Watcher
+ 	handler     *Handler
+ 	server      *httptest.Server
+ 	uploadTok   string
+@@ -167,7 +199,8 @@ func newHarness(t *testing.T, seeds ...seedScope) *testHarness {
+ 	}
+ 
+ 	backend := newMemoryBackend()
+-	h := New(cfg, store, backend, id.Recipient())
++	watcher := freshness.New(backend, cfg.RcloneRemote)
++	h := New(cfg, store, backend, id.Recipient(), watcher)
+ 	h.now = func() time.Time {
+ 		return time.Date(2026, 5, 7, 14, 15, 2, 0, time.UTC)
+ 	}
+@@ -175,6 +208,7 @@ func newHarness(t *testing.T, seeds ...seedScope) *testHarness {
+ 	t.Cleanup(server.Close)
+ 
+ 	th.backend = backend
++	th.watcher = watcher
+ 	th.handler = h
+ 	th.server = server
+ 	th.now = h.now()
+@@ -559,6 +593,70 @@ func TestUpload_PruneCountsBackupsOnly(t *testing.T) {
+ 	}
+ }
+ 
++// waitStreams polls until the watcher publishes want.
++func (th *testHarness) waitStreams(t *testing.T, want []freshness.Stream) {
++	t.Helper()
++	deadline := time.Now().Add(2 * time.Second)
++	for time.Now().Before(deadline) {
++		if reflect.DeepEqual(th.watcher.Streams(), want) {
++			return
++		}
++		time.Sleep(10 * time.Millisecond)
++	}
++	t.Fatalf("streams:\n got  %+v\n want %+v", th.watcher.Streams(), want)
++}
++
++func TestUpload_RefreshesFreshness(t *testing.T) {
++	th := newHarness(t, appA())
++
++	resp := th.postValidFor(t, th.uploadTok, "backup.zip", "52h", []byte("payload"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusCreated {
++		t.Fatalf("got %d, want 201", resp.StatusCode)
++	}
++	th.waitStreams(t, []freshness.Stream{
++		{Scope: "appa", Filename: "backup.zip", LastBackup: th.now, ValidUntil: th.now.Add(52 * time.Hour)},
++	})
++
++	// An uploader that stops declaring stays watched.
++	later := th.now.Add(24 * time.Hour)
++	th.handler.now = func() time.Time { return later }
++	resp = th.post(t, th.uploadTok, "backup.zip", []byte("payload"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusCreated {
++		t.Fatalf("got %d, want 201", resp.StatusCode)
++	}
++	th.waitStreams(t, []freshness.Stream{
++		{Scope: "appa", Filename: "backup.zip", LastBackup: later, ValidUntil: later.Add(52 * time.Hour)},
++	})
++}
++
++func TestFreshness_WatchedWithoutCredential(t *testing.T) {
++	th := newHarness(t, appA())
++
++	resp := th.postValidFor(t, th.uploadTok, "backup.zip", "52h", []byte("payload"))
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusCreated {
++		t.Fatalf("got %d, want 201", resp.StatusCode)
++	}
++	want := []freshness.Stream{
++		{Scope: "appa", Filename: "backup.zip", LastBackup: th.now, ValidUntil: th.now.Add(52 * time.Hour)},
++	}
++	th.waitStreams(t, want)
++
++	resp = th.do(t, http.MethodDelete, "/credentials/appa", managementToken, nil)
++	resp.Body.Close()
++	if resp.StatusCode != http.StatusNoContent {
++		t.Fatalf("delete credential: got %d, want 204", resp.StatusCode)
++	}
++	if err := th.watcher.Refresh(context.Background()); err != nil {
++		t.Fatalf("refresh: %v", err)
++	}
++	if got := th.watcher.Streams(); !reflect.DeepEqual(got, want) {
++		t.Errorf("streams after the credential is gone:\n got  %+v\n want %+v", got, want)
++	}
++}
++
+ func TestHealth(t *testing.T) {
+ 	th := newHarness(t)
+ 
+diff --git a/backup-server/src/internal/pipeline/backend.go b/backup-server/src/internal/pipeline/backend.go
+index 425d8ef..c67a317 100644
+--- a/backup-server/src/internal/pipeline/backend.go
++++ b/backup-server/src/internal/pipeline/backend.go
+@@ -77,15 +77,37 @@ func (r *RcloneBackend) Delete(ctx context.Context, target string) error {
+ 	return nil
+ }
+ 
++// rcloneExitDirNotFound is the exit code rclone documents for a directory
++// that does not exist.
++const rcloneExitDirNotFound = 3
++
++var errDirNotFound = errors.New("directory not found")
++
++// List returns the names of the files directly under dir; a dir that does
++// not exist has none.
+ func (r *RcloneBackend) List(ctx context.Context, dir string) ([]string, error) {
++	names, err := r.lsjson(ctx, dir, false)
++	if errors.Is(err, errDirNotFound) {
++		return nil, nil
++	}
++	return names, err
++}
++
++// ListDirs returns the names of the folders directly under dir. A dir that
++// does not exist is an error.
++func (r *RcloneBackend) ListDirs(ctx context.Context, dir string) ([]string, error) {
++	return r.lsjson(ctx, dir, true)
++}
++
++func (r *RcloneBackend) lsjson(ctx context.Context, dir string, dirs bool) ([]string, error) {
+ 	var stdout, stderr bytes.Buffer
+ 	cmd := exec.CommandContext(ctx, "rclone", "lsjson", dir)
+ 	cmd.Stdout = &stdout
+ 	cmd.Stderr = &stderr
+ 	if err := cmd.Run(); err != nil {
+-		s := strings.ToLower(stderr.String())
+-		if strings.Contains(s, "not found") || strings.Contains(s, "directory not found") || strings.Contains(s, "no such") {
+-			return nil, nil
++		var exit *exec.ExitError
++		if errors.As(err, &exit) && exit.ExitCode() == rcloneExitDirNotFound {
++			return nil, fmt.Errorf("rclone lsjson %s: %w", dir, errDirNotFound)
+ 		}
+ 		return nil, fmt.Errorf("rclone lsjson: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+ 	}
+@@ -98,9 +120,20 @@ func (r *RcloneBackend) List(ctx context.Context, dir string) ([]string, error)
+ 	}
+ 	names := make([]string, 0, len(entries))
+ 	for _, e := range entries {
+-		if !e.IsDir {
++		if e.IsDir == dirs {
+ 			names = append(names, e.Name)
+ 		}
+ 	}
+ 	return names, nil
+ }
++
++func (r *RcloneBackend) Read(ctx context.Context, target string) ([]byte, error) {
++	var stdout, stderr bytes.Buffer
++	cmd := exec.CommandContext(ctx, "rclone", "cat", target)
++	cmd.Stdout = &stdout
++	cmd.Stderr = &stderr
++	if err := cmd.Run(); err != nil {
++		return nil, fmt.Errorf("rclone cat: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
++	}
++	return stdout.Bytes(), nil
++}
+diff --git a/backup-server/src/internal/pipeline/backend_test.go b/backup-server/src/internal/pipeline/backend_test.go
+new file mode 100644
+index 0000000..32026f5
+--- /dev/null
++++ b/backup-server/src/internal/pipeline/backend_test.go
+@@ -0,0 +1,77 @@
++package pipeline
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"path/filepath"
++	"slices"
++	"testing"
++)
++
++// stubRclone puts an rclone first on PATH that writes stdout and stderr and
++// exits with code.
++func stubRclone(t *testing.T, stdout, stderr string, code int) {
++	t.Helper()
++	dir := t.TempDir()
++	for name, content := range map[string]string{"stdout": stdout, "stderr": stderr} {
++		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
++			t.Fatal(err)
++		}
++	}
++	script := fmt.Sprintf("#!/bin/sh\ncat '%[1]s/stdout'\ncat '%[1]s/stderr' >&2\nexit %[2]d\n", dir, code)
++	if err := os.WriteFile(filepath.Join(dir, "rclone"), []byte(script), 0o755); err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
++}
++
++func TestRcloneListing(t *testing.T) {
++	stubRclone(t, `[{"Name":"openbao","IsDir":true},{"Name":"x.age","IsDir":false}]`, "", 0)
++	b := NewRcloneBackend("")
++	dirs, err := b.ListDirs(context.Background(), "remote:")
++	if err != nil || !slices.Equal(dirs, []string{"openbao"}) {
++		t.Errorf("ListDirs = %v, %v; want [openbao]", dirs, err)
++	}
++	files, err := b.List(context.Background(), "remote:")
++	if err != nil || !slices.Equal(files, []string{"x.age"}) {
++		t.Errorf("List = %v, %v; want [x.age]", files, err)
++	}
++}
++
++// Only rclone's directory-not-found exit code means a listing is empty, and
++// only to List: a failure whose text happens to say "not found" or "no such"
++// is still a failure.
++func TestRcloneListingFailures(t *testing.T) {
++	cases := []struct {
++		name         string
++		stderr       string
++		code         int
++		listEmpty    bool
++		listDirsFail bool
++	}{
++		{"dns", `Failed to lsjson: couldn't list directory: dial tcp: lookup www.googleapis.com on 10.152.183.10:53: no such host`, 1, false, true},
++		{"no config", `NOTICE: Config file "/data/rclone.conf" not found - using defaults
++CRITICAL: Failed to create file system for "gdrive-pieter:Homelab Backups": didn't find section in config file ("gdrive-pieter")`, 1, false, true},
++		{"drive 404", `Failed to lsjson: googleapi: Error 404: File not found: 1AbC., notFound`, 1, false, true},
++		{"directory not found", `ERROR : error listing: directory not found
++NOTICE: Failed to lsjson with 2 errors: last error was: error in ListJSON: directory not found`, 3, true, true},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			stubRclone(t, "", tc.stderr, tc.code)
++			b := NewRcloneBackend("")
++			names, err := b.List(context.Background(), "remote:scope")
++			if tc.listEmpty {
++				if err != nil || names != nil {
++					t.Errorf("List = %v, %v; want empty and no error", names, err)
++				}
++			} else if err == nil {
++				t.Errorf("List = %v, nil; want an error", names)
++			}
++			if names, err := b.ListDirs(context.Background(), "remote:"); err == nil {
++				t.Errorf("ListDirs = %v, nil; want an error", names)
++			}
++		})
++	}
++}
+diff --git a/backup-server/src/internal/pipeline/metadata.go b/backup-server/src/internal/pipeline/metadata.go
+index 5e20878..86dd8ee 100644
+--- a/backup-server/src/internal/pipeline/metadata.go
++++ b/backup-server/src/internal/pipeline/metadata.go
+@@ -24,12 +24,22 @@ type Metadata struct {
+ 	ValidFor string `json:"valid_for"`
+ }
+ 
+-func ValidateValidity(s string) error {
++// ParseValidity returns the duration a valid_for value declares.
++func ParseValidity(s string) (time.Duration, error) {
+ 	d, err := time.ParseDuration(s)
+ 	if err != nil || d <= 0 {
+-		return ErrValidityInvalid
++		return 0, ErrValidityInvalid
+ 	}
+-	return nil
++	return d, nil
++}
++
++// DecodeValidity returns the validity a metadata file's content declares.
++func DecodeValidity(data []byte) (time.Duration, error) {
++	var meta Metadata
++	if err := json.Unmarshal(data, &meta); err != nil {
++		return 0, fmt.Errorf("decode metadata: %w", err)
++	}
++	return ParseValidity(meta.ValidFor)
+ }
+ 
+ func MetadataName(objname string) string {
+diff --git a/backup-server/src/internal/pipeline/metadata_test.go b/backup-server/src/internal/pipeline/metadata_test.go
+index d74b036..1c0cea1 100644
+--- a/backup-server/src/internal/pipeline/metadata_test.go
++++ b/backup-server/src/internal/pipeline/metadata_test.go
+@@ -7,31 +7,61 @@ import (
+ 	"time"
+ )
+ 
+-func TestValidateValidity(t *testing.T) {
++func TestParseValidity(t *testing.T) {
+ 	cases := []struct {
+-		in   string
+-		want error
++		in       string
++		want     error
++		duration time.Duration
+ 	}{
+-		{"52h", nil},
+-		{"1h30m", nil},
+-		{"90s", nil},
+-		{"", ErrValidityInvalid},
+-		{"0", ErrValidityInvalid},
+-		{"0s", ErrValidityInvalid},
+-		{"-52h", ErrValidityInvalid},
+-		{"52", ErrValidityInvalid},
+-		{"2d", ErrValidityInvalid},
+-		{"soon", ErrValidityInvalid},
++		{"52h", nil, 52 * time.Hour},
++		{"1h30m", nil, 90 * time.Minute},
++		{"90s", nil, 90 * time.Second},
++		{"", ErrValidityInvalid, 0},
++		{"0", ErrValidityInvalid, 0},
++		{"0s", ErrValidityInvalid, 0},
++		{"-52h", ErrValidityInvalid, 0},
++		{"52", ErrValidityInvalid, 0},
++		{"2d", ErrValidityInvalid, 0},
++		{"soon", ErrValidityInvalid, 0},
+ 	}
+ 	for _, tc := range cases {
+ 		t.Run(tc.in, func(t *testing.T) {
+-			if err := ValidateValidity(tc.in); !errors.Is(err, tc.want) {
++			d, err := ParseValidity(tc.in)
++			if !errors.Is(err, tc.want) {
+ 				t.Errorf("got %v, want %v", err, tc.want)
+ 			}
++			if d != tc.duration {
++				t.Errorf("duration = %v, want %v", d, tc.duration)
++			}
+ 		})
+ 	}
+ }
+ 
++func TestDecodeValidity(t *testing.T) {
++	b := newFakePruneBackend()
++	target := "remote:scope/20260507T141502Z_backup.zip.age.metadata.json"
++	if err := WriteMetadata(context.Background(), b, target, Metadata{ValidFor: "52h"}); err != nil {
++		t.Fatalf("write: %v", err)
++	}
++	d, err := DecodeValidity(b.objects[target])
++	if err != nil {
++		t.Fatalf("decode: %v", err)
++	}
++	if d != 52*time.Hour {
++		t.Errorf("got %v, want 52h", d)
++	}
++
++	if _, err := DecodeValidity([]byte(`{"valid_for":"2d"}`)); !errors.Is(err, ErrValidityInvalid) {
++		t.Errorf("2d: got %v, want %v", err, ErrValidityInvalid)
++	}
++	if _, err := DecodeValidity([]byte(`{}`)); !errors.Is(err, ErrValidityInvalid) {
++		t.Errorf("no valid_for: got %v, want %v", err, ErrValidityInvalid)
++	}
++	if _, err := DecodeValidity([]byte(`not json`)); err == nil {
++		t.Errorf("not json: got nil error")
++	}
++}
++
+ func TestMetadataName(t *testing.T) {
+ 	obj := ObjectName(time.Date(2026, 5, 7, 14, 15, 2, 0, time.UTC), "backup.zip")
+ 	got := MetadataName(obj)
+diff --git a/backup-server/src/internal/pipeline/upload.go b/backup-server/src/internal/pipeline/upload.go
+index 83694e3..b9aa518 100644
+--- a/backup-server/src/internal/pipeline/upload.go
++++ b/backup-server/src/internal/pipeline/upload.go
+@@ -14,6 +14,7 @@ import (
+ const (
+ 	MaxFilenameBytes = 200
+ 	TimestampLayout  = "20060102T150405Z"
++	objectSuffix     = ".age"
+ )
+ 
+ var (
+@@ -50,7 +51,25 @@ func ValidateFilename(name string) error {
+ }
+ 
+ func ObjectName(now time.Time, filename string) string {
+-	return now.UTC().Format(TimestampLayout) + "_" + filename + ".age"
++	return now.UTC().Format(TimestampLayout) + "_" + filename + objectSuffix
++}
++
++// ParseObjectName reverses ObjectName; ok is false for a name ObjectName
++// cannot produce.
++func ParseObjectName(objname string) (received time.Time, filename string, ok bool) {
++	stamp, rest, found := strings.Cut(objname, "_")
++	if !found {
++		return time.Time{}, "", false
++	}
++	received, err := time.Parse(TimestampLayout, stamp)
++	if err != nil {
++		return time.Time{}, "", false
++	}
++	filename, found = strings.CutSuffix(rest, objectSuffix)
++	if !found || ValidateFilename(filename) != nil {
++		return time.Time{}, "", false
++	}
++	return received, filename, true
+ }
+ 
+ func JoinTarget(remote, scope, objname string) string {
+diff --git a/backup-server/src/internal/pipeline/upload_test.go b/backup-server/src/internal/pipeline/upload_test.go
+index 206ef02..f39a2b2 100644
+--- a/backup-server/src/internal/pipeline/upload_test.go
++++ b/backup-server/src/internal/pipeline/upload_test.go
+@@ -36,6 +36,29 @@ func TestValidateFilename(t *testing.T) {
+ 	}
+ }
+ 
++func TestParseObjectName(t *testing.T) {
++	received := time.Date(2026, 5, 7, 14, 15, 2, 0, time.UTC)
++	gotAt, gotName, ok := ParseObjectName(ObjectName(received, "my_db.dump"))
++	if !ok || !gotAt.Equal(received) || gotName != "my_db.dump" {
++		t.Errorf("round trip = (%v, %q, %v), want (%v, %q, true)", gotAt, gotName, ok, received, "my_db.dump")
++	}
++
++	for _, name := range []string{
++		"20260507T141502Z_db.dump",
++		"20260507T141502Z_.age",
++		"20260507T141502Z_.hidden.age",
++		"2026-05-07_db.dump.age",
++		"20260507T141502_db.dump.age",
++		"db.dump.age",
++		"20260507T141502Z_db.dump.age.metadata.json",
++		"Q2ZhbmN5IGNyeXB0IG5hbWU",
++	} {
++		if _, _, ok := ParseObjectName(name); ok {
++			t.Errorf("ParseObjectName(%q) ok, want not ok", name)
++		}
++	}
++}
++
+ func TestObjectName(t *testing.T) {
+ 	now := time.Date(2026, 5, 7, 14, 15, 2, 0, time.UTC)
+ 	got := ObjectName(now, "backup.zip")

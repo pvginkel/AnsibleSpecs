@@ -1,7 +1,8 @@
 # Close-out — slice 023 backup_freshness_alerting
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-18 22:51 → 2026-09-19 00:46 · 7 phases · 0 bail-outs · 1 test round · doc phase
+done · $60.06 (planner 22 %, research 6 %, rework 6 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,12 +14,19 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+A dead backup now raises an alert. backup-server (DockerImages) takes an optional `valid_for` on
+upload and writes `<object>.metadata.json` beside the landed backup. Pruning counts backups only.
+It reads the metadata back from Drive at start, hourly and after each upload, and publishes each
+stream's last-backup and valid-until times on its own in-cluster listener, `:8081/metrics`.
+The storage chart annotates the Service for scraping. Production Prometheus gains the
+`backup-freshness` group: `BackupOverdue` and `BackupWatcherBlind`, both critical. The Postgres
+dumps and the OpenBao wrapper declare `52h`. Ansible `docs/runbooks/backup-freshness.md` and
+`decisions.md` carry the triage and the contract. All of it is live on prd except the OpenBao
+wrapper, which waits on the operator's playbook run (A2).
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A2 first. Until the operator runs the `openbao` playbook, the OpenBao backup is still unwatched, which is R1's silent failure. A1 needs no action: the test phase found no live object to delete.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -53,7 +61,7 @@ To settle it, once the leader has uploaded (and after 02:00 for Postgres), with 
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: A quiet run with no bail-out and no appended phase. N1 is the prd rollout in plan order: the metrics were served before the rules loaded, so `BackupWatcherBlind` never fired during the rollout.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -74,33 +82,9 @@ Both Recreate rolls of prd's backup-server ended before the 01:30 uploads. Also 
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B7 first, witnessed: IaC/HelmCharts build logs expose a live GitHub token. It is a defect of the HelmCharts Jenkinsfile, not of this slice. Next B3 (witnessed) and B4 (read), both in backup-server code this slice shipped: each lets a failure pass without a trace. B1 is already fixed on HelmCharts main. Of the five live bugs, two are witnessed.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
-
-### B1 — HelmCharts CLAUDE.md states Prometheus retains ~2 days (retentionSize 2GB); prd values set 7d / 10GB · nit
-
-HelmCharts CLAUDE.md (recommend-resources entry) says 'Prometheus retains ~2 (`retentionSize: 2GB`), so runs measure roughly the last two days'. configs/prd/prometheus/prd/values.yaml:3-4 sets retention: 7d and retentionSize: 10GB. Not touched by this slice.
-
-consult 1, 2026-09-19 — Already fixed on HelmCharts main by 73560d9 (2026-09-18, slice 018 close-out B2): CLAUDE.md now reads 'retention: 7d, retentionSize: 10GB' and a 7-day window. Nothing left to do; the entry stands only because it was filed before that commit.
-
-**Consequence:** A reader sizing recommend-resources runs underestimates the history Prometheus actually holds.
-
-**Provenance:** read — plan-writer, planning, r1, HelmCharts CLAUDE.md vs configs/prd/prometheus/prd/values.yaml
-**Disposition:**
-
-### B2 — HelmCharts postgres-pas comments say only prd has a backup-server; a dev storage release carrying backup-server exists · nit
-
-HelmCharts charts/postgres-pas/values.yaml:93-95 says 'only the prd cluster has a backup-server (the storage release isn't deployed on dev)', and configs/prd/postgres-pas/prd/values.yaml:51 says '(prd has one; dev does not)'. HelmCharts configs/dev/storage/prd/{values.yaml,manifests.yaml} is a dev storage release that carries backup-server's age-key ConfigMap, and the slice's refinement settled that backup-server runs on the dev cluster too. The live dev cluster was not checked (srvk8sdev is off). Not touched by this slice.
-
-test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get ns with config-dev-write): the dev cluster has no storage-prd namespace and no backup-server, so 'the storage release isn't deployed on dev' is true of live dev today; only the configs/dev/storage release definition exists. The entry's consequence narrows to a reader of the chart who later deploys that dev release.
-
-**Consequence:** A reader of the postgres-pas chart believes dev has no backup-server, so they overlook the dev copy when changing backup-server or testing uploads there.
-
-**Provenance:** read — plan-reviewer, planning, r1, HelmCharts charts/postgres-pas/values.yaml vs configs/dev/storage/prd/
-**Disposition:**
 
 ### B3 — DockerImages backup-server: a malformed valid_for (e.g. 52h%zz) is silently dropped; the upload is stored undeclared with 201 · minor
 
@@ -120,24 +104,6 @@ backup-server/src/internal/pipeline/backend.go Delete matches stderr substrings,
 **Provenance:** read — code-writer, P2, review-fix round 2, phases/P2/code_review_r1.md F1
 **Disposition:**
 
-### ~~B5 — Ansible backup-freshness runbook §2 says the 10-minute read timeout logs 'context deadline exceeded'; the call running at the deadline logs 'signal: killed' · nit~~ — resolved in consult 1 (Ansible bb4db40): docs/runbooks/backup-freshness.md §2 now names 'signal: killed' (the call running at the 10-minute limit) beside 'context deadline exceeded' (one started after it), in any of the bullet's log lines; kc project lint re-run green; struck by consult 1
-
-docs/runbooks/backup-freshness.md:182. Every rclone call in backup-server runs under exec.CommandContext within the 10-minute refreshTimeout (DockerImages backup-server/src/internal/pipeline/backend.go:104,132; freshness/watcher.go:20). The command running when the deadline hits returns its exit status, 'signal: killed'. Only a command started after the deadline returns 'context deadline exceeded'. Witnessed on go1.26.5.
-
-**Consequence:** An operator reading a timed-out refresh's 'rclone lsjson: signal: killed' log finds no matching bullet, takes a slow Drive read for an unreadable folder or a broken login, and chases the wrong cause.
-
-**Provenance:** witnessed — code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
-**Disposition:**
-
-### ~~B6 — Ansible backup-freshness runbook §2's safe-restart window (outside 02:00–03:00) misses the youtrack-backup upload at 01:30 · nit~~ — resolved in consult 1 (Ansible bb4db40): docs/runbooks/backup-freshness.md §2's safe-restart window is now outside 01:30–03:00, naming YouTrack's 01:30 upload; kc project lint re-run green; struck by consult 1
-
-docs/runbooks/backup-freshness.md:185. The youtrack-backup CronJob uploads to backup-server at '30 1 * * *' with a 1 h deadline (HelmCharts charts/youtrack/values.yaml:36,39; live prd CronJob). backup-server is a Recreate Deployment, so a restart at 01:30–02:00 leaves no pod to take that upload.
-
-**Consequence:** A backup-server restart at 01:30–02:00, which the runbook allows, fails that night's YouTrack backup. One missed night pages nobody, but it uses up the one-night margin.
-
-**Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
-**Disposition:**
-
 ### B7 — HelmCharts Jenkinsfile: IaC/HelmCharts build logs print the GitHub token (--set gitToken=…) in plaintext · minor
 
 The `Gate releases` stage's `helm lint` and `helm template` command lines (build #6542, log lines 97 and 105, and the same shape for every gated release) carry `--set gitToken=<value>` with the value expanded, and Jenkins does not mask it: the log API returns a plain `ghp_…` token. Not touched by this slice; found while reading #6542 to confirm the storage deploy. The value is deliberately not repeated here.
@@ -147,9 +113,59 @@ The `Gate releases` stage's `helm lint` and `helm template` command lines (build
 **Provenance:** witnessed, test-agent, test phase, r1, IaC/HelmCharts #6542, searched with the Jenkins MCP
 **Disposition:**
 
+### B1 — HelmCharts CLAUDE.md states Prometheus retains ~2 days (retentionSize 2GB); prd values set 7d / 10GB · nit
+
+HelmCharts CLAUDE.md (recommend-resources entry) says 'Prometheus retains ~2 (`retentionSize: 2GB`), so runs measure roughly the last two days'. configs/prd/prometheus/prd/values.yaml:3-4 sets retention: 7d and retentionSize: 10GB. Not touched by this slice.
+
+consult 1, 2026-09-19 — Already fixed on HelmCharts main by 73560d9 (2026-09-18, slice 018 close-out B2): CLAUDE.md now reads 'retention: 7d, retentionSize: 10GB' and a 7-day window. Nothing left to do; the entry stands only because it was filed before that commit.
+
+doc-writer, doc phase, 2026-09-19 — Already fixed on HelmCharts main (73560d9, not this slice): CLAUDE.md:76 now states retention: 7d and retentionSize: 10GB, matching configs/prd/prometheus/prd/values.yaml. Nothing left to do; this entry can be closed.
+
+**Consequence:** A reader sizing recommend-resources runs underestimates the history Prometheus actually holds.
+
+**Provenance:** read — plan-writer, planning, r1, HelmCharts CLAUDE.md vs configs/prd/prometheus/prd/values.yaml
+**Disposition:**
+
+### B2 — HelmCharts postgres-pas comments say only prd has a backup-server; a dev storage release carrying backup-server exists · nit
+
+HelmCharts charts/postgres-pas/values.yaml:93-95 says 'only the prd cluster has a backup-server (the storage release isn't deployed on dev)', and configs/prd/postgres-pas/prd/values.yaml:51 says '(prd has one; dev does not)'. HelmCharts configs/dev/storage/prd/{values.yaml,manifests.yaml} is a dev storage release that carries backup-server's age-key ConfigMap, and the slice's refinement settled that backup-server runs on the dev cluster too. The live dev cluster was not checked (srvk8sdev is off). Not touched by this slice.
+
+test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get ns with config-dev-write): the dev cluster has no storage-prd namespace and no backup-server, so 'the storage release isn't deployed on dev' is true of live dev today; only the configs/dev/storage release definition exists. The entry's consequence narrows to a reader of the chart who later deploys that dev release.
+
+**Consequence:** A reader of the postgres-pas chart believes dev has no backup-server, so they overlook the dev copy when changing backup-server or testing uploads there.
+
+**Provenance:** read — plan-reviewer, planning, r1, HelmCharts charts/postgres-pas/values.yaml vs configs/dev/storage/prd/
+**Disposition:**
+
+### ~~B5 — Ansible backup-freshness runbook §2 says the 10-minute read timeout logs 'context deadline exceeded'; the call running at the deadline logs 'signal: killed' · nit~~ — resolved in consult 1 (Ansible bb4db40): docs/runbooks/backup-freshness.md §2 now names 'signal: killed' (the call running at the 10-minute limit) beside 'context deadline exceeded' (one started after it), in any of the bullet's log lines; kc project lint re-run green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+docs/runbooks/backup-freshness.md:182. Every rclone call in backup-server runs under exec.CommandContext within the 10-minute refreshTimeout (DockerImages backup-server/src/internal/pipeline/backend.go:104,132; freshness/watcher.go:20). The command running when the deadline hits returns its exit status, 'signal: killed'. Only a command started after the deadline returns 'context deadline exceeded'. Witnessed on go1.26.5.
+
+**Consequence:** An operator reading a timed-out refresh's 'rclone lsjson: signal: killed' log finds no matching bullet, takes a slow Drive read for an unreadable folder or a broken login, and chases the wrong cause.
+
+**Provenance:** witnessed — code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
+**Disposition:**
+
+</details>
+
+### ~~B6 — Ansible backup-freshness runbook §2's safe-restart window (outside 02:00–03:00) misses the youtrack-backup upload at 01:30 · nit~~ — resolved in consult 1 (Ansible bb4db40): docs/runbooks/backup-freshness.md §2's safe-restart window is now outside 01:30–03:00, naming YouTrack's 01:30 upload; kc project lint re-run green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+docs/runbooks/backup-freshness.md:185. The youtrack-backup CronJob uploads to backup-server at '30 1 * * *' with a 1 h deadline (HelmCharts charts/youtrack/values.yaml:36,39; live prd CronJob). backup-server is a Recreate Deployment, so a restart at 01:30–02:00 leaves no pod to take that upload.
+
+**Consequence:** A backup-server restart at 01:30–02:00, which the runbook allows, fails that night's YouTrack backup. One missed night pages nobody, but it uses up the one-night margin.
+
+**Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
+**Disposition:**
+
+</details>
+
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Q1 only: does YouTrack's upload opt in with `valid_for=52h`? Until someone decides, YouTrack stays on its CronJob-status rule. The HelmCharts rule comment claiming this slice retires that rule is wrong either way.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -163,6 +179,8 @@ executor P5, 2026-09-18 — P5's BackupOverdue selects every scope on backup-ser
 
 consult 1, 2026-09-19 — Not owed by the plan: the rulings opt in OpenBao and the Postgres dumps only, and YouTrack's uploader landed two days after the grounding. Opting it in is a one-line valid_for=52h in charts/youtrack/files/backup/backup.py plus deleting the youtrack-backup rule group and its test; it needs the operator's ruling, not a phase. If ruled in, the runbook's 'Streams watched today' table and decisions.md's §Backup YouTrack entry change with it.
 
+doc-writer, doc phase, 2026-09-19 — decisions.md §Backup's YouTrack entry now states the current state (AnsibleSpecs af566cd): its uploads declare no validity, so BackupOverdue does not watch it, and YouTrackBackupStale covers it. It no longer says slice 023 opts the stream in. The HelmCharts rule comment above the youtrack-backup group (configs/prd/prometheus/prd/values.yaml) still says the group goes once slice 023 ships. Whichever way Q1 is ruled, that comment needs an edit.
+
 **Consequence:** The YouTrack backup is never a watched backup-server stream, and the interim CronJob-status rule stays although its own comment says slice 023 retires it.
 
 **Provenance:** witnessed, code-writer, P4, r1, HelmCharts charts/youtrack/files/backup/backup.py
@@ -170,8 +188,7 @@ consult 1, 2026-09-19 — Not owed by the plan: the rulings opt in OpenBao and t
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S2 and S5 (read) are doc work for another slice. backup-server's own api.md and README describe neither the validity nor the metrics, because this doc phase lands only in Ansible. No runbook covers renewing the Drive login that `BackupWatcherBlind` points at. S1, S3 and S4 (all witnessed) are missing gates and tests; S4 needs promtool in the iac image.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -187,6 +204,8 @@ run_loop.py --dry-run reports P1 and P2 (Target ../DockerImages) as '(no determi
 ### S2 — DockerImages backup-server api.md and README describe neither valid_for nor the metrics listener, and the doc plan names no DockerImages surface · minor
 
 backup-server/api.md documents POST /upload with only 'filename' and lists three endpoint groups on a single port; README.md's configuration table has no METRICS_LISTEN_ADDR (default :8081, GET /metrics only) and its prune step still counts every name. P1 added valid_for and P2 the metrics listener without touching either (prose docs are the doc phase's), but Ansible docs/slice-doc-plan.md lists only Ansible/AnsibleSpecs surfaces, so the doc phase may not reach these files. README.md also still names the retired backup-server-tokens ConfigMap under Deployment.
+
+doc-writer, doc phase, 2026-09-19 — Still open after the doc phase. The driver lands only the Ansible doc branch, so the DockerImages docs were not edited. What the slice made untrue or incomplete there: api.md's upload section has no valid_for and no /metrics; README.md's prune step (keep the newest retention objects) now counts backups only and deletes each pruned backup's metadata file; its env table lacks METRICS_LISTEN_ADDR (default :8081). README's restore loop decrypts only *.age, so the .metadata.json files are skipped correctly.
 
 **Consequence:** A reader of backup-server's own docs does not learn that uploads can declare a validity or that freshness metrics are served on :8081, so they wire a new uploader or scrape config from an incomplete contract.
 

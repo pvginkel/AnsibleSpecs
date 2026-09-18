@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The postgres-backup script's upload now sends valid_for=52h beside filename=<db>.dump, which is the parameter and format P1's server reads, so the phase outcome, V04 and the Postgres half of V05 are met. The new test loads the real script from the chart template and fails on each of four mutations of the upload query.",
+ "details": "code_review_r1.md",
+ "findings": []}

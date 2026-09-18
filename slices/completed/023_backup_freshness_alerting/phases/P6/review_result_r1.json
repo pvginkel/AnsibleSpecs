@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "The OpenBao leader's upload declares valid_for=52h with the leader guard and timer unchanged. The new backup-freshness runbook covers both alerts and the retirement step, and its claims check out against backup-server, the rules and live prd. Two advisory prose inaccuracies in §2 ride along.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Runbook names 'context deadline exceeded' as the 10-minute timeout's log signature; the call running at the deadline logs 'signal: killed'"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Runbook's safe-restart window (outside 02:00–03:00) omits the youtrack-backup upload at 01:30, which a restart then fails"}
+ ]}

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round 1's blocking F1 is resolved in 0af47c9. lsjson now treats only rclone's directory-not-found exit code 3 as a missing directory, and only List maps it to empty. ListDirs and every other rclone failure return an error. Checked with a real rclone, round 1's repro and two mutations. The fix commit raises no new findings.",
+ "details": "code_review_r2.md",
+ "findings": []}

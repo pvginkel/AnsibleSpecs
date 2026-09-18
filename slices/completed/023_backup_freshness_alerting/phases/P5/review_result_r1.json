@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The backup-freshness rules (BackupOverdue, BackupWatcherBlind) match backup-server's metrics as published and the P3 target labels, route critical to the loud receiver, and meet V12/V13. Between them, one of the two alerts is always firing for an overdue stream while the watcher is down. The new simulation test fails on look-back, grace and VALID_FOR mutations. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "The postgres-backup script's upload now sends valid_for=52h beside filename=<db>.dump (HelmCharts 2ada3db on phase/023-P4), and a new test, tests/test_postgres_pas_backup.py, pins it; kc project test is green. A YouTrack uploader added after the plan declares no validity; whether it belongs in this slice is logged as close-out Q1."}

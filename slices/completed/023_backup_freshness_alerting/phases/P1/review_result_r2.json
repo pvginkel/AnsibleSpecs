@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round-1 F1 is resolved: the in-memory backend records upload order, and two tests now pin 'metadata only after the backup lands'. The round-1 metadata-first mutation and a write-before-error-check mutation are each caught. vet/gofmt clean and handler+pipeline tests green under -race (targeted runs; no gate recorded). No new findings.",
+ "details": "code_review_r2.md",
+ "findings": []}

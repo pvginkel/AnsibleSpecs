@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "The freshness watcher matches the rulings, but an rclone read failure whose stderr says 'not found' or 'no such' (DNS no-such-host, missing rclone config, Drive 404) is taken as an empty remote. The watcher drops every stream and records a successful refresh, which silences both the overdue alert and the dead-watcher signal. One advisory coverage gap.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "failing-test",
+   "summary": "lsjson's not-found mapping makes a failed root/scope read look empty: Refresh drops all streams and advances last-success (backend.go:94-98, watcher.go:97-125,150-153)"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "coverage-gap",
+   "summary": "No test pins refresh-after-prune ordering or :8080 not serving /metrics; both mutations survive"}
+ ]}

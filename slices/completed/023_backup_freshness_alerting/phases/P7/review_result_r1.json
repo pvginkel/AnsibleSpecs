@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "decisions.md now records the freshness contract in place of fire-and-forget and names the credential store in place of tokens.yaml. Every factual claim checks out against the code shipped by P1–P6. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
