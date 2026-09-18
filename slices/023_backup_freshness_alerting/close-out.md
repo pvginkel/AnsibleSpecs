@@ -98,6 +98,8 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 HelmCharts fab8483 (2026-09-17, card 1033, ANS-73) added charts/youtrack/files/backup/backup.py, which POSTs to backup-server /upload with filename only (:104-105), and an interim YouTrackBackupStale rule in configs/prd/prometheus/prd/values.yaml:210-236 whose comment says it goes once slice 023 ships and the upload declares its own validity. The plan's grounding (2026-09-15) says no other uploader exists, and no phase opts YouTrack in or retires that rule. Question: does opting YouTrack in (valid_for=52h in its upload, then deleting the youtrack-backup rule group and tests/test_prometheus_youtrack_backup_alert.py) belong in this slice, or in a follow-up card?
 
+executor P5, 2026-09-18 — P5's BackupOverdue selects every scope on backup-server, not a list: were YouTrack to join, its upload would need only valid_for (as P4 did for postgres-pas), and the interim YouTrackBackupStale group would then be deleted. P5 left that group untouched.
+
 **Consequence:** The YouTrack backup is never a watched backup-server stream, and the interim CronJob-status rule stays although its own comment says slice 023 retires it.
 
 **Provenance:** witnessed, code-writer, P4, r1, HelmCharts charts/youtrack/files/backup/backup.py
@@ -135,4 +137,13 @@ Two behaviours in P2's outcome survive a mutation run. Swapping Handler.afterUpl
 **Consequence:** A later change that reorders the post-upload refresh or exposes /metrics on the port nginx proxies passes the suite. The first leaves a pruned-away stream publishing for up to an hour. The second makes stream names and times answerable through backup-server.home.
 
 **Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:**
+
+### S4 — HelmCharts suite never parses the prd alerting rules as Prometheus would; no promtool in the iac image · minor
+
+The prd Prometheus release's rules (configs/prd/prometheus/prd/values.yaml, serverFiles.alerting_rules.yml) are held by pytest files that match each expression with a regex; nothing parses the PromQL or the annotation templates. The iac container has no promtool. In P5 the two new expressions were parsed by hand against the live prd Prometheus query API (3.14.0); their annotation templates were not checked. A promtool check rules step over the rendered rules file would close it.
+
+**Consequence:** A PromQL or template syntax error in a new rule passes the suite and CI; the prd Prometheus rejects the reloaded rules file and keeps evaluating the old one, so the new alert never fires and nothing says so.
+
+**Provenance:** witnessed — executor, P5, r1
 **Disposition:**

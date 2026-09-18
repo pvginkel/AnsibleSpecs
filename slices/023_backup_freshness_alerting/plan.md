@@ -436,6 +436,36 @@ routing delivers both loud.
 - This phase goes out in the second HelmCharts push, after production is confirmed serving metrics
   (Ordering constraints).
 
+**Done (P5).** HelmCharts `93626fc` on `phase/023-P5`. A new rule group, `backup-freshness`
+(`configs/prd/prometheus/prd/values.yaml:239-298`), has two `severity: critical` rules with no `for:`.
+`BackupOverdue` is `time() - max by (scope, filename) (max_over_time(valid_until[6h])) > 0`.
+`BackupWatcherBlind` is `time() - max by (namespace, service) (max_over_time(last_success[6h])) > 6 * 3600`
+`or absent_over_time(last_success[6h])`. Both select `{namespace="storage-prd",service="backup-server"}`.
+`kc project test` is green. Both expressions parse on the live prd Prometheus (3.14.0).
+
+Later phases:
+- P6's runbook: `BackupOverdue` covers every scope and names scope/file name. It fires on the first
+  evaluation past valid-until, with no grace of its own, so the 52 h alone sets the one-missed-night edge.
+  `BackupWatcherBlind` fires once the newest successful read that any scrape in the last 6 h reported is
+  over 6 h old. That covers failed reads (the pod logs `freshness refresh:`), a target down or gone, and
+  a crash loop. A stream that leaves (all its backups pruned, or its `.metadata.json` files deleted)
+  keeps `BackupOverdue` firing for 6 h after its last scrape.
+- Test phase (V14): until prd serves the metrics, `BackupWatcherBlind` evaluates to `1` through
+  `absent_over_time`. Before pushing P5, confirm `up{service="backup-server"} == 1` and a non-zero
+  `backup_server_refresh_last_success_timestamp_seconds`.
+
+Record:
+- `start_time_seconds` is unused. Measuring across pods means a crash loop cannot reset the clock and a
+  new pod's `0` does not fire. The absent term takes over when the last sample leaves, so there is no gap.
+- Both look-backs equal the grace, so an overdue stream stays firing until `BackupWatcherBlind` fires
+  and never shows a false RESOLVED. A healthy read is at most 1 h 10 m old, so 6 h passes four failed
+  reads, or a redeploy and three. Aggregating drops `instance`/`node`: all overdue streams share one
+  Telegram group, with no host line.
+- `tests/test_prometheus_backup_freshness_alerts.py` evaluates both parsed rules over simulated pods. It
+  also walks the real postgres-pas schedule and `VALID_FOR` across a year, with an assumed 1 h run bound
+  (observed runs take about 2 min). Mutating a look-back or the grace fails it. `YouTrackBackupStale`
+  is untouched (close-out Q1 note). Close-out S4 records that there is no promtool check.
+
 ### P6 — The OpenBao backup declares a 52-hour validity, and a runbook covers the backup alerts
 
 Target: ansible
@@ -447,12 +477,16 @@ Target: ansible
   which do not change.
 - Followers keep exiting successfully before any login (`openbao-backup.sh.j2:76-81`), and the unit's
   exit status carries no freshness signal (ruling).
-- The two alerts P5 shipped get an operator runbook in `docs/runbooks/`, read when either fires, as
+- The two alerts P5 shipped, `BackupOverdue` and `BackupWatcherBlind` (HelmCharts
+  `configs/prd/prometheus/prd/values.yaml`, group `backup-freshness`), get an operator runbook in
+  `docs/runbooks/`, read when either fires, as
   `docs/runbooks/s3-mirror.md` is for `S3MirrorStale` (`:3-6`). No runbook covers them today:
   `docs/runbooks/openbao.md` restores OpenBao from its backup, but knows nothing of the `postgres-pas`
   scope or of backup-server's watching. The runbook carries the retirement step the plan review r1 Q1
   ruling names: a scope retired on purpose alerts critical until its `.metadata.json` files are deleted
-  by hand, and its backups may stay.
+  by hand, and its backups may stay. After the deletion the alert keeps firing for about 6–7 h. The
+  streams drop out on the next full read, and the rule's 6 h look-back holds them after that. Silence
+  the alert for that time.
 - Deploy-owed: the operator's `openbao` playbook run against the srvvaultN nodes, check-mode first.
 
 ### P7 — Doctrine records the backup freshness contract
@@ -465,8 +499,8 @@ Target: ../AnsibleSpecs
   set per scope through the provider's `homelab_backup_credential`. Both stale phrases are at
   `decisions.md:101`.
 - The §Backup list of off-cluster copies already names `S3MirrorStale` for the mirror (`:597`). Its
-  OpenBao and `postgres-pas` entries (`:595-596`) name their freshness alert the same way, since D1
-  opts both in.
+  OpenBao and `postgres-pas` entries (`:595-596`) name their freshness alert, `BackupOverdue`, the same
+  way, since D1 opts both in.
 
 ## Not in scope
 
