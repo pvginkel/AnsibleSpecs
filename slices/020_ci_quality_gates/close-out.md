@@ -23,6 +23,29 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Apply the microk8s elect-primary rewrite to prd via site-k8s.yml
+
+P1 rewrote roles/microk8s/tasks/elect-primary.yml (Ansible 797b530, folded into 652e1a5). Render-equivalence across 14 cases was proven pre-merge, and the test phase ran the change live against the dev cluster: `cd ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --limit k8s_dev --skip-tags os_update --check -v` against srvk8sdev came back PLAY RECAP ok=129 changed=0, with the election task reporting "cluster=k8s_dev node=srvk8sdev (running-solo) -> primary=srvk8sdev". srvk8sdev is single-node, so this only exercises the running-solo branch; prd's k8s_prd and k8s_dev groups (multi-node control planes) are the first live exercise of the in-cluster branch. Per this repo's testing doctrine every role change ends deploy-owed regardless of how well it is verified beforehand. Check-mode first, then the same command with --check dropped:
+
+cd ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --skip-tags os_update --check
+cd ansible && cexec iac poetry run ansible-playbook playbooks/site-k8s.yml --skip-tags os_update
+
+Both apply cluster-wide; the converge play's serial: 1 (already in site-k8s.yml, unchanged by this slice) protects against two k8s nodes disrupted at once. No --limit needed unless the operator wants to scope to one cluster.
+
+**Consequence:** V01 stays unverified against prd's multi-node in-cluster branch until this runs. Nothing regresses meanwhile: the change is behavior-preserving by construction (14-case render-equivalence) and converged clean on the dev cluster with zero changes reported.
+
+**Provenance:** witnessed, test-agent, test phase, r1, session transcript (live --check run against srvk8sdev) and IaC/Build-Main #176
+**Disposition:**
+
+### A2 — DockerImages trivy scan (V14-V16, part of V18) not yet exercised by a real image build
+
+This push touched only the DockerImages Jenkinsfile, so utils.hasChanges found no image-dir diff and build #2522 built zero images — every 'Building X' stage ran with an empty body, so scanImage() was never called. Per the plan's explicit ruling (grounding, 2026-09-15: 'No forced build'), the test phase does not force-rebuild an image to prove this. It self-proves on the next real image build: a push touching an image dir, or the daily 05:00 version-poller CronJob (DockerImages/version-poller). To prove it sooner, the operator can trigger the DockerImages job by hand with parameter image=<name> (or image=all for every image), which is the same path a forced rebuild already takes.
+
+**Consequence:** V14-V16 and the DockerImages portion of V18 stay unverified by a real build until one runs. The mechanism itself is implemented, parses (build #2522 succeeded with the new code present) and was witnessed pre-merge against the live registry (plan.md P6 record: python:latest and kube-coder-tunnel-reclaim:latest each raised one warning for 3 fixable perl-base CRITICALs).
+
+**Provenance:** witnessed, test-agent, test phase, r1, DockerImages build #2522 console log (0 images built)
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -63,6 +86,8 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 helmops._run echoes each helm command line to stderr in full (tools/deploy/deploy_cli/helmops.py:22-24), and the Jenkinsfile passes --set gitToken="$GIT_API_TOKEN" to every deploy, so each deploy stage's log carries the clone PAT in plaintext on its '+ helm upgrade --install ...' line. This predates slice 020. P4's gate uses the same deploy line, so its lint and template lines print the token too, in the same log. Witnessed with a placeholder token in a local run of the gate script.
 
+test-agent, test phase r1, 2026-09-18 — Confirmed in a real production log, not just the local gate simulation: IaC/HelmCharts build #6518 (this push's real deploy, https://jenkins.webathome.org/job/IaC/job/HelmCharts/6518/) prints the live GitHub PAT in plain text on every '+ helm lint'/'+ helm template'/'+ helm upgrade --install' line the Gate releases stage and the deploy loop emit, for every gated/deployed release (homeassistant-mcp, media, storage; prometheus deploys with no gitToken since it is an upstream chart with no local lint step). Same exposure as B1 describes, now witnessed live rather than simulated.
+
 **Consequence:** Anyone who can read IaC/HelmCharts console logs can read the GitHub PAT the iac harness clones with.
 
 **Provenance:** witnessed — executor, P4, r1, local gate simulation stderr
@@ -92,7 +117,7 @@ The rulings define one alert — an image with a CRITICAL that has a fixed versi
 **Provenance:** read, plan-writer, planning r1, plan.md P6
 **Disposition:**
 
-### S2 — HomelabTerraformProvider Jenkinsfile: the publish-stage comment describes delivery stages that no longer exist · cosmetic
+### ~~S2 — HomelabTerraformProvider Jenkinsfile: the publish-stage comment describes delivery stages that no longer exist · cosmetic~~ — resolved by consult 1 (HomelabTerraformProvider 22d6d2e): the stale paragraph is gone, and the comment now says the registry publish is the only delivery path, as 374068f made it. Comment-only; the gate sweep re-runs on the new commit; struck by consult 1
 
 The comment above the "Publish to provider registry" stage (`HomelabTerraformProvider/Jenkinsfile:56-69`) says the stage "Runs alongside the legacy filesystem-mirror path below" and that "the Ansible-lock and Docker-image-bake stages go away" once consumers switch to the network mirror. Nothing follows that stage — the pipeline ends at `:100-102` — so the comment describes a second delivery path that is gone. Slice 020 P3 edits this file for the vet/test gate but does not own this comment.
 
@@ -141,6 +166,8 @@ The gate runs kubeconform with -ignore-missing-schemas (HelmCharts Jenkinsfile:5
 
 helmops.lint returns early for an upstream release (HelmCharts tools/deploy/deploy_cli/helmops.py:209-211), so the gate only renders these releases and runs kubeconform on them. V07 and the refinement ruling say the gate lints and renders every release it deploys. The executor disclosed this in the P4 done-record. The practical gap is empty: helm template enforces values.schema.json, kubeconform reports parse errors in the rendered YAML, and lint's deprecation check only warns.
 
+consult 1, 2026-09-18 — Judged not owed: no phase was appended. The ruling's purpose, catching template and values errors before deploy, is met for upstream releases by render (helm template enforces the upstream values.schema.json) plus strict kubeconform. Linting a pulled upstream chart would add only lint's own warnings. V07 is met except for the lint step on these nine; the operator accepts or rejects that.
+
 **Consequence:** none for the estate; whoever grades V07 should know that nine releases have no lint step
 
 **Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md F2
@@ -149,6 +176,8 @@ helmops.lint returns early for an upstream release (HelmCharts tools/deploy/depl
 ### S8 — Slice 020 plan: P4's record says empty stdin makes kubeconform exit 1 with no JSON, but through docker run -i an empty render exits 0 with valid 0 · nit
 
 The record holds only for a character-device stdin (< /dev/null). docker run -i gives kubeconform a pipe, and kubeconform v0.8.0 given an empty pipe exits 0 with a JSON report of valid 0. The gate still fails an empty render, but through the valid == 0 branch (HelmCharts Jenkinsfile:133), not the missing-report branch (:136-138).
+
+consult 1, 2026-09-18 — The P4 record in plan.md still has the wrong claim; the consult left the done-record unchanged. When proving V19, go by this entry: an empty render fails through valid == 0.
 
 **Consequence:** none for the estate; whoever proves V19 should expect the zero-valid branch, not the missing-report branch, to fail an empty render
 
@@ -180,4 +209,24 @@ The trivy sidecar starts each build with an empty cache. The first scan download
 **Consequence:** Each image-building DockerImages build puts up to about 3 GB into the trivy container's ephemeral storage and spends up to about 3 minutes on DB downloads; the scan result is unaffected.
 
 **Provenance:** witnessed, executor, P6, r1, plan.md P6 record
+**Disposition:**
+
+### S12 — DockerImages trivy sidecar: a failure to pull or keep the scanner container fails the whole build, outside the scan's catchError · minor
+
+The trivy container is part of the pod the whole build runs on (Jenkinsfile:37-41). Suppose a node that has not cached ghcr.io/aquasecurity/trivy@sha256:… cannot pull it because of an outage or a rate limit. Then the agent never comes online, and the build fails before any stage runs, even when it would have built nothing. If the sidecar terminates mid-build, the agent is lost too. The catchError at Jenkinsfile:10 covers only failures inside container("trivy"), so it does not help in either case. The plan says a scanner error never changes the build status (plan.md P6). The chance is low: the pull is digest-pinned with IfNotPresent and happens once per node, and other estate sidecars already pull from public registries.
+
+consult 1, 2026-09-18 — Judged not owed: no phase was appended. V16 and the ruling cover what the scan finds and whether it completes, and P6 wraps both in catchError. A failure to start the pod is a different risk, and the build already carries it for its kaniko and python containers. The image is pinned by digest with IfNotPresent, so each node pulls it once. The fix, mirroring trivy into registry:5000 or running it outside the build pod, is the operator's call.
+
+**Consequence:** During a ghcr.io outage, a DockerImages build that lands on a node without the cached trivy image fails, and the Telegram bot pages on the FAILURE. Nothing is built or deployed until a rerun.
+
+**Provenance:** read, code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
+**Disposition:**
+
+### S13 — DockerImages trivy stage: --insecure also turns off TLS verification for the vulnerability-DB and Java-DB downloads · minor
+
+Jenkinsfile:13 passes --insecure so that trivy can reach the plain-HTTP registry:5000, and trivy applies the flag to every registry. I tested this with the pinned 0.74.0 binary and --db-repository self-signed.badssl.com/…: without --insecure it fails x509 verification, and with it the request reaches the server. So mirror.gcr.io/aquasec/trivy-db:2 and trivy-java-db:1, which are fetched by tag, are downloaded with no certificate check. The digest pin covers the scanner binary, not its data. One fix idea is to download the DBs in a separate step without --insecure, then scan with --skip-db-update --skip-java-db-update --insecure.
+
+**Consequence:** none today. Anyone on the build pod's egress path could serve a DB that hides findings, and the warn-only scan would stay quiet.
+
+**Provenance:** witnessed, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
 **Disposition:**

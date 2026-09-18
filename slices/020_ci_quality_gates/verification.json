@@ -4,153 +4,218 @@
       "id": "V01",
       "area": "Ansible lint baseline",
       "description": "\"ansible-lint strict (+fix 6 findings)\" — ansible-lint over `ansible/` runs with warnings fatal (today `strict: false`, `.ansible-lint:20-21`) and exits 0; the six findings stay fixed, and the one warning strict turns fatal (`jinja[spacing]`, `ansible/roles/microk8s/tasks/elect-primary.yml:44`) is fixed in the task rather than skip-listed or noqa'd, with the value that expression renders unchanged.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`.ansible-lint` sets `strict: true` with the old comment gone; `elect-primary.yml`'s rewritten expression carries no `noqa`/skip. Render-equivalence across 14 cases was proven pre-merge (plan.md P1 record). The live push build's Lint stage shows ansible-lint clean under strict, and a live --check run against the dev cluster shows the rewritten expression resolving correctly against a real `microk8s status` payload.",
+      "evidence": [
+        "Ansible/.ansible-lint:20 — `strict: true`",
+        "Ansible/ansible/roles/microk8s/tasks/elect-primary.yml:37-57 — rewritten expression, no noqa/skip",
+        "IaC/Build-Main #176 (https://jenkins.webathome.org/job/IaC/job/Build-Main/176/), Lint stage: \"Passed: 0 failure(s), 0 warning(s) in 187 files processed of 216 encountered. Profile 'production' was required, and it passed.\"",
+        "test phase r1, live `ansible-playbook playbooks/site-k8s.yml --limit k8s_dev --skip-tags os_update --check -v` against srvk8sdev: \"cluster=k8s_dev node=srvk8sdev (running-solo) → primary=srvk8sdev\"; PLAY RECAP ok=129 changed=0 unreachable=0 failed=0"
+      ]
     },
     {
       "id": "V02",
       "area": "Ansible push job",
       "description": "\"+ yamllint + syntax-check\" — `IaC/Build-Main` (`Jenkinsfile.iac-on-push`, a single plan stage today at `:34-51`) runs yamllint, strict ansible-lint and a syntax-check of every playbook ahead of the Terraform plan; a red gate fails the build before `terraform plan` runs.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The Lint stage runs yamllint then ansible-lint (whose unskippable syntax-check rule covers all 14 playbooks) ahead of Terraform validate and Plan + destroy check. Live build confirms the stage order and a green result.",
+      "evidence": [
+        "Ansible/Jenkinsfile.iac-on-push:41-57 (Lint stage)",
+        "IaC/Build-Main #176 log: `yamllint -c ../.yamllint .` then `ansible-lint`, both clean, running before the `Terraform validate` and `Plan + destroy check` stages"
+      ]
     },
     {
       "id": "V03",
       "area": "Ansible push job",
       "description": "\"terraform fmt/validate (fmt fails today)\" — the same job runs `terraform fmt -check` over the Terraform tree and `terraform validate` on both `terraform/prd` and `terraform/scratch` ahead of the plan, and lands green (fmt passes today).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`terraform fmt -check -recursive` runs inside Lint; `terraform init -backend=false` + `validate` runs on `prd` then `scratch` inside Terraform validate. Both passed on the live build.",
+      "evidence": [
+        "Ansible/Jenkinsfile.iac-on-push:44-72",
+        "IaC/Build-Main #176 log: `terraform fmt -check -recursive` passes silently; both `terraform validate` runs print \"Success! The configuration is valid.\""
+      ]
     },
     {
       "id": "V04",
       "area": "Ansible push job",
       "description": "The gates run before anything else in the job, cheapest first, and `Jenkinsfile.iac-apply` is unchanged.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Log order is Lint → Terraform validate → Plan + destroy check. `git diff` for P1+P2 touches only `.ansible-lint`, `Jenkinsfile.iac-on-push` and `elect-primary.yml` — `Jenkinsfile.iac-apply` is absent from the diff.",
+      "evidence": [
+        "`git diff c0d943d..652e1a5 --stat` (Ansible): `.ansible-lint | 3 +-`, `Jenkinsfile.iac-on-push | 49 +++++++++++++++++++++++---`, `ansible/roles/microk8s/tasks/elect-primary.yml | 20 +++++------` — no `Jenkinsfile.iac-apply` entry",
+        "IaC/Build-Main #176 log stage order: Lint, Terraform validate, Plan + destroy check"
+      ]
     },
     {
       "id": "V05",
       "area": "Provider",
       "description": "\"go test/vet before provider publish (currently untested binaries ship)\" — every HomelabTerraformProvider build runs `go vet ./...` and the unit tests before publishing, and a vet or test failure fails the build with nothing appended to the provider registry (today the build goes from `go build` straight to publish, `HomelabTerraformProvider/Jenkinsfile:18-100`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "A `Vet and unit tests` stage of two plain `sh` steps (`go vet ./...`, `go test ./...`) sits between Build and Publish; a failure in either fails the build before Publish runs. Live build shows both green, then Publish ran and pushed 0.1.33.",
+      "evidence": [
+        "HomelabTerraformProvider/Jenkinsfile:61-74 (Vet and unit tests stage)",
+        "IaC/HomelabTerraformProvider #33 (https://jenkins.webathome.org/job/IaC/job/HomelabTerraformProvider/33/) log: `go vet ./...` clean; `go test ./...` — 6 `ok <pkg> <time>` lines, 5 `[no test files]`, no failures; then `Publish to provider registry` ran, `==> index now carries: 0.1.28, 0.1.29, 0.1.30, 0.1.31, 0.1.32, 0.1.33`"
+      ]
     },
     {
       "id": "V06",
       "area": "Provider",
       "description": "The acceptance tests (`TF_ACC`, live storage) are not run by the pipeline; they stay a manual run.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`TF_ACC` is set nowhere in the Jenkinsfile. `go test ./...` runs without `-v`, so the live log shows only per-package `ok` lines, consistent with `TestAcc*` tests skipping silently rather than being wired in (S5).",
+      "evidence": [
+        "HomelabTerraformProvider/Jenkinsfile — no `TF_ACC` anywhere in the file",
+        "IaC/HomelabTerraformProvider #33 log: `go test ./...` output has no `TestAcc*` lines, only `ok`/`[no test files]`"
+      ]
     },
     {
       "id": "V07",
       "area": "Chart gate",
       "description": "\"helm lint + kubeconform\" — before any release deploys, the HelmCharts build lints and renders every release it is about to deploy with the values it is deployed with in prd, and runs kubeconform in strict mode (unknown fields and duplicate keys rejected) on the rendered manifests against Kubernetes 1.35; any failure fails the whole build with no release deployed (today the loop deploys with no validation, `HelmCharts/Jenkinsfile:61-88`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "A `Gate releases` stage runs `deploy lint` + `deploy template` + strict kubeconform (`-strict -kubernetes-version 1.35.0`) for every release `deploys(entry)` selects, before the deploy loop. Live build shows the gate running and completing for 4 releases before any `Deploying` stage body executes.",
+      "evidence": [
+        "HelmCharts/Jenkinsfile:75-172 (Gate releases stage), :184-188 (`deploys(entry)`)",
+        "IaC/HelmCharts #6518 (https://jenkins.webathome.org/job/IaC/job/HelmCharts/6518/) log: Gate releases lints/templates/kubeconforms homeassistant-mcp@prd, media@prd, prometheus@prd, storage@prd, all before the first populated `Deploying` stage"
+      ]
     },
     {
       "id": "V08",
       "area": "Chart gate",
       "description": "The gated set is exactly the deployed set: a push that moves no release's chart, config, shared Terraform surface or image digest gates nothing, and an unchanged chart never blocks another push (selection at `HelmCharts/Jenkinsfile:74` and `:94-101`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
-    },
-    {
-      "id": "V19",
-      "area": "Chart gate",
-      "description": "kubeconform actually receives the rendered manifests of every release the build gates, although its sibling container sees only host paths (the agent workspace `/home/jenkins/agent` is not a host mount, `Ansible/support/iac-agent/bin/jenkins-agent-launch.sh:15,59-68`; each `iac -c` clone is private to its container, `Ansible/support/iac-agent/bin/iac:46-52`), and a kubeconform run that validates zero resources fails the build.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The deploy loop's `else if` now calls the same `deploys(entry)` the gate uses. Live build gated and deployed exactly 4 of 47 releases (the ones this push's chart edits and digest moves touched); the other 43 `Deploying X@stage` stages ran with empty bodies (skipped).",
+      "evidence": [
+        "HelmCharts/Jenkinsfile:94 (`} else if (deploys(entry)) {`), :184-188",
+        "IaC/HelmCharts #6518 log: only homeassistant-mcp@prd, media@prd, prometheus@prd, storage@prd have populated `Deploying` bodies; the remaining 43 releases show `[Pipeline] { (Deploying X@stage)` / `[Pipeline] }` with nothing between"
+      ]
     },
     {
       "id": "V09",
       "area": "Chart gate",
       "description": "The gate passes on every prd release as deployed; `media` and `mosquitto`, which fail `helm lint` only with chart defaults, are left alone.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Every release the live gate actually exercised passed lint (0 failed) and kubeconform strict (invalid 0, errors 0). media and mosquitto were not gated this push (unchanged); the full-fleet pass (all 47 enabled stages, including mosquitto and media unchanged) was witnessed pre-merge and is unaffected by this push.",
+      "evidence": [
+        "IaC/HelmCharts #6518 log: \"1 chart(s) linted, 0 chart(s) failed\" for homeassistant-mcp, media, storage; kubeconform `invalid 0, errors 0` for all 4 gated releases",
+        "plan.md P4 record: local run over all 47 enabled jenkins prd stages, fresh HELM_* dirs — 38 lint clean, 47 render, every render passes kubeconform v0.8.0 strict with valid ≥ 1 (2026-09-15, pre-merge)"
+      ]
     },
     {
       "id": "V10",
       "area": "Chart gate",
       "description": "`storage` passes `helm lint` with its prd values: its cronjob template's document separator no longer glues onto the next document (`HelmCharts/charts/storage/templates/storage-cronjobs.yaml:54-56`), and the rendered `storage` objects do not change.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The separator is now `---` immediately followed by `{{ end -}}` with no intervening blank line. The live gate's storage lint reports 0 failed and kubeconform reports storage@prd valid 12, invalid 0; the deploy then rolled out cleanly.",
+      "evidence": [
+        "HelmCharts/charts/storage/templates/storage-cronjobs.yaml:53-54",
+        "IaC/HelmCharts #6518 log: storage lint \"1 chart(s) linted, 0 chart(s) failed\"; \"storage@prd: kubeconform valid 12, invalid 0, errors 0, skipped 3\"; \"deployment \\\"storage\\\" successfully rolled out\""
+      ]
     },
     {
       "id": "V11",
       "area": "Chart gate",
       "description": "`homeassistant-mcp` passes strict kubeconform: the dead first `command:` of its Deployment (`HelmCharts/charts/homeassistant-mcp/templates/app-deployment.yaml:21`, duplicated at `:22`) is deleted, and the live container still runs `[\"ha-mcp-web\"]`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Only one `command:` line remains (`[\"ha-mcp-web\"]`). Live strict kubeconform reports homeassistant-mcp@prd valid 2, invalid 0; the deploy rolled out.",
+      "evidence": [
+        "HelmCharts/charts/homeassistant-mcp/templates/app-deployment.yaml:21",
+        "IaC/HelmCharts #6518 log: \"homeassistant-mcp@prd: kubeconform valid 2, invalid 0, errors 0, skipped 1\"; \"deployment \\\"homeassistant-mcp\\\" successfully rolled out\""
+      ]
     },
     {
       "id": "V12",
       "area": "Values schema",
       "description": "\"values.schema.json reference chart\" — `media` ships a `values.schema.json` that rejects keys the chart does not define; a values file carrying `storage.plex.subvolumeName` (the 2024-08 key — the chart reads `storage.plex.imageName`, `HelmCharts/charts/media/templates/media-pvc.yaml:15`) fails lint and render, and therefore the chart gate.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`values.schema.json` sets `additionalProperties: false` at every level the chart defines, including `storage.plex`. `tests/test_media_values_schema.py` asserts the `storage.plex.subvolumeName` case fails with one error at that path, and that suite is green in the established sweep.",
+      "evidence": [
+        "HelmCharts/charts/media/values.schema.json:1-6 and its `storage.plex` block",
+        "HelmCharts/tests/test_media_values_schema.py (unknown-key cases, incl. storage.plex)",
+        "/work/AnsibleSpecs/slices/020_ci_quality_gates/sweeps/r2/HelmCharts_root_test.log — GREEN, established input per dispatch"
+      ]
     },
     {
       "id": "V13",
       "area": "Values schema",
       "description": "The chart defaults, prd's deployed values and every value the pipeline injects at deploy (`global.environment`, `gitToken`, the image-digest `--set`s) pass the `media` schema, and the rendered `media` prd manifests are identical before and after it lands, apart from the render-time `deployment` annotation every render stamps (`HelmCharts/charts/shared/_helpers.tpl:1-3`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The live gate ran `helm lint`/`helm template` for media with exactly the deploy's injected args (`--set global.environment=prd --set gitToken=... --set images.*=@sha256:...`) and reported 0 lint failures and kubeconform valid 14, invalid 0; the subsequent deploy rolled out both the media and mydownloads Deployments.",
+      "evidence": [
+        "IaC/HelmCharts #6518 log: media lint \"1 chart(s) linted, 0 chart(s) failed\" with the deploy's `--set` args; \"media@prd: kubeconform valid 14, invalid 0, errors 0, skipped 6\"; \"deployment \\\"media\\\" successfully rolled out\", \"deployment \\\"mydownloads\\\" successfully rolled out\""
+      ]
     },
     {
       "id": "V14",
       "area": "Trivy",
       "description": "\"trivy warn-only in DockerImages\" — each image the DockerImages build pushes is scanned by trivy right after the push, and its CRITICAL and HIGH findings are printed in the build log; scheduled rebuilds forced by version-poller are scanned the same way.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "This push touched only the DockerImages Jenkinsfile, so `utils.hasChanges` found no image-dir diff and build #2522 built zero images — every `Building X` stage ran with an empty body, so `scanImage` was never called. Per the plan's explicit ruling no image is force-rebuilt to prove this; it is proven by the next real image build (a push touching an image dir, or the daily 05:00 version-poller CronJob), which the operator does not need to trigger by hand unless they want the proof sooner.",
+      "evidence": [
+        "DockerImages/Jenkinsfile:9-33 (`scanImage`, trivy sidecar) — present, and the pipeline parsed and ran green with it (build succeeded)",
+        "DockerImages #2522 (https://jenkins.webathome.org/job/DockerImages/2522/) log: every `Building X` stage body is empty; no image pushed",
+        "plan.md P6 record: pre-merge witness against the live registry:5000 (python:latest, kube-coder-tunnel-reclaim:latest each printed tables and one warning) — proves the mechanism, not this build"
+      ]
     },
     {
       "id": "V15",
       "area": "Trivy",
       "description": "An image with a CRITICAL that has a fixed version raises exactly one `notify.warning(...)` alert for that image, never one per CVE (`JenkinsPipelineUtils/vars/notify.groovy:46-48`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Same reasoning as V14: this push's build scanned no image, so no alert path ran live. The single-warning-per-image logic is implemented and was witnessed pre-merge.",
+      "evidence": [
+        "DockerImages/Jenkinsfile:9-33 (`fixable` collection, one `notify.warning` call)",
+        "DockerImages #2522 log: no images built, no scan, no alert",
+        "plan.md P6 record: pre-merge witness — python:latest and kube-coder-tunnel-reclaim:latest each raised exactly one warning for 3 fixable perl-base CRITICALs"
+      ]
     },
     {
       "id": "V16",
       "area": "Trivy",
       "description": "The scan never changes the build status — no `unstable()`, no failure — whatever it finds and whether or not it completes, and the Helm deploy trigger after the builds runs as before (`DockerImages/Jenkinsfile:116-122`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "The scan's non-effect on build status was not exercised live (no scan ran in this window). What did run: the `catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', ...)` wrapper parsed and the whole build stayed SUCCESS with the new code present, and the `Deploy Helm charts` stage after the build loop ran exactly as before (skipped, since nothing built) — consistent with the trigger being unchanged, but not a live test of the warn-only behavior itself.",
+      "evidence": [
+        "DockerImages/Jenkinsfile:9-13 (`catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', catchInterruptions: false)`)",
+        "DockerImages #2522 log: build result SUCCESS; `Deploy Helm charts` stage present and ran (empty body, as always when nothing built)"
+      ]
     },
     {
       "id": "V17",
       "area": "Supply chain",
       "description": "The trivy image and the kubeconform image are pinned by digest.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Both images are referenced by `@sha256:...`. kubeconform's pin was exercised live — pulled and ran successfully in IaC/HelmCharts #6518. trivy's pin is correct by inspection and was witnessed pulling and running successfully pre-merge.",
+      "evidence": [
+        "HelmCharts/Jenkinsfile:55 — `KUBECONFORM = 'ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e'`",
+        "DockerImages/Jenkinsfile:39 — `ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969`",
+        "IaC/HelmCharts #6518 log: \"Pulling from yannh/kubeconform\" ... \"Digest: sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e\", pulled and ran"
+      ]
     },
     {
       "id": "V18",
       "area": "Proof",
       "description": "Each pipeline change is proven by a real build after the run pushes all four repos: `IaC/Build-Main` green through its new gates, a HomelabTerraformProvider build green through vet/test and publish, a HelmCharts build that gates and then deploys `media`, `storage` and `homeassistant-mcp`; the trivy scan is proven on the next real DockerImages image build, or left owed to the operator if none runs in the test phase's window.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "3 of 4 are proven: IaC/Build-Main #176 green through Lint, Terraform validate and Plan + destroy check; IaC/HomelabTerraformProvider #33 green through Vet and unit tests then Publish (0.1.33); IaC/HelmCharts #6518 gated and deployed media, storage, homeassistant-mcp (and prometheus) with every rollout succeeding. The DockerImages trivy scan is not proven — build #2522 built zero images, matching the plan's own prediction for a Jenkinsfile-only push — and per its explicit ruling no image is force-rebuilt, so this stays owed to the operator until the next real image build (push-triggered or the 05:00 version-poller).",
+      "evidence": [
+        "IaC/Build-Main #176 — SUCCESS, https://jenkins.webathome.org/job/IaC/job/Build-Main/176/",
+        "IaC/HomelabTerraformProvider #33 — SUCCESS, https://jenkins.webathome.org/job/IaC/job/HomelabTerraformProvider/33/",
+        "IaC/HelmCharts #6518 — SUCCESS, https://jenkins.webathome.org/job/IaC/job/HelmCharts/6518/, all 4 gated releases rolled out",
+        "DockerImages #2522 — SUCCESS but 0 images built, https://jenkins.webathome.org/job/DockerImages/2522/"
+      ]
+    },
+    {
+      "id": "V19",
+      "area": "Chart gate",
+      "description": "kubeconform actually receives the rendered manifests of every release the build gates, although its sibling container sees only host paths (the agent workspace `/home/jenkins/agent` is not a host mount, `Ansible/support/iac-agent/bin/jenkins-agent-launch.sh:15,59-68`; each `iac -c` clone is private to its container, `Ansible/support/iac-agent/bin/iac:46-52`), and a kubeconform run that validates zero resources fails the build.",
+      "verdict": "verified",
+      "rationale": "The live gate fed kubeconform real renders over stdin (via a tar handoff out of the iac container) for all 4 gated releases, and every one reported a nonzero valid count (2, 14, 23, 12) — proof kubeconform saw real manifests, not an empty mount. The zero-valid-fails-build branch itself was not exercised (no release rendered empty this run); S8 already documents which branch an empty render takes.",
+      "evidence": [
+        "HelmCharts/Jenkinsfile:130-171 (tar-based stdin handoff to kubeconform; `if (rc != 0 || sum['valid'] == 0) { failed << name }`)",
+        "IaC/HelmCharts #6518 log: kubeconform valid counts 2 (homeassistant-mcp), 14 (media), 23 (prometheus), 12 (storage) — never zero",
+        "close-out.md S8 — the empty-render failure path is the `valid == 0` branch, not the missing-report branch"
+      ]
     }
   ]
 }
