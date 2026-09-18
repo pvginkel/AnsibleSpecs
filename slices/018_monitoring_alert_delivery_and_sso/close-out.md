@@ -27,9 +27,20 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 Production Prometheus, 2026-09-18 ~11:00 UTC: srvk8s1's node_pressure_memory_stalled_seconds_total rate has read 0.71-0.97 s/s since 2026-09-16 ~06:00 (booted 2026-09-15 ~17:00), with MemAvailable at 33% of MemTotal and 1.7 major faults/s over the hour. The pre-P1 rules fire NodeMemoryStalled (critical) and NodeMemoryStallElevated on it right now, undelivered. Once P1 deploys, neither stall alert fires on srvk8s1 and NodeMemoryStallCounterWedged fires there within the hour (a replay over the retained week puts its qualifying condition on srvk8s1 from 09-16 06:36 to now, and on srvk8s2 through its recorded wedge, nowhere else). That warning firing is the rule working (review advisory A1), not a V06 failure. A reboot resets the counter and resolves it; until then P2's inhibition blinds srvk8s1's stall alerts.
 
+test-agent, test phase round 1, 2026-09-18 — P1/P2 are now live on production (test phase r1 pushed and deployed them, IaC/HelmCharts build #6524). Live query confirms: NodeMemoryStallCounterWedged is alertstate=pending for node=srvk8s1 right now, exactly as predicted here — it will cross into firing within the hour of this note and, once it does, P2's inhibition mutes srvk8s1's two stall alerts as designed. The reboot this entry asks for is still outstanding.
+
 **Consequence:** A real memory stall on srvk8s1, the node of the 2026-08-02 starvation, goes unannounced until it is rebooted.
 
 **Provenance:** witnessed — code-writer, P1, r1, live production Prometheus queries 2026-09-18
+**Disposition:**
+
+### A2 — Push the rest of HelmCharts to move auth.ginbov.nl to 26.7.3 and turn on Grafana/pgAdmin Keycloak sign-in · major
+
+Test phase r1 executed plan.md's two-stage HelmCharts push under the devlock's pre-authorization: DockerImages 02e19be (26.7.3 image, built and published by DockerImages build #2523) and HelmCharts 7a8944e (the 'rolling dev' stage — P1's corroborated stall alerts, P2's Telegram delivery, and P4's first commit, which moved keycloak-dev.home to 26.7.3 under the new Recreate strategy) are both live on production; IaC/HelmCharts build #6524 deployed them clean (0 errors). Local HelmCharts main is now 5 commits ahead of origin (d53b4e3 'keycloak: every release runs 26.7.3', de4c8eb 'grafana: prd signs in through Keycloak', bff7adb 'pgadmin: prd signs in through Keycloak', f5092ef, 2ceff0c) — this is the second push plan.md orders, held back per the devlock boundary ('prd stays operator-gated'): it moves auth.ginbov.nl itself to 26.7.3 (no pre-upgrade database backup — waived, N3) and turns on Grafana's and pgAdmin's Keycloak sign-in for the first time in production. Command: cd /work/HelmCharts && git push origin main. After it lands, IaC/HelmCharts will deploy keycloak-prd, grafana-prd and pgadmin-prd; verification.json V02/V03/V09/V10/V11/V14 settle by then re-checking (a granted and an ungranted homelab-realm sign-in at grafana.home and pgadmin.home settles V09/V10/F1 specifically).
+
+**Consequence:** Until this lands: auth.ginbov.nl keeps running Keycloak 26.5.1 (only keycloak-dev.home is on 26.7.3, so R3/U1 is half-done), and Grafana and pgAdmin still only accept their local admin login — R2/#575 is coded and gated but not live for any real user.
+
+**Provenance:** witnessed — test-agent, test phase, round 1, IaC/HelmCharts build #6524 (SUCCESS) and live kubectl/curl checks against keycloak-dev, keycloak-prd, prometheus-prd this pass
 **Disposition:**
 
 ## Notable events
@@ -60,6 +71,24 @@ configs/{prd,dev}/grafana/prd/release.yaml pull grafana/grafana from https://gra
 **Consequence:** Grafana stays on 12.3.1 with no upstream fixes until the releases point at the grafana-community chart repository.
 
 **Provenance:** witnessed, code-writer, P5, r1, helm pull grafana/grafana (Chart.yaml deprecated: true, README Chart Migration)
+**Disposition:**
+
+### N3 — Keycloak 26.7.3 deploys with no pre-upgrade database dump: the operator waived checklist step 6 on 2026-09-18, so V03's backup clause is waived, not met · minor
+
+Plan ruling 2026-09-18 (pre-run): "Don't worry about the backup. The window of data loss is minimal." No keycloak_prd_db dump is taken before the push that deploys 26.7.3 and none is set aside outside the postgres-pas backup scope's 90-object pruning, so V03's backup clause and review advisory A2 are superseded by that ruling. The same pre-run pass left two checklist items unverified: step 3's role assignment on both clients (403 on role-member and group queries with the read-only service account), and step 5's checks on homelab-dev (that token is rejected by the keycloak-dev server). The test phase's live V09/V10 sign-ins are the first check of step 3.
+
+**Consequence:** Keycloak's 26.6 migration is one-way; if it damages keycloak_prd_db, recovery falls back to the latest nightly postgres-pas dump, losing realm changes made since then.
+
+**Provenance:** read — completion consult 1, plan.md 'Rulings (2026-09-18, pre-run)' and verification.json V03
+**Disposition:**
+
+### N4 — Test phase r1 pushed DockerImages and HelmCharts's first stage; both deployed clean · minor
+
+Per plan.md's own 'Push order (the test phase's)' and the driver's devlock pre-authorization ('pushing and rolling dev... pre-authorized; prd stays operator-gated'), the test phase pushed: DockerImages (rebased cce00ff..02e19be onto a diverged origin/main, disjoint files, no conflicts) — build #2523 SUCCESS in 254s, published registry:5000/keycloak:26.7.3-postgres-health-ispn. Then HelmCharts's first stage (rebased 6e5baa1..7a8944e onto a diverged origin/main via dev:rebase-agent, disjoint files except tests/conftest.py which merged cleanly with both sides' intent preserved, kc project test green) — IaC/HelmCharts build #6524 SUCCESS in 197s, 0 errors, deployed prometheus-prd (P1+P2), keycloak-dev (26.7.3) and keycloak-prd (still 26.5.1, Recreate-rolled only). Live checks post-deploy: all three node-memory-pressure rules health=ok; Alertmanager's live config matches values.yaml verbatim (route, inhibit rule, both Telegram receivers); NodeMemoryStallCounterWedged is pending on srvk8s1 exactly as close-out A1 predicted; both keycloak Deployments report {"type":"Recreate"} live, and keycloak-prd's rollout events show the old pod deleted before the new one was created. HelmCharts's second push (auth.ginbov.nl, Grafana, pgAdmin) was deliberately not pushed this pass — see the new Outstanding actions entry.
+
+**Consequence:** none — this is the record of what the test phase itself did, not a defect
+
+**Provenance:** witnessed — test-agent, test phase, round 1, this session's push+deploy+live-check trail (IaC/HelmCharts build #6524, DockerImages build #2523, live kubectl/curl evidence cited in verification.json V01/V04-V08/V13/V15)
 **Disposition:**
 
 ## Bugs
@@ -97,7 +126,7 @@ docs/runbooks/k8s-rebuild.md:35 describes a keycloak-db Deployment (Recreate, ~3
 **Provenance:** read, plan-writer, planning r2, plan.md P4
 **Disposition:**
 
-### B4 — HelmCharts: the wedge alert's look-back comment and test cite for-grace-period as the restart bound, which does not apply to firing alerts · minor
+### ~~B4 — HelmCharts: the wedge alert's look-back comment and test cite for-grace-period as the restart bound, which does not apply to firing alerts · minor~~ — resolved by consult 1 (HelmCharts 3987dee): values.yaml's hold comment and the test's comment now give the real bound, restart downtime plus a couple of evaluations; the FOR_GRACE_MINUTES < look-back assertion stays as a conservative floor; kc project test re-run green. plan.md's P1 Record (the 10m for-grace-period sentence) still repeats the old reason; struck by consult 1
 
 configs/prd/prometheus/prd/values.yaml:127-130 and tests/test_prometheus_node_memory_alerts.py:37,:133 say the 30m ALERTS look-back must exceed restart downtime plus the 10m rules.alert.for-grace-period, because a restored alert stays pending that long. Prometheus applies the grace period only to alerts that were still pending. A restored alert that was already firing fires again on the first evaluation after restore: witnessed with Prometheus 3.5.0, for 60s and grace 30s, firing again 12s after restart. The real bound is downtime plus about two evaluation intervals, and 30m meets it.
 
@@ -177,4 +206,13 @@ P2 makes production Alertmanager (ss:alertmanager in HelmCharts charts/prometheu
 **Consequence:** The architecture model omits that alert delivery depends on Telegram, so a Telegram outage or bot revocation does not show up as affecting alerting.
 
 **Provenance:** read, code-writer, P2, r1, HelmCharts charts/prometheus/architecture.yaml
+**Disposition:**
+
+### S4 — HelmCharts: cover pgadmin's fresh-storage bootstrap (keycloak-admin's setup-db step and setup-log mount) in test_pgadmin_keycloak_login.py · minor
+
+The keycloak-admin init container's setup-db step (charts/pgadmin/templates/pgadmin-deployment.yaml:71-73) and its /var/log/pgadmin emptyDir mount (:92-93, :146-147) only run on a volume with no pgadmin4.db. The image has no /var/log/pgadmin and runs as uid 5050. Removing either one still passes all 9 tests. Production's PVC already holds the database, so neither runs there today.
+
+**Consequence:** If a later edit drops either line, the suite stays green, and pgAdmin fails to start the next time its PVC is rebuilt or restored empty.
+
+**Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F2 (mutations run)
 **Disposition:**

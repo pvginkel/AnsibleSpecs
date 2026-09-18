@@ -4,121 +4,198 @@
       "id": "V01",
       "area": "R1 — memory-stall alerts and delivery (#625)",
       "description": "R1 (#625): \"NodeMemoryStalled (critical) and NodeMemoryStallElevated (warning) have both been firing on srvk8s3 since ~2026-08-13, across 485 five-minute buckets.\" / \"Alertmanager still has no receiver configured, so none of it was sent anywhere.\" / \"Two coupled facets: the alert rules trust a counter that can wedge, and there is no delivery path to notice when they misfire — or when they fire for real.\" Both facets are closed on production: the two stall alerts no longer fire on a wedged counter alone (today they read the stall rate and nothing else — HelmCharts configs/prd/prometheus/prd/values.yaml:75-97), and Alertmanager, on the chart's stock receiver with no configuration today (values.yaml:120-130 sets none), delivers alerts to Telegram.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Both facets are live on production, not just committed. Pushed HelmCharts 7a8944e (the two-stage push this slice's plan.md orders — 'Push order (the test phase's)'), which IaC/HelmCharts build #6524 deployed (helm upgrade --install prometheus-prd, SUCCESS, no errors in a 745-line log). Live: prometheus.home /api/v1/rules shows NodeMemoryStalled, NodeMemoryStallElevated and NodeMemoryStallCounterWedged all health=ok, lastError=null — the corroborated rules (V04) and the wedge warning (V05) are both loaded and evaluating cleanly. Live: the alertmanager-prd pod (restarted 90s after deploy, checksum/config bump) serves a config (amtool config show) with telegram-critical/telegram-warning receivers and the NodeMemoryStallCounterWedged inhibit rule (V07/V15) — the delivery path R1 found missing now exists and is live.",
+      "evidence": [
+        "HelmCharts 7a8944e pushed to origin/main (git push origin 7a8944e:main), this pass",
+        "IaC/HelmCharts build #6524 — SUCCESS, 197s — helm upgrade --install prometheus-prd, keycloak-dev, keycloak-prd; 0 errors/failed matches in the full log",
+        "live: curl http://prometheus.home/api/v1/rules — NodeMemoryStalled/NodeMemoryStallElevated/NodeMemoryStallCounterWedged all health=ok, lastError=null, 2026-09-18 post-deploy",
+        "live: kubectl -n prometheus-prd exec prometheus-prd-alertmanager-0 -- amtool config show — route/inhibit_rules/receivers match configs/prd/prometheus/prd/values.yaml:264-303 verbatim",
+        "configs/prd/prometheus/prd/values.yaml:75-160 (corroborated rules + wedge alert), :248-303 (alertmanager config)"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — Grafana and pgAdmin on Keycloak (#575)",
       "description": "R2 (#575): \"Put Grafana and pgAdmin behind the homelab Keycloak (`homelab` realm at https://auth.ginbov.nl/realms/homelab) instead of their app-local logins, same shape as dnsmasq / electronics-inventory / iot / guacamole / open-webui / zigbee2mqtt already use\" — per-app confidential client, secret in OpenBao at eso/<cluster>/<app>/<stage>/oidc, materialised by ESO, OIDC config in the chart/release values (the dnsmasq shape: HelmCharts configs/prd/dnsmasq/prd/values.yaml:19-51). Holds for production's Grafana and pgAdmin (ruling D6), with their secrets at eso/prd/grafana/prd/oidc and eso/prd/pgadmin/prd/oidc; no client secret appears in any committed file.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "The code is committed and gated (P5 aa875f7→de4c8eb, P6 2af8b69+0b35392→bff7adb+f5092ef after rebase — kc project test green, both this pass's rebase and the original phase). Per this slice's own plan.md ('Push order (the test phase's)'), the Grafana/pgAdmin cutover ships in HelmCharts' *second* push — deliberately held back of the first ('rolling dev'), which is as far as the devlock hold's pre-authorization reaches; 'prd stays operator-gated' names exactly this cutover (the homelab-realm sign-in path real users and the operator's own admin access depend on, going live with no pre-upgrade database backup per the operator's 2026-09-18 waiver — close-out N3). Static confirmation this pass that the shape matches R2's own citation: configs/prd/grafana/prd/values.yaml:13,19-37 (envFromSecret: grafana-oidc, auth.generic_oauth against the homelab realm) and configs/prd/pgadmin/prd/values.yaml:10-22 (oidc.issuerUrl, externalSecrets.secrets.oidc → eso/prd/pgadmin/prd/oidc) — no secret literal in either file. Settles when the operator pushes the rest of HelmCharts' local main.",
+      "evidence": [
+        "plan.md 'Ordering constraints' — Push order (the test phase's): HelmCharts' second push carries P5/P6",
+        "configs/prd/grafana/prd/values.yaml:13,19-37 (envFromSecret, auth.generic_oauth, no secret literal)",
+        "configs/prd/pgadmin/prd/values.yaml:10-22 (oidc.issuerUrl, externalSecrets.secrets.oidc, no secret literal)",
+        "HelmCharts local main ahead of origin by 5 commits after this pass's stage-1 push (d53b4e3, de4c8eb, bff7adb, f5092ef, 2ceff0c)",
+        "Operator command: cd /work/HelmCharts && git push origin main"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — Keycloak upgrade (ruling U1)",
       "description": "R3: \"a Keycloak upgrade would be warrented\" — Keycloak is built at 26.7.3 in DockerImages (26.5.1 today, keycloak/build-matrix.json:5), every charts/keycloak release is pinned to it (HelmCharts charts/keycloak/values.yaml:22 pins 26.5.1 today) and both production Keycloak stages, auth.ginbov.nl and keycloak-dev.home, run it, with a backup of Keycloak's database taken before the push that deploys it, and that backup's keycloak_prd_db dump kept outside the postgres-pas backup scope's count-based pruning (the newest 90 objects — HelmCharts configs/prd/postgres-pas/_shared/infrastructure.tf:72-73) until 26.7.3 is verified working. The dev-cluster release's deploy waits on srvk8sdev (fact F3).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Half live: DockerImages 02e19be (rebased) pushed to origin/main; DockerImages build #2523 (SUCCESS, 254s) built and pushed registry:5000/keycloak:26.7.3-postgres-health-ispn (sha256:fa01e691958346718aa2075acdc42e448a31aa754a09c34df99693ea4543acde — confirmed present via the registry's tags/list). HelmCharts' first push deployed it to keycloak-dev.home only (charts/keycloak/values.yaml still names no version — the per-stage override at configs/prd/keycloak/dev/values.yaml carried it; keycloak-dev's Deployment now runs the 26.7.3 digest, live log shows a clean liquibase migration homelab-dev/kensho-dev/master → 26.6.1 → 26.6.2 → 26.7.0, 'Bootstrap completed', no error). auth.ginbov.nl (keycloak-prd) is still on the 26.5.1 digest (sha256:c138ec1d…) — confirmed live via kubectl. The chart-wide pin (charts/keycloak/values.yaml:22) and keycloak-prd's move are the second HelmCharts push (V02's owed command), which is where 'both production Keycloak stages... run it' is settled. The backup clause is separately not met by design: the operator waived checklist step 6 on 2026-09-18 ('Don't worry about the backup. The window of data loss is minimal.') — already recorded at close-out N3; not re-flagged here.",
+      "evidence": [
+        "DockerImages 02e19be pushed; build #2523 SUCCESS 254s; 'Pushed registry:5000/keycloak@sha256:fa01e691958346718aa2075acdc42e448a31aa754a09c34df99693ea4543acde'",
+        "live: registry:5000/v2/keycloak/tags/list = [\"26.5.1-postgres-health-ispn\",\"26.7.3-postgres-health-ispn\"]",
+        "live: kubectl -n keycloak-dev get deploy keycloak — image digest sha256:fa01e69...; logs show clean migration to 26.7.0 and 'Bootstrap completed in 7.7s', Keycloak 26.7.3",
+        "live: kubectl -n keycloak-prd get deploy keycloak — image digest sha256:c138ec1... (unchanged, still 26.5.1)",
+        "close-out N3 (already recorded): backup clause waived by operator ruling 2026-09-18",
+        "Operator command (same as V02): cd /work/HelmCharts && git push origin main"
+      ]
     },
     {
       "id": "V04",
       "area": "D2 — stall alerts corroborated",
       "description": "Each stall alert fires only when available memory is low or major faults are high as well: NodeMemoryStalled and NodeMemoryStallElevated additionally require, on the same node, MemAvailable under 10% of MemTotal or major page faults above 500/s, with their stall thresholds (0.05 / 0.02), severities and for-windows otherwise unchanged (HelmCharts configs/prd/prometheus/prd/values.yaml:75-97 today). The 2026-08-02 incident meets both signals (0.62 GiB MemAvailable, 670–770 major faults/s — AnsibleSpecs handovers/memory-issues/06-eviction.md:73, 02-measurements.md:136).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: read configs/prd/prometheus/prd/values.yaml:79-121 this pass — NodeMemoryStalled/NodeMemoryStallElevated keep their original stall thresholds (>0.05 for 10m critical, >0.02 for 15m warning) and each now `and on (node)` requires MemAvailable/MemTotal<0.10 or rate(pgmajfault[5m])>500, exactly as the criterion states; P1's Record (plan.md) additionally documents promtool witness testing of this expression and a live production replay finding both rules match no minute over the retained week. Live, post-deploy: prometheus.home /api/v1/rules shows both rules health=ok with no lastError, and the /api/v1/query for ALERTS{alertname=~\"NodeMemory.*\"} returns no NodeMemoryStalled/NodeMemoryStallElevated series firing anywhere — consistent with no real stall on production right now.",
+      "evidence": [
+        "configs/prd/prometheus/prd/values.yaml:79-121 (read in full this pass)",
+        "live: prometheus.home /api/v1/rules — NodeMemoryStalled, NodeMemoryStallElevated health=ok, lastError=null",
+        "live: prometheus.home /api/v1/query?query=ALERTS{alertname=~\"NodeMemory.*\"} — no NodeMemoryStalled/NodeMemoryStallElevated series present",
+        "plan.md P1 Record — promtool 3.5.0 scenario witness (starvation fires both stall alerts; healthy node stays quiet) and production replay (09-11→09-18, both rules match no minute)"
+      ]
     },
     {
       "id": "V05",
       "area": "D2 — wedged-counter warning",
       "description": "A new warning-level alert fires when a node's memory stall rate is above 0.02 while MemAvailable is above 25% of MemTotal and major faults average under 50/s over an hour, held for at least an hour. Once firing it keeps firing through that node's memory dips and fault bursts for as long as the stall rate stays above 0.02, and resolves when the counter stops (a reboot). Its message names the node and says the stall alerts on that node are blind until it is rebooted.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: configs/prd/prometheus/prd/values.yaml:133-160 — NodeMemoryStallCounterWedged's expression and `for: 1h` match the criterion's qualifying condition, hold and message exactly; P1's Record documents promtool witness scenarios for the hold-through-dips and reboot-resolves behaviour (not re-derived here). Live, post-deploy: prometheus.home /api/v1/query for ALERTS{alertname=\"NodeMemoryStallCounterWedged\"} returns node=srvk8s1, alertstate=pending — exactly the node close-out A1 already flagged as wedged since 2026-09-16, correctly qualifying and on track to cross into firing within the hour (the `for: 1h` clock restarted with this deploy's fresh rule group), and no other node's series present (correctly quiet elsewhere).",
+      "evidence": [
+        "configs/prd/prometheus/prd/values.yaml:133-160 (read in full this pass)",
+        "live: prometheus.home /api/v1/query?query=ALERTS{alertname=\"NodeMemoryStallCounterWedged\"} — {node=\"srvk8s1\", alertstate=\"pending\", severity=\"warning\"}, value 1",
+        "close-out A1 (already recorded) — srvk8s1 wedged since 2026-09-16 ~06:00 UTC, predicted to qualify",
+        "plan.md P1 Record — promtool hold/reboot-resolve witness scenarios"
+      ]
     },
     {
       "id": "V06",
       "area": "D2 — rule health",
       "description": "The production alerting rules load and evaluate without errors. After deploy, neither stall alert fires on a production node whose stall counter is healthy, and the wedge warning fires only on a node whose counter is genuinely wedged — a wedge that happens during the run is the warning working, not a failure. The rules also evaluate cleanly while a node-exporter chart upgrade leaves two overlapping series per node that differ only in helm_sh_chart: checked against data while such an overlap is still within Prometheus's 7-day retention (HelmCharts configs/prd/prometheus/prd/values.yaml:3), and by reading the rules once it has aged out.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Live, post-deploy: prometheus.home /api/v1/rules shows all three node-memory-pressure rules health=ok, lastError=null — loading and evaluating cleanly on real production data. Live query confirms no stall alert fires on a healthy node and the wedge warning is pending only on srvk8s1, the one node close-out A1 already established is genuinely wedged (per review adjudication A1, that is the warning working, not a V06 failure). The node-exporter overlap window (09-13 03:58–04:01) is now outside the 7-day retention as of 2026-09-18 (>7 days old, HelmCharts values.yaml:3 sets 7d), so per this criterion's own instruction it is settled by reading the rules, which is what P1's Record already did (rules evaluated cleanly across that exact overlap in its retained-week replay, run before the window aged out) — not re-run live since the data no longer exists to query.",
+      "evidence": [
+        "live: prometheus.home /api/v1/rules — 3/3 node-memory-pressure rules health=ok, lastError=null, 2026-09-18 post-deploy",
+        "live: ALERTS query — no stall alert firing; wedge warning pending only on srvk8s1 (the already-flagged genuine wedge, close-out A1)",
+        "configs/prd/prometheus/prd/values.yaml:3 (retention: 7d) — the 09-13 overlap is now outside retention",
+        "plan.md P1 Record — replay evaluated cleanly across the 09-13 03:58–04:01 node-exporter 4.56.3/4.57.0 overlap, read while it was still live data"
+      ]
     },
     {
       "id": "V07",
       "area": "D1 — Telegram delivery",
       "description": "Production Alertmanager delivers to the chat of a new, dedicated Telegram bot (neither eso/prd/jenkins-telegram-bot nor eso/prd/telegram-mcp is reused): critical alerts delivered loud, warning alerts delivered silent, resolved notices sent, plain text. The bot token and chat id come from OpenBao eso/prd/prometheus/prd/telegram via ESO and appear in neither git nor the rendered Alertmanager configuration.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Live, post-deploy: kubectl exec into prometheus-prd-alertmanager-0 and amtool config show returns the running config verbatim — route to telegram-warning with a severity=\"critical\" child route to telegram-critical (loud/silent split), both receivers send_resolved: true, bot_token_file/chat_id_file under /etc/secrets/telegram (not a literal value — ESO-materialised, confirmed the ExternalSecret targets eso/prd/prometheus/prd/telegram, a path distinct from jenkins-telegram-bot and telegram-mcp), no parse_mode (plain text). No secret value was read to produce this evidence — the file paths and receiver shape are visible without it. Not independently re-exercised with a live send this pass (nothing is currently firing to trigger one — see V05); P2's Record documents a witnessed local Alertmanager 0.34.1 run against a fake Telegram API confirming the actual send behaviour (loud/silent, [RESOLVED], no parse_mode).",
+      "evidence": [
+        "live: kubectl -n prometheus-prd exec prometheus-prd-alertmanager-0 -- amtool config show --alertmanager.url=http://localhost:9093",
+        "configs/prd/prometheus/prd/manifests.yaml:1-28 (ExternalSecret alertmanager-telegram ← eso/prd/prometheus/prd/telegram, distinct from eso/prd/jenkins-telegram-bot and eso/prd/telegram-mcp)",
+        "configs/prd/prometheus/prd/values.yaml:264-303 (route/receivers)",
+        "plan.md P2 Record — witnessed local Alertmanager 0.34.1 run against a fake Telegram API (loud critical, silent warning, [RESOLVED] on resolve)"
+      ]
     },
     {
       "id": "V08",
       "area": "D1 — delivery scope",
       "description": "Delivery covers the production cluster's Alertmanager only: the dev cluster's Prometheus release is unchanged, no SMTP gateway or mail-derived event receivers are added, and Alertmanager gains no ingress.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: git diff origin/main...HEAD (pre-push) touches only configs/prd/prometheus/prd/{values.yaml,manifests.yaml} — configs/dev/prometheus/ has no diff at all in this slice. The alertmanager config read live (V07) has exactly two receivers, both telegram_configs — no smtp_configs, no source=\"smtp\" route, matching D1's SMTP-gateway exclusion. Live: kubectl -n prometheus-prd get ingress — no Alertmanager ingress object exists (checked this pass); only the ClusterIP services listed.",
+      "evidence": [
+        "git diff origin/main...HEAD --stat (this pass, pre-push) — configs/dev/prometheus untouched",
+        "live: amtool config show — receivers are telegram_configs only, no smtp_configs",
+        "live: kubectl -n prometheus-prd get ingress,svc — no ingress; alertmanager only has the two ClusterIP Services it always had"
+      ]
     },
     {
       "id": "V09",
       "area": "D3 / F1 — Grafana gate",
       "description": "On production, an account holding the grafana Keycloak client's admin role signs in to Grafana through Keycloak as Grafana Admin, and a homelab-realm account without that role — F1's friend — cannot log in.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Not live: Grafana's Keycloak sign-in (P5, HelmCharts de4c8eb) ships in HelmCharts' second push, held back this pass per plan.md's push order and the devlock's 'prd stays operator-gated' boundary (see V02). A live sign-in also needs the operator's own Keycloak credentials, which this test phase does not hold or use. Settles together with V02's push, then an actual sign-in (granted and refused) against grafana.home.",
+      "evidence": [
+        "configs/prd/grafana/prd/values.yaml:19-37 (role_attribute_path/role_attribute_strict, read this pass)",
+        "plan.md P5 Record — witnessed against a fake IdP: admin-role account → Grafana Admin; role-less and viewer-only accounts refused",
+        "Operator command (same as V02): cd /work/HelmCharts && git push origin main, then sign in at http://grafana.home/login/generic_oauth with a granted and an ungranted homelab account"
+      ]
     },
     {
       "id": "V10",
       "area": "D3 / F1 — pgAdmin gate",
       "description": "On production, an account holding the pgadmin Keycloak client's admin role signs in to pgAdmin through Keycloak as a pgAdmin administrator that already lists and can connect to the chart's postgres-pas server (HelmCharts charts/pgadmin/files/servers.json), and a homelab-realm account without that role cannot log in.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Not live: pgAdmin's Keycloak sign-in (P6, HelmCharts bff7adb+f5092ef) ships in HelmCharts' second push, held back this pass for the same reason as V09. Settles together with V02/V09's push, then an actual sign-in (granted and refused) against pgadmin.home.",
+      "evidence": [
+        "charts/pgadmin/files/config_local.py (OAUTH2_ADDITIONAL_CLAIMS pgadmin_roles, read this pass)",
+        "charts/pgadmin/templates/pgadmin-deployment.yaml:57-97 (keycloak-admin init container, read this pass)",
+        "plan.md P6 Record — witnessed against a fake Keycloak + postgres sidecar: admin-role account signs in as admin and connects; claim-less/viewer-only accounts refused, no account created",
+        "Operator command (same as V02): cd /work/HelmCharts && git push origin main, then sign in at http://pgadmin.home/oauth2/authorize with a granted and an ungranted homelab account"
+      ]
     },
     {
       "id": "V11",
       "area": "D4 — break-glass",
       "description": "Production's Grafana and pgAdmin each keep their local admin and login form as break-glass; Keycloak is an additional login button, with no automatic redirect.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Statically holds in the committed code, but the live behaviour this criterion asks for (grafana.home and pgadmin.home's login pages, in production, today) is only true once the second HelmCharts push lands (V02) — Grafana currently has no auth.generic_oauth block live at all (keycloak-prd stage of this cutover not yet deployed), so there is nothing to confirm 'stays as break-glass beside' yet. Static: grafana.ini sets auth.generic_oauth.enabled without disable_login_form or auto_login (both default false — configs/prd/grafana/prd/values.yaml:19-37, no such keys present); charts/pgadmin/files/config_local.py sets AUTHENTICATION_SOURCES = ['internal', 'oauth2'] (both sources, not oauth2-only). Settles together with V02's push, then a live check of both login pages.",
+      "evidence": [
+        "configs/prd/grafana/prd/values.yaml:19-37 (no disable_login_form/auto_login key; both default false)",
+        "charts/pgadmin/files/config_local.py:3 (AUTHENTICATION_SOURCES = ['internal', 'oauth2'])",
+        "Operator command (same as V02): cd /work/HelmCharts && git push origin main, then GET http://grafana.home/login and http://pgadmin.home/login"
+      ]
     },
     {
       "id": "V12",
       "area": "D6 — dev-cluster copies keep local login",
       "description": "The dev-cluster copies of Grafana and pgAdmin keep their local login: the dev Grafana release is unchanged, and the dev pgAdmin release rendered from the changed chart shows no Keycloak login and references no OIDC secret.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static, read-only, no push needed: `git diff origin/main...HEAD -- configs/dev/grafana/ configs/dev/pgadmin/` is empty — neither dev release is touched by this slice's diff at all. Rendered the dev pgAdmin release directly against the changed chart this pass (`cexec iac poetry run deploy template dev/pgadmin`, from HelmCharts) and grepped the output for oidc/oauth2/keycloak — zero matches: the shared chart's `{{- if .Values.oidc.issuerUrl }}` guards (charts/pgadmin/templates/pgadmin-configmap.yaml, pgadmin-deployment.yaml) correctly compile away every Keycloak-related block when the dev release's values (configs/dev/pgadmin/prd/values.yaml) set no oidc.issuerUrl.",
+      "evidence": [
+        "git diff origin/main...HEAD -- configs/dev/grafana/ configs/dev/pgadmin/ — empty, this pass",
+        "cexec iac poetry run deploy template dev/pgadmin (HelmCharts) — 0 matches for oidc/oauth2/keycloak in the rendered manifests, this pass",
+        "charts/pgadmin/templates/pgadmin-configmap.yaml, pgadmin-deployment.yaml — {{- if .Values.oidc.issuerUrl }} guards (read this pass)"
+      ]
     },
     {
       "id": "V13",
       "area": "D5 / U1 — Keycloak never runs beside an older version",
       "description": "Every Keycloak rollout stops the old pod before the new one starts (ruling D5; the chart surges a second pod today — HelmCharts charts/keycloak/templates/keycloak-deployment.yaml:10-14), so the rollout that deploys 26.7.3 never runs a 26.5.1 and a 26.7.3 pod against the same database at once (Keycloak upgrading guide, \"Migrating to 26.6.0\"), and keycloak-dev.home runs 26.7.3 healthily before auth.ginbov.nl does.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Fully live this pass. `kubectl -n keycloak-dev get deploy keycloak -o jsonpath='{.spec.strategy}'` and the same for keycloak-prd both return {\"type\":\"Recreate\"} — the live Deployments, not just the chart source. keycloak-prd's rollout events (this push rolled its pod template even though its image digest is unchanged) show ScalingReplicaSet keycloak-799855b764 from 1 to 0 and SuccessfulDelete of its pod BEFORE ScalingReplicaSet keycloak-67b47d8b8b (the new ReplicaSet) from 0 to 1 — old pod gone before new pod created, i.e. Recreate's actual behaviour, not merely its declared strategy. keycloak-dev.home is confirmed running 26.7.3 (image digest sha256:fa01e69..., logs 'Keycloak 26.7.3... started') while keycloak-prd (auth.ginbov.nl) is confirmed still on 26.5.1 (digest sha256:c138ec1..., logs 'Keycloak 26.5.1... started') — dev-stage-first, exactly as ordered.",
+      "evidence": [
+        "live: kubectl -n keycloak-dev get deploy keycloak -o jsonpath='{.spec.strategy}' → {\"type\":\"Recreate\"}",
+        "live: kubectl -n keycloak-prd get deploy keycloak -o jsonpath='{.spec.strategy}' → {\"type\":\"Recreate\"}",
+        "live: kubectl -n keycloak-prd get events --sort-by=.lastTimestamp — ScalingReplicaSet …-799855b764 1→0 + SuccessfulDelete pod, then ScalingReplicaSet …-67b47d8b8b 0→1 (old gone before new created)",
+        "live: keycloak-dev pod image sha256:fa01e69...; log 'Keycloak 26.7.3 on JVM ... started'",
+        "live: keycloak-prd pod image sha256:c138ec1...; log 'Keycloak 26.5.1 on JVM ... started'"
+      ]
     },
     {
       "id": "V14",
       "area": "U1 — Keycloak after the upgrade",
       "description": "After the upgrade, the homelab and homelab-dev login pages render with the deployed themes; a sign-in through an app already on Keycloak succeeds on homelab, and a sign-in to the account console succeeds on homelab-dev (no production-cluster app uses that realm).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Partially live, partially owed. homelab-dev (keycloak-dev.home) is upgraded this pass: its discovery document (200, issuer http://keycloak-dev.home/realms/homelab-dev) and its login page (200) both serve cleanly post-migration, and the pod log shows a clean liquibase migration with no error (V03). homelab (auth.ginbov.nl) is NOT upgraded this pass — keycloak-prd is still 26.5.1 (V13) — so 'after the upgrade... a sign-in through an app already on Keycloak succeeds on homelab' cannot yet be true of the upgraded version; its discovery document still serves (200) on the pre-upgrade version, unaffected by today's push. An actual authenticated sign-in (either realm) needs real credentials this test phase does not hold, so even homelab-dev's account-console leg is unexercised beyond the discovery/login-page checks above. Settles once the second HelmCharts push (V02) lands and the operator signs in.",
+      "evidence": [
+        "live: curl http://keycloak-dev.home/realms/homelab-dev/.well-known/openid-configuration → 200, issuer http://keycloak-dev.home/realms/homelab-dev",
+        "live: curl http://keycloak-dev.home/realms/homelab-dev/protocol/openid-connect/auth?... → 200 (login page renders)",
+        "live: curl https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration → 200, issuer unchanged (still pre-upgrade — keycloak-prd on 26.5.1, V13)",
+        "live: keycloak-dev pod log — clean migration to 26.7.0, 'Bootstrap completed', no error",
+        "Operator command (same as V02) for the homelab leg; homelab-dev's account-console sign-in is a separate manual check the operator can do now"
+      ]
     },
     {
       "id": "V15",
       "area": "D2 — stall alerts inhibited on a wedged node",
       "description": "While the wedge warning fires for a node, Alertmanager inhibits that node's NodeMemoryStalled and NodeMemoryStallElevated, so neither is delivered from a wedged node, including through a memory dip or fault burst on that node long enough to meet the stall alert's for-window; stall alerts on other nodes and every other alert are not inhibited. The inhibition matches on the node label, which every production series of node_pressure_memory_stalled_seconds_total carries (Prometheus series API, 2026-09-14).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Live, post-deploy: amtool config show confirms the running Alertmanager config carries exactly one inhibit rule — source alertname=\"NodeMemoryStallCounterWedged\", target alertname=~\"NodeMemoryStalled|NodeMemoryStallElevated\", equal: [node] — matching the criterion verbatim, and no other inhibit rule exists (so other alerts are correctly untouched). Not live-exercised end-to-end this pass: srvk8s1's wedge warning is still `pending` (V05), not yet `firing`, so there is no live inhibition event to observe right now (Alertmanager's own `amtool alert` list is empty). This exact mechanism was witnessed by code-writer in P2 (local Alertmanager 0.34.1 against fake data: srvk8s1's two stall alerts suppressed under its wedge warning while srvk8s1's NodeKubeReservedMissing and srvk8s2's stall alert stayed active) — combined with the live confirmation that the identical rule is the one actually running in production, this is verified rather than merely configured.",
+      "evidence": [
+        "live: kubectl -n prometheus-prd exec prometheus-prd-alertmanager-0 -- amtool config show — inhibit_rules: exactly one rule, source NodeMemoryStallCounterWedged / target NodeMemoryStalled|NodeMemoryStallElevated / equal [node]",
+        "live: amtool alert — empty (nothing firing yet; srvk8s1's wedge warning is pending, not firing — V05)",
+        "configs/prd/prometheus/prd/values.yaml:279-283 (inhibit_rules, read this pass)",
+        "plan.md P2 Record — witnessed local Alertmanager 0.34.1 run: srvk8s1's stall alerts suppressed under its wedge warning; srvk8s1's NodeKubeReservedMissing and srvk8s2's stall alert stayed active"
+      ]
     }
   ]
 }
