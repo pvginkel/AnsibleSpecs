@@ -489,6 +489,34 @@ Target: ansible
   the alert for that time.
 - Deploy-owed: the operator's `openbao` playbook run against the srvvaultN nodes, check-mode first.
 
+**Done (P6).** Ansible `d70be14` on `phase/023-P6`. The wrapper's upload URL is
+`…/upload?filename=${UPLOAD_FILENAME}&valid_for=${UPLOAD_VALID_FOR}`, with `UPLOAD_VALID_FOR="52h"` a constant
+beside `UPLOAD_FILENAME` (`openbao-backup.sh.j2:26-30`), not a role variable. Leader guard and timer are
+unchanged. New runbook `docs/runbooks/backup-freshness.md` covers both alerts. `kc project test --project ansible` is green.
+
+Later phases:
+- P7: the runbook for `BackupOverdue` and `BackupWatcherBlind` is Ansible `docs/runbooks/backup-freshness.md`.
+  §3 of it holds the retirement step, for a scope or for one stream.
+- Doc phase: no runbook links to it yet. `openbao.md` "What can go wrong" (nightly backup failed) and the role
+  README's backup section (`README.md:330-405`) do not mention the validity or the alert.
+- Test phase: V15 and V19's `openbao` stream need the operator's `openbao` playbook run, check-mode first.
+  The run's diff is the one URL line and the comment above it.
+
+Record:
+- Runbook structure: how the watching works, with the streams watched today; §1 `BackupOverdue`, per
+  uploader; §2 `BackupWatcherBlind`, split into target and reads; §3 retire a scope or a stream.
+- It reads Drive by `kubectl exec deploy/backup-server -- rclone …`. The image sets
+  `RCLONE_CONFIG=/data/rclone.conf`, so no rclone host or Drive login is needed. Metrics come by
+  `exec … curl localhost:8081/metrics`, or from `prometheus.home`. The silence is `amtool silence add`
+  inside `prometheus-prd-alertmanager-0`, which has no ingress. The silence lasts 8 h.
+- A one-stream deletion filters on `/????????T??????Z_<filename>.age.metadata.json`, so that `db.dump`
+  cannot match `other_db.dump`.
+- A full read that fails in several scopes logs one `freshness refresh:` line, followed by one line per
+  scope (`errors.Join`), so the runbook greps with `-A3`.
+- Renewing backup-server's Drive login has no runbook anywhere. The new runbook says so (close-out S5).
+- Prd backup-server does not serve the metrics yet (on 2026-09-18 `up{service="backup-server"}` was
+  empty), so none of the runbook's live queries has been run.
+
 ### P7 — Doctrine records the backup freshness contract
 
 Target: ../AnsibleSpecs
@@ -500,7 +528,7 @@ Target: ../AnsibleSpecs
   `decisions.md:101`.
 - The §Backup list of off-cluster copies already names `S3MirrorStale` for the mirror (`:597`). Its
   OpenBao and `postgres-pas` entries (`:595-596`) name their freshness alert, `BackupOverdue`, the same
-  way, since D1 opts both in.
+  way, since D1 opts both in. Its triage runbook is Ansible `docs/runbooks/backup-freshness.md` (P6).
 
 ## Not in scope
 

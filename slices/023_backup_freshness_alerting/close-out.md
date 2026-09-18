@@ -147,3 +147,12 @@ The prd Prometheus release's rules (configs/prd/prometheus/prd/values.yaml, serv
 
 **Provenance:** witnessed — executor, P5, r1
 **Disposition:**
+
+### S5 — No runbook covers renewing backup-server's Drive login (the gdrive-pieter remote in /data/rclone.conf on rclone-backup-pvc) · minor
+
+Writing docs/runbooks/backup-freshness.md (P6), BackupWatcherBlind's most likely total-blindness cause is a Drive login backup-server can no longer use: its full read logs 'freshness refresh: list gdrive-pieter:Homelab Backups: …' and every upload answers 500. The login lives in the gdrive-pieter remote of /data/rclone.conf on the rclone-backup-pvc volume (backup-server image sets RCLONE_CONFIG=/data/rclone.conf). No runbook in Ansible docs/runbooks/ or HelmCharts says how that token is renewed, so the new runbook states it is not covered rather than inventing a procedure.
+
+**Consequence:** When backup-server's Drive login expires or is revoked, BackupWatcherBlind fires and every upload fails, and the operator has no written procedure to renew the login and restore both backups and the watching.
+
+**Provenance:** read, code-writer, P6, r1, docs/runbooks/backup-freshness.md §2
+**Disposition:**
