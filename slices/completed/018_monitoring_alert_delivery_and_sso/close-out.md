@@ -35,7 +35,9 @@ your granted account, one with an account that has no role, which must be refuse
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — srvk8s1's memory PSI counter has been wedged since 2026-09-16 ~06:00 UTC; reboot srvk8s1 · major
+### ~~A1 — srvk8s1's memory PSI counter has been wedged since 2026-09-16 ~06:00 UTC; reboot srvk8s1 · major~~ — closed by the operator, 2026-09-18
+
+<details><summary>struck — body kept for the record</summary>
 
 Production Prometheus, 2026-09-18 ~11:00 UTC: srvk8s1's node_pressure_memory_stalled_seconds_total rate has read 0.71-0.97 s/s since 2026-09-16 ~06:00 (booted 2026-09-15 ~17:00), with MemAvailable at 33% of MemTotal and 1.7 major faults/s over the hour. The pre-P1 rules fire NodeMemoryStalled (critical) and NodeMemoryStallElevated on it right now, undelivered. Once P1 deploys, neither stall alert fires on srvk8s1 and NodeMemoryStallCounterWedged fires there within the hour (a replay over the retained week puts its qualifying condition on srvk8s1 from 09-16 06:36 to now, and on srvk8s2 through its recorded wedge, nowhere else). That warning firing is the rule working (review advisory A1), not a V06 failure. A reboot resets the counter and resolves it; until then P2's inhibition blinds srvk8s1's stall alerts.
 
@@ -44,7 +46,9 @@ test-agent, test phase round 1, 2026-09-18 — P1/P2 are now live on production 
 **Consequence:** A real memory stall on srvk8s1, the node of the 2026-08-02 starvation, goes unannounced until it is rebooted.
 
 **Provenance:** witnessed — code-writer, P1, r1, live production Prometheus queries 2026-09-18
-**Disposition:** Is it necessary to do this now? Sunday morning there'll be a scheduled update.
+**Disposition:** Is it necessary to do this now? Sunday morning there'll be a scheduled update. Then: "Yes, string the rest and close the card."
+
+</details>
 
 ### ~~A2 — Push the rest of HelmCharts to move auth.ginbov.nl to 26.7.3 and turn on Grafana/pgAdmin Keycloak sign-in · major~~ — closed by the operator, 2026-09-18
 
@@ -74,7 +78,9 @@ it (N4, N5). Keycloak's one-way migration ran with no pre-upgrade dump, as waive
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — srvk8s4 ran at 5% MemAvailable and up to 842 major faults/s during 2026-09-07 → 09-14, without memory stall · minor
+### ~~N1 — srvk8s4 ran at 5% MemAvailable and up to 842 major faults/s during 2026-09-07 → 09-14, without memory stall · minor~~ — closed by the operator, 2026-09-18
+
+<details><summary>struck — body kept for the record</summary>
 
 Replay for P1's thresholds: min(MemAvailable/MemTotal) 0.050 and max rate(node_vmstat_pgmajfault[5m]) 842/s on srvk8s4 (20 GiB node), p99 faults ~258–317/s, while its stall rate never exceeded 0.007. The other three nodes stayed above 17% available and under 192 faults/s. No alert covers this by design (the mixin's standalone memory alerts are out of scope).
 
@@ -83,16 +89,22 @@ plan-writer r3, 2026-09-14 — Replayed at the rules' one-minute evaluation over
 **Consequence:** srvk8s4 runs close to its memory ceiling with no alert on it; a capacity look may be due.
 
 **Provenance:** witnessed, plan-writer, planning r1, live production Prometheus queries 2026-09-14
-**Disposition:** Really? I just gave it a ton more memory a few days ago.
+**Disposition:** Really? I just gave it a ton more memory a few days ago. Then: "Yes, string the rest and close the card."
 
-### N2 — HelmCharts: the grafana releases track a deprecated chart repo, frozen at chart 10.5.15 / Grafana 12.3.1 · minor
+</details>
+
+### ~~N2 — HelmCharts: the grafana releases track a deprecated chart repo, frozen at chart 10.5.15 / Grafana 12.3.1 · minor~~ — closed by the operator, 2026-09-18
+
+<details><summary>struck — body kept for the record</summary>
 
 configs/{prd,dev}/grafana/prd/release.yaml pull grafana/grafana from https://grafana.github.io/helm-charts, unpinned. That chart is marked deprecated: true (helm template warns "this chart is deprecated"); its README says updates moved to grafana-community/helm-charts after 2026-01-30. Its newest version, 10.5.15 (appVersion 12.3.1), is what production runs, so the unpinned release gets no further Grafana versions or security fixes. Not moved here — out of P5's scope.
 
 **Consequence:** Grafana stays on 12.3.1 with no upstream fixes until the releases point at the grafana-community chart repository.
 
 **Provenance:** witnessed, code-writer, P5, r1, helm pull grafana/grafana (Chart.yaml deprecated: true, README Chart Migration)
-**Disposition:** I'm going to update all this stuff, but not now.
+**Disposition:** I'm going to update all this stuff, but not now. Then: "Yes, string the rest and close the card."
+
+</details>
 
 ### ~~N3 — Keycloak 26.7.3 deploys with no pre-upgrade database dump: the operator waived checklist step 6 on 2026-09-18, so V03's backup clause is waived, not met · minor~~ — closed by the operator, 2026-09-18
 
