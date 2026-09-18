@@ -603,7 +603,7 @@ Record:
   worked; the local admin still logged in through the form. Eight value mutations each fail the new test.
 - `grafana/grafana` 10.5.15 is live and the repo's newest; that chart repo is deprecated (close-out N2).
 
-### P6 — pgAdmin signs in through Keycloak, gated by a client role
+### P6 — pgAdmin signs in through Keycloak, gated by a client role ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
