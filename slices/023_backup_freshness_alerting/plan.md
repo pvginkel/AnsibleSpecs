@@ -409,7 +409,7 @@ Record:
   `{filename: <db>.dump, valid_for: 52h}`. It fails against the script as it was before this phase.
   `tests/conftest.py`'s docstring lists it.
 
-### P5 — Production Prometheus raises an overdue backup and a blind watcher
+### P5 — Production Prometheus raises an overdue backup and a blind watcher ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
