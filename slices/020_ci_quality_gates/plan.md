@@ -193,6 +193,43 @@ What the repo does not tell the executor:
 - Each `iac -c` is a fresh container with a fresh deploy-project install (`Jenkinsfile:33-42`), and the agent's single executor is shared with Ansible's IaC jobs.
 - Python that lands under `tools/` rides with the repo's hermetic unit tests; the Jenkinsfile itself is proven only by a real build.
 
+**Done (P4).** The HelmCharts `Jenkinsfile` gains a `Gate releases` stage between
+`Collect releases` and the deploy loop. The stage and the loop select releases through the same
+`deploys(entry)` predicate. The stage is skipped when nothing deploys. One `iac -c` runs, per
+gated release, the deploy's own `resolve-helm-args` line, then `deploy lint` and
+`deploy template`, each with `--kube-version=1.35.0 --set gitToken=… $args`. The renders leave
+iac as a tar on stdout. The agent then feeds each render on stdin to
+`ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43…` (strict, `-ignore-missing-schemas`,
+`-kubernetes-version 1.35.0`, JSON summary). A lint, render or kubeconform failure, or zero valid
+resources, fails the build before anything deploys or uninstalls. Two chart fixes: the storage
+separator (`---` then `{{ end -}}`) and homeassistant-mcp's dead `command:` line.
+HelmCharts `ba7804c` on `phase/020-P4`.
+
+Later phases:
+- P5: `deploy lint prd/media --stage=prd` and `deploy template …` are what the gate runs, and
+  both enforce `values.schema.json`. The gate also passes `--kube-version=1.35.0` (not a value)
+  and `--set gitToken=<token>` plus the `images.*=@sha256:…` digest `--set`s.
+- V18: a HelmCharts build that deploys shows `Gate releases` with one
+  `<chart_dir>@<stage>: kubeconform valid N, invalid 0, errors 0, skipped M` line per release.
+  The first build pulls the kubeconform image through the srviac host's docker (not yet witnessed).
+
+Record:
+- New `deploy lint` verb (`helmops.lint`), refused on Argo-owned releases like `template`. It
+  lints only a local chart source: an upstream release (9 in prd) prints that it has none and
+  exits 0, so its gate is the render plus kubeconform. `_values_args` is shared by lint and the
+  helm invocation. `_setup_repos` sends helm's stdout to stderr, so `template` stdout is the
+  render alone. The gate relies on this; `tests/test_helmops.py` covers it.
+- Local run of the exact gate script over all 47 enabled jenkins prd stages, with fresh HELM_*
+  dirs and a placeholder token: 38 lint clean, 47 render, and every render passes kubeconform
+  v0.8.0 strict with valid ≥ 1. Before the fix, storage lint fails: "invalid Yaml document
+  separator". Storage and homeassistant-mcp objects are identical before and after, apart from
+  the timestamp annotation.
+- Empty stdin makes kubeconform exit 1 with no JSON. The stage treats a missing report as a
+  failure.
+- Close-out B1: the deploy CLI echoes `--set gitToken=<token>` into the build log. This predates
+  the slice, and the gate's lint and template lines now print it too. The renders are deleted in
+  `finally`.
+
 ### P5 — `media` carries a values schema that rejects unknown keys
 
 Target: ../HelmCharts

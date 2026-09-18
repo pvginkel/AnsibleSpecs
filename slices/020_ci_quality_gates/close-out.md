@@ -50,6 +50,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — HelmCharts deploy CLI prints GIT_API_TOKEN into every IaC/HelmCharts build log · major
+
+helmops._run echoes each helm command line to stderr in full (tools/deploy/deploy_cli/helmops.py:22-24), and the Jenkinsfile passes --set gitToken="$GIT_API_TOKEN" to every deploy, so each deploy stage's log carries the clone PAT in plaintext on its '+ helm upgrade --install ...' line. This predates slice 020. P4's gate uses the same deploy line, so its lint and template lines print the token too, in the same log. Witnessed with a placeholder token in a local run of the gate script.
+
+**Consequence:** Anyone who can read IaC/HelmCharts console logs can read the GitHub PAT the iac harness clones with.
+
+**Provenance:** witnessed — executor, P4, r1, local gate simulation stderr
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -99,4 +108,13 @@ The build stage saves $HOME/go/pkg/mod to the build cache (key: go.sum) right af
 **Consequence:** Each provider build spends extra time and network re-fetching the test modules; the result is still correct.
 
 **Provenance:** witnessed | code-writer, P3, r1, probe in the dev go sidecar
+**Disposition:**
+
+### S5 — Slice 020 plan: P3's handover says the provider build log shows TestAcc* skipping, but go test prints only per-package ok lines · nit
+
+The P3 'Later phases' note says a green provider build's log shows the unit tests passing and the TestAcc* tests skipping. The stage runs `go test ./...` without -v (HomelabTerraformProvider Jenkinsfile:65), and that prints only one `ok <package> <time>` line per package, with no per-test PASS or SKIP lines. A targeted non-verbose run over s3reader and s3storage, which hold three TestAcc* tests, printed only two ok lines. The review appended the actual log shape to the P3 note. The pipeline behaviour is correct.
+
+**Consequence:** none for the estate; whoever proves V06 from the build log must rely on TF_ACC being unset, not on skip lines
+
+**Provenance:** witnessed, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
 **Disposition:**
