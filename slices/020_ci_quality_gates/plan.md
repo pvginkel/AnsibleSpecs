@@ -236,6 +236,35 @@ Target: ../HelmCharts
 
 The `media` chart ships a `values.schema.json` — the reference for the pattern — under which a key the chart does not define is an error at every level the chart defines, so the 2024-08 class fails before deploy: `storage.plex.subvolumeName` (the chart reads only `storage.plex.imageName`, `charts/media/templates/media-pvc.yaml:15`) is rejected by lint and render, and so by P4's gate. Everything legitimate passes: the chart defaults (`charts/media/values.yaml`, whose leaves are mostly empty), prd's deployed values (`configs/prd/media/prd/values.yaml`), and every value the pipeline injects at deploy (see P4 — `global.environment`, `gitToken`, the image-digest `--set`s). Blocks a template hands to Kubernetes wholesale are not re-specified in the schema. Pushing this redeploys `media` in prd (operator-accepted); the rendered prd manifests are identical before and after apart from the render-time `deployment` annotation (`charts/shared/_helpers.tpl:1-3`) that restarts its pods on every deploy.
 
+**Done (P5).** `charts/media/values.schema.json` is a draft-07 schema. It sets
+`additionalProperties: false` at every level `values.yaml` defines. It also sets it on each
+`externalSecrets.secrets.<entry>` and on that entry's `data[]` items, which hold the keys
+`shared.externalsecrets` reads. The `resources.*` blocks are `object|null` with no inner schema.
+Leaves that are empty in the defaults are `string|null`, and `isPublic` and
+`requireStorageZpool2` are booleans. The top level also admits `global` (with only
+`environment`) and `gitToken`, because the deploy injects both. `tests/test_media_values_schema.py`
+validates with `jsonschema`, a new `test`-group dependency that `poetry.lock` pins. The chart
+defaults pass. The prd values pass together with the injected `--set`s, whose image paths come
+from `get_helm_images`. Seven unknown-key cases each fail with one error at the expected path.
+HelmCharts `6e5baa1` on `phase/020-P5`.
+
+Later phases:
+- P6 is unchanged. The HelmCharts suite needs `kc project setup` to install `jsonschema`. This
+  pod's iac container already has it.
+- V12/V13: helm's rejection message is `at '/storage/plex': additional properties 'subvolumeName' not allowed`.
+
+Record:
+- Witnessed with Helm v4.3.0 in iac, through `deploy lint` and `deploy template prd/media
+  --stage=prd` with the gate's args (`--kube-version=1.35.0`, `--set gitToken=…` and five
+  `images.*=@sha256:…`). Lint reports 0 failed. The render matches the pre-schema render line
+  for line, apart from the `deployment:` annotation. Adding an override file that carries
+  `storage.plex.subvolumeName` fails both lint and template.
+- Plain `helm lint charts/media` still fails only on the known nil pointer in the defaults
+  (`mydownloads-tvdb`). With a bad key added, the schema error is reported instead, so the
+  defaults themselves pass the schema.
+- `values.yaml` defines `images.debian` and `storage.mydownloads.downloadHostPath`, but no
+  template reads either, so the schema admits both (close-out S9).
+
 ### P6 — DockerImages scans every image it pushes and alerts on fixable criticals
 
 Target: ../DockerImages

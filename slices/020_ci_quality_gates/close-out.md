@@ -118,3 +118,39 @@ The P3 'Later phases' note says a green provider build's log shows the unit test
 
 **Provenance:** witnessed, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
 **Disposition:**
+
+### S6 — HelmCharts chart gate: kubeconform skips, and never validates, resources with no 1.35 schema — removed built-in API versions and misspelled kinds included · minor
+
+The gate runs kubeconform with -ignore-missing-schemas (HelmCharts Jenkinsfile:56) and fails a release only on a non-zero exit or zero valid resources (:133). Any resource whose apiVersion/kind has no schema at kubeconform's 1.35 location therefore counts as skipped, and -strict never applies to it. That covers the custom resources the flag was meant for, and also removed built-in API versions (policy/v1beta1 PodDisruptionBudget, networking.k8s.io/v1beta1 Ingress) and a misspelled kind (apps/v1 Deploymnet). Each was witnessed with kubeconform v0.8.0 and the gate's flags: valid 1, skipped N, exit 0. helm lint --kube-version=1.35.0 (helm 4.3.0) only warns on a removed API and exits 0. The per-release summary line prints only a skipped count, so the log does not say what was skipped.
+
+**Consequence:** A release with a removed or misspelled apiVersion/kind passes the gate. Its helm upgrade then fails in the deploy loop, after earlier releases in the same build have already deployed.
+
+**Provenance:** witnessed — code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
+**Disposition:**
+
+### S7 — HelmCharts chart gate: the 9 upstream-chart releases are rendered and passed through kubeconform but not linted, while V07 says every gated release is linted · nit
+
+helmops.lint returns early for an upstream release (HelmCharts tools/deploy/deploy_cli/helmops.py:209-211), so the gate only renders these releases and runs kubeconform on them. V07 and the refinement ruling say the gate lints and renders every release it deploys. The executor disclosed this in the P4 done-record. The practical gap is empty: helm template enforces values.schema.json, kubeconform reports parse errors in the rendered YAML, and lint's deprecation check only warns.
+
+**Consequence:** none for the estate; whoever grades V07 should know that nine releases have no lint step
+
+**Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md F2
+**Disposition:**
+
+### S8 — Slice 020 plan: P4's record says empty stdin makes kubeconform exit 1 with no JSON, but through docker run -i an empty render exits 0 with valid 0 · nit
+
+The record holds only for a character-device stdin (< /dev/null). docker run -i gives kubeconform a pipe, and kubeconform v0.8.0 given an empty pipe exits 0 with a JSON report of valid 0. The gate still fails an empty render, but through the valid == 0 branch (HelmCharts Jenkinsfile:133), not the missing-report branch (:136-138).
+
+**Consequence:** none for the estate; whoever proves V19 should expect the zero-valid branch, not the missing-report branch, to fail an empty render
+
+**Provenance:** witnessed — code-reviewer, P4, r1, phases/P4/code_review_r1.md F3
+**Disposition:**
+
+### S9 — HelmCharts media chart: images.debian and storage.mydownloads.downloadHostPath are defined in values.yaml but no template reads them, so the schema admits them · minor
+
+charts/media/values.yaml defines images.debian and storage.mydownloads.downloadHostPath, and configs/prd/media/prd/values.yaml sets downloadHostPath: /zpool2/mydownloads/downloads. No template in charts/media reads either key: mydownloads-deployment.yaml hard-codes the hostPath as /{{ .Values.storage.zfs.pool }}/mydownloads/downloads, and no image line references images.debian. P5's values.schema.json admits every key that values.yaml defines, because the chart defaults and prd's values must pass. The schema therefore cannot flag these two. Deleting them from values.yaml, the prd values and the schema would close the gap without changing the render.
+
+**Consequence:** Setting downloadHostPath in prd does nothing, and the schema does not flag it. An operator who changes it expects the host path to move, but the pod keeps mounting /<pool>/mydownloads/downloads.
+
+**Provenance:** witnessed, code-writer, P5, r1, grep of charts/media during schema authoring
+**Disposition:**
