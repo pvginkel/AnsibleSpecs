@@ -293,12 +293,50 @@ bounded", "metrics are served only inside the cluster").
   rulings name: overdue, still watched after the newest backup stops declaring, pruned away, failed
   refresh.
 
+**Done (P2).** DockerImages `88e329f` on `phase/023-P2`, in `backup-server/`. New package
+`src/internal/freshness` (watcher and collector), on `prometheus/client_golang` v1.23.2 (module stays
+`go 1.24`). `GET /metrics`, and nothing else, is served on its own listener: `METRICS_LISTEN_ADDR`,
+default `:8081` (`EXPOSE 8080 8081`); `:8080` serves no metrics. `gofmt` and `go vet` clean;
+`go test -race ./...` green on Go 1.26 and 1.24 (go container).
+
+Later phases:
+- P3 scrapes pod port `8081`, path `/metrics`, no token; the default needs no env in the chart.
+- P5's series, all gauges in Unix seconds: `backup_server_stream_valid_until_timestamp_seconds{scope,filename}`
+  (overdue once `time()` passes it); `backup_server_stream_last_backup_timestamp_seconds{scope,filename}`;
+  `backup_server_refresh_last_success_timestamp_seconds` (last full refresh that read every folder without
+  error, `0` until the first, advancing hourly when healthy; a post-upload refresh does not advance it);
+  `backup_server_start_time_seconds`. Blindness is `time()` minus the later of last success and start,
+  e.g. `(last_success > 0) or start_time`; a fresh server's `0` alone would fire at once. No
+  `process_*`/`go_*` series are served.
+- P6's runbook: a retired scope's streams drop out on the first full refresh (hourly, or a restart)
+  after its `.metadata.json` files are deleted.
+
+Record. Settled beyond the plan's text:
+- Watched set: every folder `rclone lsjson` lists directly under `RCLONE_REMOTE` (new
+  `RcloneBackend.ListDirs`). Stream key and landing time come from the object name (new
+  `pipeline.ParseObjectName`, request-start timestamp, not Drive's modtime); unparseable names (the S3
+  mirror's crypt tree) are ignored.
+- Reads are narrower than the ruling's bound: per stream only the newest declaring backup's metadata
+  is read (`rclone cat`, new `RcloneBackend.Read`), remembered per scope. A cold start reads one file per
+  stream, a post-upload refresh one; an orphan is never read.
+- The post-upload refresh (`Handler.afterUpload`) re-lists only the uploaded scope, after its prune,
+  even if the prune failed. Refreshes are serialized, 10-minute timeout each.
+- A scope whose listing or newest metadata read/decode fails keeps its last streams and fails the full
+  refresh; a failed root listing keeps everything; a folder absent from a good root listing drops out.
+- `pipeline.ValidateValidity` became `ParseValidity` (returns the duration); `DecodeValidity` is new.
+  `backup-server/architecture.yaml` gains interface `GET /metrics` (validator green).
+- Tests: `freshness/watcher_test.go` covers watched set, newest-stops-declaring, orphans, pruned away,
+  failed refresh (scope, root, bad metadata), bounded reads and lists, scope refresh, `Run` cadence,
+  and the exposition (overdue, `0` before the first refresh, scrape reads no storage, only `/metrics`
+  served). `handler_test.go` covers upload-driven refresh and watching after credential deletion. No
+  test removed (`TestValidateValidity` became `TestParseValidity`).
+
 ### P3 — Prometheus scrapes backup-server inside the cluster
 
 Target: ../HelmCharts
 
-- The `storage` chart exposes P2's metrics listener to Prometheus on both clusters, using the
-  Service-annotation pattern (`charts/electronics-inventory/templates/app-service.yaml:6-8`, scraped by
+- The `storage` chart exposes P2's metrics listener (pod port `8081`, `GET /metrics`, no token) to
+  Prometheus on both clusters, using the Service-annotation pattern (`charts/electronics-inventory/templates/app-service.yaml:6-8`, scraped by
   the stock `kubernetes-service-endpoints` job). The nginx annotations still proxy only port 8080
   (`charts/storage/templates/backup-server-service.yaml:9-13`), so the ingress hostname never serves
   the metrics.
@@ -331,12 +369,15 @@ Two critical alerts join the production Prometheus release's rules (`configs/prd
 Their severity is labelled the way the existing critical rules label it (`:79`, `:138`), so slice 018's
 routing delivers both loud.
 
-- **Overdue.** A watched stream is past its valid-until. The alert names the scope and file name, and
+- **Overdue.** A watched stream is past its valid-until
+  (`backup_server_stream_valid_until_timestamp_seconds{scope,filename}`, P2). The alert names the scope
+  and file name, and
   its description points at where that stream's uploader leaves its logs: the leader srvvaultN's
   `openbao-backup` unit for `openbao`, the `postgres-backup` Job in `postgres-pas-prd` for
   `postgres-pas`.
 - **Dead watcher.** Prometheus cannot scrape backup-server, or backup-server reports it cannot read
-  cloud storage. "Cannot scrape" includes the target disappearing altogether, not only reporting down.
+  cloud storage: `backup_server_refresh_last_success_timestamp_seconds` (`0` until the first success)
+  measured from the later of it and `backup_server_start_time_seconds` (P2's done-record). "Cannot scrape" includes the target disappearing altogether, not only reporting down.
   It fires only once the condition has lasted hours, so a redeploy or a self-clearing cloud-storage
   hiccup never pages. The Deployment is `Recreate`
   (`charts/storage/templates/backup-server-deployment.yaml:9-10`), so every redeploy has a gap. The
