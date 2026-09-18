@@ -137,14 +137,14 @@ S14–S16 are doc debt this phase left open.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — DockerImages trivy stage: a scan that errors or times out raises no alert · minor
+### ~~S1 — DockerImages trivy stage: a scan that errors or times out raises no alert · minor~~ — fixed by DockerImages beac1e2, 2026-09-18
 
 The rulings define one alert — an image with a CRITICAL that has a fixed version — and forbid any build-status change. A scan that cannot complete (vulnerability DB fetch failure, registry pull error, its own timeout on a large toolchain image) is therefore log-only in this slice's P6. If trivy breaks on every build, nothing pages and the scan goes dark unnoticed. Alerting on scan failure (e.g. a notify.warning naming the image) would be a one-line follow-up once first-run behaviour is known.
 
 **Consequence:** A persistently failing trivy stage is visible only by reading DockerImages build logs.
 
 **Provenance:** read, plan-writer, planning r1, plan.md P6
-**Disposition:** File.
+**Disposition:** File. / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: fix now. DockerImages beac1e2: a scan that cannot complete raises notify.warning; README and decisions.md say so. Committed locally; push pending.
 
 ### ~~S3 — HelmCharts chart gate: kubectl-applied release manifests are never rendered, so kubeconform never validates them · minor~~ — closed by the operator, 2026-09-18
 
@@ -182,7 +182,7 @@ The gate runs kubeconform with -ignore-missing-schemas (HelmCharts Jenkinsfile:5
 **Provenance:** witnessed — code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
 **Disposition:** Close.
 
-### S7 — HelmCharts chart gate: the 9 upstream-chart releases are rendered and passed through kubeconform but not linted, while V07 says every gated release is linted · nit
+### ~~S7 — HelmCharts chart gate: the 9 upstream-chart releases are rendered and passed through kubeconform but not linted, while V07 says every gated release is linted · nit~~ — closed by the operator, 2026-09-18
 
 helmops.lint returns early for an upstream release (HelmCharts tools/deploy/deploy_cli/helmops.py:209-211), so the gate only renders these releases and runs kubeconform on them. V07 and the refinement ruling say the gate lints and renders every release it deploys. The executor disclosed this in the P4 done-record. The practical gap is empty: helm template enforces values.schema.json, kubeconform reports parse errors in the rendered YAML, and lint's deprecation check only warns.
 
@@ -191,7 +191,7 @@ consult 1, 2026-09-18 — Judged not owed: no phase was appended. The ruling's p
 **Consequence:** none for the estate; whoever grades V07 should know that nine releases have no lint step
 
 **Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md F2
-**Disposition:** Fix inline.
+**Disposition:** Fix inline. / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: close. Nothing left to fix: decisions.md already says "linted where its chart source is in the repo" and HelmCharts' CLAUDE.md and deploy README say an upstream release's lint exits 0.
 
 ### ~~S8 — Slice 020 plan: P4's record says empty stdin makes kubeconform exit 1 with no JSON, but through docker run -i an empty render exits 0 with valid 0 · nit~~ — closed by the operator, 2026-09-18
 
@@ -204,32 +204,32 @@ consult 1, 2026-09-18 — The P4 record in plan.md still has the wrong claim; th
 **Provenance:** witnessed — code-reviewer, P4, r1, phases/P4/code_review_r1.md F3
 **Disposition:** Close.
 
-### S9 — HelmCharts media chart: images.debian and storage.mydownloads.downloadHostPath are defined in values.yaml but no template reads them, so the schema admits them · minor
+### ~~S9 — HelmCharts media chart: images.debian and storage.mydownloads.downloadHostPath are defined in values.yaml but no template reads them, so the schema admits them · minor~~ — fixed by HelmCharts 03ea7fb, 2026-09-18
 
 charts/media/values.yaml defines images.debian and storage.mydownloads.downloadHostPath, and configs/prd/media/prd/values.yaml sets downloadHostPath: /zpool2/mydownloads/downloads. No template in charts/media reads either key: mydownloads-deployment.yaml hard-codes the hostPath as /{{ .Values.storage.zfs.pool }}/mydownloads/downloads, and no image line references images.debian. P5's values.schema.json admits every key that values.yaml defines, because the chart defaults and prd's values must pass. The schema therefore cannot flag these two. Deleting them from values.yaml, the prd values and the schema would close the gap without changing the render.
 
 **Consequence:** Setting downloadHostPath in prd does nothing, and the schema does not flag it. An operator who changes it expects the host path to move, but the pod keeps mounting /<pool>/mydownloads/downloads.
 
 **Provenance:** witnessed, code-writer, P5, r1, grep of charts/media during schema authoring
-**Disposition:** File.
+**Disposition:** File. / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: fix now. HelmCharts 03ea7fb drops both keys from values.yaml, the schema and prd's values; the prd render is byte-identical and the suite is green. Committed locally; push pending.
 
-### S10 — HelmCharts media schema test samples 7 of the schema's 21 closed levels, so reopening any other level passes the suite · minor
+### ~~S10 — HelmCharts media schema test samples 7 of the schema's 21 closed levels, so reopening any other level passes the suite · minor~~ — closed by the operator, 2026-09-18
 
 tests/test_media_values_schema.py:83-97 checks unknown keys at storage.plex, the top level, global, images, resources.media, one externalSecrets.secrets entry and that entry's data[] items. No case covers service.*, storage.{zfs,media,mydownloads}, nodeAffinity, plex, users, resources.mydownloads, externalSecrets or storeRef. Removing additionalProperties: false from service.plex and storage.zfs left all 9 tests green (mutation run in review r1). The schema is complete today; only the every-level property is unpinned.
 
 **Consequence:** none today; a later schema edit that drops additionalProperties at an unsampled level silently stops catching wrong keys there, and the tests stay green
 
 **Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
-**Disposition:** Don't know. Please advise.
+**Disposition:** Don't know. Please advise. / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: close (rule 4: a test gap with no impact today).
 
-### S11 — DockerImages trivy stage: every build pod downloads the vulnerability DB and, for images with jars, the Java DB · minor
+### ~~S11 — DockerImages trivy stage: every build pod downloads the vulnerability DB and, for images with jars, the Java DB · minor~~ — closed by the operator, 2026-09-18
 
 The trivy sidecar starts each build with an empty cache. The first scan downloads the vulnerability DB from mirror.gcr.io (1.4 GB unpacked, about 11 s from the pod). The first scan of an image with jars also downloads the Java DB (1.5 GB unpacked). android-35 took 192 s cold and 28 s with both DBs cached, at 347 MiB peak RSS. A shared cache, like the jenkins chart's build-cache, would remove the repeat downloads.
 
 **Consequence:** Each image-building DockerImages build puts up to about 3 GB into the trivy container's ephemeral storage and spends up to about 3 minutes on DB downloads; the scan result is unaffected.
 
 **Provenance:** witnessed, executor, P6, r1, plan.md P6 record
-**Disposition:** What do we do here? Add a PVC?
+**Disposition:** What do we do here? Add a PVC? / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: close, no PVC. The vulnerability DB is about 11 s; only jar images pay for the Java DB, and the storage is freed with the pod.
 
 ### ~~S12 — DockerImages trivy sidecar: a failure to pull or keep the scanner container fails the whole build, outside the scan's catchError · minor~~ — closed by the operator, 2026-09-18
 
@@ -251,14 +251,14 @@ Jenkinsfile:13 passes --insecure so that trivy can reach the plain-HTTP registry
 **Provenance:** witnessed, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
 **Disposition:** Close.
 
-### S14 — HomelabTerraformProvider README: its delivery paragraphs describe the filesystem-mirror bake and the Ansible lock rewrite, not the registry-only pipeline · minor
+### ~~S14 — HomelabTerraformProvider README: its delivery paragraphs describe the filesystem-mirror bake and the Ansible lock rewrite, not the registry-only pipeline · minor~~ — fixed by HomelabTerraformProvider 19bf2d2, 2026-09-18
 
 README.md:14-30 still says the iac/modern-app-dev images install each build into a baked filesystem mirror, that CI rewrites Ansible's .terraform.lock.hcl, and that the network mirror is 'in transition'. The Jenkinsfile's publish-stage comment says the registry publish is the pipeline's only delivery path. The doc phase added the vet-and-test paragraph beside these and left them alone: they predate this slice, and correcting them means grounding the images' current Terraform CLI config, which is outside the slice's diff.
 
 **Consequence:** Someone reading the README expects the provider to arrive through a baked filesystem mirror and an automatic lock rewrite, and waits for a lock update that never comes.
 
 **Provenance:** read — doc-writer, doc phase, r1, HomelabTerraformProvider README.md:14-30 against Jenkinsfile's 'Publish to provider registry' comment
-**Disposition:** Don't know. Please advise.
+**Disposition:** Don't know. Please advise. / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: fix now. HomelabTerraformProvider 19bf2d2 rewrites the delivery and install sections for the network mirror (grounded in the images' terraform.rc). Committed locally; push pending.
 
 ### ~~S15 — DockerImages: no doc tells the operator what a trivy warning means or what to do about it · minor~~ — fixed by DockerImages 16208d1, 2026-09-18
 
@@ -269,14 +269,14 @@ DockerImages has no page that describes its build pipeline. Its CLAUDE.md is a w
 **Provenance:** read — doc-writer, doc phase, r1, DockerImages CLAUDE.md, docs/registry-management/README.md
 **Disposition:** Well, yes. I'm missing that doc already. Can you add something to the README.md? Fix inline. — DockerImages 16208d1 adds a root README.md (the repo had none): how a build runs, and what a trivy warning asks for. Committed locally; push pending.
 
-### S16 — HelmCharts Jenkinsfile: the KUBE_VERSION comment points at the microk8s role default, not prd's channel pin · cosmetic
+### ~~S16 — HelmCharts Jenkinsfile: the KUBE_VERSION comment points at the microk8s role default, not prd's channel pin · cosmetic~~ — fixed by HelmCharts 03ea7fb, 2026-09-18
 
 The comment says KUBE_VERSION tracks prd's microk8s channel at ansible/roles/microk8s/defaults/main.yml. prd's pin is microk8s_channel in ansible/inventories/prd/group_vars/k8s_prd.yml, and today both read 1.35/stable. docs/runbooks/k8s-upgrade.md, which gained the step that moves KUBE_VERSION, names the group_vars pin. The doc phase did not edit the Jenkinsfile.
 
 **Consequence:** None today. If prd's channel is bumped only in group_vars, the comment's pointer still shows the old minor.
 
 **Provenance:** read — doc-writer, doc phase, r1, HelmCharts Jenkinsfile KUBE_VERSION comment; Ansible inventories/prd/group_vars/k8s_prd.yml:26
-**Disposition:** Close.
+**Disposition:** Close. / operator in chat, 2026-09-18, on the advice given: "I'll follow your advises." — advice: rides along with S9. HelmCharts 03ea7fb: the comment names microk8s_channel in the prd group_vars.
 
 ### ~~S2 — HomelabTerraformProvider Jenkinsfile: the publish-stage comment describes delivery stages that no longer exist · cosmetic~~ — resolved by consult 1 (HomelabTerraformProvider 22d6d2e): the stale paragraph is gone, and the comment now says the registry publish is the only delivery path, as 374068f made it. Comment-only; the gate sweep re-runs on the new commit; struck by consult 1
 

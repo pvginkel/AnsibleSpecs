@@ -593,7 +593,7 @@ Each push-triggered pipeline below runs its checks ahead of the step that change
 - **HelmCharts**: every release the build is about to deploy is rendered with the values and `--set` args its deploy uses, and linted where its chart source is in the repo; kubeconform validates each render in strict mode against prd's Kubernetes version (a pin in the `Jenkinsfile` that moves with prd's channel — `docs/runbooks/k8s-upgrade.md`), before the first release deploys or uninstalls.
 - **HomelabTerraformProvider**: `go vet` and the unit tests, before the registry publish. The acceptance tests need live backends and stay a manual run.
 
-**DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert. The scan never changes the build result.
+**DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert, and so does a scan that could not complete. The scan never changes the build result.
 
 Scanner and validator images are pinned by digest.
 
