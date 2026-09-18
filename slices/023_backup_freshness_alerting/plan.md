@@ -517,7 +517,7 @@ Record:
 - Prd backup-server does not serve the metrics yet (on 2026-09-18 `up{service="backup-server"}` was
   empty), so none of the runbook's live queries has been run.
 
-### P7 — Doctrine records the backup freshness contract
+### P7 — Doctrine records the backup freshness contract ✅ DONE 2026-09-19
 
 Target: ../AnsibleSpecs
 
