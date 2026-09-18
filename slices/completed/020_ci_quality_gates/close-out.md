@@ -1,7 +1,8 @@
 # Close-out — slice 020 ci_quality_gates
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-18 12:28 → 14:10 · 6 phases · 0 bail-outs · 1 test round · doc phase done · $73.53
+(planner 22 %, research 25 %, rework 0 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,12 +14,23 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 020 puts checks ahead of every push path that deploys or publishes. Ansible's
+`iac-on-push` runs yamllint, ansible-lint and `terraform fmt -check`, then `terraform validate`,
+before it plans. ansible-lint is now strict, and its one warning is fixed. HelmCharts' new
+`Gate releases` stage lints, renders and runs kubeconform (strict) on every release the build is
+about to deploy, and a failure stops the build before any of them deploys. That work added a
+`deploy lint` verb, fixed two chart defects the gate caught, and gave `media` a values schema that
+rejects unknown keys. The provider publishes only a build that passes `go vet` and its unit tests.
+DockerImages scans each pushed image with a digest-pinned trivy and raises one Telegram warning
+per image with a fixable CRITICAL, and it never changes the build result. The doc phase updated
+the Ansible docs and runbooks, decisions.md, the argo-cd set, HelmCharts' CLAUDE.md and deploy
+README, and the provider README to match.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A1 is the only prd change you owe: the `site-k8s.yml` apply of the elect-primary rewrite,
+check-mode first. A2 needs no keystroke unless you want the trivy proof sooner. A3 pushes the doc
+commits on HelmCharts and the provider; the provider push publishes a new provider version.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -46,9 +58,20 @@ This push touched only the DockerImages Jenkinsfile, so utils.hasChanges found n
 **Provenance:** witnessed, test-agent, test phase, r1, DockerImages build #2522 console log (0 images built)
 **Disposition:**
 
+### A3 — Push the doc-phase commits on HelmCharts main (031aab7) and HomelabTerraformProvider main (666b6a1)
+
+The driver lands and pushes only the Ansible doc branch; the doc phase committed these two locally on main and pushed nothing. Pushing the provider starts a build that publishes a new provider version, as every push to its main does, and HelmCharts' floating init -upgrade picks it up. Pushing HelmCharts runs IaC/HelmCharts. The commit changes docs only (CLAUDE.md, tools/deploy/README.md, a pyproject.toml comment), so no release deploys by diff, but the gate still runs, and so does the deploy of any release whose image digests moved, as on every run. AnsibleSpecs 7d608c3 sits on main with the rest of the slice's spec commits.
+
+**Consequence:** Until these are pushed, origin's HelmCharts and provider docs describe the pipelines without their new gates, and both local mains stay one commit ahead of origin.
+
+**Provenance:** witnessed — doc-writer, doc phase, r1, doc_phase_result.json
+**Disposition:**
+
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: A clean run: six phases, each done and signed off in one round, with no bail-outs and no
+appended phases. N1 is the one to act on: the vault passphrase reached a session transcript, and
+rotating it is your call. N2 predicts a warning from nearly every Debian image build once trivy runs.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -76,9 +99,9 @@ Scanned from the pod with the pinned trivy 0.74.0 against registry:5000: python:
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: One bug, in HelmCharts, which this slice touched. It is witnessed live and major: B1, the
+GitHub PAT printed in every IaC/HelmCharts log. It predates the slice, and the new gate's lint and
+template lines print the PAT too (build #6518).
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -95,7 +118,7 @@ test-agent, test phase r1, 2026-09-18 — Confirmed in a real production log, no
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Nothing is open. Every question the run raised was ruled in the plan.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -103,8 +126,9 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S6 (witnessed) and S3 are gaps that let a bad release deploy partway through a build, so
+they are the next chart-gate slice. S1, S12 and S13 feed the trivy fail-on-critical bundle.
+S14–S16 are doc debt this phase left open.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -115,15 +139,6 @@ The rulings define one alert — an image with a CRITICAL that has a fixed versi
 **Consequence:** A persistently failing trivy stage is visible only by reading DockerImages build logs.
 
 **Provenance:** read, plan-writer, planning r1, plan.md P6
-**Disposition:**
-
-### ~~S2 — HomelabTerraformProvider Jenkinsfile: the publish-stage comment describes delivery stages that no longer exist · cosmetic~~ — resolved by consult 1 (HomelabTerraformProvider 22d6d2e): the stale paragraph is gone, and the comment now says the registry publish is the only delivery path, as 374068f made it. Comment-only; the gate sweep re-runs on the new commit; struck by consult 1
-
-The comment above the "Publish to provider registry" stage (`HomelabTerraformProvider/Jenkinsfile:56-69`) says the stage "Runs alongside the legacy filesystem-mirror path below" and that "the Ansible-lock and Docker-image-bake stages go away" once consumers switch to the network mirror. Nothing follows that stage — the pipeline ends at `:100-102` — so the comment describes a second delivery path that is gone. Slice 020 P3 edits this file for the vet/test gate but does not own this comment.
-
-**Consequence:** none for the estate; anyone reading the provider pipeline, including the slice's P3 executor, is told there is a second delivery path that is not there
-
-**Provenance:** read, plan-reviewer, planning r1, HomelabTerraformProvider/Jenkinsfile:56-102
 **Disposition:**
 
 ### S3 — HelmCharts chart gate: kubectl-applied release manifests are never rendered, so kubeconform never validates them · minor
@@ -230,3 +245,43 @@ Jenkinsfile:13 passes --insecure so that trivy can reach the plain-HTTP registry
 
 **Provenance:** witnessed, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
 **Disposition:**
+
+### S14 — HomelabTerraformProvider README: its delivery paragraphs describe the filesystem-mirror bake and the Ansible lock rewrite, not the registry-only pipeline · minor
+
+README.md:14-30 still says the iac/modern-app-dev images install each build into a baked filesystem mirror, that CI rewrites Ansible's .terraform.lock.hcl, and that the network mirror is 'in transition'. The Jenkinsfile's publish-stage comment says the registry publish is the pipeline's only delivery path. The doc phase added the vet-and-test paragraph beside these and left them alone: they predate this slice, and correcting them means grounding the images' current Terraform CLI config, which is outside the slice's diff.
+
+**Consequence:** Someone reading the README expects the provider to arrive through a baked filesystem mirror and an automatic lock rewrite, and waits for a lock update that never comes.
+
+**Provenance:** read — doc-writer, doc phase, r1, HomelabTerraformProvider README.md:14-30 against Jenkinsfile's 'Publish to provider registry' comment
+**Disposition:**
+
+### S15 — DockerImages: no doc tells the operator what a trivy warning means or what to do about it · minor
+
+DockerImages has no page that describes its build pipeline. Its CLAUDE.md is a workflow note, and docs/registry-management covers rebuild, tagging and reaping. The scan's contract is now stated in AnsibleSpecs decisions.md ('Push pipelines check before they deploy or publish') and in the comment on scanImage in the Jenkinsfile. Nothing operator-facing says what the Telegram warning asks for: a base-image bump, a forced rebuild, or waiting for version-poller's scheduled rebuild. The doc model has no home for this page, so the doc phase did not invent one.
+
+**Consequence:** An operator who receives 'trivy: registry:5000/<image>:<tag> has N CRITICAL findings with a fixed version' has no page to act from. With N2's volume, the warnings read as noise.
+
+**Provenance:** read — doc-writer, doc phase, r1, DockerImages CLAUDE.md, docs/registry-management/README.md
+**Disposition:**
+
+### S16 — HelmCharts Jenkinsfile: the KUBE_VERSION comment points at the microk8s role default, not prd's channel pin · cosmetic
+
+The comment says KUBE_VERSION tracks prd's microk8s channel at ansible/roles/microk8s/defaults/main.yml. prd's pin is microk8s_channel in ansible/inventories/prd/group_vars/k8s_prd.yml, and today both read 1.35/stable. docs/runbooks/k8s-upgrade.md, which gained the step that moves KUBE_VERSION, names the group_vars pin. The doc phase did not edit the Jenkinsfile.
+
+**Consequence:** None today. If prd's channel is bumped only in group_vars, the comment's pointer still shows the old minor.
+
+**Provenance:** read — doc-writer, doc phase, r1, HelmCharts Jenkinsfile KUBE_VERSION comment; Ansible inventories/prd/group_vars/k8s_prd.yml:26
+**Disposition:**
+
+### ~~S2 — HomelabTerraformProvider Jenkinsfile: the publish-stage comment describes delivery stages that no longer exist · cosmetic~~ — resolved by consult 1 (HomelabTerraformProvider 22d6d2e): the stale paragraph is gone, and the comment now says the registry publish is the only delivery path, as 374068f made it. Comment-only; the gate sweep re-runs on the new commit; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+The comment above the "Publish to provider registry" stage (`HomelabTerraformProvider/Jenkinsfile:56-69`) says the stage "Runs alongside the legacy filesystem-mirror path below" and that "the Ansible-lock and Docker-image-bake stages go away" once consumers switch to the network mirror. Nothing follows that stage — the pipeline ends at `:100-102` — so the comment describes a second delivery path that is gone. Slice 020 P3 edits this file for the vet/test gate but does not own this comment.
+
+**Consequence:** none for the estate; anyone reading the provider pipeline, including the slice's P3 executor, is told there is a second delivery path that is not there
+
+**Provenance:** read, plan-reviewer, planning r1, HomelabTerraformProvider/Jenkinsfile:56-102
+**Disposition:**
+
+</details>

@@ -1,0 +1,126 @@
+/work/Ansible — P1: git diff c0d943d92698..797b530a0388
+
+.ansible-lint                                  |  3 +--
+ ansible/roles/microk8s/tasks/elect-primary.yml | 20 ++++++++++----------
+ 2 files changed, 11 insertions(+), 12 deletions(-)
+
+diff --git a/.ansible-lint b/.ansible-lint
+index b3fe847..ab9a0b7 100644
+--- a/.ansible-lint
++++ b/.ansible-lint
+@@ -17,5 +17,4 @@ extra_vars:
+   rebuild_target: lint-placeholder
+   reissue_target: lint-placeholder
+ 
+-# Fail hard on warnings once roles stabilize; for now, warnings stay warnings.
+-strict: false
++strict: true
+diff --git a/ansible/roles/microk8s/tasks/elect-primary.yml b/ansible/roles/microk8s/tasks/elect-primary.yml
+index c1bc2a1..89706b6 100644
+--- a/ansible/roles/microk8s/tasks/elect-primary.yml
++++ b/ansible/roles/microk8s/tasks/elect-primary.yml
+@@ -42,17 +42,17 @@
+   # rather than crashing the set_fact.
+   ansible.builtin.set_fact:
+     _microk8s_node_state: >-
+-      {%- if microk8s_worker_only | bool -%}worker
+-      {%- else -%}
+-      {%- set s = (_microk8s_status_for_election.stdout | default('') | from_yaml) -%}
+-      {%- if s is not mapping -%}down
+-      {%- else -%}
++      {%- if microk8s_worker_only | bool -%}
++      worker{%- else -%}
++      {%- set s = _microk8s_status_for_election.stdout | default('') | from_yaml -%}
++      {%- if s is not mapping -%}
++      down{%- else -%}
+       {%- set running = s.get('microk8s', {}).get('running', false) -%}
+-      {%- set nodes = (s.get('high-availability', {}).get('nodes') or []) -%}
+-      {%- if running and (nodes | length > 1) -%}in-cluster
+-      {%- elif running -%}running-solo
+-      {%- else -%}down
+-      {%- endif -%}
++      {%- set nodes = s.get('high-availability', {}).get('nodes') or [] -%}
++      {%- if running and (nodes | length > 1) -%}
++      in-cluster{%- elif running -%}
++      running-solo{%- else -%}
++      down{%- endif -%}
+       {%- endif -%}
+       {%- endif -%}
+
+/work/Ansible — P2: git diff 797b530a0388..652e1a597e53
+
+Jenkinsfile.iac-on-push | 49 ++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 44 insertions(+), 5 deletions(-)
+
+diff --git a/Jenkinsfile.iac-on-push b/Jenkinsfile.iac-on-push
+index a34b446..63887df 100644
+--- a/Jenkinsfile.iac-on-push
++++ b/Jenkinsfile.iac-on-push
+@@ -1,6 +1,6 @@
+ // iac-on-push — validates every push to main on pvginkel/Ansible.
+-// Read-only: `terraform plan` plus the protected-VM destroy check. It
+-// converges nothing.
++// Read-only: lint and validate gates, then `terraform plan` plus the
++// protected-VM destroy check. It converges nothing.
+ //
+ // The converging stages used to live here and fire on every push. They
+ // are now Jenkinsfile.iac-apply, started by hand. The split exists so
+@@ -8,9 +8,9 @@
+ // production — an unattended agent pushing a branch must not be able to
+ // roll the prd fleet. Whoever wants convergence starts iac-apply.
+ //
+-// A red build here means the commit on main would not apply cleanly, or
+-// would destroy something protected. Nothing has happened to the estate
+-// either way.
++// A red build here means the commit on main fails a lint or validate
++// gate, would not apply cleanly, or would destroy something protected.
++// Nothing has happened to the estate either way.
+ //
+ // Controller config:
+ //   - SCM: pvginkel/Ansible, branch main
+@@ -31,6 +31,45 @@ pipeline {
+     }
+ 
+     stages {
++        // The gates run cheapest first; a red gate stops the build before
++        // the plan. The ansible commands are the dev loop's gate
++        // (.kubecoder/project.yaml, project `ansible`) and must stay
++        // identical to it. ansible-lint takes strict mode and the
++        // mandatory-var placeholders from .ansible-lint, and its
++        // unskippable syntax-check rule runs `ansible-playbook
++        // --syntax-check` on every playbook.
++        stage('Lint') {
++            steps {
++                sh '''
++                    iac -c '
++                        set -euo pipefail
++                        cd /work/Ansible/terraform
++                        terraform fmt -check -recursive
++                        cd /work/Ansible/ansible
++                        yamllint -c ../.yamllint .
++                        ansible-lint
++                    '
++                '''
++            }
++        }
++
++        // -backend=false: validate reads no state, so this gate never
++        // touches the state backend or its lock.
++        stage('Terraform validate') {
++            steps {
++                sh '''
++                    iac -c '
++                        set -euo pipefail
++                        for root in prd scratch; do
++                            cd "/work/Ansible/terraform/$root"
++                            terraform init -backend=false -input=false -no-color
++                            terraform validate -no-color
++                        done
++                    '
++                '''
++            }
++        }
++
+         stage('Plan + destroy check') {
+             steps {
+                 sh '''

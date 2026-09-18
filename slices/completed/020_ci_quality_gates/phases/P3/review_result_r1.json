@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "The provider Jenkinsfile's new Vet and unit tests stage runs go vet and go test (TF_ACC unset) in the go container after the header install and before publish, so a failure stops the registry append. No blocking findings. One advisory: the done-record says the build log shows TestAcc* skips, but non-verbose go test prints only per-package ok lines.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "P3's Later-phases note says the build log shows unit tests passing and TestAcc* skipping; `go test ./...` without -v prints only `ok <pkg>` lines"}
+ ]}

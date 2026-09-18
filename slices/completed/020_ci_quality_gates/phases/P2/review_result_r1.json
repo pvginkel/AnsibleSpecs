@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Jenkinsfile.iac-on-push gains Lint (fmt -check, yamllint, strict ansible-lint with its unskippable syntax-check over all 14 playbooks) and Terraform validate (prd, scratch) stages ahead of the unchanged plan; iac-apply untouched. No findings; the real Build-Main build (V18) remains the proof.",
+ "details": "code_review_r1.md",
+ "findings": []}

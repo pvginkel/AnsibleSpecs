@@ -1,0 +1,13 @@
+{
+  "outcome": "signoff",
+  "summary": "The gate lints, renders and runs strict kubeconform on exactly the releases the loop deploys, and any failure fails the build before a deploy or uninstall. The storage and homeassistant-mcp fixes pass lint and strict kubeconform with unchanged objects, and the kubeconform pin, entrypoint and JSON shape are verified. All three findings are advisory.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+     "summary": "-ignore-missing-schemas skips removed built-in API versions and misspelled kinds, so they pass the gate unvalidated and fail at deploy time"},
+    {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+     "summary": "The 9 upstream-chart releases are rendered and passed through kubeconform but not linted, a disclosed departure from V07's 'lints and renders'"},
+    {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+     "summary": "P4's plan record says empty stdin makes kubeconform exit 1; through docker run -i it exits 0 with valid 0, and the valid==0 branch catches it"}
+  ]
+}

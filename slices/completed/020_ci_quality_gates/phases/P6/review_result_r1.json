@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "P6 meets its outcome: each pushed image is scanned right after its push, its CRITICAL/HIGH table is logged, and one warning fires per image with a fixable CRITICAL. Scan failures stay inside catchError(SUCCESS), and the deploy trigger is unchanged. The digest pin, the sidecar's sleep and the template were checked. Two advisory Minors (close-out S12, S13); the gate state is unverified and does not bear on either.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "Failing to pull or keep the trivy sidecar fails the whole build, outside the scan's catchError"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "--insecure also turns off TLS verification for trivy's vulnerability-DB and Java-DB downloads"}
+ ]}

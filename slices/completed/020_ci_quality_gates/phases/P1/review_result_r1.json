@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "`.ansible-lint` is now strict. A mutation run proved that the old task fails lint from ansible/, so strict is picked up through the git root. The jinja[spacing] fix in elect-primary.yml renders values identical to the old expression's across 44 independent cases. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

@@ -1,0 +1,17 @@
+$ kc project lint
+root: no lint statements — skipped
+ansible: cexec iac poetry run yamllint -c ../.yamllint .    [  OK  ]
+ansible: cexec iac poetry run ansible-lint    [  OK  ]
+terraform: cexec iac terraform fmt -check -recursive    [  OK  ]
+architecture: no lint statements — skipped
+$ kc project build
+root: no build statements — skipped
+ansible: no build statements — skipped
+terraform: no build statements — skipped
+architecture: no build statements — skipped
+$ kc project test
+root: no test statements — skipped
+ansible: cexec iac poetry run yamllint -c ../.yamllint .    [  OK  ]
+ansible: cexec iac poetry run ansible-lint    [  OK  ]
+terraform: cexec iac terraform fmt -check -recursive    [  OK  ]
+architecture: cexec iac ./scripts/arch-validate.py docs/architecture/ansible-architecture.yaml    [  OK  ]

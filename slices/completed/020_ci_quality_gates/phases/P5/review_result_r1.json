@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The media values.schema.json closes every level values.yaml defines. Helm 4.3.0 rejects storage.plex.subvolumeName in both lint and template, and accepts the defaults, the prd and dev values, and the injected --sets, with no network fetch. One advisory finding: the tests sample 7 of the 21 closed levels.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "Unknown-key tests check 7 of 21 closed schema levels; removing additionalProperties at service.plex/storage.zfs leaves all tests green"}]}

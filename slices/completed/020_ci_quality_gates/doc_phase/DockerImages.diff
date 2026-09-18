@@ -1,0 +1,89 @@
+/work/DockerImages — P6: git diff d58ad42d584a..cce00fff7288
+
+Jenkinsfile | 39 +++++++++++++++++++++++++++++++++------
+ 1 file changed, 33 insertions(+), 6 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 46d49f6..f71994c 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -2,6 +2,32 @@ import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
+ 
+ library identifier: 'JenkinsPipelineUtils', changelog: false
+ 
++// Nothing in the scan may change the build or stage result: a failing trivy only
++// logs its exit status, and catchError swallows any other error. trivy's --timeout
++// bounds the scan, not a timeout() step: a timeout() expiry is an interruption,
++// which catchInterruptions: false rethrows so that a user abort still aborts.
++def scanImage(String ref) {
++    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', catchInterruptions: false) {
++        container('trivy') {
++            int rc = sh(returnStatus: true, script: """
++                trivy image --no-progress --image-src remote --insecure --scanners vuln \\
++                    --severity CRITICAL,HIGH --timeout 15m --format json --output .trivy.json '${ref}' &&
++                trivy convert --quiet --format table .trivy.json
++            """)
++            if (rc != 0) {
++                echo "trivy could not scan ${ref} (exit ${rc}); the build result is unchanged"
++            } else {
++                def fixable = sh(returnStdout: true, script: '''
++                    trivy convert --quiet --format template --template '{{ range . }}{{ range .Vulnerabilities }}{{ if and (eq .Severity "CRITICAL") .FixedVersion }}{{ println .VulnerabilityID }}{{ end }}{{ end }}{{ end }}' .trivy.json
++                ''').split('\n').collect { it.trim() }.findAll { it != '' }
++                if (fixable) {
++                    notify.warning("trivy: ${ref} has ${fixable.size()} CRITICAL findings with a fixed version")
++                }
++            }
++        }
++    }
++}
++
+ properties([
+     parameters([
+         string(name: 'image', defaultValue: '')
+@@ -9,7 +35,8 @@ properties([
+ ])
+ 
+ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+-    containerTemplates.python('python')
++    containerTemplates.python('python'),
++    containerTemplate(name: 'trivy', image: 'ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969', command: 'sleep', args: 'infinity')
+ ]) {
+     node(POD_LABEL) {
+         def variants
+@@ -63,6 +90,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+             stage(stageName) {
+                 if (image in closure) {
+                     built = true
++                    def pushed = isMatrix ? "registry:5000/${image}:${tag}" : "registry:5000/${image}:${currentBuild.number}"
+ 
+                     dir(image) {
+                         if (fileExists('required-artifacts.json')) {
+@@ -89,17 +117,14 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+                             container('kaniko') {
+                                 if (isMatrix) {
+                                     helmCharts.kaniko2(
+-                                        destinations: ["registry:5000/${image}:${tag}"],
++                                        destinations: [pushed],
+                                         buildArgs: v.args,
+                                         params: [image: image],
+                                         depends: depends
+                                     )
+                                 } else {
+                                     helmCharts.kaniko2(
+-                                        destinations: [
+-                                            "registry:5000/${image}:${currentBuild.number}",
+-                                            "registry:5000/${image}:latest"
+-                                        ],
++                                        destinations: [pushed, "registry:5000/${image}:latest"],
+                                         params: [image: image],
+                                         depends: depends
+                                     )
+@@ -107,6 +132,8 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+                             }
+                         }
+                     }
++
++                    scanImage(pushed)
+                 } else {
+                     Utils.markStageSkippedForConditional(stageName)
+                 }
