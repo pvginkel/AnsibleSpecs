@@ -230,7 +230,7 @@ Record:
   the slice, and the gate's lint and template lines now print it too. The renders are deleted in
   `finally`.
 
-### P5 — `media` carries a values schema that rejects unknown keys
+### P5 — `media` carries a values schema that rejects unknown keys ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
