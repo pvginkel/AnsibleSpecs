@@ -551,7 +551,7 @@ Record:
   dev-cluster release was not dry-run (srvk8sdev off).
 - The test pins the strategy only, not the version; it reads the template with Helm actions stripped.
 
-### P5 — Grafana signs in through Keycloak, gated by a client role
+### P5 — Grafana signs in through Keycloak, gated by a client role ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
