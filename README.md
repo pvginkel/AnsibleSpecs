@@ -19,10 +19,9 @@ Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmChar
 - Slice numbers come from the `dev` plugin's allocator (a lock-guarded counter). The numbering space is Ansible's own; never renumber — the numbers are referenced from cards, commits and docs.
 - Anything transitional lives here. Perpetual operational docs (runbooks) stay in [/work/Ansible/docs/runbooks/](../Ansible/docs/runbooks/).
 
-**Live status lives on the shared Kanban board**, not here — each active slice is a `[NNN]` card
-flowing **To Do → In Progress → Done** (owner tag `Ansible`, which disambiguates from other repos'
-slices on the shared board). The lists below are a lean catalogue; each slice's own documents hold
-the detail.
+**Live status lives in the tracker**, not here — each active slice is a `[NNN]` slice issue in the
+Ansible project, and its `slice.md` names it (`issue:`). The lists below are a lean catalogue; each
+slice's own documents hold the detail.
 
 ## Pending
 
