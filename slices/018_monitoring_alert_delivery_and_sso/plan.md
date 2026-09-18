@@ -496,7 +496,7 @@ Record. `kaniko --context keycloak --no-push --build-arg KEYCLOAK_VERSION=26.7.3
 `run time options … ignored during build time: kc.cache` notice, so that notice predates this
 change. `KC_CACHE` sits only in the builder stage, as before.
 
-### P4 — Every Keycloak release runs 26.7.3, never beside 26.5.1
+### P4 — Every Keycloak release runs 26.7.3, never beside 26.5.1 ✅ DONE 2026-09-18
 
 Target: ../HelmCharts
 
