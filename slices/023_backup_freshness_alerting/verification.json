@@ -4,169 +4,274 @@
       "id": "V01",
       "area": "R1 — a freshness check exists",
       "description": "R1 (#573): \"3. Followers exit 0 — a dead backup looks healthy fleet-wide. No freshness check anywhere.\" A freshness check now exists. When the OpenBao backup stops arriving at backup-server, production Alertmanager receives a critical alert, even though every srvvaultN's backup unit still exits successfully (followers exit 0 before login, ansible/roles/openbao/templates/openbao-backup.sh.j2:76-81).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "The chain the item describes is live and quiet on production, but the OpenBao backup is not yet a watched stream, so the item's own sentence (the OpenBao backup stops arriving, Alertmanager receives a critical alert) is not yet true for it. The P6 change that opts it in (`&valid_for=52h`, Ansible bb4db40) is merged and pushed, and IaC/Build-Main #180 is green, but it reaches srvvault1-3 only through the operator's `openbao` playbook run: read over ssh, the wrapper deployed on all three nodes has no `valid_for` line. Until a leader upload declares a validity, the `openbao` scope holds no declaring backup, so backup-server publishes no `openbao` stream and BackupOverdue has nothing to fire on. Earned now: the rules are loaded, healthy and critical, Prometheus has an active Alertmanager, critical routes to the loud Telegram receiver, and every srvvaultN unit still exits 0 (V15).",
+      "evidence": [
+        "live, read-only ssh to srvvault1-3: `grep -c valid_for /usr/local/sbin/openbao-backup` prints 0 on each node, so the deployed wrapper predates P6",
+        "live: prd Prometheus /api/v1/rules, group backup-freshness: BackupOverdue and BackupWatcherBlind, severity critical, health ok, state inactive (2026-09-19 00:29:52)",
+        "live: /api/v1/alertmanagers lists http://172.16.129.142:9093; prometheus_notifications_alertmanagers_discovered 1; rate(prometheus_notifications_errors_total[1h]) 0",
+        "HelmCharts configs/prd/prometheus/prd/values.yaml, alertmanager.config: route matcher severity=\"critical\" to receiver telegram-critical, disable_notifications: false",
+        "Settle: `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml --tags openbao_backup --limit openbao --check`, then the same line without `--check`; the full text, caveats and timing are close-out A2",
+        "then, after the leader's next upload: `q 'backup_server_stream_valid_until_timestamp_seconds{scope=\"openbao\"}'` returns one series, filename openbao-backup.tgz (`q` is the helper in docs/runbooks/backup-freshness.md)"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — tracked in the backup service",
       "description": "R2: \"The better solution would be to track this in the backup service. I feel like the end to end solution would be to add metadata to the upload indicating for how long it's valid (two days in our example). The backup service can then report that it didn't receive (and successfully upload) a backup within that period. For bonus points the check would actually read some JSON file from the backup server containing this metadata. I'm envisioning a .metadata.json file next to the backup, for now containing only this data field.\" Freshness is tracked in backup-server. Each upload declares how long it is valid. backup-server writes that to a .metadata.json file next to the backup, containing only the validity field, and reads those files back from cloud storage. It reports a stream that has received no successfully uploaded backup within the declared period.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Freshness is tracked in backup-server, not in its uploaders. `handleUpload` writes `<object>.metadata.json`, holding only `{\"valid_for\":\"<duration>\"}`, once the backup has landed; the freshness watcher lists every scope folder under the remote, reads each stream's newest declaring metadata file back with `rclone cat`, and publishes the stream's landing and valid-until times, so a stream with no backup inside its declared period is past its valid-until. The Go suite is green with `-race`, and the tests cover each edge through an in-memory backend. Live on prd, the new backup-server runs (image sha256:0ffa8be8…) and its first full read of the real Drive remote finished without error 21 s after start. Not yet proven against real Drive: writing a metadata file and reading it back. Only listing has run live, because no upload has declared a validity yet. The first ones are tonight's nightly runs, and V19 settles them.",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "DockerImages backup-server/src/internal/handler/handler.go:94,130-139 (metadata written after the backup, before the 201) and internal/pipeline/metadata.go:23-59",
+        "DockerImages backup-server/src/internal/freshness/watcher.go:91-127 (Refresh) and :161-226 (scan), internal/pipeline/backend.go:130-139 (Read via rclone cat)",
+        "live: `kubectl -n storage-prd get deploy backup-server` image registry:5000/backup-server@sha256:0ffa8be89167…; pod Running 0 restarts; log 'listening on :8080', 'serving metrics on :8081'",
+        "live: backup_server_start_time_seconds 1789770310, backup_server_refresh_last_success_timestamp_seconds 1789770331 (first full read, 21 s after start)"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — integrated with Alertmanager",
       "description": "R3: \"I would assume we just integrate it with Alertmanager. I'm also in the process of rolling that out.\" The overdue report reaches the operator through Alertmanager: production Prometheus evaluates rules over backup-server's published freshness and fires the alerts into Alertmanager. backup-server itself sends nothing to Alertmanager.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The report reaches the operator through Alertmanager and backup-server sends nothing to it. Production Prometheus evaluates two rules over backup-server's published series and fires them into its active Alertmanager; a search of backup-server's source for an Alertmanager client finds none. The rules are loaded and healthy on prd. None has fired yet, because no stream exists to be overdue, so the delivery of a real firing is settled with V19.",
+      "evidence": [
+        "live: /api/v1/rules backup-freshness group, both rules health ok; /api/v1/alertmanagers one active Alertmanager; notification error rate 0",
+        "grep -rni alertmanager /work/DockerImages/backup-server/src --include=*.go prints nothing",
+        "HelmCharts configs/prd/prometheus/prd/values.yaml:262-298 (group backup-freshness)"
+      ]
     },
     {
       "id": "V04",
       "area": "Uploaders opted in",
       "description": "Ruling D1: the postgres-pas nightly per-database dump job declares the same validity as OpenBao, so each database's dump is its own watched stream. The upload is built at charts/postgres-pas/templates/backup-configmap.yaml:42-50 (HelmCharts); the file name is <db>.dump (:63).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The postgres-pas nightly job now declares its validity per database. The upload is `urllib.parse.urlencode({\"filename\": <db>.dump, \"valid_for\": VALID_FOR})` with `VALID_FOR = \"52h\"`, and that script is live in the postgres-pas-prd `postgres-backup-script` ConfigMap, with the CronJob `0 2 * * *` unsuspended. Server-side a stream is scope plus file name, so each `<db>.dump` is its own stream. The first real streams appear after tonight's 02:00 run (V19).",
+      "evidence": [
+        "HelmCharts charts/postgres-pas/templates/backup-configmap.yaml:30 (VALID_FOR = \"52h\") and :48 (urlencode of filename and valid_for)",
+        "live: `kubectl -n postgres-pas-prd get cm postgres-backup-script` backup.py lines 23 and 41 carry the same; `get cronjob postgres-backup`: schedule `0 2 * * *`, suspend=false",
+        "HelmCharts tests/test_postgres_pas_backup.py::test_each_database_is_its_own_stream_declaring_52_hours (green in the driver's sweep, HelmCharts 93626fc)",
+        "DockerImages internal/freshness/watcher_test.go::TestRefresh_PublishesWatchedStreams (one stream per scope + file name)"
+      ]
     },
     {
       "id": "V05",
       "area": "Uploaders opted in",
       "description": "The declared validity is 52 hours for both the OpenBao backup and the Postgres dumps. One missed night stays quiet; two in a row alert.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "52 hours is in both uploaders on main, but only the Postgres one is live. The Postgres script declares `VALID_FOR = \"52h\"` in production now. The OpenBao wrapper declares `UPLOAD_VALID_FOR=\"52h\"` in the repo, and the copy on srvvault1-3 is still the old one until the operator's playbook run. The 52 h against the 02:00 timer plus up to 1 h random delay is the plan's ruling: one missed night stays inside it, two do not, and the P5 test walks the real Postgres schedule across a year to hold that.",
+      "evidence": [
+        "Ansible ansible/roles/openbao/templates/openbao-backup.sh.j2:30 (UPLOAD_VALID_FOR=\"52h\") and :175 (URL gains &valid_for=${UPLOAD_VALID_FOR}); rendered with stub vars, `bash -n` passes",
+        "live: postgres-pas-prd ConfigMap backup.py:23 VALID_FOR = \"52h\"",
+        "live, read-only ssh: srvvault1-3 wrapper has 0 valid_for lines; next timers tonight at 02:33 (srvvault3), 02:42 (srvvault1), 02:52 (srvvault2) CEST",
+        "HelmCharts tests/test_prometheus_backup_freshness_alerts.py::test_one_missed_postgres_night_stays_quiet_however_late_the_next_dump_lands and ::test_two_missed_postgres_nights_fire_before_the_third_run",
+        "Settle: `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml --tags openbao_backup --limit openbao --check`, then the same line without `--check`; the full text, caveats and timing are close-out A2"
+      ]
     },
     {
       "id": "V06",
       "area": "backup-server — metadata",
       "description": "An upload that declares a validity leaves <backup object name>.metadata.json next to the backup, holding only {\"valid_for\": \"<duration>\"}, written only after the backup has landed in cloud storage. The file is plain JSON that backup-server can read back (it holds only the age public key, decisions.md:100). A validity that is not a positive duration is refused before anything is stored. An upload that declares nothing behaves as before and writes no metadata; today's server reads only filename from the query (DockerImages backup-server/src/internal/handler/handler.go:76).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "An upload with `valid_for` leaves `<object>.age.metadata.json` beside the backup, plain JSON holding only `{\"valid_for\":\"<duration>\"}`, written after the backup lands; a backup that fails writes none; a metadata write that fails deletes both and returns 500; a `valid_for` that is not a positive Go duration is refused with 400 before anything is stored; an upload that declares nothing writes no metadata. Proven by the handler tests over the in-memory backend and by reading the code. A real metadata file on Drive first exists tonight (V19).",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "DockerImages internal/handler/handler_test.go: TestUpload_ValidForWritesMetadata, TestUpload_WithoutValidForWritesNoMetadata, TestUpload_ValidForValidation, TestUpload_BackendFailureWritesNoMetadata, TestUpload_MetadataFailureCleans",
+        "DockerImages internal/pipeline/metadata_test.go: TestParseValidity, TestDecodeValidity, TestMetadataName, TestWriteMetadata (exact bytes)",
+        "handler.go:94-101 (declared, ParseValidity before anything is stored), :130-139 (write after the backup landed; cleanup of both on failure)",
+        "outside the item's wording, recorded in close-out B3: a percent-malformed valid_for (e.g. 52h%zz) is dropped by net/url and the upload is stored undeclared"
+      ]
     },
     {
       "id": "V07",
       "area": "backup-server — streams",
       "description": "A stream is scope + file name. Every scope folder under backup-server's remote that holds declaring backups is watched, whether or not the scope still has a credential, so a lost credential store or a removed credential leaves its streams watched. A stream stays watched while any of its kept backups declares a validity. It is overdue once its newest backup's landing time plus the newest declared validity has passed. A stream with no declaring backup is not watched. A stream whose backups have all been pruned stops being watched, and its alert clears. An uploader that stops declaring keeps its stream watched.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "A stream is scope plus file name, and the watched set comes from Drive, never from the credential store: `freshness.New` is given only the backend and the remote, and `Refresh` walks `ListDirs(remote)`. A stream stays watched while any kept backup has a metadata file, is valid until its newest backup's stamp plus the newest declaring backup's validity, drops out when its backups are all pruned, and is not watched with no declaring backup. Each edge has a named test.",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "DockerImages internal/freshness/watcher_test.go: TestRefresh_PublishesWatchedStreams, TestRefresh_StillWatchedAfterNewestStopsDeclaring, TestRefresh_OrphanMetadataDeclaresNothing, TestRefresh_PrunedAwayDropsOut",
+        "DockerImages internal/handler/handler_test.go::TestFreshness_WatchedWithoutCredential (stream still published after its credential is deleted)",
+        "cmd/backup-server/main.go:48 (freshness.New(backend, cfg.RcloneRemote): no credential store) and watcher.go:97,105-117"
+      ]
     },
     {
       "id": "V08",
       "area": "backup-server — pruning",
       "description": "Pruning counts backups only: a scope keeps its newest `retention` backups regardless of how many metadata files sit beside them. Each pruned backup's metadata file is deleted with it. Today prune counts every name in the scope (DockerImages backup-server/src/internal/pipeline/prune.go:14-41).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`Prune` splits a scope's names into backups and metadata files, keeps the newest `retention` backups, and deletes every other backup and every metadata file whose backup is not kept, including one whose backup is already gone. Metadata files never count toward retention.",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "DockerImages internal/pipeline/prune.go:12-61",
+        "DockerImages internal/pipeline/prune_test.go: TestPrune_MetadataNotCounted, TestPrune_DeletesPrunedBackupsMetadata, TestPrune_ClearsOrphanMetadata; handler_test.go::TestUpload_PruneCountsBackupsOnly"
+      ]
     },
     {
       "id": "V09",
       "area": "backup-server — published freshness",
       "description": "backup-server publishes, per watched stream, when the newest backup landed and until when it is valid, as absolute times. The values come from the metadata files read back from cloud storage. They are refreshed hourly and right after each upload, not on every scrape. After a failed refresh backup-server keeps the last values it read.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "backup-server publishes per stream when the newest backup landed and until when it is valid, as Unix seconds, from the metadata it read back. It refreshes at start, hourly and right after each upload's prune, never per scrape, and keeps the last values when a refresh fails. Live: the four series exist on prd (the two global ones, with no streams yet), and the first refresh succeeded.",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "DockerImages internal/freshness/watcher_test.go: TestRun_RefreshesAtStartAndEveryInterval, TestRefresh_FailureKeepsLastValues, TestMetrics (a scrape reads no storage); handler_test.go::TestUpload_RefreshesFreshness",
+        "DockerImages internal/freshness/metrics.go:11-61 (series and collector) and watcher.go:19 (RefreshInterval = time.Hour)",
+        "live: `count by (__name__) ({__name__=~\"backup_server_.*\"})` returns backup_server_refresh_last_success_timestamp_seconds and backup_server_start_time_seconds; per-stream series appear with the first declared upload (V19)"
+      ]
     },
     {
       "id": "V10",
       "area": "backup-server — published freshness",
       "description": "The metrics are served only inside the cluster: nothing is answered for them through backup-server.home or the backup-server hostname, which nginx proxies to port 8080 (HelmCharts charts/storage/templates/backup-server-service.yaml:9-13, configs/prd/storage/prd/values.yaml:6). They take no token, and they carry scope, file names and times only.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The metrics are served on their own listener, `METRICS_LISTEN_ADDR` default `:8081`, which carries only `GET /metrics`; the main listener on 8080, which nginx proxies, has no metrics route. Checked live through the hostname, the Service and Prometheus: no token is needed, and only scope, file names and times are exposed (a query for go_* and process_* series from the target returns none).",
+      "evidence": [
+        "live: https://backup-server.home/health/healthz 200 (control); https://backup-server.home/metrics 404; https://backup-server/metrics 404; http://backup-server.home:8081/metrics connection refused (curl exit 7)",
+        "live: `kubectl -n storage-prd get svc backup-server` ports: http=8080->8080 only; nginx target-port annotation 8080",
+        "live: Prometheus scrapes http://172.16.128.197:8081/metrics with no credentials, health up; the only backup_server_* series are the two global ones",
+        "DockerImages internal/freshness/metrics.go:32-38 (only GET /metrics), cmd/backup-server/main.go:55-57 (two listeners), internal/config/config.go:18-20,35",
+        "HelmCharts tests/test_storage_backup_server_metrics.py::test_the_hostname_and_the_service_ports_reach_only_the_api_listener (green in the driver's sweep)"
+      ]
     },
     {
       "id": "V11",
       "area": "Prometheus",
       "description": "Production Prometheus scrapes backup-server's metrics through the Service-annotation pattern (HelmCharts charts/electronics-inventory/templates/app-service.yaml:6-8, the kubernetes-service-endpoints job), and the target is up.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The `backup-server` Service carries `prometheus.io/scrape`, `path` and `port` annotations and the stock `kubernetes-service-endpoints` job scrapes it; the target is up on prd, labelled `namespace=\"storage-prd\", service=\"backup-server\"`, which is what P5's selectors use.",
+      "evidence": [
+        "live: `kubectl -n storage-prd get svc backup-server` annotations prometheus.io/path=/metrics, prometheus.io/port=8081, prometheus.io/scrape=true",
+        "live: /api/v1/targets: job kubernetes-service-endpoints, scrapeUrl http://172.16.128.197:8081/metrics, health up, lastError empty; `up{service=\"backup-server\"}` = 1, min over 20 m = 1",
+        "HelmCharts charts/storage/templates/backup-server-service.yaml:6-8 and backup-server-deployment.yaml (containerPort 8081 named metrics); IaC/HelmCharts #6543 SUCCESS"
+      ]
     },
     {
       "id": "V12",
       "area": "Alerts",
       "description": "The alert rules sit with the other rules in the production Prometheus release (HelmCharts configs/prd/prometheus/prd/values.yaml, serverFiles.alerting_rules.yml). A stream past its valid-until fires a critical alert that names the scope and file name, delivered loud.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The rules sit in the production Prometheus release's `alerting_rules.yml`, in a new `backup-freshness` group. `BackupOverdue` is critical, aggregates by scope and file name, and its summary and description name both and point at each uploader's logs; critical routes to the loud Telegram receiver. Loaded and healthy on prd. It has not yet fired, because no stream exists to go overdue; the tests simulate it firing once the validity passes and clearing when a backup lands.",
+      "evidence": [
+        "HelmCharts configs/prd/prometheus/prd/values.yaml:262-298 (BackupOverdue: summary uses $labels.scope and $labels.filename; severity: critical)",
+        "live: /api/v1/rules BackupOverdue health ok, state inactive, evaluationTime 0.0003 s, file /etc/config/alerting_rules.yml",
+        "HelmCharts tests/test_prometheus_backup_freshness_alerts.py: test_both_rules_are_critical_and_read_the_prd_backup_server_only, test_the_overdue_alert_names_its_stream_and_its_uploaders_logs, test_an_overdue_stream_fires_once_its_validity_passes_and_clears_when_a_backup_lands",
+        "HelmCharts configs/prd/prometheus/prd/values.yaml alertmanager.config: severity=\"critical\" to telegram-critical, disable_notifications: false"
+      ]
     },
     {
       "id": "V13",
       "area": "Alerts",
       "description": "A second critical alert fires when Prometheus cannot scrape backup-server, including when the target is gone entirely, or when backup-server cannot read cloud storage. It waits out a grace period, so a redeploy or a cloud-storage hiccup that clears by itself never pages; it fires once the watching has really been blind for hours.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`BackupWatcherBlind` is critical and fires when the newest successful full read any scrape in the last 6 h reported is over 6 h old, or when the series is absent for 6 h, so a target that is down, crash-looping or gone altogether, and a server whose reads fail, all fire only after hours; a redeploy or a self-clearing hiccup does not. The tests walk redeploys, failed reads, a gone target and a crash loop minute by minute. Live it is loaded, healthy and inactive: the expression's first half reads 203 s (healthy) and its absent half returns nothing.",
+      "evidence": [
+        "HelmCharts configs/prd/prometheus/prd/values.yaml:281-298",
+        "HelmCharts tests/test_prometheus_backup_freshness_alerts.py: test_a_healthy_watcher_is_never_blind, test_a_blind_watcher_fires_once_its_newest_read_is_past_the_grace_and_holds, test_an_overdue_stream_stays_alerting_while_the_watcher_goes_blind, test_the_look_backs_equal_the_blind_grace",
+        "live: /api/v1/rules BackupWatcherBlind health ok, state inactive; `time() - max by (namespace, service) (max_over_time(backup_server_refresh_last_success_timestamp_seconds{...}[6h]))` = 203 s at 00:26; `absent_over_time(...[6h])` empty"
+      ]
     },
     {
       "id": "V14",
       "area": "Rollout",
       "description": "The alert rules went live on production only after the new backup-server was serving metrics there, and the dead-watcher alert did not fire during rollout.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Production served the metrics before the rules went live, and the dead-watcher alert did not fire. Before the rollout prd had no backup_server_* series, no `backup-freshness` group and the old backup-server image. The order then was: DockerImages 0af47c9 (new image rolled by #6542), HelmCharts 2ada3db (scrape annotations, #6543), the gate (target up, last-success non-zero), and only then 93626fc (rules, #6545). The group loaded at 00:29:33 and BackupWatcherBlind was healthy and inactive at its first evaluation, 00:29:52.",
+      "evidence": [
+        "live baseline before pushing (00:16): `up{service=\"backup-server\"}` empty, no backup_server_* series, rule groups node-memory-pressure, node-reservation, s3-mirror, youtrack-backup only, backup-server image sha256:74e0381e…",
+        "track_build: DockerImages #2526 SUCCESS, IaC/HelmCharts #6542 SUCCESS (00:22), #6543 SUCCESS (00:26), #6545 SUCCESS (00:28)",
+        "live gate at 00:26:33 before the P5 push: up=1, last_success 1789770331, no streams; P5 pushed 00:26:59",
+        "live after: `count_over_time(ALERTS{alertname=~\"Backup.*\"}[3h])` returns nothing; /api/v1/alerts has no Backup* alert; the only firing alert is NodeMemoryStallCounterWedged (slice 018's)"
+      ]
     },
     {
       "id": "V15",
       "area": "OpenBao wrapper",
       "description": "The OpenBao followers keep exiting successfully (ansible/roles/openbao/templates/openbao-backup.sh.j2:76-81); no node's unit status is the freshness signal.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The followers' early exit is unchanged. P6's diff touches only the comment, `UPLOAD_VALID_FOR` and the upload URL; the leader guard still logs `not the Raft leader; nothing to do` and exits 0 before any login, and the unit has no `OnFailure=`. Live: on all three srvvaultN the last `openbao-backup.service` run ended `Result=success`, `ExecMainStatus=0`, whether the node led or followed.",
+      "evidence": [
+        "Ansible ansible/roles/openbao/templates/openbao-backup.sh.j2:81-85 (leader guard, unchanged by d70be14); `git show d70be14` changes 6 lines of the template, none in the guard",
+        "live, read-only ssh: srvvault1 last run 2026-09-18 02:25:09, srvvault2 02:14:35, srvvault3 02:48:02: Result=success ExecMainStatus=0 on each; ActiveState inactive",
+        "the deployed wrapper still carries the guard at line 79 (`grep -n 'not the Raft leader'`), so the property holds before and after the playbook run"
+      ]
     },
     {
       "id": "V16",
       "area": "Doctrine",
       "description": "decisions.md's OpenBao backup section records the freshness contract in place of \"fire-and-forget\". It names the real retention mechanism (backup-server's credential store, set per scope through homelab_backup_credential) instead of the retired tokens.yaml; both stale phrases are at decisions.md:101 today.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "decisions.md's OpenBao backup section records the freshness contract and names the real retention mechanism. Neither stale phrase remains.",
+      "evidence": [
+        "AnsibleSpecs decisions.md:102 (Freshness is watched by backup-server, not by the nodes) and the Retention bullet (credential store `credentials.json`, set through homelab_backup_credential); AnsibleSpecs 353f23a",
+        "`grep -n -i 'fire-and-forget\\|tokens\\.yaml' decisions.md` prints nothing",
+        "decisions.md §Backup: the OpenBao and postgres-pas entries name BackupOverdue and docs/runbooks/backup-freshness.md"
+      ]
     },
     {
       "id": "V17",
       "area": "Dev storage release",
       "description": "The orphaned backup-server-tokens ConfigMap is gone from the dev storage release (HelmCharts configs/dev/storage/prd/manifests.yaml:14-26 today). Deleting the live dev-cluster object is recorded as an operator action if it is not done in the run: manifests.yaml goes through a plain kubectl apply that never prunes (tools/deploy/deploy_cli/helmops.py:202-203).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The dev storage release's manifests.yaml no longer ships the `backup-server-tokens` ConfigMap, and a test keeps each storage release's manifests to objects the chart names. There is no live object to delete: read live, the dev cluster has no storage-prd namespace, no such ConfigMap in any namespace and no backup-server Deployment, so the operator action the item allows for is moot (close-out A1, noted).",
+      "evidence": [
+        "HelmCharts configs/dev/storage/prd/manifests.yaml (ConfigMap removed by 3419695: `git diff 03ea7fb..93626fc -- configs/dev/storage/prd/manifests.yaml` deletes 14 lines)",
+        "HelmCharts tests/test_storage_backup_server_metrics.py::test_a_storage_release_ships_only_objects_the_chart_reads (green in the driver's sweep)",
+        "live: `kubectl --kubeconfig ~/.kube/config-dev-write --context dev get ns` lists no storage-prd; `get cm -A --field-selector metadata.name=backup-server-tokens`: No resources found; `get deploy -A` shows no backup-server"
+      ]
     },
     {
       "id": "V18",
       "area": "Coverage",
       "description": "backup-server's Go suite and the HelmCharts suite are green. No existing upload, prune or credentials test is lost without a named successor.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "backup-server's Go suite is green in this pass and the HelmCharts suite is green in the driver's sweep at 93626fc. No existing test was removed: the diffs of both repos show no deleted `func Test` or `def test_`. `TestValidateValidity`, added in P1, became `TestParseValidity` in P2 within the slice.",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "`git diff beac1e2..0af47c9 -- '*_test.go' | grep -E '^-\\s*func Test'` in DockerImages prints nothing; 27 test functions added",
+        "`git diff 03ea7fb..93626fc -- tests | grep -E '^-\\s*def test_'` in HelmCharts prints nothing; 13 added",
+        "driver sweep: HelmCharts root lint, build and test GREEN at 93626fcf8e96 (sweeps/r2/HelmCharts_root_test.log)"
+      ]
     },
     {
       "id": "V19",
       "area": "End to end (production)",
       "description": "After the first nightly runs that follow rollout, backup-server on production publishes a stream for openbao / openbao-backup.tgz and one for each postgres-pas database. Each is valid until 52 hours after its landing, and no backup alert is firing.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "The first nightly runs after rollout have not happened yet: at the time of this pass it is before 01:00 on 2026-09-19 and the Postgres CronJob runs at 02:00 CEST. Everything before them is in place and read live: the new backup-server serves metrics and reads Drive, the Postgres script declares 52 h, the rules are loaded and quiet, and the watched set is empty of streams because no backup declares a validity yet. The `openbao` stream also needs the operator's playbook run (V01, V05). Nothing else stands between this item and its check.",
+      "evidence": [
+        "live now: `backup_server_stream_valid_until_timestamp_seconds` returns no series; `backup_server_refresh_last_success_timestamp_seconds` 1789770331; no Backup* alert firing or pending",
+        "after 02:00 CEST tonight, without any operator action: `q 'backup_server_stream_valid_until_timestamp_seconds{scope=\"postgres-pas\"}'` returns one series per non-excluded database (filename <db>.dump), each equal to its `backup_server_stream_last_backup_timestamp_seconds` + 187200 (52 h); and `kubectl --context prd -n postgres-pas-prd get jobs` shows the night's Job Complete",
+        "after the operator's `openbao` playbook run and the leader's next upload: `q 'backup_server_stream_valid_until_timestamp_seconds{scope=\"openbao\"}'` returns filename openbao-backup.tgz, 52 h after its last-backup time",
+        "throughout: `curl -s http://prometheus.home/api/v1/alerts | jq '[.data.alerts[].labels.alertname]'` names no Backup* alert",
+        "Settle: `cd /work/Ansible/ansible && cexec iac poetry run ansible-playbook playbooks/site-openbao.yml --tags openbao_backup --limit openbao --check`, then the same line without `--check`; the full text, caveats and timing are close-out A2"
+      ]
     },
     {
       "id": "V20",
       "area": "backup-server — published freshness",
       "description": "A refresh's Drive reads are bounded. A refresh lists each scope folder once and reads only metadata files it has not seen before; a metadata file, which never changes once written, is read once and remembered. A normal night costs a handful of Drive calls, not a re-read of every kept metadata file after each Postgres upload. Drive's per-minute query quota has already failed a backup mid-upload (DockerImages backup-server/src/internal/pipeline/backend.go:34-38), and the Postgres job uploads its databases one after another in the same window (HelmCharts charts/postgres-pas/templates/backup-configmap.yaml:57-64).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "A refresh lists each scope folder once and reads only metadata files it has not read before. It reads only each stream's newest declaring file, remembered per scope, so a cold start reads one file per stream, a later refresh none, and an upload's refresh one and lists only its own scope. A named test pins each count. Live, the whole remote was read in 21 s with no metadata reads yet; tonight's runs put the real call counts through Drive (V19).",
+      "evidence": [
+        "go: `cexec go sh -c 'cd /work/DockerImages/backup-server/src && gofmt -l . ; go vet ./... ; go test -race -count=1 ./...'` on go1.26.5 (test phase r1, 2026-09-19): gofmt and vet print nothing; ok for auth, freshness, handler and pipeline",
+        "DockerImages internal/freshness/watcher_test.go::TestRefresh_ReadsBounded: first refresh 1 root listing, 1 list per scope, 10 reads for 10 streams; second refresh 0 reads; one upload's RefreshScope reads exactly the new metadata file and lists only its scope",
+        "DockerImages internal/freshness/watcher.go:198-216 (known[metaName] cache; Read only when the validity is not remembered)",
+        "live: backup_server_start_time_seconds 1789770310 to backup_server_refresh_last_success_timestamp_seconds 1789770331"
+      ]
     },
     {
       "id": "V21",
       "area": "Runbook",
       "description": "A scope retired on purpose alerts critical until its .metadata.json files are deleted by hand; its backups may stay. That retirement step is documented in the operator runbook for the backup alerts, with the other runbooks in Ansible docs/runbooks/.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The retirement step is written down: docs/runbooks/backup-freshness.md §3 says a scope retired on purpose alerts critical until its `.metadata.json` files are deleted by hand, that its backups may stay, how to list and delete them (dry run first), and to silence BackupOverdue for 8 h because the alert lingers about 6 to 7 h after. I ran the runbook's read-only parts against prd: its three Prometheus queries parse and run, the pod label, the Alertmanager container name and the Drive remote it names match the live objects, and the backup-server image ships curl and rclone.",
+      "evidence": [
+        "Ansible docs/runbooks/backup-freshness.md:194-239 (§3 Retire a scope or a stream); bb4db40 is the current text",
+        "live: the `q` helper's three queries return status success; `get pods -l app=backup-server` returns the pod; Alertmanager pod prometheus-prd-alertmanager-0 has container `alertmanager`; deployment env RCLONE_REMOTE=gdrive-pieter:Homelab Backups",
+        "DockerImages backup-server/Dockerfile: `apt install … curl` and the rclone install, so the runbook's `exec … curl localhost:8081/metrics` and `rclone lsf` have their tools",
+        "not run, by design: the runbook's exec, rclone delete and amtool commands need the write kubeconfig or change state"
+      ]
     }
   ]
 }
