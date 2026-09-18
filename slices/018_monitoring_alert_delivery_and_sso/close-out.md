@@ -53,6 +53,15 @@ plan-writer r3, 2026-09-14 — Replayed at the rules' one-minute evaluation over
 **Provenance:** witnessed, plan-writer, planning r1, live production Prometheus queries 2026-09-14
 **Disposition:**
 
+### N2 — HelmCharts: the grafana releases track a deprecated chart repo, frozen at chart 10.5.15 / Grafana 12.3.1 · minor
+
+configs/{prd,dev}/grafana/prd/release.yaml pull grafana/grafana from https://grafana.github.io/helm-charts, unpinned. That chart is marked deprecated: true (helm template warns "this chart is deprecated"); its README says updates moved to grafana-community/helm-charts after 2026-01-30. Its newest version, 10.5.15 (appVersion 12.3.1), is what production runs, so the unpinned release gets no further Grafana versions or security fixes. Not moved here — out of P5's scope.
+
+**Consequence:** Grafana stays on 12.3.1 with no upstream fixes until the releases point at the grafana-community chart repository.
+
+**Provenance:** witnessed, code-writer, P5, r1, helm pull grafana/grafana (Chart.yaml deprecated: true, README Chart Migration)
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -95,6 +104,17 @@ configs/prd/prometheus/prd/values.yaml:127-130 and tests/test_prometheus_node_me
 **Consequence:** none — 30m meets the real bound too; only the stated reason, and the test assertion built on it, are wrong
 
 **Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### B5 — HelmCharts: a stall alert delivered before its node's wedge warning fires never gets a [RESOLVED] notice once the wedge inhibits it · minor
+
+The prd Alertmanager inhibit rule (configs/prd/prometheus/prd/values.yaml:281-284) mutes a target's resolve as well as its firing, and Alertmanager drops the resolved alert after that muted flush. A corroborated NodeMemoryStalled delivered loud during a wedged node's first-detection window (P1: ~44 h on average on srvk8s1) is therefore never closed in the chat, even after the wedge warning resolves. Witnessed on a local Alertmanager 0.34.1 on this config: stall firing, wedge firing, stall resolved, wedge resolved sent no resolve for the stall alert.
+
+code-reviewer P2 r1, 2026-09-18 — Line citation correction: the inhibit rule is configs/prd/prometheus/prd/values.yaml:278-281, not 281-284.
+
+**Consequence:** The Telegram chat can hold a loud critical NodeMemoryStalled that never resolves, which reads as an ongoing stall; unlikely, since P1's replay found no corroborated stall minute in the retained week.
+
+**Provenance:** witnessed — code-reviewer, P2 r1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
 ## Open questions and rulings

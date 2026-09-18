@@ -571,6 +571,38 @@ D3, D4, D6 and F1:
   address the checklist registered.
 - The dev-cluster copy (`configs/dev/grafana/prd`) is untouched and keeps its local login.
 
+**Done (P5).** HelmCharts `aa875f7` on `phase/018-P5`: `configs/prd/grafana/prd/values.yaml` gains
+`envFromSecret: grafana-oidc` and `grafana.ini` (`server.root_url: http://grafana.home/`,
+`auth.generic_oauth` against the `homelab` realm); new `configs/prd/grafana/prd/manifests.yaml`
+(ExternalSecret `grafana-oidc`); new `tests/test_grafana_keycloak_login.py`. Dev release untouched.
+`kc project test` green.
+
+Later phases:
+- First deploy: the new Grafana pod's `envFrom` waits on Secret `grafana-oidc` (CreateContainerConfigError)
+  until ESO syncs it after `manifests.yaml` is applied — no action needed.
+- Live checks (V09/V11): `http://grafana.home/login` is 200 with `"oauth":{"generic_oauth":{"icon":"signin","name":"Keycloak"}`
+  and `"disableLoginForm":false`; `/login/generic_oauth` 302s to `auth.ginbov.nl/realms/homelab/…/auth` with
+  `redirect_uri=http://grafana.home/login/generic_oauth` and `code_challenge_method=S256`. A granted sign-in
+  gives `/api/user` `isGrafanaAdmin: true`, org role Admin, login = Keycloak `preferred_username`.
+- Every Keycloak sign-in, successful ones too, logs `Failed to extract role … role_attribute_strict_violation`
+  warnings (ID token and userinfo carry no client roles); only `authn.service … could not evaluate any valid
+  roles using IdP provided data` is a refusal.
+
+Record:
+- The ExternalSecret's keys are `GF_AUTH_GENERIC_OAUTH_CLIENT_ID` / `_CLIENT_SECRET` (properties `client_id` /
+  `client_secret`), Grafana env overrides via the chart's `envFromSecret`; grafana.ini names neither.
+- Beyond the plan: `scopes: openid email profile` (`roles` is a default client scope), `use_pkce: true`,
+  `use_refresh_token: true` (without it Grafana ends the session when the access token expires),
+  `login_attribute_path: preferred_username`, `allow_sign_up: true`. `auto_login` / `disable_login_form` stay at
+  their false defaults. No `signout_redirect_url`: the client registers no post-logout redirect.
+- Role: `contains(resource_access.grafana.roles[*], 'admin') && 'GrafanaAdmin'`, strict, `allow_assign_grafana_admin`;
+  Grafana 12.3.1 (`generic_oauth.go` `collectUserInfoData`) tries ID token, userinfo, then access token.
+- Witnessed: Grafana 12.3.1 on the rendered grafana.ini (endpoint URLs repointed) against a fake IdP issuing
+  Keycloak-shaped tokens — the admin-role account became Grafana Admin / org Admin; a role-less account and a
+  `viewer`-only one were refused to `/login`; id/secret arrived via the env overrides; PKCE and a refresh grant
+  worked; the local admin still logged in through the form. Eight value mutations each fail the new test.
+- `grafana/grafana` 10.5.15 is live and the repo's newest; that chart repo is deprecated (close-out N2).
+
 ### P6 — pgAdmin signs in through Keycloak, gated by a client role
 
 Target: ../HelmCharts
