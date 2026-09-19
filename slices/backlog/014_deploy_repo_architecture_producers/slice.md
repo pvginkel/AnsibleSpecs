@@ -1,3 +1,7 @@
+---
+issue: ANS-36
+---
+
 # 014 — Architecture producers for the deploy repos
 
 **Major.** Each deploy repo gains its own `Jenkinsfile.architecture` producer delivering the same

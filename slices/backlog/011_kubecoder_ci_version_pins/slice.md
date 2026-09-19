@@ -1,3 +1,7 @@
+---
+issue: ANS-32
+---
+
 # 011 — KubeCoder CI: version-pin commits instead of deploys
 
 Reduce KubeCoder's Jenkins to CI: `Build-Main` pushes `:<n>` images and commits the tags into

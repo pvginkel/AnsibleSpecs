@@ -1,3 +1,7 @@
+---
+issue: ANS-33
+---
+
 # 012 — KubeCoder cutover: Terraform state surgery and the per-stage runbook
 
 Produce the cutover runbook — Terraform state surgery, the registry commit, the diff review, the
