@@ -85,6 +85,19 @@ Verbatim from `phases.md`:
    > annotation, the namespace gaining a tracking annotation — **anything else stops the
    > cutover**.
 
+   **The expected set is the runbook table, not this list** (slice 010 close-out S9; operator
+   2026-09-20: *"Agreed"*). `/work/Ansible/docs/runbooks/argocd.md` carries a diff table built on
+   2026-09-13 by running Argo CD v3.5.1's own `StateDiffs` against the 23 live `kubecoder-dev`
+   objects and KubeCoderDeploy `9d6c448`'s dev render. This list is wrong in both directions.
+   Missing from it: the Namespace's `sync-wave: "-1"` and `Prune=false` annotations (D25), the
+   controller ConfigMap's worker and vsix pins with the controller checksum that follows them,
+   and the `argocd.argoproj.io/tracking-id` every rendered object gains — no live object carries
+   `app.kubernetes.io/instance`, so tracking is not normalised away. Its "image references" are
+   digest changes: the live images are HelmCharts' deploy-time digests, against the five pins and
+   tunnel-reclaim's `:latest`. Listed but never shown: the `imagePullPolicy: Always` and bot/MCP
+   annotation removals (slice 010 close-out S11). Since *anything else stops the cutover*, review
+   against the runbook table — re-derived if requirement 5's re-sync moved the chart.
+
 9. > Sync once, manually, at the chosen moment. Verify Synced/Healthy, controller
    > `1/1 Running`, ConfigMap correct, env pods back.
 
@@ -267,6 +280,13 @@ fine." — "It doesn't hurt anything I think. You're good to go.").
   the namespace's tracking annotation: the five pinned containers lose `imagePullPolicy: Always`,
   and the bot and MCP Deployments lose the deployment annotation (the controller's becomes the
   controllerConfig checksum).
+
+  *Corrected 2026-09-20 (slice 010 close-out S9 and S11).* Those two removals appear in neither
+  the diff nor the sync under Argo's default client-side apply, so they belong in no expected set:
+  the live Deployments carry no `kubectl.kubernetes.io/last-applied-configuration` (Helm 4 applies
+  server-side and writes none), and without it Argo's three-way merge degrades to a two-way one
+  that can never delete a field. See requirement 8's note for the set that does appear, and the
+  slice 010's close-out S11 for the mechanism this slice still has to choose.
 - **Before KubeCoder's first dev sync, the operator syncs Argo itself** — slice 010 gives the
   hook a webhook-secret environment value in ArgoCDDeploy, which KubeCoderDeploy's webhook
   Terraform reads. The dev stage owns the webhook; the `prd` branch is born at prd's cutover.

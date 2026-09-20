@@ -34,7 +34,9 @@ preview, is the diff-quality proof that slice 012's cutover review relies on.
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Add KubeCoderDeploy to the Ansible environment manifest and run kc env sync
+### ~~A1 — Add KubeCoderDeploy to the Ansible environment manifest and run kc env sync~~ — closed by the operator, 2026-09-20 — a temporary situation, not an issue
+
+<details><summary>struck — body kept for the record</summary>
 
 R10 asks for KubeCoderDeploy in both `/work/Ansible/.kubecoder/config.yaml` and KubeCoder's own manifest. The operator's note of 2026-08-13 keeps the Ansible-side edit and `kc env sync` with the operator. The slice therefore adds only KubeCoder's line (plan.md P6). `/work/KubeCoderDeploy` is cloned in this environment today, but no manifest declares it.
 
@@ -43,7 +45,9 @@ plan-writer, plan pass r2, 2026-09-13 — No phase adds KubeCoder's line. The se
 **Consequence:** A rebuilt Ansible environment comes up without a /work/KubeCoderDeploy checkout until the line is added and synced.
 
 **Provenance:** read — plan-writer, plan pass r1; plan.md R10, settled 13
-**Disposition:** I don't know if that's right. I assume we have that repo here now for the migration, but I can't imagine this environment will have all deploy repos. Or was that the plan all along? If it's just for the migration, it's OK to not track it in config.yaml.
+**Disposition:** I don't know if that's right. I assume we have that repo here now for the migration, but I can't imagine this environment will have all deploy repos. Or was that the plan all along? If it's just for the migration, it's OK to not track it in config.yaml. — answered in chat, 2026-09-20: no plan ever put every deploy repo here; at triage the operator said the repos are hand-cloned ("I'll add some, but will do this myself"), this environment's /work holds five undeclared clones against eight declared, and KubeCoder's own manifest declares KubeCoderDeploy (KubeCoder 1e523e79). Residual cost: a rebuilt environment has no /work/KubeCoderDeploy, and slices 012, 014 and the 024/025 re-cut still edit it from here. Operator in chat, 2026-09-20: "I assume we don't need these anymore once we've fully migrated to Argo CD. It's a temporary situation, not an issue, I think." — closed.
+
+</details>
 
 ### ~~A2 — Sync argocd-prd by hand once P1 has landed, before KubeCoder first dev sync~~ — closed by the operator, 2026-09-20 — done
 
@@ -215,15 +219,6 @@ doc-writer, doc phase r1, 2026-09-13 — docs/runbooks/step-ca-root-rotation.md 
 **Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
 **Disposition:** Aren't we tracking this somewhere? The list of certificate copies?
 
-### S6 — KubeCoderDeploy terraform/ constrains no provider versions and commits no lock file, so every PreSync init takes the newest providers · minor
-
-terraform/providers.tf names integrations/github, hashicorp/kubernetes and pvginkel/homelab with no version constraint, and .gitignore drops .terraform.lock.hcl. This follows HelmCharts' _providers/ and .gitignore. The hook's init in its fresh clone resolves the latest release every sync; the P5 gate's init resolved github 6.13.0, kubernetes 3.2.1 and homelab 0.1.31. Either pessimistic constraints (~> major) or a committed lock (linux_amd64; the homelab provider comes from tfmirror.home, so only local checksums) would make an upgrade a reviewed commit. The choice is estate-wide: every later deploy repo copies this one.
-
-**Consequence:** A breaking major release of one of the three providers reaches KubeCoder's next sync without review, and a failed PreSync apply blocks that sync.
-
-**Provenance:** read, code-writer, P5, r1, KubeCoderDeploy terraform/providers.tf
-**Disposition:** I think this is an accepted risk. This is about pinning the container right? Leave this for now.
-
 ### S9 — Slice 012 requirement 8's expected diff omits the Namespace's sync-wave/Prune=false annotations and the controller ConfigMap's worker/vsix pins · minor
 
 Slice 012's expected diff lists image references, the deployment annotation and the namespace's tracking annotation. Its 'Carried in from slice 010' section adds the dropped imagePullPolicy lines and the bot/MCP stamps. A helm template diff on 2026-09-13 found more: HelmCharts charts/kubecoder (dev values) against KubeCoderDeploy 9d6c448 (dev values) also shows the Namespace gaining argocd.argoproj.io/sync-wave "-1" and sync-options Prune=false (D25's manifest). It also shows kubecoder-controller-config's worker and vsix images moving from dev-latest to the pin, with the controller's checksum/config following. The runbook table in docs/runbooks/argocd.md lists all of these. Slice 012's own text does not.
@@ -235,16 +230,7 @@ doc-writer, doc phase r1, 2026-09-13 — argo-cd/phases.md B.5 now points the cu
 **Consequence:** At the dev cutover, an operator reviewing against slice 012's list alone stops the cutover on differences that are expected.
 
 **Provenance:** witnessed | code-writer, P7, r1, plan.md P7 done-record
-**Disposition:** I have no idea. Please advise.
-
-### S10 — Ansible argocd runbook: the diff preview's <app>-<stage>-preview name is also the Helm release name Argo renders, unlike the generated <app>-<stage> Application · minor
-
-Argo passes the Application name as the Helm release name unless spec.source.helm.releaseName is set (argo-cd v3.5.1 reposerver/repository/repository.go:1288-1289). The preview procedure names the Application <app>-<stage>-preview (docs/runbooks/argocd.md:248-250) and says it renders the deploy repo exactly as the generated Application will (:240-241). KubeCoderDeploy's chart reads only .Release.Namespace (chart/templates/namespace.yaml:9), so KubeCoder's preview is unaffected. A later migration whose chart reads .Release.Name would preview names or labels the generated Application does not render.
-
-**Consequence:** A later migration's preview of a chart that reads .Release.Name shows differences its real first sync would not make.
-
-**Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F4)
-**Disposition:** What's the suggested fix? Is there really a problem? I already deleted the preview application.
+**Disposition:** I have no idea. Please advise. — advised: review against the diff table in /work/Ansible/docs/runbooks/argocd.md, built 2026-09-13 from Argo CD v3.5.1's own StateDiffs, rather than requirement 8's list, which is wrong in both directions. Operator in chat, 2026-09-20: "Agreed." — folded into slice 012: a note under requirement 8 naming what the list misses and what it wrongly expects, and a dated correction on the carried-in "Requirement 8's expected diff grows" bullet.
 
 ### S11 — KubeCoderDeploy / slice 012: Argo's first sync leaves imagePullPolicy: Always on the five pinned containers and the old deployment annotation on bot and MCP · minor
 
@@ -267,6 +253,19 @@ chart/values.yaml:8-10, added by P4, groups controllerConfig.images.{worker,vsix
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md
 **Disposition:**
+
+</details>
+
+### ~~S6 — KubeCoderDeploy terraform/ constrains no provider versions and commits no lock file, so every PreSync init takes the newest providers · minor~~ — closed by the operator, 2026-09-20 — accepted risk
+
+<details><summary>struck — body kept for the record</summary>
+
+terraform/providers.tf names integrations/github, hashicorp/kubernetes and pvginkel/homelab with no version constraint, and .gitignore drops .terraform.lock.hcl. This follows HelmCharts' _providers/ and .gitignore. The hook's init in its fresh clone resolves the latest release every sync; the P5 gate's init resolved github 6.13.0, kubernetes 3.2.1 and homelab 0.1.31. Either pessimistic constraints (~> major) or a committed lock (linux_amd64; the homelab provider comes from tfmirror.home, so only local checksums) would make an upgrade a reviewed commit. The choice is estate-wide: every later deploy repo copies this one.
+
+**Consequence:** A breaking major release of one of the three providers reaches KubeCoder's next sync without review, and a failed PreSync apply blocks that sync.
+
+**Provenance:** read, code-writer, P5, r1, KubeCoderDeploy terraform/providers.tf
+**Disposition:** I think this is an accepted risk. This is about pinning the container right? Leave this for now. — answered in chat, 2026-09-20: not the container. It is the three Terraform providers (integrations/github, hashicorp/kubernetes, pvginkel/homelab) that the PreSync hook's terraform init resolves fresh in its own clone on every sync, with no constraints and .terraform.lock.hcl gitignored; the argocd-hook image is pinned separately. Operator in chat after the correction, 2026-09-20: "I know. Leave it." — closed as an accepted risk.
 
 </details>
 
@@ -295,5 +294,18 @@ terraform/providers.tf:23-25 is correct today, but tests/terraform.sh cannot see
 
 **Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
 **Disposition:** Fix inline if possible. — fixed in KubeCoderDeploy ede0394: a block-scoped awk check in tests/terraform.sh that provider "homelab" assigns zfs_pools = var.zfs_pools. Verified it fails on both mutations the reviewer described (attribute blanked, attribute dropped) and passes on the real file; kc project lint and test green.
+
+</details>
+
+### ~~S10 — Ansible argocd runbook: the diff preview's <app>-<stage>-preview name is also the Helm release name Argo renders, unlike the generated <app>-<stage> Application · minor~~ — fixed in Ansible docs/runbooks/argocd.md: the preview manifest pins helm.releaseName
+
+<details><summary>struck — body kept for the record</summary>
+
+Argo passes the Application name as the Helm release name unless spec.source.helm.releaseName is set (argo-cd v3.5.1 reposerver/repository/repository.go:1288-1289). The preview procedure names the Application <app>-<stage>-preview (docs/runbooks/argocd.md:248-250) and says it renders the deploy repo exactly as the generated Application will (:240-241). KubeCoderDeploy's chart reads only .Release.Namespace (chart/templates/namespace.yaml:9), so KubeCoder's preview is unaffected. A later migration whose chart reads .Release.Name would preview names or labels the generated Application does not render.
+
+**Consequence:** A later migration's preview of a chart that reads .Release.Name shows differences its real first sync would not make.
+
+**Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F4)
+**Disposition:** What's the suggested fix? Is there really a problem? I already deleted the preview application. — answered in chat, 2026-09-20: no problem for KubeCoder, whose chart reads only .Release.Namespace, so the preview that was run and deleted was faithful; the exposure is the next migration whose chart reads .Release.Name. Suggested fix: pin spec.source.helm.releaseName to <app>-<stage> in the preview manifest. Operator in chat, 2026-09-20: "Then fix inline please." — fixed in /work/Ansible docs/runbooks/argocd.md: releaseName: kubecoder-dev in the manifest and a bullet saying why.
 
 </details>
