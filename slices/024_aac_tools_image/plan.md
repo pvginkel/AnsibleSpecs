@@ -431,7 +431,7 @@ Later phases:
 - README is untouched and now understates the repo — its Layout tree, CI section and Gates lead-in
   each name one image. The doc phase's, off the slice's diff.
 
-### P3 — the deploy-repo architecture generator
+### P3 — the deploy-repo architecture generator ✅ DONE 2026-09-20
 
 Target: ../ArgoCDTools
 
