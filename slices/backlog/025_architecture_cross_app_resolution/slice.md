@@ -1,3 +1,7 @@
+---
+issue: ANS-80
+---
+
 # 025 — Architecture: cross-app references resolve through the published set
 
 **Feature.** Once apps publish their architecture from separate deploy repos, an edge from one app

@@ -1,3 +1,7 @@
+---
+issue: ANS-79
+---
+
 # 024 — `aac-tools`: the architecture generator and validator as an image, built in ArgoCDTools
 
 **Feature.** A new container image, `aac-tools`, built in ArgoCDTools beside `argocd-hook`, carrying
@@ -21,10 +25,10 @@ deploy repos their producers on top of it; slice `025_architecture_cross_app_res
 cross-app references.
 
 **Why it is its own slice:** between the image and any repo that gates on it locally sits a step no
-run loop can take — the `aac-tools` toolchain entering the KubeCoder catalog (a KC-project task) and
+run loop can take — the `aac-tools` toolchain entering the KubeCoder catalog (KC-68) and
 the environments picking it up.
 
-**Depends on:** nothing. **Needed by:** the KC toolchain task, slice 014 (hard-ordered before slice
+**Depends on:** nothing. **Needed by:** the KC toolchain task (KC-68), slice 014 (hard-ordered before slice
 012's prd flip), slice 025, and ANS-78 (the cross-repo `arch-validate.py` migration).
 
 The triage record is AnsibleSpecs `handovers/triage_2026-09-20.md` and `…_raw.md` at `27408db` (the
