@@ -525,6 +525,38 @@ Constraints the repo does not state:
   The generator resolves the chart dependency itself, so nothing runs `tests/build-deps.sh` first.
 - Per G12 it runs the generator from source in the `iac` sidecar, never from the image.
 
+**Done (P4).** `aac-tools/checks/handover_equality.py` is the check, one command in the `iac`
+sidecar: `cexec iac python3 aac-tools/checks/handover_equality.py`. It clones `/work/KubeCoderDeploy`
+into a temporary directory, gives the clone the source's own origin, copies
+`checks/kubecoder-architecture.yaml` in as the root `architecture.yaml`, runs the generator from
+source over it at `--stage prd`, and compares what it wrote with the live published dataset. Green
+today: 9 elements and 16 relations, id for id, with `producer`, `logo` and `stats.image` the only
+fields that differ and the 4 cross-stage relations named in the report as excluded. Both sides read
+one dataset snapshot (`ARCH_DATASET_URL` is passed to the child, the overlay emptied), so a publish
+between two reads cannot look like a difference. Refetched and refiltered first, per the
+attachment's shelf-life note: the target is unmoved from what the page records.
+
+The target is derived from the dataset every run, never pinned. Containers are keyed to the app by
+`stats.release`, but a published ingress interface carries no release at all, so the filter is the
+one thing both have — a producer's element whose composite-id hint is the app name or starts with
+it — and the comparison is set equality in both directions, so an element the published model gains
+fails the check rather than slipping past. Relations follow: every published relation with an
+endpoint in the target, less those whose other endpoint is the same app in another stage. Proven to
+fail, not just to pass — a dropped `images:` line loses 2 relations, a mutated dataset element
+reports the field and a planted one reports the id, each exiting 1. `checks/` is out of the kaniko
+context (`.dockerignore`) and out of `test_image.py`'s baked-source walk, because nothing here is
+baked. `kc project lint | test | build` green; 34 tests, the new one pinning the fixture as an
+annotation layer the generator accepts carrying the date all nine published elements have.
+
+Later phases:
+- The command above is what earns V09; it is not a `kc project` verb and CI never runs it — it
+  needs a sibling checkout, the chart repository and the live dataset, none of which a cold checkout
+  or the `IaC/ArgoCDTools` job has.
+- A difference it reports is not automatically a defect: the reference side is live, so refetch and
+  read `attachments/handover-equality.md` before treating one as a regression.
+- Nothing landed in `/work/KubeCoderDeploy` — it is clean, and the repo this slice changed is
+  ArgoCDTools only.
+
 ### P5 — `aac-tools` in the KubeCoder toolchain catalog
 
 Target: ../HelmCharts

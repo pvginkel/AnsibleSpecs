@@ -81,6 +81,42 @@ The container path maps a `realizes:` target through the cluster storage table b
 **Provenance:** witnessed | code-writer, P3, r1 — /work/ArgoCDTools/aac-tools/image/gen_architecture.py (emit_cnpg_substrate), ported from /work/HelmCharts/tools/chart_tools/gen_architecture.py:855
 **Disposition:**
 
+### B5 — aac-tools: the generator takes the app name from Chart.yaml, Argo takes it from the registry path · minor
+
+`main()` keys the namespace, the release name and therefore every element UUID on `chart/Chart.yaml`'s `name` (gen_architecture.py:279-280,706-708). Argo builds the same `<app>-<stage>` string from path segments 2 and 3 of the registry glob `configs/prd/*/*/release.yaml` (ArgoCDDeploy chart/templates/applicationsets.yaml:21-22,88,123), and a registry entry names the repo and revision but no app. Both deploy repos that exist today happen to agree (kubecoder, argocd), and the plan allowed this derivation (G13: '--app or reads Chart.yaml'); what is missing is anything that records, checks or fails on the equality the kept-UUID requirement rests on. Witnessed: renaming the throwaway clone's chart to `kubecoder-chart` emits app:kubecoder-chart-prd-kubecoder-bot-kubecoder-bot,b2d8ec93-... in place of the published ...,87f8c15c-... — still 9 elements, 16 relations, one gap line, exit 0.
+
+**Consequence:** A deploy repo whose chart name differs from its registry directory publishes a full architecture keyed to a namespace the app is not deployed in — green, no gap line — and every cross-producer edge into the real ids dangles.
+
+**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F1
+**Disposition:**
+
+### B6 — aac-tools (and HelmCharts): an unresolvable cross-producer ref is reported outside the `gap:` form · nit
+
+`resolve_product` defers a ref no producer resolves (gen_architecture.py:743-750) and the run prints 'deferred (cross-producer, unresolved): <ref>' (:1017-1018). The generated-producer contract binds the other form: 'Whatever the generator cannot map ... prints on a console line of its own, gap: <what> ... a gap reported in any other form is never seen' (/work/Architecture/.claude/architecture/producer-manual.md:543-549). Verbatim from HelmCharts, so the port-whole ruling produced it. Bounded, not silent: the deferred ref also reaches the artifact bare, where the validation service's kind lookup rejects it, so the build reds downstream — what is lost is the named ref in the line the central architecture update reads.
+
+**Consequence:** The central architecture update, which reads gap: lines off the last successful AaC build, never sees which cross-producer reference the generator could not place; the operator learns of it only as a validation failure.
+
+**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
+**Disposition:**
+
+### B7 — ArgoCDTools: .kubecoder/project.yaml's aac-tools description still names one command · nit
+
+.kubecoder/project.yaml:28-33 describes the component as 'The architecture-as-code commands the estate runs inside a repo's checkout — `arch-validate`, the federation's validator, shipped as the canonical script — and the aac-tools image that carries them': an apposition that reads as the complete list and is now one of two. The sibling statement of the same fact, the Dockerfile header (aac-tools/Dockerfile:1-5), was extended in this phase for gen-architecture.
+
+**Consequence:** `kc project info` and the manifest describe an image that carries only the validator, so a reader looking for where the generator is built and tested does not find it named.
+
+**Provenance:** read | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F3
+**Disposition:**
+
+### B8 — aac-tools: two of gen-architecture's preconditions fail with a traceback, the third with a sentence · nit
+
+`annotations()` refuses a missing or dateless annotation layer with a SystemExit naming the path and why (gen_architecture.py:283-306). The two preconditions added beside it do not: `hook_parameters` shells out to 'git remote get-url origin' (:363-378) and `chart_metadata` reads chart/Chart.yaml unguarded (:279-280). Witnessed on a git-init-only checkout carrying an annotation layer and a chart: the run ends in subprocess.CalledProcessError after a Python traceback. `run()` prints the child's stderr first, so "error: No such remote 'origin'" is above it, and annotations() runs before chart_metadata(), so the common wrong-directory case stays legible.
+
+**Consequence:** A run in a checkout without an origin remote — an export, a worktree, a repo cloned without remotes — ends in a Python traceback rather than a statement of what the generator needed.
+
+**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F4
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -133,4 +169,13 @@ Each justifies a live design decision to the next reader; nothing executes them,
 **Consequence:** A reader who follows one of these comments to check whether the PreSync hook still behaves as claimed greps a path that no longer exists and has to re-derive the answer.
 
 **Provenance:** witnessed | code review, P1, round 1 — full record in phases/P1/code_review_r1.md (F1)
+**Disposition:**
+
+### S4 — aac-tools: the equality fixture becomes a second copy the day KubeCoderDeploy commits its own annotation layer · nit
+
+`aac-tools/checks/kubecoder-architecture.yaml` is KubeCoder's annotation layer, held here because this slice lands no file in the deploy repo (ruling). `handover_equality.py` copies it over the clone's root before rendering, so once slice 014 gives KubeCoderDeploy its own committed `architecture.yaml`, the check keeps overriding the real file with this copy and the two can drift apart unnoticed. At that point the fixture has done its job: slice 014 can delete it and default `--annotations` to the clone's own file (or drop the copy step altogether), which also makes the check prove equality for exactly the judgment the pipeline renders.
+
+**Consequence:** The check can go on proving the handover for an annotation layer the pipeline does not use — the deploy repo's committed judgment drifts from the fixture's, and a green check no longer says anything about the artifact Jenkins publishes.
+
+**Provenance:** witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
 **Disposition:**
