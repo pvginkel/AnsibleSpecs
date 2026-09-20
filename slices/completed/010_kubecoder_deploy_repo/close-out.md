@@ -208,17 +208,6 @@ The only test of the diff guard uses an Argo-owned entry whose live release is a
 **Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md (F1)
 **Disposition:** operator in chat, 2026-09-20: "create a new card that lists the three items, but from the perspective that we just need to fully redesign the script or approach once we've migrated fully to Argo CD" — filed as HC-12 with B1, S2 and S3 as its evidence: once every app is on Argo CD the tool's premise (desired state derived from `configs/prd`) is gone, so it is redesigned then rather than patched three times. Deferred, State Later.
 
-### S4 — KubeCoderDeploy commits a copy of the homelab root CA (chart/files/ca/homelab-root.crt) that a root rotation has to update by hand · minor
-
-In HelmCharts the chart's CA file is a symlink to the repo's canonical homelab-root.crt. Argo's repo-server refuses a symlink that leaves the repository, so KubeCoderDeploy carries a real copy, as ArgoCDDeploy already does (chart/files/homelab-root.crt). Nothing ties either copy to the canonical file; the CA ConfigMap's comment is the only pointer.
-
-doc-writer, doc phase r1, 2026-09-13 — docs/runbooks/step-ca-root-rotation.md now lists KubeCoderDeploy's copy in the root inventory and in the md5sum check, and all three chart copies matched the canonical file on 2026-09-13. Nothing binds the copy to the canonical file mechanically; that part of the suggestion stands.
-
-**Consequence:** After a root CA rotation, KubeCoder's controller still hands step the old root from kubecoder-controller-ca until someone updates KubeCoderDeploy's copy, so SSH host-key signing for env pods fails.
-
-**Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
-**Disposition:** Aren't we tracking this somewhere? The list of certificate copies?
-
 ### S9 — Slice 012 requirement 8's expected diff omits the Namespace's sync-wave/Prune=false annotations and the controller ConfigMap's worker/vsix pins · minor
 
 Slice 012's expected diff lists image references, the deployment annotation and the namespace's tracking annotation. Its 'Carried in from slice 010' section adds the dropped imagePullPolicy lines and the bot/MCP stamps. A helm template diff on 2026-09-13 found more: HelmCharts charts/kubecoder (dev values) against KubeCoderDeploy 9d6c448 (dev values) also shows the Namespace gaining argocd.argoproj.io/sync-wave "-1" and sync-options Prune=false (D25's manifest). It also shows kubecoder-controller-config's worker and vsix images moving from dev-latest to the pin, with the controller's checksum/config following. The runbook table in docs/runbooks/argocd.md lists all of these. Slice 012's own text does not.
@@ -241,7 +230,22 @@ consult 1, 2026-09-13 — Not owed by this slice. Ruling D3 limits R14's accepta
 **Consequence:** After slice 012's cutover the five pinned containers still pull Always on every pod start, and slice 012's D145 update would record a partial retirement that is not live.
 
 **Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F5)
-**Disposition:** Help me out. Is this being tracked somewhere? Because we do need to change this for all deployments we migrate later on. You're right, it the imagePullPolicy does have to be fixed.
+**Disposition:** Help me out. Is this being tracked somewhere? Because we do need to change this for all deployments we migrate later on. You're right, it the imagePullPolicy does have to be fixed. — investigated 2026-09-20 at the operator's prompt to look for other occurrences. Probed in prd's development namespace: neither client-side apply, nor server-side apply with force-conflicts, nor stripping helm's managedFields entry removes an inherited field; only the manager declaring it and then dropping it does. It is a one-time adoption artifact — Argo's first apply writes last-applied-configuration, after which removals work normally. The whole residue was enumerated for both stages (52 fields on dev, 55 on prd): imagePullPolicy x5, the bot/MCP deployment annotation x2, and Helm's own labels and annotations on every adopted object; no object stranded. Operator in chat, 2026-09-20: "That sounds fine. To make sure that this is tracked somewhere for our migration guide. That rules S11 I believe." — tracked in three places: the argocd runbook gained "What a cutover does not change" with the pre-flight procedure; slice 012 gained "Carried in from slice 010's close-out (S11)" with the chart fix, the pre-flight and D145's ordering; the evidence and the detector script are in AnsibleSpecs handovers/argo-adoption-blind-spot/. Carded as ANS-81 (land the pre-flight as a supported tool in ArgoCDTools) and ANS-82 (adopt-in-place vs recreate as the estate default). A fourth reason was added to HC-12: the Helm stamps outlive the migration, so ownership must come from the registry rather than the objects.
+
+### ~~S4 — KubeCoderDeploy commits a copy of the homelab root CA (chart/files/ca/homelab-root.crt) that a root rotation has to update by hand · minor~~ — closed by the operator, 2026-09-20 — the copy is tracked in the step-ca root-rotation runbook
+
+<details><summary>struck — body kept for the record</summary>
+
+In HelmCharts the chart's CA file is a symlink to the repo's canonical homelab-root.crt. Argo's repo-server refuses a symlink that leaves the repository, so KubeCoderDeploy carries a real copy, as ArgoCDDeploy already does (chart/files/homelab-root.crt). Nothing ties either copy to the canonical file; the CA ConfigMap's comment is the only pointer.
+
+doc-writer, doc phase r1, 2026-09-13 — docs/runbooks/step-ca-root-rotation.md now lists KubeCoderDeploy's copy in the root inventory and in the md5sum check, and all three chart copies matched the canonical file on 2026-09-13. Nothing binds the copy to the canonical file mechanically; that part of the suggestion stands.
+
+**Consequence:** After a root CA rotation, KubeCoder's controller still hands step the old root from kubecoder-controller-ca until someone updates KubeCoderDeploy's copy, so SSH host-key signing for env pods fails.
+
+**Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
+**Disposition:** Aren't we tracking this somewhere? The list of certificate copies? — answered in chat, 2026-09-20: yes. /work/Ansible/docs/runbooks/step-ca-root-rotation.md carries a row for /work/KubeCoderDeploy/chart/files/ca/homelab-root.crt in the root-copy inventory and in the md5sum check; all seven copies matched on 2026-09-13. Only the mechanical binding to the canonical file is absent, which is what the suggestion proposed. Operator in chat, 2026-09-20: "S4: Close." — closed.
+
+</details>
 
 ### ~~S5 — KubeCoderDeploy chart/values.yaml pin comment says worker/vsix take the default pull policy; the controller still pulls them Always · minor~~ — resolved by consult 1 (KubeCoderDeploy 021cc1b): chart/values.yaml:8-10 now says env pods still pull worker/vsix Always; comment only, line numbering kept; kc project lint and test re-run green; struck by consult 1
 

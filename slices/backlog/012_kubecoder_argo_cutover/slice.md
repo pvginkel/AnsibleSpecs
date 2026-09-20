@@ -95,7 +95,7 @@ Verbatim from `phases.md`:
    `app.kubernetes.io/instance`, so tracking is not normalised away. Its "image references" are
    digest changes: the live images are HelmCharts' deploy-time digests, against the five pins and
    tunnel-reclaim's `:latest`. Listed but never shown: the `imagePullPolicy: Always` and bot/MCP
-   annotation removals (slice 010 close-out S11). Since *anything else stops the cutover*, review
+   annotation removals — see the S11 section below. Since *anything else stops the cutover*, review
    against the runbook table — re-derived if requirement 5's re-sync moved the chart.
 
 9. > Sync once, manually, at the chosen moment. Verify Synced/Healthy, controller
@@ -286,7 +286,7 @@ fine." — "It doesn't hurt anything I think. You're good to go.").
   the live Deployments carry no `kubectl.kubernetes.io/last-applied-configuration` (Helm 4 applies
   server-side and writes none), and without it Argo's three-way merge degrades to a two-way one
   that can never delete a field. See requirement 8's note for the set that does appear, and the
-  slice 010's close-out S11 for the mechanism this slice still has to choose.
+  "Carried in from slice 010's close-out (S11)" below for the mechanism the operator ruled on.
 - **Before KubeCoder's first dev sync, the operator syncs Argo itself** — slice 010 gives the
   hook a webhook-secret environment value in ArgoCDDeploy, which KubeCoderDeploy's webhook
   Terraform reads. The dev stage owns the webhook; the `prd` branch is born at prd's cutover.
@@ -303,6 +303,42 @@ fine." — "It doesn't hurt anything I think. You're good to go.").
   slice 014, "Carried in from the 2026-09-20 design session".
 - **Requirement 13 no longer strands the mapping.** `charts/kubecoder/architecture.yaml` moves to
   KubeCoderDeploy under slice 014; deleting `charts/kubecoder/` afterwards loses nothing.
+
+## Carried in from slice 010's close-out (S11) — the operator's ruling, 2026-09-20
+
+**Argo's first sync removes nothing the old chart set. The chart must declare what has to
+change.** Requirement 8's `imagePullPolicy: Always` drop does not go live at the cutover: the
+live Deployments carry no `kubectl.kubernetes.io/last-applied-configuration` (Helm 4.3 applies
+server-side and writes none), so Argo's three-way merge degrades to a two-way one that can never
+delete a field. Server-side apply does not rescue it either — the field is owned by the manager
+`helm`, and SSA deletes a field only when the manager that owns it stops declaring it. Proven by
+probe on 2026-09-20; mechanism and evidence in
+[`handovers/argo-adoption-blind-spot/findings-2026-09-20.md`](../../../handovers/argo-adoption-blind-spot/findings-2026-09-20.md).
+
+This slice therefore owns:
+
+1. **Declare `imagePullPolicy` explicitly** on the five pinned containers in KubeCoderDeploy's
+   chart — `IfNotPresent`, which is what the pinned tags default to anyway. Declaring it makes
+   Argo own it, which works under either apply mode and is what makes it changeable afterwards.
+2. **Run the pre-flight before requirement 8's diff review**, per the argocd runbook's "What a
+   cutover does not change", after requirement 5's chart re-sync — the inventory below is the
+   render as at 2026-09-20 and the re-sync can move it.
+3. **Write D145's update from what is then live**, not from what the chart dropped.
+
+The full residue on both stages as at 2026-09-20, beyond the image and tracking-annotation
+changes the runbook table already lists:
+
+- `imagePullPolicy` on the five pinned containers (item 1 above).
+- `spec.template.metadata.annotations` on `kubecoder-bot` and `kubecoder-mcp` — the stale
+  deployment timestamp. Static, rolls nothing: leave it, or patch it out once at cutover.
+- `metadata.labels` and `metadata.annotations` on every adopted object (22 and 23 of them): the
+  chart renders neither, so `app.kubernetes.io/managed-by: Helm` and `meta.helm.sh/release-name`
+  survive the migration. Inert, but anything keyed on them keeps reading KubeCoder as
+  Helm-managed — including HelmCharts' `audit-prd-orphans`. Declaring the labels in the chart
+  would take ownership; not required by this slice.
+
+Nothing else: no object is stranded, and the eight ESO-materialised Secrets the check flags are
+its own output, produced by `ExternalSecret`s the render carries.
 
 ## Subsumes
 
