@@ -222,8 +222,9 @@ credential-handling precedent (G2).
 Target: ../KubeCoderDeploy
 
 The seven Build-Main image references are named **only** in `config/{dev,prd}/values.yaml` — dev
-naming build 511's bare tag, prd naming `prd-511` — and `chart/values.yaml` carries no tag for
-them at all, not even a default (D47, `argo-cd/decisions.md:493-496`; §14.2 of
+naming a bare `<n>`, prd naming `prd-<n>`, both on one build number the phase picks when it runs
+(Ruling 4) — and `chart/values.yaml` carries no tag for them at all, not even a default (D47,
+`argo-cd/decisions.md:493-496`; §14.2 of
 `/work/DockerImages/docs/registry-management/version-poller-redesign.md`). G3 has the seven keys
 and their two shapes: the five `images.*` keys are tag suffixes the Deployment templates
 concatenate onto a repository (`chart/templates/controller-deployment.yaml:46,173,194`,
@@ -232,10 +233,16 @@ references that `chart/templates/controller-config.yaml:12` dumps verbatim into 
 ConfigMap. Whether a stage file carries a bare tag or a whole reference follows from what the
 template needs — D45's dict is `{YAML path → tag}`, and P2 writes whatever the caller hands it.
 
-A stage that names no tag for one of the seven **fails the render, naming the key**. That is the
-point of removing the default rather than blanking it: today's concatenation renders an untagged
-reference — `:latest` by another route — which is the hazard the D37 amendment strengthens against
-(`argo-cd/decisions.md:396-398`). Prove it in the gate.
+A stage that names no tag for one of the seven **fails the render, naming the key**, and that
+failure belongs in the chart, not only in the gate (Ruling 6). Removing the default does not
+produce it on its own: an absent key renders an untagged reference and helm exits 0 — `:latest` by
+another route, the hazard the D37 amendment strengthens against (`argo-cd/decisions.md:396-398`) —
+so the chart itself has to demand all seven at render time. The two shapes fail differently and
+have different sites: the five concatenated suffixes have a per-container line each, while the
+`controllerConfig.images.*` pair reaches the ConfigMap through a single `toYaml` dump with no
+per-key site at all (G3), where an absent key drops that key from the controller's config rather
+than rendering an untagged reference. `kc project test` does not run at sync time, which is why
+the chart carries this — the gate then checks the same property from outside.
 
 `tests/render-chart.py` enforces the inverted invariant as the repo's `kc project test` gate
 (green today, all three steps). G3 names its three readers of `chart/values.yaml` and the
@@ -248,10 +255,14 @@ successor. `images.tunnelReclaim` keeps its floating reference and its check (no
 
 Two constraints the repo will not tell the executor:
 
-- **The tags written here are forward references.** The registry holds `dev-511`; neither `511`
-  nor `prd-511` exists, and nothing creates them until slice 012's first cutover build. Nothing
-  consumes this repo yet (G7), so this breaks nothing — it is the shape shipping ahead of its
-  producer, which is what Ruling 1 accepted. Do not "fix" it by keeping the `dev-` prefix.
+- **The build number is chosen when the phase runs, and both tags are forward references.** Pin
+  the newest `dev-<n>` the registry actually holds at that moment — `dev-523` as this is written,
+  and `dev-511`, which the repo names today, has already been evicted (Ruling 4, G12). Neither the
+  bare `<n>` nor the `prd-<n>` of whatever build you pin exists in the registry, and nothing
+  creates them until slice 012's cutover; so neither the chart nor the gate may require either tag
+  to resolve. Nothing consumes this repo yet (G7), so nothing breaks — it is the shape shipping
+  ahead of its producer, which is what Ruling 1 accepted. Do not "fix" it by keeping the `dev-`
+  prefix.
 - **The stage values files are hand-written and densely commented**, and from slice 012 onward a
   machine edits them on every build (P2). Give the image tags one small, clearly-bounded region
   per file rather than scattering them through the hand-written blocks.
@@ -293,24 +304,39 @@ library-loading job that changes nothing is the Ansible architecture pipeline
 (`/work/Ansible/Jenkinsfile.architecture:1-20`: validates a YAML, archives it); the test phase
 confirms its job path and hands the operator the exact re-run.
 
-### P3 — AnsibleSpecs: the argo-cd register describes the shape that shipped
+### P3 — AnsibleSpecs: the register, and slice 012, describe the shape that shipped
 
 Target: ../AnsibleSpecs
 
-`argo-cd/design.md` states where CI writes the tags in two places — the "Deploy repos" bullet
-(`:64-65`, R8's sentence) and the CI-and-promotion worked example (`:500-503`, "write
-`chart/values.yaml`" and "the chart's committed default tag"). Both describe what slice 010
-shipped; both must describe D47. `decisions.md`'s D45 (`:466-471`) names the single-values-file
+Two documents in the spec repo still describe the arrangement this slice replaces.
+
+**The argo-cd register.** `design.md` states where CI writes the tags in three places — the
+"Deploy repos" bullet (`:65`, R8's sentence) and, in the CI-and-promotion worked example, the
+`Build-Main` bullet ("write `chart/values.yaml`", `:500-503`) and its closing line ("the chart's
+committed default tag is always a real `<n>`", `:509`). All three describe what slice 010 shipped;
+all three must describe D47. `decisions.md`'s D45 (`:466-471`) names the single-values-file
 parameter P2 settles otherwise — record the shape as settled at implementation, the way D40 does
 (`:455-456`), not as a reversal: D47 already decided this and D45's mechanism is untouched.
+Decisions D47 has already amended in place, D37 above all, need nothing — the register's amendment
+blocks are how it carries those, and this phase adds no new decision.
 
-Decisions D47 has already amended in place, D37 above all, need nothing — the register's
-amendment blocks are how it carries those, and this phase adds no new decision.
+**Slice 012's `slice.md`** (Ruling 5). Ruling 1 moved `Build-Main`'s rewrite (R2) into slice 012,
+and nothing in that slice says so: it names `Build-Main` nowhere, while its item 14 (`:113-118`)
+already carries R4 under "From B.3, held back deliberately to this point". R2 joins it there, in
+the same voice and quoted as B.3 states it, and brings the grounding this slice established that
+slice 012 will plan against — G5, G6, G8, G10 and G12, which between them settle R2's "verify
+first", the eighth image, `crane`'s availability, and what the registry holds. Its **Depends on**
+line (`:18`, "011 (CI commits pins)") is made false by Ruling 1 and must instead state what this
+slice hands over: the library method, the stage-file pins and the gate that enforces them, with
+the CI call that uses the method still to be written. A slice document is a specification, not a
+log — no supersession notice, no narration of the move
+(`/work/Ansible/docs/design-philosophy.md`).
 
 ## Not in scope
 
 - `Build-Main`'s rewrite (R2) and `Deploy-PRD`'s replacement and deletion (R4) — moved to slice
-  012 by Ruling 1, with G5, G6, G8 and G10 as their carried grounding.
+  012 by Ruling 1; P3 writes R2 and the carried grounding (G5, G6, G8, G10, G12) into that slice's
+  `slice.md`, where R4 already sits.
 - `/work/HelmCharts` in its entirety — G4 removes the only reason the slice named it.
 - `/work/HelmCharts/tools/deploy/deploy_cli/` and the slice-008 S4 blind-spot note — G9.
 - `images.tunnelReclaim` in `KubeCoderDeploy/chart/values.yaml` — a floating DockerImages tag, not
@@ -318,4 +344,5 @@ amendment blocks are how it carries those, and this phase adds no new decision.
 - `kubecoder-claude-shim`'s tag scheme — slice 012's, with the rename (G8).
 - The `registry-cleanup` TTL "keep newest of a family" gap — G11, pre-existing and independent.
 - The `gitToken` PAT travelling as a helm CLI argument for all 45 releases — Ruling 7: `design.md`
-  assigns it to the version-poller migration, and nothing here touches that invocation.
+  assigns it to the version-poller migration, and nothing here touches that invocation. Filed to
+  close-out (S3) so it outlives the slice.

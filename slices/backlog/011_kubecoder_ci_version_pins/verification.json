@@ -3,13 +3,13 @@
     {
       "id": "V01",
       "area": "JenkinsPipelineUtils (R1)",
-      "description": "\"The new JenkinsPipelineUtils method: (deploy repo, values path, {YAML path -> tag}) -> clone, update, commit, push\" exists in the shared library, and writes the whole set of pins it is given in one commit because D47 requires both stage files to move together (argo-cd/decisions.md:465-470 for D45's mechanism, :494-495 for the one-commit constraint).",
+      "description": "\"The new JenkinsPipelineUtils method: (deploy repo, values path, {YAML path -> tag}) -> clone, update, commit, push\" exists in the shared library, and its values-path parameter carries the whole set of files one call must move rather than the single path D45 named: D45's signature predates D47, which requires both stage files to be written in one commit, so a call that can only name chart/values.yaml cannot satisfy it (argo-cd/decisions.md:466-471 for D45's mechanism, :495-496 for the one-commit constraint).",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "AnsibleSpecs/argo-cd/decisions.md:466-471 (D45's mechanism)",
         "AnsibleSpecs/argo-cd/decisions.md:495-496 (D47: both stage files in one commit)",
-        "JenkinsPipelineUtils/vars/ \u2014 7 files, no clone/commit/push precedent to model on"
+        "JenkinsPipelineUtils/vars/ — 7 files, no clone/commit/push precedent to model on"
       ]
     },
     {
@@ -40,41 +40,44 @@
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "JenkinsPipelineUtils/vars/*.groovy \u2014 compiled together on library load",
+        "JenkinsPipelineUtils/vars/*.groovy — compiled together on library load",
         "19 Jenkinsfiles across /work load the library unpinned (`library identifier: 'JenkinsPipelineUtils'`)",
-        "/work/Ansible/Jenkinsfile.architecture:1-20 \u2014 candidate canary: loads the library, validates a YAML, archives it"
+        "/work/Ansible/Jenkinsfile.architecture:1-20 — candidate canary: loads the library, validates a YAML, archives it"
       ]
     },
     {
       "id": "V05",
       "area": "KubeCoderDeploy pins (R6)",
-      "description": "\"Move the seven image pins out of KubeCoderDeploy/chart/values.yaml into config/{dev,prd}/values.yaml \u2014 dev <n>, prd prd-<n> (D47). They sit at dev-511 today.\" \u2014 both stage files name all seven on the same build number, and chart/values.yaml names no tag for any of them.",
+      "description": "\"Move the seven image pins out of KubeCoderDeploy/chart/values.yaml into config/{dev,prd}/values.yaml — dev <n>, prd prd-<n> (D47). They sit at dev-511 today.\" — both stage files name all seven on the same build number and chart/values.yaml names no tag for any of them. The number is the newest dev-<n> the registry actually held when the phase ran, not 511: dev-511 has been evicted and can never be reproduced, so Ruling 4 has the phase choose at run time and both written tags are forward references slice 012's cutover creates.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "KubeCoderDeploy/chart/values.yaml:11,12,13,17,18 (the five tag suffixes at :dev-511)",
         "KubeCoderDeploy/chart/values.yaml:668,671 (worker/vsix, whole references at dev-511)",
-        "KubeCoderDeploy/config/{dev,prd}/values.yaml \u2014 neither names an image today",
-        "AnsibleSpecs/argo-cd/decisions.md:493-496 (D47)"
+        "KubeCoderDeploy/config/{dev,prd}/values.yaml — neither names an image today",
+        "AnsibleSpecs/argo-cd/decisions.md:493-496 (D47)",
+        "http://registry:5000/v2/kubecoder-<name>/tags/list, re-queried 2026-09-20: dev-428..dev-509 then dev-514..dev-523 for all seven; no dev-511, no 511, no prd-511",
+        "/work/DockerImages/registry-cleanup/app/main.py:283-299 (the newest-10 per-prefix cap that evicted it)"
       ]
     },
     {
       "id": "V06",
       "area": "KubeCoderDeploy pins (R5, D37 as amended)",
-      "description": "\"The committed default tag is a real <n>, never latest (D37)\" \u2014 strengthened by D47 to no default at all: a stage whose values file omits one of the seven fails the render with a message naming the key, rather than rendering an untagged reference. Today the templates concatenate the tag onto the repository, so an absent value renders :latest by another route.",
+      "description": "\"The committed default tag is a real <n>, never latest (D37)\" — strengthened by D47 to no default at all and by Ruling 6 to a chart that refuses to render: with a stage values file missing any one of the seven, helm template fails with a message naming the key. Removing the default alone does not do that — an absent concatenated suffix renders an untagged reference and helm exits 0, and an absent controllerConfig.images key drops silently out of the controller's ConfigMap — so the guard is in the chart, where it protects a hand-edited stage file at sync time, with the gate checking the same property from outside.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "KubeCoderDeploy/chart/templates/controller-deployment.yaml:46,173,194",
+        "KubeCoderDeploy/chart/templates/controller-deployment.yaml:46,173,194 (concatenated suffixes)",
         "KubeCoderDeploy/chart/templates/bot-deployment.yaml:26",
         "KubeCoderDeploy/chart/templates/mcp-deployment.yaml:22",
-        "AnsibleSpecs/argo-cd/decisions.md:396-398 (the D37 amendment: never a default at all)"
+        "KubeCoderDeploy/chart/templates/controller-config.yaml:12 ({{ .Values.controllerConfig | toYaml | indent 4 }} — no per-key site)",
+        "AnsibleSpecs/argo-cd/decisions.md:396-398 (the D37 amendment: never a default at all — and its 'fails to render' claim, which Ruling 6 records as untrue of a concatenated tag)"
       ]
     },
     {
       "id": "V07",
       "area": "KubeCoderDeploy gate (R7)",
-      "description": "\"Invert KubeCoderDeploy/tests/render-chart.py's check_stage_values, which fails the gate on any image key in a stage file \u2014 the exact opposite of D47\" \u2014 kc project test is green, and the gate now fails on D47's inverse: an image tag back in chart/values.yaml, a stage file missing one of the seven, a prd tag without its prd- prefix, or the two stage files naming different builds.",
+      "description": "\"Invert KubeCoderDeploy/tests/render-chart.py's check_stage_values, which fails the gate on any image key in a stage file — the exact opposite of D47\" — kc project test is green, and the gate now fails on D47's inverse: an image tag back in chart/values.yaml, a stage file missing one of the seven, a prd tag without its prd- prefix, or the two stage files naming different builds.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -110,12 +113,13 @@
     {
       "id": "V10",
       "area": "Design register (R8)",
-      "description": "\"Fix argo-cd/design.md's 'Deploy repos' line ... correct it as part of the change, not before\" \u2014 design.md describes D47's shape wherever it states where CI writes the tags, and decisions.md's D45 records the parameter shape settled at implementation rather than the single values file it named before D47.",
+      "description": "\"Fix argo-cd/design.md's 'Deploy repos' line ... correct it as part of the change, not before\" — design.md describes D47's shape everywhere it states where CI writes the tags, including the worked example's closing line about the chart's committed default tag, and decisions.md's D45 records the parameter shape settled at implementation rather than the single values file it named before D47.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "AnsibleSpecs/argo-cd/design.md:64-65 (the Deploy repos line R8 names)",
-        "AnsibleSpecs/argo-cd/design.md:500-503 (the worked example, same claim)",
+        "AnsibleSpecs/argo-cd/design.md:65 (the Deploy repos line R8 names)",
+        "AnsibleSpecs/argo-cd/design.md:500-503 (the Build-Main bullet: 'write chart/values.yaml')",
+        "AnsibleSpecs/argo-cd/design.md:509 ('The chart's committed default tag is always a real <n>')",
         "AnsibleSpecs/argo-cd/decisions.md:466-471 (D45's single values-file parameter)",
         "AnsibleSpecs/argo-cd/decisions.md:455-456 (D40, the 'shape settled at implementation' precedent)"
       ]
@@ -123,12 +127,24 @@
     {
       "id": "V11",
       "area": "Blast radius (Ruling 1)",
-      "description": "Nothing live moves: no stage is deployed, redeployed or repointed by this slice, and KubeCoder keeps running from HelmCharts until slice 012's cutover. The method has no caller and the relocated pins no reader \u2014 Ruling 1's accepted consequence, and the reason this slice's verification is static.",
+      "description": "Nothing live moves: no stage is deployed, redeployed or repointed by this slice, and KubeCoder keeps running from HelmCharts until slice 012's cutover. The method has no caller and the relocated pins no reader — Ruling 1's accepted consequence, and the reason this slice's verification is static.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/ArgoCDDeploy \u2014 no manifest mentions kubecoder (grep over *.yaml)",
+        "/work/ArgoCDDeploy — no manifest mentions kubecoder (grep over *.yaml)",
         "/work/HelmCharts/configs/prd/kubecoder/{dev,prd}/values.yaml still deploy KubeCoder"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "Slice 012 handoff (Ruling 5)",
+      "description": "Slice 012's slice.md carries the work Ruling 1 sent it: R2 — Build-Main's rewrite — stated as B.3 states it, beside the R4 entry already there, with this slice's grounding behind it (G5, G6, G8, G10, G12); and its 'Depends on' line names what slice 011 actually delivers instead of \"011 (CI commits pins)\", which Ruling 1 made false.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:18 (the dependency line Ruling 1 falsifies)",
+        "AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:113-118 (item 14, 'From B.3, held back deliberately to this point' — the R4 entry R2 joins)",
+        "grep over that slice.md's 346 lines, 2026-09-20: 'Build-Main' appears nowhere; 'Deploy-PRD' only at :116 and :184"
       ]
     }
   ]

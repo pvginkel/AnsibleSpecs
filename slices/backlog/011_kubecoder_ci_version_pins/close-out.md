@@ -100,3 +100,25 @@ P1 leaves `config/dev/values.yaml` naming build 511's bare tag and `config/prd/v
 
 **Provenance:** read — plan-writer, plan pass r1; KubeCoderDeploy/chart/values.yaml:11-18,668,671, plan.md G7 and Ruling 1
 **Disposition:**
+
+### S3 — HelmCharts: the gitToken PAT rides the helm command line for all 45 releases, and only version-poller consumes it · minor
+
+`argo-cd/design.md` records it, and slice 011's `slice.md` carried it into planning "so it isn't
+lost", asking the planner to decide deliberately because `version-poller` is one of requirement
+3's tag-prefix readers:
+
+> **`gitToken` travels as a helm CLI argument for all 45 releases**; only `version-poller`
+> consumes it. It must become an ESO leaf when version-poller migrates — Argo has no such
+> argument to inject — and a PAT on a command line lands in process tables and echoed commands
+> regardless.
+
+**The decision (Ruling 7, operator, 2026-09-20): out of scope for slice 011.** `design.md`
+assigns the fix to the version-poller migration, and nothing in slice 011 touches the helm
+invocation that carries the argument — the slice moves image tags between values files in
+KubeCoderDeploy and adds a library method. Recorded here so the item survives the slice rather
+than closing with it.
+
+**Consequence:** A GitHub PAT is visible in process tables and echoed commands on every one of 45 release deploys, to serve the one release that needs it; nothing changes until version-poller migrates and the token becomes an ESO leaf.
+
+**Provenance:** read, plan-writer r2 (review fix pass) — Ruling 7 in plan.md; carried in slice.md's source material from argo-cd/design.md
+**Disposition:**
