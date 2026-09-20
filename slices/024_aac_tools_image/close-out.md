@@ -180,6 +180,15 @@ decisions.md:167 — the bullet immediately after the CA-root inventory P6 rewro
 **Provenance:** witnessed, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F2
 **Disposition:**
 
+### B14 — AnsibleSpecs: V04 asks the register to state a first-party tag norm the estate does not have · minor
+
+verification.json V04 requires decisions.md to state the pin rule as 'third-party scanner and validator images pinned by digest, first-party images we build following the estate's floating-tag norm', mirroring the ruling at plan.md:67-68 and the P6 brief at plan.md:613-616. P6 round 1 proved that norm does not exist — matrix-built images publish neither :<build> nor :latest, and webhook-relay, argocd-hook and four matrix toolchain entries are consumed pinned — so the phase deliberately landed a line that states no first-party tag norm at all, and says so in its done-record (plan.md:629-630). The deviation is the right call; what is missing is a ruling on V04, whose own words the test phase checks the register against.
+
+**Consequence:** At acceptance the test agent has to decide unaided how much of V04's wording is load-bearing: read literally, V04 fails against a register line that is more truthful than V04 is, and read loosely it passes with no record of why the second clause went unmet.
+
+**Provenance:** read, code-reviewer, P6 round 2, phases/P6/code_review_r2.md F2
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
