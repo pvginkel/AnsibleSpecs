@@ -4,153 +4,232 @@
       "id": "V01",
       "area": "R1 — the tools ship as a container",
       "description": "One image carries several commands: both the deploy-repo architecture generator and `arch-validate` are invocable in `aac-tools`, and neither needs a script copied into a consuming repo.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Both commands are installed on PATH in the image and each is run by the build itself; no script is copied into a consuming repo. Live, from source in the iac sidecar, gen-architecture ran in a throwaway clone that carries no copy of arch-validate, and arch-validate then accepted its output.",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/Dockerfile:62-63,68-69 — COPY image/arch-validate.py and image/gen_architecture.py to /usr/local/bin/{arch-validate,gen-architecture}, chmod 0755",
+        "/work/ArgoCDTools/aac-tools/Dockerfile:86-87 — the closing RUN executes `arch-validate --help` and `gen-architecture --help`; kaniko build GREEN in sweeps/r2/ArgoCDTools_aac-tools_build.log, so both ran in the built image",
+        "ran (iac, from source, throwaway clone of /work/KubeCoderDeploy + fixture): gen-architecture --stage prd --producer kubecoder-deploy -> 'wrote docs/architecture/kubecoder-deploy.yaml — 9 elements, 16 relations', exit 0; arch-validate.py on that file -> '✓ ...', --json {\"valid\":true,\"schemaVersion\":\"0.1\"}, exit 0"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — built in ArgoCDTools",
       "description": "The image is built in ArgoCDTools, from its own folder, by that repo's Jenkinsfile on a push to `main` — beside `argocd-hook`, not in place of it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/ArgoCDTools/Jenkinsfile (today: one build stage, argocd-hook only)"]
+      "verdict": "pass",
+      "rationale": "The Jenkinsfile has one stage per image folder, each wrapping helmCharts.kaniko2 in dir('<folder>'), triggered by githubPush() on main — aac-tools beside argocd-hook. kaniko2 passes a relative --context, so dir() scopes the context exactly as in DockerImages' existing multi-image Jenkinsfile. The job's SCM is pvginkel/ArgoCDTools */main with the Jenkinsfile still at the repo root, so the layout move does not disturb it. The first real Jenkins build of both stages happens only on the operator's push (held).",
+      "evidence": [
+        "/work/ArgoCDTools/Jenkinsfile:13 githubPush(); :19 git branch 'main'; :24-39 stage 'Build argocd-hook image' dir('argocd-hook'); :41-56 stage 'Build aac-tools image' dir('aac-tools')",
+        "/work/JenkinsPipelineUtils/vars/helmCharts.groovy:96-105 — kaniko2 builds `--dockerfile=\"Dockerfile\" --context=\".\"` relative to the step's working directory; /work/DockerImages/Jenkinsfile:97 wraps the same call in dir(image)",
+        "Jenkins IaC/ArgoCDTools: SCM https://github.com/pvginkel/ArgoCDTools.git */main; last build #5 SUCCESS (pre-slice layout)",
+        "kaniko builds of both folders GREEN in sweeps/r2/ArgoCDTools_argocd-hook_build.log and ArgoCDTools_aac-tools_build.log"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — the name",
       "description": "Image and toolchain are both named `aac-tools`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The name is aac-tools at every place it appears: the image, the Jenkinsfile destinations, the kc project component, and the KubeCoder catalog key. No other name for the image exists in either repo's diff.",
+      "evidence": [
+        "/work/ArgoCDTools/Jenkinsfile:47-48 registry:5000/aac-tools:{build,latest}",
+        "/work/ArgoCDTools/.kubecoder/project.yaml:28,37 — component `aac-tools`, build destination registry:5000/aac-tools:local",
+        "/work/HelmCharts/charts/kubecoder/values.yaml:581 catalog key `aac-tools`; :609 image registry:5000/aac-tools:latest",
+        "kc project list in /work/ArgoCDTools: root, argocd-hook, aac-tools"
+      ]
     },
     {
       "id": "V04",
       "area": "R4 — floating tag, and the register narrowed",
       "description": "Every reference to the image uses a floating tag, and `decisions.md` states the pin rule narrowed by provenance — third-party scanner and validator images pinned by digest, images we build ourselves not pinned that way with the choice left to the consuming site — in terms that name no deploy implementation, so the Argo CD cutover leaves the line standing. Rewritten in place, with no note left elsewhere.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/AnsibleSpecs/decisions.md:599 — 'Scanner and validator images are pinned by digest.', the section's closing sentence, no duplicate in the estate"]
+      "verdict": "pass",
+      "rationale": "Every reference to the image floats: the catalog entry consumes :latest, and the Jenkinsfile publishes :<build> and :latest (a publication, not a reference; :local is a --no-push build tag). No @sha256 or pinned-tag reference to aac-tools exists anywhere under /work. decisions.md:599 now states the rule by provenance and at the reference site, names no deploy implementation, and is the only statement of it: third-party scanner/validator images pinned by digest for the stated reason; images we build ourselves not digest-pinned, the floating-or-pinned choice left to the consuming site.",
+      "evidence": [
+        "/work/AnsibleSpecs/decisions.md:599 — 'Image pins follow provenance.' (the old one-line 'Scanner and validator images are pinned by digest.' is gone; git diff origin/main..HEAD shows an in-place rewrite)",
+        "grep across /work/{ArgoCDTools,HelmCharts/charts,Ansible,DockerImages,JenkinsPipelineUtils,KubeCoderDeploy,ArgoCDDeploy} for aac-tools image references: only registry:5000/aac-tools:latest (values.yaml:609) and the Jenkinsfile destinations; none digest-pinned",
+        "grep 'pinned by digest|digest-pinned' over AnsibleSpecs (outside this slice) and Ansible/docs: the only live statement is decisions.md:599; other hits are completed slice records (history, per close-out B15's scope)"
+      ]
     },
     {
       "id": "V05",
       "area": "R5 — one folder per image",
       "description": "ArgoCDTools is laid out one folder per image: `argocd-hook/` holds its Dockerfile, `presync/`, `image/` and `tests/`, the new image has a sibling folder, each is its own kaniko context, and no Dockerfile is left in the repo root.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/ArgoCDTools/Dockerfile:66,74 — the two files the build reads out of image/", "/work/JenkinsPipelineUtils/vars/helmCharts.groovy:83-90 — kaniko2 takes dockerfile and context"]
+      "verdict": "pass",
+      "rationale": "The repo root holds no Dockerfile; argocd-hook/ carries Dockerfile, .dockerignore, presync/, image/ and tests/; aac-tools/ is the sibling with its own; each folder builds as its own kaniko context. The argocd-hook files moved as pure renames.",
+      "evidence": [
+        "find /work/ArgoCDTools -name 'Dockerfile*' (excluding .git) -> argocd-hook/Dockerfile, aac-tools/Dockerfile only; ls of the old root paths image/, presync/, tests/, Dockerfile -> all absent",
+        "git diff --stat -M d1849c9..HEAD: argocd-hook/{Dockerfile,presync/*,image/terraform.rc,tests/*} are 0-line renames; homelab-root.crt is the one file copied in (image/ -> both folders)",
+        "aac-tools/.dockerignore and argocd-hook/.dockerignore each keep the context to what its Dockerfile reads",
+        "kaniko --context . GREEN per folder in sweeps/r2 (argocd-hook_build, aac-tools_build)"
+      ]
     },
     {
       "id": "V06",
       "area": "R6 — the tools run locally, from the same image",
       "description": "`cexec aac-tools gen-architecture …` and `cexec aac-tools arch-validate …` are what an environment runs in a repo's checkout, and this slice earns that by construction: the image meets KubeCoder's toolchain contract (bash present, no dependence on its own entrypoint, a resolvable passwd identity) and an `aac-tools` entry exists in the catalog HelmCharts authors. Selecting it in a live environment waits on the operator's deploy — V19.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648", "/work/HelmCharts/charts/kubecoder/values.yaml:343 — controllerConfig.toolchains; :427 the iac entry's shape"]
+      "verdict": "pass",
+      "rationale": "Earned by construction, as the criterion words it. The image meets KubeCoder's toolchain contract: bash present and asserted in the build, no ENTRYPOINT or CMD, and `USER ubuntu` with the build asserting a passwd entry for the running uid. The catalog entry sits under controllerConfig.toolchains (not controller:), carries no command/args, has a 1Gi memory limit, floats, and matches the shape of the eleven entries beside it. Selecting it in a live environment is V19.",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/Dockerfile:74 USER ubuntu; :80-81 `getent passwd \"$(id -u)\"` and `bash --version` in the closing RUN; grep '^ENTRYPOINT|^CMD' -> none",
+        "/work/HelmCharts/charts/kubecoder/values.yaml:581-612 — parsed with yaml in the iac sidecar: controllerConfig.toolchains keys include aac-tools; entry keys container/description/instructions; container = {image registry:5000/aac-tools:latest, imagePullPolicy Always, resources.limits.memory 1Gi}; no command/args; `controller.toolchains` does not exist (the wrong-parent trap G5 names)",
+        "/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648 (the contract: raw container spec, memory limit, no command/args, bash, passwd identity)"
+      ]
     },
     {
       "id": "V07",
       "area": "R7 — exactly one stage, named on the command line",
       "description": "`--stage` is required and single-valued — no default, no 'all stages' — the generator never inspects the branch, and it holds no rule of its own about which stages a repo may publish.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "--stage is argparse required=True with no default, no choices and no nargs, so it takes exactly one value; the generator reads no branch (the only git calls are `remote get-url origin` and `rev-parse HEAD`, a commit sha) and holds no list of publishable stages — the one stage literal is release_label's naming rule, copied verbatim from HelmCharts. Live: absent --stage exits 2; --stage prd and --stage dev both run.",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:673-696 parse_args; grep -n -i branch -> comments only (:17, :680); grep for stage literals -> :309-316 release_label only",
+        "ran (iac): `gen_architecture.py --producer x` -> 'error: the following arguments are required: --stage', exit 2; --stage prd -> 9 elements/16 relations; --stage dev -> 7 elements/14 relations, exit 0",
+        "/work/ArgoCDTools/aac-tools/tests/test_deploy_repo.py:87-112 CommandLineTests (required, no default, single value)"
+      ]
     },
     {
       "id": "V08",
       "area": "R8 — UUIDs kept across the handover",
       "description": "A moved element keeps its id and only its owner changes: the ported generator reuses the same uuid5 namespace constant and the same natural keys as HelmCharts' generator, so inbound edges from other producers never dangle.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/HelmCharts/tools/chart_tools/gen_architecture.py:104-105 — the NS constant", ":669-673 — the container natural key is namespace/workload/container, with no release or chart name in it"]
+      "verdict": "pass",
+      "rationale": "The namespace constant is AST-identical to HelmCharts' (same URL, helm-charts-shaped, with a comment at the port saying why), and the natural-key formulas — container ns.workload.container, composite() — are line-for-line the same. The real-case equality in V09 is the end-to-end proof.",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:121 NS = uuid5(NAMESPACE_URL, '.../producers/helm-charts'); :190 elt_uuid; :195 composite",
+        "AST comparison of /work/HelmCharts/tools/chart_tools/gen_architecture.py against the port: NS, CEPH_DRIVERS, CNPG_KINDS, CROSS_PRODUCER_HOST_HINTS, MICROK8S_PRD, DATASET_URL identical; main()'s nkey/hint/composite lines identical",
+        "V09's live id-for-id equality"
+      ]
     },
     {
       "id": "V09",
       "area": "R8 — the equality proof on the real case",
       "description": "Running the ported generator against the real `/work/KubeCoderDeploy` checkout for `--stage prd` yields the KubeCoder prd subset of what `helm-charts` publishes today: the same element ids and the same relation ids, with the producer field differing. The differences the check tolerates are only those named in attachments/handover-equality.md.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["published dataset read 2026-09-20: 9 helm-charts prd elements for KubeCoder, 20 relations touching them, 16 of which are the prd stage's own", "/work/HelmCharts/tools/chart_tools/gen_architecture.py:487-511 — resolve_svc_target narrows by workload name, never by namespace, which is why 4 of the 20 cross the stage boundary"]
+      "verdict": "pass",
+      "rationale": "Run live in this test phase, from source in the iac sidecar per G12: the generator over a throwaway clone of the real /work/KubeCoderDeploy (ede0394) at --stage prd reproduces the published helm-charts KubeCoder prd subset id for id — 9 elements, 16 relations — with producer, logo and stats.image the only fields that differ and the four cross-stage relations named as excluded, exactly as attachments/handover-equality.md predicts. The refetched target is unmoved from that page's counts. /work/KubeCoderDeploy stays clean (no architecture.yaml, no docs/).",
+      "evidence": [
+        "ran: cd /work/ArgoCDTools && cexec iac python3 aac-tools/checks/handover_equality.py -> exit 0: 'published helm-charts: 9 elements, 16 relations / generated kubecoder-deploy: 9 elements, 16 relations / equal — every id matches; producer, logo and stats.image are all that differ'; 4 'excluded (crosses the stage boundary)' lines",
+        "git -C /work/KubeCoderDeploy status --short -> empty; HEAD ede0394 (the grounding sha)",
+        "/work/AnsibleSpecs/slices/024_aac_tools_image/attachments/handover-equality.md — target definition and shelf-life note"
+      ]
     },
     {
       "id": "V10",
       "area": "Ruling — the generator is ported whole",
       "description": "All five post-render passes, the CNPG substrate and the Ceph classification are present in the ported generator, even though KubeCoder exercises none of the last three; only the HelmCharts-layout couplings were stripped.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/HelmCharts/tools/chart_tools/gen_architecture.py:769-773 — reconcile_exposed_services, resolve_boundby, resolve_upstreams, resolve_secret_stores, resolve_mcp_clients", ":807 emit_cnpg_substrate", ":128-131 CEPH_DRIVERS"]
+      "verdict": "pass",
+      "rationale": "All five post-render passes are called from main(), emit_cnpg_substrate is called, and CEPH_DRIVERS with the PVC classification is present. An AST comparison finds 36 of the 39 shared functions identical; the three that differ change only a HelmCharts coupling (load_dataset's ROOT -> repo) or lint style (resolve_upstreams' extracted variable, `raise ... from e`); main() differs by design. The two functions only HelmCharts has are first_commit_date and releases — couplings. Two changes beyond the eight couplings are recorded settlements of P3, both needed for V09: the cluster storage services are referenced by derived id rather than minted (technologyServices is not in the envelope), and Argo lifecycle-hook resources are dropped from the render. The classification itself is kept.",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:978-982 reconcile_exposed_services, resolve_boundby, resolve_upstreams, resolve_secret_stores, resolve_mcp_clients; :924 emit_cnpg_substrate; :145 CEPH_DRIVERS; :160 CNPG_KINDS; :269 CEPH_SERVICE_IDS",
+        "AST diff of /work/HelmCharts/tools/chart_tools/gen_architecture.py vs the port: only in HelmCharts {first_commit_date, releases}; only in port {annotations, build_dependencies, chart_metadata, dependency_urls, hook_parameters, is_hook, parse_args, release_label, render, template_args}; differing shared defs {load_dataset, main, resolve_upstreams}",
+        "plan.md P3 done-record 'Three settlements beyond the plan's text'"
+      ]
     },
     {
       "id": "V11",
       "area": "R9 — HelmCharts does not move onto the image",
       "description": "HelmCharts' own `gen_architecture.py` and its tests are untouched by this slice; the only change in that repo is the toolchain declaration.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "HelmCharts' change since the slice's base (c6c6357) is one file, charts/kubecoder/values.yaml, 32 added lines, all of them the aac-tools toolchain entry. Nothing under tools/ or tests/, and charts/kubecoder/architecture.yaml is untouched.",
+      "evidence": [
+        "git -C /work/HelmCharts diff --stat c6c6357..HEAD -> 1 file changed, 32 insertions(+); git diff c6c6357..HEAD -- tools tests | wc -l -> 0"
+      ]
     },
     {
       "id": "V12",
       "area": "Generated-producer contract",
       "description": "The generator is deterministic — regenerating twice over an unchanged checkout produces a byte-identical artifact — and everything it cannot map is printed as its own `gap: <what>` console line with the run staying green.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/Architecture/.claude/architecture/producer-manual.md:522-529, :543-549"]
+      "verdict": "pass",
+      "rationale": "Determinism: two consecutive runs over an unchanged checkout wrote byte-identical artifacts (7962 bytes). The gap contract: the real gap prints as its own `gap: <what>` line on stderr and the run exits 0. One residual class stays outside the form, recorded as close-out B6 (nit): a cross-producer ref no producer resolves is printed as `deferred (cross-producer, unresolved): <ref>` — verbatim from HelmCharts under the port-whole ruling — and reaches the artifact bare, where validation rejects it, so it is loud rather than silent. Judged against the bar there, not here.",
+      "evidence": [
+        "ran (iac): generator --stage prd twice over one clone; cmp a.yaml b.yaml -> BYTE-IDENTICAL (7962 bytes); console: 'gap: kubecoder: image 'kube-coder-tunnel-reclaim' (in kubecoder-controller/tunnel-reclaim)' on its own line, exit 0",
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py — the `gap:` writes at the end of main(); the `deferred (cross-producer, unresolved)` line beside it",
+        "/work/Architecture/.claude/architecture/producer-manual.md:522-529, :543-549",
+        "close-out B6"
+      ]
     },
     {
       "id": "V13",
       "area": "arch-validate",
       "description": "The `arch-validate` the image ships is the canonical script byte for byte, not a fork.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/Architecture/.claude/architecture/arch-validate.py — md5 9e7e3f8c853efcce868fbe9d7ddedb3b, matching the copies in /work/{Ansible,HelmCharts,DockerImages}/scripts/"]
+      "verdict": "pass",
+      "rationale": "The shipped validator's md5 is the canonical script's and the three estate copies'; a test pins it and ruff.toml excludes the file from the formatter.",
+      "evidence": [
+        "md5sum: /work/ArgoCDTools/aac-tools/image/arch-validate.py = /work/Architecture/.claude/architecture/arch-validate.py = /work/{Ansible,HelmCharts,DockerImages}/scripts/arch-validate.py = 9e7e3f8c853efcce868fbe9d7ddedb3b",
+        "/work/ArgoCDTools/aac-tools/tests/test_image.py:20,62-64 CANONICAL_ARCH_VALIDATE_MD5 pinned; /work/ArgoCDTools/ruff.toml:8 exclude"
+      ]
     },
     {
       "id": "V14",
       "area": "The image's contents",
       "description": "The image carries what the two commands need at run time and nothing beyond it, including the homelab CA root that no default trust store carries — asserted where a build can prove it: the build fails if a declared tool is missing or the root did not reach the trust store, and the source-level assertions hold over what the image bakes. Live reachability from a running container is V19's, not this item's.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["charts.home serves a leaf issued by 'O=homelab-ca, CN=homelab-ca Intermediate CA'; architecture.webathome.org serves a Let's Encrypt leaf (checked 2026-09-20)", "/work/Ansible/support/iac-image/Dockerfile:74 — the same root, same reason", "/work/ArgoCDTools/Dockerfile:66-68 — the CA root and update-ca-certificates; :88-93 — the build-time check of the image's own contents"]
+      "verdict": "pass",
+      "rationale": "The image installs ca-certificates, curl (kept from fetching the helm installer), git, python3, python3-yaml, helm and the homelab root — no Terraform, none of HelmCharts' deploy tooling. The build itself asserts the promise: the closing RUN checks the passwd entry, bash, git, helm, python >= 3.12, `import yaml`, both commands, and `openssl verify` of the homelab root against the system bundle, and the kaniko build ran green, so a missing tool or an uninstalled root fails the build. test_image.py asserts the baked sources import only stdlib plus yaml, the validator's md5, and that the two images' CA roots are one file. Live reachability from a running container is V19.",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/Dockerfile:30-38 apt set; :48-50 CA root + update-ca-certificates; :55-59 helm; :80-90 closing RUN",
+        "sweeps/r2/ArgoCDTools_aac-tools_build.log GREEN (kaniko executes the RUN chain); plan.md P2 done-record records the clause outputs (git 2.43.0, helm v4.3.0, homelab-root.crt: OK)",
+        "/work/ArgoCDTools/aac-tools/tests/test_image.py:26-56,68-75; sweeps/r2/ArgoCDTools_aac-tools_test.log GREEN",
+        "md5sum of aac-tools/image/homelab-root.crt = argocd-hook/image/homelab-root.crt = the canonical bundle (aa4e1a5c…)"
+      ]
     },
     {
       "id": "V15",
       "area": "Coverage preservation",
       "description": "No coverage is lost across the folder move and the port: the `argocd-hook` gate passes unchanged in substance, and every test that covered a behaviour of HelmCharts' generator has a named successor covering it in the ported one.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/HelmCharts/tests/test_gen_architecture.py — 11 tests", "/work/ArgoCDTools/tests/test_image.py — the static image-contract pattern"]
+      "verdict": "pass",
+      "rationale": "The argocd-hook gate is a pure move: all ten test files are 0-line renames and the gate is green from the new folder. Every one of HelmCharts' 11 test functions and all 14 parametrized cases has a same-named successor in the port (the pytest.param cases became subTest loops of the same cases). The port adds tests for the new layer rather than dropping any.",
+      "evidence": [
+        "git diff --stat -M d1849c9..HEAD -- tests argocd-hook/tests: 10 renames, 0 insertions, 0 deletions",
+        "/work/HelmCharts/tests/test_gen_architecture.py — 11 test functions, 14 pytest.param cases -> /work/ArgoCDTools/aac-tools/tests/test_gen_architecture.py: same 11 names in ExposedServiceTests/McpClientTests/UpstreamTests; EXPOSURE_CASES (2) x2 + 5 + 5 subTest cases = 14",
+        "sweeps/r2/ArgoCDTools_argocd-hook_test.log and ArgoCDTools_aac-tools_test.log GREEN"
+      ]
     },
     {
       "id": "V16",
       "area": "The estate's records",
       "description": "The records that inventory the artefacts this slice moved and added are true afterwards: the root-rotation inventory in `decisions.md` and the operator runbooks name the paths that exist, so their one-change-window check is runnable as written.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/AnsibleSpecs/decisions.md:166", "/work/Ansible/docs/runbooks/step-ca-root-rotation.md:71,109,140,154", "/work/Ansible/docs/runbooks/operator-workstation.md:95"]
+      "verdict": "pass",
+      "rationale": "Ran the runbook's own check blocks as written: all ten homelab-root.crt paths return one hash (aa4e1a5c…), the four terraform.rc paths return one (f2af2394…), and `find /work -name homelab-root.crt` returns twelve paths — those ten real files plus HelmCharts' two symlinks — exactly as the runbook says. decisions.md:166 and the runbook name nine copies, five image-baked, consistently; no record still names ArgoCDTools/image, /presync or /Dockerfile. Two wording defects stay in the close-out and neither is a path or count: B17 (the aac-tools row credits the homelab root with reaching architecture.webathome.org, which a public Let's Encrypt leaf serves) and B13 (a pre-existing stale KubeCoder-controller bullet at decisions.md:167).",
+      "evidence": [
+        "ran md5sum over the runbook's ten-path block (docs/runbooks/step-ca-root-rotation.md:146-155) -> one distinct hash, count 10; the terraform.rc block (:163-166) -> one hash, count 4",
+        "ran find /work -name homelab-root.crt (excluding .git) -> 10 regular files + 2 symlinks (HelmCharts charts/jenkins, charts/kubecoder)",
+        "/work/AnsibleSpecs/decisions.md:166 (nine copies, five baked, symlink clause); /work/Ansible/docs/runbooks/step-ca-root-rotation.md:42,64-68,76,94,141,158; docs/runbooks/operator-workstation.md:95",
+        "grep 'ArgoCDTools/(image|presync|Dockerfile)' over the three records -> none"
+      ]
     },
     {
       "id": "V17",
       "area": "The producer contract is on this machine",
       "description": "`pvginkel/Architecture` is declared in this environment's repo set, so the generated-producer contract the image is written against is present by construction rather than by hand.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/Ansible/.kubecoder/config.yaml:6-14 — the repos: list, which does not name it today"]
+      "verdict": "pass",
+      "rationale": "pvginkel/Architecture is the last entry of repos: in this environment's config, and the checkout it names is present with the producer manual the generator is written against. The side effect that a declared repo's setup step fails at pod start is recorded as B16 (major) — the declaration itself is what V17 asks for.",
+      "evidence": [
+        "/work/Ansible/.kubecoder/config.yaml:17-21 — repos: ... `- url: https://github.com/pvginkel/Architecture` with its comment",
+        "/work/Architecture/.claude/architecture/producer-manual.md and arch-validate.py present; git -C /work/Architecture status --short -> clean",
+        "close-out B16"
+      ]
     },
     {
       "id": "V18",
       "area": "Ruling — the repo's curated verbs are part of the folder rework",
       "description": "ArgoCDTools' curated entry points describe the repo this slice leaves behind: each image is a component of its own with its own build and test verb, so `kc project test` at the repo root runs both images' suites and no verb addresses a path the folder move deleted.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/ArgoCDTools/.kubecoder/project.yaml:5,18,21 — today a single `root` component, whose test (`-s tests -t .`) and build (`--context .`) both name paths R5's move deletes", "/work/Ansible/docs/slice-testing-strategy.md:11-13 — `kc project test` across every repo the slice touched is the run loop's first gate", "/work/KubeCoder/manual/docs/reference/project-yaml.md:99-114 — every non-`root` component key is a folder name, and that folder is its working directory"]
+      "verdict": "pass",
+      "rationale": "ArgoCDTools' manifest declares one component per image, each with its own build and test verb, and lint on root; every verb is folder-relative, so none names a path the move deleted. `kc project test` at the root covered both suites in the loop-tail sweep.",
+      "evidence": [
+        "kc project list in /work/ArgoCDTools -> root, argocd-hook, aac-tools; kc project info -> build: argocd-hook, aac-tools / test: argocd-hook, aac-tools / lint: root",
+        "/work/ArgoCDTools/.kubecoder/project.yaml:9-37",
+        "sweeps/r2/ArgoCDTools_{root_lint,argocd-hook_test,argocd-hook_build,aac-tools_test,aac-tools_build}.log all GREEN"
+      ]
     },
     {
       "id": "V19",
       "area": "Owed to the operator — live reachability from a running container",
       "description": "Owed to the operator, and not earnable in this run: once the image is pushed and the toolchain deployed, `aac-tools` reaches the chart repository and the validation endpoint from a running container — `cexec aac-tools gen-architecture --stage prd …` in a deploy-repo checkout, then `cexec aac-tools arch-validate docs/architecture/<producer>.yaml`. The test phase records this item owed with that command, and never marks it verified off a green build.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": ["/work/Ansible/.kubecoder/config.yaml:30 — kaniko only; no docker, podman or nerdctl in this pod, so nothing here runs an image", "/work/Ansible/docs/slice-testing-strategy.md:64,73 — an item the run cannot settle is marked owed to the operator, with the command that settles it"]
+      "verdict": "owed-to-operator",
+      "rationale": "Not earnable here and not marked verified: no docker, podman or nerdctl in this pod, and the toolchain reaches an environment only after the operator's pushes and deploy. Everything short of a running container was exercised from source in the iac sidecar (V09, V12, V01): the generator reached charts.home and the dataset, and arch-validate reached the validation service. What stays owed is the same two calls from inside the built image with the homelab root in its trust store. Order (close-out A1): push ArgoCDTools so IaC/ArgoCDTools publishes registry:5000/aac-tools:latest; push and deploy HelmCharts (rolls the prd controller); restart the environment that selects the toolchain. Then, in that environment: git clone /work/KubeCoderDeploy /work/aac-tools-v19 && cd /work/aac-tools-v19 && git remote set-url origin https://github.com/pvginkel/KubeCoderDeploy && cp /work/ArgoCDTools/aac-tools/checks/kubecoder-architecture.yaml architecture.yaml && cexec aac-tools gen-architecture --stage prd --producer kubecoder-deploy && cexec aac-tools arch-validate docs/architecture/kubecoder-deploy.yaml ; cd /work && rm -rf /work/aac-tools-v19. Expected: 'wrote docs/architecture/kubecoder-deploy.yaml — 9 elements, 16 relations', one `gap: kubecoder: image 'kube-coder-tunnel-reclaim' ...` line, then '✓ docs/architecture/kubecoder-deploy.yaml', both exit 0. The clone lives under /work (not /tmp) so the toolchain sidecar sees it; a real deploy repo needs the annotation layer at its root, which KubeCoderDeploy will only carry after slice 014.",
+      "evidence": [
+        "/work/Ansible/docs/slice-testing-strategy.md:64,73",
+        "/work/Ansible/.kubecoder/config.yaml:30 — kaniko only",
+        "close-out A1 (order) and the new A2 (this command)"
+      ]
     }
   ]
 }

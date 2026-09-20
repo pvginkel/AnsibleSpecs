@@ -32,6 +32,26 @@ The catalog entry this slice adds names `registry:5000/aac-tools:latest`, a tag 
 **Provenance:** witnessed | code-writer, P5, r1 — the entry is at charts/kubecoder/values.yaml:581-612 on phase/024-P5; the publishing stage is ArgoCDTools' Jenkinsfile 'Build aac-tools image'
 **Disposition:**
 
+### A2 — Run the live aac-tools check (V19) from a running container once the image and toolchain are deployed
+
+V19 is the one acceptance item no phase can earn: this pod has no docker, podman or nerdctl, and the toolchain only reaches an environment after the operator's pushes and deploy (A1's order: push ArgoCDTools so `IaC/ArgoCDTools` publishes `registry:5000/aac-tools:latest`; push and deploy HelmCharts, which rolls the prd controller; restart the environment that selects the toolchain).
+
+Then, in that environment:
+
+    git clone /work/KubeCoderDeploy /work/aac-tools-v19 && cd /work/aac-tools-v19 \
+      && git remote set-url origin https://github.com/pvginkel/KubeCoderDeploy \
+      && cp /work/ArgoCDTools/aac-tools/checks/kubecoder-architecture.yaml architecture.yaml \
+      && cexec aac-tools gen-architecture --stage prd --producer kubecoder-deploy \
+      && cexec aac-tools arch-validate docs/architecture/kubecoder-deploy.yaml
+    cd /work && rm -rf /work/aac-tools-v19
+
+Expected: `wrote docs/architecture/kubecoder-deploy.yaml — 9 elements, 16 relations`, one `gap: kubecoder: image 'kube-coder-tunnel-reclaim' …` line, then `✓ docs/architecture/kubecoder-deploy.yaml`, both exit 0 — the output the same two commands gave from source in the `iac` sidecar during the test phase. The clone sits under /work rather than /tmp so the toolchain sidecar sees it, and carries the fixture as its `architecture.yaml` because KubeCoderDeploy has no annotation layer of its own until slice 014.
+
+**Consequence:** Until it runs, nothing shows that a running aac-tools container reaches https://charts.home through its baked homelab root and https://architecture.webathome.org; the first place a broken trust store or a missing outbound path would surface is slice 014's pipeline, mid-migration.
+
+**Provenance:** witnessed | test-agent, test phase, r1 — every step short of a running container was run from source in the iac sidecar (generator, equality check, arch-validate); verification.json V19 records the item owed
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -112,6 +132,8 @@ The container path maps a `realizes:` target through the cluster storage table b
 
 `resolve_product` defers a ref no producer resolves (gen_architecture.py:743-750) and the run prints 'deferred (cross-producer, unresolved): <ref>' (:1017-1018). The generated-producer contract binds the other form: 'Whatever the generator cannot map ... prints on a console line of its own, gap: <what> ... a gap reported in any other form is never seen' (/work/Architecture/.claude/architecture/producer-manual.md:543-549). Verbatim from HelmCharts, so the port-whole ruling produced it. Bounded, not silent: the deferred ref also reaches the artifact bare, where the validation service's kind lookup rejects it, so the build reds downstream — what is lost is the named ref in the line the central architecture update reads.
 
+test-agent, test phase, r1, 2026-09-20 — Re-checked against V12, which asks that everything the generator cannot map is printed as its own gap: line. It holds for every class the generator writes as gap: — the real KubeCoder run prints exactly one, on its own stderr line, exit 0 — and does not hold for this deferred class; V12 is recorded pass with this exception named in its rationale. Judged against the generation bar and left here rather than appended: the port-whole ruling produced the line verbatim, P3 delivered the gap contract for every other class, and the deferred ref reaches the artifact bare where validation rejects it, so the failure is loud downstream rather than silent.
+
 **Consequence:** The central architecture update, which reads gap: lines off the last successful AaC build, never sees which cross-producer reference the generator could not place; the operator learns of it only as a validation failure.
 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
@@ -129,6 +151,8 @@ The container path maps a `realizes:` target through the cluster storage table b
 ### B8 — aac-tools: two of gen-architecture's preconditions fail with a traceback, the third with a sentence · nit
 
 `annotations()` refuses a missing or dateless annotation layer with a SystemExit naming the path and why (gen_architecture.py:283-306). The two preconditions added beside it do not: `hook_parameters` shells out to 'git remote get-url origin' (:363-378) and `chart_metadata` reads chart/Chart.yaml unguarded (:279-280). Witnessed on a git-init-only checkout carrying an annotation layer and a chart: the run ends in subprocess.CalledProcessError after a Python traceback. `run()` prints the child's stderr first, so "error: No such remote 'origin'" is above it, and annotations() runs before chart_metadata(), so the common wrong-directory case stays legible.
+
+test-agent, test phase, r1, 2026-09-20 — Witnessed once more in the test phase, a third precondition of the same class: --stage naming a stage that has no config/<stage>/values.yaml (run with --stage nosuchstage over a throwaway clone) exits through subprocess.CalledProcessError after helm's own error line — a Python traceback, not a sentence. Same nit, same consequence; recorded here so the entry's scope is not read as two preconditions only.
 
 **Consequence:** A run in a checkout without an origin remote — an export, a worktree, a repo cloned without remotes — ends in a Python traceback rather than a statement of what the generator needed.
 
