@@ -309,8 +309,9 @@ Target: ../ArgoCDTools
 The repo's root stops being one image's build context. `argocd-hook/` holds that image's
 Dockerfile, its `presync/` package, its `image/` payload and its `tests/`, and is self-contained:
 everything the Dockerfile reads sits inside it, and its ignore list travels with it. The root keeps
-only what is genuinely repo-wide. The `argocd-hook` gate and the published image are unchanged in
-substance — this is a move, not a rebuild.
+only what is genuinely repo-wide. The repo's curated entry points move with the layout, so
+`argocd-hook` is still built and tested by name afterwards. The gate and the published image are
+unchanged in substance — this is a move, not a rebuild.
 
 Constraints the repo does not state:
 
@@ -321,12 +322,24 @@ Constraints the repo does not state:
   (`/work/JenkinsPipelineUtils/vars/helmCharts.groovy:83-90`), and the estate's existing
   multi-image repo instead wraps the call in `dir(...)` (`/work/DockerImages/Jenkinsfile:97`).
   Either shape is fine.
+- `.kubecoder/project.yaml` breaks on this phase's own diff and is part of it: it declares a single
+  component, `root`, whose `test: … -s tests -t .` (`:18`) and `build: kaniko --context .` (`:21`)
+  both name paths the move deletes. The manifest names each image instead (ruling): a folder-named
+  component per image, with its own build and test verb. Where the repository's own metadata then
+  goes is the schema's
+  (`/work/KubeCoder/manual/docs/reference/project-yaml.md:99-114` — every non-`root` key is a folder
+  name, and that folder is the component's working directory; `:175-181` — `jenkins` normally lives
+  on `root`).
+- `kc project test` at this repo's root is the run loop's gate here and the first gate of its test
+  phase (`/work/Ansible/docs/slice-testing-strategy.md:11-13`); it runs every component the manifest
+  declares, so the new manifest is proved by this phase rather than patched under a later one.
 - The moved paths are recorded in two other repos' inventories. P6 and P7 update those; don't chase
   them from here.
 
 ### P2 — the `aac-tools` image, carrying `arch-validate`
 
 Target: ../ArgoCDTools
+Creates: aac-tools
 
 A sibling folder builds `registry:5000/aac-tools`, and the repo's Jenkinsfile publishes it beside
 `argocd-hook` on a push to `main` (R1, R2, R3). The image is usable two ways with no per-caller
@@ -343,6 +356,9 @@ Constraints the repo does not state:
   entry or the entry needs `skipParityChecks`
   (`/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648`; the same concern
   `/work/ArgoCDTools/Dockerfile:78-93` already handles).
+- The repo's manifest gains its second component here (ruling): `aac-tools` beside `argocd-hook`,
+  each separately buildable and testable, rather than one component whose verbs run both images'
+  commands. That is also the name later work on this image — slices 014 and 025 — addresses it by.
 - What it carries is fixed by what P3's generator needs at run time and nothing beyond it (G11):
   python ≥3.12 with pyyaml, helm, git, bash, and the homelab CA root. `https://charts.home` serves
   a `homelab-ca` leaf no default trust store carries; `https://architecture.webathome.org` is
@@ -353,9 +369,15 @@ Constraints the repo does not state:
 - R4: everything referencing this image references a floating tag.
 - This environment cannot run a container — there is no docker, podman or nerdctl, and
   `/work/Ansible/.kubecoder/config.yaml:30` enables kaniko only. So the build itself is the proof
-  the image composes, and what it promises to contain is asserted statically, the way
-  `/work/ArgoCDTools/tests/test_image.py` already asserts it for `argocd-hook`. Note that this
-  package, unlike `presync`, is not standard-library-only.
+  the image composes, and what it promises to contain — every declared tool present, the homelab
+  root actually in the trust store — is asserted where a build can prove it: inside the build, the
+  way the `argocd-hook` Dockerfile's closing `RUN` already asserts its own contents
+  (`/work/ArgoCDTools/Dockerfile:88-93`, over a trust store laid down at `:66-68`), and over the
+  source, the way `/work/ArgoCDTools/tests/test_image.py` does. Note that this package, unlike
+  `presync`, is not standard-library-only.
+- Nothing available here proves a live handshake from a running container against `charts.home` or
+  `architecture.webathome.org`, and no phase may claim one. That check is owed to the operator, with
+  the command that settles it — last bullet of "Not in scope".
 
 ### P3 — the deploy-repo architecture generator
 
@@ -392,7 +414,8 @@ Constraints the repo does not state:
   is never seen.
 - Its tests travel. HelmCharts has 11, in pytest over synthetic in-memory fixtures
   (`/work/HelmCharts/tests/test_gen_architecture.py`), covering three of the five post-render
-  passes and nothing else (G15); ArgoCDTools' suite is stdlib `unittest`.
+  passes and nothing else (G15); ArgoCDTools' suite is stdlib `unittest`, and the ported tests run
+  under the `aac-tools` component P2 registers.
 
 ### P4 — the handover holds: the same ids, from the other producer
 
@@ -406,12 +429,13 @@ stage. The KubeCoder annotation fixture it needs lives here; nothing lands in Ku
 What equality means here — the exact target set, the four published relations that are correctly
 absent, and the three fields that legitimately differ — is
 [`attachments/handover-equality.md`](attachments/handover-equality.md). Read it before writing the
-comparison; the diff is unreadable without it.
+comparison; the diff is unreadable without it. Its reference side is a live artifact, so start with
+the shelf-life note at the top of the page.
 
 Constraints the repo does not state:
 
 - The check needs a sibling deploy-repo checkout, a live chart repository and the live published
-  dataset. The repo's default `test` verb is what CI and a cold checkout run, and has none of the
+  dataset. The components' `test` verbs are what CI and a cold checkout run, and have none of the
   three. Keep the two apart rather than making the suite conditional.
 - Per G12 it runs the generator from source in the `iac` sidecar, never from the image.
 
@@ -447,8 +471,9 @@ scanner's pin look unnecessary. Today that is one sentence with no duplicate any
 (`:599`, closing the section headed at `:589`).
 
 The same file's root-rotation inventory names the copies of `homelab-root.crt` that a rotation must
-move in one window (`:166`). This slice moves one of them and adds another; after this phase the
-inventory is true.
+move in one window (`:166`), and counts them there and in two later sentences (`:171`, `:174`). This
+slice moves one of those copies and adds another, so both the paths and the count are stale; after
+this phase they are true.
 
 The record is rewritten in place — no supersession note, no history narration.
 
@@ -463,6 +488,12 @@ one-change-window check is runnable as written: `docs/runbooks/step-ca-root-rota
 (the CA-root inventory row, the `terraform.rc` list, and both `md5sum` blocks) and
 `docs/runbooks/operator-workstation.md:95`. Both the `argocd-hook` folder move and the new image's
 CA-root copy are in scope here.
+
+The new copy also moves a count that runbook states three times: `step-ca-root-rotation.md:42` and
+`:64-65` ("six out-of-repo copies", "a rotation updates all six") and `:146` ("all seven hashes must
+match", over the seven-path `md5sum` block above it). The `terraform.rc` set is untouched — this
+image carries no Terraform — so its count of four, here and in `operator-workstation.md:90`, stays
+as it is.
 
 `.kubecoder/config.yaml`'s `repos:` declares `pvginkel/Architecture`, so the producer contract the
 generator is written against is on this machine by construction rather than by hand. The checkout
@@ -484,4 +515,11 @@ materialise it recreates this pod, so it is the operator's and never runs mid-sl
 - Giving the `IaC/ArgoCDTools` job a test stage. It clones and builds, and has never run the
   repo's suite; this slice adds a second image to that job without changing its shape.
 - Deploying HelmCharts and restarting the environments so the toolchain becomes selectable — the
-  remainder of KC-68, and the operator's.
+  remainder of KC-68, and the operator's. That is also what settles the one acceptance item no phase
+  can earn (V19): in an environment that has selected the toolchain,
+  `cexec aac-tools gen-architecture --stage prd …` in a deploy-repo checkout followed by
+  `cexec aac-tools arch-validate docs/architecture/<producer>.yaml` exercises, from a running
+  container, both endpoints the image needs — `https://charts.home` for the chart dependency and
+  `https://architecture.webathome.org` for the dataset and the validator. The test phase records it
+  owed to the operator with that command
+  (`/work/Ansible/docs/slice-testing-strategy.md:64,73`), never verified off a green build.

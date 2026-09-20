@@ -43,7 +43,7 @@
     {
       "id": "V06",
       "area": "R6 — the tools run locally, from the same image",
-      "description": "`cexec aac-tools gen-architecture …` and `cexec aac-tools arch-validate …` run in a repo's checkout: the image meets KubeCoder's toolchain contract (bash present, no dependence on its own entrypoint, a resolvable passwd identity) and an `aac-tools` entry exists in the catalog HelmCharts authors.",
+      "description": "`cexec aac-tools gen-architecture …` and `cexec aac-tools arch-validate …` are what an environment runs in a repo's checkout, and this slice earns that by construction: the image meets KubeCoder's toolchain contract (bash present, no dependence on its own entrypoint, a resolvable passwd identity) and an `aac-tools` entry exists in the catalog HelmCharts authors. Selecting it in a live environment waits on the operator's deploy — V19.",
       "verdict": null,
       "rationale": "",
       "evidence": ["/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648", "/work/HelmCharts/charts/kubecoder/values.yaml:343 — controllerConfig.toolchains; :427 the iac entry's shape"]
@@ -107,10 +107,10 @@
     {
       "id": "V14",
       "area": "The image's contents",
-      "description": "The image carries what the two commands need at run time and nothing beyond it, and can reach both the chart repository and the validation endpoint from a fresh container — including the homelab CA root, which no default trust store carries.",
+      "description": "The image carries what the two commands need at run time and nothing beyond it, including the homelab CA root that no default trust store carries — asserted where a build can prove it: the build fails if a declared tool is missing or the root did not reach the trust store, and the source-level assertions hold over what the image bakes. Live reachability from a running container is V19's, not this item's.",
       "verdict": null,
       "rationale": "",
-      "evidence": ["charts.home serves a leaf issued by 'O=homelab-ca, CN=homelab-ca Intermediate CA'; architecture.webathome.org serves a Let's Encrypt leaf (checked 2026-09-20)", "/work/Ansible/support/iac-image/Dockerfile:74 — the same root, same reason"]
+      "evidence": ["charts.home serves a leaf issued by 'O=homelab-ca, CN=homelab-ca Intermediate CA'; architecture.webathome.org serves a Let's Encrypt leaf (checked 2026-09-20)", "/work/Ansible/support/iac-image/Dockerfile:74 — the same root, same reason", "/work/ArgoCDTools/Dockerfile:66-68 — the CA root and update-ca-certificates; :88-93 — the build-time check of the image's own contents"]
     },
     {
       "id": "V15",
@@ -135,6 +135,22 @@
       "verdict": null,
       "rationale": "",
       "evidence": ["/work/Ansible/.kubecoder/config.yaml:6-14 — the repos: list, which does not name it today"]
+    },
+    {
+      "id": "V18",
+      "area": "Ruling — the repo's curated verbs are part of the folder rework",
+      "description": "ArgoCDTools' curated entry points describe the repo this slice leaves behind: each image is a component of its own with its own build and test verb, so `kc project test` at the repo root runs both images' suites and no verb addresses a path the folder move deleted.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/ArgoCDTools/.kubecoder/project.yaml:5,18,21 — today a single `root` component, whose test (`-s tests -t .`) and build (`--context .`) both name paths R5's move deletes", "/work/Ansible/docs/slice-testing-strategy.md:11-13 — `kc project test` across every repo the slice touched is the run loop's first gate", "/work/KubeCoder/manual/docs/reference/project-yaml.md:99-114 — every non-`root` component key is a folder name, and that folder is its working directory"]
+    },
+    {
+      "id": "V19",
+      "area": "Owed to the operator — live reachability from a running container",
+      "description": "Owed to the operator, and not earnable in this run: once the image is pushed and the toolchain deployed, `aac-tools` reaches the chart repository and the validation endpoint from a running container — `cexec aac-tools gen-architecture --stage prd …` in a deploy-repo checkout, then `cexec aac-tools arch-validate docs/architecture/<producer>.yaml`. The test phase records this item owed with that command, and never marks it verified off a green build.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/Ansible/.kubecoder/config.yaml:30 — kaniko only; no docker, podman or nerdctl in this pod, so nothing here runs an image", "/work/Ansible/docs/slice-testing-strategy.md:64,73 — an item the run cannot settle is marked owed to the operator, with the command that settles it"]
     }
   ]
 }

@@ -7,6 +7,16 @@ KubeCoder's prd stage. Read on 2026-09-20 against the live published dataset
 KubeCoderDeploy `ede0394`, that target is exact and reachable. This page says what the two sides
 are and names every difference that is real, so the diff can be read without guessing.
 
+**This page has a shelf life.** The reference side is not a fixture — it is whatever
+`https://architecture.webathome.org/data/v0.1/architecture.yaml` carries when the check runs, and
+the counts below describe it as published on 2026-09-20, from HelmCharts `c6c6357`. A `kubecoder`
+chart or prd-values change shipped in HelmCharts between then and this phase moves them: a
+container added or removed shifts the element count and the per-container edges, an exposed host
+changed shifts the interfaces and their `Assignment` edges. So refetch and refilter first, and if
+the numbers have moved, the check is written against the refreshed target and this page's counts
+are corrected with it — what does not move is the rest of the page: which differences are
+legitimate, and why the four cross-stage relations are correctly absent.
+
 ## The target set
 
 Filter the published dataset to KubeCoder elements whose `producer` is `helm-charts` and whose
@@ -45,8 +55,12 @@ Three, all of them expected:
 
 - **`producer`** — by construction; the point of the handover.
 - **`stats.image`** — the two repos pin different tags today: HelmCharts' prd values render
-  `registry:5000/kubecoder-*:prd-latest`, `/work/KubeCoderDeploy/config/prd/values.yaml` renders
-  `:dev-511`. A real difference in what each repo would deploy, not a defect.
+  `registry:5000/kubecoder-*:prd-latest`
+  (`/work/HelmCharts/configs/prd/kubecoder/prd/values.yaml:10-15`), while the deploy repo pins
+  `:dev-511` in `/work/KubeCoderDeploy/chart/values.yaml:11-22`. The deploy repo's stage files set
+  no image references at all and its gate fails if they do
+  (`/work/KubeCoderDeploy/tests/render-chart.py:217-222`), so both its stages render the chart's
+  pins. A real difference in what each repo would deploy, not a defect.
 - **`logo`** — added centrally when the federation merges producers; no generator emits it.
 
 Everything else has to match: the natural-key-derived ids above all, and `label`, `environment`,

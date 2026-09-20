@@ -79,3 +79,16 @@ Deliberately left out of this slice (Not in scope) rather than folded into the J
 
 **Provenance:** read; plan-writer, planning, r1; /work/ArgoCDTools/Jenkinsfile
 **Disposition:**
+
+### S2 — A sibling repo's component name is not a `Target:` any Ansible-led slice can use
+
+The round-1 ruling makes ArgoCDTools' manifest declare `argocd-hook` and `aac-tools` so "slices 014 and 025 have a name to put in a `Target:` line". That holds only for a slice whose primary repo is ArgoCDTools: the run loop builds its component vocabulary from `kc project list` in the repo the run is started in (`load_project_dirs(self.repo_root)`), and resolves anything else only as a sibling path (`_resolve_target`). Run from `/work/Ansible`, `kc project list` returns `root`, `ansible`, `terraform` and `architecture` — never another repo's components.
+
+So the two components are worth having for what they do here — each image separately buildable and testable, and `kc project test` at that repo's root covering both — but a slice led from this repo still addresses that work as `Target: ../ArgoCDTools`. This slice's own phases do (P1–P4), and the `Creates: aac-tools` line on P2 is a record of what the phase registers, not a name the driver will resolve.
+
+KubeCoder's remote project surface is the other half of the picture: it walks every repository in the environment and does address components by name across all of them (`/work/KubeCoder/manual/docs/reference/project-yaml.md:42-56`). The gap is the run loop's, not the manifest's.
+
+**Consequence:** A later slice planned from this repo that writes `Target: aac-tools` (or `argocd-hook`) fails the run loop's plan check with "neither a kc project list component nor a sibling repo path" — a bail at parse time, before any work starts.
+
+**Provenance:** read; plan-writer, planning, r2; run_loop.py load_project_dirs / _resolve_target, and `kc project list` in both repos
+**Disposition:**
