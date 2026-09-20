@@ -41,6 +41,33 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — DockerImages/registry-cleanup: the per-prefix cap has already deleted the dev-511 build that KubeCoderDeploy's committed pins name · major
+
+All seven `Build-Main` images in `KubeCoderDeploy/chart/values.yaml` pin `dev-511`. The registry
+no longer holds that tag for any of them: the `dev` family runs `dev-428, dev-441, dev-443,
+dev-457, dev-470, dev-479, dev-482, dev-495, dev-509` then jumps to `dev-514 … dev-523`. The nine
+survivors below 514 share digests with `prd-26 … prd-36` and are held by the shared-digest guard;
+`dev-511` was not promoted, so the newest-10 per-prefix cap evicted it while KubeCoderDeploy's
+chart referenced it in git.
+
+`plan.md`'s G11 frames this exposure as prd-only, un-promoted and TTL-based. The realised case is
+a *dev* pin, deleted by the *cap*, with a git reference standing. Under D47 the dev stage's
+deployed reference becomes exactly such a pin, and the protection D47 designs — `prd-<n>` created
+at promotion, sharing a digest with `prd-latest` — covers prd only.
+
+Two adjacent observations from the same registry read, recorded for whoever picks this up:
+
+- Six of the seven images already carry a bare-numbered family, `175`/`176`-`185`, from a
+  pre-`dev-` scheme; `kubecoder-vsix` and `kubecoder-claude-shim` carry none. D47's bare `<n>`
+  family is therefore not empty for most of the set, and its cap is already full at 10.
+- `prd-26 … prd-36` are the promote job's own build numbers, not image build numbers — the
+  mismatch S1 records, confirmed live.
+
+**Consequence:** A git-committed deployment reference is not in registry-cleanup's protection set, so once Argo deploys KubeCoder from a stage file the pinned tag can be deleted under the cap while git still names it — the Application then fails to pull. It has already happened to the pins in the repo today.
+
+**Provenance:** witnessed — plan-reviewer, plan review r1; http://registry:5000/v2/kubecoder-*/tags/list queried 2026-09-20, KubeCoderDeploy/chart/values.yaml:11-18,668,671, DockerImages/registry-cleanup/app/main.py:285-299
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
