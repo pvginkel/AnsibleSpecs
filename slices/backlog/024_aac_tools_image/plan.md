@@ -299,8 +299,9 @@ Facts established by the planning session on 2026-09-20, against ArgoCDTools `d1
 - `../ArgoCDTools` — `slice.md`'s operator boundary: *"Pushing stays the operator's call."* The
   `IaC/ArgoCDTools` job builds and pushes both images on a push to `main`.
 - `../HelmCharts` — a push deploys changed releases, and the catalog entry changes the `kubecoder`
-  release: it restarts the KubeCoder controller on prd (see the consequence recorded above). The
-  operator presses this one.
+  release, so a push would deploy it and roll the prd controller. (The entry is not what rolls the
+  pod — any deploy of this chart does; see the consequence recorded above.) The operator presses
+  this one.
 
 ### P1 — ArgoCDTools: one folder per image
 
@@ -456,9 +457,12 @@ Constraints the repo does not state:
   `/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648` — a raw container spec with a
   memory limit and no `command`/`args`.
 - The image floats (R4), as every first-party toolchain image in this catalog already does.
-- Adding it changes `controllerConfig`'s checksum and so restarts the prd controller on the next
-  deploy of this repo. That deploy is the operator's keystroke and the repo is push-held; the
-  change lands, nothing rolls.
+- The entry reaches a running environment only on the next deploy of this repo, which is the
+  operator's keystroke and which the push hold keeps out of this run: the change lands, nothing
+  rolls. That deploy does roll the prd controller, but the entry is not why — the Deployment's
+  re-rendered `deployment.timestamp` annotation rolls it on every deploy
+  (`charts/kubecoder/templates/controller-deployment.yaml:20-24`), so this change adds no restart
+  cost of its own.
 
 ### P6 — the register says what it now means
 
