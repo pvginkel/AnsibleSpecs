@@ -394,8 +394,11 @@ tag prefix gets repointed — registry retention/GC, `collect-versions`, the ver
 > what expresses promotion state. Read D12 as being about the artifact, not its label.
 >
 > **"Never `latest`" is strengthened to "never a default at all":** `chart/values.yaml` carries
-> no image tag, so a missing stage values file fails to render instead of silently deploying a
-> fallback — the same hazard this decision named, reached by a different route.
+> no image tag, and the chart `required`-guards every tag it renders, so a stage values file
+> missing one fails to render instead of silently deploying a fallback — the same hazard this
+> decision named, reached by a different route. The guard is what fails the render, not the
+> absent default: an image reference whose tag is absent renders untagged and `helm template`
+> exits 0.
 >
 > The "everything keyed on the tag prefix gets repointed" verify item resolves to *nothing to
 > repoint*: the prefix keeps meaning what it always meant, and `collect-versions` was never
@@ -464,11 +467,13 @@ with no new leaf and no new values block. **The token is Argo's own, not the hoo
 the two rotate independently, and a compromise on one side does not hand over the other.
 
 **D45 — CI writes image tags through one shared-library call.** Decided 2026-08-12 (operator,
-gate-1 review). The pipeline assembles a dict of `{YAML path in the values file → tag}`; a new
-JenkinsPipelineUtils method takes the deploy repo, the values-file path (defaulting to
-`chart/values.yaml`) and that dict, then clones → updates the file → commits → pushes in one
-call. This is the mechanism behind "git equals deployed state" on the CI side: apps decide what
-goes in the dict and when the call runs (scope note); the library owns the git mechanics.
+gate-1 review; signature settled 2026-09-20 at implementation). The pipeline assembles the tags as
+`{values file → {YAML path in that file → tag}}`; the JenkinsPipelineUtils method
+`cicd.writeVersionPins(repo:, pins:, message:)` takes the deploy repo and that map, then clones →
+updates every file named in it → commits → pushes in one call. The map spans files because one
+call is one commit and D47 moves both stage files together. This is the mechanism behind "git
+equals deployed state" on the CI side: apps decide what goes in the map and when the call runs
+(scope note); the library owns the git mechanics.
 
 **D47 — Stage tags are the deployed reference, pre-written by CI and created by the promote
 job.** Decided 2026-08-16 (operator; supersedes the marker design considered the same day).

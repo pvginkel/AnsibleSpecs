@@ -62,7 +62,8 @@ config/
   the registry entry's `targetRevision` — the pilot uses `main`/`prd` (D34), other apps choose
   their own topology (scope note in decisions.md).
 - **No configuration in the chart** (D13). Stage values live in `config/{stage}/values.yaml`;
-  the chart's `values.yaml` carries defaults plus the CI-written image tags (D37, D45).
+  the chart's `values.yaml` carries defaults but no image tag — CI writes each stage's tag into
+  that stage's own values file (D45, D47).
 - **Terraform is rebuilt, not copied**, when an app migrates (D12 rework licence). The
   `*.tfvars` never travel through Argo — the hook reads them from its own clone (D14).
 - **Upstream-chart-only apps have no `chart/`** (D18): the repo is `/{terraform,config}`, and
@@ -497,16 +498,18 @@ charts migrate.
 
 Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** does.
 
-- `Build-Main` builds and pushes `:<n>` images (D37), assembles the tags dict
-  `{YAML path → tag}`, and makes one JenkinsPipelineUtils call (D45): clone KubeCoderDeploy,
-  write `chart/values.yaml`, commit, push `main`. The webhook fires; the dev stage syncs.
+- `Build-Main` builds and pushes `:<n>` images (D37), assembles the tags per stage values file
+  `{values file → {YAML path → tag}}`, and makes one JenkinsPipelineUtils call (D45): clone
+  KubeCoderDeploy, write `config/dev/values.yaml` at `<n>` and `config/prd/values.yaml` at
+  `prd-<n>` in one commit, push `main` (D47). The webhook fires; the dev stage syncs.
   `cicd.helmDeploy()` is gone from the job; Jenkins holds no cluster credential (D1).
 - **Promotion** advances `prd` to a validated `main` commit (D35) — a fast-forward by
   construction, since `prd` never carries a commit `main` doesn't. What performs the advance is
   the product's trigger choice; `Deploy-PRD` is deleted, not rewritten.
 - **Rollback** (D36): revert on `main`, promote — dev follows, accepted. Emergency lever:
   force-move `prd` back to the previously promoted SHA, which loses nothing.
-- The chart's committed default tag is always a real `<n>`, never `latest` (D37).
+- Every committed tag is a real `<n>` or `prd-<n>`, never `latest`, and the chart carries no
+  default to fall back on (D37 as amended by D47).
 
 ## Lifecycle
 

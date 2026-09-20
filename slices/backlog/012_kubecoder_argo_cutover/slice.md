@@ -15,8 +15,10 @@ This is **Phase B.4 + B.5** of the Argo CD adoption, cut from
 stops being deployed by Jenkins and starts being converged by Argo — in phases.md's own words,
 B.4 is *"the step that can delete production."*
 
-**Depends on:** slices 010 (KubeCoderDeploy exists and renders) and 011 (CI commits pins), and
-through them all of Phase A.
+**Depends on:** slices 010 (KubeCoderDeploy exists and renders) and 011 (the shared-library
+method that commits version pins, KubeCoderDeploy's stage files holding the seven image pins, and
+the render gate that enforces them — the CI call that uses the method is requirement 14 here),
+and through them all of Phase A.
 
 ### The shape of this slice, settled at triage
 
@@ -111,10 +113,25 @@ Verbatim from `phases.md`:
 13. > Afterwards, unhurried: delete the orphaned `sh.helm.release.v1.kubecoder-<stage>.*`
     > Secrets, `charts/kubecoder/` in HelmCharts, and the D145 overrides (B.2).
 
-14. From B.3, held back deliberately to this point:
+14. From B.3, held back deliberately to this point — each applied at the moment its stage
+    flips, `Build-Main`'s rewrite at dev's cutover, `Deploy-PRD`'s replacement at prd's:
+
+    > `Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main`.
+    > *Verify first:* opting out of the `cicd` library's `<stage>-<n>` scheme is a per-repo
+    > switch, not a library rewrite — the other 44 releases stay on `helmDeploy()`.
 
     > `Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays
     > alive until each stage cuts over.
+
+    **Both are amended by D47.** `Build-Main` drops the stage prefix from what it *pushes*, not
+    from what it *writes*: it pushes `:<n>`/`:latest` and calls
+    `cicd.writeVersionPins(repo:, pins:, message:)` with `<n>` for `config/dev/values.yaml` and
+    `prd-<n>` for `config/prd/values.yaml` — one call, one commit, and `prd-<n>` a forward
+    reference to a tag that does not exist yet. `Deploy-PRD`'s replacement is therefore not a bare
+    `git push origin main:prd`: it retags (`crane tag <app>:<n> <app>:prd-<n>`), then advances
+    `prd`, then writes D48's annotated `release-<n>` tag. Do not delete `Deploy-PRD` until that
+    job retags, or prd's values file references a tag nobody creates and the sync fails on an
+    unpullable image. Grounding for both is in "Carried in from slice 011" below.
 
 ### Exit criterion
 
@@ -339,6 +356,49 @@ changes the runbook table already lists:
 
 Nothing else: no object is stranded, and the eight ESO-materialised Secrets the check flags are
 its own output, produced by `ExternalSecret`s the render carries.
+
+## Carried in from slice 011 (2026-09-20)
+
+Slice 011 ships the producer side — the shared-library method, KubeCoderDeploy's stage-file pins
+and the render gate that enforces them — and leaves the Jenkins side to requirement 14 here. What
+it verified along the way:
+
+- **The tag rename cannot land before a stage cuts over.** The live dev stage renders
+  `controller`/`bot`/`mcp`/`ingress`/`manual` at `:dev-latest` and `worker`/`vsix` at `dev-latest`
+  (`/work/HelmCharts/configs/prd/kubecoder/dev/values.yaml:5-10,34-35`); prd's equivalents are
+  `prd-latest` (`configs/prd/kubecoder/prd/values.yaml:10-15,54-55`). `Deploy-PRD`
+  (`/work/KubeCoder/Jenkinsfile.deploy-prd:33-38`) retags `dev-${sourceDevBuild}` → `prd-<its own
+  build number>` plus a floating `prd-latest`, for seven images. So dropping `dev-` while the
+  stages are Jenkins-owned freezes dev silently and breaks promotion outright — and even at the
+  dev cutover the prefix cannot simply vanish, because prd flips later and promotion must keep
+  working from the bare `<n>` in between.
+- **Requirement 14's *verify first* is discharged.** There is no `<stage>-<n>` scheme in the
+  `cicd` library to opt out of: the prefix is a hardcoded literal at each of `Build-Main`'s eight
+  `helmCharts.kaniko(...)` call sites (`/work/KubeCoder/Jenkinsfile:218-222` and seven siblings),
+  and `vars/helmCharts.groovy`'s kaniko helpers validate only the *shape* of a tag pair and
+  already accept an unprefixed one. No library change is involved and the other ~44 releases are
+  structurally unaffected.
+- **`Build-Main` builds eight images, not seven.** The eighth, `kubecoder-claude-shim`, is neither
+  pinned in KubeCoderDeploy nor promoted by `Deploy-PRD`. Its tag under the new scheme is this
+  slice's to decide.
+- **`crane` needs no toolchain work.** It is baked into the shared `k8s` agent image
+  (`/work/DockerImages/k8s/Dockerfile:5`) and already used in production by `Deploy-PRD`; the
+  header comment in `Jenkinsfile.deploy-prd` claiming it is absent from the main-build podTemplate
+  is stale.
+- **The pins name build 523, and neither of its tags exists.** `config/dev/values.yaml` names
+  `523` and `config/prd/values.yaml` `prd-523`, for all seven images. The registry holds `dev-523`
+  but neither `523` nor `prd-523` (queried 2026-09-20; the surviving dev family is `dev-428 …
+  dev-509` then `dev-514 … dev-523`). Both are forward references this cutover must satisfy
+  before the first dev sync — by running the rewritten `Build-Main` first, or by a one-off
+  `crane tag kubecoder-<name>:dev-523 kubecoder-<name>:523`.
+- **The bare `<n>` namespace is not empty.** `kubecoder-*:176 … 185` exist, created 2026-07-21
+  with label `org.webathome.poller.pipeline: KubeCoder/KubeCoder` and tracking-tag `latest`, from
+  a Jenkins job that no longer exists (`KubeCoder/Build-Main` is live at build 523;
+  `KubeCoder/KubeCoder` returns no results). `Build-Main` pushing bare `<n>`/`latest` inherits
+  that tag family and that `latest`.
+- **The dev stage may go stale until its cutover** (operator ruling, 2026-09-20). Nothing depends
+  on KubeCoder's dev stage picking up new builds in the meantime, so no bridging tag scheme is
+  needed and `dev-latest` need not be preserved for continuity.
 
 ## Subsumes
 
