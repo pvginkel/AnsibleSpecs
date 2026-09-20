@@ -189,6 +189,15 @@ verification.json V04 requires decisions.md to state the pin rule as 'third-part
 **Provenance:** read, code-reviewer, P6 round 2, phases/P6/code_review_r2.md F2
 **Disposition:**
 
+### B15 — AnsibleSpecs: doctrine says our own images are not digest-pinned; HelmCharts' deploy calls its digest resolution pinning · nit
+
+decisions.md:599 is the register's only statement about image digests (grep -n digest decisions.md returns that line alone), and it says images we build ourselves are not digest-pinned. HelmCharts uses the word the other way for a real mechanism the register never records: migrate-release.py:342's --no-pin is documented as 'skip image-digest pinning via resolve-helm-args', and resolve_helm_args.py:148 resolves every chart-template image reference to @sha256: at deploy time (--set at :155), which Jenkinsfile:189-191 then uses as the trigger to deploy. Under the sentence's own definition of a pin — a reference committed here that an upstream tag move cannot shift — the claim is true, and the resolution is the opposite of a pin: it follows whatever the written tag points at now. So this is a gap in doctrine, not a false rule, and no procedure follows from it wrongly: the aac-tools reference never meets the resolver at all (get_helm_images walks charts/<chart>/templates/ only, resolve_helm_args.py:41,56, while the toolchain entries live in values.yaml), and the operative half — floating or pinned tag is the consuming site's call — holds in code at charts/kubecoder/values.yaml:331-332, :381, :406, :456, :485 against eleven :latest entries. Reviewed as blocking in P6 rounds 2 and 3 and as advisory in round 4; recording it once here rather than relitigating the wording.
+
+**Consequence:** A reader who takes decisions.md as the estate's word on digests, then meets @sha256: on every HelmCharts-deployed prd pod or greps HelmCharts' tooling for 'pin', has to work out unaided that the two uses are different mechanisms — and closing it properly means the register describing the deploy path's digest resolution, an edit wider than R4's ruling asked P6 for.
+
+**Provenance:** read, code-reviewer, P6 round 4, phases/P6/code_review_r4.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
