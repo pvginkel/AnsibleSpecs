@@ -149,7 +149,7 @@ P6 rewrote `decisions.md`'s CA-root inventory expecting to move one path and add
 **Consequence:** Had the gap gone unnoticed, a year-9 root rotation following either record would have updated seven copies and left two toolchain images trusting only the retired root — a failure that surfaces as those images losing TLS to every homelab endpoint, after the cutover window closed. It is corrected in decisions.md now and owed in the runbook at P7.
 
 **Provenance:** witnessed, code-writer, P6, round 1 — find /work -name homelab-root.crt -type f, then cmp against ansible/roles/baseline/files/homelab-root.crt and the images' Dockerfiles; gate script in the phase transcript
-**Disposition:** set the dispositions you know are answered — closed, both records corrected — P6 landed the true nine in decisions.md and P7 (f3cdc60) landed nine in docs/runbooks/step-ca-root-rotation.md:65-68; B13 and B17 about the same records stay live
+**Disposition:** set the dispositions you know are answered — closed, both records corrected — P6 landed the true nine in decisions.md and P7 (f3cdc60) landed nine in docs/runbooks/step-ca-root-rotation.md:65-68; B13 and B17 about the same records stay live · operator on review: Ok
 
 </details>
 
@@ -174,16 +174,7 @@ Out of scope here — R9 keeps HelmCharts' generator out of this slice, and its 
 **Consequence:** Anyone reading the published architecture sees KubeCoder's prd controller serving the dev bot and the dev MCP adapter, and the dev controller serving both prd consumers — four asserted cross-environment dependencies that are not real.
 
 **Provenance:** witnessed; plan-writer, planning, r1; plan.md attachments/handover-equality.md
-**Disposition:**
-
-### B2 — ArgoCDTools: ruff.toml's new `exclude` drops ruff's default exclude list repo-wide · minor
-
-P2 added a top-level `exclude = ["aac-tools/image/arch-validate.py"]` to `ruff.toml:8`, a file that had no `exclude` key before. Ruff's `exclude` overrides the built-in default list rather than extending it, so `.venv`, `venv`, `build`, `dist`, `node_modules`, `site-packages`, `__pypackages__`, `.tox` and `.mypy_cache` are no longer skipped; `ruff check --show-settings .` prints that one entry as the whole list. The repo's `.gitignore` is two lines (`__pycache__/`, `*.pyc`), so `respect-gitignore` covers none of them. Witnessed: `mkdir build && printf 'import os\nx=1\n' > build/vendored.py` then `ruff check .` from the repo root reports F401 on `build/vendored.py` (probe reverted). No such directory exists in ArgoCDTools today, which is why this is advisory rather than blocking. Using ruff's `extend-exclude` instead keeps the vendored-file exclusion and the defaults both.
-
-**Consequence:** The first time a build tree, a virtualenv or a vendored dependency lands anywhere in ArgoCDTools, `kc project lint` (and the IaC/ArgoCDTools gate that runs the same verbs) reds on third-party code the repo does not own.
-
-**Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Raise please. Can you create this for the Architecture project please, so that it can do a cross repo scan. — filed as ARCH-13 in the Architecture project, framed as the cross-producer scan with this finding as its evidence
 
 ### B5 — aac-tools: the generator takes the app name from Chart.yaml, Argo takes it from the registry path · minor
 
@@ -192,29 +183,7 @@ P2 added a top-level `exclude = ["aac-tools/image/arch-validate.py"]` to `ruff.t
 **Consequence:** A deploy repo whose chart name differs from its registry directory publishes a full architecture keyed to a namespace the app is not deployed in — green, no gap line — and every cross-producer edge into the real ids dangles.
 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F1
-**Disposition:**
-
-### B13 — AnsibleSpecs: the rotation inventory still names a KubeCoder controller CA copy that was deleted two weeks before this slice · minor
-
-decisions.md:167 — the bullet immediately after the CA-root inventory P6 rewrote — states that the KubeCoder controller image bakes its own copy at /work/KubeCoder/controller/homelab-root.crt, and that it rotates like the other image-baked copies: rebuild the image, roll the controller Deployment onto the new tag. The file does not exist. KubeCoder 7e78405f (2026-09-03, "the step root from the pod") deleted it, and controller/Dockerfile carries no COPY of it — the controller now takes the root from the chart mount, exactly as the /work/HelmCharts/homelab-root.crt row at :166 already describes ("The controller keeps no copy of its own: a chart deploy carries it, no image rebuild"). Pre-existing, not introduced by slice 024. P6 re-gated this inventory against the tree but only in one direction — no real copy under /work is unnamed — so a named path that had vanished survived the sweep. Same class as N1, found by running that sweep the other way.
-
-consult 3, 2026-09-20 — Re-verified at consult 3: /work/KubeCoder/controller/homelab-root.crt does not exist and controller/Dockerfile (KubeCoder 8277e4ca) carries no COPY of it, so the bullet at decisions.md:167 is false as written and contradicts the /work/HelmCharts/homelab-root.crt row of the runbook table, which says the controller keeps no copy of its own. Judged against the generation bar and left here: V16 scopes to the artefacts this slice moved and added, and this copy is neither — it is the same pre-existing class as N1, found by sweeping the inventory the other way.
-
-**Consequence:** A year-9 rotation operator following the register looks for a file that is not there, and rebuilds and rolls the KubeCoder controller for a root that now reaches it through the chart mount — wasted keystrokes in the change window, and a lingering doubt about whether the controller got the new root at all.
-
-**Provenance:** witnessed, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F2
-**Disposition:**
-
-### B17 — Ansible: the rotation runbook's new aac-tools row credits the homelab root for reaching architecture.webathome.org · minor
-
-`docs/runbooks/step-ca-root-rotation.md:76` reads: 'It is how a run reaches https://charts.home for the chart dependency and https://architecture.webathome.org for the dataset and the validator.' The second half is not true. Checked live from this pod: architecture.webathome.org presents `issuer=C=US, O=Let's Encrypt, CN=YE2`, so the stock trust store reaches it and the baked homelab root plays no part; charts.home presents `issuer=O=homelab-ca, CN=homelab-ca Intermediate CA`, which is the whole reason the copy exists — as the image itself says at /work/ArgoCDTools/aac-tools/Dockerfile:42-45, and as this slice's own verification.json V14 evidence line records. The same row's 'which Jenkins pulls' is also ahead of the estate: no pipeline consumes the image until slice 014 gives a deploy repo its Jenkinsfile.architecture.
-
-consult 3, 2026-09-20 — Re-verified live from this pod at consult 3, both halves: architecture.webathome.org presents issuer=C=US, O=Let's Encrypt, CN=YE2, so the stock trust store reaches it and the baked root plays no part; charts.home presents issuer=O=homelab-ca, CN=homelab-ca Intermediate CA, which is the whole reason the copy exists. Left for the operator rather than fixed in session, unlike B18's arithmetic: the sentence needs an authoring decision, not a restatement — the row's 'which Jenkins pulls' is the second half of the finding and no pipeline consumes the image until slice 014. The true clause is that the baked root is how a run reaches https://charts.home for the chart dependency, and that nothing about https://architecture.webathome.org — dataset or validator — depends on it.
-
-**Consequence:** A rotation operator reading the row puts the AaC dataset and validator inside a root change's blast radius they are not in, or blames a stale root for an arch-validate failure that cannot have that cause.
-
-**Provenance:** witnessed | code-reviewer, P7, round 1 — openssl s_client against both hosts; full record in phases/P7/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Fix inline or raise. — raised as ANS-85: the registry path lives in the registry repo, which the generator never reads, so there is nothing the generator can check inline
 
 ### B3 — ArgoCDTools: the ruff exclusion does not hold for the invocation its comment promises · nit
 
@@ -223,18 +192,37 @@ consult 3, 2026-09-20 — Re-verified live from this pod at consult 3, both halv
 **Consequence:** An editor-on-save formatter or a hand-run `ruff format <path>` silently rewrites the canonical validator; the drift surfaces as a red md5 test rather than being prevented.
 
 **Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F2
-**Disposition:**
+**Disposition:** What's going on with this include? Was it just a mistake to add it?
 
-### B4 — aac-tools (and HelmCharts): a CNPG CR's `realizes:` targets are emitted bare, unlike a container's · nit
+### ~~B2 — ArgoCDTools: ruff.toml's new `exclude` drops ruff's default exclude list repo-wide · minor~~ — fixed in ArgoCDTools b9f6f4d: ruff.toml uses extend-exclude, so the vendored-file exclusion and ruff's default exclude list both hold; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+P2 added a top-level `exclude = ["aac-tools/image/arch-validate.py"]` to `ruff.toml:8`, a file that had no `exclude` key before. Ruff's `exclude` overrides the built-in default list rather than extending it, so `.venv`, `venv`, `build`, `dist`, `node_modules`, `site-packages`, `__pypackages__`, `.tox` and `.mypy_cache` are no longer skipped; `ruff check --show-settings .` prints that one entry as the whole list. The repo's `.gitignore` is two lines (`__pycache__/`, `*.pyc`), so `respect-gitignore` covers none of them. Witnessed: `mkdir build && printf 'import os\nx=1\n' > build/vendored.py` then `ruff check .` from the repo root reports F401 on `build/vendored.py` (probe reverted). No such directory exists in ArgoCDTools today, which is why this is advisory rather than blocking. Using ruff's `extend-exclude` instead keeps the vendored-file exclusion and the defaults both.
+
+**Consequence:** The first time a build tree, a virtualenv or a vendored dependency lands anywhere in ArgoCDTools, `kc project lint` (and the IaC/ArgoCDTools gate that runs the same verbs) reds on third-party code the repo does not own.
+
+**Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F1
+**Disposition:** Fix inline. — fixed in ArgoCDTools b9f6f4d: ruff.toml uses `extend-exclude`, so the vendored-file exclusion and ruff's built-in default list both hold; witnessed with a `dist/vendored.py` probe, red before and skipped after
+
+</details>
+
+### ~~B4 — aac-tools (and HelmCharts): a CNPG CR's `realizes:` targets are emitted bare, unlike a container's · nit~~ — closed by the operator, 2026-09-20 — the condition holds: the bare target reaches the artifact unresolved and the validation service rejects it, so the build reds downstream
+
+<details><summary>struck — body kept for the record</summary>
 
 The container path maps a `realizes:` target through the cluster storage table before drawing the edge (`CEPH_SERVICE_IDS.get(tgt, tgt)`); `emit_cnpg_substrate` draws `tgt` raw. Both copies behave this way — the port carried HelmCharts' code across unchanged, which is what the ruling asked for. Latent in both today: every `cnpg:` annotation in the estate declares `cap:` targets only, and those are bare by design. It fires the first time a database substrate is annotated as realizing a storage service.
 
 **Consequence:** A `cnpg:` annotation that declares `realizes: [svc:cluster-ceph-rbd]` publishes a Realization to a reference the federation cannot resolve, where the same annotation on an `images:` entry publishes the resolvable composite id.
 
 **Provenance:** witnessed | code-writer, P3, r1 — /work/ArgoCDTools/aac-tools/image/gen_architecture.py (emit_cnpg_substrate), ported from /work/HelmCharts/tools/chart_tools/gen_architecture.py:855
-**Disposition:**
+**Disposition:** Close if this would raise an error further down. — it does: the bare target reaches the artifact unresolved, where the validation service's kind lookup rejects it and the build reds — the same downstream failure B6 records for the deferred class; closed
 
-### B6 — aac-tools (and HelmCharts): an unresolvable cross-producer ref is reported outside the `gap:` form · nit
+</details>
+
+### ~~B6 — aac-tools (and HelmCharts): an unresolvable cross-producer ref is reported outside the `gap:` form · nit~~ — fixed in ArgoCDTools b9f6f4d and HelmCharts 897c571: an unresolved cross-producer ref prints as a gap: line, the one form the producer contract binds; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 `resolve_product` defers a ref no producer resolves (gen_architecture.py:743-750) and the run prints 'deferred (cross-producer, unresolved): <ref>' (:1017-1018). The generated-producer contract binds the other form: 'Whatever the generator cannot map ... prints on a console line of its own, gap: <what> ... a gap reported in any other form is never seen' (/work/Architecture/.claude/architecture/producer-manual.md:543-549). Verbatim from HelmCharts, so the port-whole ruling produced it. Bounded, not silent: the deferred ref also reaches the artifact bare, where the validation service's kind lookup rejects it, so the build reds downstream — what is lost is the named ref in the line the central architecture update reads.
 
@@ -243,45 +231,9 @@ test-agent, test phase, r1, 2026-09-20 — Re-checked against V12, which asks th
 **Consequence:** The central architecture update, which reads gap: lines off the last successful AaC build, never sees which cross-producer reference the generator could not place; the operator learns of it only as a validation failure.
 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Can this be fixed inline easily? Looks like a simple error message to report. — it was: fixed in ArgoCDTools b9f6f4d and HelmCharts 897c571 — the deferred ref now prints as `gap: cross-producer reference '<ref>' resolves to no producer`, the one form the producer contract binds
 
-### B8 — aac-tools: two of gen-architecture's preconditions fail with a traceback, the third with a sentence · nit
-
-`annotations()` refuses a missing or dateless annotation layer with a SystemExit naming the path and why (gen_architecture.py:283-306). The two preconditions added beside it do not: `hook_parameters` shells out to 'git remote get-url origin' (:363-378) and `chart_metadata` reads chart/Chart.yaml unguarded (:279-280). Witnessed on a git-init-only checkout carrying an annotation layer and a chart: the run ends in subprocess.CalledProcessError after a Python traceback. `run()` prints the child's stderr first, so "error: No such remote 'origin'" is above it, and annotations() runs before chart_metadata(), so the common wrong-directory case stays legible.
-
-test-agent, test phase, r1, 2026-09-20 — Witnessed once more in the test phase, a third precondition of the same class: --stage naming a stage that has no config/<stage>/values.yaml (run with --stage nosuchstage over a throwaway clone) exits through subprocess.CalledProcessError after helm's own error line — a Python traceback, not a sentence. Same nit, same consequence; recorded here so the entry's scope is not read as two preconditions only.
-
-**Consequence:** A run in a checkout without an origin remote — an export, a worktree, a repo cloned without remotes — ends in a Python traceback rather than a statement of what the generator needed.
-
-**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F4
-**Disposition:**
-
-### B9 — aac-tools: the equality check's "one snapshot" is two fetches of the same URL · nit
-
-`main()` fetches the dataset itself (`aac-tools/checks/handover_equality.py:247`) and then passes the child the same URL rather than the bytes it read (`:99`, `ARCH_DATASET_URL=dataset`). With the default `--dataset`, that is two independent HTTP GETs at different times. The comment at `:97-98` — "Both sides read one snapshot, so a publish between the two reads cannot look like a difference" — and `plan.md:535`, which repeats it, are true only when `--dataset` names a file.
-
-**Consequence:** A helm-charts publish landing between the two reads shows up as a difference, and the note beside the code tells whoever reads the report that a concurrent publish is impossible — so a spurious difference is investigated as a regression in the port.
-
-**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
-**Disposition:**
-
-### B10 — aac-tools: the equality check cannot read a multi-document dataset the generator handles · nit
-
-The check's `load_dataset` (`aac-tools/checks/handover_equality.py:122-127`) uses `yaml.safe_load` while calling itself "the generator's own rule"; the generator uses `yaml.safe_load_all` and indexes every envelope in the stream (`aac-tools/image/gen_architecture.py:489-491`). The check mirrors the URL-versus-file half of the rule and not the multi-document half. The endpoint serves a single document today (555 KB, no `---` separators, read 2026-09-20).
-
-**Consequence:** If the federation ever serves the merged dataset as a YAML stream, the generator keeps working and the reference side of the handover check dies with a ComposerError instead — a loud failure, not a wrong result.
-
-**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F2
-**Disposition:**
-
-### B15 — AnsibleSpecs: doctrine says our own images are not digest-pinned; HelmCharts' deploy calls its digest resolution pinning · nit
-
-decisions.md:599 is the register's only statement about image digests (grep -n digest decisions.md returns that line alone), and it says images we build ourselves are not digest-pinned. HelmCharts uses the word the other way for a real mechanism the register never records: migrate-release.py:342's --no-pin is documented as 'skip image-digest pinning via resolve-helm-args', and resolve_helm_args.py:148 resolves every chart-template image reference to @sha256: at deploy time (--set at :155), which Jenkinsfile:189-191 then uses as the trigger to deploy. Under the sentence's own definition of a pin — a reference committed here that an upstream tag move cannot shift — the claim is true, and the resolution is the opposite of a pin: it follows whatever the written tag points at now. So this is a gap in doctrine, not a false rule, and no procedure follows from it wrongly: the aac-tools reference never meets the resolver at all (get_helm_images walks charts/<chart>/templates/ only, resolve_helm_args.py:41,56, while the toolchain entries live in values.yaml), and the operative half — floating or pinned tag is the consuming site's call — holds in code at charts/kubecoder/values.yaml:331-332, :381, :406, :456, :485 against eleven :latest entries. Reviewed as blocking in P6 rounds 2 and 3 and as advisory in round 4; recording it once here rather than relitigating the wording.
-
-**Consequence:** A reader who takes decisions.md as the estate's word on digests, then meets @sha256: on every HelmCharts-deployed prd pod or greps HelmCharts' tooling for 'pin', has to work out unaided that the two uses are different mechanisms — and closing it properly means the register describing the deploy path's digest resolution, an edit wider than R4's ruling asked P6 for.
-
-**Provenance:** read, code-reviewer, P6 round 4, phases/P6/code_review_r4.md F1
-**Disposition:**
+</details>
 
 ### ~~B7 — ArgoCDTools: .kubecoder/project.yaml's aac-tools description still names one command · nit~~ — resolved by the consult's own commit ArgoCDTools e03e644: .kubecoder/project.yaml's aac-tools description now names gen-architecture beside arch-validate, matching the Dockerfile header P3 extended; kc project info and kc project lint re-run green; struck by consult 3
 
@@ -293,6 +245,47 @@ decisions.md:599 is the register's only statement about image digests (grep -n d
 
 **Provenance:** read | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F3
 **Disposition:**
+
+</details>
+
+### ~~B8 — aac-tools: two of gen-architecture's preconditions fail with a traceback, the third with a sentence · nit~~ — closed by the operator, 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+`annotations()` refuses a missing or dateless annotation layer with a SystemExit naming the path and why (gen_architecture.py:283-306). The two preconditions added beside it do not: `hook_parameters` shells out to 'git remote get-url origin' (:363-378) and `chart_metadata` reads chart/Chart.yaml unguarded (:279-280). Witnessed on a git-init-only checkout carrying an annotation layer and a chart: the run ends in subprocess.CalledProcessError after a Python traceback. `run()` prints the child's stderr first, so "error: No such remote 'origin'" is above it, and annotations() runs before chart_metadata(), so the common wrong-directory case stays legible.
+
+test-agent, test phase, r1, 2026-09-20 — Witnessed once more in the test phase, a third precondition of the same class: --stage naming a stage that has no config/<stage>/values.yaml (run with --stage nosuchstage over a throwaway clone) exits through subprocess.CalledProcessError after helm's own error line — a Python traceback, not a sentence. Same nit, same consequence; recorded here so the entry's scope is not read as two preconditions only.
+
+**Consequence:** A run in a checkout without an origin remote — an export, a worktree, a repo cloned without remotes — ends in a Python traceback rather than a statement of what the generator needed.
+
+**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F4
+**Disposition:** Close.
+
+</details>
+
+### ~~B9 — aac-tools: the equality check's "one snapshot" is two fetches of the same URL · nit~~ — fixed in ArgoCDTools b9f6f4d: the dataset is read once and handed to the generator as a file, so both sides read one snapshot; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+`main()` fetches the dataset itself (`aac-tools/checks/handover_equality.py:247`) and then passes the child the same URL rather than the bytes it read (`:99`, `ARCH_DATASET_URL=dataset`). With the default `--dataset`, that is two independent HTTP GETs at different times. The comment at `:97-98` — "Both sides read one snapshot, so a publish between the two reads cannot look like a difference" — and `plan.md:535`, which repeats it, are true only when `--dataset` names a file.
+
+**Consequence:** A helm-charts publish landing between the two reads shows up as a difference, and the note beside the code tells whoever reads the report that a concurrent publish is impossible — so a spurious difference is investigated as a regression in the port.
+
+**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
+**Disposition:** Fix if you feel confident fixing this inline. — fixed in ArgoCDTools b9f6f4d: the dataset is read once and handed to the generator as a file, so both sides really do read one snapshot; the check still runs equal against the live dataset
+
+</details>
+
+### ~~B10 — aac-tools: the equality check cannot read a multi-document dataset the generator handles · nit~~ — closed by the operator, 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+The check's `load_dataset` (`aac-tools/checks/handover_equality.py:122-127`) uses `yaml.safe_load` while calling itself "the generator's own rule"; the generator uses `yaml.safe_load_all` and indexes every envelope in the stream (`aac-tools/image/gen_architecture.py:489-491`). The check mirrors the URL-versus-file half of the rule and not the multi-document half. The endpoint serves a single document today (555 KB, no `---` separators, read 2026-09-20).
+
+**Consequence:** If the federation ever serves the merged dataset as a YAML stream, the generator keeps working and the reference side of the handover check dies with a ComposerError instead — a loud failure, not a wrong result.
+
+**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F2
+**Disposition:** Close.
 
 </details>
 
@@ -326,6 +319,21 @@ doc-writer, doc phase, 2026-09-20 — Resolved in the doc phase (HelmCharts fb49
 
 </details>
 
+### ~~B13 — AnsibleSpecs: the rotation inventory still names a KubeCoder controller CA copy that was deleted two weeks before this slice · minor~~ — fixed in AnsibleSpecs 104c0c2: the register says the controller keeps no copy of its own and takes the root from the chart mount, no image rebuild; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+decisions.md:167 — the bullet immediately after the CA-root inventory P6 rewrote — states that the KubeCoder controller image bakes its own copy at /work/KubeCoder/controller/homelab-root.crt, and that it rotates like the other image-baked copies: rebuild the image, roll the controller Deployment onto the new tag. The file does not exist. KubeCoder 7e78405f (2026-09-03, "the step root from the pod") deleted it, and controller/Dockerfile carries no COPY of it — the controller now takes the root from the chart mount, exactly as the /work/HelmCharts/homelab-root.crt row at :166 already describes ("The controller keeps no copy of its own: a chart deploy carries it, no image rebuild"). Pre-existing, not introduced by slice 024. P6 re-gated this inventory against the tree but only in one direction — no real copy under /work is unnamed — so a named path that had vanished survived the sweep. Same class as N1, found by running that sweep the other way.
+
+consult 3, 2026-09-20 — Re-verified at consult 3: /work/KubeCoder/controller/homelab-root.crt does not exist and controller/Dockerfile (KubeCoder 8277e4ca) carries no COPY of it, so the bullet at decisions.md:167 is false as written and contradicts the /work/HelmCharts/homelab-root.crt row of the runbook table, which says the controller keeps no copy of its own. Judged against the generation bar and left here: V16 scopes to the artefacts this slice moved and added, and this copy is neither — it is the same pre-existing class as N1, found by sweeping the inventory the other way.
+
+**Consequence:** A year-9 rotation operator following the register looks for a file that is not there, and rebuilds and rolls the KubeCoder controller for a root that now reaches it through the chart mount — wasted keystrokes in the change window, and a lingering doubt about whether the controller got the new root at all.
+
+**Provenance:** witnessed, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F2
+**Disposition:** Is this a trivial fix? If so, please fix inline. — trivial, and fixed in AnsibleSpecs 104c0c2: decisions.md:167 now says the controller keeps no copy of its own and takes the root from the chart mount, matching the runbook's HelmCharts row
+
+</details>
+
 ### ~~B14 — AnsibleSpecs: V04 asks the register to state a first-party tag norm the estate does not have · minor~~ — resolved by f2927cb (024: R4 rules the substance, not the sentence): V04 was reworded to state the outcome rather than the register's prose, and now matches the line P6 landed at decisions.md:599 — both re-read at consult 3, so the test phase has nothing left to decide unaided; struck by consult 3
 
 <details><summary>struck — body kept for the record</summary>
@@ -339,6 +347,19 @@ verification.json V04 requires decisions.md to state the pin rule as 'third-part
 
 </details>
 
+### ~~B15 — AnsibleSpecs: doctrine says our own images are not digest-pinned; HelmCharts' deploy calls its digest resolution pinning · nit~~ — fixed in AnsibleSpecs 104c0c2: the register names HelmCharts' deploy-time digest resolution and says why it is not a pin in the sense the bullet above defines; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+decisions.md:599 is the register's only statement about image digests (grep -n digest decisions.md returns that line alone), and it says images we build ourselves are not digest-pinned. HelmCharts uses the word the other way for a real mechanism the register never records: migrate-release.py:342's --no-pin is documented as 'skip image-digest pinning via resolve-helm-args', and resolve_helm_args.py:148 resolves every chart-template image reference to @sha256: at deploy time (--set at :155), which Jenkinsfile:189-191 then uses as the trigger to deploy. Under the sentence's own definition of a pin — a reference committed here that an upstream tag move cannot shift — the claim is true, and the resolution is the opposite of a pin: it follows whatever the written tag points at now. So this is a gap in doctrine, not a false rule, and no procedure follows from it wrongly: the aac-tools reference never meets the resolver at all (get_helm_images walks charts/<chart>/templates/ only, resolve_helm_args.py:41,56, while the toolchain entries live in values.yaml), and the operative half — floating or pinned tag is the consuming site's call — holds in code at charts/kubecoder/values.yaml:331-332, :381, :406, :456, :485 against eleven :latest entries. Reviewed as blocking in P6 rounds 2 and 3 and as advisory in round 4; recording it once here rather than relitigating the wording.
+
+**Consequence:** A reader who takes decisions.md as the estate's word on digests, then meets @sha256: on every HelmCharts-deployed prd pod or greps HelmCharts' tooling for 'pin', has to work out unaided that the two uses are different mechanisms — and closing it properly means the register describing the deploy path's digest resolution, an edit wider than R4's ruling asked P6 for.
+
+**Provenance:** read, code-reviewer, P6 round 4, phases/P6/code_review_r4.md F1
+**Disposition:** Fix inline. — fixed in AnsibleSpecs 104c0c2: the register now names HelmCharts' deploy-time digest resolution and says why it is not a pin in the sense the bullet above defines
+
+</details>
+
 ### ~~B16 — Ansible: declaring pvginkel/Architecture gives this environment a setup step that fails at every pod start · major~~ — fixed in Ansible ec4fbc3: the pvginkel/Architecture repos: entry is gone from .kubecoder/config.yaml, and this environment's restart reports issues: (none); struck by close-out 2026-09-20
 
 <details><summary>struck — body kept for the record</summary>
@@ -349,6 +370,21 @@ P7 adds `- url: https://github.com/pvginkel/Architecture` at `.kubecoder/config.
 
 **Provenance:** witnessed | code-reviewer, P7, round 1 — cd /work/Architecture && kc project setup in this pod; full record in phases/P7/code_review_r1.md F1
 **Disposition:** set the dispositions you know are answered — closed, fixed in Ansible ec4fbc3 — the pvginkel/Architecture repos: entry is gone from .kubecoder/config.yaml, and this environment's restart reports issues: (none)
+
+</details>
+
+### ~~B17 — Ansible: the rotation runbook's new aac-tools row credits the homelab root for reaching architecture.webathome.org · minor~~ — fixed in Ansible 32dab1f: the row credits the baked root for charts.home only, and no longer says Jenkins pulls the image; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+`docs/runbooks/step-ca-root-rotation.md:76` reads: 'It is how a run reaches https://charts.home for the chart dependency and https://architecture.webathome.org for the dataset and the validator.' The second half is not true. Checked live from this pod: architecture.webathome.org presents `issuer=C=US, O=Let's Encrypt, CN=YE2`, so the stock trust store reaches it and the baked homelab root plays no part; charts.home presents `issuer=O=homelab-ca, CN=homelab-ca Intermediate CA`, which is the whole reason the copy exists — as the image itself says at /work/ArgoCDTools/aac-tools/Dockerfile:42-45, and as this slice's own verification.json V14 evidence line records. The same row's 'which Jenkins pulls' is also ahead of the estate: no pipeline consumes the image until slice 014 gives a deploy repo its Jenkinsfile.architecture.
+
+consult 3, 2026-09-20 — Re-verified live from this pod at consult 3, both halves: architecture.webathome.org presents issuer=C=US, O=Let's Encrypt, CN=YE2, so the stock trust store reaches it and the baked root plays no part; charts.home presents issuer=O=homelab-ca, CN=homelab-ca Intermediate CA, which is the whole reason the copy exists. Left for the operator rather than fixed in session, unlike B18's arithmetic: the sentence needs an authoring decision, not a restatement — the row's 'which Jenkins pulls' is the second half of the finding and no pipeline consumes the image until slice 014. The true clause is that the baked root is how a run reaches https://charts.home for the chart dependency, and that nothing about https://architecture.webathome.org — dataset or validator — depends on it.
+
+**Consequence:** A rotation operator reading the row puts the AaC dataset and validator inside a root change's blast radius they are not in, or blames a stale root for an arch-validate failure that cannot have that cause.
+
+**Provenance:** witnessed | code-reviewer, P7, round 1 — openssl s_client against both hosts; full record in phases/P7/code_review_r1.md F2
+**Disposition:** Fix inline. — fixed in Ansible 32dab1f: the row credits the baked root for https://charts.home only, states that architecture.webathome.org presents a publicly trusted leaf, and no longer says Jenkins pulls the image
 
 </details>
 
@@ -392,7 +428,7 @@ Deliberately left out of this slice (Not in scope) rather than folded into the J
 **Consequence:** A commit that reds the repo's tests still publishes to registry:5000 on a push to main — and after this slice that is two images, one of them the tool a deploy repo's architecture gate will depend on.
 
 **Provenance:** read; plan-writer, planning, r1; /work/ArgoCDTools/Jenkinsfile
-**Disposition:**
+**Disposition:** Fix inline or raise. — raised as ANS-86: a test stage needs a container choice the entry does not settle, and no Jenkinsfile change can be verified from this pod
 
 ### S2 — A sibling repo's component name is not a `Target:` any Ansible-led slice can use
 
@@ -405,7 +441,7 @@ KubeCoder's remote project surface is the other half of the picture: it walks ev
 **Consequence:** A later slice planned from this repo that writes `Target: aac-tools` (or `argocd-hook`) fails the run loop's plan check with "neither a kc project list component nor a sibling repo path" — a bail at parse time, before any work starts.
 
 **Provenance:** read; plan-writer, planning, r2; run_loop.py load_project_dirs / _resolve_target, and `kc project list` in both repos
-**Disposition:**
+**Disposition:** The suggestion is to make Target use project names, right? I think that's a good suggestion. Raise please. — raised as AIWF-8 against the run loop, which is where the gap is
 
 ### S4 — aac-tools: the equality fixture becomes a second copy the day KubeCoderDeploy commits its own annotation layer · nit
 
@@ -414,31 +450,7 @@ KubeCoder's remote project surface is the other half of the picture: it walks ev
 **Consequence:** The check can go on proving the handover for an annotation layer the pipeline does not use — the deploy repo's committed judgment drifts from the fixture's, and a green check no longer says anything about the artifact Jenkins publishes.
 
 **Provenance:** witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
-**Disposition:**
-
-### S6 — Ansible: KubeCoderDeploy is checked out under /work but declared in no repo set · minor
-
-P7 added `pvginkel/Architecture` to `/work/Ansible/.kubecoder/config.yaml`'s `repos:` and found, doing it, that `/work/KubeCoderDeploy` is not in that list either — the declared set is AnsibleSpecs, HelmCharts, JenkinsPipelineUtils, DockerImages, HomelabTerraformProvider, ArgoCDDeploy, ArgoCDTools, Charts and now Architecture. The checkout exists and has its own origin, so it was made by hand. This slice leans on it twice: P4's handover-equality check clones `/work/KubeCoderDeploy` as the real case that earns V09, and the rotation runbook's md5sum block names `/work/KubeCoderDeploy/chart/files/ca/homelab-root.crt` as one of the ten paths to hash. `CLAUDE.md` also lists it among the repos under `/work` and says the set is declared in `config.yaml`. Declaring it is a one-line edit, but it only materialises through `kc env restart`, which recreates this pod — the operator's, not a slice's.
-
-**Consequence:** A rebuilt environment loses /work/KubeCoderDeploy, and with it the equality check that proves the UUID handover and one of the ten paths the rotation runbook's inventory check hashes — both fail as missing files, in a fresh pod, with no record of why the checkout was expected.
-
-**Provenance:** witnessed | code-writer, P7, r1 — /work/Ansible/.kubecoder/config.yaml repos:, /work/KubeCoderDeploy/.git origin
-**Disposition:**
-
-### S7 — The Architecture repo's own docs still describe arch-validate.py as a script every producer copies · nit
-
-ANS-78 owns migrating the estate's four copied arch-validate.py scripts and the producer manual's instruction to copy it, which this slice puts out of scope. Three lines sit just outside that framing and are now inaccurate rather than merely incomplete:
-
-- /work/Architecture/README.md:71 — the .claude/ tree listing calls arch-validate.py '(the only copy)'. It is not: the aac-tools image ships it byte for byte, and four repos carry hand copies (one of them, KubeCoder's, already drifted).
-- /work/Architecture/USAGE.md:135-138 — 'A producer repo drops the file into its own scripts/ directory and runs it in CI' as the only distribution story.
-- /work/Architecture/USAGE.md:160-161 — 'Updates are coordinated by re-copying from this repo'; for the image's copy an update rides a rebuild.
-
-Left untouched: the Architecture repo is outside this slice's diff and outside this project's doc model, and editing it would put a commit in a seventh repo nothing here pushes.
-
-**Consequence:** A producer being onboarded reads the federation's own docs and hand-copies the validator into scripts/ when selecting the aac-tools toolchain would have given it the canonical one — adding a fifth copy to the set ANS-78 exists to shrink.
-
-**Provenance:** read, doc-writer, doc phase — surveyed while reconciling this slice's doc surfaces
-**Disposition:**
+**Disposition:** That sounds like a mistake. Can you still fix this? You're not saying the file is now in the image, right? I'm not sure if I understand what happened.
 
 ### ~~S3 — Three sibling-repo comments still cite /work/ArgoCDTools/presync/…, a path slice 024 moved · minor~~ — fixed by the doc phase: ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7, both now on origin/main; struck by close-out 2026-09-20
 
@@ -471,5 +483,37 @@ P6 rewrote P7's section to land nine copies instead of seven, enumerating the ru
 
 **Provenance:** read, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F3
 **Disposition:**
+
+</details>
+
+### ~~S6 — Ansible: KubeCoderDeploy is checked out under /work but declared in no repo set · minor~~ — closed by the operator, 2026-09-20 — not a problem
+
+<details><summary>struck — body kept for the record</summary>
+
+P7 added `pvginkel/Architecture` to `/work/Ansible/.kubecoder/config.yaml`'s `repos:` and found, doing it, that `/work/KubeCoderDeploy` is not in that list either — the declared set is AnsibleSpecs, HelmCharts, JenkinsPipelineUtils, DockerImages, HomelabTerraformProvider, ArgoCDDeploy, ArgoCDTools, Charts and now Architecture. The checkout exists and has its own origin, so it was made by hand. This slice leans on it twice: P4's handover-equality check clones `/work/KubeCoderDeploy` as the real case that earns V09, and the rotation runbook's md5sum block names `/work/KubeCoderDeploy/chart/files/ca/homelab-root.crt` as one of the ten paths to hash. `CLAUDE.md` also lists it among the repos under `/work` and says the set is declared in `config.yaml`. Declaring it is a one-line edit, but it only materialises through `kc env restart`, which recreates this pod — the operator's, not a slice's.
+
+**Consequence:** A rebuilt environment loses /work/KubeCoderDeploy, and with it the equality check that proves the UUID handover and one of the ten paths the rotation runbook's inventory check hashes — both fail as missing files, in a fresh pod, with no record of why the checkout was expected.
+
+**Provenance:** witnessed | code-writer, P7, r1 — /work/Ansible/.kubecoder/config.yaml repos:, /work/KubeCoderDeploy/.git origin
+**Disposition:** This is not a problem.
+
+</details>
+
+### ~~S7 — The Architecture repo's own docs still describe arch-validate.py as a script every producer copies · nit~~ — closed by the operator, 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+ANS-78 owns migrating the estate's four copied arch-validate.py scripts and the producer manual's instruction to copy it, which this slice puts out of scope. Three lines sit just outside that framing and are now inaccurate rather than merely incomplete:
+
+- /work/Architecture/README.md:71 — the .claude/ tree listing calls arch-validate.py '(the only copy)'. It is not: the aac-tools image ships it byte for byte, and four repos carry hand copies (one of them, KubeCoder's, already drifted).
+- /work/Architecture/USAGE.md:135-138 — 'A producer repo drops the file into its own scripts/ directory and runs it in CI' as the only distribution story.
+- /work/Architecture/USAGE.md:160-161 — 'Updates are coordinated by re-copying from this repo'; for the image's copy an update rides a rebuild.
+
+Left untouched: the Architecture repo is outside this slice's diff and outside this project's doc model, and editing it would put a commit in a seventh repo nothing here pushes.
+
+**Consequence:** A producer being onboarded reads the federation's own docs and hand-copies the validator into scripts/ when selecting the aac-tools toolchain would have given it the canonical one — adding a fifth copy to the set ANS-78 exists to shrink.
+
+**Provenance:** read, doc-writer, doc phase — surveyed while reconciling this slice's doc surfaces
+**Disposition:** Close.
 
 </details>
