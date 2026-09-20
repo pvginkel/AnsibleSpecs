@@ -42,6 +42,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — The root-rotation inventory was already two copies short before this slice touched it · minor
+
+P6 rewrote `decisions.md`'s CA-root inventory expecting to move one path and add one — six copies to seven. A `find /work -name homelab-root.crt` run as the phase's gate returned nine real copies, not seven: `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt` and `/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt` are tracked, byte-identical to the canonical copy, and baked into their images by a `COPY homelab-root.crt /usr/local/share/ca-certificates/` line, exactly like the three copies the inventory did name. Neither is new: the arm64 one arrives with its image in `68151c9`, well before this slice. Rather than land a count it had just disproved, P6 recorded the true nine and named all of them; `docs/runbooks/step-ca-root-rotation.md` carries the same six-copy list and the same two omissions, and P7 is edited to land nine there. The two HelmCharts chart copies a `find` also returns (`charts/jenkins/`, `charts/kubecoder/`) are symlinks to the repo-root copy, not separate copies — both records are right to exclude them, and `decisions.md` now says so, so the next reader does not re-add them.
+
+**Consequence:** Had the gap gone unnoticed, a year-9 root rotation following either record would have updated seven copies and left two toolchain images trusting only the retired root — a failure that surfaces as those images losing TLS to every homelab endpoint, after the cutover window closed. It is corrected in decisions.md now and owed in the runbook at P7.
+
+**Provenance:** witnessed, code-writer, P6, round 1 — find /work -name homelab-root.crt -type f, then cmp against ansible/roles/baseline/files/homelab-root.crt and the images' Dockerfiles; gate script in the phase transcript
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -142,6 +151,24 @@ The check's `load_dataset` (`aac-tools/checks/handover_equality.py:122-127`) use
 **Consequence:** If the federation ever serves the merged dataset as a YAML stream, the generator keeps working and the reference side of the handover check dies with a ComposerError instead — a loud failure, not a wrong result.
 
 **Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F2
+**Disposition:**
+
+### B11 — HelmCharts: the aac-tools catalog entry says every first-party image here floats, and four do not · nit
+
+charts/kubecoder/values.yaml:585 justifies the floating tag with "as every first-party image in this catalog does". The block header at :331-332 states the opposite rule for matrix-built images — "so its entry pins that tag — frontend, modern-app, java and esp-idf" — and those four entries carry resolved tags (:381 node-24, :406 node-24, :456 jdk-21, :485 idf-5.5.3). The floating tag on aac-tools itself is what R4 asks for; only the generalisation beside it is wrong.
+
+**Consequence:** A reader takes the catalog's tag policy from the newest entry's comment rather than from the header, and reads four pinned entries as exceptions to a rule that does not exist.
+
+**Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
+### B12 — HelmCharts: the aac-tools toolchain instructions tell agents no repo needs a copy of arch-validate · nit
+
+charts/kubecoder/values.yaml:604 — text kc env describe prints to an agent in every selecting environment — states that because the image ships the canonical validator, "no repo needs a copy of that script". HelmCharts' own Jenkinsfile.architecture:34 runs ./scripts/arch-validate.py from a Jenkins pod that has no toolchain image, and retiring the byte-identical copies under /work/{Ansible,HelmCharts,DockerImages}/scripts/ is ANS-78, which this slice puts out of scope.
+
+**Consequence:** An agent working in a repo that has selected aac-tools can read its scripts/arch-validate.py as redundant and remove it, breaking that repo's architecture pipeline, which runs the copy rather than the image.
+
+**Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F2
 **Disposition:**
 
 ## Open questions and rulings

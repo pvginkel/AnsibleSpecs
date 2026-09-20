@@ -644,6 +644,39 @@ this phase they are true.
 
 The record is rewritten in place — no supersession note, no history narration.
 
+**Done (P6).** `decisions.md:599` is now **"Image pins follow provenance."** — third-party scanner
+and validator images pinned by digest, naming trivy in `DockerImages`' scan stage and kubeconform in
+`HelmCharts`' render gate, against first-party images we build ourselves on the estate's
+floating-tag norm (`:<build>` and `:latest` published, `:latest` consumed). Narrowed by provenance,
+not by pull mechanism; rewritten in place, nothing left elsewhere. The three live hits the old
+wording still has are slice 020's completed records and slice 014's `slice.md:649`, which quotes the
+old line as the collision and already says "The record moves with slice 024" — history, not
+doctrine, and untouched.
+
+The CA-root inventory is the phase's one deviation from its own arithmetic. It was to go six to
+seven; gating it against the tree returned **nine** real copies, so nine is what landed. The two the
+record never named — `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt` and
+`/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt` — are tracked, byte-identical and
+baked by the same `COPY` line as the copies it did name, and predate this slice. Landing seven would
+have put a number in doctrine that the phase's own gate had just disproved, and V16 asks for a
+one-change-window check runnable as written. Five of the nine are image-baked (was two); the count
+is consistent across `:166`, `:171` and `:174`. One clause added: HelmCharts' `charts/jenkins/` and
+`charts/kubecoder/` are symlinks to the repo-root copy, so a `find` that returns eleven does not mean
+eleven — that stops the next reader re-adding them.
+
+Gate: no tooling in this repo, so the gate is the claims themselves — all nine paths exist, are
+regular files and are byte-identical to `ansible/roles/baseline/files/homelab-root.crt`; no real copy
+under `/work` is unnamed; exactly five resolve to a Dockerfile; both named pins carry an `@sha256:`;
+ArgoCDTools' Jenkinsfile publishes both floating tags.
+
+Later phases:
+- **P7 lands nine, not seven** — its text is corrected in place. `step-ca-root-rotation.md` carries
+  the same six-copy list with the same two omissions, so its sweep gains two table rows and two
+  `md5sum` lines beyond the `aac-tools` and `argocd-hook` path work, and `:146` becomes "All ten
+  hashes must match" (the block counts the canonical copy too).
+- The `terraform.rc` set is genuinely four and unchanged — verified, not assumed.
+- Close-out N1 carries the pre-existing gap for the operator.
+
 ### P7 — the estate's records of what exists
 
 Target: root
@@ -657,10 +690,16 @@ one-change-window check is runnable as written: `docs/runbooks/step-ca-root-rota
 CA-root copy are in scope here.
 
 The new copy also moves a count that runbook states three times: `step-ca-root-rotation.md:42` and
-`:64-65` ("six out-of-repo copies", "a rotation updates all six") and `:146` ("all seven hashes must
-match", over the seven-path `md5sum` block above it). The `terraform.rc` set is untouched — this
-image carries no Terraform — so its count of four, here and in `operator-workstation.md:90`, stays
-as it is.
+`:64-65` ("Six out-of-repo copies", "a rotation updates all six") and `:146` ("All seven hashes must
+match", over the `md5sum` block above it). **The count was already wrong before this slice**, which
+P6 found and `decisions.md` now fixes: `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt`
+and `/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt` are tracked, byte-identical,
+image-baked copies that neither record inventoried. So the runbook lands **nine**, not seven — two
+extra table rows beside the `aac-tools` one, two extra `md5sum` lines, and "All ten hashes must
+match" over that block, which counts the canonical copy too. Five of the nine are image-baked, and
+HelmCharts' `charts/jenkins/` and `charts/kubecoder/` copies are symlinks to the repo-root one, so
+they are not on the list. The `terraform.rc` set is untouched — this image carries no Terraform —
+so its count of four, here and in `operator-workstation.md:90`, stays as it is.
 
 `.kubecoder/config.yaml`'s `repos:` declares `pvginkel/Architecture`, so the producer contract the
 generator is written against is on this machine by construction rather than by hand. The checkout
