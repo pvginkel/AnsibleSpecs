@@ -680,7 +680,7 @@ Later phases:
 - The `terraform.rc` set is genuinely four and unchanged — verified, not assumed.
 - Close-out N1 carries the pre-existing gap for the operator.
 
-### P7 — the estate's records of what exists
+### P7 — the estate's records of what exists ✅ DONE 2026-09-20
 
 Target: root
 
