@@ -770,8 +770,9 @@ wins** — the supersessions are listed at the end.
 4. **Distribution is a container, built in ArgoCDTools, floating tag.** *"Jenkins can pull those in
    and it means we have a fully managed system for this. It also means we don't need the scripts in
    the repo anymore."* One image, several commands — `gen-architecture` and `arch-validate` first.
-   Working name **`pipeline-utils`** (the operator weighed `argocd-utils` and `build-utils` and
-   found none better). Why ArgoCDTools although the tools are not Argo-specific: *"most of the
+   The image and the toolchain are both named **`aac-tools`** — the operator, after weighing
+   `argocd-utils`, `build-utils` and `pipeline-utils`: *"We're only putting AaC stuff in it.
+   pipeline-utils invites a grab bag of different things."* Why ArgoCDTools although the tools are not Argo-specific: *"most of the
    complexity is around the Kubernetes based architecture generation stuff. The agent has that
    context in this repo. We can move it later if we want."* The image carries python, uv and helm.
    HelmCharts consumes the same image — its job installs the repo's own `deploy` CLI into the
