@@ -63,6 +63,8 @@ Two adjacent observations from the same registry read, recorded for whoever pick
 - `prd-26 … prd-36` are the promote job's own build numbers, not image build numbers — the
   mismatch S1 records, confirmed live.
 
+consult 1, 2026-09-20 — The realised case this entry names was P1's input, not its output: P1 re-pinned to build 523 under Ruling 4 precisely because dev-511 can never be reproduced, and the chart now pins nothing at all. The bug is unchanged and still lands on DockerImages/registry-cleanup — a git-committed pin is outside its protection set — but the exposed tags are now 523 and prd-523, which do not exist yet and which slice 012's cutover creates.
+
 **Consequence:** A git-committed deployment reference is not in registry-cleanup's protection set, so once Argo deploys KubeCoder from a stage file the pinned tag can be deleted under the cap while git still names it — the Application then fails to pull. It has already happened to the pins in the repo today.
 
 **Provenance:** witnessed — plan-reviewer, plan review r1; http://registry:5000/v2/kubecoder-*/tags/list queried 2026-09-20, KubeCoderDeploy/chart/values.yaml:11-18,668,671, DockerImages/registry-cleanup/app/main.py:285-299
@@ -75,6 +77,24 @@ vars/cicd.groovy:233-235 promises that a rewritten line "always parses back to t
 **Consequence:** A future app that pins a bare numeric tag through this method gets an int where it asked for a string; a chart that renders the tag through printf "%s" emits %!s(int=524) instead of the tag. Nothing in slice 011 or 012 passes such a value.
 
 **Provenance:** witnessed — code-reviewer, P2 review r1; phases/P2/code_review_r1.md F2, traced through a Python transcription of replacePin/plainSafe
+**Disposition:**
+
+### B3 — JenkinsPipelineUtils/cicd.writeVersionPins: the duplicate-key guard covers the values-file map but not the pins map · minor
+
+normalizePins throws when two keys render the same values-file name (vars/cicd.groovy:154-157). One line down, :161 writes normalised[path.toString()] = value.toString() in a loop, so two distinct keys in one file's dict rendering the same dotted path collapse silently, last one wins. Witnessed under a JVM with Jenkins steps stubbed: with String c = 'controller', the literal ['images.controller': ':800', ("images.${c}"): ':801'] keeps two keys (String and GStringImpl, both rendering images.controller — map literals do not coerce, only subscript assignment does), the method commits controller: ":801" and discards :800 with no error and a success return. The docstring at :16-18 names a pin that lands nowhere as the failure this method exists to make impossible, which is precisely what :154-157 enforces one level up.
+
+**Consequence:** A caller that names two values for one YAML path in a single file's dict has one of them silently dropped and the build reports success. No caller in slice 011 writes that shape, and neither does the call shape slice 012 inherits, so nothing in flight is affected.
+
+**Provenance:** witnessed | code reviewer, P2, review round 2, phases/P2/code_review_r2.md F1
+**Disposition:**
+
+### ~~B4 — AnsibleSpecs/argo-cd: two of the register's new absolutes are contradicted by the chart they describe · minor~~ — resolved by consult 1 (AnsibleSpecs a4fd09c): both clauses narrowed to CI-written tags — decisions.md's D37 amendment now reads 'required-guards every tag CI writes' and design.md:511 'Every tag CI commits'; tunnelReclaim and localHome, the chart's two floating DockerImages tags, are no longer contradicted. Prose only, in files this slice's diff already touched; AnsibleSpecs has no gate, and the re-check in its place was the one P3 used — every relative link in both files resolves, no changed line over 100 columns; struck by consult 1
+
+decisions.md:397 now says 'the chart required-guards every tag it renders'. It does not: chart/templates/controller-deployment.yaml:225 renders registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }} unguarded, and controller-config.yaml:13 ranges over list "worker" "vsix" only while controllerConfig.images.localHome rides the same toYaml dump. The plan asked for the narrower true statement (plan.md:397-398, 'the chart required-guards all seven; say that'). design.md:511-512 generalises to 'Every committed tag is a real <n> or prd-<n>, never latest', while chart/values.yaml:17 commits tunnelReclaim: :latest and :665 commits localHome: ...:latest — and P1's render gate positively requires tunnelReclaim to stay floating. Both images are out of the slice's scope by G3, and D47's own :498 already phrases the claim absolutely.
+
+**Consequence:** A reader takes 'no image tag in the chart' and 'every rendered tag is guarded' as invariants of KubeCoderDeploy's chart, when two DockerImages images in it are committed at :latest by design and the gate requires one of them to stay that way.
+
+**Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F3)
 **Disposition:**
 
 ## Open questions and rulings
@@ -104,6 +124,8 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 ### S2 — The pins this slice writes are forward references: slice 012 must build before it points Argo at KubeCoderDeploy · minor
 
 P1 leaves `config/dev/values.yaml` naming build 511's bare tag and `config/prd/values.yaml` naming `prd-511`; the registry holds `dev-511` and neither of the two. Nothing creates them until a Build-Main run under the new scheme (slice 012, Ruling 1). Nothing consumes the repo today (G7), so the gap is inert — but it is an ordering constraint on the cutover, not a defect to fix here.
+
+consult 1, 2026-09-20 — Numbers superseded by Ruling 4 and P1: the stage files name build 523, not 511 — dev '523', prd 'prd-523' — and the registry holds dev-523 but neither 523 nor prd-523 (dev-511 is gone entirely, see B1). The substance is unchanged and is what slice 012 inherits: both written tags are forward references, so the cutover must create them before the first dev sync. Slice 012's slice.md carries this as its own bullet under 'Carried in from slice 011'.
 
 **Consequence:** A dev Application created before the first cutover build syncs to an image tag that does not exist and fails to pull; sequencing the build ahead of the Application avoids it entirely.
 
@@ -152,4 +174,26 @@ is the cheap half and catches the one failure that reaches other jobs.
 **Consequence:** Every change to the shared library ships on reading alone, and a syntax error in any vars/*.groovy breaks every job in the estate on its next run — the failure mode Ruling 2's canary exists to catch after the fact rather than before.
 
 **Provenance:** witnessed | code-writer, P2, review round 2 — /work/AnsibleSpecs/slices/011_kubecoder_ci_version_pins/phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### S5 — Slice 012 is not told that writeVersionPins writes values verbatim, nor that Build-Main needs disableConcurrentBuilds() and git in its container · major
+
+P2 handed both constraints to P3 (plan.md:350-355) and neither reached the register or slice 012's slice.md. D45 as rewritten (argo-cd/decisions.md:469-476) gives the map's shape and no value semantics; slice 012's call description (slices/backlog/012_kubecoder_argo_cutover/slice.md:126-134) says only 'with <n> for config/dev/values.yaml and prd-<n> for config/prd/values.yaml'; the 'Carried in from slice 011' section (:360-401) carries the five grounding bullets Ruling 5 named and neither of these. The five images.* pins are tag suffixes — config/dev/values.yaml:29 holds controller: ":523" and chart/templates/controller-deployment.yaml:46 concatenates onto registry:5000/kubecoder-controller — so a caller handing '524' instead of ':524' renders registry:5000/kubecoder-controller524, which the required guard accepts. KubeCoderDeploy carries no Jenkinsfile, so nothing re-runs the render gate between a CI-written pin commit and Argo's sync. /work/KubeCoder/Jenkinsfile declares no properties([...]) block, so Build-Main has no disableConcurrentBuilds() today. cicd.groovy:29-33 does carry both rules in the method's docstring, which is what the author of the call will be reading.
+
+consult 1, 2026-09-20 — Judged against the generation bar and left here rather than appended. It is real and it is plan-described — P2's later-phase note (plan.md, under P2) addressed both constraints to P3, and P3 carried six grounding bullets into slice 012's 'Carried in from slice 011' section and neither of these. It does not clear the bar because Ruling 5, which is what the plan actually owes slice 012, enumerates what to carry (R2 verbatim, G5/G6/G8/G10/G12, the corrected Depends on line) and all of it landed; and because the constraints are not lost: vars/cicd.groovy:22-31 states all three in the method's docstring — git on PATH, 'a caller declares disableConcurrentBuilds()', and 'Values are written verbatim' with ':524' as the worked example — which is what the author of the call reads. A phase for three sentences of prose costs an executor round, a review round and another consult; this costs one word. The remediation, if the operator folds it into 012: one bullet in that section saying the five images.* pins are tag suffixes, so the caller supplies the leading colon (':524', not '524'), and one saying Build-Main needs disableConcurrentBuilds() and git in its container.
+
+**Consequence:** If slice 012 writes the Build-Main call from its own slice.md, the five image pins land without their leading colon and the dev cutover fails on an invalid image reference; and two concurrent builds lose the race on the second pin push.
+
+**Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F1)
+**Disposition:**
+
+### S6 — Slice 012's requirement 14 stages Deploy-PRD's replacement at prd's cutover, which leaves prd unpromotable between the two flips · minor
+
+The lede added at slices/backlog/012_kubecoder_argo_cutover/slice.md:116-117 reads 'each applied at the moment its stage flips, Build-Main's rewrite at dev's cutover, Deploy-PRD's replacement at prd's'. The G5 bullet carried into the same document at :369-375 states the opposite requirement: 'even at the dev cutover the prefix cannot simply vanish, because prd flips later and promotion must keep working from the bare <n> in between'. At dev's flip Build-Main stops pushing dev-<n>, while the surviving Deploy-PRD retags registry:5000/kubecoder-<name>:dev- (/work/KubeCoder/Jenkinsfile.deploy-prd:33-38) — a tag no new build produces. Nothing in the document names what promotes to prd in that window. Ruling 1 says only 'applied at the moment each stage flips, staged per stage'; the per-job assignment is the phase's gloss.
+
+consult 1, 2026-09-20 — The tension is in Ruling 1, not in P3's gloss of it: the operator's ruling stages the two Jenkins artefacts 'at the moment each stage flips', and G5 — verified in the same session — says the dev- prefix cannot simply vanish at dev's cutover because promotion must keep working from the bare <n> until prd flips. Both texts now sit in slice 012's own slice.md (requirement 14's lede and the carried-in G5 bullet), so its planner meets the question rather than inheriting a silent gap. Settling what promotes to prd in the window between the flips is slice 012's planning decision, not work slice 011 owes.
+
+**Consequence:** A slice-012 plan written from requirement 14's lede schedules no promotion work at the dev cutover, and prd cannot be promoted for any build made between the dev and prd flips.
+
+**Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F2)
 **Disposition:**
