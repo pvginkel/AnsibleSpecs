@@ -276,6 +276,8 @@ public registry; and the homelab step-ca root the mirror's chain needs, which no
 store carries. All of it is baked in, since the image is dedicated to this one purpose, so
 nothing is cloned at runtime except the deploy repo at the synced SHA. ArgoCDTools (D15) is thus
 both the source repo and the image build; Argo-specific content inside it is fine by definition.
+The repo is not exclusively Argo's, though: it lays out one folder per image, and builds the
+estate's architecture-as-code image alongside this one.
 The `iac` image stays untouched and gains no Argo-specific anything; nothing rides `iac`'s
 `repos:` mechanism; nothing is installed on any host. Supersedes plan's delivery-via-IaCAgent
 detail and lifecycle's "PreSync runs `deploy apply`" — HelmCharts' deploy CLI is not in the
@@ -606,11 +608,12 @@ go; tracked in phases.md so it cannot be forgotten.
 pilot and the adoption plugin exist.
 
 **O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
-`gen-architecture`'s rendering source, `recommend-resources`, `collect-versions` and the
-version-poller. Decided by endgame time; design.md carries the per-tool notes so the decision
-has an obvious shape when it comes. Also in this bucket (qa Q3's caveat): the `configs/dev`
-chart-debugging tree and the ability to hand-run a chart or its Terraform ad hoc — the
-operator's srvk8sdev workflow must survive HelmCharts' deletion in some form.
+`recommend-resources`, `collect-versions` and the version-poller. Decided by endgame time;
+design.md carries the per-tool notes so the decision has an obvious shape when it comes, and
+records the one already settled — `gen-architecture`'s rendering source. Also in this bucket
+(qa Q3's caveat): the `configs/dev` chart-debugging tree and the ability to hand-run a chart or its
+Terraform ad hoc — the operator's srvk8sdev workflow must survive HelmCharts' deletion in some
+form.
 
 **O4 — Whether a GitHub App replaces the hook's classic PAT** (D41). The PAT is `repo` on every
 private repository because fine-grained tokens do not cross resource owners; an App installation

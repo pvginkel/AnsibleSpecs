@@ -347,5 +347,6 @@ Nothing here is scheduled; it is the direction the migration-era mechanisms poin
   charts.home must not depend on the library charts.home serves.
 - **The namespace Terraform module goes** (D44): `terraform-modules/namespace` and whatever
   migration tooling still handles it, deleted once the last app migrates.
-- **Residual tooling finds homes** (O2): `gen-architecture`, `recommend-resources`,
+- **Residual tooling finds homes** (O2): `recommend-resources` and
   `collect-versions`/version-poller — each enumerating deploy repos instead of the config tree.
+  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator.

@@ -30,7 +30,7 @@ stages migrate — "dev excluded" excludes the `srvk8sdev` cluster, never a stag
 | --- | --- |
 | `<App>Deploy` (per app) | The app's complete deployment: chart, Terraform, stage config (D11) |
 | `ArgoCDDeploy` | Argo CD's own deploy repo — Argo manages itself (D3) |
-| `ArgoCDTools` | The presync scripts and the dedicated hook image built from them (D15, D31) |
+| `ArgoCDTools` | The presync scripts and the dedicated hook image built from them (D15, D31); also `aac-tools` |
 | `Charts` | Source of the library chart; publishes the static chart repo `https://charts.home` (D17) |
 | `HelmCharts` | Migration era only: the registry, plus every app not yet migrated (D20, D43) |
 
@@ -99,15 +99,20 @@ flag the cutover flow needs anyway (D5) provides this for free.
 
 ### ArgoCDTools and the hook image
 
-One repo carrying the presync entrypoint, its Python/Terraform support code, and the Dockerfile
-that bakes them into the dedicated hook image: Terraform, terraform-backend-git, git, the
-scripts and the distro `python3` they run under, plus what Terraform cannot resolve or execute
-the estate's own provider without — `librados2`/`librbd1` for the cgo `pvginkel/homelab` binary,
-the CLI config routing that provider to the private mirror, and the step-ca root the mirror's
-chain needs; nothing general-purpose (D31). CI publishes `registry:5000/argocd-hook:<n>`. The
+The repo lays out one folder per image, each its own build context; the hook's holds the presync
+entrypoint, its Python/Terraform support code, and the Dockerfile that bakes them into the
+dedicated hook image: Terraform, terraform-backend-git, git, the scripts and the distro `python3`
+they run under, plus what Terraform cannot resolve or execute the estate's own provider without —
+`librados2`/`librbd1` for the cgo `pvginkel/homelab` binary, the CLI config routing that provider
+to the private mirror, and the step-ca root the mirror's chain needs; nothing general-purpose
+(D31). CI publishes `registry:5000/argocd-hook:<n>` from a kaniko stage of its own. The
 **default tag pin lives in the library chart** — one bump point for the whole estate — with the
 option to override per app while debugging. A tools release therefore reaches each app as it next
 re-renders, which is the GitOps-consistent behaviour.
+
+The repo's other folder builds `aac-tools`, the architecture-as-code commands a deploy repo's
+checkout runs. It is not Argo CD's and nothing in this design depends on it; what it does for the
+migration is under "Ancillary tooling" below.
 
 ### Charts and charts.home
 
@@ -380,7 +385,7 @@ The flow, per sync of an app that has Terraform:
    `hook.repo`, `hook.revision` (the exact synced SHA), `hook.stage` and `hook.namespace` — the
    destination namespace, the same `<app>-<stage>` expression the ApplicationSet computes for
    `destination.namespace` — via chart values.
-2. The pod runs the ArgoCDTools image (D31). The entrypoint clones the deploy repo at that SHA
+2. The pod runs the `argocd-hook` image (D31). The entrypoint clones the deploy repo at that SHA
    — the only runtime clone; the scripts are already in the image. The clone authenticates via
    an inline credential helper, never a token-in-URL remote — the URL form leaks the PAT into
    the process table and any error that echoes the remote.
@@ -551,12 +556,18 @@ The `reconciler:` key is the single ownership fact (D38):
   surgery (D32) and the KubeCoder-specific values work, is phases.md's.
 
 **Ancillary tooling** that stops covering a migrated app enumerates the same key (O2):
-`gen-architecture` (renders via `deploy template` today; a migrated app has no release to
-render), `recommend-resources` (becomes clone-edit-push against deploy repos, spanning them and
-the config tree at once, and stops keying the chart source on the config directory name —
-phases.md's named follow-up),
-`collect-versions`/version-poller (its role already changing to proposing pin-bump commits).
-None blocks the pilot; each needs its decision by endgame.
+`recommend-resources` (becomes clone-edit-push against deploy repos, spanning them and the config
+tree at once, and stops keying the chart source on the config directory name — phases.md's named
+follow-up), `collect-versions`/version-poller (its role already changing to proposing pin-bump
+commits). None blocks the pilot; each needs its decision by endgame.
+
+`gen-architecture` is the one already answered. HelmCharts' copy renders via `deploy template`,
+and a migrated app has no release to render; the `aac-tools` image carries a deploy-repo generator
+that renders the repo's own chart the way the releases ApplicationSet has Argo render it, one stage
+per run, writing `docs/architecture/<producer>.yaml`. It mints the same element ids HelmCharts'
+copy does, so a handover changes an element's owner and nothing else, and inbound edges from other
+producers never dangle. What is still owed is per repo: registering the deploy repo as a producer,
+and giving it the job that runs the command.
 
 ## Consequences to accept
 
