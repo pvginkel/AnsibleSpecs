@@ -363,7 +363,7 @@ No test needed changing: `test_image.py:10` and `test_cli.py:31` both anchor on
 `Path(__file__).parent.parent`, now `argocd-hook/`. README's Layout block, its two `image/` paths,
 the CI context sentence and the Gates lead-in are corrected — the sentences the move falsifies.
 
-### P2 — the `aac-tools` image, carrying `arch-validate`
+### P2 — the `aac-tools` image, carrying `arch-validate` ✅ DONE 2026-09-20
 
 Target: ../ArgoCDTools
 Creates: aac-tools
