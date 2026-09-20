@@ -1,0 +1,23 @@
+{
+  "outcome": "issues",
+  "summary": "Round 1's blocking F1 is gone — the false :latest gloss no longer appears at decisions.md:599, and the provenance narrowing the ruling asked for is intact and correct. But the clause that replaced it makes a second estate-wide claim the ruling did not ask for, and this one is falsified by the HelmCharts deploy path and by the prd cluster: every first-party image HelmCharts deploys runs digest-pinned. One advisory finding rides along on V04's wording.",
+  "details": "code_review_r2.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "comment-prose",
+      "anchor": "contradiction",
+      "summary": "decisions.md:599 now says images we build ourselves are not digest-pinned and the tag is the consuming site's call; HelmCharts' deploy resolves every release image to @sha256: (resolve_helm_args.py:148, Jenkinsfile:189-191) and eleven first-party prd Deployments run that way."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "The landed line deliberately states no first-party tag norm (right, per round 1's evidence), while V04 and the ruling at plan.md:67-68 both name one — V04 needs the operator's ruling at acceptance; recorded as close-out B14."
+    }
+  ]
+}

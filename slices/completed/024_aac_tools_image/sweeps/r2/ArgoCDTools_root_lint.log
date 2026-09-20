@@ -1,0 +1,2 @@
+root: cexec iac ruff check .    [  OK  ]
+root: cexec iac ruff format --check .    [  OK  ]

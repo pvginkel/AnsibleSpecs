@@ -1,0 +1,15 @@
+{
+  "outcome": "issues",
+  "summary": "No fix round ran: 6eba2c3..HEAD is one orchestrator commit adding close-out entry B14 (round 2's advisory F2), and decisions.md:599 is byte-identical to the line round 2 flagged blocking. Round 2's F1 is therefore unresolved and unrefuted — re-verified this round against HelmCharts' deploy code and the prd cluster — and carries forward unchanged. The one commit in scope introduces no new problem.",
+  "details": "code_review_r3.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "comment-prose",
+      "anchor": "contradiction",
+      "summary": "decisions.md:599 still says images we build ourselves are not digest-pinned and the tag is the consuming site's call; HelmCharts' deploy resolves every release image to @sha256: (resolve_helm_args.py:148, Jenkinsfile:189-191) and 19 of 20 first-party registry:5000 references on the cluster run that way. Round 2's F1, unedited."
+    }
+  ]
+}

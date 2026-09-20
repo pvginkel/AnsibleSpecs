@@ -1,0 +1,48 @@
+/work/HelmCharts — P5: git diff c6c6357604fa..ab1e4e0ca9e0
+
+charts/kubecoder/values.yaml | 32 ++++++++++++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/charts/kubecoder/values.yaml b/charts/kubecoder/values.yaml
+index 126d7b0..4b5ed22 100644
+--- a/charts/kubecoder/values.yaml
++++ b/charts/kubecoder/values.yaml
+@@ -578,6 +578,38 @@ controllerConfig:
+         imagePullPolicy: Always
+         resources:
+           limits: { memory: 4Gi }
++    aac-tools:
++      # Slice 024, serving the deploy repos. The one entry here whose image is not from
++      # KubeCoder's own build matrix: ArgoCDTools builds and publishes registry:5000/aac-tools,
++      # which is why the name carries neither the kube-coder- prefix nor the -toolchain suffix.
++      # It floats, as every first-party image in this catalog does.
++      # No homeOverlays: the generator writes its helm repository list to a temporary file per
++      # run, so it neither reads nor rewrites the caller's helm configuration, and helm's
++      # repository cache lands under the controller's built-in `.cache`. The image bakes the
++      # homelab step-ca root that no default trust store carries, so https://charts.home resolves
++      # from here with no configuration in the selecting repo.
++      # 1Gi covers a `helm dependency build` plus a render plus one python pass: that is the work
++      # slice 024's handover-equality check ran green inside the 1Gi `iac` sidecar.
++      description: >-
++        The estate's architecture-as-code commands: gen-architecture for a deploy repo's
++        architecture artifact, and arch-validate for checking an artifact against the federation.
++      instructions: >-
++        The architecture-as-code toolchain, for producing and checking a deploy repo's
++        architecture artifact. `gen-architecture --stage <stage> --producer <id>` runs in the
++        repo's checkout: it renders that repo's chart the way Argo CD renders it, reads the
++        annotation layer from `architecture.yaml` at the repo root, and writes
++        `docs/architecture/<producer>.yaml`. Both flags are required — there is no default stage,
++        no way to ask for all of them, and nothing reads the branch. `arch-validate <file>`
++        submits an artifact to the federation's validation service; it is the canonical validator
++        byte for byte, so no repo needs a copy of that script. Both commands need the network:
++        chart dependencies come from https://charts.home, and the merged dataset and the
++        validation endpoint from https://architecture.webathome.org. python3 and helm are here
++        because these two commands need them — this is not a general toolset.
++      container:
++        image: registry:5000/aac-tools:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 1Gi }
+   # The kubeconfig files this deployment projects under ~/.kube (D085), in projection order.
+   # `catalogKey` is the catalog Secret key holding the file and `file` the bare name it lands as,
+   # so this list is also the set of catalog keys every env's catalog must carry. An entry without

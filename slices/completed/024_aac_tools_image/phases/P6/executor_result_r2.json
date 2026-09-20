@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "summary": "F1 (blocking) confirmed by inspection at all four cited sites and fixed: decisions.md:599's mechanism gloss defining a first-party floating-tag norm is replaced with what is true — images we build ourselves are not digest-pinned, and the tag a consumer takes, floating or pinned, is the consuming site's call. The ruling's provenance narrowing and the trivy/kubeconform naming are untouched; the section got shorter, not longer. Note for the operator: this drops the phrase \"the estate's floating-tag norm\" that the ruling and V04 both echo, because argocd-hook (imageTag \"1\") and webhook-relay:2485 falsify it as doctrine — R4's actual requirement, aac-tools on a floating tag, is unaffected and still holds. F2 and F3 are advisory and were left in place. Gate re-run green: nine named copies exist, are regular and byte-identical; no real copy under /work unnamed; exactly five image-baked; the only two @sha256: pins in the estate are the two the line names and nothing under registry:5000/ is digest-pinned.",
+  "refuted": []
+}

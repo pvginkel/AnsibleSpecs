@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "The port is complete and faithful — function inventory and all six post-render/substrate call sites match HelmCharts argument-for-argument — and I reproduced the handover independently: 9 elements and 16 relations id-for-id against the live published dataset, byte-identical over two runs, one gap line, exit 0, with seven mutations showing the 33 tests are live. Four advisory findings, none of them fix work: the app name comes from Chart.yaml where Argo takes it from the registry path, a deferred cross-producer ref is reported outside the `gap:` form, the repo manifest's component description still names one command, and two new preconditions fail with a traceback.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {"id": "F1", "severity": "Major", "impact": "advisory", "category": "functional", "anchor": "none",
+     "summary": "The namespace and every element id derive from chart/Chart.yaml's name, while Argo builds <app>-<stage> from the registry path segment; a divergence re-mints the whole model on a green run."},
+    {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+     "summary": "An unresolvable cross-producer ref prints as `deferred (cross-producer, unresolved):` rather than the `gap:` line the generated-producer contract says is the only form ever read."},
+    {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+     "summary": ".kubecoder/project.yaml's aac-tools description still enumerates arch-validate alone after this phase added the image's second command."},
+    {"id": "F4", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+     "summary": "hook_parameters' origin remote and chart_metadata's chart/Chart.yaml fail with an unhandled traceback where the sibling annotation-layer precondition fails with a sentence."}
+  ]
+}

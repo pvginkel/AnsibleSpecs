@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "No commit landed since round 3 — the two review-funding consults bailed out before ruling, so this is a third read of 51af5aa, not a fix round. I re-derived the phase's gate from the tree: the nine named CA-root copies exist, are byte-identical and are exactly the real set, the two excluded ones are symlinks, five are image-baked, and the two @sha256: pins the line names are the only ones in the estate. Rounds 2 and 3's blocking finding does not hold as blocking: decisions.md:599 defines pinning one clause earlier as a committed reference a tag move cannot shift, and HelmCharts' deploy-time digest resolution follows the written tag rather than pinning against it — it is the mechanism that makes a floating tag work. Re-entered as advisory (close-out B15); nothing blocks merging.",
+  "details": "code_review_r4.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "decisions.md:599 is the register's only word on image digests, while HelmCharts' own tooling calls its deploy-time digest resolution 'image-digest pinning' (migrate-release.py:342, resolve_helm_args.py:148) — a mechanism doctrine records nowhere, so the term sits unreconciled across the estate."
+    }
+  ]
+}

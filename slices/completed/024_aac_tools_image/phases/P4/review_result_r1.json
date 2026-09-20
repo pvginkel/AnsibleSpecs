@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "The handover-equality check meets P4's outcome and I verified it independently: it runs green here at 9 elements and 16 relations with the four cross-stage relations excluded, matching the attachment's target exactly, and it fails as it should under three mutations including an NS re-mint. Two Minor advisory nits, both about the check's dataset read; nothing blocking.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "The check fetches the dataset URL twice, so the comment's and plan's 'one snapshot, a publish between the reads cannot look like a difference' does not hold for the default --dataset."},
+              {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "The check's load_dataset uses yaml.safe_load while claiming to follow the generator's rule, which is safe_load_all, so a multi-document dataset the generator handles would kill the reference side."}]}

@@ -1,0 +1,3 @@
+root: no test statements — skipped
+argocd-hook: cexec iac python3 -m unittest discover -b -s tests -t .    [  OK  ]
+aac-tools: cexec iac python3 -m unittest discover -b -s tests -t .    [  OK  ]

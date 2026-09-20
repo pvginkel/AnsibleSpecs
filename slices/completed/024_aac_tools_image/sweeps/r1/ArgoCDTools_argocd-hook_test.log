@@ -1,0 +1,1 @@
+argocd-hook: cexec iac python3 -m unittest discover -b -s tests -t .    [  OK  ]

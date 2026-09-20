@@ -1,0 +1,3498 @@
+/work/ArgoCDTools — P1: git diff d1849c9478a7..de16d7857bf9
+
+.dockerignore                                    | 12 -----------
+ .kubecoder/project.yaml                          | 20 +++++++++++-------
+ Jenkinsfile                                      | 16 +++++++++------
+ README.md                                        | 48 ++++++++++++++++++++++++++------------------
+ argocd-hook/.dockerignore                        |  6 ++++++
+ Dockerfile => argocd-hook/Dockerfile             |  0
+ {image => argocd-hook/image}/homelab-root.crt    |  0
+ {image => argocd-hook/image}/terraform.rc        |  0
+ {presync => argocd-hook/presync}/__init__.py     |  0
+ {presync => argocd-hook/presync}/__main__.py     |  0
+ {presync => argocd-hook/presync}/backend.py      |  0
+ {presync => argocd-hook/presync}/cli.py          |  0
+ {presync => argocd-hook/presync}/environment.py  |  0
+ {presync => argocd-hook/presync}/errors.py       |  0
+ {presync => argocd-hook/presync}/git.py          |  0
+ {presync => argocd-hook/presync}/kube.py         |  0
+ {presync => argocd-hook/presync}/kubeconfig.py   |  0
+ {presync => argocd-hook/presync}/proc.py         |  0
+ {presync => argocd-hook/presync}/reattach.py     |  0
+ {presync => argocd-hook/presync}/terraform.py    |  0
+ {tests => argocd-hook/tests}/__init__.py         |  0
+ {tests => argocd-hook/tests}/support.py          |  0
+ {tests => argocd-hook/tests}/test_backend.py     |  0
+ {tests => argocd-hook/tests}/test_cli.py         |  0
+ {tests => argocd-hook/tests}/test_environment.py |  0
+ {tests => argocd-hook/tests}/test_git.py         |  0
+ {tests => argocd-hook/tests}/test_image.py       |  0
+ {tests => argocd-hook/tests}/test_kubeconfig.py  |  0
+ {tests => argocd-hook/tests}/test_reattach.py    |  0
+ {tests => argocd-hook/tests}/test_terraform.py   |  0
+ 30 files changed, 58 insertions(+), 44 deletions(-)
+
+diff --git a/.dockerignore b/.dockerignore
+deleted file mode 100644
+index 91113e9..0000000
+--- a/.dockerignore
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# The builder mounts nothing but this context, so keep it to what the Dockerfile
+-# actually reads: the presync package and the two files baked under image/.
+-.git
+-.gitignore
+-.dockerignore
+-.kubecoder
+-.ruff_cache
+-**/__pycache__
+-Jenkinsfile
+-ruff.toml
+-tests
+-*.md
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 5dc5660..305e0fa 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -1,19 +1,25 @@
+-# Curated entry points for ArgoCDTools. Python and Ruff live in the `iac` toolchain
+-# sidecar, so the verbs carry their `cexec` prefix here and only here.
++# Curated entry points for ArgoCDTools. One component per image, each rooted in its
++# own folder, so an image is built and tested by name. Python and Ruff live in the
++# `iac` toolchain sidecar, so the verbs carry their `cexec` prefix here and only here.
+ 
+ projects:
+   root:
+     description: >-
+-      The Terraform PreSync hook Argo CD runs before a migrated app syncs: the
+-      entrypoint that clones the deploy repo at the synced SHA, applies its
+-      Terraform against the estate's git-backed state backend and reattaches the
+-      app's Released PVs — and the argocd-hook image that carries it.
++      The images the estate builds around Argo CD and architecture-as-code, one
++      folder per image — each folder self-contained and its own kaniko context.
+     jenkins: IaC/ArgoCDTools
++    # ruff.toml is repo-wide, so one run from the root lints every image's package.
+     lint:
+       - cexec iac ruff check .
+       - cexec iac ruff format --check .
++  argocd-hook:
++    description: >-
++      The Terraform PreSync hook Argo CD runs before a migrated app syncs: the
++      entrypoint that clones the deploy repo at the synced SHA, applies its
++      Terraform against the estate's git-backed state backend and reattaches the
++      app's Released PVs — and the argocd-hook image that carries it.
+     # The entrypoint is standard-library Python, so the suite needs no install and
+-    # no setup verb: unittest against the repo root is the whole gate.
++    # no setup verb: unittest against the folder is the whole gate.
+     # -b keeps a passing run's progress reporting out of the gate's output.
+     test: cexec iac python3 -m unittest discover -b -s tests -t .
+     # What CI builds, minus the push. `kaniko` lives in this container rather than
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 30266f0..701aaae 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -21,12 +21,16 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko') {
+         stage('Build argocd-hook image') {
+             timeout(time: 15, unit: 'MINUTES') {
+                 container('kaniko') {
+-                    helmCharts.kaniko2(
+-                        destinations: [
+-                            "registry:5000/argocd-hook:${currentBuild.number}",
+-                            "registry:5000/argocd-hook:latest"
+-                        ]
+-                    )
++                    // One folder per image, and each folder is the whole build
++                    // context: the builder mounts nothing outside it.
++                    dir('argocd-hook') {
++                        helmCharts.kaniko2(
++                            destinations: [
++                                "registry:5000/argocd-hook:${currentBuild.number}",
++                                "registry:5000/argocd-hook:latest"
++                            ]
++                        )
++                    }
+                 }
+             }
+         }
+diff --git a/README.md b/README.md
+index a18ac64..bbc8083 100644
+--- a/README.md
++++ b/README.md
+@@ -15,14 +15,21 @@ migration's authoritative document set.
+ 
+ ## Layout
+ 
++One folder per image. Each image folder is self-contained and is its own kaniko context —
++everything its Dockerfile reads sits inside it, and its ignore list sits beside it — so the root
++carries only what is repo-wide.
++
+ ```
+ .
+-├── presync/       # the entrypoint — standard-library Python 3, no dependencies
+-├── image/         # what the image bakes beside the code: the Terraform CLI config and the
+-│                  # homelab step-ca root
+-├── tests/         # the gate's unit tests
+-├── Dockerfile     # the argocd-hook image
+-└── Jenkinsfile    # the IaC/ArgoCDTools job
++├── argocd-hook/        # the argocd-hook image, and the whole of its build context
++│   ├── presync/        # the entrypoint — standard-library Python 3, no dependencies
++│   ├── image/          # what the image bakes beside the code: the Terraform CLI config and
++│   │                   # the homelab step-ca root
++│   ├── tests/          # the gate's unit tests
++│   ├── Dockerfile
++│   └── .dockerignore   # what the context leaves out
++├── Jenkinsfile         # the IaC/ArgoCDTools job
++└── ruff.toml           # lint settings, repo-wide
+ ```
+ 
+ ## A run
+@@ -140,11 +147,11 @@ at runtime but the deploy repo.
+   Terraform's. That provider is cgo and names those sonames in `DT_NEEDED`, so without them
+   Terraform resolves every provider and can execute none — a failure at `apply`, never at `init`,
+   which checksums a plugin without running it.
+-- **`image/terraform.rc`** at `TF_CLI_CONFIG_FILE`, because `pvginkel/homelab` is never served by
+-  the public registry: the CLI config routes it to the estate's network mirror and excludes it from
+-  `direct`. Every deploy repo's Terraform declares that provider.
+-- **`image/homelab-root.crt`**, the homelab step-ca root, because that mirror serves a leaf no
+-  default trust store verifies. Same artefact as the Ansible repo's
++- **`argocd-hook/image/terraform.rc`** at `TF_CLI_CONFIG_FILE`, because `pvginkel/homelab` is
++  never served by the public registry: the CLI config routes it to the estate's network mirror and
++  excludes it from `direct`. Every deploy repo's Terraform declares that provider.
++- **`argocd-hook/image/homelab-root.crt`**, the homelab step-ca root, because that mirror serves a
++  leaf no default trust store verifies. Same artefact as the Ansible repo's
+   `roles/baseline/files/homelab-root.crt`.
+ 
+ `USER ubuntu` — noble's own uid-1000 passwd entry, and it has to resolve in `/etc/passwd`:
+@@ -168,19 +175,22 @@ nothing here deploys.
+ The build number is what a chart pins: `homelab-shared`'s `values.yaml` carries the estate-wide
+ `hook.imageTag`, and a consumer can override it to debug against another build.
+ 
+-The build context is streamed to a builder that mounts nothing else, so `.dockerignore` is
+-load-bearing — it is an exclusion list of everything the Dockerfile does not read, `*.md` and this
+-README included.
++The build context is `argocd-hook/` and is streamed to a builder that mounts nothing else, so
++`argocd-hook/.dockerignore` is load-bearing — it is an exclusion list of everything inside the
++folder that the Dockerfile does not read.
+ 
+ ## Gates
+ 
+-`kc project lint | test | build`, all from the repo root:
++`kc project lint | test | build`, run from the repo root. `lint` is the repository's, over every
++image's package at once; `test` and `build` belong to the `argocd-hook` component and run in its
++folder, so `kc project test --project argocd-hook` is the one image's suite:
+ 
+ - **lint** — `ruff check` and `ruff format --check` (py312, 100 columns).
+-- **test** — `unittest` over `tests/`. The suite needs `git`, `terraform` and `openssl` on PATH:
+-  the clone tests drive a real fixture repository, the release-identity tests run real Terraform
+-  because variable precedence is Terraform's and no double can witness it, and `openssl` builds the
+-  CA the apiserver double presents. Nothing in `presync` itself shells out to `openssl`.
++- **test** — `unittest` over `argocd-hook/tests/`. The suite needs `git`, `terraform` and
++  `openssl` on PATH: the clone tests drive a real fixture repository, the release-identity tests
++  run real Terraform because variable precedence is Terraform's and no double can witness it, and
++  `openssl` builds the CA the apiserver double presents. Nothing in `presync` itself shells out to
++  `openssl`.
+ - **build** — the image kaniko builds in CI, minus the push.
+ 
+ Python and Ruff live in the `iac` toolchain sidecar, so `kc project` supplies the `cexec iac`
+diff --git a/argocd-hook/.dockerignore b/argocd-hook/.dockerignore
+new file mode 100644
+index 0000000..21a6fe0
+--- /dev/null
++++ b/argocd-hook/.dockerignore
+@@ -0,0 +1,6 @@
++# This folder is the whole build context — the builder mounts nothing else — so
++# keep it to what the Dockerfile actually reads: the presync package and the two
++# files baked under image/.
++.dockerignore
++**/__pycache__
++tests
+diff --git a/Dockerfile b/argocd-hook/Dockerfile
+similarity index 100%
+rename from Dockerfile
+rename to argocd-hook/Dockerfile
+diff --git a/image/homelab-root.crt b/argocd-hook/image/homelab-root.crt
+similarity index 100%
+rename from image/homelab-root.crt
+rename to argocd-hook/image/homelab-root.crt
+diff --git a/image/terraform.rc b/argocd-hook/image/terraform.rc
+similarity index 100%
+rename from image/terraform.rc
+rename to argocd-hook/image/terraform.rc
+diff --git a/presync/__init__.py b/argocd-hook/presync/__init__.py
+similarity index 100%
+rename from presync/__init__.py
+rename to argocd-hook/presync/__init__.py
+diff --git a/presync/__main__.py b/argocd-hook/presync/__main__.py
+similarity index 100%
+rename from presync/__main__.py
+rename to argocd-hook/presync/__main__.py
+diff --git a/presync/backend.py b/argocd-hook/presync/backend.py
+similarity index 100%
+rename from presync/backend.py
+rename to argocd-hook/presync/backend.py
+diff --git a/presync/cli.py b/argocd-hook/presync/cli.py
+similarity index 100%
+rename from presync/cli.py
+rename to argocd-hook/presync/cli.py
+diff --git a/presync/environment.py b/argocd-hook/presync/environment.py
+similarity index 100%
+rename from presync/environment.py
+rename to argocd-hook/presync/environment.py
+diff --git a/presync/errors.py b/argocd-hook/presync/errors.py
+similarity index 100%
+rename from presync/errors.py
+rename to argocd-hook/presync/errors.py
+diff --git a/presync/git.py b/argocd-hook/presync/git.py
+similarity index 100%
+rename from presync/git.py
+rename to argocd-hook/presync/git.py
+diff --git a/presync/kube.py b/argocd-hook/presync/kube.py
+similarity index 100%
+rename from presync/kube.py
+rename to argocd-hook/presync/kube.py
+diff --git a/presync/kubeconfig.py b/argocd-hook/presync/kubeconfig.py
+similarity index 100%
+rename from presync/kubeconfig.py
+rename to argocd-hook/presync/kubeconfig.py
+diff --git a/presync/proc.py b/argocd-hook/presync/proc.py
+similarity index 100%
+rename from presync/proc.py
+rename to argocd-hook/presync/proc.py
+diff --git a/presync/reattach.py b/argocd-hook/presync/reattach.py
+similarity index 100%
+rename from presync/reattach.py
+rename to argocd-hook/presync/reattach.py
+diff --git a/presync/terraform.py b/argocd-hook/presync/terraform.py
+similarity index 100%
+rename from presync/terraform.py
+rename to argocd-hook/presync/terraform.py
+diff --git a/tests/__init__.py b/argocd-hook/tests/__init__.py
+similarity index 100%
+rename from tests/__init__.py
+rename to argocd-hook/tests/__init__.py
+diff --git a/tests/support.py b/argocd-hook/tests/support.py
+similarity index 100%
+rename from tests/support.py
+rename to argocd-hook/tests/support.py
+diff --git a/tests/test_backend.py b/argocd-hook/tests/test_backend.py
+similarity index 100%
+rename from tests/test_backend.py
+rename to argocd-hook/tests/test_backend.py
+diff --git a/tests/test_cli.py b/argocd-hook/tests/test_cli.py
+similarity index 100%
+rename from tests/test_cli.py
+rename to argocd-hook/tests/test_cli.py
+diff --git a/tests/test_environment.py b/argocd-hook/tests/test_environment.py
+similarity index 100%
+rename from tests/test_environment.py
+rename to argocd-hook/tests/test_environment.py
+diff --git a/tests/test_git.py b/argocd-hook/tests/test_git.py
+similarity index 100%
+rename from tests/test_git.py
+rename to argocd-hook/tests/test_git.py
+diff --git a/tests/test_image.py b/argocd-hook/tests/test_image.py
+similarity index 100%
+rename from tests/test_image.py
+rename to argocd-hook/tests/test_image.py
+diff --git a/tests/test_kubeconfig.py b/argocd-hook/tests/test_kubeconfig.py
+similarity index 100%
+rename from tests/test_kubeconfig.py
+rename to argocd-hook/tests/test_kubeconfig.py
+diff --git a/tests/test_reattach.py b/argocd-hook/tests/test_reattach.py
+similarity index 100%
+rename from tests/test_reattach.py
+rename to argocd-hook/tests/test_reattach.py
+diff --git a/tests/test_terraform.py b/argocd-hook/tests/test_terraform.py
+similarity index 100%
+rename from tests/test_terraform.py
+rename to argocd-hook/tests/test_terraform.py
+
+/work/ArgoCDTools — P2: git diff de16d7857bf9..d152bacc07c8
+
+.kubecoder/project.yaml          |   9 +++
+ Jenkinsfile                      |  24 +++++++-
+ aac-tools/.dockerignore          |   5 ++
+ aac-tools/Dockerfile             |  80 +++++++++++++++++++++++++++
+ aac-tools/image/arch-validate.py | 177 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ aac-tools/image/homelab-root.crt |  11 ++++
+ aac-tools/tests/__init__.py      |   0
+ aac-tools/tests/test_image.py    |  73 ++++++++++++++++++++++++
+ ruff.toml                        |   7 ++-
+ 9 files changed, 382 insertions(+), 4 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 305e0fa..67cfa1c 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -25,3 +25,12 @@ projects:
+     # What CI builds, minus the push. `kaniko` lives in this container rather than
+     # the toolchain sidecar, so the verb carries no cexec.
+     build: kaniko --context . --destination registry:5000/argocd-hook:local --no-push
++  aac-tools:
++    description: >-
++      The architecture-as-code commands the estate runs inside a repo's checkout —
++      `arch-validate`, the federation's validator, shipped as the canonical script —
++      and the aac-tools image that carries them for Jenkins and for KubeCoder's
++      toolchain catalog alike.
++    # Same shape as argocd-hook's: stdlib unittest over the folder, no install step.
++    test: cexec iac python3 -m unittest discover -b -s tests -t .
++    build: kaniko --context . --destination registry:5000/aac-tools:local --no-push
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 701aaae..2853c98 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -1,8 +1,11 @@
+ library identifier: 'JenkinsPipelineUtils', changelog: false
+ 
+-// Publishes registry:5000/argocd-hook — the image the Terraform PreSync hook Job
+-// runs. There is no deploy stage: the image is pulled by a Job the library chart
+-// renders, and the tag it pins is a build number, so nothing here deploys.
++// Publishes this repo's images, one stage per image folder: registry:5000/argocd-hook,
++// the image the Terraform PreSync hook Job runs, and registry:5000/aac-tools, the
++// architecture-as-code commands Jenkins pipelines and the KubeCoder toolchain catalog
++// both run. There is no deploy stage: each image is pulled by whoever runs it — the
++// hook Job pins a build number, aac-tools is referenced by its floating tag — so
++// nothing here deploys.
+ properties([
+     // Two builds racing would leave `latest` on whichever finished last rather
+     // than on the newest commit.
+@@ -34,5 +37,20 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko') {
+                 }
+             }
+         }
++
++        stage('Build aac-tools image') {
++            timeout(time: 15, unit: 'MINUTES') {
++                container('kaniko') {
++                    dir('aac-tools') {
++                        helmCharts.kaniko2(
++                            destinations: [
++                                "registry:5000/aac-tools:${currentBuild.number}",
++                                "registry:5000/aac-tools:latest"
++                            ]
++                        )
++                    }
++                }
++            }
++        }
+     }
+ }
+diff --git a/aac-tools/.dockerignore b/aac-tools/.dockerignore
+new file mode 100644
+index 0000000..86e44e5
+--- /dev/null
++++ b/aac-tools/.dockerignore
+@@ -0,0 +1,5 @@
++# This folder is the whole build context — the builder mounts nothing else — so keep it
++# to what the Dockerfile actually reads: the two files under image/.
++.dockerignore
++**/__pycache__
++tests
+diff --git a/aac-tools/Dockerfile b/aac-tools/Dockerfile
+new file mode 100644
+index 0000000..cedb064
+--- /dev/null
++++ b/aac-tools/Dockerfile
+@@ -0,0 +1,80 @@
++# aac-tools — the estate's architecture-as-code commands in one image. `arch-validate`
++# submits an architecture artifact to the federation's validation service, and is the
++# canonical script from `pvginkel/Architecture` shipped byte for byte, not a fork.
++#
++# Two callers run this image and neither supplies setup of its own: a Jenkins pipeline
++# pulls it and runs a command, and KubeCoder runs it as a toolchain sidecar. KubeCoder
++# replaces a toolchain container's command with its own agent and runs every `kc cexec`
++# command as `bash -lc`, so the commands live on PATH, `bash` is mandatory, and nothing
++# here may depend on an ENTRYPOINT — this image declares none.
++#
++# Contents are what the commands need at run time and nothing more: python3 with PyYAML,
++# helm, git, bash and the homelab step-ca root. No Terraform, and none of HelmCharts'
++# deploy tooling.
++#
++# Ubuntu noble is the runtime the commands target: its python3 is 3.12 (ruff.toml), and
++# its `ubuntu` user is the uid-1000 passwd entry KubeCoder's pod-level runAsUser
++# resolves against.
++FROM ubuntu:noble
++
++ARG DEBIAN_FRONTEND=noninteractive
++
++# Console output interleaves with helm's and git's own, which are unbuffered.
++ENV PYTHONUNBUFFERED=1
++
++# python3-yaml is PyYAML from the distro, so the image runs no pip and carries no
++# virtualenv; git and helm are what generating a deploy repo's architecture reads and
++# renders with; curl fetches the helm installer below.
++RUN apt-get update -yqq && \
++    apt-get install -y --no-install-recommends \
++        ca-certificates \
++        curl \
++        git \
++        python3 \
++        python3-yaml \
++    && \
++    \
++    apt-get clean && \
++    rm -rf /var/lib/apt/lists/*
++
++# The homelab step-ca root, which no default trust store carries. `https://charts.home`
++# — the chart repository a deploy repo resolves its dependencies from — serves a leaf
++# signed by it, so without this helm cannot reach the estate's charts at all. Same cert
++# artefact as the Ansible repo's roles/baseline/files/homelab-root.crt and as
++# argocd-hook/image/homelab-root.crt; a test asserts the two copies here are one file,
++# because the estate rotates every copy in a single change window.
++COPY image/homelab-root.crt /usr/local/share/ca-certificates/homelab-root.crt
++RUN chmod 0644 /usr/local/share/ca-certificates/homelab-root.crt && \
++    update-ca-certificates
++
++# helm 4 from upstream's own installer, as the estate's other images install it — there
++# is no apt suite for helm. Fetched to a file rather than piped, so a failed download
++# cannot be executed as a truncated script.
++RUN curl -fsSL -o /tmp/get-helm-4 \
++        https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 && \
++    bash /tmp/get-helm-4 && \
++    rm /tmp/get-helm-4
++
++# The canonical validator, on PATH under the name every caller invokes. It carries its
++# own shebang and imports only the standard library.
++COPY image/arch-validate.py /usr/local/bin/arch-validate
++RUN chmod 0755 /usr/local/bin/arch-validate
++
++# A run needs a passwd entry for the uid it runs as: `kc cexec`'s preflight warns
++# without one, and KubeCoder gives a toolchain sidecar no securityContext of its own, so
++# it inherits the pod's uid 1000 — noble's `ubuntu`.
++USER ubuntu
++
++# Nothing downstream gates the image's contents, and no environment that builds this
++# image can run it, so the build is where what the image promises is proved. The
++# trust-store check verifies the homelab root against the system bundle: a self-signed
++# root verifies there only if update-ca-certificates actually installed it.
++RUN getent passwd "$(id -u)" > /dev/null && \
++    bash --version > /dev/null && \
++    git --version && \
++    helm version && \
++    python3 -c "import sys; assert sys.version_info >= (3, 12), sys.version" && \
++    python3 -c "import yaml" && \
++    arch-validate --help > /dev/null && \
++    openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt \
++        /usr/local/share/ca-certificates/homelab-root.crt
+diff --git a/aac-tools/image/arch-validate.py b/aac-tools/image/arch-validate.py
+new file mode 100755
+index 0000000..8fc89c5
+--- /dev/null
++++ b/aac-tools/image/arch-validate.py
+@@ -0,0 +1,177 @@
++#!/usr/bin/env python3
++#
++# arch-validate — submit architecture artifact(s) to the validation service.
++#
++# Usage:
++#   arch-validate <path> [<path>...]    validate one or more YAML files
++#   arch-validate -                     read a single artifact from stdin
++#
++# Flags:
++#   --json                emit the raw endpoint response to stdout
++#   --quiet               suppress per-file "OK" lines; only print on failure
++#
++# Environment:
++#   ARCHITECTURE_VALIDATE_URL    override the endpoint (default: production service)
++#
++# Exit codes: 0 valid, 1 invalid, 2 transport/server error.
++#
++# Runs on python:slim — uses only the standard library.
++
++import argparse
++import json
++import os
++import sys
++import urllib.error
++import urllib.request
++
++DEFAULT_ENDPOINT = "https://architecture.webathome.org/api/validate"
++
++
++def parse_args():
++    p = argparse.ArgumentParser(
++        prog="arch-validate",
++        description="Submit architecture artifact(s) to the validation service.",
++        add_help=True,
++    )
++    p.add_argument("--json", dest="json_mode", action="store_true",
++                   help="emit the raw endpoint response to stdout")
++    p.add_argument("--quiet", action="store_true",
++                   help='suppress per-file "OK" lines; only print on failure')
++    p.add_argument("paths", nargs="+",
++                   help="artifact paths, or '-' to read one artifact from stdin")
++    return p.parse_args()
++
++
++def colors():
++    if sys.stderr.isatty():
++        return {"red": "\033[31m", "green": "\033[32m",
++                "dim": "\033[2m", "reset": "\033[0m"}
++    return {"red": "", "green": "", "dim": "", "reset": ""}
++
++
++def read_body(path):
++    if path == "-":
++        return sys.stdin.read()
++    with open(path, "r", encoding="utf-8") as f:
++        return f.read()
++
++
++def display_name(path):
++    return "<stdin>" if path == "-" else path
++
++
++def post(endpoint, body):
++    """Return (http_code, response_text). Raises urllib.error.URLError on transport failure."""
++    req = urllib.request.Request(
++        endpoint,
++        data=body.encode("utf-8"),
++        headers={"Content-Type": "application/yaml"},
++        method="POST",
++    )
++    try:
++        with urllib.request.urlopen(req) as resp:
++            return resp.status, resp.read().decode("utf-8", errors="replace")
++    except urllib.error.HTTPError as e:
++        return e.code, e.read().decode("utf-8", errors="replace")
++
++
++def print_human(name, response, quiet, c):
++    try:
++        data = json.loads(response)
++    except json.JSONDecodeError:
++        sys.stderr.write(f"{c['red']}✗{c['reset']} {name}\n")
++        sys.stderr.write("  server returned non-JSON body:\n")
++        for line in response.splitlines():
++            sys.stderr.write(f"    {line}\n")
++        return False
++
++    if data.get("valid") is True:
++        if not quiet:
++            sys.stderr.write(f"{c['green']}✓{c['reset']} {name}\n")
++        return True
++
++    sys.stderr.write(f"{c['red']}✗{c['reset']} {name}\n")
++    errors = data.get("errors") or []
++    if not errors:
++        msg = data.get("error", "(unknown failure)")
++        sys.stderr.write(f"  {msg}\n")
++        return False
++
++    for err in errors:
++        sys.stderr.write(f"  {err.get('path', '')}\n")
++        sys.stderr.write(f"    {err.get('message', '')}\n")
++        sys.stderr.write(f"    schema: {err.get('schemaUrl', '')}\n")
++        if err.get("hint"):
++            sys.stderr.write(f"    hint: {err['hint']}\n")
++    return False
++
++
++def print_server_error(name, http_code, response, c):
++    sys.stderr.write(f"{c['red']}✗{c['reset']} {name} {c['dim']}(HTTP {http_code}){c['reset']}\n")
++    if not response:
++        sys.stderr.write("  server returned no body\n")
++        return
++    try:
++        data = json.loads(response)
++        msg = data.get("error") if isinstance(data, dict) else None
++        sys.stderr.write(f"  {msg if msg else json.dumps(data)}\n")
++    except json.JSONDecodeError:
++        for line in response.splitlines():
++            sys.stderr.write(f"  {line}\n")
++
++
++def main():
++    args = parse_args()
++    endpoint = os.environ.get("ARCHITECTURE_VALIDATE_URL", DEFAULT_ENDPOINT)
++    c = colors()
++    status = 0
++
++    for artifact in args.paths:
++        name = display_name(artifact)
++
++        try:
++            body = read_body(artifact)
++        except OSError as e:
++            sys.stderr.write(f"{c['red']}✗{c['reset']} {name}\n")
++            sys.stderr.write(f"  cannot read file: {e}\n")
++            status = 2
++            continue
++
++        try:
++            http_code, response = post(endpoint, body)
++        except urllib.error.URLError as e:
++            sys.stderr.write(f"{c['red']}✗{c['reset']} {name}\n")
++            sys.stderr.write(f"  transport error: could not reach {endpoint}\n")
++            sys.stderr.write(f"    {e.reason}\n")
++            status = 2
++            continue
++
++        if 200 <= http_code < 300:
++            if args.json_mode:
++                sys.stdout.write(response if response.endswith("\n") else response + "\n")
++                try:
++                    if json.loads(response).get("valid") is not True and status < 1:
++                        status = 1
++                except json.JSONDecodeError:
++                    if status < 1:
++                        status = 1
++            else:
++                ok = print_human(name, response, args.quiet, c)
++                if not ok and status < 1:
++                    status = 1
++            continue
++
++        # 4xx: server rejected the client's request (treat as invalid).
++        # 5xx: server-side failure (transport-class).
++        print_server_error(name, http_code, response, c)
++        if 400 <= http_code < 500:
++            if status < 1:
++                status = 1
++        else:
++            status = 2
++
++    sys.exit(status)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/aac-tools/image/homelab-root.crt b/aac-tools/image/homelab-root.crt
+new file mode 100644
+index 0000000..7e974c7
+--- /dev/null
++++ b/aac-tools/image/homelab-root.crt
+@@ -0,0 +1,11 @@
++-----BEGIN CERTIFICATE-----
++MIIBqDCCAU6gAwIBAgIRAP2icmeUuen7hls+UdWGx/swCgYIKoZIzj0EAwIwMjET
++MBEGA1UEChMKaG9tZWxhYi1jYTEbMBkGA1UEAxMSaG9tZWxhYi1jYSBSb290IENB
++MB4XDTI2MDUxMzE4MzE0MFoXDTM2MDUxMDE4MzE0MFowMjETMBEGA1UEChMKaG9t
++ZWxhYi1jYTEbMBkGA1UEAxMSaG9tZWxhYi1jYSBSb290IENBMFkwEwYHKoZIzj0C
++AQYIKoZIzj0DAQcDQgAExErM2qzc9SgqwKe10dSwhRL13Oi7PZRrwtvvR15rJGO+
++IyNQ5f3z5aYxvbea0CrRfZkgBT4sOH4jzSgcAyJNjKNFMEMwDgYDVR0PAQH/BAQD
++AgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFJkGFQesmRqRMOv1x1k2
++27k3F03qMAoGCCqGSM49BAMCA0gAMEUCIBvOR8kJLvbttEa+IBSfjV7Z5WqPsOb3
++aTMeHoQr7Q1eAiEAmE9cGdPV83hfen/7iZobGFI065H0AWEnODDaVkbnmYs=
++-----END CERTIFICATE-----
+diff --git a/aac-tools/tests/__init__.py b/aac-tools/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/aac-tools/tests/test_image.py b/aac-tools/tests/test_image.py
+new file mode 100644
+index 0000000..a479c20
+--- /dev/null
++++ b/aac-tools/tests/test_image.py
+@@ -0,0 +1,73 @@
++"""What the aac-tools image has to keep true about what it bakes."""
++
++from __future__ import annotations
++
++import ast
++import hashlib
++import sys
++import unittest
++from pathlib import Path
++
++TESTS = Path(__file__).resolve().parent
++FOLDER = TESTS.parent
++REPO = FOLDER.parent
++
++# `arch-validate.py` as pvginkel/Architecture publishes it, which is the hash every
++# other copy in the estate carries. The image ships that file and no fork of it, so
++# what may not happen to it is an edit — running a formatter over it is exactly how
++# the estate's one drifted copy drifted. ruff.toml excludes it for that reason.
++CANONICAL_ARCH_VALIDATE_MD5 = "9e7e3f8c853efcce868fbe9d7ddedb3b"
++
++# The third-party import roots the image installs — python3-yaml, in the Dockerfile's
++# apt block. Anything else a baked module imports is simply absent at run time: the
++# image runs no pip and carries no virtualenv.
++INSTALLED_IMPORT_ROOTS = {"yaml"}
++
++
++def _baked_sources() -> list[Path]:
++    """Every python source inside the build context; tests are ignored out of it."""
++    return sorted(p for p in FOLDER.rglob("*.py") if TESTS not in p.parents)
++
++
++def _imported_roots(source: Path) -> set[str]:
++    """The top-level modules `source` imports absolutely; relative imports are its own."""
++    roots: set[str] = set()
++    for node in ast.walk(ast.parse(source.read_text())):
++        if isinstance(node, ast.Import):
++            roots.update(alias.name.split(".")[0] for alias in node.names)
++        elif isinstance(node, ast.ImportFrom) and node.level == 0:
++            roots.add(node.module.split(".")[0])
++    return roots
++
++
++class BakedSourceTests(unittest.TestCase):
++    def test_the_image_bakes_python_sources_at_all(self) -> None:
++        """A glob that silently found nothing would pass every assertion below."""
++        self.assertNotEqual(_baked_sources(), [])
++
++    def test_they_import_only_what_the_image_carries(self) -> None:
++        """A third-party import the image does not install fails at run time, in the
++        caller's pipeline or sidecar, with nothing before it to catch."""
++        for source in _baked_sources():
++            with self.subTest(module=str(source.relative_to(FOLDER))):
++                outside = _imported_roots(source) - sys.stdlib_module_names
++                self.assertEqual(outside - INSTALLED_IMPORT_ROOTS, set())
++
++
++class ShippedValidatorTests(unittest.TestCase):
++    def test_arch_validate_is_the_canonical_script(self) -> None:
++        """Byte for byte, or this is one more copy for the estate to reconcile rather
++        than the one canonical script the image exists to distribute."""
++        shipped = (FOLDER / "image" / "arch-validate.py").read_bytes()
++        self.assertEqual(hashlib.md5(shipped).hexdigest(), CANONICAL_ARCH_VALIDATE_MD5)
++
++
++class TrustRootTests(unittest.TestCase):
++    def test_both_images_bake_the_same_ca_root(self) -> None:
++        """The estate rotates the step-ca root across every copy in one change window,
++        and the rotation runbook works off a list of paths. Two copies in one repo that
++        can differ is a rotation that half-lands."""
++        self.assertEqual(
++            (FOLDER / "image" / "homelab-root.crt").read_bytes(),
++            (REPO / "argocd-hook" / "image" / "homelab-root.crt").read_bytes(),
++        )
+diff --git a/ruff.toml b/ruff.toml
+index ad48f6c..f8543b5 100644
+--- a/ruff.toml
++++ b/ruff.toml
+@@ -1,6 +1,11 @@
+-# The image runs Ubuntu noble's python3, so the entrypoint targets 3.12.
++# Both images run Ubuntu noble's python3, so the code in them targets 3.12.
+ target-version = "py312"
+ line-length = 100
+ 
++# The federation's arch-validate, vendored byte for byte and shipped as the canonical
++# script (a test pins its md5). Neither `ruff check --fix` nor `ruff format` may touch
++# it: reformatting is how the estate's one drifted copy drifted.
++exclude = ["aac-tools/image/arch-validate.py"]
++
+ [lint]
+ select = ["E", "F", "I", "UP", "B"]
+
+/work/ArgoCDTools — P3: git diff d152bacc07c8..d4db54a1828e
+
+aac-tools/.dockerignore                  |    2 +-
+ aac-tools/Dockerfile                     |    9 +
+ aac-tools/image/gen_architecture.py      | 1612 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ aac-tools/tests/support.py               |   19 +
+ aac-tools/tests/test_deploy_repo.py      |  254 ++++++++
+ aac-tools/tests/test_gen_architecture.py |  355 +++++++++++
+ 6 files changed, 2250 insertions(+), 1 deletion(-)
+
+diff --git a/aac-tools/.dockerignore b/aac-tools/.dockerignore
+index 86e44e5..9dde716 100644
+--- a/aac-tools/.dockerignore
++++ b/aac-tools/.dockerignore
+@@ -1,5 +1,5 @@
+ # This folder is the whole build context — the builder mounts nothing else — so keep it
+-# to what the Dockerfile actually reads: the two files under image/.
++# to what the Dockerfile actually reads: the files under image/.
+ .dockerignore
+ **/__pycache__
+ tests
+diff --git a/aac-tools/Dockerfile b/aac-tools/Dockerfile
+index cedb064..28cfae6 100644
+--- a/aac-tools/Dockerfile
++++ b/aac-tools/Dockerfile
+@@ -1,6 +1,8 @@
+ # aac-tools — the estate's architecture-as-code commands in one image. `arch-validate`
+ # submits an architecture artifact to the federation's validation service, and is the
+ # canonical script from `pvginkel/Architecture` shipped byte for byte, not a fork.
++# `gen-architecture` generates a deploy repo's architecture artifact for one stage,
++# rendering the repo's chart the way Argo CD renders it.
+ #
+ # Two callers run this image and neither supplies setup of its own: a Jenkins pipeline
+ # pulls it and runs a command, and KubeCoder runs it as a toolchain sidecar. KubeCoder
+@@ -60,6 +62,12 @@ RUN curl -fsSL -o /tmp/get-helm-4 \
+ COPY image/arch-validate.py /usr/local/bin/arch-validate
+ RUN chmod 0755 /usr/local/bin/arch-validate
+ 
++# The deploy-repo architecture generator, likewise a single file on PATH: it is one
++# module importing nothing but the standard library and PyYAML, so the image needs no
++# package, no PYTHONPATH and no install step for it.
++COPY image/gen_architecture.py /usr/local/bin/gen-architecture
++RUN chmod 0755 /usr/local/bin/gen-architecture
++
+ # A run needs a passwd entry for the uid it runs as: `kc cexec`'s preflight warns
+ # without one, and KubeCoder gives a toolchain sidecar no securityContext of its own, so
+ # it inherits the pod's uid 1000 — noble's `ubuntu`.
+@@ -76,5 +84,6 @@ RUN getent passwd "$(id -u)" > /dev/null && \
+     python3 -c "import sys; assert sys.version_info >= (3, 12), sys.version" && \
+     python3 -c "import yaml" && \
+     arch-validate --help > /dev/null && \
++    gen-architecture --help > /dev/null && \
+     openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt \
+         /usr/local/share/ca-certificates/homelab-root.crt
+diff --git a/aac-tools/image/gen_architecture.py b/aac-tools/image/gen_architecture.py
+new file mode 100644
+index 0000000..034743b
+--- /dev/null
++++ b/aac-tools/image/gen_architecture.py
+@@ -0,0 +1,1612 @@
++#!/usr/bin/env python3
++"""Generate a deploy repo's architecture artifact for one stage.
++
++A deploy repo holds one app: the chart under `chart/`, one values file per stage
++under `config/<stage>/`, and the annotation layer this generator reads at the repo
++root. Argo CD renders a stage as `chart/` under the Application's own name
++`<app>-<stage>`, into the namespace of that name, with `../config/<stage>/values.yaml`
++and four `hook.*` parameters; this renders it the same way and parses the *rendered*
++manifests. Every container of every workload (init + main) becomes a running instance
++element, keyed `<namespace>.<workload>.<container>` with a deterministic UUID5 id.
++Each instance Specializes its product, is Served by the Kubernetes platform, realizes
++any annotated capabilities, and — where it mounts a Ceph PVC — is Served by the
++matching cluster storage service.
++
++One run emits exactly one stage: the artifact is attached to a pipeline, and a
++pipeline that listened to two stages would make the artifact flap. `--stage` is
++required and single-valued; nothing here reads the branch, and nothing here rules on
++which stages a repo may publish.
++
++On top of the structural model, the generator resolves the **runtime dependency**
++edges a deployment defines but does not own the recipe for:
++
++* `boundBy` edges — a consumer producer (e.g. DockerImages) authors
++  `app:<x> —Association→ cap:<y>` (or `svc:<y>`) carrying `boundBy: env:VAR`. We read
++  the rendered value of VAR off the consuming container, resolve the host to the
++  concrete provider instance, and emit `provider —Serving→ consumer`. Only the
++  renderer can do this — the value is runtime state, fenced out of the published
++  dataset.
++* the OpenBao secret-store edge — the ClusterSecretStore that points the External
++  Secrets Operator at OpenBao is a deployer-owned manifest, so `OpenBao —Serving→ ESO`
++  is ours to draw.
++* `upstream` edges — a generic proxy (mcp-filter) has no intrinsic target; the chart
++  declares the wire on its image entry and we draw `upstream —Serving→ proxy` from the
++  rendered env var (resolve_upstreams).
++
++Cross-producer ids (the DockerImages `app:`/`svc:` UUIDs, Ansible's OpenBao/platform
++UUIDs) are resolved from the published merged dataset (`load_dataset`), with local
++producer checkouts overlaid so freshly-authored — not-yet-published — recipes resolve
++while testing.
++
++Judgment lives in `architecture.yaml` at the repo root:
++
++    introduced: '2026-06-17'     # the app's date; a deploy repo's git history dates
++                                 #   the repo, so it cannot be derived here
++    images:                      # image name (registry:5000/<name>) -> product
++      dnsmasq-config-generator: app:dnsmasq-config-generator
++      dnsmasq:                   # long form when a capability/kind is needed
++        product: ss:dnsmasq
++        realizes: [cap:dns, cap:dhcp]
++      mcp-filter:                # a proxy: `env` locates the pod it fronts,
++        product: app:mcp-filter  #   `providers` names that pod's containers
++        upstream:                #   serving it (omitted when the host is a
++          env: MCP_UPSTREAM_URL  #   cross-producer element)
++          providers: [server]
++    cnpg:                        # CloudNativePG CRs -> product (Cluster/Pooler)
++      Cluster:                   #   the operator materializes these at runtime,
++        product: ss:postgresql   #   so there's no walkable workload — we read
++        realizes: [cap:relational-database]   # the CRs directly (see CNPG_KINDS)
++      Pooler:
++        product: ss:pgbouncer
++        realizes: [cap:relational-database]
++    products:                    # upstream «SoftwareProduct» entries this app owns
++      - id: ss:dnsmasq
++        label: dnsmasq
++        summary: Lightweight DNS forwarder and DHCP server.
++        homepage: https://thekelleys.org.uk/dnsmasq/doc.html
++    exposures:                   # service name -> the container its host routes to,
++      git-sync: gitblit          #   when the port cannot name it
++    webUi:                       # exposed hosts that are human, browser-facing
++      - grafana.home             #   UIs -> the interface carries `webUi: true`
++    mcpClients:                  # container -> the rendered ConfigMap listing the
++      intercom-server:           #   MCP servers it connects to
++        configMap: mcp-servers
++        key: servers.json
++        providers: {trello: [server]}
++
++Kind is derived from the product prefix (app: -> ApplicationComponent, ss: ->
++SystemSoftware). An image with no annotation is reported as a gap.
++
++The artifact is a build output: regenerate it, do not commit it and do not hand-edit
++it.
++
++Usage: gen-architecture --stage <stage> --producer <id> [--repo <path>]
++
++Environment:
++  ARCH_DATASET_URL      base merged dataset (default: live webathome.org);
++                        a value without a scheme is read as a local file.
++  ARCH_DATASET_OVERLAY  glob of local producer architecture files overlaid on
++                        the base (default: ../DockerImages/*/architecture.yaml
++                        beside the repo, if that sibling checkout exists).
++"""
++
++import argparse
++import datetime
++import glob
++import json
++import os
++import re
++import subprocess
++import sys
++import tempfile
++import urllib.request
++import uuid
++from pathlib import Path
++
++import yaml
++
++# The deploy-repo layout the releases ApplicationSet renders
++# (/work/ArgoCDDeploy/chart/templates/applicationsets.yaml): the chart, the stage's
++# values out of the chart path, and the annotation layer beside them.
++CHART_DIR = "chart"
++CONFIG_DIR = "config"
++ANNOTATIONS = "architecture.yaml"
++
++# Deterministic id namespace for this producer (UUID5 of a fixed URL). Ids are a pure
++# function of a stable natural key, so "never re-mint" holds by construction. The URL
++# still names `helm-charts` because these ids are the same ids: an app that moves from
++# HelmCharts to its own deploy repo keeps every element id and only changes owner, so
++# inbound edges from other producers never dangle. Changing this string re-mints the
++# estate's whole deploy-side model.
++NS = uuid.uuid5(uuid.NAMESPACE_URL, "https://architecture.webathome.org/producers/helm-charts")
++
++# Cross-producer attach points. The platform every pod runs on is a stable,
++# always-needed reference; the others are resolved from the published dataset
++# (see load_dataset / cross_producer_id). Kept as a constant only because it is
++# referenced unconditionally by every instance.
++MICROK8S_PRD = "ss:microk8s-prd,54ca8c6c-27ec-4e0d-ac17-cf3f65e7c5d4"
++
++# Published merged dataset (all producers) — the source of cross-producer UUIDs.
++DATASET_URL = "https://architecture.webathome.org/data/v0.1/architecture.yaml"
++
++# Connection-string host -> the cross-producer element (kind, hint) it names.
++# The host appears in a rendered value / store config; the UUID behind the hint
++# comes from the dataset, so only the host->hint mapping is hand-maintained.
++CROSS_PRODUCER_HOST_HINTS = {
++    "secrets.home": ("svc", "openbao-api-prd"),  # OpenBao (Ansible)
++    "ceph": ("svc", "ceph-vip-prd"),  # Ceph RGW S3 via the VIP
++    "homeassistant.webathome.org": ("ss", "home-assistant-prd"),  # Home Assistant (Architecture)
++}
++
++# Cluster-local storage services, referenced but not owned here: the elements are
++# minted by the producer that deploys the CSI drivers, and a deploy repo resolves the
++# same ids from the same namespace and natural key. CSI driver -> (service id, hint,
++# capability-suffix).
++CEPH_DRIVERS = {
++    "rbd.csi.ceph.com": ("svc:cluster-ceph-rbd", "cluster-ceph-rbd", "block"),
++    "cephfs.csi.ceph.com": ("svc:cluster-ceph-cephfs", "cluster-ceph-cephfs", "shared-fs"),
++}
++
++WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
++
++# CloudNativePG declares its database substrate as custom resources the operator
++# materializes at runtime: a `Cluster` (the PostgreSQL instances) and a `Pooler`
++# (the PgBouncer front-end apps connect to). The operator-created pods/Services
++# never appear in `helm template`, so a chart that deploys these CRs has no
++# walkable workload for the database — we detect the CRs directly and emit the
++# substrate instances + the pooler's in-cluster Service host (see
++# emit_cnpg_substrate). Keyed by CR kind in the `cnpg:` annotation.
++CNPG_API_GROUP = "postgresql.cnpg.io"
++CNPG_KINDS = {"Cluster", "Pooler"}
++
++# Service annotations that expose a workload at an external host. server-name
++# drives the custom NGINX ingress; dns.webathome.org/hostname drives the
++# LoadBalancer/DNS path (e.g. step-ca at ca.home). Both name a host that a
++# boundBy value can resolve to.
++SERVER_NAME_ANNOTATION = "nginx.webathome.org/server-name"
++DNS_HOSTNAME_ANNOTATION = "dns.webathome.org/hostname"
++
++# Argo CD's lifecycle marker (see is_hook).
++HOOK_ANNOTATION = "argocd.argoproj.io/hook"
++
++
++def image_basename(ref):
++    """registry:5000/dnsmasq:latest -> dnsmasq; quay.io/keycloak/keycloak:24 -> keycloak."""
++    return ref.split("@", 1)[0].rsplit("/", 1)[-1].split(":", 1)[0]
++
++
++def run(args, cwd):
++    proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
++    if proc.returncode != 0:
++        # Surface the child's output before raising — otherwise a failing
++        # `helm template` (e.g. a malformed values file) shows only an opaque
++        # CalledProcessError in CI, with the real helm error hidden.
++        sys.stderr.write(proc.stdout)
++        sys.stderr.write(proc.stderr)
++        proc.check_returncode()
++    return proc.stdout
++
++
++def elt_uuid(natural_key):
++    # Honest UUID5 of the natural key (the schema id pattern is version-agnostic).
++    return str(uuid.uuid5(NS, natural_key))
++
++
++def composite(prefix, hint, natural_key):
++    return f"{prefix}:{hint},{elt_uuid(natural_key)}"
++
++
++def product_id(bare):
++    """Composite id for a «SoftwareProduct» catalog entry we own.
++
++    `bare` is the annotation form, e.g. `ss:dnsmasq` / `app:git-sync`; the
++    returned id keeps the hint and appends the deterministic UUID5.
++    """
++    prefix, name = bare.split(":", 1)
++    return composite(prefix, name, f"product.{bare}")
++
++
++def bare(ref):
++    """Strip the ,<uuid> off a composite id -> the `prefix:hint` form."""
++    return ref.split(",", 1)[0]
++
++
++def hint_of(ref):
++    """The hint part of a `prefix:hint[,uuid]` reference."""
++    b = bare(ref)
++    if ":" not in b:
++        raise ValueError(f"reference {ref!r} is not in `prefix:hint[,uuid]` form (no ':')")
++    return b.split(":", 1)[1]
++
++
++def pod_spec(doc):
++    spec = doc["spec"]
++    if doc["kind"] == "CronJob":
++        return spec["jobTemplate"]["spec"]["template"]["spec"]
++    return spec["template"]["spec"]
++
++
++def pod_labels(doc):
++    spec = doc["spec"]
++    tmpl = spec["jobTemplate"]["spec"]["template"] if doc["kind"] == "CronJob" else spec["template"]
++    return (tmpl.get("metadata") or {}).get("labels") or {}
++
++
++def kind_for(product):
++    return "SystemSoftware" if product.startswith("ss:") else "ApplicationComponent"
++
++
++def kebab(host):
++    return "".join(ch if ch.isalnum() else "-" for ch in host.lower()).strip("-")
++
++
++def container_ports(c):
++    """(set of declared containerPort numbers, set of port names) for a container."""
++    nums, names = set(), set()
++    for p in c.get("ports") or []:
++        cp = p.get("containerPort")
++        if cp is not None:
++            nums.add(int(cp))
++        if p.get("name"):
++            names.add(p["name"])
++    return nums, names
++
++
++# Helm-randomized one-shot Jobs name themselves `<base>-{{ randAlphaNum 5 |
++# lower }}` so each upgrade creates a fresh (immutable) Job. The suffix is
++# deploy noise, not identity — strip it so the instance id is stable across
++# renders. Scoped to Job (CronJob/Deployment names are already stable).
++RANDOM_JOB_SUFFIX = re.compile(r"-[a-z0-9]{5}$")
++
++
++def stable_workload_name(kind, name):
++    return RANDOM_JOB_SUFFIX.sub("", name) if kind == "Job" else name
++
++
++LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
++
++# The storage service ids, derived rather than minted (see CEPH_DRIVERS).
++CEPH_SERVICE_IDS = {
++    svc: composite("svc", hint, f"svc.{hint}") for svc, hint, _suffix in CEPH_DRIVERS.values()
++}
++
++
++# --------------------------------------------------------------------------- #
++# The deploy repo: what it is called, what it renders, what it annotates
++# --------------------------------------------------------------------------- #
++
++
++def chart_metadata(repo):
++    return yaml.safe_load((repo / CHART_DIR / "Chart.yaml").read_text(encoding="utf-8"))
++
++
++def annotations(repo):
++    """The repo-root annotation layer, and the app's `introduced` date.
++
++    `introduced` cannot be derived here: HelmCharts reads the first commit touching
++    `charts/<chart>`, but a deploy repo's history dates the repo, not the app. An
++    unquoted YAML date resolves to a `date` object, so normalize — the schema wants
++    the ISO string and quoting is not the annotation author's to remember.
++    """
++    path = repo / ANNOTATIONS
++    if not path.exists():
++        raise SystemExit(
++            f"gen-architecture: {path} does not exist; a generated "
++            f"producer's judgment layer is not optional"
++        )
++    ann = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
++    introduced = ann.get("introduced")
++    if not introduced:
++        raise SystemExit(
++            f"gen-architecture: {path} declares no `introduced:`; a "
++            f"deploy repo's git history dates the repo, not the app"
++        )
++    if isinstance(introduced, datetime.date):
++        introduced = introduced.isoformat()
++    return ann, introduced
++
++
++def release_label(app, stage):
++    """What an element's summary and `stats.release` quote.
++
++    The published model names the prd release by the app alone and suffixes every
++    other stage. Kept verbatim so an app that moves to its own deploy repo keeps the
++    release name its elements already carry.
++    """
++    return app if stage == "prd" else f"{app}@{stage}"
++
++
++def dependency_urls(meta):
++    """The chart repositories `helm dependency build` has to be told about.
++
++    Only a remote repository needs adding; a `file://` dependency resolves off disk.
++    """
++    urls = []
++    for dep in meta.get("dependencies") or []:
++        url = dep.get("repository") or ""
++        if url.startswith(("http://", "https://")) and url not in urls:
++            urls.append(url)
++    return urls
++
++
++def build_dependencies(repo, meta, repo_config):
++    """Resolve `chart/Chart.lock` into `chart/charts/`, as Argo's repo-server does.
++
++    Helm cannot template an unresolved dependency, and `helm dependency build`
++    resolves a dependency's repository through helm's local repository list, so each
++    entry has to exist first. The list is built in a temporary file: a run must not
++    depend on — or rewrite — the caller's helm configuration.
++    """
++    urls = dependency_urls(meta)
++    if not urls:
++        return
++    for url in urls:
++        run(
++            [
++                "helm",
++                "repo",
++                "add",
++                kebab(url.split("://", 1)[1]),
++                url,
++                "--force-update",
++                "--repository-config",
++                str(repo_config),
++            ],
++            cwd=repo,
++        )
++    run(
++        ["helm", "dependency", "build", CHART_DIR, "--repository-config", str(repo_config)],
++        cwd=repo,
++    )
++
++
++def hook_parameters(repo, stage, namespace):
++    """The four `hook.*` parameters the ApplicationSet passes every app it syncs.
++
++    The shared library `required`-guards all four
++    (/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl), so a render
++    missing one fails whole for any app that includes the Terraform PreSync hook —
++    not just the hook Job. The values reach no element: every hook resource is
++    dropped from the render (HOOK_ANNOTATION).
++    """
++    return {
++        "hook.repo": run(["git", "remote", "get-url", "origin"], cwd=repo).strip(),
++        "hook.revision": run(["git", "rev-parse", "HEAD"], cwd=repo).strip(),
++        "hook.stage": stage,
++        "hook.namespace": namespace,
++    }
++
++
++def template_args(stage, namespace, release_name, parameters):
++    """The `helm template` call the releases ApplicationSet has Argo make: the chart
++    under the Application's own name, into its namespace, with the stage's values
++    reached out of the chart path."""
++    args = [
++        "helm",
++        "template",
++        release_name,
++        CHART_DIR,
++        "--namespace",
++        namespace,
++        "--values",
++        f"{CONFIG_DIR}/{stage}/values.yaml",
++    ]
++    for name, value in parameters.items():
++        args += ["--set", f"{name}={value}"]
++    return args
++
++
++def is_hook(doc):
++    """An Argo CD lifecycle hook, which the model leaves to the deployment.
++
++    A hook resource is deploy machinery, not the app's architecture — and the
++    estate's Terraform PreSync hook Job carries `generateName` only, so it has no
++    name to build a natural key from either.
++    """
++    return HOOK_ANNOTATION in ((doc.get("metadata") or {}).get("annotations") or {})
++
++
++def render(repo, meta, stage, namespace, release_name):
++    """The stage's rendered manifests, the way Argo CD's repo-server renders them."""
++    with tempfile.TemporaryDirectory() as tmp:
++        build_dependencies(repo, meta, Path(tmp) / "repositories.yaml")
++    out = run(
++        template_args(stage, namespace, release_name, hook_parameters(repo, stage, namespace)),
++        cwd=repo,
++    )
++    return [d for d in yaml.safe_load_all(out) if d and not is_hook(d)]
++
++
++# --------------------------------------------------------------------------- #
++# Cross-producer dataset ingestion
++# --------------------------------------------------------------------------- #
++
++
++class Dataset:
++    """In-memory index over the published merged model + local overlays.
++
++    Only used to resolve *cross-producer* references to their UUIDs and to
++    read the consumer recipes (boundBy edges, app->service realizations) that
++    other producers author. We never look our own elements up here.
++    """
++
++    def __init__(self):
++        self.by_hint = {}  # (kind, hint) -> composite id
++        self.relations = []  # every relation across all envelopes
++        self.boundby_by_source = {}  # bare source id -> [relation,...] (boundBy set)
++        self.app_provides_svc = {}  # bare app id -> [svc composite id,...]
++        self.svc_provider_app = {}  # bare svc id -> bare app id
++
++    def add_envelope(self, env):
++        for key, val in (env or {}).items():
++            if key == "relations" or not isinstance(val, list):
++                continue
++            for el in val:
++                if isinstance(el, dict) and "id" in el:
++                    # Only composite `prefix:hint[,uuid]` ids are cross-producer
++                    # references we index by hint. Plain-slug constructs (e.g.
++                    # `views` entries, whose ids are bare names) aren't elements
++                    # and aren't resolvable by hint — skip them.
++                    if ":" not in bare(el["id"]):
++                        continue
++                    prefix, _, _rest = el["id"].partition(":")
++                    self.by_hint[(prefix, hint_of(el["id"]))] = el["id"]
++        for r in (env or {}).get("relations") or []:
++            self.relations.append(r)
++            if "boundBy" in r:
++                self.boundby_by_source.setdefault(bare(r["source"]), []).append(r)
++            if r.get("type") == "Realization":
++                s, t = bare(r["source"]), bare(r["target"])
++                if s.startswith("app:") and t.startswith("svc:"):
++                    self.app_provides_svc.setdefault(s, []).append(r["target"])
++                    self.svc_provider_app[t] = s
++
++    def full(self, kind, hint):
++        return self.by_hint.get((kind, hint))
++
++
++def load_dataset(repo):
++    """Build the cross-producer index: live merged dataset + local overlay.
++
++    Base = ARCH_DATASET_URL (default the live merged dataset; a scheme-less
++    value is read as a file). Overlay = ARCH_DATASET_OVERLAY (default the
++    sibling DockerImages checkout if present) — its envelopes are added so a
++    producer whose data is authored but not yet published still resolves. The
++    overlay may be several globs joined by os.pathsep (':'), so more than one
++    sibling producer checkout can be overlaid at once.
++    """
++    ds = Dataset()
++
++    base = os.environ.get("ARCH_DATASET_URL", DATASET_URL)
++    if re.match(r"^[a-z][a-z0-9+.\-]*://", base):
++        try:
++            with urllib.request.urlopen(base, timeout=30) as resp:
++                text = resp.read().decode("utf-8")
++        except Exception as e:  # noqa: BLE001 — surface the URL and bail
++            raise SystemExit(f"gen-architecture: cannot fetch dataset {base}: {e}") from e
++    else:
++        text = Path(base).read_text(encoding="utf-8")
++    for env in yaml.safe_load_all(text):
++        if env:
++            ds.add_envelope(env)
++
++    overlay = os.environ.get(
++        "ARCH_DATASET_OVERLAY", str(repo.parent / "DockerImages" / "*" / "architecture.yaml")
++    )
++    seen = set()
++    for pattern in overlay.split(os.pathsep):
++        for path in sorted(glob.glob(pattern.strip())):
++            if path in seen:
++                continue
++            seen.add(path)
++            ds.add_envelope(yaml.safe_load(Path(path).read_text(encoding="utf-8")))
++
++    return ds
++
++
++def cross_producer_id(host, ds):
++    """Resolve a connection-string host to a cross-producer element id."""
++    kindhint = CROSS_PRODUCER_HOST_HINTS.get(host)
++    if not kindhint:
++        return None
++    return ds.full(*kindhint)
++
++
++# --------------------------------------------------------------------------- #
++# boundBy host parsing
++# --------------------------------------------------------------------------- #
++
++# Kubernetes `$(VAR)` dependent-env reference (and the `$$(` escape for a
++# literal `$(`). The kubelet expands `$(VAR)` to a *preceding* env var's value
++# in the same container; a name with no match is left verbatim. We mirror that
++# so a connection string assembled from sibling vars — e.g. DATABASE_URL =
++# `...@$(DB_HOST)/$(DB_NAME)` with DB_HOST a literal chart value — yields the
++# real host before parse_host sees it.
++ENV_REF = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)|\$\$\(")
++
++
++def expand_env_refs(value, env):
++    """Resolve `$(VAR)` references in `value` against the container's `env` map.
++
++    `env` is the {name: value} map of literal-valued env vars on the same
++    container (valueFrom entries aren't here — a `$(SECRET_VAR)` therefore stays
++    verbatim, which is correct: its runtime value is unpublished state, and a
++    host is never carried in a secret). Recursive references resolve depth-first;
++    a reference cycle or a name resolving to itself is broken by leaving the
++    unresolved reference verbatim (the kubelet would too — it only substitutes
++    *preceding* vars). `$$(` is the documented escape for a literal `$(`.
++    """
++
++    def repl(m, _seen):
++        if m.group(0) == "$$(":
++            return "$("
++        name = m.group(1)
++        if name not in env or name in _seen:
++            return m.group(0)
++        return ENV_REF.sub(lambda mm: repl(mm, _seen | {name}), env[name])
++
++    return ENV_REF.sub(lambda m: repl(m, frozenset()), value)
++
++
++def parse_host(value):
++    """(host, port) from a connection string, preserving identity.
++
++    Strips scheme (incl. compound `postgresql+psycopg`, `amqp`), `user:pass@`
++    and `/path` — but keeps host AND port, because same-pod/localhost services
++    differ only by port and collapsing it would lose identity. port is None
++    when absent.
++    """
++    v = value.strip()
++    v = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", "", v)  # scheme
++    v = v.split("/", 1)[0]  # drop /path
++    v = v.rsplit("@", 1)[-1]  # drop user:pass@
++    if v.startswith("["):  # IPv6 [::1]:port
++        host, _, rest = v[1:].partition("]")
++        port = rest[1:] if rest.startswith(":") else None
++    elif v.count(":") == 1:
++        host, port = v.split(":", 1)
++    else:
++        host, port = v, None
++    return host, (port or None)
++
++
++def normalize_incluster(host, consumer_ns):
++    """(ns, svc) if host is Kubernetes Service DNS, else None.
++
++    Recognizes exactly `<svc>`, `<svc>.<ns>`, `<svc>.<ns>.svc[.cluster.local]`.
++    A bare name takes the consumer's namespace; the dotted forms carry their
++    own. Never strips ports, never strips arbitrary domains — a non-cluster
++    host like `ca.home` falls through to None unless an actual (ns,svc) of that
++    shape exists (the caller checks membership before trusting the result).
++    """
++    h = host
++    for suffix in (".svc.cluster.local", ".svc"):
++        if h.endswith(suffix):
++            h = h[: -len(suffix)]
++            break
++    parts = h.split(".")
++    if len(parts) == 1:
++        return (consumer_ns, parts[0])
++    if len(parts) == 2:
++        return (parts[1], parts[0])
++    return None
++
++
++# --------------------------------------------------------------------------- #
++# Provider index + resolvers
++# --------------------------------------------------------------------------- #
++
++
++def build_provider_index(all_services, workloads_by_ns):
++    """external: host -> [instance id,...]; incluster: (ns,svc) -> [instance id,...].
++
++    Backing instances are every container of a workload the Service selects,
++    SystemSoftware included — an upstream app's exposed host is backed by an
++    ss: container (Keycloak/Jenkins), not an ApplicationComponent.
++    """
++    external, incluster = {}, {}
++    for svc in all_services:
++        doc, ns = svc["doc"], svc["ns"]
++        name = doc["metadata"]["name"]
++        selector = (doc.get("spec") or {}).get("selector") or {}
++        backing = []
++        if selector:
++            for w in workloads_by_ns.get(ns, []):
++                if all(w["labels"].get(k) == v for k, v in selector.items()):
++                    backing.extend(w["all"])
++        if backing:
++            incluster.setdefault((ns, name), []).extend(backing)
++        anns = doc["metadata"].get("annotations") or {}
++        hosts = []
++        for a in (SERVER_NAME_ANNOTATION, DNS_HOSTNAME_ANNOTATION):
++            hosts += [h.strip() for h in (anns.get(a) or "").split(",") if h.strip()]
++        for h in hosts:
++            external.setdefault(h, []).extend(backing)
++    return external, incluster
++
++
++def resolve_host(host, consumer_ns, external, incluster, ds):
++    """(provider instance ids, is_cross_producer) or ([], None) if unresolved."""
++    nk = normalize_incluster(host, consumer_ns)
++    if nk and nk in incluster:
++        return incluster[nk], False
++    if host in external:
++        return external[host], False
++    xid = cross_producer_id(host, ds)
++    if xid:
++        return [xid], True
++    return [], None
++
++
++def resolve_svc_target(svc_target, value, consumer, instances_by_product, ds):
++    """A boundBy `svc:<id>` names an in-house provider service: map it to the
++    app that realizes it, then to the long-running instance we deploy of that
++    app. When the app runs in several workloads, the rendered value *locates*
++    which one — a loopback host means the same pod, else a same-release backing
++    workload; otherwise the workload whose name appears in the host (e.g.
++    `dns-0.dns-headless` -> the `dns` workload)."""
++    app_bare = ds.svc_provider_app.get(bare(svc_target))
++    if not app_bare:
++        return None
++    cands = [i for i in instances_by_product.get(app_bare, []) if not i["is_init"]]
++    if len(cands) <= 1:
++        return cands
++    host, _ = parse_host(value)
++    if host in LOOPBACK_HOSTS:
++        # localhost cannot cross the pod, let alone the namespace/release: resolve
++        # to the same pod, else a same-release backing workload. Never fall back
++        # to every release's instance — that fans one sidecar recipe out across
++        # every app deploying the same product (e.g. the SSE gateway sidecar).
++        # Empty → the caller reports the recipe unresolved.
++        same_pod = [i for i in cands if i["ns"] == consumer["ns"] and i["wl"] == consumer["wl"]]
++        same_release = [i for i in cands if i["release"] == consumer["release"]]
++        return same_pod or same_release
++    narrowed = [i for i in cands if i["wl"] in host]
++    return narrowed or cands
++
++
++# --------------------------------------------------------------------------- #
++# main
++# --------------------------------------------------------------------------- #
++
++
++def parse_args(argv=None):
++    parser = argparse.ArgumentParser(
++        prog="gen-architecture",
++        description="Generate a deploy repo's architecture artifact for one stage.",
++    )
++    # One run, one stage: the artifact is attached to a pipeline, and a pipeline
++    # listening to two stages would make it flap. No default, no "all stages", and
++    # nothing here reads the branch.
++    parser.add_argument(
++        "--stage",
++        required=True,
++        help="the stage to render (names config/<stage>/values.yaml "
++        "and the <app>-<stage> namespace)",
++    )
++    parser.add_argument(
++        "--producer",
++        required=True,
++        help="the producer id this artifact is published under, as "
++        "registered in the federation's pipeline-producers.yaml",
++    )
++    parser.add_argument(
++        "--repo", default=".", help="the deploy repo's checkout (default: the current directory)"
++    )
++    return parser.parse_args(argv)
++
++
++def main():
++    args = parse_args()
++    repo = Path(args.repo).resolve()
++    stage, producer = args.stage, args.producer
++
++    ann, introduced = annotations(repo)
++    meta = chart_metadata(repo)
++    app = meta["name"]
++    # Argo names the Application, its namespace and the helm release `<app>-<stage>`.
++    ns = release_name = f"{app}-{stage}"
++    env = stage
++    release = release_label(app, stage)
++
++    elements = {
++        "systemSoftware": {},
++        "applicationComponents": {},
++        "applicationServices": {},
++        "applicationInterfaces": {},
++    }
++    relations = {}
++    gaps = []
++    deferred = set()  # bare cross-producer refs no producer resolves yet
++    # «SoftwareProduct» catalog entries this producer owns: bare ref (ss:/app:
++    # from the annotations) -> composite id. Specialization edges resolve their
++    # target through this, then the dataset, then dangle (deferred).
++    owned = {}
++
++    # Accumulated for the post-render dependency passes.
++    instances = []  # every emitted container instance (dicts)
++    workloads_by_ns = {}  # ns -> [{name, labels, all:[id], ac:[(hint,id)]}]
++    all_services = []  # [{doc, ns}] — every Service (for in-cluster DNS)
++    exposed = []  # [{doc, ns, env, introduced, release}] — annotated
++    secret_stores = []  # [{doc, ns, release, release_name}]
++    mcp_clients = []  # [{ns, chart, container, configMap, key, hostField}]
++    configmaps = {}  # (ns, name) -> data dict (for mcp client lists)
++    cnpg_pooler_svcs = {}  # (ns, svc-name) -> [pooler instance id] for the index
++
++    ds = load_dataset(repo)
++
++    def add_rel(rid, source, target, rtype):
++        relations[rid] = {"id": rid, "source": source, "target": target, "type": rtype}
++
++    def resolve_product(ref):
++        """bare product ref -> composite id: owned, else dataset, else dangling."""
++        if ref in owned:
++            return owned[ref]
++        prefix, name = ref.split(":", 1)
++        full = ds.full(prefix, name)
++        if full:
++            return full
++        deferred.add(ref)
++        return ref
++
++    images = ann.get("images") or {}
++
++    # Deployer-owned MCP-client bindings: a consuming container plus the rendered
++    # ConfigMap that lists the MCP servers it connects to.
++    for cname, spec in (ann.get("mcpClients") or {}).items():
++        mcp_clients.append(
++            {
++                "ns": ns,
++                "chart": app,
++                "container": cname,
++                "configMap": spec["configMap"],
++                "key": spec["key"],
++                "hostField": spec.get("hostField", "url"),
++                "providers": spec.get("providers") or {},
++            }
++        )
++
++    # Upstream «SoftwareProduct» entries this app owns.
++    for prod in ann.get("products") or []:
++        cid = product_id(prod["id"])
++        owned[prod["id"]] = cid
++        entry = dict(
++            prod,
++            id=cid,
++            stereotype="SoftwareProduct",
++            lifecycle="active",
++            introduced=prod.get("introduced", introduced),
++        )
++        arr = "systemSoftware" if prod["id"].startswith("ss:") else "applicationComponents"
++        elements[arr].setdefault(prod["id"], entry)
++
++    docs = render(repo, meta, stage, ns, release_name)
++
++    # Classify each PVC by its statically-bound PV's CSI driver
++    # (PVC.spec.volumeName -> PV.spec.csi.driver); the PVC's own
++    # storageClassName is empty for static binding.
++    pv_driver = {
++        d["metadata"]["name"]: (d["spec"].get("csi") or {}).get("driver")
++        for d in docs
++        if d.get("kind") == "PersistentVolume"
++    }
++    pvc_driver = {
++        d["metadata"]["name"]: pv_driver.get(d["spec"].get("volumeName"))
++        for d in docs
++        if d.get("kind") == "PersistentVolumeClaim"
++    }
++
++    rel_workloads = workloads_by_ns.setdefault(ns, [])
++    for doc in docs:
++        if doc.get("kind") not in WORKLOAD_KINDS:
++            continue
++        wl = stable_workload_name(doc["kind"], doc["metadata"]["name"])
++        pspec = pod_spec(doc)
++        wl_backing = []  # the containers that back an exposed Service (dicts)
++        wl_all = []  # every container instance id (for Service backing)
++        wl_products = set()  # bare product refs of this workload's containers
++        vol_claim = {
++            v["name"]: v["persistentVolumeClaim"]["claimName"]
++            for v in pspec.get("volumes") or []
++            if "persistentVolumeClaim" in v
++        }
++        init_names = {c["name"] for c in pspec.get("initContainers") or []}
++        containers = (pspec.get("initContainers") or []) + pspec["containers"]
++        for c in containers:
++            image = c["image"]
++            image_name = image_basename(image)
++            if image_name in images:
++                img_ann = images[image_name]  # present (may be null = no product)
++            else:
++                gaps.append(f"{app}: image '{image_name}' (in {wl}/{c['name']})")
++                img_ann = None
++            if isinstance(img_ann, str):
++                img_ann = {"product": img_ann}
++            img_ann = img_ann or {}
++            product = img_ann.get("product")
++            kind = img_ann.get("kind") or (kind_for(product) if product else "ApplicationComponent")
++            nkey = f"{ns}.{wl}.{c['name']}"
++            hint = f"{ns}-{wl}-{c['name']}"
++            prefix = "ss" if kind == "SystemSoftware" else "app"
++            arr = "systemSoftware" if kind == "SystemSoftware" else "applicationComponents"
++            inst_id = composite(prefix, hint, nkey)
++            elements[arr][nkey] = {
++                "id": inst_id,
++                "label": f"{wl}/{c['name']} ({env})",
++                "summary": f"{kind} container '{c['name']}' of workload "
++                f"'{wl}' in release '{release}'.",
++                "introduced": introduced,
++                "lifecycle": "active",
++                "environment": env,
++                "cluster": "prd",
++                "stats": {
++                    "release": release,
++                    "workload": wl,
++                    "container": c["name"],
++                    "image": image,
++                },
++            }
++            realizes = {t for t in img_ann.get("realizes") or []}
++            instances.append(
++                {
++                    "id": inst_id,
++                    "product": product,
++                    "ns": ns,
++                    "wl": wl,
++                    "container": c["name"],
++                    "release": release,
++                    "chart": app,
++                    "hint": hint,
++                    "is_init": c["name"] in init_names,
++                    "env": {e["name"]: e["value"] for e in (c.get("env") or []) if "value" in e},
++                    "realizes": realizes,
++                    "upstream": img_ann.get("upstream"),
++                }
++            )
++            wl_all.append(inst_id)
++            if product:
++                wl_products.add(product)
++            # A non-init container backs an exposed Service. Both layers
++            # count: an upstream app's serving container is SystemSoftware
++            # (Keycloak/Jenkins), not an ApplicationComponent. Its declared
++            # ports let the exposure resolve to the one container on the
++            # Service's HTTP port (see resolve_exposed_realizers).
++            if product and c["name"] not in init_names:
++                nums, names = container_ports(c)
++                wl_backing.append(
++                    {
++                        "hint": hint,
++                        "id": inst_id,
++                        "container": c["name"],
++                        "port_nums": nums,
++                        "port_names": names,
++                    }
++                )
++            # Platform: Kubernetes serves this workload.
++            add_rel(f"rel:{hint}-platform", MICROK8S_PRD, inst_id, "Serving")
++            # Specialization to its product (owned -> dataset -> dangling).
++            if product:
++                add_rel(f"rel:{hint}-spec", inst_id, resolve_product(product), "Specialization")
++            # Realizations: capabilities (bare cap:) and the cluster storage
++            # services (resolve svc: to the id the storage producer mints).
++            for tgt in img_ann.get("realizes") or []:
++                add_rel(
++                    f"rel:{hint}-realizes-{hint_of(tgt)}",
++                    inst_id,
++                    CEPH_SERVICE_IDS.get(tgt, tgt),
++                    "Realization",
++                )
++            # Served-by: a backend service serves this container (e.g. the
++            # Ceph VIP serving a CSI driver).
++            for svc in img_ann.get("served_by") or []:
++                add_rel(f"rel:{hint}-servedby-{hint_of(svc)}", svc, inst_id, "Serving")
++            # Ceph storage: services serve the containers that mount the PVC.
++            for m in c.get("volumeMounts") or []:
++                drv = pvc_driver.get(vol_claim.get(m["name"]))
++                if drv in CEPH_DRIVERS:
++                    svc_id, _hint, kindsuffix = CEPH_DRIVERS[drv]
++                    add_rel(
++                        f"rel:{hint}-storage-{kindsuffix}",
++                        CEPH_SERVICE_IDS[svc_id],
++                        inst_id,
++                        "Serving",
++                    )
++        rel_workloads.append(
++            {
++                "name": wl,
++                "labels": pod_labels(doc),
++                "backing": wl_backing,
++                "all": wl_all,
++                "products": wl_products,
++            }
++        )
++
++    emit_cnpg_substrate(
++        docs,
++        ann.get("cnpg") or {},
++        ns,
++        env,
++        release,
++        introduced,
++        elements,
++        instances,
++        owned,
++        resolve_product,
++        add_rel,
++        cnpg_pooler_svcs,
++        gaps,
++        app,
++    )
++
++    for doc in docs:
++        if doc.get("kind") == "Service":
++            all_services.append({"doc": doc, "ns": ns})
++            anns = doc["metadata"].get("annotations") or {}
++            if anns.get(SERVER_NAME_ANNOTATION) or anns.get(DNS_HOSTNAME_ANNOTATION):
++                exposed.append(
++                    {
++                        "doc": doc,
++                        "ns": ns,
++                        "env": env,
++                        "introduced": introduced,
++                        "release": release,
++                        "exposures": ann.get("exposures") or {},
++                        "webUi": ann.get("webUi") or [],
++                    }
++                )
++        elif doc.get("kind") in ("SecretStore", "ClusterSecretStore"):
++            secret_stores.append(
++                {"doc": doc, "ns": ns, "release": release, "release_name": release_name}
++            )
++        elif doc.get("kind") == "ConfigMap":
++            configmaps[(ns, doc["metadata"]["name"])] = doc.get("data") or {}
++
++    inst_by_id = {i["id"]: i for i in instances}
++    instances_by_product = {}
++    for i in instances:
++        if i["product"]:
++            instances_by_product.setdefault(i["product"], []).append(i)
++
++    external, incluster = build_provider_index(all_services, workloads_by_ns)
++    # The CNPG Pooler's Service is operator-created, so it never reached
++    # all_services; register it so an app's DB_HOST (the pooler DNS name)
++    # resolves to the pooler instance the substrate emitted.
++    for nk, pids in cnpg_pooler_svcs.items():
++        incluster.setdefault(nk, []).extend(pids)
++
++    errors = []
++    reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds, gaps)
++    resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, add_rel, errors)
++    resolve_upstreams(instances, inst_by_id, external, incluster, ds, add_rel, errors)
++    resolve_secret_stores(secret_stores, instances, ds, add_rel, errors)
++    resolve_mcp_clients(
++        mcp_clients, configmaps, inst_by_id, instances, external, incluster, ds, add_rel, errors
++    )
++
++    if errors:
++        for e in errors:
++            sys.stderr.write(e + "\n")
++        sys.stderr.write(f"gen-architecture: {len(errors)} unresolved edge(s); no output written\n")
++        raise SystemExit(1)
++
++    envelope = {"schemaVersion": "0.1", "producer": producer}
++    for arr in (
++        "systemSoftware",
++        "applicationComponents",
++        "applicationServices",
++        "applicationInterfaces",
++    ):
++        if elements[arr]:
++            envelope[arr] = sorted(elements[arr].values(), key=lambda e: e["id"])
++    if relations:
++        envelope["relations"] = sorted(relations.values(), key=lambda r: r["id"])
++
++    output = repo / "docs" / "architecture" / f"{producer}.yaml"
++    output.parent.mkdir(parents=True, exist_ok=True)
++    with open(output, "w", encoding="utf-8") as f:
++        f.write("# GENERATED by gen-architecture — do not edit by hand.\n")
++        f.write(f"# Edit {ANNOTATIONS} at the repo root and regenerate.\n")
++        yaml.safe_dump(envelope, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
++
++    n = sum(len(elements[a]) for a in elements)
++    sys.stderr.write(
++        f"wrote {output.relative_to(repo)} — {n} elements, {len(relations)} relations\n"
++    )
++    for g in gaps:
++        sys.stderr.write(f"gap: {g}\n")
++    for d in sorted(deferred):
++        sys.stderr.write(f"deferred (cross-producer, unresolved): {d}\n")
++
++
++def emit_cnpg_substrate(
++    docs,
++    cnpg_ann,
++    ns,
++    env,
++    release,
++    introduced,
++    elements,
++    instances,
++    owned,
++    resolve_product,
++    add_rel,
++    cnpg_pooler_svcs,
++    gaps,
++    chart,
++):
++    """Model a CloudNativePG `Cluster`/`Pooler` declared in the rendered chart.
++
++    The operator turns these CRs into the actual PostgreSQL pods and the
++    PgBouncer pooler Service at runtime, none of which `helm template` emits.
++    So we read the CRs directly and emit a SystemSoftware instance per CR
++    (keyed `<ns>.<cr-name>`), driven by the `cnpg:` annotation — a map of CR
++    kind -> {product, realizes, served_by}, mirroring the `images:` form. The
++    instance Specializes its product, is Served by the platform, and realizes
++    its annotated capabilities. The pooler is additionally Served by its backing
++    `Cluster` (read off `spec.cluster.name`), and its Service DNS name is
++    registered so a consumer's DB_HOST resolves to it (the apps connect through
++    the pooler, never the operator-internal Service directly).
++    """
++    cnpg_docs = [
++        d
++        for d in docs
++        if d.get("kind") in CNPG_KINDS and str(d.get("apiVersion", "")).startswith(CNPG_API_GROUP)
++    ]
++    cluster_inst = {}  # cluster CR name -> instance id (for the pooler edge)
++    # Clusters before Poolers so a Pooler's backing-cluster edge resolves
++    # regardless of the order the chart renders them in.
++    for doc in sorted(cnpg_docs, key=lambda d: d["kind"] != "Cluster"):
++        kind = doc["kind"]
++        name = doc["metadata"]["name"]
++        if kind not in cnpg_ann:
++            gaps.append(f"{chart}: cnpg {kind} '{name}' (no `cnpg:` annotation)")
++            continue
++        spec = cnpg_ann[kind] or {}
++        product = spec.get("product")
++        nkey = f"{ns}.{name}"
++        hint = f"{ns}-{name}"
++        inst_id = composite("ss", hint, nkey)
++        elements["systemSoftware"][nkey] = {
++            "id": inst_id,
++            "label": f"{name} ({env})",
++            "summary": f"CloudNativePG {kind} '{name}' of release '{release}'.",
++            "introduced": introduced,
++            "lifecycle": "active",
++            "environment": env,
++            "cluster": "prd",
++            "stats": {"release": release, "resource": f"{kind}/{name}"},
++        }
++        realizes = {t for t in spec.get("realizes") or []}
++        instances.append(
++            {
++                "id": inst_id,
++                "product": product,
++                "ns": ns,
++                "wl": name,
++                "container": name,
++                "release": release,
++                "chart": chart,
++                "hint": hint,
++                "is_init": False,
++                "env": {},
++                "realizes": realizes,
++            }
++        )
++        add_rel(f"rel:{hint}-platform", MICROK8S_PRD, inst_id, "Serving")
++        if product:
++            add_rel(f"rel:{hint}-spec", inst_id, resolve_product(product), "Specialization")
++        for tgt in realizes:
++            add_rel(f"rel:{hint}-realizes-{hint_of(tgt)}", inst_id, tgt, "Realization")
++        for svc in spec.get("served_by") or []:
++            add_rel(f"rel:{hint}-servedby-{hint_of(svc)}", svc, inst_id, "Serving")
++        if kind == "Cluster":
++            cluster_inst[name] = inst_id
++        elif kind == "Pooler":
++            backing_cluster = (doc["spec"].get("cluster") or {}).get("name")
++            if backing_cluster in cluster_inst:
++                add_rel(
++                    f"rel:{ns}-{backing_cluster}-serves-{hint}",
++                    cluster_inst[backing_cluster],
++                    inst_id,
++                    "Serving",
++                )
++            # Apps reach the pooler by its Service DNS; register every cluster-DNS
++            # form so DB_HOST (any of <svc>, <svc>.<ns>, *.svc[.cluster.local])
++            # resolves to this instance.
++            cnpg_pooler_svcs.setdefault((ns, name), []).append(inst_id)
++
++
++def reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds, gaps):
++    """Mint ApplicationService + ApplicationInterface(s) for an exposed Service.
++
++    For an **in-house** app (a backing product DockerImages owns, that realizes
++    its own `svc:`), reference that service's UUID and attach the public host as
++    an ApplicationInterface — we do not mint a second service or an instance
++    Realization (DockerImages already owns app->svc). For an **upstream** app we
++    own the whole exposure, so we mint our own service.
++
++    A workload pod is often several containers (app + UI + sidecars) behind one
++    Service, so the minted service is realized by the single container the host
++    actually routes to — the one on the Service's HTTP target port
++    (resolve_exposed_realizers). An `exposures:` entry overrides that when the
++    front door is a reverse proxy whose port can't name the product (e.g.
++    git-sync's nginx fronting Gitblit). When neither resolves a container, every
++    backer realizes the service and a gap is reported.
++    """
++    for entry in exposed:
++        doc, ns, env, introduced = entry["doc"], entry["ns"], entry["env"], entry["introduced"]
++        release = entry["release"]
++        anns = doc["metadata"].get("annotations") or {}
++        server_name = anns.get(SERVER_NAME_ANNOTATION) or anns.get(DNS_HOSTNAME_ANNOTATION)
++        svcname = doc["metadata"]["name"]
++        hosts = [h.strip() for h in server_name.split(",") if h.strip()]
++        # Hosts the `webUi:` annotation marks as human, browser-facing UIs (the
++        # homeapps launcher tiles every interface carrying `webUi: true`).
++        # Per-host, not per-app: one app can mix UI and machine ingresses (e.g.
++        # design-assistant's frontend/portal vs its API hosts).
++        webui = set(entry.get("webUi") or [])
++
++        selector = (doc.get("spec") or {}).get("selector") or {}
++        matched = [
++            w
++            for w in workloads_by_ns.get(ns, [])
++            if selector and all(w["labels"].get(k) == v for k, v in selector.items())
++        ]
++
++        # If exactly one in-house app (DockerImages-owned, realizing its own
++        # svc:) backs this Service, reference that service instead of minting.
++        inhouse_svc = _inhouse_service_for(matched, ds)
++
++        if inhouse_svc is not None:
++            asvc_id = inhouse_svc
++        else:
++            # Upstream: mint our own service; its workload realizations follow.
++            akey = f"appsvc.{ns}.{svcname}"
++            asvc_id = composite("svc", f"{ns}-{svcname}", akey)
++            elements["applicationServices"][akey] = {
++                "id": asvc_id,
++                "label": f"{svcname} ({env})",
++                "summary": f"Application service '{svcname}' of release '{release}', "
++                f"reachable at {', '.join(hosts)}.",
++                "introduced": introduced,
++                "lifecycle": "active",
++                "environment": env,
++                "cluster": "prd",
++                "stats": {"hosts": ", ".join(hosts)},
++            }
++
++        for host in hosts:
++            ikey = f"appif.{host}"
++            interface = {
++                "id": composite("if", kebab(host), ikey),
++                "label": host,
++                "summary": f"Ingress endpoint {host} exposing '{svcname}'.",
++                "introduced": introduced,
++                "lifecycle": "active",
++                "environment": env,
++                "cluster": "prd",
++                "stats": {"url": host},
++            }
++            if host in webui:
++                interface["webUi"] = True
++            elements["applicationInterfaces"][ikey] = interface
++            add_rel(f"rel:{ns}-{kebab(host)}-exposes", interface["id"], asvc_id, "Assignment")
++
++        if inhouse_svc is not None:
++            continue
++
++        all_backing = [b for w in matched for b in w["backing"]]
++        identity = entry["exposures"].get(svcname)
++        if identity:
++            realizers = [b for b in all_backing if b["container"] == identity]
++            if not realizers:
++                gaps.append(
++                    f"{release}: exposures[{svcname}] names container "
++                    f"'{identity}', which no backing workload has"
++                )
++        else:
++            realizers = resolve_exposed_realizers(doc, all_backing)
++        if not realizers:
++            # A real port-match failure (backers exist, none on the HTTP port) is
++            # worth a gap; an empty backing set is a headless / per-pod-selector
++            # or unannotated-image service, reported elsewhere.
++            if all_backing and not identity:
++                gaps.append(
++                    f"{release}: exposed service '{svcname}' — HTTP target "
++                    f"port matches no backing container; realized by all "
++                    f"(set exposures[{svcname}] or declare the containerPort)"
++                )
++            realizers = all_backing
++        for b in realizers:
++            add_rel(f"rel:{b['hint']}-provides-{kebab(svcname)}", b["id"], asvc_id, "Realization")
++
++
++def resolve_exposed_realizers(doc, all_backing):
++    """The backing container(s) the Service's HTTP front routes to, or None.
++
++    Resolution order: the explicit `nginx.webathome.org/target-port`; else, if
++    every Service port maps to one container, that container (covers a single
++    HTTP port and multi-port L4 services like Samba alike); else the port named
++    `http` (the web front of a split multi-port pod, e.g. dnsmasq's dhcp). A
++    targetPort is matched to a container by number, or by name when it is a
++    named port. None when nothing matches — a port-less or proxy-fronted front.
++    """
++
++    def match(num=None, name=None):
++        return [
++            b
++            for b in all_backing
++            if (num is not None and num in b["port_nums"])
++            or (name is not None and name in b["port_names"])
++        ]
++
++    anns = doc["metadata"].get("annotations") or {}
++    tp = anns.get("nginx.webathome.org/target-port")
++    if tp and tp.isdigit():
++        return match(num=int(tp)) or None
++
++    ports = (doc.get("spec") or {}).get("ports") or []
++
++    def port_match(p):
++        t = p.get("targetPort")
++        if isinstance(t, int) or (isinstance(t, str) and t.isdigit()):
++            return match(num=int(t))
++        return match(name=t) if isinstance(t, str) else []
++
++    containers = {b["container"] for p in ports for b in port_match(p)}
++    if len(containers) == 1:
++        return [b for b in all_backing if b["container"] == next(iter(containers))]
++
++    http = next((p for p in ports if p.get("name") == "http"), None)
++    return (http and port_match(http)) or None
++
++
++def _inhouse_service_for(matched, ds):
++    """The DockerImages svc UUID if exactly one in-house app backs the Service."""
++    svcs = set()
++    for w in matched:
++        for prod in w.get("products", []):
++            for svc in ds.app_provides_svc.get(prod, []):
++                svcs.add(svc)
++    if len(svcs) == 1:
++        return next(iter(svcs))
++    return None
++
++
++def resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, add_rel, errors):
++    """Emit provider —Serving→ consumer for every resolvable boundBy recipe.
++
++    For each product we deploy that has boundBy edges authored against it, read
++    the named env off the container(s) that set it, resolve the value's host to
++    a provider, and draw the edge. Any edge that can't resolve (naming chart/
++    release/container/var/value/host) is collected into `errors` and skipped, so
++    one run surfaces *every* breakage at once; main reports them and exits
++    non-zero rather than writing a partial artifact. The breakage is still the
++    signal — there are just no longer one-at-a-time.
++
++    A rendered env always wins. When no deployed container sets the var, the
++    recipe's `boundByDefaultValue` supplants the missing config: it declares
++    that the consumer reaches the provider through a hidden code-default, so
++    the relation holds for *every* deployed instance of the consumer — each
++    must resolve to a co-located provider, and any that can't is a hard-fail.
++    Absent both a setter and a default, the dependency is simply unwired in
++    this deployment: there is no Serving edge, so none is drawn. We model what
++    is deployed, not what ought to be — a mandatory wire left unset is the
++    app's own runtime failure, not ours to pre-empt. A value that *is* wired
++    but resolves nowhere still fails loudly: that is a configured connection
++    the model can't place, a real hole, not an absent dependency. (So an
++    *optional* dependency just carries no default and surfaces its host as a
++    literal env only where it applies — e.g. the SSEGateway RabbitMQ backplane:
++    only the release wiring RABBITMQ_URL draws the edge, and when none does,
++    say design-assistant is disabled, the gateway has no backplane edge at all.)
++
++    A loopback host on a `cap:` target — whether rendered (e.g. gitblit-mcp-
++    server -> gitblit on localhost:8080) or supplied by a localhost default — is
++    a same-pod sidecar: resolve to a same-pod cap-realizing instance. No
++    same-release fallback: localhost cannot leave the pod; the old fallback only
++    ever masked vaulted connection strings, which now surface their real host
++    and resolve in-cluster. Mirrors `resolve_svc_target` for `svc:` targets.
++    """
++    for prod_bare, prod_instances in instances_by_product.items():
++        for edge in ds.boundby_by_source.get(prod_bare, []):
++            var = edge["boundBy"].split("env:", 1)[1]
++            tgt_bare = bare(edge["target"])
++            default = edge.get("boundByDefaultValue")
++            setters = [i for i in prod_instances if var in i["env"]]
++            if not setters:
++                if default is None:
++                    # No instance wires this dependency and there is no code
++                    # default to stand in: there is no Serving edge to draw. We
++                    # describe deployed reality, not enforce it — a missing
++                    # mandatory wire surfaces as the app's own runtime failure.
++                    continue
++                setters = prod_instances
++            for inst in setters:
++                value = inst["env"].get(var, default)
++                # A connection string assembled from sibling env vars via
++                # Kubernetes `$(VAR)` substitution (e.g. DATABASE_URL =
++                # `...@$(DB_HOST)/...`, where DB_HOST is a literal chart value)
++                # carries the real host only after the kubelet expands it.
++                # Expand it here against this container's other literal-valued
++                # env so parse_host sees the resolved host, not the placeholder.
++                value = expand_env_refs(value, inst["env"])
++                loc = (
++                    f"{inst['chart']}/{inst['release']} "
++                    f"{inst['ns']}.{inst['wl']}.{inst['container']}"
++                )
++                if tgt_bare.startswith("svc:"):
++                    providers = resolve_svc_target(
++                        edge["target"], value, inst, instances_by_product, ds
++                    )
++                    if not providers:
++                        errors.append(
++                            f"gen-architecture: boundBy: {loc}: {var}={value!r} "
++                            f"svc target {tgt_bare} maps to no deployed instance"
++                        )
++                        continue
++                    provider_ids = [p["id"] for p in providers]
++                else:
++                    host, _port = parse_host(value)
++                    if host in LOOPBACK_HOSTS:
++                        # Loopback on a cap: target — a genuine same-pod sidecar
++                        # reached over the pod loopback (e.g. gitblit-mcp-server
++                        # -> gitblit on localhost:8080). Resolve to a same-pod
++                        # instance realizing the capability; mirrors
++                        # resolve_svc_target's same-pod rule. Vaulted connection
++                        # strings no longer reach here — charts surface the real
++                        # host, so they resolve in-cluster below.
++                        chosen = [
++                            i
++                            for i in inst_by_id.values()
++                            if not i["is_init"]
++                            and tgt_bare in i["realizes"]
++                            and i["ns"] == inst["ns"]
++                            and i["wl"] == inst["wl"]
++                        ]
++                        if not chosen:
++                            errors.append(
++                                f"gen-architecture: boundBy: {loc}: {var}={value!r} -> "
++                                f"loopback host names no same-pod provider "
++                                f"realizing {tgt_bare}"
++                            )
++                            continue
++                        provider_ids = [i["id"] for i in chosen]
++                    else:
++                        pids, is_cross = resolve_host(host, inst["ns"], external, incluster, ds)
++                        if not pids:
++                            errors.append(
++                                f"gen-architecture: boundBy: {loc}: {var}={value!r} -> "
++                                f"host {host!r} resolves to no provider "
++                                f"(in-cluster / exposed host / cross-producer)"
++                            )
++                            continue
++                        if is_cross:
++                            provider_ids = pids
++                        else:
++                            # cap-invariant: keep providers that actually realize the
++                            # capability — and that serve it (a one-shot init
++                            # container sharing the image is not a provider).
++                            provider_ids = [
++                                p
++                                for p in pids
++                                if p in inst_by_id
++                                and not inst_by_id[p]["is_init"]
++                                and tgt_bare in inst_by_id[p]["realizes"]
++                            ]
++                            if not provider_ids:
++                                errors.append(
++                                    f"gen-architecture: boundBy: {loc}: {var}={value!r} "
++                                    f"host {host} -> provider does not Realize {tgt_bare}"
++                                )
++                                continue
++                for pid in provider_ids:
++                    add_rel(
++                        f"rel:{kebab(hint_of(pid))}-serves-{inst['hint']}-{kebab(hint_of(tgt_bare))}",
++                        pid,
++                        inst["id"],
++                        "Serving",
++                    )
++
++
++def resolve_upstreams(instances, inst_by_id, external, incluster, ds, add_rel, errors):
++    """Emit upstream —Serving→ proxy for each image entry declaring `upstream`.
++
++    A generic proxy (mcp-filter) fronts whatever the deployment points it at:
++    after DockerImages' filter recipe went with cap:mcp there is no capability or
++    service to bind it to, so the wire is the deployer's, declared on the image
++    entry like the `mcpClients` providers map. The rendered `env` var locates the
++    pod — a loopback host is the proxy's own pod, any other host resolves through
++    the same in-cluster / exposed-host machinery as boundBy — and `providers`
++    names the containers of that pod that serve the proxy. Not "every other
++    container": the trello pod's auth nginx sits in front of the filter, not
++    behind it. A cross-producer host names an element, not a pod, so it takes no
++    `providers` and is drawn as resolved. An unset var, a host resolving nowhere,
++    a named container missing from the pod and a pod host with no `providers`
++    are hard fails, collected with the other resolvers' errors.
++    """
++    for inst in instances:
++        upstream = inst.get("upstream")
++        if not upstream or inst["is_init"]:
++            continue
++        var = upstream["env"]
++        wanted = upstream.get("providers") or []
++        loc = f"{inst['chart']}/{inst['release']} {inst['ns']}.{inst['wl']}.{inst['container']}"
++        if var not in inst["env"]:
++            errors.append(
++                f"gen-architecture: upstream: {loc}: {var} is not set to a "
++                f"literal value on the container"
++            )
++            continue
++        value = expand_env_refs(inst["env"][var], inst["env"])
++        host, _port = parse_host(value)
++        if host in LOOPBACK_HOSTS:
++            pids = [i["id"] for i in instances if i["ns"] == inst["ns"] and i["wl"] == inst["wl"]]
++            is_cross = False
++        else:
++            pids, is_cross = resolve_host(host, inst["ns"], external, incluster, ds)
++            if not pids:
++                errors.append(
++                    f"gen-architecture: upstream: {loc}: {var}={value!r} -> "
++                    f"host {host!r} resolves to no provider "
++                    f"(in-cluster / exposed host / cross-producer)"
++                )
++                continue
++        if is_cross:
++            provider_ids = pids
++        else:
++            backing = [
++                inst_by_id[p] for p in pids if p in inst_by_id and not inst_by_id[p]["is_init"]
++            ]
++            have = {i["container"] for i in backing}
++            missing = [c for c in wanted if c not in have]
++            if not wanted or missing:
++                declared = "no providers declared" if not wanted else f"providers names {missing}"
++                errors.append(
++                    f"gen-architecture: upstream: {loc}: {var}={value!r} -> "
++                    f"host {host!r}: {declared}; "
++                    f"the pod's containers are {sorted(have)}"
++                )
++                continue
++            provider_ids = [i["id"] for i in backing if i["container"] in wanted]
++        for pid in provider_ids:
++            add_rel(
++                f"rel:{kebab(hint_of(pid))}-serves-{inst['hint']}-upstream",
++                pid,
++                inst["id"],
++                "Serving",
++            )
++
++
++def resolve_mcp_clients(
++    mcp_clients, configmaps, inst_by_id, instances, external, incluster, ds, add_rel, errors
++):
++    """Emit provider —Serving→ consumer for each declared MCP-client binding.
++
++    An MCP client (e.g. intercom-server) fans out to a deployment-chosen set of
++    MCP servers. The set is config, not intrinsic to the image, so it is authored
++    here as deployer-owned wiring (the `mcpClients` annotation) rather than as a
++    DockerImages boundBy recipe — mirroring the OpenBao store edge. For each
++    binding we read the rendered ConfigMap the annotation points at, pull each
++    server's host off the declared `hostField` (no value-shape sniffing — the
++    field is declared) and resolve it through the same in-cluster / exposed-host
++    machinery as boundBy.
++
++    A host resolves to every container of the pod behind it: the MCP server
++    together with its auth proxy, its filter and unrelated neighbours (git.home's
++    pod runs Gitblit itself beside the Gitblit MCP server). The binding's
++    `providers` map names, per server (its `name` in the ConfigMap), the
++    containers of that pod that serve it, and only those draw the edge. A server
++    with no entry, a named container missing from the resolved pod, and an entry
++    naming no rendered server are all hard fails — the breakage is the signal, as
++    everywhere else. A cross-producer host names an element, not a pod, so it is
++    drawn as resolved.
++    """
++    by_ns_container = {}
++    for i in instances:
++        if not i["is_init"]:
++            by_ns_container.setdefault((i["ns"], i["container"]), []).append(i)
++    for client in mcp_clients:
++        loc = f"{client['chart']} {client['ns']}.{client['container']}"
++        consumers = by_ns_container.get((client["ns"], client["container"]))
++        if not consumers:
++            errors.append(
++                f"gen-architecture: mcp client {loc}: no deployed "
++                f"container of that name in the namespace"
++            )
++            continue
++        cm = configmaps.get((client["ns"], client["configMap"]))
++        if cm is None or client["key"] not in cm:
++            errors.append(
++                f"gen-architecture: mcp client {loc}: ConfigMap "
++                f"{client['configMap']}[{client['key']}] not rendered"
++            )
++            continue
++        try:
++            servers = (json.loads(cm[client["key"]]) or {}).get("servers") or []
++        except json.JSONDecodeError as e:
++            errors.append(
++                f"gen-architecture: mcp client {loc}: "
++                f"{client['configMap']}[{client['key']}] is not valid JSON: {e}"
++            )
++            continue
++        providers = client["providers"]
++        named = [
++            (srv.get("name", srv.get(client["hostField"])), srv.get(client["hostField"]))
++            for srv in servers
++        ]
++        for stale in sorted(set(providers) - {name for name, _ in named}):
++            errors.append(
++                f"gen-architecture: mcp client {loc}: providers[{stale!r}] "
++                f"names no server in {client['configMap']}[{client['key']}]"
++            )
++        for name, url in named:
++            if not url:
++                continue
++            host, _ = parse_host(url)
++            pids, is_cross = resolve_host(host, client["ns"], external, incluster, ds)
++            if not pids:
++                errors.append(
++                    f"gen-architecture: mcp client {loc}: server "
++                    f"{name!r} host {host!r} resolves to no provider "
++                    f"(in-cluster / exposed host / cross-producer)"
++                )
++                continue
++            if is_cross:
++                provider_ids = pids
++            else:
++                wanted = providers.get(name) or []
++                backing = [
++                    inst_by_id[p] for p in pids if p in inst_by_id and not inst_by_id[p]["is_init"]
++                ]
++                have = {i["container"] for i in backing}
++                missing = [c for c in wanted if c not in have]
++                if not wanted or missing:
++                    errors.append(
++                        f"gen-architecture: mcp client {loc}: server "
++                        f"{name!r} host {host} -> providers[{name!r}] "
++                        f"{'is not declared' if not wanted else f'names {missing}'}; "
++                        f"the host's containers are {sorted(have)}"
++                    )
++                    continue
++                provider_ids = [i["id"] for i in backing if i["container"] in wanted]
++            for c in consumers:
++                for pid in provider_ids:
++                    add_rel(
++                        f"rel:{kebab(hint_of(pid))}-serves-{c['hint']}-mcp", pid, c["id"], "Serving"
++                    )
++
++
++def resolve_secret_stores(secret_stores, instances, ds, add_rel, errors):
++    """OpenBao —Serving→ the ESO controller, from the ClusterSecretStore.
++
++    The store names the OpenBao backend (provider.vault.server); the consumer is
++    the External Secrets Operator that reads it — the workload in the store's
++    release that realizes cap:secrets-management, primary controller only
++    (name == release), so the webhook/cert-controller pods don't get a false
++    edge. Apps never talk to OpenBao (they read the materialized k8s Secret), so
++    no per-app edge is drawn.
++    """
++    for store in secret_stores:
++        vault = ((store["doc"].get("spec") or {}).get("provider") or {}).get("vault")
++        if not vault or not vault.get("server"):
++            continue
++        host, _ = parse_host(vault["server"])
++        provider_id = cross_producer_id(host, ds)
++        if not provider_id:
++            errors.append(
++                f"gen-architecture: secret store {store['doc']['metadata']['name']}: "
++                f"backend host {host!r} is not a known cross-producer provider"
++            )
++            continue
++        cands = [
++            i
++            for i in instances
++            if i["release"] == store["release"] and "cap:secrets-management" in i["realizes"]
++        ]
++        primary = [i for i in cands if i["wl"] == store["release_name"]] or cands
++        for i in primary:
++            add_rel(f"rel:openbao-serves-{i['hint']}", provider_id, i["id"], "Serving")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/aac-tools/tests/support.py b/aac-tools/tests/support.py
+new file mode 100644
+index 0000000..64caa4d
+--- /dev/null
++++ b/aac-tools/tests/support.py
+@@ -0,0 +1,19 @@
++"""Loading a command the image bakes, the way a test can reach it.
++
++`gen-architecture` is installed as a file on PATH, not as a package on PYTHONPATH, so
++there is no module to import by name — the source is loaded from its path instead.
++"""
++
++from __future__ import annotations
++
++import importlib.util
++from pathlib import Path
++
++IMAGE = Path(__file__).resolve().parent.parent / "image"
++
++
++def load(name):
++    spec = importlib.util.spec_from_file_location(f"aac_tools_{name}", IMAGE / f"{name}.py")
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
+diff --git a/aac-tools/tests/test_deploy_repo.py b/aac-tools/tests/test_deploy_repo.py
+new file mode 100644
+index 0000000..60fd81d
+--- /dev/null
++++ b/aac-tools/tests/test_deploy_repo.py
+@@ -0,0 +1,254 @@
++"""The deploy-repo layer: the command line, the render, and the ids that carry over.
++
++What this file covers is everything the port replaced — HelmCharts' generator walks a
++config tree, shells out to a deploy CLI and dates a chart from git; a deploy repo
++holds one app, renders it the way Argo CD does, and states the rest in an annotation
++layer at its root.
++"""
++
++from __future__ import annotations
++
++import contextlib
++import io
++import subprocess
++import tempfile
++import unittest
++from pathlib import Path
++
++from .support import load
++
++ga = load("gen_architecture")
++
++# Ids the federation publishes today for KubeCoder's prd stage and for the cluster
++# storage services, read off https://architecture.webathome.org/data/v0.1/architecture.yaml
++# on 2026-09-20 (producer `helm-charts`). They are what a handover has to reproduce:
++# an id this generator mints differently is an element re-minted under a new owner,
++# and every inbound edge other producers author against it dangles.
++PUBLISHED_CONTAINER = (
++    "app:kubecoder-prd-kubecoder-bot-kubecoder-bot,87f8c15c-1076-52d4-86c9-56e063d29ec0"
++)
++PUBLISHED_INTERFACE = "if:kubecoder-home,6c9379fd-d644-51e6-af52-2b3aefa783c8"
++PUBLISHED_CEPH = {
++    "svc:cluster-ceph-rbd": "svc:cluster-ceph-rbd,02509593-ffcf-5740-9fa9-c14f90c1a160",
++    "svc:cluster-ceph-cephfs": "svc:cluster-ceph-cephfs,6d5615a9-59fd-59c7-822a-d31c86cd476c",
++}
++
++
++class KeptIdentityTests(unittest.TestCase):
++    def test_a_container_keeps_the_id_the_published_model_carries(self):
++        self.assertEqual(
++            ga.composite(
++                "app",
++                "kubecoder-prd-kubecoder-bot-kubecoder-bot",
++                "kubecoder-prd.kubecoder-bot.kubecoder-bot",
++            ),
++            PUBLISHED_CONTAINER,
++        )
++
++    def test_an_exposed_host_keeps_the_id_the_published_model_carries(self):
++        host = "kubecoder.home"
++        self.assertEqual(ga.composite("if", ga.kebab(host), f"appif.{host}"), PUBLISHED_INTERFACE)
++
++    def test_the_storage_services_are_referenced_not_re_minted(self):
++        """The elements belong to whoever deploys the CSI drivers. A deploy repo draws
++        the storage edge to the id that producer already publishes, and emits no
++        element of its own — two producers publishing one id is one element too many."""
++        self.assertEqual(ga.CEPH_SERVICE_IDS, PUBLISHED_CEPH)
++
++
++ORIGIN = "https://github.com/pvginkel/KubeCoderDeploy.git"
++
++
++@contextlib.contextmanager
++def _checkout():
++    """A throwaway git checkout with the two things Argo reads off one: an origin and
++    a commit."""
++    with tempfile.TemporaryDirectory() as tmp:
++        root = Path(tmp)
++        for args in (
++            ["init", "-q"],
++            ["remote", "add", "origin", ORIGIN],
++            [
++                "-c",
++                "user.name=aac-tools tests",
++                "-c",
++                "user.email=aac-tools@tests.invalid",
++                "commit",
++                "-q",
++                "--allow-empty",
++                "-m",
++                "root",
++            ],
++        ):
++            subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
++        yield root
++
++
++class CommandLineTests(unittest.TestCase):
++    def test_the_stage_is_required_and_has_no_default(self):
++        """One run, one stage: the artifact is attached to a pipeline, and a pipeline
++        listening to two stages would make it flap."""
++        with contextlib.redirect_stderr(io.StringIO()):
++            with self.assertRaises(SystemExit):
++                ga.parse_args(["--producer", "kubecoder-deploy"])
++
++    def test_the_producer_is_required(self):
++        """`kubecoder` is another producer's id in the federation registry, so there
++        is no id this command could default to."""
++        with contextlib.redirect_stderr(io.StringIO()):
++            with self.assertRaises(SystemExit):
++                ga.parse_args(["--stage", "prd"])
++
++    def test_a_run_names_one_stage_one_producer_and_a_checkout(self):
++        args = ga.parse_args(["--stage", "prd", "--producer", "kubecoder-deploy"])
++
++        self.assertEqual((args.stage, args.producer, args.repo), ("prd", "kubecoder-deploy", "."))
++
++    def test_the_stage_takes_a_single_value(self):
++        """Not a list and not repeatable-into-a-list: `--stage` is one stage."""
++        args = ga.parse_args(["--stage", "prd", "--producer", "p"])
++
++        self.assertIsInstance(args.stage, str)
++
++
++class RenderContractTests(unittest.TestCase):
++    def test_the_template_call_is_the_one_argo_makes(self):
++        """The releases ApplicationSet templates `chart/` under the Application's own
++        name, into that namespace, with the stage's values reached out of the chart
++        path and the hook parameters set."""
++        args = ga.template_args(
++            "prd",
++            "kubecoder-prd",
++            "kubecoder-prd",
++            {"hook.stage": "prd", "hook.namespace": "kubecoder-prd"},
++        )
++
++        self.assertEqual(
++            args,
++            [
++                "helm",
++                "template",
++                "kubecoder-prd",
++                "chart",
++                "--namespace",
++                "kubecoder-prd",
++                "--values",
++                "config/prd/values.yaml",
++                "--set",
++                "hook.stage=prd",
++                "--set",
++                "hook.namespace=kubecoder-prd",
++            ],
++        )
++
++    def test_only_remote_chart_repositories_are_added(self):
++        """A `file://` dependency resolves off disk; a repository named twice is one
++        repository."""
++        meta = {
++            "dependencies": [
++                {"name": "homelab-shared", "repository": "https://charts.home"},
++                {"name": "other", "repository": "https://charts.home"},
++                {"name": "local", "repository": "file://../local"},
++                {"name": "aliased"},
++            ]
++        }
++
++        self.assertEqual(ga.dependency_urls(meta), ["https://charts.home"])
++
++    def test_a_chart_without_dependencies_adds_nothing(self):
++        self.assertEqual(ga.dependency_urls({"name": "app", "version": "0.1"}), [])
++
++    def test_an_argo_lifecycle_hook_is_not_part_of_the_model(self):
++        """The estate's Terraform PreSync hook is a Job in another namespace carrying
++        `generateName` only — deploy machinery with no natural key to be keyed on."""
++        hook = {
++            "kind": "Job",
++            "metadata": {
++                "generateName": "tf-presync-",
++                "namespace": "argocd-hooks",
++                "annotations": {ga.HOOK_ANNOTATION: "PreSync"},
++            },
++        }
++        workload = {"kind": "Deployment", "metadata": {"name": "kubecoder-bot"}}
++
++        self.assertTrue(ga.is_hook(hook))
++        self.assertFalse(ga.is_hook(workload))
++
++    def test_the_hook_parameters_are_the_four_the_library_guards(self):
++        """The shared library `required`-guards all four, so a render missing one
++        fails whole — not just the hook Job it would have rendered. Two of them are
++        what Argo passes: the repo the Application syncs and the commit it synced."""
++        with _checkout() as root:
++            parameters = ga.hook_parameters(root, "prd", "kubecoder-prd")
++
++            self.assertEqual(
++                sorted(parameters), ["hook.namespace", "hook.repo", "hook.revision", "hook.stage"]
++            )
++            self.assertEqual(parameters["hook.stage"], "prd")
++            self.assertEqual(parameters["hook.namespace"], "kubecoder-prd")
++            self.assertEqual(parameters["hook.repo"], ORIGIN)
++            self.assertEqual(
++                parameters["hook.revision"],
++                subprocess.run(
++                    ["git", "rev-parse", "HEAD"],
++                    cwd=root,
++                    capture_output=True,
++                    text=True,
++                    check=True,
++                ).stdout.strip(),
++            )
++
++
++class ReleaseNameTests(unittest.TestCase):
++    def test_prd_is_named_by_the_app_alone(self):
++        """What the published model already quotes in every prd element's summary and
++        `stats.release`."""
++        self.assertEqual(ga.release_label("kubecoder", "prd"), "kubecoder")
++
++    def test_every_other_stage_is_suffixed(self):
++        self.assertEqual(ga.release_label("kubecoder", "dev"), "kubecoder@dev")
++
++
++@contextlib.contextmanager
++def _repo(annotation):
++    with tempfile.TemporaryDirectory() as tmp:
++        root = Path(tmp)
++        if annotation is not None:
++            (root / ga.ANNOTATIONS).write_text(annotation, encoding="utf-8")
++        yield root
++
++
++class AnnotationLayerTests(unittest.TestCase):
++    def test_a_repo_with_no_annotation_layer_is_refused(self):
++        """Without it every image is a gap and no element carries a date: a generated
++        producer's judgment layer is not optional."""
++        with _repo(None) as root:
++            with self.assertRaises(SystemExit):
++                ga.annotations(root)
++
++    def test_an_annotation_layer_without_introduced_is_refused(self):
++        """A deploy repo's git history dates the repo, not the app, so there is
++        nothing to fall back to."""
++        with _repo("images:\n  kubecoder-bot: app:kubecoder-bot\n") as root:
++            with self.assertRaises(SystemExit):
++                ga.annotations(root)
++
++    def test_an_unquoted_date_becomes_the_iso_string(self):
++        """YAML resolves an unquoted date to a `date`, and the schema wants the ISO
++        string — quoting is not the annotation author's to remember."""
++        with _repo("introduced: 2026-06-17\n") as root:
++            _ann, introduced = ga.annotations(root)
++
++            self.assertEqual(introduced, "2026-06-17")
++
++    def test_the_judgment_the_annotation_carries_reaches_the_caller(self):
++        with _repo(
++            "introduced: '2026-06-17'\n"
++            "images:\n  kubecoder-bot: app:kubecoder-bot\n"
++            "webUi:\n  - kubecoder.home\n"
++        ) as root:
++            ann, introduced = ga.annotations(root)
++
++            self.assertEqual(introduced, "2026-06-17")
++            self.assertEqual(ann["images"], {"kubecoder-bot": "app:kubecoder-bot"})
++            self.assertEqual(ann["webUi"], ["kubecoder.home"])
+diff --git a/aac-tools/tests/test_gen_architecture.py b/aac-tools/tests/test_gen_architecture.py
+new file mode 100644
+index 0000000..f2feb18
+--- /dev/null
++++ b/aac-tools/tests/test_gen_architecture.py
+@@ -0,0 +1,355 @@
++"""gen-architecture: exposed-host interfaces, upstream wires and MCP-client edges.
++
++The successors of HelmCharts' `tests/test_gen_architecture.py` — the same eleven
++behaviours, under the same names, over the same synthetic in-memory fixtures. They
++exercise the post-render passes, which the port carries across whole.
++"""
++
++from __future__ import annotations
++
++import json
++import unittest
++
++from .support import load
++
++ga = load("gen_architecture")
++
++
++def _service(name, hosts):
++    return {
++        "kind": "Service",
++        "metadata": {"name": name, "annotations": {ga.SERVER_NAME_ANNOTATION: ", ".join(hosts)}},
++        "spec": {
++            "selector": {"app": name},
++            "ports": [{"name": "http", "port": 80, "targetPort": 8080}],
++        },
++    }
++
++
++def _workload(ns, name, product):
++    inst_id = ga.composite("app", f"{ns}-{name}-{name}", f"{ns}.{name}.{name}")
++    return {
++        "name": name,
++        "labels": {"app": name},
++        "backing": [
++            {
++                "hint": f"{ns}-{name}-{name}",
++                "id": inst_id,
++                "container": name,
++                "port_nums": {8080},
++                "port_names": set(),
++            }
++        ],
++        "all": [inst_id],
++        "products": {product},
++    }
++
++
++def _reconcile(ds, product, hosts, webui):
++    ns = "web-prd"
++    exposed = [
++        {
++            "doc": _service("web", hosts),
++            "ns": ns,
++            "env": "prd",
++            "introduced": "2024-01-01",
++            "release": "web",
++            "exposures": {},
++            "webUi": webui,
++        }
++    ]
++    elements = {"applicationServices": {}, "applicationInterfaces": {}}
++    relations = {}
++
++    def add_rel(rid, source, target, rtype):
++        relations[rid] = {"source": source, "target": target, "type": rtype}
++
++    ga.reconcile_exposed_services(
++        exposed, {ns: [_workload(ns, "web", product)]}, elements, add_rel, ds, []
++    )
++    return elements, relations
++
++
++def _inhouse_dataset():
++    ds = ga.Dataset()
++    ds.add_envelope(
++        {
++            "relations": [
++                {
++                    "id": "rel:web-realizes-web-api",
++                    "type": "Realization",
++                    "source": "app:web,00000000-0000-0000-0000-000000000001",
++                    "target": "svc:web-api,00000000-0000-0000-0000-000000000002",
++                }
++            ]
++        }
++    )
++    return ds
++
++
++# An upstream app we own the exposure of, and an in-house one whose service another
++# producer already owns: the two halves reconcile_exposed_services chooses between.
++EXPOSURE_CASES = (("upstream", ga.Dataset, "ss:web"), ("in-house", _inhouse_dataset, "app:web"))
++
++
++class ExposedServiceTests(unittest.TestCase):
++    def test_only_webui_hosts_carry_the_attribute(self):
++        for case, ds_factory, product in EXPOSURE_CASES:
++            with self.subTest(case=case):
++                elements, relations = _reconcile(
++                    ds_factory(), product, ["web.home", "api.home"], ["web.home"]
++                )
++
++                interfaces = elements["applicationInterfaces"]
++                self.assertIs(interfaces["appif.web.home"]["webUi"], True)
++                self.assertNotIn("webUi", interfaces["appif.api.home"])
++                self.assertEqual(
++                    [r for r in relations.values() if r["target"].startswith("cap:")], []
++                )
++
++    def test_every_host_interface_is_assigned_to_its_service(self):
++        for case, ds_factory, product in EXPOSURE_CASES:
++            with self.subTest(case=case):
++                elements, relations = _reconcile(ds_factory(), product, ["web.home"], ["web.home"])
++
++                interface_id = elements["applicationInterfaces"]["appif.web.home"]["id"]
++                [assignment] = [r for r in relations.values() if r["type"] == "Assignment"]
++                self.assertEqual(assignment["source"], interface_id)
++                if product.startswith("app:"):
++                    self.assertEqual(elements["applicationServices"], {})
++                    self.assertEqual(
++                        assignment["target"], "svc:web-api,00000000-0000-0000-0000-000000000002"
++                    )
++                else:
++                    [svc] = elements["applicationServices"].values()
++                    self.assertEqual(assignment["target"], svc["id"])
++
++
++def _inst(ns, wl, container, is_init=False):
++    hint = f"{ns}-{wl}-{container}"
++    return {
++        "id": ga.composite("app", hint, f"{ns}.{wl}.{container}"),
++        "ns": ns,
++        "wl": wl,
++        "container": container,
++        "hint": hint,
++        "is_init": is_init,
++        "product": None,
++        "realizes": set(),
++        "env": {},
++        "release": wl,
++        "chart": wl,
++    }
++
++
++CLIENT = _inst("intercom-prd", "intercom", "intercom-server")
++# An MCP server behind its auth proxy and response filter, as trello-mcp deploys it.
++TRELLO_POD = [_inst("trello-prd", "trello", c) for c in ("auth", "filter", "server")]
++TRELLO = {"name": "trello", "url": "http://trello.home/mcp"}
++
++
++def _resolve_mcp(servers, providers, pod=TRELLO_POD):
++    instances = [CLIENT, *pod]
++    client = {
++        "ns": "intercom-prd",
++        "chart": "intercom",
++        "container": "intercom-server",
++        "configMap": "mcp-servers",
++        "key": "servers.json",
++        "hostField": "url",
++        "providers": providers,
++    }
++    configmaps = {
++        ("intercom-prd", "mcp-servers"): {"servers.json": json.dumps({"servers": servers})}
++    }
++    external = {"trello.home": [i["id"] for i in pod]}
++    relations, errors = {}, []
++
++    def add_rel(rid, source, target, rtype):
++        relations[rid] = {"source": source, "target": target, "type": rtype}
++
++    ga.resolve_mcp_clients(
++        [client],
++        configmaps,
++        {i["id"]: i for i in instances},
++        instances,
++        external,
++        {},
++        ga.Dataset(),
++        add_rel,
++        errors,
++    )
++    return relations, errors
++
++
++def _id(container, pod=TRELLO_POD):
++    return next(i["id"] for i in pod if i["container"] == container)
++
++
++class McpClientTests(unittest.TestCase):
++    def test_mcp_edges_come_from_the_containers_the_binding_names(self):
++        relations, errors = _resolve_mcp([TRELLO], {"trello": ["filter", "server"]})
++
++        self.assertEqual(errors, [])
++        self.assertEqual(
++            {(r["source"], r["target"], r["type"]) for r in relations.values()},
++            {(_id("filter"), CLIENT["id"], "Serving"), (_id("server"), CLIENT["id"], "Serving")},
++        )
++
++    def test_a_server_host_that_resolves_to_no_provider_fails(self):
++        relations, errors = _resolve_mcp(
++            [{"name": "gone", "url": "http://gone.home/mcp"}], {"gone": ["server"]}
++        )
++
++        self.assertEqual(relations, {})
++        self.assertEqual(len(errors), 1)
++        self.assertIn("resolves to no provider", errors[0])
++
++    def test_a_server_with_no_qualifying_provider_fails(self):
++        cases = (
++            ("no-entry", {}, TRELLO_POD),
++            ("empty-entry", {"trello": []}, TRELLO_POD),
++            ("container-not-in-pod", {"trello": ["mcp-server"]}, TRELLO_POD),
++            ("one-named-container-missing", {"trello": ["filter", "gone"]}, TRELLO_POD),
++            (
++                "init-container",
++                {"trello": ["setup"]},
++                TRELLO_POD + [_inst("trello-prd", "trello", "setup", is_init=True)],
++            ),
++        )
++        for case, providers, pod in cases:
++            with self.subTest(case=case):
++                relations, errors = _resolve_mcp([TRELLO], providers, pod)
++
++                self.assertEqual(relations, {})
++                self.assertEqual(len(errors), 1)
++                self.assertIn("'trello'", errors[0])
++
++    def test_a_providers_entry_naming_no_rendered_server_fails(self):
++        _relations, errors = _resolve_mcp([TRELLO], {"trello": ["filter"], "jenkins": ["filter"]})
++
++        self.assertEqual(len(errors), 1)
++        self.assertIn("providers['jenkins']", errors[0])
++
++
++LOOPBACK = "http://127.0.0.1:8002/mcp"
++HOME_ASSISTANT = "ss:home-assistant-prd,00000000-0000-0000-0000-000000000003"
++
++
++def _proxy(ns, wl, url, providers, container="filter", var="MCP_UPSTREAM_URL"):
++    upstream = {"env": var}
++    if providers is not None:
++        upstream["providers"] = providers
++    return dict(_inst(ns, wl, container), env={var: url}, upstream=upstream)
++
++
++def _trello_pod(proxy):
++    return [_inst("trello-prd", "trello", "auth"), proxy, _inst("trello-prd", "trello", "server")]
++
++
++def _resolve_upstreams(instances, incluster=None, ds=None):
++    relations, errors = {}, []
++
++    def add_rel(rid, source, target, rtype):
++        relations[rid] = {"source": source, "target": target, "type": rtype}
++
++    ga.resolve_upstreams(
++        instances,
++        {i["id"]: i for i in instances},
++        {},
++        incluster or {},
++        ds or ga.Dataset(),
++        add_rel,
++        errors,
++    )
++    return {(r["source"], r["target"], r["type"]) for r in relations.values()}, errors
++
++
++class UpstreamTests(unittest.TestCase):
++    def test_a_loopback_upstream_is_the_named_container_of_the_proxys_own_pod(self):
++        proxy = _proxy("trello-prd", "trello", LOOPBACK, ["server"])
++        pod = _trello_pod(proxy)
++        # The same workload name in another namespace is another pod.
++        elsewhere = _inst("other-prd", "trello", "server")
++
++        edges, errors = _resolve_upstreams(pod + [elsewhere])
++
++        self.assertEqual(errors, [])
++        self.assertEqual(edges, {(_id("server", pod), proxy["id"], "Serving")})
++
++    def test_an_in_cluster_upstream_is_the_named_container_behind_the_service(self):
++        init = _inst("jenkins-prd", "jenkins", "install-homelab-ca", is_init=True)
++        jenkins = _inst("jenkins-prd", "jenkins", "jenkins")
++        proxy = _proxy(
++            "jenkins-prd", "jenkins-mcp", "http://jenkins:8080/mcp-server/stateless", ["jenkins"]
++        )
++
++        edges, errors = _resolve_upstreams(
++            [init, jenkins, proxy],
++            incluster={("jenkins-prd", "jenkins"): [init["id"], jenkins["id"]]},
++        )
++
++        self.assertEqual(errors, [])
++        self.assertEqual(edges, {(jenkins["id"], proxy["id"], "Serving")})
++
++    def test_a_cross_producer_upstream_is_the_element_its_host_names(self):
++        ds = ga.Dataset()
++        ds.add_envelope({"systemSoftware": [{"id": HOME_ASSISTANT}]})
++        server = _proxy(
++            "homeassistant-mcp-prd",
++            "homeassistant-mcp",
++            "https://homeassistant.webathome.org",
++            None,
++            container="ha-mcp-server",
++            var="HOMEASSISTANT_URL",
++        )
++
++        edges, errors = _resolve_upstreams([server], ds=ds)
++
++        self.assertEqual(errors, [])
++        self.assertEqual(edges, {(HOME_ASSISTANT, server["id"], "Serving")})
++
++    def test_an_upstream_that_cannot_be_placed_fails(self):
++        cases = (
++            (
++                "var-unset",
++                dict(_proxy("trello-prd", "trello", LOOPBACK, ["server"]), env={}),
++                "MCP_UPSTREAM_URL is not set",
++            ),
++            (
++                "host-unresolved",
++                _proxy("trello-prd", "trello", "http://gone:8080/mcp", ["server"]),
++                "resolves to no provider",
++            ),
++            (
++                "container-not-in-pod",
++                _proxy("trello-prd", "trello", LOOPBACK, ["server", "mcp-server"]),
++                "providers names ['mcp-server']",
++            ),
++            (
++                "empty-providers",
++                _proxy("trello-prd", "trello", LOOPBACK, []),
++                "no providers declared",
++            ),
++            (
++                "missing-providers",
++                _proxy("trello-prd", "trello", LOOPBACK, None),
++                "no providers declared",
++            ),
++        )
++        for case, proxy, message in cases:
++            with self.subTest(case=case):
++                edges, errors = _resolve_upstreams(_trello_pod(proxy))
++
++                self.assertEqual(edges, set())
++                self.assertEqual(len(errors), 1)
++                self.assertIn(message, errors[0])
++
++    def test_every_unplaceable_upstream_is_reported_in_one_run(self):
++        unset = dict(_proxy("a-prd", "a", LOOPBACK, ["server"]), env={})
++        unresolved = _proxy("b-prd", "b", "http://gone:8080/mcp", ["server"])
++
++        edges, errors = _resolve_upstreams([unset, unresolved])
++
++        self.assertEqual(edges, set())
++        self.assertEqual(len(errors), 2)
+
+/work/ArgoCDTools — P4: git diff d4db54a1828e..d0dbfe6e56c5
+
+aac-tools/.dockerignore                      |   1 +
+ aac-tools/checks/handover_equality.py        | 284 +++++++++++++++++++++++++++++++++++++++++++++++
+ aac-tools/checks/kubecoder-architecture.yaml |  27 +++++
+ aac-tools/tests/test_deploy_repo.py          |  29 +++++
+ aac-tools/tests/test_image.py                |   6 +-
+ 5 files changed, 345 insertions(+), 2 deletions(-)
+
+diff --git a/aac-tools/.dockerignore b/aac-tools/.dockerignore
+index 9dde716..fa902f0 100644
+--- a/aac-tools/.dockerignore
++++ b/aac-tools/.dockerignore
+@@ -2,4 +2,5 @@
+ # to what the Dockerfile actually reads: the files under image/.
+ .dockerignore
+ **/__pycache__
++checks
+ tests
+diff --git a/aac-tools/checks/handover_equality.py b/aac-tools/checks/handover_equality.py
+new file mode 100644
+index 0000000..ac7fc8f
+--- /dev/null
++++ b/aac-tools/checks/handover_equality.py
+@@ -0,0 +1,284 @@
++#!/usr/bin/env python3
++"""The handover keeps the ids — the real case, run end to end.
++
++    cexec iac python3 aac-tools/checks/handover_equality.py
++
++Clones a deploy repo, copies the annotation layer beside this script into it, runs the
++generator from source over the clone for one stage, and compares what it wrote with
++what the app's current producer publishes for that app and stage: the same element
++ids, the same relation ids, and every field equal bar three. Exit 0 means a producer
++could take the app over today and no inbound edge in the federation would dangle.
++
++Not part of `kc project test`, and not meant to be: this needs a sibling deploy-repo
++checkout, the chart repository and the live published dataset, and CI and a cold
++checkout have none of the three. The checkout is cloned rather than used in place
++because a run reads `architecture.yaml` at the repo root and writes
++`docs/architecture/`, and neither file belongs to the deploy repo yet.
++
++The reference side is live, so a chart or values change published between two runs
++moves the target: a container added or removed shifts the element count and its edges,
++an exposed host changed shifts the interfaces. That is the check working — the counts
++below are derived from the dataset every run, never pinned.
++"""
++
++from __future__ import annotations
++
++import argparse
++import importlib.util
++import os
++import re
++import shutil
++import subprocess
++import sys
++import tempfile
++import urllib.request
++from pathlib import Path
++
++import yaml
++
++HERE = Path(__file__).resolve().parent
++GENERATOR = HERE.parent / "image" / "gen_architecture.py"
++FIXTURE = HERE / "kubecoder-architecture.yaml"
++
++ELEMENT_ARRAYS = (
++    "systemSoftware",
++    "applicationComponents",
++    "applicationServices",
++    "applicationInterfaces",
++)
++
++# The fields that may differ, and why none of them is a defect:
++#   producer    — by construction; the whole point of a handover.
++#   logo        — added centrally when the federation merges producers; no generator
++#                 emits it.
++#   stats.image — the two repos pin different tags today, a real difference in what
++#                 each would deploy rather than a difference in the model.
++IGNORED_FIELDS = frozenset({"producer", "logo"})
++IGNORED_STATS = frozenset({"image"})
++
++
++def _generator_module():
++    """The generator's own constants, so the check cannot drift from the file it runs.
++
++    Loaded from its path because the image installs it as a command, not as a package
++    on PYTHONPATH. The run itself is a subprocess — the way a pipeline invokes it.
++    """
++    spec = importlib.util.spec_from_file_location("gen_architecture", GENERATOR)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++gen = _generator_module()
++
++
++def git(cwd, *args):
++    return subprocess.run(
++        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
++    ).stdout.strip()
++
++
++def clone(source, dest):
++    """A throwaway checkout of the deploy repo at its committed HEAD.
++
++    The clone is given the source's own origin: `hook.repo` is the repository Argo
++    syncs, and cloning from a path would hand the render a local one.
++    """
++    origin = git(source, "remote", "get-url", "origin")
++    git(None, "clone", "--quiet", str(source), str(dest))
++    git(dest, "remote", "set-url", "origin", origin)
++    return git(dest, "rev-parse", "HEAD")
++
++
++def generate(repo, stage, producer, dataset):
++    """Run the generator over the clone and read back what it wrote."""
++    env = dict(
++        os.environ,
++        # Both sides read one snapshot, so a publish between the two reads cannot
++        # look like a difference.
++        ARCH_DATASET_URL=dataset,
++        # The published dataset is the whole reference here: an overlay would resolve
++        # ids the reference side does not carry.
++        ARCH_DATASET_OVERLAY="",
++    )
++    subprocess.run(
++        [
++            sys.executable,
++            str(GENERATOR),
++            "--stage",
++            stage,
++            "--producer",
++            producer,
++            "--repo",
++            str(repo),
++        ],
++        check=True,
++        env=env,
++    )
++    written = repo / "docs" / "architecture" / f"{producer}.yaml"
++    return yaml.safe_load(written.read_text(encoding="utf-8"))
++
++
++def load_dataset(source):
++    """The merged published dataset, from a URL or a file — the generator's own rule."""
++    if re.match(r"^[a-z][a-z0-9+.\-]*://", source):
++        with urllib.request.urlopen(source, timeout=60) as resp:
++            return yaml.safe_load(resp.read().decode("utf-8"))
++    return yaml.safe_load(Path(source).read_text(encoding="utf-8"))
++
++
++def hint(element_id):
++    """`app:kubecoder-prd-bot,<uuid>` -> `kubecoder-prd-bot` — a composite id's natural half."""
++    return element_id.split(":", 1)[1].split(",", 1)[0]
++
++
++def elements(envelope):
++    return {e["id"]: e for array in ELEMENT_ARRAYS for e in (envelope.get(array) or [])}
++
++
++def relations(envelope):
++    return {r["id"]: r for r in (envelope.get("relations") or [])}
++
++
++def app_elements(dataset, producer, app):
++    """Everything `producer` publishes for `app`, in every stage.
++
++    The published model keys a container to its app through `stats.release`, but an
++    ingress interface carries no release at all. What both carry is an id minted from
++    a natural key that starts with the app's name. An exposed host renamed off that
++    prefix drops out of the target and surfaces as an extra on the generated side —
++    the check fails rather than passing quietly.
++    """
++    return {
++        e["id"]: e
++        for array in ELEMENT_ARRAYS
++        for e in (dataset.get(array) or [])
++        if e.get("producer") == producer
++        and (hint(e["id"]) == app or hint(e["id"]).startswith(f"{app}-"))
++    }
++
++
++def split_relations(dataset, target_ids, app_ids):
++    """The published relations the target owns, and the cross-stage ones among them.
++
++    A relation belongs to the target when at least one endpoint is in it. Left out are
++    those whose other endpoint is the same app in another stage: the current producer
++    renders every stage in one run and resolves a Service consumer by host alone, so
++    both stages' providers match and every consumer gets an edge from each. A
++    single-stage run has one namespace's instances to choose from and draws the true
++    edge only — the omission is a property of the handover, not a hole in the port.
++    """
++    target, cross = {}, {}
++    for r in dataset.get("relations") or []:
++        if r["source"] not in target_ids and r["target"] not in target_ids:
++            continue
++        other = r["target"] if r["source"] in target_ids else r["source"]
++        bucket = cross if other in app_ids and other not in target_ids else target
++        bucket[r["id"]] = r
++    return target, cross
++
++
++def normalize(element):
++    kept = {k: v for k, v in element.items() if k not in IGNORED_FIELDS}
++    if kept.get("stats"):
++        kept["stats"] = {k: v for k, v in kept["stats"].items() if k not in IGNORED_STATS}
++    return kept
++
++
++def differences(published, generated, label, prepare=lambda e: e):
++    lines = []
++    for eid in sorted(set(published) - set(generated)):
++        lines.append(f"{label} published but not generated: {eid}")
++    for eid in sorted(set(generated) - set(published)):
++        lines.append(f"{label} generated but not published: {eid}")
++    for eid in sorted(set(published) & set(generated)):
++        was, now = prepare(published[eid]), prepare(generated[eid])
++        for field in sorted(set(was) | set(now)):
++            if was.get(field) != now.get(field):
++                lines.append(
++                    f"{label} {eid}: {field}: published {was.get(field)!r} "
++                    f"!= generated {now.get(field)!r}"
++                )
++    return lines
++
++
++def parse_args(argv=None):
++    parser = argparse.ArgumentParser(
++        prog="handover_equality.py",
++        description="Prove a deploy repo's generator reproduces what the app's "
++        "current producer publishes for one stage.",
++    )
++    parser.add_argument(
++        "--deploy-repo",
++        default="/work/KubeCoderDeploy",
++        help="the deploy repo to clone and render (default: %(default)s)",
++    )
++    parser.add_argument("--stage", default="prd", help="the stage to render (default: %(default)s)")
++    parser.add_argument(
++        "--annotations",
++        default=str(FIXTURE),
++        help="the annotation layer to copy into the clone "
++        "(default: the fixture beside this script)",
++    )
++    parser.add_argument(
++        "--published-producer",
++        default="helm-charts",
++        help="the producer that publishes the app today (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--producer",
++        default="kubecoder-deploy",
++        # Nothing rests on the value: it names the artifact and fills the envelope's
++        # `producer`, the one field the comparison is required to ignore. The id the
++        # deploy repo publishes under is registered in a later slice.
++        help="the producer id to generate under (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--dataset",
++        default=gen.DATASET_URL,
++        help="the merged published dataset, a URL or a file (default: %(default)s)",
++    )
++    return parser.parse_args(argv)
++
++
++def main():
++    args = parse_args()
++    source = Path(args.deploy_repo).resolve()
++    dataset = load_dataset(args.dataset)
++
++    with tempfile.TemporaryDirectory() as tmp:
++        repo = Path(tmp) / source.name
++        head = clone(source, repo)
++        shutil.copyfile(args.annotations, repo / gen.ANNOTATIONS)
++        app = gen.chart_metadata(repo)["name"]
++        envelope = generate(repo, args.stage, args.producer, args.dataset)
++
++    published = app_elements(dataset, args.published_producer, app)
++    target = {i: e for i, e in published.items() if e.get("environment") == args.stage}
++    target_rel, cross = split_relations(dataset, set(target), set(published))
++    generated, generated_rel = elements(envelope), relations(envelope)
++
++    print(f"handover equality — {app} {args.stage}")
++    print(f"  deploy repo  {source} at {head[:12]}")
++    print(f"  dataset      {args.dataset}")
++    print(
++        f"  published    {args.published_producer}: {len(target)} elements, "
++        f"{len(target_rel)} relations"
++    )
++    print(
++        f"  generated    {args.producer}: {len(generated)} elements, {len(generated_rel)} relations"
++    )
++    for rid in sorted(cross):
++        print(f"  excluded (crosses the stage boundary): {rid}")
++
++    diffs = differences(target, generated, "element", normalize)
++    diffs += differences(target_rel, generated_rel, "relation")
++    if diffs:
++        for line in diffs:
++            print(line)
++        raise SystemExit(f"{len(diffs)} difference(s): the handover does not hold as it stands")
++    print("  equal — every id matches; producer, logo and stats.image are all that differ")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/aac-tools/checks/kubecoder-architecture.yaml b/aac-tools/checks/kubecoder-architecture.yaml
+new file mode 100644
+index 0000000..3bab181
+--- /dev/null
++++ b/aac-tools/checks/kubecoder-architecture.yaml
+@@ -0,0 +1,27 @@
++# KubeCoder's annotation layer, as the deploy repo will carry it once slice 014 gives
++# KubeCoderDeploy a producer of its own. It lives here because this slice lands no file
++# in that repo (ruling, 2026-09-20), and handover_equality.py copies it into a throwaway
++# clone as `architecture.yaml` at the root.
++#
++# The `images:` block is HelmCharts' charts/kubecoder/architecture.yaml verbatim — the
++# same judgment has to produce the same ids from the other side. `introduced:` is the
++# date HelmCharts derives from the first commit touching charts/kubecoder; a deploy
++# repo's history dates the repo, not the app, so the value is stated here instead.
++introduced: '2026-06-17'
++
++# kubecoder is an in-house app (registry:5000/kubecoder-*) whose source and
++# «SoftwareProduct» catalog belong to the kubecoder producer (pvginkel/KubeCoder),
++# so we reference its app:* products and the generator resolves them to that
++# producer's UUIDs. No capability `realizes:` is asserted from this side.
++images:
++  kubecoder-controller: app:kubecoder-controller
++  kubecoder-bot: app:kubecoder-bot
++  kubecoder-mcp: app:kubecoder-mcp
++  kubecoder-manual: app:kubecoder-manual
++  # The controller pod's front door is stock nginx with a baked routing config.
++  kubecoder-ingress: ss:nginx
++  # kube-coder-tunnel-reclaim stays unmapped (a reported gap) until the generator
++  # resolves a Service's in-house product from its own container.
++  # Mapped now, the controller workload carries two in-house services and the
++  # generator mints a duplicate kubecoder.home service instead of referencing
++  # svc:kubecoder-controller-api.
+diff --git a/aac-tools/tests/test_deploy_repo.py b/aac-tools/tests/test_deploy_repo.py
+index 60fd81d..2c478c4 100644
+--- a/aac-tools/tests/test_deploy_repo.py
++++ b/aac-tools/tests/test_deploy_repo.py
+@@ -252,3 +252,32 @@ class AnnotationLayerTests(unittest.TestCase):
+             self.assertEqual(introduced, "2026-06-17")
+             self.assertEqual(ann["images"], {"kubecoder-bot": "app:kubecoder-bot"})
+             self.assertEqual(ann["webUi"], ["kubecoder.home"])
++
++
++CHECKS = Path(__file__).resolve().parent.parent / "checks"
++
++
++class HandoverFixtureTests(unittest.TestCase):
++    """The annotation layer `checks/handover_equality.py` copies into its clone.
++
++    The equality that check proves rests on this file: no date and every element is
++    undated, an `images:` line missing and that container specializes nothing, so a
++    hand-edit of it is caught here rather than a run later.
++    """
++
++    def test_the_fixture_is_an_annotation_layer_the_generator_accepts(self):
++        with _repo((CHECKS / "kubecoder-architecture.yaml").read_text(encoding="utf-8")) as root:
++            ann, introduced = ga.annotations(root)
++
++        # The date every published KubeCoder element carries.
++        self.assertEqual(introduced, "2026-06-17")
++        self.assertEqual(
++            set(ann["images"]),
++            {
++                "kubecoder-bot",
++                "kubecoder-controller",
++                "kubecoder-ingress",
++                "kubecoder-manual",
++                "kubecoder-mcp",
++            },
++        )
+diff --git a/aac-tools/tests/test_image.py b/aac-tools/tests/test_image.py
+index a479c20..9701a61 100644
+--- a/aac-tools/tests/test_image.py
++++ b/aac-tools/tests/test_image.py
+@@ -10,6 +10,7 @@ from pathlib import Path
+ 
+ TESTS = Path(__file__).resolve().parent
+ FOLDER = TESTS.parent
++CHECKS = FOLDER / "checks"
+ REPO = FOLDER.parent
+ 
+ # `arch-validate.py` as pvginkel/Architecture publishes it, which is the hash every
+@@ -25,8 +26,9 @@ INSTALLED_IMPORT_ROOTS = {"yaml"}
+ 
+ 
+ def _baked_sources() -> list[Path]:
+-    """Every python source inside the build context; tests are ignored out of it."""
+-    return sorted(p for p in FOLDER.rglob("*.py") if TESTS not in p.parents)
++    """Every python source the build context carries — what .dockerignore leaves in."""
++    outside = (TESTS, CHECKS)
++    return sorted(p for p in FOLDER.rglob("*.py") if not any(d in p.parents for d in outside))
+ 
+ 
+ def _imported_roots(source: Path) -> set[str]:

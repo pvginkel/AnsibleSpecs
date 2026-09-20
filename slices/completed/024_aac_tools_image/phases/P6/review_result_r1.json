@@ -1,0 +1,31 @@
+{
+  "outcome": "issues",
+  "summary": "The CA-root inventory rewrite is correct and independently re-derived — nine real copies, five image-baked, the two symlinks rightly excluded — and the digest half of the pin rule checks out. But the pin sentence's appended gloss defines an estate-wide first-party tag norm that four code sites falsify, in the one phase whose whole outcome is that sentence being true. Two advisory findings ride along: the inventory's next bullet names a copy KubeCoder deleted on 2026-09-03, and P7's enumeration of the runbook's count sentences misses one.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "comment-prose",
+      "anchor": "contradiction",
+      "summary": "decisions.md:599's new gloss says first-party builds publish :<build> and :latest and consumers reference :latest; matrix images publish neither and four consumers pin."
+    },
+    {
+      "id": "F2",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "decisions.md:167, the same inventory's next bullet, still names /work/KubeCoder/controller/homelab-root.crt, deleted in KubeCoder 7e78405f — a wrong rotation procedure the phase's one-directional sweep could not catch."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "P7's enumeration of the runbook's count sentences omits step-ca-root-rotation.md:132 (\"The seven paths are duplicates by convention\"), two lines above the md5sum block that grows to ten."
+    }
+  ]
+}

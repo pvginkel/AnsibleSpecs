@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The catalog entry is under the correct parent, renders into the controller ConfigMap, meets KubeCoder's toolchain contract (memory limit, no command/args), and names the image ArgoCDTools actually publishes on a floating tag; the 1Gi sizing and the omitted skipParityChecks/homeOverlays check out against live pod state and the shipped generator. Two advisory prose inaccuracies in the new comment block, neither affecting behaviour.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none", "summary": "The entry's \"every first-party image in this catalog floats\" is contradicted by the block header and four pinned entries in the same file."},
+              {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none", "summary": "The instructions tell agents no repo needs a copy of arch-validate, while HelmCharts' own Jenkinsfile.architecture still runs scripts/arch-validate.py and retiring the copies is ANS-78."}]}

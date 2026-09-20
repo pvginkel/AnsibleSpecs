@@ -1,0 +1,31 @@
+{
+  "outcome": "signoff",
+  "summary": "P7's inventory rewrite checks out against the filesystem it describes: the nine out-of-repo copies, the ten-path md5sum block, the five baked copies and both moved ArgoCDTools paths are all true, and the Architecture repo is declared. Three advisory findings ride along — declaring that repo adds a setup step that fails at every pod start because its manifest needs a `modern-app` tool container this environment does not have, and two statements newly written into the rotation runbook (the homelab root reaching architecture.webathome.org, and the eleven-path `find` cross-check) are false.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "Declaring pvginkel/Architecture in repos: adds a pod-start setup step that fails on every environment start — its project.yaml runs every setup statement in a `modern-app` tool container this environment does not declare (witnessed: `cd /work/Architecture && kc project setup` exits 1)."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "step-ca-root-rotation.md:76 says the baked homelab root is how a run reaches https://architecture.webathome.org, which serves a Let's Encrypt leaf; the root is only what gets helm to charts.home."
+    },
+    {
+      "id": "F3",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "step-ca-root-rotation.md:67-68's reassurance that a `find` returns eleven paths omits the canonical copy the same section names — the search returns twelve."
+    }
+  ]
+}

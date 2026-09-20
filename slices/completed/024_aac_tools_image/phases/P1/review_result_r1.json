@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The folder rework is a clean git mv with zero content change plus the four files the move falsifies. Both claims the phase rests on hold under independent probing: kc project build is green from argocd-hook/ (the dispatched gate log covers only kc project test), and the suite discovers 58 tests rather than reading green on a vacuous discovery. One advisory finding — three sibling-repo comments cite the old presync/ path and no phase owns them.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "Three comments in ArgoCDDeploy and KubeCoderDeploy cite /work/ArgoCDTools/presync/..., which this move deletes, and P6/P7 are scoped to the CA-root inventories only"}]}

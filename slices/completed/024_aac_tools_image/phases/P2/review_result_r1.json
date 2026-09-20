@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "The aac-tools image folder, its Jenkins stage and its manifest component all meet P2's outcome: I rebuilt the context with kaniko and every clause of the closing assertion RUN executed green, the shipped arch-validate is byte-identical to the canonical script, the CA root is byte-equal to argocd-hook's and Ansible's, and the 4-test suite is non-vacuous. Nothing is blocking. Two advisory findings, both in ruff.toml's new exclude directive: it replaces ruff's default exclude list rather than extending it, and it does not hold for explicitly named paths as its comment claims.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "ruff.toml's new top-level `exclude` overrides ruff's built-in default exclude list, so `kc project lint` now walks build/, dist/, .venv/, node_modules/ and the rest, which .gitignore's two lines do not backfill."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "repro-trace",
+      "summary": "The comment promises `ruff format` and `ruff check --fix` can never touch the vendored arch-validate.py, but with force-exclude off an explicitly named path is still reformatted and still flags UP015."
+    }
+  ]
+}
