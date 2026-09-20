@@ -217,7 +217,7 @@ credential-handling precedent (G2).
   inverted (R6/R7) — `slice.md` holds that sentence standing deliberately "so the register does
   not contradict the live gate in the meantime".
 
-### P1 — KubeCoderDeploy: the tags move to the stage files, behind a gate that enforces it
+### P1 — KubeCoderDeploy: the tags move to the stage files, behind a gate that enforces it ✅ DONE 2026-09-20
 
 Target: ../KubeCoderDeploy
 
