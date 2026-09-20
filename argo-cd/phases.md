@@ -214,13 +214,15 @@ Dev stage end to end first. Let it sit. Then prd. Depends on all of Phase A.
 
 ### B.2 — image pinning
 
-Of the images the chart names, only the seven `Build-Main` images are in scope, and versioned
-tags already exist — this is deleting `-latest`, not a new scheme.
+Of the images the chart names, only the seven `Build-Main` images are in scope, and each stage
+pins its own: the tag lives in `config/<stage>/values.yaml`, and the chart names none of the seven
+(D47).
 
-- [ ] Pin `images.{controller,bot,mcp,ingress,manual}` in `chart/values.yaml`, to one build's
-      `dev-<n>` tag; no stage file overrides an image.
-- [ ] Pin `controllerConfig.images.{worker,vsix}` — the unpinned half D145 documents; today's
-      digest scraper never reached them.
+- [ ] Pin `images.{controller,bot,mcp,ingress,manual}` in both stage values files, to one
+      build — dev on `<n>`, prd on `prd-<n>`. `chart/values.yaml` names no tag for them and
+      each template `required`-guards its key, so a stage that omits one fails to render.
+- [ ] Pin `controllerConfig.images.{worker,vsix}` the same way — the unpinned half D145
+      documents; today's digest scraper never reached them.
 - [ ] Leave `images.tunnelReclaim` floating: DockerImages toolchain image, out of scope by
       operator decision — the boundary is "the seven Build-Main images", not the block.
 - [ ] Retire the D145 `imagePullPolicy: Always` overrides on the five pinned chart Deployment
@@ -229,26 +231,34 @@ tags already exist — this is deleting `-latest`, not a new scheme.
       worker/vsix ImageVolume `pullPolicy` lines, and D145's update (its sunset checklist is
       stale), wait until both stages run from pins — B.5's cleanup, after prd.
 
-Everything above that a repository can hold is committed (slice 010): KubeCoderDeploy — the chart
-on `homelab-shared` 0.2.0, both stages' values and tfvars, the rebuilt Terraform, and render and
-Terraform gates — plus ArgoCDDeploy's hook changes, the webhook-secret key and the dropped
-`namespaces` rule, and KubeCoder's manifest line. Owed to the operator: a manual sync of
+Everything above that a repository can hold is committed (slices 010 and 011): KubeCoderDeploy —
+the chart on `homelab-shared` 0.2.0, both stages' values and tfvars, the rebuilt Terraform, and
+render and Terraform gates — plus ArgoCDDeploy's hook changes, the webhook-secret key and the
+dropped `namespaces` rule, and KubeCoder's manifest line. Owed to the operator: a manual sync of
 `argocd-prd`, without which neither hook change is live and KubeCoder's first PreSync apply lacks
 its webhook secret; the `/work/Ansible` manifest line; and A.5's diff preview.
 
-### B.3 — CI (D37, D45 — KubeCoder's per-app choices)
+### B.3 — CI (D37 as amended by D47, D45 — KubeCoder's per-app choices)
 
-- [ ] The new JenkinsPipelineUtils method: `(deploy repo, values path = chart/values.yaml,
-      {YAML path → tag})` → clone, update, commit, push.
-- [ ] `Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main`.
-      *Verify first:* opting out of the `cicd` library's `<stage>-<n>` scheme is a per-repo
-      switch, not a library rewrite — the other 44 releases stay on `helmDeploy()`.
-- [ ] Repoint everything keyed on the tag *prefix*: registry retention/GC rules,
-      `collect-versions` / the version-poller. "Running in prd" moves from the registry into
-      git — the point, but its readers must be told.
+- [ ] The JenkinsPipelineUtils method `cicd.writeVersionPins(repo:, pins:, message:)`, where
+      `pins` is `{values file → {dotted YAML path → value}}` → clone, write every file it
+      names, one commit, push `main`.
+- [ ] `Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main` with
+      both stage files — dev's pins at `<n>`, prd's at `prd-<n>`. The prefix is a literal at
+      each of the eight `helmCharts.kaniko(...)` call sites, so dropping it is a per-repo edit:
+      the library carries no `<stage>-<n>` scheme to opt out of, and the other releases are
+      untouched.
 - [ ] `Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays
       alive until each stage cuts over.
-- [ ] The committed default tag is a real `<n>`, never `latest` (D37).
+- [ ] Every tag CI commits is a real `<n>` or `prd-<n>`, never `latest` (D37 as amended by D47).
+
+Committed (slice 011): the method, and KubeCoderDeploy carrying both stages' pins behind a render
+gate that enforces the shape — exactly the seven per stage file, one build across both, none in
+the chart. The two Jenkins-side items wait for the cutover that flips each stage and land with
+B.5, so nothing calls the method yet and the committed pins are forward references: dev's `<n>`
+does not exist until `Build-Main` pushes it, prd's `prd-<n>` until the promote job retags. The
+"repoint everything keyed on the tag prefix" verify item resolves to nothing to repoint (the D37
+amendment).
 
 ### B.4 — Terraform state surgery (D32) — **the step that can delete production**
 

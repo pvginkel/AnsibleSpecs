@@ -13,12 +13,26 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 011 shipped the producer side of D47 and only that. KubeCoderDeploy now carries Build-Main's
+seven image pins in `config/dev/values.yaml` (build 523) and `config/prd/values.yaml` (`prd-523`);
+`chart/values.yaml` names no tag for those seven and every template `required`-guards its key, so a
+stage file that omits one fails to render rather than deploying something untagged. The render gate
+enforces the shape — exactly the seven per stage file, one build across both, none in the chart.
+JenkinsPipelineUtils gained `cicd.writeVersionPins(repo:, pins:, message:)`: one call clones a
+deploy repo, rewrites the named YAML lines in every values file it is handed, and commits and
+pushes them together, so no stage is left behind on the previous build. The argo-cd register,
+KubeCoderDeploy's README and slice 012's slice.md were brought onto that shape.
+
+Ruling 1 moved the Jenkins-side half — `Build-Main`'s rewrite and `Deploy-PRD`'s replacement — to
+slice 012, so neither half is exercised yet: the method has no caller and the pins have no reader.
+Verification was static by design. What stays owed is the operator's one canary build (A1) and, at
+the cutover, the tags themselves — the registry holds neither `523` nor `prd-523` today.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A1 first — one Jenkins build. The library is already on `main` and live for every job
+that loads it, so until that build is green the push is proven only off-Jenkins. A2 is the
+push of two repos the driver's branch sweep does not reach.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -40,9 +54,20 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 **Provenance:** witnessed; test-agent, test phase r1; verification.json V04, evidence from the Jenkins API and /tmp/t011/cps_parse.groovy
 **Disposition:**
 
+### A2 — The doc phase's commits land on `main` in AnsibleSpecs and KubeCoderDeploy, outside the driver's branch sweep · minor
+
+Only /work/Ansible carries a phase/011-docs branch; AnsibleSpecs and KubeCoderDeploy were on main, as slice 024's doc phase also found (its A5). The doc-phase edits are therefore committed on main in both: AnsibleSpecs — argo-cd/phases.md (B.2's pin location, B.3's method signature and what slice 011 committed), history.md (the D47 turn in the promotion arc, the D45 label) and decisions.md (D37's amendment narrowed to the images CI pins); KubeCoderDeploy — both stage values files' pin comment. Gates run in place: kc project lint and kc project test green in KubeCoderDeploy, and AnsibleSpecs' substitute checks (every relative link in the three changed files resolves, no changed line over 100 columns). Nothing pushed, in any repo.
+
+**Consequence:** The driver's sweep rebase-merges and pushes only the Ansible branch, which this phase left empty — if nobody pushes AnsibleSpecs and KubeCoderDeploy, the register and the deploy repo keep the corrected text locally and the estate keeps reading the pre-011 shape.
+
+**Provenance:** witnessed; doc phase; doc_phase_result.json
+**Disposition:**
+
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: Nothing filed — no bail-out, no appended phase, no tool or harness trouble. What moved
+this slice moved before it ran: Ruling 1 sent the Jenkins-side half to slice 012, and the three
+phases then ran as planned.
 
 <!-- Everything that deviated from a completely uneventful run — product and workflow alike: a
      bail-out, an appended phase, a live run that exposed what the suite hid; a tool missing from
@@ -52,9 +77,9 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B1 first: registry-cleanup's per-prefix cap has already deleted the build the committed
+pins named, and the same cap can reach a deployed tag once Argo syncs a stage file. B2 and B3
+are latent in `writeVersionPins` — no caller in 011 or 012 passes the shapes that trigger them.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -81,6 +106,8 @@ Two adjacent observations from the same registry read, recorded for whoever pick
   mismatch S1 records, confirmed live.
 
 consult 1, 2026-09-20 — The realised case this entry names was P1's input, not its output: P1 re-pinned to build 523 under Ruling 4 precisely because dev-511 can never be reproduced, and the chart now pins nothing at all. The bug is unchanged and still lands on DockerImages/registry-cleanup — a git-committed pin is outside its protection set — but the exposed tags are now 523 and prd-523, which do not exist yet and which slice 012's cutover creates.
+
+doc-writer, 2026-09-21 — Read against what shipped: the pins are 523 and prd-523, not dev-511 — Ruling 4 chose the build at phase time. The realised instance this entry names is therefore gone from the repo, and the exposure is not: the chart no longer names a tag at all, and nothing in registry-cleanup's protection set knows that a stage values file in git is a deployment reference.
 
 **Consequence:** A git-committed deployment reference is not in registry-cleanup's protection set, so once Argo deploys KubeCoder from a stage file the pinned tag can be deleted under the cap while git still names it — the Application then fails to pull. It has already happened to the pins in the repo today.
 
@@ -109,16 +136,24 @@ normalizePins throws when two keys render the same values-file name (vars/cicd.g
 
 ### ~~B4 — AnsibleSpecs/argo-cd: two of the register's new absolutes are contradicted by the chart they describe · minor~~ — resolved by consult 1 (AnsibleSpecs a4fd09c): both clauses narrowed to CI-written tags — decisions.md's D37 amendment now reads 'required-guards every tag CI writes' and design.md:511 'Every tag CI commits'; tunnelReclaim and localHome, the chart's two floating DockerImages tags, are no longer contradicted. Prose only, in files this slice's diff already touched; AnsibleSpecs has no gate, and the re-check in its place was the one P3 used — every relative link in both files resolves, no changed line over 100 columns; struck by consult 1
 
+<details><summary>struck — body kept for the record</summary>
+
 decisions.md:397 now says 'the chart required-guards every tag it renders'. It does not: chart/templates/controller-deployment.yaml:225 renders registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }} unguarded, and controller-config.yaml:13 ranges over list "worker" "vsix" only while controllerConfig.images.localHome rides the same toYaml dump. The plan asked for the narrower true statement (plan.md:397-398, 'the chart required-guards all seven; say that'). design.md:511-512 generalises to 'Every committed tag is a real <n> or prd-<n>, never latest', while chart/values.yaml:17 commits tunnelReclaim: :latest and :665 commits localHome: ...:latest — and P1's render gate positively requires tunnelReclaim to stay floating. Both images are out of the slice's scope by G3, and D47's own :498 already phrases the claim absolutely.
+
+doc-writer, 2026-09-21 — The narrowing went one clause further at the doc phase: decisions.md's D37 amendment still opened 'chart/values.yaml carries no image tag', which tunnelReclaim and localHome contradict as flatly as the two clauses consult 1 fixed. It now reads 'carries no tag for the images CI pins, and the chart required-guards every one of them' — same scope as design.md:511's 'Every tag CI commits'.
 
 **Consequence:** A reader takes 'no image tag in the chart' and 'every rendered tag is guarded' as invariants of KubeCoderDeploy's chart, when two DockerImages images in it are committed at :latest by design and the gate requires one of them to stay that way.
 
 **Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F3)
 **Disposition:**
 
+</details>
+
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Nothing open. The rulings that shaped the slice were all made at plan time, and the one
+question a phase raised — how wide the register's new absolutes should be — was settled by
+consult 1 and is struck as B4.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -126,14 +161,17 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S5 first — slice 012 would otherwise learn it the hard way: values are written verbatim,
+so the five dev pins need their leading colon, and the caller needs `disableConcurrentBuilds()`
+and `git` in its container. S1, S2 and S6 are slice 012's too; S3, S4 and S7 outlive it.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
 ### S1 — Deploy-PRD numbers its prd-<n> tags with the promote job's build number; D47 numbers them with the image build's · minor
 
 `Jenkinsfile.deploy-prd:33-38` retags `dev-${sourceDevBuild}` to `prd-${currentBuild.number}` — the promote job's own build number, in a numbering space unrelated to Build-Main's. D47 pre-writes `prd-<n>` into the prd stage values file at build time, where `<n>` is the image build's number, and has the promote job create exactly that tag. Slice 012's replacement therefore changes numbering space, not just mechanism, and the `prd-*` tags already in the registry belong to the old space. This slice writes `prd-511` into the prd stage file as its first forward reference.
+
+doc-writer, 2026-09-21 — The prd stage file shipped with prd-523, not prd-511 (Ruling 4). The numbering-space point is unchanged — the forward reference names Build-Main's build number, and Deploy-PRD's own.
 
 **Consequence:** If slice 012's promote job keeps the old numbering, it creates a tag nothing references while the stage file's prd-<n> stays unpullable — and the sync fails on an image that does not exist, which is exactly the loud-and-local failure D47 designed for, landing for the wrong reason.
 
@@ -219,4 +257,13 @@ consult 1, 2026-09-20 — The tension is in Ruling 1, not in P3's gloss of it: t
 **Consequence:** A slice-012 plan written from requirement 14's lede schedules no promotion work at the dev cutover, and prd cannot be promoted for any build made between the dev and prd flips.
 
 **Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F2)
+**Disposition:**
+
+### S7 — slices/DAG.md still files the /work/KubeCoder gate constraint, and a KubeCoder + HelmCharts repo set, under 011 · minor
+
+DAG.md:31 lists 011's subprojects as JenkinsPipelineUtils, KubeCoder, KubeCoderDeploy, HelmCharts — Ruling 1 moved the Build-Main edit to 012 and G4 took HelmCharts out of the slice entirely. DAG.md:74-77 heads the constraint 'Not a gate, but a constraint on 011' and mentions 012 only in its closing sentence, about the pull-policy removal rather than Build-Main. The doc phase does not hand-edit DAG.md: its own header says to re-run /dev:slice-dag after slices land, and the inventory section says re-runs reuse cached rows for slices already listed, so the stale 011 row survives a regeneration unless it is invalidated.
+
+**Consequence:** Slice 012's planner reads the '/work/KubeCoder cannot gate here' constraint as slice 011's, with its own Build-Main rewrite named only in passing, and can schedule a run-loop phase against a repo whose gate this environment cannot run.
+
+**Provenance:** read; doc phase; /work/AnsibleSpecs/slices/DAG.md:31,74-77
 **Disposition:**

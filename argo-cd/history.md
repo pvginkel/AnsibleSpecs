@@ -15,7 +15,7 @@ review gates amending the register as they went.
 
 ---
 
-## Promotion: from retag, to synthetic commit, to a branch advance (D35–D37)
+## Promotion: from retag, to synthetic commit, to a branch advance (D35–D37, D47)
 
 The estate promoted by retagging images (`crane`: `dev-<n>` → `prd-<n>`), because the tag *was*
 the promotion mechanism — `prd-latest` was how the deploy learned what prd should run. The CR
@@ -33,6 +33,18 @@ H7 is dissolved, and the atomicity the plan wanted comes free — chart, Terrafo
 version travel together in a validated `main` tree. At gate 1 the operator narrowed the scope:
 branch topology, trigger and rollback ritual are **per-app** choices; the project supplies
 mechanism only, and what's registered is the pilot's worked example.
+
+Four days later the tag half of that came back (D47). Stage-agnostic tags left both stages
+deploying one bare `<n>` out of the chart's defaults, and the alternative considered the same
+day — a marker tag that protects an image without deploying it — put a second concept in front
+of every reader and failed silently when anyone forgot it. So `<n>` and `prd-<n>` return as
+ordinary deployment references, one per stage values file, and the chart carries no default for
+them to fall back on: CI writes both stage files in one commit, and the promote job creates
+`prd-<n>` by retag before it fast-forwards `prd`. The reference is written before the tag
+exists, which is the point — a retag that never happens stops the sync in the pipeline that
+caused it, loud and local, instead of an image quietly going missing somewhere else weeks on.
+What 2026-08-12 dissolved was the retag as the *promotion mechanism*; the retag itself stayed,
+as what makes a pre-written reference resolvable.
 
 ## The namespace: reversing CR decision 6 (D25–D26)
 
@@ -263,7 +275,7 @@ its narrowing is Triage #991, owed before the first migration whose Terraform ma
   lives" but *what app-authored manifests can reach* — hook Jobs are chart content, the
   AppProject must permit their namespace for every app, and that namespace must therefore
   never be `argocd`.
-- **The tags-dict write call** (D45) became the project's CI mechanism, keeping "git equals
+- **The version-pin write call** (D45) became the project's CI mechanism, keeping "git equals
   deployed state" while leaving content and timing to each app.
 - **D44's "plugin" wording** was interpreted broadly — the namespace TF module and whatever
   tooling still handles it go when the last app migrates.
