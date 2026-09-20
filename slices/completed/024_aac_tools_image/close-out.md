@@ -185,15 +185,6 @@ Out of scope here — R9 keeps HelmCharts' generator out of this slice, and its 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F1
 **Disposition:** Fix inline or raise. — raised as ANS-85: the registry path lives in the registry repo, which the generator never reads, so there is nothing the generator can check inline
 
-### B3 — ArgoCDTools: the ruff exclusion does not hold for the invocation its comment promises · nit
-
-`ruff.toml:5-7` says "Neither `ruff check --fix` nor `ruff format` may touch it" of the vendored `aac-tools/image/arch-validate.py`. With `force-exclude` off (default), an explicitly named path bypasses `exclude`: `ruff format --check aac-tools/image/arch-validate.py` answers "1 file would be reformatted" and `ruff check` on the same path reports the UP015 the comment names. Only directory traversal — the repo's own lint verb — is actually covered. The md5 pin in `aac-tools/tests/test_image.py:58-62` catches the drift one gate later. Setting `force-exclude = true` would make the comment's claim true.
-
-**Consequence:** An editor-on-save formatter or a hand-run `ruff format <path>` silently rewrites the canonical validator; the drift surfaces as a red md5 test rather than being prevented.
-
-**Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F2
-**Disposition:** What's going on with this include? Was it just a mistake to add it?
-
 ### ~~B2 — ArgoCDTools: ruff.toml's new `exclude` drops ruff's default exclude list repo-wide · minor~~ — fixed in ArgoCDTools b9f6f4d: ruff.toml uses extend-exclude, so the vendored-file exclusion and ruff's default exclude list both hold; struck by close-out 2026-09-20
 
 <details><summary>struck — body kept for the record</summary>
@@ -204,6 +195,19 @@ P2 added a top-level `exclude = ["aac-tools/image/arch-validate.py"]` to `ruff.t
 
 **Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F1
 **Disposition:** Fix inline. — fixed in ArgoCDTools b9f6f4d: ruff.toml uses `extend-exclude`, so the vendored-file exclusion and ruff's built-in default list both hold; witnessed with a `dist/vendored.py` probe, red before and skipped after
+
+</details>
+
+### ~~B3 — ArgoCDTools: the ruff exclusion does not hold for the invocation its comment promises · nit~~ — fixed in ArgoCDTools 5926d4e: force-exclude = true, so the vendored validator's exclusion holds for an explicitly named path too — the exclusion was right, only incomplete; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+`ruff.toml:5-7` says "Neither `ruff check --fix` nor `ruff format` may touch it" of the vendored `aac-tools/image/arch-validate.py`. With `force-exclude` off (default), an explicitly named path bypasses `exclude`: `ruff format --check aac-tools/image/arch-validate.py` answers "1 file would be reformatted" and `ruff check` on the same path reports the UP015 the comment names. Only directory traversal — the repo's own lint verb — is actually covered. The md5 pin in `aac-tools/tests/test_image.py:58-62` catches the drift one gate later. Setting `force-exclude = true` would make the comment's claim true.
+
+**Consequence:** An editor-on-save formatter or a hand-run `ruff format <path>` silently rewrites the canonical validator; the drift surfaces as a red md5 test rather than being prevented.
+
+**Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F2
+**Disposition:** What's going on with this include? Was it just a mistake to add it? · It's just that I saw a few different remarks (3 I think?) on what I would think was a simple thing. I didn't mean "by mistake". I meant "was the wrong thing to do". Regardless, if it's an easy fix, go for it. — the exclusion itself was right (a test pins the vendored validator's md5); it was only incomplete. Fixed in ArgoCDTools 5926d4e: `force-exclude = true`, so an explicitly named path is excluded too — `ruff format --check aac-tools/image/arch-validate.py` now answers "No Python files found"
 
 </details>
 
@@ -443,15 +447,6 @@ KubeCoder's remote project surface is the other half of the picture: it walks ev
 **Provenance:** read; plan-writer, planning, r2; run_loop.py load_project_dirs / _resolve_target, and `kc project list` in both repos
 **Disposition:** The suggestion is to make Target use project names, right? I think that's a good suggestion. Raise please. — raised as AIWF-8 against the run loop, which is where the gap is
 
-### S4 — aac-tools: the equality fixture becomes a second copy the day KubeCoderDeploy commits its own annotation layer · nit
-
-`aac-tools/checks/kubecoder-architecture.yaml` is KubeCoder's annotation layer, held here because this slice lands no file in the deploy repo (ruling). `handover_equality.py` copies it over the clone's root before rendering, so once slice 014 gives KubeCoderDeploy its own committed `architecture.yaml`, the check keeps overriding the real file with this copy and the two can drift apart unnoticed. At that point the fixture has done its job: slice 014 can delete it and default `--annotations` to the clone's own file (or drop the copy step altogether), which also makes the check prove equality for exactly the judgment the pipeline renders.
-
-**Consequence:** The check can go on proving the handover for an annotation layer the pipeline does not use — the deploy repo's committed judgment drifts from the fixture's, and a green check no longer says anything about the artifact Jenkins publishes.
-
-**Provenance:** witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
-**Disposition:** That sounds like a mistake. Can you still fix this? You're not saying the file is now in the image, right? I'm not sure if I understand what happened.
-
 ### ~~S3 — Three sibling-repo comments still cite /work/ArgoCDTools/presync/…, a path slice 024 moved · minor~~ — fixed by the doc phase: ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7, both now on origin/main; struck by close-out 2026-09-20
 
 <details><summary>struck — body kept for the record</summary>
@@ -470,6 +465,19 @@ doc-writer, doc phase, 2026-09-20 — Resolved in the doc phase (ArgoCDDeploy 32
 
 **Provenance:** witnessed | code review, P1, round 1 — full record in phases/P1/code_review_r1.md (F1)
 **Disposition:** set the dispositions you know are answered — closed, fixed by the doc phase — ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7, both now on origin/main
+
+</details>
+
+### ~~S4 — aac-tools: the equality fixture becomes a second copy the day KubeCoderDeploy commits its own annotation layer · nit~~ — folded into slice 014 (slices/backlog/014_deploy_repo_architecture_producers/slice.md): the fixture cannot go before 014 commits KubeCoderDeploy's own annotation layer; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+`aac-tools/checks/kubecoder-architecture.yaml` is KubeCoder's annotation layer, held here because this slice lands no file in the deploy repo (ruling). `handover_equality.py` copies it over the clone's root before rendering, so once slice 014 gives KubeCoderDeploy its own committed `architecture.yaml`, the check keeps overriding the real file with this copy and the two can drift apart unnoticed. At that point the fixture has done its job: slice 014 can delete it and default `--annotations` to the clone's own file (or drop the copy step altogether), which also makes the check prove equality for exactly the judgment the pipeline renders.
+
+**Consequence:** The check can go on proving the handover for an annotation layer the pipeline does not use — the deploy repo's committed judgment drifts from the fixture's, and a green check no longer says anything about the artifact Jenkins publishes.
+
+**Provenance:** witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
+**Disposition:** That sounds like a mistake. Can you still fix this? You're not saying the file is now in the image, right? I'm not sure if I understand what happened. · Fold into 014 please. — the file is not in the image (`.dockerignore` drops `checks`, the Dockerfile copies only `image/`); it cannot be fixed before 014, which is what commits the deploy repo's own annotation layer. Appended verbatim to `slices/backlog/014_deploy_repo_architecture_producers/slice.md`
 
 </details>
 

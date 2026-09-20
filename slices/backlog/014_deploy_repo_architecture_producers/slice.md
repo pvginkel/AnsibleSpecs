@@ -689,3 +689,27 @@ producer's first green build sits between the branch's birth and the registry fl
 - Still open: whether ArgoCDDeploy's producer is generated or hand-authored; what the reusable
   pattern is concretely (the image and toolchain now carry most of it); the stale
   `producer-manual.md` citations.
+
+## Folded in from slice 024's close-out (2026-09-20)
+
+One entry from `slices/completed/024_aac_tools_image/close-out.md`, appended verbatim with its
+`Provenance:` line. The operator's disposition was "Fold into 014 please" — it cannot be fixed
+before this slice, because `/work/KubeCoderDeploy/architecture.yaml` does not exist until this
+slice commits it, and the fixture is the only annotation layer there is.
+
+### S4 — aac-tools: the equality fixture becomes a second copy the day KubeCoderDeploy commits its own annotation layer · nit
+
+`aac-tools/checks/kubecoder-architecture.yaml` is KubeCoder's annotation layer, held here because
+this slice lands no file in the deploy repo (ruling). `handover_equality.py` copies it over the
+clone's root before rendering, so once slice 014 gives KubeCoderDeploy its own committed
+`architecture.yaml`, the check keeps overriding the real file with this copy and the two can drift
+apart unnoticed. At that point the fixture has done its job: slice 014 can delete it and default
+`--annotations` to the clone's own file (or drop the copy step altogether), which also makes the
+check prove equality for exactly the judgment the pipeline renders.
+
+Consequence: The check can go on proving the handover for an annotation layer the pipeline does not
+use — the deploy repo's committed judgment drifts from the fixture's, and a green check no longer
+says anything about the artifact Jenkins publishes.
+
+Provenance: witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
+Disposition:
