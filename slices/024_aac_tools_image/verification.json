@@ -27,7 +27,7 @@
     {
       "id": "V04",
       "area": "R4 — floating tag, and the register narrowed",
-      "description": "Every reference to the image uses a floating tag, and `decisions.md` states the pin rule as narrowed by provenance — third-party scanner and validator images pinned by digest, first-party images we build following the estate's floating-tag norm — rewritten in place, with no note left elsewhere.",
+      "description": "Every reference to the image uses a floating tag, and `decisions.md` states the pin rule at the reference site — third-party scanner and validator images pinned by digest in our repos, images we build ourselves referenced by a floating tag with nothing in our repos pinning them, and no rule set either way about what a deploy does with that tag — rewritten in place, with no note left elsewhere.",
       "verdict": null,
       "rationale": "",
       "evidence": ["/work/AnsibleSpecs/decisions.md:599 — 'Scanner and validator images are pinned by digest.', the section's closing sentence, no duplicate in the estate"]

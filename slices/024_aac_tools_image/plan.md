@@ -20,9 +20,24 @@ given; a ruling that corrects an earlier one replaces it in place.
 - **R3 — it is named `aac-tools`**, image and toolchain alike. *"Grrr. We're only putting AaC stuff
   in it. pipeline-utils invites a grab bag of different things. Yeah, go with aac-tools."*
 
-- **R4 — it is referenced by a floating tag, overruling a standing line.** *"Yes on the floating
-  tag."* — and, when the collision with the register was put to the operator: *"I thought we
-  discussed this. Floating is fine."* The record moves in `decisions.md`, not in a note elsewhere.
+- **R4 — it is referenced by a floating tag, and the register states the pin rule at the
+  reference site.** *"Yes on the floating tag."* — and, when the collision with the register was
+  put to the operator: *"I thought we discussed this. Floating is fine."* The record moves in
+  `decisions.md`, not in a note elsewhere.
+
+  There is no estate-wide floating-tag *norm* for the register to appeal to. HelmCharts' deploy
+  resolves every release image to `@sha256:` (`resolve_helm_args.py:148`), so first-party images
+  run digest-pinned today. Put to the operator, who ruled the register should state the rule by
+  mechanism and added: *"I'm not 100% sure. Right now, yes HelmCharts does this. But once we've
+  fully migrated to Argo CD, this goes away. See what makes most sense."*
+
+  What the register states is therefore the half that survives that cutover — the rule at the
+  **reference site**. Third-party scanner and validator images are pinned by digest in our repos,
+  because an upstream tag moving under a gate changes what the gate accepts without a commit here.
+  Images we build ourselves are referenced by a floating tag, and nothing in our repos pins them.
+  Whether a deploy resolves that tag to a digest before it runs is the deploy path's business: the
+  register sets no rule about it and does not name HelmCharts' resolution as doctrine, so the Argo
+  CD cutover — where that resolution goes away — leaves the line standing.
 
 - **R5 — ArgoCDTools goes to one folder per image.** *"I saw there's a Dockerfile in the root.
   Please rework that. Preference is to just name it Dockerfile.argocd-hook, but putting it in a
@@ -610,10 +625,13 @@ Later phases:
 
 Target: ../AnsibleSpecs
 
-`decisions.md` states the pin rule as the operator narrowed it (R4, ruling): third-party scanner
-and validator images pinned by digest, first-party images we build following the estate's
-floating-tag norm — not narrowed by pull mechanism, which would make the existing third-party
-scanner's pin look unnecessary. Today that is one sentence with no duplicate anywhere in the estate
+`decisions.md` states the pin rule as R4 rules it, at the reference site: third-party scanner and
+validator images pinned by digest in our repos, because an upstream tag moving under a gate changes
+what the gate accepts without a commit here; images we build ourselves referenced by a floating tag,
+with nothing in our repos pinning them. What a deploy does with that tag is the deploy path's
+business, and the register says no more about it — it neither states nor denies that anything
+resolves the tag to a digest, which is what lets the line stand when HelmCharts' resolution retires
+at the Argo CD cutover. Today that is one sentence with no duplicate anywhere in the estate
 (`:599`, closing the section headed at `:589`).
 
 The same file's root-rotation inventory names the copies of `homelab-root.crt` that a rotation must
