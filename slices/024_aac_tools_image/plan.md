@@ -581,6 +581,31 @@ Constraints the repo does not state:
   (`charts/kubecoder/templates/controller-deployment.yaml:20-24`), so this change adds no restart
   cost of its own.
 
+**Done (P5).** `controllerConfig.toolchains` gains a last entry, `aac-tools:`, naming
+`registry:5000/aac-tools:latest` on `imagePullPolicy: Always` with a 1Gi limit and no
+`command`/`args` — the contract's raw container spec. No `homeOverlays`: the generator writes its
+helm repository list to a temporary file per run and helm's repository cache lands under the
+controller's built-in `.cache`, so the entry has nothing persistent of its own to declare. No
+`skipParityChecks` either — noble's `ubuntu` is the uid-1000 passwd entry the pod resolves against.
+`instructions:` is what an agent reads before its first run: both commands with their required
+flags, where the annotation layer is read and the artifact written, and the two hosts a run reaches.
+`helm template` over `configs/prd/kubecoder/prd/values.yaml` renders the entry into the controller
+ConfigMap; `kc project test` green. Nothing else in the repo changed.
+
+Two settlements. 1Gi is not a guess: a `helm dependency build`, a render and one python pass is the
+work P4's equality check ran green inside the `iac` sidecar, whose cgroup limit reads 1Gi. And the
+entry carries no test — this repo's suite is hermetic unit tests over `tools/`, nothing in it reads
+`values.yaml`, and the controller refuses startup on a malformed entry, so a test harness for one
+declaration is not this phase's to invent.
+
+Later phases:
+- The image is now referenced twice, both floating: ArgoCDTools' Jenkinsfile publishes `:latest`
+  and this entry consumes it. That is the whole of V04's "every reference" (P6).
+- HelmCharts' own `gen_architecture.py`, its tests and `charts/kubecoder/architecture.yaml` are
+  untouched — V11 holds, and P3's fixture provenance stands.
+- The image must exist before any repo selects the toolchain: close-out A1, inside the KC-68
+  remainder the operator already owns. No phase here acts on it.
+
 ### P6 — the register says what it now means
 
 Target: ../AnsibleSpecs

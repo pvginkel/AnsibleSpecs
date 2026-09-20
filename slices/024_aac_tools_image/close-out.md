@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — The aac-tools image must be built before any repo selects the toolchain
+
+The catalog entry this slice adds names `registry:5000/aac-tools:latest`, a tag nothing has published yet: ArgoCDTools' `IaC/ArgoCDTools` job builds it on a push to `main`, and this run holds every push. Deploying HelmCharts first is harmless on its own — the catalog is a declaration, and no repo manifest carries `{use: aac-tools}` yet, so nothing pulls the tag. The order that matters is: push ArgoCDTools (the job builds and publishes both images), then deploy HelmCharts, then restart the environments, and only then add the `tools:` entry to whichever repo wants it. Selecting the toolchain before the image exists is an ImagePullBackOff on the whole env pod, not a degraded sidecar. This is the ordering inside the KC-68 remainder, not a task of its own.
+
+**Consequence:** An environment that selects aac-tools before ArgoCDTools has published the image fails to start at all — the sidecar's missing image blocks the whole pod, so the dev container is unreachable too.
+
+**Provenance:** witnessed | code-writer, P5, r1 — the entry is at charts/kubecoder/values.yaml:581-612 on phase/024-P5; the publishing stage is ArgoCDTools' Jenkinsfile 'Build aac-tools image'
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -115,6 +124,24 @@ The container path maps a `realizes:` target through the cluster storage table b
 **Consequence:** A run in a checkout without an origin remote — an export, a worktree, a repo cloned without remotes — ends in a Python traceback rather than a statement of what the generator needed.
 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F4
+**Disposition:**
+
+### B9 — aac-tools: the equality check's "one snapshot" is two fetches of the same URL · nit
+
+`main()` fetches the dataset itself (`aac-tools/checks/handover_equality.py:247`) and then passes the child the same URL rather than the bytes it read (`:99`, `ARCH_DATASET_URL=dataset`). With the default `--dataset`, that is two independent HTTP GETs at different times. The comment at `:97-98` — "Both sides read one snapshot, so a publish between the two reads cannot look like a difference" — and `plan.md:535`, which repeats it, are true only when `--dataset` names a file.
+
+**Consequence:** A helm-charts publish landing between the two reads shows up as a difference, and the note beside the code tells whoever reads the report that a concurrent publish is impossible — so a spurious difference is investigated as a regression in the port.
+
+**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
+**Disposition:**
+
+### B10 — aac-tools: the equality check cannot read a multi-document dataset the generator handles · nit
+
+The check's `load_dataset` (`aac-tools/checks/handover_equality.py:122-127`) uses `yaml.safe_load` while calling itself "the generator's own rule"; the generator uses `yaml.safe_load_all` and indexes every envelope in the stream (`aac-tools/image/gen_architecture.py:489-491`). The check mirrors the URL-versus-file half of the rule and not the multi-document half. The endpoint serves a single document today (555 KB, no `---` separators, read 2026-09-20).
+
+**Consequence:** If the federation ever serves the merged dataset as a YAML stream, the generator keeps working and the reference side of the handover check dies with a ComposerError instead — a loud failure, not a wrong result.
+
+**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F2
 **Disposition:**
 
 ## Open questions and rulings
