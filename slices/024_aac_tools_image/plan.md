@@ -337,6 +337,32 @@ Constraints the repo does not state:
 - The moved paths are recorded in two other repos' inventories. P6 and P7 update those; don't chase
   them from here.
 
+**Done (P1).** `argocd-hook/` holds the image's `Dockerfile`, `.dockerignore`, `presync/`, `image/`
+and `tests/` — a pure `git mv`, no file's contents changed. The root keeps `Jenkinsfile`,
+`ruff.toml`, `.gitignore`, `.kubecoder/` and `README.md`. `kc project lint`, `test` **and** `build`
+are green from the repo root; the kaniko build is the proof the folder is a complete context.
+
+Later phases:
+- The two inventoried artefacts are now `argocd-hook/image/homelab-root.crt` and
+  `argocd-hook/image/terraform.rc` (P6, P7).
+- P2 adds `aac-tools:` as a third key in `.kubecoder/project.yaml` — key order is load-bearing, a
+  non-`root` key must be the folder's name — plus a second `dir('aac-tools')` Jenkinsfile stage.
+  `lint` stays on `root`: `ruff.toml` is repo-wide and one root run already covers a new package
+  under `aac-tools/`, so P2 declares only `test` and `build`.
+- P2's two citations to the moved `Dockerfile` and `test_image.py` are corrected in place above.
+  Grounding's citations are a dated snapshot of `d1849c9` and were left as taken.
+
+`.kubecoder/project.yaml` is `root` (description, `jenkins`, both `lint` statements) plus
+`argocd-hook` (`test`, `build`). Both verb strings are unchanged text — `-s tests -t .` and
+`--context .` now resolve against the component's folder, which is its working directory. The
+Jenkinsfile wraps the existing `helmCharts.kaniko2` call in `dir('argocd-hook')` (G1's DockerImages
+shape): no library change, no destination change. `argocd-hook/.dockerignore` is cut to what exists
+inside the context — `.dockerignore`, `**/__pycache__`, `tests`.
+
+No test needed changing: `test_image.py:10` and `test_cli.py:31` both anchor on
+`Path(__file__).parent.parent`, now `argocd-hook/`. README's Layout block, its two `image/` paths,
+the CI context sentence and the Gates lead-in are corrected — the sentences the move falsifies.
+
 ### P2 — the `aac-tools` image, carrying `arch-validate`
 
 Target: ../ArgoCDTools
@@ -356,7 +382,7 @@ Constraints the repo does not state:
   image's own command so nothing may depend on an entrypoint, and the uid it runs as needs a passwd
   entry or the entry needs `skipParityChecks`
   (`/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648`; the same concern
-  `/work/ArgoCDTools/Dockerfile:78-93` already handles).
+  `/work/ArgoCDTools/argocd-hook/Dockerfile:78-93` already handles).
 - The repo's manifest gains its second component here (ruling): `aac-tools` beside `argocd-hook`,
   each separately buildable and testable, rather than one component whose verbs run both images'
   commands. That is also the name later work on this image — slices 014 and 025 — addresses it by.
@@ -373,9 +399,9 @@ Constraints the repo does not state:
   the image composes, and what it promises to contain — every declared tool present, the homelab
   root actually in the trust store — is asserted where a build can prove it: inside the build, the
   way the `argocd-hook` Dockerfile's closing `RUN` already asserts its own contents
-  (`/work/ArgoCDTools/Dockerfile:88-93`, over a trust store laid down at `:66-68`), and over the
-  source, the way `/work/ArgoCDTools/tests/test_image.py` does. Note that this package, unlike
-  `presync`, is not standard-library-only.
+  (`/work/ArgoCDTools/argocd-hook/Dockerfile:88-93`, over a trust store laid down at `:66-68`), and
+  over the source, the way `/work/ArgoCDTools/argocd-hook/tests/test_image.py` does. Note that this
+  package, unlike `presync`, is not standard-library-only.
 - Nothing available here proves a live handshake from a running container against `charts.home` or
   `architecture.webathome.org`, and no phase may claim one. That check is owed to the operator, with
   the command that settles it — last bullet of "Not in scope".
