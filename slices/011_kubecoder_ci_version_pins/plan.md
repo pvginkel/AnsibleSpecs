@@ -409,6 +409,37 @@ the CI call that uses the method still to be written. A slice document is a spec
 log — no supersession notice, no narration of the move
 (`/work/Ansible/docs/design-philosophy.md`).
 
+**Done (P3).** `design.md` now says the chart's `values.yaml` carries no image tag and CI writes
+each stage's tag into that stage's own values file, in all three places it stated where the tags
+live — the deploy-repo bullet (`:65`), the worked example's `Build-Main` bullet (`:501`, both stage
+files in one commit) and its closing line (`:511`, "every committed tag is a real `<n>` or
+`prd-<n>`, never `latest`, and the chart carries no default to fall back on"). `decisions.md`'s
+D45 (`:470`) records P2's signature as settled at implementation —
+`cicd.writeVersionPins(repo:, pins:, message:)`, the map spanning files because one call is one
+commit — and D37's amendment (`:397`) names the chart's `required` guards as what fails the render,
+not the absent default. Slice 012's `slice.md` carries R2 beside R4 in requirement 14 (`:116`),
+both under D47's amendment, with this slice's grounding in a new "Carried in from slice 011"
+section (`:360`); its **Depends on** line (`:18`) names what slice 011 delivers. No new decision —
+D47's amendment blocks already carry what it changed. AnsibleSpecs `9de4486` on `phase/011-P3`.
+
+Later phases:
+
+- V10 and V12 are checkable by reading: `argo-cd/design.md:64-66,501-505,511-512`,
+  `argo-cd/decisions.md:396-401,469-476`, and slice 012's `slice.md:18-21,116-134,360-401`.
+- Slice 012 inherits, beyond R2 and R4 themselves: the pins name build 523 and neither `523` nor
+  `prd-523` exists yet, so the cutover creates both before the first dev sync; `Build-Main` builds
+  eight images and `kubecoder-claude-shim`'s tag is its call; the bare `<n>` family already holds
+  `176 … 185` from a retired pipeline.
+
+Record:
+
+- Those three were the only `design.md` sites stating where CI writes tags. D37's own body
+  (`decisions.md:379`) still describes the pre-D47 shape and stays that way: the amendment block
+  under it is how the register carries the change.
+- AnsibleSpecs has no `.kubecoder/project.yaml` and so no gate. Checked in its place: every
+  relative link in the three edited files resolves, and no added line exceeds the repo's
+  100-column wrap.
+
 ## Not in scope
 
 - `Build-Main`'s rewrite (R2) and `Deploy-PRD`'s replacement and deletion (R4) — moved to slice
