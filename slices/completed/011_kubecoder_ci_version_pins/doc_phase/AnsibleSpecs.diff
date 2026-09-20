@@ -1,0 +1,79 @@
+/work/AnsibleSpecs — P3: git diff f67f790c6bd7..cf594f1a3b06
+
+argo-cd/decisions.md | 19 ++++++++++++-------
+ argo-cd/design.md    | 13 ++++++++-----
+ 2 files changed, 20 insertions(+), 12 deletions(-)
+
+diff --git a/argo-cd/decisions.md b/argo-cd/decisions.md
+index 6ab6932..f5d7c54 100644
+--- a/argo-cd/decisions.md
++++ b/argo-cd/decisions.md
+@@ -394,8 +394,11 @@ tag prefix gets repointed — registry retention/GC, `collect-versions`, the ver
+ > what expresses promotion state. Read D12 as being about the artifact, not its label.
+ >
+ > **"Never `latest`" is strengthened to "never a default at all":** `chart/values.yaml` carries
+-> no image tag, so a missing stage values file fails to render instead of silently deploying a
+-> fallback — the same hazard this decision named, reached by a different route.
++> no image tag, and the chart `required`-guards every tag it renders, so a stage values file
++> missing one fails to render instead of silently deploying a fallback — the same hazard this
++> decision named, reached by a different route. The guard is what fails the render, not the
++> absent default: an image reference whose tag is absent renders untagged and `helm template`
++> exits 0.
+ >
+ > The "everything keyed on the tag prefix gets repointed" verify item resolves to *nothing to
+ > repoint*: the prefix keeps meaning what it always meant, and `collect-versions` was never
+@@ -464,11 +467,13 @@ with no new leaf and no new values block. **The token is Argo's own, not the hoo
+ the two rotate independently, and a compromise on one side does not hand over the other.
+ 
+ **D45 — CI writes image tags through one shared-library call.** Decided 2026-08-12 (operator,
+-gate-1 review). The pipeline assembles a dict of `{YAML path in the values file → tag}`; a new
+-JenkinsPipelineUtils method takes the deploy repo, the values-file path (defaulting to
+-`chart/values.yaml`) and that dict, then clones → updates the file → commits → pushes in one
+-call. This is the mechanism behind "git equals deployed state" on the CI side: apps decide what
+-goes in the dict and when the call runs (scope note); the library owns the git mechanics.
++gate-1 review; signature settled 2026-09-20 at implementation). The pipeline assembles the tags as
++`{values file → {YAML path in that file → tag}}`; the JenkinsPipelineUtils method
++`cicd.writeVersionPins(repo:, pins:, message:)` takes the deploy repo and that map, then clones →
++updates every file named in it → commits → pushes in one call. The map spans files because one
++call is one commit and D47 moves both stage files together. This is the mechanism behind "git
++equals deployed state" on the CI side: apps decide what goes in the map and when the call runs
++(scope note); the library owns the git mechanics.
+ 
+ **D47 — Stage tags are the deployed reference, pre-written by CI and created by the promote
+ job.** Decided 2026-08-16 (operator; supersedes the marker design considered the same day).
+diff --git a/argo-cd/design.md b/argo-cd/design.md
+index b21add1..0b43071 100644
+--- a/argo-cd/design.md
++++ b/argo-cd/design.md
+@@ -62,7 +62,8 @@ config/
+   the registry entry's `targetRevision` — the pilot uses `main`/`prd` (D34), other apps choose
+   their own topology (scope note in decisions.md).
+ - **No configuration in the chart** (D13). Stage values live in `config/{stage}/values.yaml`;
+-  the chart's `values.yaml` carries defaults plus the CI-written image tags (D37, D45).
++  the chart's `values.yaml` carries defaults but no image tag — CI writes each stage's tag into
++  that stage's own values file (D45, D47).
+ - **Terraform is rebuilt, not copied**, when an app migrates (D12 rework licence). The
+   `*.tfvars` never travel through Argo — the hook reads them from its own clone (D14).
+ - **Upstream-chart-only apps have no `chart/`** (D18): the repo is `/{terraform,config}`, and
+@@ -497,16 +498,18 @@ charts migrate.
+ 
+ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** does.
+ 
+-- `Build-Main` builds and pushes `:<n>` images (D37), assembles the tags dict
+-  `{YAML path → tag}`, and makes one JenkinsPipelineUtils call (D45): clone KubeCoderDeploy,
+-  write `chart/values.yaml`, commit, push `main`. The webhook fires; the dev stage syncs.
++- `Build-Main` builds and pushes `:<n>` images (D37), assembles the tags per stage values file
++  `{values file → {YAML path → tag}}`, and makes one JenkinsPipelineUtils call (D45): clone
++  KubeCoderDeploy, write `config/dev/values.yaml` at `<n>` and `config/prd/values.yaml` at
++  `prd-<n>` in one commit, push `main` (D47). The webhook fires; the dev stage syncs.
+   `cicd.helmDeploy()` is gone from the job; Jenkins holds no cluster credential (D1).
+ - **Promotion** advances `prd` to a validated `main` commit (D35) — a fast-forward by
+   construction, since `prd` never carries a commit `main` doesn't. What performs the advance is
+   the product's trigger choice; `Deploy-PRD` is deleted, not rewritten.
+ - **Rollback** (D36): revert on `main`, promote — dev follows, accepted. Emergency lever:
+   force-move `prd` back to the previously promoted SHA, which loses nothing.
+-- The chart's committed default tag is always a real `<n>`, never `latest` (D37).
++- Every committed tag is a real `<n>` or `prd-<n>`, never `latest`, and the chart carries no
++  default to fall back on (D37 as amended by D47).
+ 
+ ## Lifecycle

@@ -1,0 +1,440 @@
+/work/KubeCoderDeploy — P1: git diff 0757cf79864d..49f0629f49bf
+
+README.md                                  |   7 +--
+ chart/templates/bot-deployment.yaml        |   2 +-
+ chart/templates/controller-config.yaml     |   5 ++
+ chart/templates/controller-deployment.yaml |   6 +--
+ chart/templates/mcp-deployment.yaml        |   2 +-
+ chart/values.yaml                          |  36 ++++++--------
+ config/dev/values.yaml                     |  19 ++++++++
+ config/prd/values.yaml                     |  19 ++++++++
+ tests/render-chart.py                      | 126 ++++++++++++++++++++++++++++++++++++-------------
+ 9 files changed, 158 insertions(+), 64 deletions(-)
+
+diff --git a/README.md b/README.md
+index 4946d5c..4391c88 100644
+--- a/README.md
++++ b/README.md
+@@ -23,9 +23,10 @@ A replay keeps what the copy changed for Argo, all of which `kc project test`'s
+ - the controller's `deployment` annotation is the controllerConfig checksum and the bot and MCP
+   pod templates carry no stamp, so two renders are identical;
+ - the chart renders its wave -1 `Prune=false` Namespace and the library's PreSync hook Job;
+-- each stage file sets `global.environment` and names no image;
+-- the seven Build-Main images are pinned in `chart/values.yaml`, and their five Deployment
+-  containers state no `imagePullPolicy`.
++- each stage file sets `global.environment` and names exactly Build-Main's seven image pins, dev on
++  the bare build number and prd on the `prd-<n>` retag of the same build (D47);
++- `chart/values.yaml` names no tag for those seven and the chart refuses to render a stage missing
++  one, and their five Deployment containers state no `imagePullPolicy`.
+ 
+ The Terraform is rebuilt, not copied: `terraform/` holds the ZFS dataset, its PV and the
+ repository's webhook, with each stage's inputs in `config/<stage>/terraform.tfvars`.
+diff --git a/chart/templates/bot-deployment.yaml b/chart/templates/bot-deployment.yaml
+index c2c24c3..5d53144 100644
+--- a/chart/templates/bot-deployment.yaml
++++ b/chart/templates/bot-deployment.yaml
+@@ -23,7 +23,7 @@ spec:
+       enableServiceLinks: false
+       containers:
+         - name: kubecoder-bot
+-          image: registry:5000/kubecoder-bot{{ .Values.images.bot }}
++          image: registry:5000/kubecoder-bot{{ required "images.bot is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.bot }}
+           ports:
+             - containerPort: 8080
+           env:
+diff --git a/chart/templates/controller-config.yaml b/chart/templates/controller-config.yaml
+index 1cb5806..5e561ee 100644
+--- a/chart/templates/controller-config.yaml
++++ b/chart/templates/controller-config.yaml
+@@ -8,5 +8,10 @@ kind: ConfigMap
+ metadata:
+   name: kubecoder-controller-config
+ data:
++{{- /* worker and vsix reach the controller through the dump below, which has no per-key site: an
++       absent key would drop out of its config silently instead of failing the render (D47). */}}
++{{- range $key := list "worker" "vsix" }}
++{{- $_ := required (printf "controllerConfig.images.%s is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" $key) (index $.Values.controllerConfig.images $key) }}
++{{- end }}
+   controller.yaml: |
+ {{ .Values.controllerConfig | toYaml | indent 4 }}
+diff --git a/chart/templates/controller-deployment.yaml b/chart/templates/controller-deployment.yaml
+index dda9b25..0b7f4f6 100644
+--- a/chart/templates/controller-deployment.yaml
++++ b/chart/templates/controller-deployment.yaml
+@@ -43,7 +43,7 @@ spec:
+           effect: NoSchedule
+       containers:
+         - name: kubecoder-controller
+-          image: registry:5000/kubecoder-controller{{ .Values.images.controller }}
++          image: registry:5000/kubecoder-controller{{ required "images.controller is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.controller }}
+           ports:
+             - containerPort: 8080
+           env:
+@@ -170,7 +170,7 @@ spec:
+         # /healthz, /readyz, the SSE stream — to the controller on :8080. The Service's targetPort
+         # points HERE, not at the controller; the controller is no longer directly addressable.
+         - name: ingress
+-          image: registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
++          image: registry:5000/kubecoder-ingress{{ required "images.ingress is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.ingress }}
+           ports:
+             - containerPort: 8090
+           readinessProbe:
+@@ -191,7 +191,7 @@ spec:
+         # drop the whole controller pod out of the Service: a broken docs sidecar would become a
+         # control-plane outage. Liveness still restarts it if it wedges.
+         - name: manual
+-          image: registry:5000/kubecoder-manual{{ .Values.images.manual }}
++          image: registry:5000/kubecoder-manual{{ required "images.manual is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.manual }}
+           ports:
+             - containerPort: 8081
+           env:
+diff --git a/chart/templates/mcp-deployment.yaml b/chart/templates/mcp-deployment.yaml
+index 86e878f..4df8f10 100644
+--- a/chart/templates/mcp-deployment.yaml
++++ b/chart/templates/mcp-deployment.yaml
+@@ -19,7 +19,7 @@ spec:
+       enableServiceLinks: false
+       containers:
+         - name: kubecoder-mcp
+-          image: registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
++          image: registry:5000/kubecoder-mcp{{ required "images.mcp is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.mcp }}
+           # The Streamable-HTTP MCP surface (path /mcp). Unlike the bot (outbound-only), the
+           # adapter serves inbound, so it carries a Service (mcp-service.yaml, plus the
+           # internet-reachable mcp-public-service.yaml where a stage configures one).
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 91efd72..9117a98 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -5,20 +5,15 @@
+ # See KubeCoderSpecs/slices/helm-chart.md.
+ 
+ images:
+-  # controller, bot, mcp, ingress, manual and controllerConfig.images.{worker,vsix} name one Build-Main
+-  # build's `:dev-<build>` tag; no stage file overrides them. The five containers take the default pull
+-  # policy; env pods still pull worker/vsix Always. tunnelReclaim is a DockerImages image.
+-  controller: :dev-511 # registry:5000/kubecoder-controller{{ .Values.images.controller }}
+-  bot: :dev-511 # registry:5000/kubecoder-bot{{ .Values.images.bot }}
+-  mcp: :dev-511 # registry:5000/kubecoder-mcp{{ .Values.images.mcp }}
+-  # The controller pod's two sidecars (slice 084): the pure-routing nginx front door and the
+-  # operator manual it serves at /help/. Both ride IN the controller's pod, so both images must
+-  # already be in the registry before this chart rolls — a missing image takes the controller down.
+-  ingress: :dev-511 # registry:5000/kubecoder-ingress{{ .Values.images.ingress }}
+-  manual: :dev-511 # registry:5000/kubecoder-manual{{ .Values.images.manual }}
++  # controller, bot, mcp, ingress, manual and controllerConfig.images.{worker,vsix} are Build-Main's
++  # seven pins: CI writes them per stage into config/<stage>/values.yaml and this chart names no
++  # default for them (D47), so each template `required`-guards its key and a stage that omits one
++  # fails to render. The five containers take the default pull policy; env pods still pull
++  # worker/vsix Always. ingress and manual (slice 084, the pod's nginx front door and the operator
++  # manual it serves at /help/) ride IN the controller's pod, as tunnelReclaim below does, so their
++  # images must be in the registry before this chart rolls — a missing one takes the controller down.
+   # The controller pod's dev-tunnel reclaim actuator (slice 105): a loopback-only sidecar that runs
+-  # `code tunnel unregister`. Like the two sidecars above it rides IN the controller's pod, so its
+-  # image must be in the registry before this chart rolls — a missing image takes the controller down.
++  # `code tunnel unregister`. A DockerImages image on its tracking tag, not a Build-Main pin.
+   tunnelReclaim: :latest # registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }}
+ 
+ controller:
+@@ -661,15 +656,12 @@ controllerConfig:
+     # differently-purposed setting.
+     cloneHost: github.com
+   images:
+-    # Image root IS the worker's bin directory, mounted as an ImageVolume at TWO paths: at
+-    # /opt/kubecoder/bin on the dev container and every parity tool sidecar, and at
+-    # /kubecoderenvtools/bin on the image-builder sidecar, which resolves kanikod straight from
+-    # the image root. Change this key and BOTH mount points need checking (D121, slice 104).
+-    worker: registry:5000/kubecoder-worker:dev-511
+-    # The packaged VS Code extension alone (extension.vsix at the image root), mounted as an
+-    # ImageVolume at /opt/kubecoder/share on the dev container only (D095, slice 104).
+-    vsix: registry:5000/kubecoder-vsix:dev-511
+-    # Distributed as a Kubernetes ImageVolume mounting the image root at $HOME/.local (slice 011)
++    # worker and vsix are two of Build-Main's seven pins: CI writes them per stage into
++    # config/<stage>/values.yaml and this chart names no default for them (D47).
++    # controller-config.yaml `required`-guards both, because this block reaches the ConfigMap
++    # through one toYaml dump, where an absent key vanishes silently instead of failing the render.
++    # localHome is distributed as a Kubernetes ImageVolume mounting the image root at $HOME/.local
++    # (slice 011).
+     localHome: registry:5000/kube-coder-dev-local-home:latest
+   # Samba /work sidecar (D139, slice 069) — controller-composed env-pod infrastructure that
+   # exposes each env's /work over authenticated SMB (445) so the operator can browse/transfer
+diff --git a/config/dev/values.yaml b/config/dev/values.yaml
+index 7d4c3a2..a0e10d3 100644
+--- a/config/dev/values.yaml
++++ b/config/dev/values.yaml
+@@ -20,8 +20,27 @@ controller:
+ bot:
+   allowedChatIds: ["8524367576"]
+ 
++# Build-Main's seven image pins (D47), written here by CI on every build: dev names the bare build
++# number, prd the `prd-<n>` retag of the same build, and both stages move in one commit. The chart
++# names no default and fails to render a stage that omits one. The five keys below are tag suffixes
++# the chart concatenates onto `registry:5000/kubecoder-<name>`; `controllerConfig.images` holds the
++# other two as whole references.
++images:
++  controller: ":523"
++  bot: ":523"
++  mcp: ":523"
++  ingress: ":523"
++  manual: ":523"
++
+ # Controller-owned config (D058).
+ controllerConfig:
++  # The other two of Build-Main's seven pins (see `images:` above), as whole references. worker's
++  # image root is an ImageVolume at TWO mount points — /opt/kubecoder/bin on the dev container and
++  # every parity tool sidecar, /kubecoderenvtools/bin on the image-builder sidecar — so changing it
++  # needs both checked (D121); vsix carries extension.vsix alone, at /opt/kubecoder/share (D095).
++  images:
++    worker: registry:5000/kubecoder-worker:523
++    vsix: registry:5000/kubecoder-vsix:523
+   # Must agree with service.controller.serverName above — the controller mints its
+   # tunnel/logs links under this origin.
+   externalBaseUrl: https://kubecoder-dev.home
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index db4dd1b..821f563 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -41,10 +41,29 @@ mcp:
+     # registered with the authorization server.
+     allowedSubjects: ["03811f1f-63f9-4e24-b27f-993490cd5db6"]
+ 
++# Build-Main's seven image pins (D47), written here by CI on every build: dev names the bare build
++# number, prd the `prd-<n>` retag of the same build, and both stages move in one commit. The chart
++# names no default and fails to render a stage that omits one. The five keys below are tag suffixes
++# the chart concatenates onto `registry:5000/kubecoder-<name>`; `controllerConfig.images` holds the
++# other two as whole references.
++images:
++  controller: ":prd-523"
++  bot: ":prd-523"
++  mcp: ":prd-523"
++  ingress: ":prd-523"
++  manual: ":prd-523"
++
+ # Controller-owned config (D058). The Headlamp deep link moved here from bot.headlampLogsUrl in
+ # slice 085: the controller resolves it behind its own short `GET /logs/{envId}` redirect (D171),
+ # so the URL is declared once and the bot renders the short link it is handed.
+ controllerConfig:
++  # The other two of Build-Main's seven pins (see `images:` above), as whole references. worker's
++  # image root is an ImageVolume at TWO mount points — /opt/kubecoder/bin on the dev container and
++  # every parity tool sidecar, /kubecoderenvtools/bin on the image-builder sidecar — so changing it
++  # needs both checked (D121); vsix carries extension.vsix alone, at /opt/kubecoder/share (D095).
++  images:
++    worker: registry:5000/kubecoder-worker:prd-523
++    vsix: registry:5000/kubecoder-vsix:prd-523
+   # Headlamp deep link to the env pod's dev-container logs (Headlamp ≥0.42 ?view=logs
+   # deep-link; the pod name IS the env id, in the release namespace).
+   headlampLogsUrl: "http://headlamp/c/main/pods/kubecoder-prd/{env_id}?view=logs&container=dev"
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 8eafa06..1061c7e 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -57,9 +57,10 @@ NAMESPACED = {
+     ("rbac.authorization.k8s.io", "Role"),
+     ("rbac.authorization.k8s.io", "RoleBinding"),
+ }
+-# The seven images KubeCoder's Build-Main pushes as `:dev-<build>` (settled 8). The five
+-# Deployment containers, as (Deployment, container), take a tag from `images.<key>`; the two
+-# controller ImageVolumes take a whole reference from `controllerConfig.images.<key>`.
++# The seven images KubeCoder's Build-Main pushes, named in the stage values files alone (D47).
++# The five Deployment containers, as (Deployment, container), take a tag suffix from
++# `images.<key>`; the two controller ImageVolumes take a whole reference from
++# `controllerConfig.images.<key>`.
+ PINNED_CONTAINERS = {
+     "controller": ("kubecoder-controller", "kubecoder-controller"),
+     "ingress": ("kubecoder-controller", "ingress"),
+@@ -68,8 +69,17 @@ PINNED_CONTAINERS = {
+     "mcp": ("kubecoder-mcp", "kubecoder-mcp"),
+ }
+ PINNED_VOLUMES = ("worker", "vsix")
+-PIN = re.compile(r"registry:5000/kubecoder-(?P<name>[a-z]+):dev-(?P<build>[0-9]+)")
+-# A DockerImages image, floating as copied from HelmCharts (R13).
++# Each pin's values path: what a stage file names it, and what `--set <path>=null` unsets.
++PIN_SETTINGS = {
++    **{key: f"images.{key}" for key in PINNED_CONTAINERS},
++    **{key: f"controllerConfig.images.{key}" for key in PINNED_VOLUMES},
++}
++PIN = re.compile(r"registry:5000/kubecoder-(?P<name>[a-z]+):(?P<tag>(?:prd-)?(?P<build>[0-9]+))")
++# dev runs the bare build number Build-Main pushes, prd the `prd-<n>` retag of that same build. The
++# gate never resolves either against the registry: this repo carries the pins ahead of the CI that
++# writes them, and nothing syncs from it until the cutover.
++TAG_PREFIX = {"dev": "", "prd": "prd-"}
++# A DockerImages image, floating as copied from HelmCharts (R13). It stays in chart/values.yaml.
+ TUNNEL_RECLAIM = "registry:5000/kube-coder-tunnel-reclaim:latest"
+ # The controllerConfig keys holding a raw container spec, each stating `imagePullPolicy: Always`
+ # while its image floats (D145, ruling D3).
+@@ -155,15 +165,29 @@ def container(docs, deployment, name):
+     return None
+ 
+ 
+-def pinned_references():
+-    values = yaml.safe_load((CHART / "values.yaml").read_text())
++def stage_values(stage):
++    return yaml.safe_load((REPO / "config" / stage / "values.yaml").read_text())
++
++
++def image_settings(values):
++    """Every path in a values file that names an image: a leaf of an `images` map, or an `image`."""
++    return {
++        dotted(path)
++        for path, _ in entries(values)
++        if path[-1] == "image" or (len(path) > 1 and path[-2] == "images")
++    }
++
++
++def stage_pins(stage):
++    """{key: the whole reference the stage file pins it to}, None where it names none."""
++    values = stage_values(stage)
++    images = values.get("images") or {}
++    volumes = (values.get("controllerConfig") or {}).get("images") or {}
+     references = {
+-        key: f"registry:5000/kubecoder-{key}{values['images'][key]}" for key in PINNED_CONTAINERS
++        key: None if images.get(key) is None else f"registry:5000/kubecoder-{key}{images[key]}"
++        for key in PINNED_CONTAINERS
+     }
+-    references.update({key: values["controllerConfig"]["images"][key] for key in PINNED_VOLUMES})
+-    references["tunnelReclaim"] = (
+-        f"registry:5000/kube-coder-tunnel-reclaim{values['images']['tunnelReclaim']}"
+-    )
++    references.update({key: volumes.get(key) for key in PINNED_VOLUMES})
+     return references
+ 
+ 
+@@ -185,40 +209,66 @@ def check_library():
+     check(not tracked, f"the built dependency is committed: {tracked}")
+ 
+ 
+-def check_pins():
+-    references = pinned_references()
++def check_chart_values():
++    values = yaml.safe_load((CHART / "values.yaml").read_text())
++    named = sorted(image_settings(values) & set(PIN_SETTINGS.values()))
++    check(
++        not named,
++        f"chart/values.yaml names {named}; Build-Main's seven pins live in the stage values files "
++        "alone, with no chart default behind them (D47)",
++    )
++    reclaim = f"registry:5000/kube-coder-tunnel-reclaim{values['images'].get('tunnelReclaim')}"
++    check(
++        reclaim == TUNNEL_RECLAIM,
++        f"images.tunnelReclaim names {reclaim}, not the floating {TUNNEL_RECLAIM} (R13)",
++    )
++
++
++def check_pins(stage):
++    """The stage's seven, on one build in this stage's tag shape. Returns the builds it names."""
++    references = stage_pins(stage)
+     builds = set()
+     for key in (*PINNED_CONTAINERS, *PINNED_VOLUMES):
+-        match = PIN.fullmatch(references[key])
++        reference = references[key]
++        match = PIN.fullmatch(reference) if reference is not None else None
+         check(
+-            match is not None and match["name"] == key,
+-            f"chart/values.yaml pins {key} to {references[key]!r}, not a Build-Main "
+-            "`:dev-<build>` tag (R11, R12)",
++            match is not None
++            and match["name"] == key
++            and match["tag"] == f"{TAG_PREFIX[stage]}{match['build']}",
++            f"config/{stage}/values.yaml pins {key} to {reference!r}, not "
++            f"registry:5000/kubecoder-{key}:{TAG_PREFIX[stage]}<build> (D47)",
+         )
+         if match is not None:
+             builds.add(match["build"])
+     check(
+         len(builds) == 1,
+-        f"the seven Build-Main pins name builds {sorted(builds)}, not one (settled 8)",
+-    )
+-    check(
+-        references["tunnelReclaim"] == TUNNEL_RECLAIM,
+-        f"images.tunnelReclaim names {references['tunnelReclaim']}, not the floating "
+-        f"{TUNNEL_RECLAIM} (R13)",
++        f"config/{stage}/values.yaml names builds {sorted(builds)}, not one (D47)",
+     )
++    return builds
++
++
++def check_missing_pin(stage):
++    """The chart itself refuses a stage that omits a pin: `kc project test` does not run at sync
++    time, so this render failure is what protects a hand-edited stage file (D47)."""
++    for setting in PIN_SETTINGS.values():
++        result = template(stage, hook_parameters(stage), ["--set", f"{setting}=null"])
++        check(
++            result.returncode != 0 and setting in result.stderr,
++            f"{stage}: rendering without {setting} does not fail naming it (D47)",
++        )
+ 
+ 
+ def check_stage_values(stage):
+-    values = yaml.safe_load((REPO / "config" / stage / "values.yaml").read_text())
++    values = stage_values(stage)
+     check(
+         (values.get("global") or {}).get("environment") == stage,
+         f"config/{stage}/values.yaml does not set global.environment to {stage!r} (R4)",
+     )
+-    overrides = [dotted(path) for path, _ in entries(values) if path[-1] in ("image", "images")]
++    named = image_settings(values)
+     check(
+-        not overrides,
+-        f"config/{stage}/values.yaml sets image references {overrides}; both stages render the "
+-        "chart's pins (settled 8)",
++        named == set(PIN_SETTINGS.values()),
++        f"config/{stage}/values.yaml names images {sorted(named)}, not exactly Build-Main's seven "
++        f"pins {sorted(PIN_SETTINGS.values())} (D47)",
+     )
+ 
+ 
+@@ -309,7 +359,7 @@ def check_deployment_identity(stage, docs):
+ 
+ 
+ def check_images(stage, docs):
+-    references = pinned_references()
++    references = stage_pins(stage)
+     for key, (deployment, name) in PINNED_CONTAINERS.items():
+         spec = container(docs, deployment, name)
+         check(spec is not None, f"{stage}: Deployment/{deployment} has no container {name}")
+@@ -317,8 +367,8 @@ def check_images(stage, docs):
+             continue
+         check(
+             spec.get("image") == references[key],
+-            f"{stage}: {deployment}/{name} runs {spec.get('image')}, not the chart's pin "
+-            f"{references[key]} (settled 8)",
++            f"{stage}: {deployment}/{name} runs {spec.get('image')}, not the stage file's pin "
++            f"{references[key]} (D47)",
+         )
+         check(
+             spec.get("imagePullPolicy") != "Always",
+@@ -338,7 +388,7 @@ def check_images(stage, docs):
+         check(
+             config["images"].get(key) == references[key],
+             f"{stage}: the controller ConfigMap's images.{key} is {config['images'].get(key)}, "
+-            f"not the chart's pin {references[key]} (R12)",
++            f"not the stage file's pin {references[key]} (D47)",
+         )
+     policies = {
+         dotted(path): spec.get("imagePullPolicy")
+@@ -411,18 +461,26 @@ def check_render_stable(first):
+ 
+ def main():
+     check_library()
+-    check_pins()
++    check_chart_values()
++    builds = set()
+     first = {}
+     for stage in STAGES:
+         first[stage] = render(stage)
+         docs = objects(first[stage])
+         check_stage_values(stage)
++        builds |= check_pins(stage)
++        check_missing_pin(stage)
+         check_namespace_manifest(stage, docs)
+         check_stage_identity(stage, docs)
+         check_deployment_identity(stage, docs)
+         check_images(stage, docs)
+         check_hook_job(stage, docs)
+         check_scope(stage, docs)
++    check(
++        len(builds) == 1,
++        f"the stages pin builds {sorted(builds)}, not one; CI writes both stage files in the same "
++        "commit (D47)",
++    )
+     check_render_stable(first)
+ 
+     if failures:

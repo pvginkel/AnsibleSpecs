@@ -1,0 +1,7 @@
+{"outcome": "issues",
+ "summary": "writeVersionPins meets the phase's outcome — one commit for the whole set, surgical and idempotent writes, unknown/duplicate paths thrown before the commit, a no-op run that says so, and the estate's clone-edit-push credential pattern. One blocking defect: the values-file map is probed with the caller's raw key at :52 and read with a String-coerced key at :98, so a caller whose file paths are GStrings loses its pins — the GString-key hazard the file defends against on the inner map and reintroduces on the outer one. The branch is unverified (no gate, no JVM), and the Python transcription that stood in for a gate cannot reproduce this class of defect.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+               "summary": "vars/cicd.groovy:98 reads pins[file] with a String-coerced key after :52 probed it with the caller's raw key, so a GString-keyed pins map resolves to null and that file's pins are never applied"},
+              {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "repro-trace",
+               "summary": "the round-trip guarantee at vars/cicd.groovy:233-235 fails for a plain-styled line given an all-digit or boolean-like value, which YAML reads back as an int or a bool"}]}

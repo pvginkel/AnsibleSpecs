@@ -1,7 +1,8 @@
 # Close-out — slice 011 kubecoder_ci_version_pins
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-20 22:37 → 2026-09-21 00:41 · 3 phases · 0 bail-outs · 1 test round · doc phase
+done · $56.44 (planner 28 %, research 5 %, rework 9 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold

@@ -1,0 +1,339 @@
+/work/JenkinsPipelineUtils — P2: git diff f8103acb0e48..c5bf246570c3
+
+vars/cicd.groovy | 326 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 326 insertions(+)
+
+diff --git a/vars/cicd.groovy b/vars/cicd.groovy
+index e6155e1..d58068b 100644
+--- a/vars/cicd.groovy
++++ b/vars/cicd.groovy
+@@ -1,3 +1,329 @@
+ def helmDeploy(boolean wait = false) {
+     build job: 'IaC/HelmCharts', wait: wait
+ }
++
++/**
++ * Commits an app's image pins into its deploy repository: clone, write the
++ * named YAML paths in the named values files, commit, push -- the whole set as
++ * one commit, so no stage is left behind on the previous build (D45, D47).
++ *
++ * Under Argo CD the deploy repo's history is the deployed state, so this call
++ * is to a deploy repo what helmDeploy() above is to the Helm pipeline: the
++ * point where a build hands its images to CD. Apps decide which YAML paths
++ * carry which tags; the git mechanics are the library's.
++ *
++ * The write is surgical. Values files are hand-curated, and everything this
++ * does not write -- comments, key order, every other key -- survives it. A path
++ * the file does not already hold is an error rather than a new key: a pin that
++ * lands nowhere deploys the previous image and says nothing.
++ *
++ * Writes `main` and nothing else. Promotion is a fast-forward of `prd` to
++ * `main` (D35), which a commit made on `prd` would strand.
++ *
++ * Needs `git` on PATH in the calling container; the rest is pure Groovy. Two
++ * builds pushing pins at once lose the race on the second push, so a caller
++ * declares disableConcurrentBuilds().
++ *
++ * @param repo     `owner/name` of the deploy repo on github.com.
++ * @param pins     Values-file path -> (dotted YAML path -> value), e.g.
++ *                 ['config/dev/values.yaml': ['images.controller': ':524']].
++ *                 Values are written verbatim: what a tag looks like is the
++ *                 caller's business, not this method's.
++ * @param message  Commit message; defaults to naming the job and build.
++ * @return the pushed commit's sha, or null if every pin already held its value.
++ */
++def writeVersionPins(Map args) {
++    String repo = args.repo
++    String message = args.get('message', "ci: image pins from ${env.JOB_NAME} #${env.BUILD_NUMBER}")
++
++    if (!(repo ==~ /[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+/)) {
++        error("cicd.writeVersionPins: repo must be 'owner/name'; got '${repo}'")
++    }
++    if (!args.pins) {
++        error('cicd.writeVersionPins: pins must name at least one values file')
++    }
++
++    // Normalised before anything looks a key up, so every lookup below is
++    // String against String.
++    Map<String, Map<String, String>> pins = normalizePins(args.pins)
++
++    // Indexed loops over a plain list throughout: a Map.Entry held across a
++    // step is the NotSerializableException that kills a resumed build.
++    List<String> files = pins.keySet() as List
++
++    for (int i = 0; i < files.size(); i++) {
++        if (!pins[files[i]]) {
++            error("cicd.writeVersionPins: ${files[i]} names no pins")
++        }
++    }
++    if (sh(script: 'command -v git >/dev/null 2>&1', returnStatus: true) != 0) {
++        error('cicd.writeVersionPins: git is not on PATH in this container')
++    }
++
++    String checkout = pwd(tmp: true) + '/' + repo.substring(repo.indexOf('/') + 1)
++    String sha = null
++
++    withCredentials([usernamePassword(
++        // The estate's shared GitHub credential, the one every pipeline reaches
++        // GitHub with.
++        credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++        usernameVariable: 'GIT_USER',
++        passwordVariable: 'GIT_TOKEN')]) {
++
++        // set +x: Jenkins traces every line of a shell step, and this is the
++        // one line where the shell expands the token. The clone URL is also the
++        // only place the token goes -- the push below reuses the remote this
++        // stores, so nothing after it can echo the token.
++        sh """
++            set +x
++            set -eu
++
++            rm -rf '${checkout}'
++            git clone --quiet --depth 1 --branch main \\
++                "https://\${GIT_USER}:\${GIT_TOKEN}@github.com/${repo}.git" '${checkout}'
++            git -C '${checkout}' config user.name 'jenkins'
++            git -C '${checkout}' config user.email 'jenkins@webathome.org'
++        """
++
++        List<String> changed = []
++
++        for (int i = 0; i < files.size(); i++) {
++            String file = files[i]
++            String target = checkout + '/' + file
++
++            if (!fileExists(target)) {
++                error("cicd.writeVersionPins: ${repo} holds no ${file}")
++            }
++
++            // Explicit UTF-8 both ways: these files carry prose comments, which
++            // the platform default encoding would mangle on the way back out.
++            String before = readFile(file: target, encoding: 'UTF-8')
++            String after = applyPins(file, before, pins[file])
++
++            if (after != before) {
++                writeFile(file: target, text: after, encoding: 'UTF-8')
++                changed.add(file)
++            }
++        }
++
++        if (changed.isEmpty()) {
++            echo "${repo} already carries these pins: nothing committed, nothing pushed."
++        } else {
++            // Staged by name: a deploy repo's working tree is not this build's
++            // to sweep up.
++            String paths = "'" + changed.join("' '") + "'"
++
++            withEnv(["PIN_COMMIT_MESSAGE=${message}"]) {
++                sh """
++                    set -eu
++
++                    cd '${checkout}'
++                    git add -- ${paths}
++                    git commit --quiet -m "\$PIN_COMMIT_MESSAGE"
++                    git push --quiet origin HEAD:main
++                """
++            }
++
++            sha = sh(script: "git -C '${checkout}' rev-parse HEAD", returnStdout: true).trim()
++
++            echo "${repo} ${sha} pins ${changed.join(', ')}."
++        }
++    }
++
++    return sha
++}
++
++/**
++ * Returns `pins` with every values-file path, dotted YAML path and value a real
++ * String.
++ *
++ * Groovy's map subscript coerces a GString key to String, and a GString hashes
++ * unlike its String, so a dict built with an interpolated path -- the natural
++ * way to write one whose stages differ only by prefix -- can be read by no
++ * subscript at all, the caller's own key object included. Normalising the whole
++ * structure here is what lets everything below it use plain lookups.
++ *
++ * @param pins  Values-file path -> (dotted YAML path -> value), as handed in.
++ */
++@NonCPS
++Map<String, Map<String, String>> normalizePins(Map pins) {
++    Map<String, Map<String, String>> out = [:]
++
++    pins.each { file, filePins ->
++        String name = file.toString()
++        if (out.containsKey(name)) {
++            throw new IllegalArgumentException(
++                "cicd.writeVersionPins: pins names ${name} twice")
++        }
++
++        Map<String, String> normalised = [:]
++        if (filePins) {
++            filePins.each { path, value -> normalised[path.toString()] = value.toString() }
++        }
++        out[name] = normalised
++    }
++
++    return out
++}
++
++/**
++ * Returns `text` with each pin written at the dotted YAML path naming it, and
++ * every other byte of the file left exactly as it was found.
++ *
++ * A path that does not resolve to exactly one scalar line throws: the pin that
++ * would land nowhere and the pin that could land in two places are both the
++ * caller's bug, and neither may reach a commit.
++ *
++ * @param file  Path of the file, for the error messages.
++ * @param text  The file as it stands.
++ * @param pins  Dotted YAML path -> value, normalised by normalizePins().
++ */
++@NonCPS
++String applyPins(String file, String text, Map<String, String> pins) {
++    List<String> lines = text.split('\n', -1) as List
++
++    Map<String, Integer> found = [:]
++    List<String> keys = []
++    List<Integer> indents = []
++    // Indent of an open block scalar (`key: |`), whose body is prose that can
++    // look like YAML; -1 when none is open.
++    int literal = -1
++
++    for (int i = 0; i < lines.size(); i++) {
++        String line = lines[i]
++        if (!line.trim() || line.trim().startsWith('#')) {
++            continue
++        }
++
++        int indent = 0
++        while (indent < line.length() && line[indent] == ' ') {
++            indent++
++        }
++
++        if (literal >= 0) {
++            if (indent > literal) {
++                continue
++            }
++            literal = -1
++        }
++
++        // Anything that is not a `key: ...` line -- a sequence entry, a flow
++        // mapping's continuation -- carries no path of its own and is skipped.
++        def m = (line =~ / *([A-Za-z0-9_.\-]+): *(.*)/)
++        if (!m.matches()) {
++            continue
++        }
++
++        String key = m.group(1)
++        String rest = m.group(2)
++
++        while (!indents.isEmpty() && indents[-1] >= indent) {
++            indents.pop()
++            keys.pop()
++        }
++
++        if (!rest || rest.startsWith('#')) {
++            keys.add(key)
++            indents.add(indent)
++            continue
++        }
++        if (rest.startsWith('|') || rest.startsWith('>')) {
++            literal = indent
++            continue
++        }
++
++        String path = (keys + [key]).join('.')
++        if (pins.containsKey(path)) {
++            if (found.containsKey(path)) {
++                throw new IllegalArgumentException(
++                    "cicd.writeVersionPins: ${file} holds '${path}' on both line " +
++                    "${found[path] + 1} and line ${i + 1}")
++            }
++            found[path] = i
++        }
++    }
++
++    def missing = pins.keySet().findAll { !found.containsKey(it) }
++    if (missing) {
++        throw new IllegalArgumentException(
++            "cicd.writeVersionPins: ${file} holds no ${missing.join(', ')}; " +
++            'a path the file does not already carry is never created')
++    }
++
++    found.each { path, i ->
++        lines[i] = replacePin(lines[i], pins[path])
++    }
++
++    return lines.join('\n')
++}
++
++/**
++ * Returns `line` with its scalar replaced by `value`, keeping the key, the
++ * spacing, any trailing comment, and the quoting style the line already used.
++ * A value the line's plain style cannot carry -- a leading `:`, an embedded
++ * comment marker -- is double-quoted instead, so what comes back always parses
++ * back to the value that went in.
++ */
++@NonCPS
++String replacePin(String line, String value) {
++    // The line shape applyPins matched to find this pin; the groups split the
++    // key from the scalar and whatever trails it.
++    def m = (line =~ /( *[A-Za-z0-9_.\-]+: *)(.*)/)
++    m.matches()
++
++    String head = m.group(1)
++    String rest = m.group(2)
++    String quote = rest.substring(0, 1)
++    int end
++
++    if (quote == '"') {
++        end = 1
++        while (rest[end] != '"') {
++            end += rest[end] == '\\' ? 2 : 1
++        }
++        end++
++
++        return head + doubleQuoted(value) + rest.substring(end)
++    }
++    if (quote == "'") {
++        end = 1
++        while (rest[end] != "'" || (end + 1 < rest.length() && rest[end + 1] == "'")) {
++            end += rest[end] == "'" ? 2 : 1
++        }
++        end++
++
++        return head + "'" + value.replace("'", "''") + "'" + rest.substring(end)
++    }
++
++    // A plain scalar runs to the ' #' that opens a trailing comment, or to the
++    // end of the line; the whitespace before either is the line's, not the
++    // value's, and stays where it is.
++    end = rest.indexOf(' #')
++    end = end < 0 ? rest.length() : end
++    while (end > 0 && rest[end - 1] == ' ') {
++        end--
++    }
++
++    if (plainSafe(value)) {
++        return head + value + rest.substring(end)
++    }
++
++    return head + doubleQuoted(value) + rest.substring(end)
++}
++
++/** Whether `value` survives being written as a plain (unquoted) YAML scalar. */
++@NonCPS
++boolean plainSafe(String value) {
++    if (!value || value != value.trim()) {
++        return false
++    }
++    if ('-?:,[]{}#&*!|>\'"%@`'.contains(value.substring(0, 1))) {
++        return false
++    }
++    return !value.contains(': ') && !value.contains(' #') && !value.endsWith(':')
++}
++
++@NonCPS
++String doubleQuoted(String value) {
++    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
++}

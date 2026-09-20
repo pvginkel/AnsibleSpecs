@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "P3 lands its outcome: all three design.md sites and D45/D37's amendment now describe D47, and slice 012 carries R2, the five grounding items and a corrected Depends on line. Three advisory findings, none of which harms the product on merge: two caller-facing constraints P2 handed P3 reached neither document, item 14's new lede stages the promotion job against the G5 bullet the same document carries, and two of the register's new absolutes are contradicted by the chart's two out-of-scope floating images.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Major", "impact": "advisory", "category": "functional", "anchor": "contradiction",
+               "summary": "P2's two handoff constraints for slice 012 — values written verbatim (the leading colon) and Build-Main needing disableConcurrentBuilds() plus git — reached neither D45 nor slice 012's slice.md"},
+              {"id": "F2", "severity": "Major", "impact": "advisory", "category": "functional", "anchor": "contradiction",
+               "summary": "Slice 012's requirement-14 lede assigns Deploy-PRD's replacement to prd's cutover, which the G5 bullet carried into the same document contradicts, leaving prd unpromotable between the flips"},
+              {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "decisions.md's 'required-guards every tag it renders' and design.md's 'every committed tag is never latest' are both false of the chart's tunnelReclaim and localHome images"}]}

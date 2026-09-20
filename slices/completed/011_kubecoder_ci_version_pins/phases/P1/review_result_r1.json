@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "P1 meets its outcome: the seven pins live only in the stage files on build 523 (verified the newest dev-<n> the registry actually holds), chart/values.yaml names none, and the chart's required-guards genuinely fail a stage missing any one — proven by mutating both guards away, after which helm exits 0 rendering an untagged image and a null worker. The gate rewrite loses no prior coverage and its --set <path>=null check is a real, non-vacuous mutation test. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

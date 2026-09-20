@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "Round-1's blocking F1 is resolved, witnessed by running vars/cicd.groovy unmodified under Temurin 17 + groovy-all 2.4.21 with Jenkins steps stubbed and a local bare remote seeded from P1's real stage files: the pre-fix commit fails the interpolated-key caller with 'config/dev/values.yaml names no pins', the fix commit writes all fourteen pins in one commit. Every applyPins guard survives the wanted->pins rename, V02 holds end to end (7 lines per file, nothing else touched, values round-trip as strings, a re-run pushes nothing), and all seven vars/*.groovy parse. One new finding, Minor and advisory: the duplicate-key guard this commit adds covers the values-file map and not the pins map.",
+  "details": "code_review_r2.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "normalizePins throws on a values file named twice (:154-157) but silently collapses two keys naming one YAML path (:161), dropping a pin with a success return."
+    }
+  ]
+}
