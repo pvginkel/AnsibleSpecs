@@ -709,6 +709,36 @@ generator is written against is on this machine by construction rather than by h
 already exists — it was made during planning — and the `kc env restart` that would otherwise
 materialise it recreates this pod, so it is the operator's and never runs mid-slice.
 
+**Done (P7).** The rotation runbook's inventory is **nine** out-of-repo copies and its
+verification block **ten** paths: `argocd-hook/image/` and `aac-tools/image/` rows where the single
+`ArgoCDTools/image/` row was, plus rows for the two DockerImages toolchain sidecars P6's gate found
+unnamed — with the `md5sum` block, "All ten hashes must match" and both prose counts moved to match.
+The count turned out to be stated in a fourth place the brief did not name — "The seven paths are
+duplicates by convention", the lead-in to that same block, close-out S5 — and is now ten there too,
+so the section does not contradict itself. The rebuild caveat names the five baked copies rather
+than three, and the symlink clause `decisions.md` gained is here as well, in the form a reader
+verifying the list by `find` needs. `terraform.rc` stays at four in both runbooks; only ArgoCDTools'
+path moved, here and at `operator-workstation.md:95`. `.kubecoder/config.yaml` declares
+`pvginkel/Architecture` last in `repos:`, with what the contract is for.
+
+Later phases:
+- The runbook and `decisions.md` now state the same nine copies, five of them baked, and four
+  `terraform.rc`; a later edit to either record moves both or they disagree.
+- `/work/KubeCoderDeploy` is declared in no repo set, though the runbook's check hashes a path
+  inside it and P4's equality check clones it — close-out S6. Only `kc env restart` materialises a
+  declaration, and that recreates this pod, so it is the operator's.
+- `CLAUDE.md`'s related-repos paragraph still does not name `Architecture`. The doc phase's, off
+  the slice's diff.
+
+Gate: the dispatched `kc project test --project root` names a component that carries no test
+statements ("skipped"), so the run was `kc project test` whole — yamllint, ansible-lint,
+`terraform fmt -check` and arch-validate, all green. Nothing in it reads a runbook or
+`config.yaml`, so the claims are the gate: the ten `md5sum` paths all exist as regular files under
+one hash (`aa4e1a5c…`) and the four `terraform.rc` paths under one (`f2af2394…`); `find /work -name
+homelab-root.crt` returns exactly those ten plus HelmCharts' two symlinks; and both toolchain
+Dockerfiles `COPY homelab-root.crt` into their own trust store off a base that is not
+`kube-coder-dev-base`.
+
 ## Not in scope
 
 - Registering the deploy-repo producer in `pipeline-producers.yaml`, and choosing its id — slice 014.

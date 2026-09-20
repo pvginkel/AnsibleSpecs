@@ -269,3 +269,12 @@ P6 rewrote P7's section to land nine copies instead of seven, enumerating the ru
 
 **Provenance:** read, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F3
 **Disposition:**
+
+### S6 — Ansible: KubeCoderDeploy is checked out under /work but declared in no repo set · minor
+
+P7 added `pvginkel/Architecture` to `/work/Ansible/.kubecoder/config.yaml`'s `repos:` and found, doing it, that `/work/KubeCoderDeploy` is not in that list either — the declared set is AnsibleSpecs, HelmCharts, JenkinsPipelineUtils, DockerImages, HomelabTerraformProvider, ArgoCDDeploy, ArgoCDTools, Charts and now Architecture. The checkout exists and has its own origin, so it was made by hand. This slice leans on it twice: P4's handover-equality check clones `/work/KubeCoderDeploy` as the real case that earns V09, and the rotation runbook's md5sum block names `/work/KubeCoderDeploy/chart/files/ca/homelab-root.crt` as one of the ten paths to hash. `CLAUDE.md` also lists it among the repos under `/work` and says the set is declared in `config.yaml`. Declaring it is a one-line edit, but it only materialises through `kc env restart`, which recreates this pod — the operator's, not a slice's.
+
+**Consequence:** A rebuilt environment loses /work/KubeCoderDeploy, and with it the equality check that proves the UUID handover and one of the ten paths the rotation runbook's inventory check hashes — both fail as missing files, in a fresh pod, with no record of why the checkout was expected.
+
+**Provenance:** witnessed | code-writer, P7, r1 — /work/Ansible/.kubecoder/config.yaml repos:, /work/KubeCoderDeploy/.git origin
+**Disposition:**
