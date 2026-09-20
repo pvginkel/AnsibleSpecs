@@ -301,7 +301,7 @@ Record:
   stage setting any other image.
 - `kc project lint` and `kc project test` green (4.9s, the 14 extra renders ~0.4s of it).
 
-### P2 — JenkinsPipelineUtils: the shared method that commits version pins into a deploy repo
+### P2 — JenkinsPipelineUtils: the shared method that commits version pins into a deploy repo ✅ DONE 2026-09-20
 
 Target: ../JenkinsPipelineUtils
 
