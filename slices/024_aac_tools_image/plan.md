@@ -406,6 +406,31 @@ Constraints the repo does not state:
   `architecture.webathome.org`, and no phase may claim one. That check is owed to the operator, with
   the command that settles it — last bullet of "Not in scope".
 
+**Done (P2).** `aac-tools/` is the second image folder and its own kaniko context: `ubuntu:noble`,
+python3 3.12 with the distro's PyYAML, helm 4 from upstream's `get-helm-4`, git, bash and the
+homelab step-ca root, with `image/arch-validate.py` — the canonical script byte for byte —
+installed as `/usr/local/bin/arch-validate`. No ENTRYPOINT; `USER ubuntu` is noble's uid-1000
+passwd entry. The closing `RUN` asserts the promise and the build ran every clause: git 2.43.0,
+helm v4.3.0, python ≥3.12, `import yaml`, `arch-validate --help`, and `openssl verify` of the root
+against the system bundle (`homelab-root.crt: OK`). A `dir('aac-tools')` Jenkinsfile stage
+publishes `:<build>` and `:latest`; `.kubecoder/project.yaml` names the component (`test`,
+`build`). `kc project lint | test | build` are green from the root. `openssl` is present
+transitively via ca-certificates, so the assertion added no tool.
+
+Later phases:
+- `aac-tools/image/homelab-root.crt` is this repo's third inventoried artefact (P6, P7); a test
+  pins it byte-equal to `argocd-hook/image/homelab-root.crt`, so the two rotate as one.
+- P3: a command reaches PATH by `COPY … /usr/local/bin/<name>` + `chmod 0755`, as `arch-validate`
+  does. The image has no python package and no `PYTHONPATH` yet, so the generator's layout is P3's
+  to choose; PyYAML is already installed, and `aac-tools/tests/test_image.py` walks every `.py` in
+  the folder asserting its imports are stdlib ∪ `{"yaml"}` — a further dependency means an apt
+  line *and* that constant.
+- `ruff.toml` carries a repo-wide `exclude` for `aac-tools/image/arch-validate.py`: the formatter
+  and `UP015` each rewrite it, which is how the estate's one drifted copy drifted. Anything else
+  vendored byte-for-byte joins that list.
+- README is untouched and now understates the repo — its Layout tree, CI section and Gates lead-in
+  each name one image. The doc phase's, off the slice's diff.
+
 ### P3 — the deploy-repo architecture generator
 
 Target: ../ArgoCDTools
