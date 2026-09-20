@@ -760,12 +760,23 @@ wins** — the supersessions are listed at the end.
    for it in my architecture manifest. Can't we just not publish dev architecture and only deploy
    architecture for kubecoder-prd?"* — and, on why two stages cannot come from two branches: *"The
    artifact is attached to the pipeline. If the pipeline listens to dev and prd, the architecture
-   would flap."* **Not a generator rule** (*"I may have different needs for other apps"*). The
-   shape: *"we could just have a `--stage prd` argument, and have that check with the branch we're
-   deploying and just fail the build if it mismatches."* The producer job builds the **`prd`
-   branch**. Open for planning: where the expected stage↔branch pairing is declared — it is not a
-   universal convention (ArgoCDDeploy's one stage is `prd` on `main`) — and how a local trial run
-   skips the check.
+   would flap."* **Not a generator rule** (*"I may have different needs for other apps"*).
+
+   **The guard is a required, single-valued `--stage`, and nothing else.** The operator first
+   sketched `--stage dev --allowed-stages prd`, then a `--stage` checked against the branch, then:
+   *"I wasn't thinking it checks the branch name. It knows the stage, right? It has to build it to
+   build the namespace. Can't we use that?"* It can: the stage is a mandatory render input — it
+   selects `config/<stage>/values.yaml`, the release name and the namespace `<app>-<stage>`, as the
+   releases ApplicationSet has Argo render it (`ArgoCDDeploy chart/templates/applicationsets.yaml`)
+   and as KubeCoderDeploy's gate does (`tests/render-chart.py`). No default, no "all stages", one
+   stage emitted per run — so publishing dev takes typing `--stage dev`. The tool may assert what
+   it rendered agrees with the stage (`global.environment`, the namespace), which the deploy repo's
+   gate already requires (R4). **No branch check:** the stage says nothing about the branch (both
+   carry `config/prd/`), the branch is a literal in `Jenkinsfile.architecture` a few lines from
+   `--stage prd`, and a check between them compares the file with itself; the worst case is prd
+   described from an unpromoted commit. The producer job builds the **`prd` branch**. For planning:
+   the deploy repo states its app name nowhere (`render-chart.py` hardcodes `kubecoder-{stage}`), so
+   the tool needs `--app` or reads `Chart.yaml`.
 
 4. **Distribution is a container, built in ArgoCDTools, floating tag.** *"Jenkins can pull those in
    and it means we have a fully managed system for this. It also means we don't need the scripts in
