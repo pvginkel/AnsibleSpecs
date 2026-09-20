@@ -55,3 +55,21 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — Deploy-PRD numbers its prd-<n> tags with the promote job's build number; D47 numbers them with the image build's · minor
+
+`Jenkinsfile.deploy-prd:33-38` retags `dev-${sourceDevBuild}` to `prd-${currentBuild.number}` — the promote job's own build number, in a numbering space unrelated to Build-Main's. D47 pre-writes `prd-<n>` into the prd stage values file at build time, where `<n>` is the image build's number, and has the promote job create exactly that tag. Slice 012's replacement therefore changes numbering space, not just mechanism, and the `prd-*` tags already in the registry belong to the old space. This slice writes `prd-511` into the prd stage file as its first forward reference.
+
+**Consequence:** If slice 012's promote job keeps the old numbering, it creates a tag nothing references while the stage file's prd-<n> stays unpullable — and the sync fails on an image that does not exist, which is exactly the loud-and-local failure D47 designed for, landing for the wrong reason.
+
+**Provenance:** read — plan-writer, plan pass r1; /work/KubeCoder/Jenkinsfile.deploy-prd:33-38, argo-cd/decisions.md:493-498
+**Disposition:**
+
+### S2 — The pins this slice writes are forward references: slice 012 must build before it points Argo at KubeCoderDeploy · minor
+
+P1 leaves `config/dev/values.yaml` naming build 511's bare tag and `config/prd/values.yaml` naming `prd-511`; the registry holds `dev-511` and neither of the two. Nothing creates them until a Build-Main run under the new scheme (slice 012, Ruling 1). Nothing consumes the repo today (G7), so the gap is inert — but it is an ordering constraint on the cutover, not a defect to fix here.
+
+**Consequence:** A dev Application created before the first cutover build syncs to an image tag that does not exist and fails to pull; sequencing the build ahead of the Application avoids it entirely.
+
+**Provenance:** read — plan-writer, plan pass r1; KubeCoderDeploy/chart/values.yaml:11-18,668,671, plan.md G7 and Ruling 1
+**Disposition:**

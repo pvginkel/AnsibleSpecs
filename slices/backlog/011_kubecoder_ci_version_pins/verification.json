@@ -1,0 +1,135 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "JenkinsPipelineUtils (R1)",
+      "description": "\"The new JenkinsPipelineUtils method: (deploy repo, values path, {YAML path -> tag}) -> clone, update, commit, push\" exists in the shared library, and writes the whole set of pins it is given in one commit because D47 requires both stage files to move together (argo-cd/decisions.md:465-470 for D45's mechanism, :494-495 for the one-commit constraint).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "AnsibleSpecs/argo-cd/decisions.md:466-471 (D45's mechanism)",
+        "AnsibleSpecs/argo-cd/decisions.md:495-496 (D47: both stage files in one commit)",
+        "JenkinsPipelineUtils/vars/ \u2014 7 files, no clone/commit/push precedent to model on"
+      ]
+    },
+    {
+      "id": "V02",
+      "area": "JenkinsPipelineUtils (R1)",
+      "description": "The method's write is surgical: comments, key order and every key it was not given survive; a YAML path the values file does not already hold is an error rather than a silently created key; and a run whose tags are unchanged commits and pushes nothing, saying so.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "KubeCoderDeploy/config/dev/values.yaml:1-135 (hand-written, commented throughout)",
+        "KubeCoderDeploy/config/prd/values.yaml:1-172"
+      ]
+    },
+    {
+      "id": "V03",
+      "area": "JenkinsPipelineUtils (R1)",
+      "description": "The GitHub credential the push uses reaches neither the build log nor the deploy repo's history, following the estate's existing clone-edit-push precedent (/work/HomelabTerraformProvider/Jenkinsfile:82-95).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HomelabTerraformProvider/Jenkinsfile:82-95 (the estate's clone-edit-push precedent)"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "Library load (Ruling 2)",
+      "description": "The library still loads for every job in the estate: the operator re-runs one trivial library-loading Jenkins job that changes nothing and the output is handed back. vars/* compile together on load, so a syntax error is estate-wide (JenkinsPipelineUtils/vars/, 7 files, no tests or CI).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "JenkinsPipelineUtils/vars/*.groovy \u2014 compiled together on library load",
+        "19 Jenkinsfiles across /work load the library unpinned (`library identifier: 'JenkinsPipelineUtils'`)",
+        "/work/Ansible/Jenkinsfile.architecture:1-20 \u2014 candidate canary: loads the library, validates a YAML, archives it"
+      ]
+    },
+    {
+      "id": "V05",
+      "area": "KubeCoderDeploy pins (R6)",
+      "description": "\"Move the seven image pins out of KubeCoderDeploy/chart/values.yaml into config/{dev,prd}/values.yaml \u2014 dev <n>, prd prd-<n> (D47). They sit at dev-511 today.\" \u2014 both stage files name all seven on the same build number, and chart/values.yaml names no tag for any of them.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "KubeCoderDeploy/chart/values.yaml:11,12,13,17,18 (the five tag suffixes at :dev-511)",
+        "KubeCoderDeploy/chart/values.yaml:668,671 (worker/vsix, whole references at dev-511)",
+        "KubeCoderDeploy/config/{dev,prd}/values.yaml \u2014 neither names an image today",
+        "AnsibleSpecs/argo-cd/decisions.md:493-496 (D47)"
+      ]
+    },
+    {
+      "id": "V06",
+      "area": "KubeCoderDeploy pins (R5, D37 as amended)",
+      "description": "\"The committed default tag is a real <n>, never latest (D37)\" \u2014 strengthened by D47 to no default at all: a stage whose values file omits one of the seven fails the render with a message naming the key, rather than rendering an untagged reference. Today the templates concatenate the tag onto the repository, so an absent value renders :latest by another route.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "KubeCoderDeploy/chart/templates/controller-deployment.yaml:46,173,194",
+        "KubeCoderDeploy/chart/templates/bot-deployment.yaml:26",
+        "KubeCoderDeploy/chart/templates/mcp-deployment.yaml:22",
+        "AnsibleSpecs/argo-cd/decisions.md:396-398 (the D37 amendment: never a default at all)"
+      ]
+    },
+    {
+      "id": "V07",
+      "area": "KubeCoderDeploy gate (R7)",
+      "description": "\"Invert KubeCoderDeploy/tests/render-chart.py's check_stage_values, which fails the gate on any image key in a stage file \u2014 the exact opposite of D47\" \u2014 kc project test is green, and the gate now fails on D47's inverse: an image tag back in chart/values.yaml, a stage file missing one of the seven, a prd tag without its prd- prefix, or the two stage files naming different builds.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "KubeCoderDeploy/tests/render-chart.py:211-222 (check_stage_values, the invariant being inverted)",
+        "KubeCoderDeploy/tests/render-chart.py:71,158-167,188-208,311-353 (PIN regex and the three readers of chart/values.yaml)",
+        "KubeCoderDeploy `kc project test` green at plan time: build-deps, render-chart, terraform all OK"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "KubeCoderDeploy gate (R7)",
+      "description": "No coverage is lost in the gate rework: every image and pull-policy property the render gate asserts today either still holds or has a named successor, and images.tunnelReclaim keeps its floating reference and its check.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "KubeCoderDeploy/tests/render-chart.py:311-353 (image and pull-policy assertions today)",
+        "KubeCoderDeploy/chart/values.yaml:22 (images.tunnelReclaim, floating)"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "Tag-prefix readers (R3)",
+      "description": "\"Repoint everything keyed on the tag prefix\" resolves to nothing to repoint (D47): this slice changes no file in registry-cleanup, collect-versions or the version-poller, and the evidence that none of them needs a change still holds.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/DockerImages/registry-cleanup/app/main.py:210-217 (_family_and_number splits on a generic prefix, not a fixed list)",
+        "/work/DockerImages/registry-cleanup/app/main.py:344-397 (the shared-digest guard)",
+        "/work/DockerImages/version-poller/app/poller.py:110,122-131 (classifies by image labels, not tag text)",
+        "/work/HelmCharts/tools/chart_tools/collect_version_dependencies.py:14-78 (deployed tag is an opaque string)"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "Design register (R8)",
+      "description": "\"Fix argo-cd/design.md's 'Deploy repos' line ... correct it as part of the change, not before\" \u2014 design.md describes D47's shape wherever it states where CI writes the tags, and decisions.md's D45 records the parameter shape settled at implementation rather than the single values file it named before D47.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "AnsibleSpecs/argo-cd/design.md:64-65 (the Deploy repos line R8 names)",
+        "AnsibleSpecs/argo-cd/design.md:500-503 (the worked example, same claim)",
+        "AnsibleSpecs/argo-cd/decisions.md:466-471 (D45's single values-file parameter)",
+        "AnsibleSpecs/argo-cd/decisions.md:455-456 (D40, the 'shape settled at implementation' precedent)"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "Blast radius (Ruling 1)",
+      "description": "Nothing live moves: no stage is deployed, redeployed or repointed by this slice, and KubeCoder keeps running from HelmCharts until slice 012's cutover. The method has no caller and the relocated pins no reader \u2014 Ruling 1's accepted consequence, and the reason this slice's verification is static.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy \u2014 no manifest mentions kubecoder (grep over *.yaml)",
+        "/work/HelmCharts/configs/prd/kubecoder/{dev,prd}/values.yaml still deploy KubeCoder"
+      ]
+    }
+  ]
+}

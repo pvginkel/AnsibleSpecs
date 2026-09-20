@@ -154,11 +154,108 @@ Established in this session's grounding pass; `slice.md` is stale where these co
   requirement on a still-open TTL design. The shared-digest guard covers the ordinary case, but a
   `prd-<n>` that has not been promoted is not unconditionally safe from age-based deletion.
 
+## Task shape
+
+cross-cutting — slice.md lands work in three repos (`JenkinsPipelineUtils`, `KubeCoderDeploy`,
+`AnsibleSpecs`) and R1 adds a shared-library method every Jenkins job in the estate loads, which
+is a new pattern in a library that today has no clone/commit/push, YAML-editing or
+credential-handling precedent (G2).
+
 ## Ordering constraints
 
 - R8's correction to `argo-cd/design.md` must not merge **before** the deploy repo's gate has been
   inverted (R6/R7) — `slice.md` holds that sentence standing deliberately "so the register does
   not contradict the live gate in the meantime".
+
+### P1 — KubeCoderDeploy: the tags move to the stage files, behind a gate that enforces it
+
+Target: ../KubeCoderDeploy
+
+The seven Build-Main image references are named **only** in `config/{dev,prd}/values.yaml` — dev
+naming build 511's bare tag, prd naming `prd-511` — and `chart/values.yaml` carries no tag for
+them at all, not even a default (D47, `argo-cd/decisions.md:493-496`; §14.2 of
+`/work/DockerImages/docs/registry-management/version-poller-redesign.md`). G3 has the seven keys
+and their two shapes: the five `images.*` keys are tag suffixes the Deployment templates
+concatenate onto a repository (`chart/templates/controller-deployment.yaml:46,173,194`,
+`bot-deployment.yaml:26`, `mcp-deployment.yaml:22`), the two `controllerConfig.images.*` are whole
+references that `chart/templates/controller-config.yaml:12` dumps verbatim into the controller's
+ConfigMap. Whether a stage file carries a bare tag or a whole reference follows from what the
+template needs — D45's dict is `{YAML path → tag}`, and P2 writes whatever the caller hands it.
+
+A stage that names no tag for one of the seven **fails the render, naming the key**. That is the
+point of removing the default rather than blanking it: today's concatenation renders an untagged
+reference — `:latest` by another route — which is the hazard the D37 amendment strengthens against
+(`argo-cd/decisions.md:396-398`). Prove it in the gate.
+
+`tests/render-chart.py` enforces the inverted invariant as the repo's `kc project test` gate
+(green today, all three steps). G3 names its three readers of `chart/values.yaml` and the
+`dev-<n>`-only `PIN` regex; this is a rewrite of that invariant, not a flag on top of it
+(`/work/Ansible/docs/design-philosophy.md`, "change it, don't wrap it"). What it must hold after
+the rewrite: both stage files name all seven, dev bare-numbered and prd `prd-`-prefixed on the
+**same** build number, `chart/values.yaml` naming none, and the missing-pin render failure above.
+Every image and pull-policy property the gate asserts today either survives or has a named
+successor. `images.tunnelReclaim` keeps its floating reference and its check (not in scope).
+
+Two constraints the repo will not tell the executor:
+
+- **The tags written here are forward references.** The registry holds `dev-511`; neither `511`
+  nor `prd-511` exists, and nothing creates them until slice 012's first cutover build. Nothing
+  consumes this repo yet (G7), so this breaks nothing — it is the shape shipping ahead of its
+  producer, which is what Ruling 1 accepted. Do not "fix" it by keeping the `dev-` prefix.
+- **The stage values files are hand-written and densely commented**, and from slice 012 onward a
+  machine edits them on every build (P2). Give the image tags one small, clearly-bounded region
+  per file rather than scattering them through the hand-written blocks.
+
+### P2 — JenkinsPipelineUtils: the shared method that commits version pins into a deploy repo
+
+Target: ../JenkinsPipelineUtils
+
+One shared-library method a build calls with a deploy repo and the pins it wants written, which
+clones, updates the named YAML paths in the named values files, commits and pushes — the whole set
+in **one commit** (D45's mechanism, `argo-cd/decisions.md:466-471`; the one-commit constraint,
+D47, `:495-496` and §14.2 of the poller-redesign doc). D45's parameter list predates D47 and names
+a single values-file path defaulting to `chart/values.yaml`; the mechanism it decides is unchanged
+and the parameter carries the set, because both stage files must move together. Nothing in the
+method is KubeCoder-specific — apps decide what goes in the dict, the library owns the git
+mechanics (D45).
+
+What the method owes its callers:
+
+- **Values are opaque to it.** It writes the strings it is given at the paths it is given; the two
+  value shapes in P1 are the caller's business.
+- **Everything it does not write survives** — comments, key order, unrelated keys. The files it
+  edits are the hand-curated ones P1 leaves behind.
+- **A YAML path the file does not already hold is an error**, not a silently created key: the pin
+  that lands nowhere is the failure this method exists to make impossible.
+- **Nothing changed ⇒ nothing committed and nothing pushed**, said out loud in the build log.
+- **It runs in whatever container the caller is in**, and its caller lands in another slice: say
+  in the method what it needs there, and fail on a missing tool rather than on the push.
+- **The credential.** The estate's one precedent for a Jenkins job pushing to a second GitHub repo
+  is `/work/HomelabTerraformProvider/Jenkinsfile:82-95` — the shared username/password credential,
+  the token expanded by the shell rather than interpolated into a logged command line, and a git
+  identity set on the clone. The token must reach neither the build log nor the deploy repo's
+  history.
+
+Ruling 1 leaves the method without a caller and Ruling 2 without a compiler: it ships on review,
+and the canary Ruling 2 owes is the estate-wide failure mode's only net — `vars/*` compile
+together on load (G2), so a syntax error breaks every job on its next run. The cheapest
+library-loading job that changes nothing is the Ansible architecture pipeline
+(`/work/Ansible/Jenkinsfile.architecture:1-20`: validates a YAML, archives it); the test phase
+confirms its job path and hands the operator the exact re-run.
+
+### P3 — AnsibleSpecs: the argo-cd register describes the shape that shipped
+
+Target: ../AnsibleSpecs
+
+`argo-cd/design.md` states where CI writes the tags in two places — the "Deploy repos" bullet
+(`:64-65`, R8's sentence) and the CI-and-promotion worked example (`:500-503`, "write
+`chart/values.yaml`" and "the chart's committed default tag"). Both describe what slice 010
+shipped; both must describe D47. `decisions.md`'s D45 (`:466-471`) names the single-values-file
+parameter P2 settles otherwise — record the shape as settled at implementation, the way D40 does
+(`:455-456`), not as a reversal: D47 already decided this and D45's mechanism is untouched.
+
+Decisions D47 has already amended in place, D37 above all, need nothing — the register's
+amendment blocks are how it carries those, and this phase adds no new decision.
 
 ## Not in scope
 
