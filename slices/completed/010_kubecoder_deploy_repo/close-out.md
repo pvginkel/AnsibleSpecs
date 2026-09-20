@@ -43,7 +43,7 @@ plan-writer, plan pass r2, 2026-09-13 — No phase adds KubeCoder's line. The se
 **Consequence:** A rebuilt Ansible environment comes up without a /work/KubeCoderDeploy checkout until the line is added and synced.
 
 **Provenance:** read — plan-writer, plan pass r1; plan.md R10, settled 13
-**Disposition:**
+**Disposition:** I don't know if that's right. I assume we have that repo here now for the migration, but I can't imagine this environment will have all deploy repos. Or was that the plan all along? If it's just for the migration, it's OK to not track it in config.yaml.
 
 ### A2 — Sync argocd-prd by hand once P1 has landed, before KubeCoder first dev sync
 
@@ -56,7 +56,7 @@ Argo's own Application never auto-syncs (D3), so neither change reaches the clus
 **Consequence:** Until Argo is synced, KubeCoder first dev sync fails in its PreSync apply because the webhook-secret variable is missing, and the hook keeps its cluster-wide namespace grant.
 
 **Provenance:** read — plan-writer, plan pass r1; plan.md P1, settled 7, ruling D2
-**Disposition:**
+**Disposition:** Done
 
 ### A3 — Run the dev-stage diff preview from docs/runbooks/argocd.md, then delete the Application
 
@@ -74,7 +74,7 @@ code-writer P7 r1, 2026-09-13 — The procedure is docs/runbooks/argocd.md, sect
 **Consequence:** The diff-quality proof left open by the Phase A.5 drill stays open, and slice 012 cutover review becomes the first reading of a KubeCoderDeploy diff.
 
 **Provenance:** read — plan-writer, plan pass r1; plan.md P7, settled 12
-**Disposition:**
+**Disposition:** Checked and it looks ok.
 
 ## Notable events
 
@@ -95,7 +95,7 @@ Before this phase's push, /work/HelmCharts's local main (P2's 869e19b) and origi
 **Consequence:** none — caught and resolved before push; recorded so the r2 sweep's HelmCharts commit (869e19b) and the pushed one (c19885a) are understood to be the same change, rebased.
 
 **Provenance:** witnessed — test phase r1, dev:rebase-agent run; HelmCharts c19885a
-**Disposition:**
+**Disposition:** Ok
 
 ### N2 — All four repos pushed to origin/main; Ansible's iac-on-push (IaC/Build-Main #159) finished green
 
@@ -104,7 +104,7 @@ Pushed in this phase: ArgoCDDeploy 3f55579..d2aa093, HelmCharts db24d33..c19885a
 **Consequence:** none — this is the expected, converge-nothing CI signal for a push to main; recorded per the testing doc's instruction to wait for it and read it.
 
 **Provenance:** witnessed — test phase r1, Jenkins IaC/Build-Main build 159
-**Disposition:**
+**Disposition:** Ok
 
 ## Bugs
 
@@ -121,7 +121,7 @@ dataset and never collects zpool5, which matters only to a hand-run audit.
 **Consequence:** A hand-run audit-prd-orphans diff reports a phantom MISSING zpool2 dataset 'prd' and never checks KubeCoder's zpool5 datasets.
 
 **Provenance:** witnessed — code-writer, P2, r1, audit-prd-orphans desired run against /work/HelmCharts at 869e19b
-**Disposition:**
+**Disposition:** Raise. operator in chat, 2026-09-20: "create a new card that lists the three items, but from the perspective that we just need to fully redesign the script or approach once we've migrated fully to Argo CD" — filed as HC-12 with B1, S2 and S3 as its evidence: once every app is on Argo CD the tool's premise (desired state derived from `configs/prd`) is gone, so it is redesigned then rather than patched three times. Deferred, State Later.
 
 ## Open questions and rulings
 
@@ -140,7 +140,7 @@ D47 (/work/AnsibleSpecs/argo-cd/decisions.md, 2026-08-16) says chart/values.yaml
 **Consequence:** If slice 011 is planned from D47, it moves the pins out of chart/values.yaml and trips slice 010's render gate. If it is planned from slice 010's shape, prd runs a dev-<n> tag, which D47 says registry-cleanup's per-prefix cap can delete.
 
 **Provenance:** read — doc-writer, doc phase r1; argo-cd/decisions.md D47, slices/backlog/011_kubecoder_ci_version_pins/slice.md:42-50, KubeCoderDeploy tests/render-chart.py check_stage_values
-**Disposition:**
+**Disposition:** I don't know what to say. We decided on this, right? Image tags live in stage files. And if I'm not mistaken, that absolutely is the right place. If you've found documentation that conflicts with this, we need to make it clear for slice 011 that we're sticking to the plan.
 
 ## Suggestions
 
@@ -177,7 +177,7 @@ KubeCoder is not exposed: its dataset is on zpool5, and the audit collects zpool
 **Consequence:** After a later migration deletes its _shared/*.tf, a hand-run audit-prd-orphans lists that app's live volumes and buckets as orphan candidates, even though the deploy repo's Terraform still owns them.
 
 **Provenance:** read — plan-reviewer, plan review r1; HelmCharts tools/chart_tools/audit_prd_orphans.py, slices/backlog/012_kubecoder_argo_cutover/slice.md requirement 6
-**Disposition:**
+**Disposition:** operator in chat, 2026-09-20: "create a new card that lists the three items, but from the perspective that we just need to fully redesign the script or approach once we've migrated fully to Argo CD" — filed as HC-12 with B1, S2 and S3 as its evidence: once every app is on Argo CD the tool's premise (desired state derived from `configs/prd`) is gone, so it is redesigned then rather than patched three times. Deferred, State Later.
 
 ### S3 — HelmCharts audit-prd-orphans: no test pins that the uninstall guard keys on reconciler ownership rather than the name argocd-prd · minor
 
@@ -186,7 +186,7 @@ The only test of the diff guard uses an Argo-owned entry whose live release is a
 **Consequence:** A later edit that narrows the guard to argocd-prd keeps the suite green, and a hand-run audit would then list slice 012's live kubecoder-<stage> Helm releases as orphans to uninstall.
 
 **Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md (F1)
-**Disposition:**
+**Disposition:** operator in chat, 2026-09-20: "create a new card that lists the three items, but from the perspective that we just need to fully redesign the script or approach once we've migrated fully to Argo CD" — filed as HC-12 with B1, S2 and S3 as its evidence: once every app is on Argo CD the tool's premise (desired state derived from `configs/prd`) is gone, so it is redesigned then rather than patched three times. Deferred, State Later.
 
 ### S4 — KubeCoderDeploy commits a copy of the homelab root CA (chart/files/ca/homelab-root.crt) that a root rotation has to update by hand · minor
 
