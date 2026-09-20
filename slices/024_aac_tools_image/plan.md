@@ -303,7 +303,7 @@ Facts established by the planning session on 2026-09-20, against ArgoCDTools `d1
   pod — any deploy of this chart does; see the consequence recorded above.) The operator presses
   this one.
 
-### P1 — ArgoCDTools: one folder per image
+### P1 — ArgoCDTools: one folder per image ✅ DONE 2026-09-20
 
 Target: ../ArgoCDTools
 
