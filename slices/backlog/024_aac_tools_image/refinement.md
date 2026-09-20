@@ -16,7 +16,7 @@
 
 **If this is wrong.** Full port: a larger slice carrying some dead code for a while. Narrow port: the image is reopened at the second migration, and a silently incomplete model ships in the meantime.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree.
 
 ## D2 — How the register's "scanner and validator images are pinned by digest" line is rewritten now that aac-tools floats
 
@@ -34,7 +34,7 @@
 
 **If this is wrong.** Nothing breaks either way; the cost is a later re-edit of one sentence.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree.
 
 ## D3 — Does this slice prove the ported generator reproduces the first app's published elements, identifiers included, or does the next slice?
 
@@ -52,7 +52,7 @@
 
 **If this is wrong.** Proving here: a phase spent on a check the next slice would have done anyway. Not proving here: a silently wrong model discovered late, after the work that depends on it has been scheduled.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree.
 
 ## D4 — Does this slice also add the aac-tools toolchain to the KubeCoder catalog, or leave that to the KubeCoder project as planned?
 
@@ -70,13 +70,13 @@
 
 **If this is wrong.** If the KubeCoder side has already started the entry, a small duplicate to reconcile — which is what the fact question below is for.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree.
 
 ## Open facts — questions only you can answer
 
 **F1.** Has anything already been started on the KubeCoder side for this toolchain — a catalog entry drafted, or the environment definitions touched? It settles whether the catalog entry stays with the KubeCoder project or comes into this slice.
 
-**Operator.** _answer here_
+**Operator.** "No, nothing has been started on the toolchain."
 
 ## Settled
 
