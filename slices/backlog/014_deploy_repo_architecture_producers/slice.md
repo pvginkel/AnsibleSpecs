@@ -692,3 +692,128 @@ gives `ArgoCDDeploy` a pipeline.
 
 Provenance: code-writer, P5; ArgoCDDeploy `chart/templates/webhook-relay.yaml`, 015 close-out S2
 Disposition:
+
+## Carried in from the 2026-09-20 design session (slice 010 close-out S1)
+
+The operator read slice 010's close-out **S1** and rejected its framing. Verbatim:
+
+> It reads like we have some optional thing that may break. That's not how I want to run this
+> project. The architecture file is a first class element the current HelmCharts setup. Actually,
+> it's two parts: the static files and the generator. Both absolutely need to keep working as we
+> switch over.
+
+What follows was settled in that session. **Where it contradicts the text above, this section
+wins** — the supersessions are listed at the end.
+
+### What was found (checked 2026-09-20, HelmCharts `67db65b`, published dataset of that morning)
+
+- **The loss happens at the registry flip, not at the chart deletion.** Slice 008's resolver
+  returns `chart_name: None` for a stage whose `release.yaml` says `reconciler: argo-cd`
+  (`tools/deploy/deploy_cli/release.py:161-174`), and `gen_architecture.py:587` skips a release
+  with no `chart_name`. So a stage leaves `helm-charts.yaml` silently — no error, no red build —
+  the moment slice 012's requirement 6 lands for it. S1's "012 keeps `architecture.yaml` until 014
+  lands" would save nothing; the file is no longer read by then.
+- **Requirement 2 is therefore already met by construction.** What it still owes is a test that
+  pins it (`main.py`'s `_JENKINS_ONLY_VERBS` comment already knows `config` must stay usable for
+  this reason).
+- **KubeCoder's share of the published model:** 16 `helm-charts` elements — 12 container instances
+  over dev and prd, 4 interfaces. Every edge is intra-app (bot and MCP → controller via
+  `KUBECODER_CONTROLLER_URL`), to the `ss:microk8s-prd` constant, or to a hint the published
+  dataset resolves (`kubecoder`'s products and services, `helm-charts`' `ss:nginx`). **Hazards 1
+  and 2 do not bite for KubeCoder.** They bite for the estate: `helm-charts.yaml` carries 33
+  cross-release `Serving` edges today, all resolved in-process in one pass.
+- **The published set cannot resolve an in-cluster host.** It carries exposed hosts as `if:`
+  elements (`stats.url`) and no in-cluster Service DNS names at all.
+- **`introduced` comes from `git log` on `charts/<chart>`** (`gen_architecture.py:594`). In a
+  deploy repo that reads 2026-09; a moved app's static file has to state `introduced:` itself.
+- **dev elements `helm-charts` publishes today:** 11 — 8 KubeCoder, 3 `keycloak@dev`. Nothing
+  outside `helm-charts` references KubeCoder's dev elements. (Ansible's 8 dev elements model the
+  dev *cluster* and are unrelated.)
+- The `pvginkel/Architecture` plugin checkout cited under "Where the federation's own documents
+  live" **is no longer on this machine** (`~/.claude/plugins/marketplaces/architecture/` is gone).
+  Planning needs it back or cloned under `/work`.
+
+### Rulings
+
+1. **Cross-app references go through the published set, iteratively.** Verbatim:
+
+   > App A deploys partial architecture -> Publish aggregated set -> App B uses published set and
+   > builds its own -> Publish aggregated set -> App A can deploy its complete set
+   >
+   > We can do the same with our migration. We just have to make sure that we keep the published
+   > set in a valid state as we migrate stuff.
+
+   Nothing has to trigger A's second pass: *"The apps are deployed today, so today we're good. And
+   when we hit something like this for a new app, we manage this bootstrapping manually. It's not
+   something we have to account for now."* So unresolved stays fatal by default, and a partial run
+   is a hand-passed escape hatch for bootstrapping. **Still owed before the first app with an
+   in-cluster cross-app edge moves** (not KubeCoder): providers publish their in-cluster Service
+   names, the generator resolves a host against the published set, and HelmCharts' generator gains
+   the same fallback — otherwise hazard 1 stops `helm-charts.yaml` building. Its own slice.
+
+2. **UUIDs are kept — this reverses requirement 5.** Same namespace constant, same natural keys
+   (`namespace.workload.container`), so a moved element keeps its id and only its owner changes.
+   That is what keeps the published set valid through a handover: inbound edges never dangle.
+   Agreed by the operator ("I agree on the rest") against the recommendation to keep them.
+
+3. **One pipeline publishes one stage; KubeCoder publishes prd only.** Verbatim: *"I have no need
+   for it in my architecture manifest. Can't we just not publish dev architecture and only deploy
+   architecture for kubecoder-prd?"* — and, on why two stages cannot come from two branches: *"The
+   artifact is attached to the pipeline. If the pipeline listens to dev and prd, the architecture
+   would flap."* **Not a generator rule** (*"I may have different needs for other apps"*). The
+   shape: *"we could just have a `--stage prd` argument, and have that check with the branch we're
+   deploying and just fail the build if it mismatches."* The producer job builds the **`prd`
+   branch**. Open for planning: where the expected stage↔branch pairing is declared — it is not a
+   universal convention (ArgoCDDeploy's one stage is `prd` on `main`) — and how a local trial run
+   skips the check.
+
+4. **Distribution is a container, built in ArgoCDTools, floating tag.** *"Jenkins can pull those in
+   and it means we have a fully managed system for this. It also means we don't need the scripts in
+   the repo anymore."* One image, several commands — `gen-architecture` and `arch-validate` first.
+   Working name **`pipeline-utils`** (the operator weighed `argocd-utils` and `build-utils` and
+   found none better). Why ArgoCDTools although the tools are not Argo-specific: *"most of the
+   complexity is around the Kubernetes based architecture generation stuff. The agent has that
+   context in this repo. We can move it later if we want."* The image carries python, uv and helm.
+   HelmCharts consumes the same image — its job installs the repo's own `deploy` CLI into the
+   container as it does today and runs the image's generator, so there is one codebase; the
+   extraction's acceptance test is a byte-identical `helm-charts.yaml` before and after. A
+   `containerTemplates` entry in JenkinsPipelineUtils names the image.
+
+5. **ArgoCDTools goes to one folder per image.** The root `Dockerfile` moves; `argocd-hook/` holds
+   its Dockerfile, `presync/`, `image/` and `tests/`, the new image gets a sibling folder, each its
+   own kaniko context. Touches the Jenkinsfile, `.kubecoder/project.yaml`, test discovery, README.
+
+6. **A KubeCoder catalog toolchain for the image is a requirement**, not a nicety (*"I'd say it's a
+   requirement"*; *"If we want to trial run the generation, we need it as a tool in KubeCoder just
+   the same"*). The pod has no docker, so `cexec <toolchain> gen-architecture|arch-validate` is how
+   the tools run locally and how `kc project test` reaches them. The catalog entry is a change in
+   the KubeCoder project — never targeted from the Ansible environment, so it is owed.
+
+7. **The static file moves with the chart**: `charts/kubecoder/architecture.yaml` goes to
+   KubeCoderDeploy (slice 010 P3 left it behind as "generator input, not chart content"), gaining
+   an explicit `introduced:`.
+
+8. **Follow-on, after the toolchain exists:** *"we need to do a cross repo scan for the
+   arch-validate.py script and migrate repos over (be it removing the script alltogether, or to use
+   the toolchain)."* Every producer repo carries a copy today and they have started to drift.
+
+### Ordering against slice 012
+
+With dev unpublished, the **dev** flip only drops KubeCoder's dev elements from `helm-charts.yaml`
+— now the intended outcome, and nothing outside `helm-charts` references them. The hard constraint
+is on the **prd** flip: the KubeCoderDeploy producer must be built, green on the `prd` branch and
+ready to register before it, and the `pipeline-producers.yaml` registration lands with it. The
+`prd` branch is born at prd's cutover (012, "Carried in from slice 010's planning"), so the
+producer's first green build sits between the branch's birth and the registry flip.
+
+### What this supersedes above
+
+- **Requirement 5** (re-mint is fine) → ruling 2.
+- **Requirement 2** → met by slice 008; owes only a pinning test.
+- Open question **"Where the generator lives"** → ruling 4. **"How a deploy-repo producer
+  renders"** → `helm dependency build` + `helm template` with the stage's values, inside the image.
+- **Hazards 1 and 2** → ruling 1, their own slice, not a blocker for KubeCoder.
+- "It should land before or with slice 012" → before 012's **prd** flip; see Ordering.
+- Still open: whether ArgoCDDeploy's producer is generated or hand-authored; what the reusable
+  pattern is concretely (the image and toolchain now carry most of it); the stale
+  `producer-manual.md` citations.

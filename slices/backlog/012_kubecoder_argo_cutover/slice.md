@@ -263,6 +263,19 @@ fine." — "It doesn't hurt anything I think. You're good to go.").
   hook a webhook-secret environment value in ArgoCDDeploy, which KubeCoderDeploy's webhook
   Terraform reads. The dev stage owns the webhook; the `prd` branch is born at prd's cutover.
 
+## Carried in from the 2026-09-20 design session (slice 010 close-out S1)
+
+- **Hard ordering against slice 014 — the prd flip.** A stage leaves HelmCharts' architecture
+  artifact silently the moment requirement 6 flips it to `reconciler: argo-cd` (not at requirement
+  13's deletion of `charts/kubecoder/`), and the operator ruled the architecture model first-class:
+  it must keep working through the switch. KubeCoder publishes **prd only**, so the dev flip may
+  proceed without 014 — it drops KubeCoder's dev elements, which is intended. The **prd** flip may
+  not: the runbook orders *`prd` branch born → KubeCoderDeploy's architecture producer green on it
+  → registry flip and the `pipeline-producers.yaml` registration together*. Details and rulings:
+  slice 014, "Carried in from the 2026-09-20 design session".
+- **Requirement 13 no longer strands the mapping.** `charts/kubecoder/architecture.yaml` moves to
+  KubeCoderDeploy under slice 014; deleting `charts/kubecoder/` afterwards loses nothing.
+
 ## Subsumes
 
 Trello **#124** — "ArgoCD migration — Jenkins-orchestrated push → ArgoCD CD" (the project's
