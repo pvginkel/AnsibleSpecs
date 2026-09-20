@@ -1,0 +1,1 @@
+{"outcome": "issues", "summary": "AC coverage is 1:1 and the equality target independently confirms, but the plan never accounts for ArgoCDTools' own kc project verbs (which the folder move breaks, and which give the new image no build or test entry point) and V14 demands a fresh-container runtime check the plan settles cannot happen and owes to no one."}
