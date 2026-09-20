@@ -4,9 +4,61 @@ issue: ANS-36
 
 # 014 — Architecture producers for the deploy repos
 
-**Major.** Each deploy repo gains its own `Jenkinsfile.architecture` producer delivering the same
-artifact scoped to that repo, and HelmCharts' producer stops emitting for the app-stages that have
-moved — so a migrated app does not silently vanish from the federated architecture model.
+**Major.** Each deploy repo gains its own `Jenkinsfile.architecture` producer, run from the
+`aac-tools` image — KubeCoderDeploy's publishing the prd stage only, in place before slice 012's prd
+flip — so a migrated app does not silently vanish from the federated architecture model.
+
+## Re-cut on 2026-09-20 — read this first
+
+A design session on slice 010's close-out S1 (2026-09-20) and the triage that followed re-cut this
+slice into three. **This section and "Carried in from the 2026-09-20 design session" at the end win
+over everything between them**, which is the 2026-08-15 record, kept as written.
+
+| Slice | What it is | Relation |
+| --- | --- | --- |
+| `024_aac_tools_image` | The `aac-tools` image in ArgoCDTools: the generator for the deploy-repo layout and `arch-validate`, ArgoCDTools to one folder per image | **this slice needs it** |
+| **014 — this slice** | The producers: KubeCoderDeploy, ArgoCDDeploy, the JenkinsPipelineUtils container template, the HelmCharts pinning test, the pattern how-to | — |
+| `025_architecture_cross_app_resolution` | Cross-app references through the published set | not needed here — KubeCoder has no cross-app edge |
+
+**What this slice also waits on:** the `aac-tools` toolchain in the KubeCoder catalog (a KC-project
+task, filed at the re-cut) and the environment picking it up — the pod has no docker, so a deploy
+repo's local gate reaches the tools only through `cexec aac-tools …`. That external step between the
+image and its consumers is why 024 is its own slice.
+
+**Hard ordering:** before slice 012's **prd** flip. The dev flip does not wait on this slice.
+
+### The requirements as they stand
+
+Categories are the 2026-09-20 triage's. Quotes are the operator's, from that session.
+
+1. **[Major] The model loses nothing through KubeCoder's cutover.** *"The architecture file is a
+   first class element the current HelmCharts setup. Actually, it's two parts: the static files and
+   the generator. Both absolutely need to keep working as we switch over."* — *"This one is
+   important. It reads like we have some optional thing that may break. That's not how I want to
+   run this project."*
+2. **[Feature] KubeCoderDeploy's producer publishes prd only, from the `prd` branch.** *"Do we push
+   architecture for dev? Implicitly, yes, today, but I have no need for it in my architecture
+   manifest. Can't we just not publish dev architecture and only deploy architecture for
+   kubecoder-prd?"* — *"If (and we should) use the prd branch, that means we're publishing the right
+   thing."* — *"Don't make it a generator rule. I may have different needs for other apps."* The
+   static file `charts/kubecoder/architecture.yaml` moves into KubeCoderDeploy (the session's
+   finding; it gains an explicit `introduced:`).
+3. **[Decision] Element UUIDs are kept** — reverses requirement 5 below. *"I agree on the rest."*,
+   against the recommendation to keep the uuid5 namespace constant and natural keys so a moved
+   element keeps its id. The acceptance this makes possible (the session's phrasing): the new
+   producer's artifact equals the KubeCoder prd subset `helm-charts` publishes today — same ids,
+   only the producer differs.
+4. **[Decision] HelmCharts does not move onto the image.** *"No. I must assume that it can keep
+   working as is. Honestly, I'd prefer you patch it if you need changes in it. I want to limit the
+   amount of work we do on that repo."* What HelmCharts owes here is one test pinning that a stage
+   flipped to `reconciler: argo-cd` leaves the artifact without failing the build (requirement 2
+   below is otherwise met by slice 008).
+5. **Requirements 1, 3 and 4 below stand as triaged on 2026-08-15** — every deploy repo gains a
+   `Jenkinsfile.architecture`; both deploy repos plus the reusable pattern, ArgoCDDeploy's producer
+   included (slice 009's S8, folded in below); the `AaC/<Repo>` Jenkins job and the
+   `pipeline-producers.yaml` PR are owed to the operator, registration after the first green build.
+6. **A `containerTemplates` entry for `aac-tools` in JenkinsPipelineUtils** (the session's
+   phrasing; the image is referenced by a floating tag — *"Yes on the floating tag."*).
 
 ## What is being requested and why
 
@@ -321,220 +373,13 @@ Ansible's producer validates a hardcoded single filename rather than the glob th
 prescribes, so it would silently skip a second file if the repo ever split by scope. Noted, not
 scoped here.
 
-### `gen_architecture.py` — what requirement 2 has to change
+### The generator's internals — moved to slice 024
 
-`/work/HelmCharts/tools/chart_tools/gen_architecture.py`, 1238 lines, exposed as the
-`gen-architecture` console script (`pyproject.toml:31`). Its module docstring (lines 1–71) is the
-design spec.
-
-**It enumerates the config tree directly. It knows nothing about `reconciler:`.** Lines 88–90 and
-200–210:
-
-```python
-ROOT = Path(__file__).resolve().parents[2]
-CONFIGS = ROOT / "configs" / "prd"
-OUTPUT = ROOT / "docs" / "architecture" / "helm-charts.yaml"
-```
-
-```python
-def releases():
-    """Every (chart, stage) under configs/prd/<chart>/<stage>/."""
-    found = []
-    for chart in sorted(CONFIGS.iterdir()):
-        if not chart.is_dir():
-            continue
-        for stage in sorted(chart.iterdir()):
-            if stage.name == "_shared" or not stage.is_dir():
-                continue
-            found.append((chart.name, stage.name))
-    return found
-```
-
-`grep reconciler` across the whole HelmCharts repo returns nothing today. **Slice 008's
-`discover_releases` change therefore gives this generator nothing for free** — `releases()` does
-not go through the deploy CLI's discovery at all. The exclusion is a real code change here.
-
-It also means the exclusion must be **per app-stage, not per app**: `configs/prd/kubecoder/` yields
-`dev` and `prd`, and D42 migrates dev first, then prd. During that window `kubecoder@dev` is
-Argo-managed while `kubecoder` (prd) is still Jenkins-deployed and must stay in HelmCharts' output.
-
-**There is no exclusion mechanism.** No `exclude`, `skip`, `deny`, `omit`, `ignore` or `reconciler`
-key exists in the generator, the `charts/<chart>/architecture.yaml` annotations, or
-`configs/**/release.yaml`. What exists instead:
-
-- **A positional allow-list on the CLI** (lines 513, 576): `wanted = set(sys.argv[1:])`, matching
-  either `<chart>` or `<chart>@<stage>`; docstring line 63 — *"Usage: poetry run gen-architecture
-  [release ...]   (no args = all of configs/prd)"*. CI passes no args. Inverting it would mean
-  listing 45 charts on a command line.
-- **`disabled: true` in `release.yaml`** (lines 581–582: `if meta["disabled"] or not
-  meta["chart_name"]: continue`) — the only per-release flag that already removes an app from the
-  artifact, but **overloaded**: `deploy_cli/main.py:98-103` refuses to deploy a disabled release and
-  the pipeline *uninstalls* disabled-but-installed ones. It cannot hand an app to another producer
-  while HelmCharts keeps deploying it.
-- **Deleting `charts/<chart>/architecture.yaml` does not exclude anything** — line 585-586 falls
-  back to `ann = {}` and the loop still emits an element per container, just with no product and no
-  `Specialization` edge.
-
-**The blocker for a new `release.yaml` key.** `deploy_cli/release.py:11-20` validates keys strictly:
-
-```python
-# Keys release.yaml may carry; anything else is a typo and fails loud.
-_RELEASE_KEYS = {
-    "chart",
-    "namespace",
-    "disabled",
-    "upstream",
-    "phases",
-    "helm_args",
-    "post_rollout_manifests",
-}
-```
-
-with `release.py:142-144` raising on unknown keys. Slice 008 already extends `_RELEASE_KEYS` with
-`reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision` — so by the time this slice runs,
-the key exists in the dataclass and the resolver; only `gen_architecture.py` has to learn to read
-it. A `charts/<chart>/architecture.yaml` top-level flag is the cheaper alternative — that file is
-free-form (`yaml.safe_load`ed, keys read à la carte).
-
-**Id scheme and the namespace constant** (lines 96-97, 169, 172-173):
-
-```python
-NS = uuid.uuid5(uuid.NAMESPACE_URL,
-                "https://architecture.webathome.org/producers/helm-charts")
-```
-
-```python
-def composite(prefix, hint, natural_key):
-    return f"{prefix}:{hint},{elt_uuid(natural_key)}"
-```
-
-Natural keys by element type — what determines id stability across a repo split:
-
-| Element | prefix | hint | natural key | line |
-| --- | --- | --- | --- | --- |
-| container instance | `ss`/`app` | `{ns}-{wl}-{container}` | `f"{ns}.{wl}.{container}"` | 662-666 |
-| CNPG CR instance | `ss` | `{ns}-{name}` | `f"{ns}.{name}"` | 827-829 |
-| owned SoftwareProduct | from bare ref | product name | `f"product.{bare}"` | 176-183 |
-| Ceph storage service | `svc` | `cluster-ceph-rbd` etc. | `f"svc.{hint}"` | 565-572 |
-| minted ApplicationService | `svc` | `{ns}-{svcname}` | `f"appsvc.{ns}.{svcname}"` | 920-921 |
-| ApplicationInterface | `if` | `kebab(host)` | `f"appif.{host}"` | 904-906, 931-933 |
-
-The instance key is **namespace / workload / container** — the release or chart name is not in it
-(it appears only in `label`, `summary` and `stats.release`). So an app moved to a deploy repo keeps
-its UUIDs only if the new producer reuses the same `NS` string *and* the same
-namespace/workload/container names. Per requirement 5 the operator accepts that it will not.
-
-**Output shape** (lines 774-787):
-
-```python
-    envelope = {"schemaVersion": "0.1", "producer": PRODUCER}
-    for arr in ("systemSoftware", "applicationComponents", "applicationServices",
-                "applicationInterfaces", "technologyServices"):
-        if elements[arr]:
-            envelope[arr] = sorted(elements[arr].values(), key=lambda e: e["id"])
-    if relations:
-        envelope["relations"] = sorted(relations.values(), key=lambda r: r["id"])
-```
-
-with `PRODUCER = "helm-charts"` at line 87 — the one field naming this repo's slice of the model.
-
-**The artifact is not in git.** `/work/HelmCharts/.gitignore:4-5`:
-
-```
-# Generated architecture artifacts (regenerated in CI; archived, not committed)
-docs/architecture/*.yaml
-```
-
-It was committed once in `54d2dd8` and removed in `cd145dc` ("Stop committing the generated
-artifact (regenerate + archive in CI)"). A representative entity, from that snapshot:
-
-```yaml
-schemaVersion: '0.1'
-producer: helm-charts
-systemSoftware:
-- id: ss:dnsmasq-dhcp-dhcp-dnsmasq,ae97142b-4c3f-42ed-b852-21878b3f745c
-  label: dhcp/dhcp-dnsmasq (prd)
-  summary: SystemSoftware container 'dhcp-dnsmasq' of workload 'dhcp' in release 'dnsmasq'.
-  introduced: '2024-07-13'
-  lifecycle: active
-  environment: prd
-  cluster: prd
-  stats:
-    image: registry:5000/dnsmasq:latest
-relations:
-- id: rel:dnsmasq-dhcp-config-generator-generate-platform
-  source: ss:microk8s-prd,54ca8c6c-27ec-4e0d-ac17-cf3f65e7c5d4
-  target: app:dnsmasq-dhcp-config-generator-generate,31ed7c2a-c7ca-4cb9-a800-6d7082febb04
-  type: Serving
-- id: rel:dnsmasq-dhcp-config-generator-generate-spec
-  source: app:dnsmasq-dhcp-config-generator-generate,31ed7c2a-c7ca-4cb9-a800-6d7082febb04
-  target: app:dhcpapp                      # bare, cross-producer, dangling by design
-  type: Specialization
-```
-
-### What the generator does per release — the work a deploy-repo producer inherits
-
-Main loop, lines 574-745:
-
-1. `deploy config prd/<chart> --stage=<stage>` → metadata (`chart_name`, `namespace`,
-   `environment`, `release_name`, `disabled`, `configuration`, `post_rollout_yaml`).
-2. Reads `charts/<chart>/architecture.yaml` — the per-chart annotation layer mapping images to
-   products. 44 of 50 charts have one; the shared `charts/upstream-products.yaml` (190 lines) backs
-   it.
-3. `introduced = first_commit_date(f"charts/{chart}")` via `git log --diff-filter=A --reverse`.
-4. `deploy template prd/<chart> --stage=<stage>`, then `yaml.safe_load_all`.
-5. Folds in the out-of-helm manifests (`meta["configuration"]`, `meta["post_rollout_yaml"]`) so
-   cluster-scoped things like the `ClusterSecretStore` are visible.
-6. PVC→PV→CSI-driver classification for the Ceph storage edges.
-7. For every workload in `{"Deployment","StatefulSet","DaemonSet","Job","CronJob"}`, for every
-   container (init + main), emits one element plus: `MICROK8S_PRD —Serving→ instance`,
-   `instance —Specialization→ product`, `instance —Realization→ cap:*`/`svc:*`,
-   `served_by —Serving→ instance`, and a Ceph `svc —Serving→ instance` per mounted Ceph PVC.
-8. `emit_cnpg_substrate` — CloudNativePG `Cluster`/`Pooler` CRs get instances directly.
-
-Then four **post-render passes run once across all releases** (lines 761-765):
-
-```python
-    reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds, gaps)
-    resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, add_rel, errors)
-    resolve_secret_stores(secret_stores, instances, ds, add_rel, errors)
-    resolve_mcp_clients(mcp_clients, configmaps, inst_by_id, instances, external,
-                        incluster, ds, add_rel, errors)
-```
-
-Unresolved edges are **fatal** (lines 767-772):
-
-```python
-    if errors:
-        for e in errors:
-            sys.stderr.write(e + "\n")
-        sys.stderr.write(
-            f"gen-architecture: {len(errors)} unresolved edge(s); no output written\n")
-        raise SystemExit(1)
-```
-
-### Cross-producer resolution, as it works today
-
-```python
-DATASET_URL = "https://architecture.webathome.org/data/v0.1/architecture.yaml"
-```
-
-`load_dataset()` (lines 310-346) fetches `ARCH_DATASET_URL` (a scheme-less value is read as a local
-file — the test escape hatch) and overlays `ARCH_DATASET_OVERLAY`, which defaults to
-`ROOT.parent / "DockerImages" / "*" / "architecture.yaml"` and is `os.pathsep`-separable, so several
-sibling producer checkouts can overlay at once. The `Dataset` class comment (lines 269-271):
-
-> Only used to resolve *cross-producer* references to their UUIDs and to read the consumer recipes
-> (boundBy edges, app->service realizations) that other producers author. **We never look our own
-> elements up here.**
-
-It emits references to things it does not own — as relation endpoints only, never as elements — in
-four flavours: the hard-coded `MICROK8S_PRD = "ss:microk8s-prd,54ca8c6c-…"` platform constant
-(Ansible-owned, source of a `Serving` edge on every instance); a two-entry
-`CROSS_PRODUCER_HOST_HINTS` table (`secrets.home` → OpenBao, `ceph` → Ceph RGW); product
-`Specialization` targets resolved through the dataset and emitted **bare** when unresolvable
-(~23 expected dangling `app:*` ids, by design per the handover doc); and DockerImages-owned
-ApplicationServices, which it attaches to rather than duplicating.
+Three sections that stood here — "`gen_architecture.py` — what requirement 2 has to change", "What the
+generator does per release" and "Cross-producer resolution, as it works today" — moved verbatim to
+slice `024_aac_tools_image` on 2026-09-20, with the generator work itself. What this slice still
+needs of them: the id scheme is unchanged (ids are kept — see the re-cut section), and HelmCharts'
+generator is not touched here beyond the pinning test.
 
 ### What re-minting costs — the references the planner must still check
 
@@ -785,11 +630,16 @@ wins** — the supersessions are listed at the end.
    `argocd-utils`, `build-utils` and `pipeline-utils`: *"We're only putting AaC stuff in it.
    pipeline-utils invites a grab bag of different things."* Why ArgoCDTools although the tools are not Argo-specific: *"most of the
    complexity is around the Kubernetes based architecture generation stuff. The agent has that
-   context in this repo. We can move it later if we want."* The image carries python, uv and helm.
-   HelmCharts consumes the same image — its job installs the repo's own `deploy` CLI into the
-   container as it does today and runs the image's generator, so there is one codebase; the
-   extraction's acceptance test is a byte-identical `helm-charts.yaml` before and after. A
-   `containerTemplates` entry in JenkinsPipelineUtils names the image.
+   context in this repo. We can move it later if we want."* The image carries python and helm.
+   **HelmCharts does not consume it** — the session first recorded that it would, without an
+   explicit yes; at triage the operator ruled: *"No. I must assume that it can keep working as is.
+   Honestly, I'd prefer you patch it if you need changes in it. I want to limit the amount of work
+   we do on that repo."* So the image's generator starts as a copy of `gen_architecture.py` adapted
+   to the deploy-repo layout, and HelmCharts' copy is only ever patched. A `containerTemplates`
+   entry in JenkinsPipelineUtils names the image. **The floating tag overrules a standing line** —
+   AnsibleSpecs `decisions.md`, "Push pipelines check before they deploy or publish": *"Scanner and
+   validator images are pinned by digest."* Put to the operator as a collision at triage: *"I
+   thought we discussed this. Floating is fine."* The record moves with slice 024.
 
 5. **ArgoCDTools goes to one folder per image.** The root `Dockerfile` moves; `argocd-hook/` holds
    its Dockerfile, `presync/`, `image/` and `tests/`, the new image gets a sibling folder, each its
@@ -822,6 +672,8 @@ producer's first green build sits between the branch's birth and the registry fl
 
 - **Requirement 5** (re-mint is fine) → ruling 2.
 - **Requirement 2** → met by slice 008; owes only a pinning test.
+- The generator work itself → slice `024_aac_tools_image`; hazards 1 and 2 → slice
+  `025_architecture_cross_app_resolution`.
 - Open question **"Where the generator lives"** → ruling 4. **"How a deploy-repo producer
   renders"** → `helm dependency build` + `helm template` with the stage's values, inside the image.
 - **Hazards 1 and 2** → ruling 1, their own slice, not a blocker for KubeCoder.

@@ -25,11 +25,13 @@ slice's own documents hold the detail.
 
 ## Pending
 
-Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered:
+Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered, re-cut on 2026-09-20 into 024, 014 and 025:
 
 - **[011](slices/backlog/011_kubecoder_ci_version_pins/slice.md)** — KubeCoder CI: version-pin commits instead of deploys, via a new JenkinsPipelineUtils method (phases.md B.3; #124).
 - **[012](slices/backlog/012_kubecoder_argo_cutover/slice.md)** — KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124).
-- **[014](slices/backlog/014_deploy_repo_architecture_producers/slice.md)** — Architecture producers for the deploy repos: each deploy repo gains its own `Jenkinsfile.architecture`, HelmCharts' generator stops emitting for migrated app-stages, so a migrated app does not vanish from the federated model (major; settles the `gen-architecture` half of O2; needs 009+010, lands before 012; #124).
+- **[024](slices/backlog/024_aac_tools_image/slice.md)** — `aac-tools` image: the architecture generator for the deploy-repo layout and `arch-validate` as one image built in ArgoCDTools, which goes to one folder per image (feature; split out of 014; gates 014, 025 and the KubeCoder toolchain).
+- **[014](slices/backlog/014_deploy_repo_architecture_producers/slice.md)** — Architecture producers for the deploy repos: each deploy repo gains its own `Jenkinsfile.architecture` run from the `aac-tools` image — KubeCoderDeploy's prd only, UUIDs kept — so a migrated app does not vanish from the federated model (major; re-cut 2026-09-20; needs 024 and the KubeCoder `aac-tools` toolchain; lands before 012's prd flip; #124).
+- **[025](slices/backlog/025_architecture_cross_app_resolution/slice.md)** — Architecture cross-app resolution: app-to-app edges resolve through the published set once apps publish from separate repos (feature; split out of 014; needs 024; waits for the second migration).
 
 ## Completed
 
