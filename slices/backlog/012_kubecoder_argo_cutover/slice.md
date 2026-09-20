@@ -50,6 +50,14 @@ Verbatim from `phases.md`:
 
 3. > `state mv` the ZFS addresses to their rebuilt names.
 
+   **The targets** (slice 010 close-out S7, operator 2026-09-20). Per stage, HelmCharts'
+   `module.zfs.homelab_zfs_dataset.this` and `module.zfs.kubernetes_persistent_volume_v1.this`
+   move onto KubeCoderDeploy's rebuilt addresses `homelab_zfs_dataset.env_storage` and
+   `kubernetes_persistent_volume_v1.env_storage` (`terraform/storage.tf`). `module.namespace` has
+   no counterpart — requirement 2 removes it. `github_repository_webhook.argocd[0]` is new in
+   dev's state: no hand-made KubeCoderDeploy webhook may exist when dev first syncs, or the
+   create collides. Also in [`argo-cd/phases.md`](../../../argo-cd/phases.md) B.4.
+
 4. > Prove with a `terraform plan` showing **no destroys** before any hook runs for real.
 
 ### B.5 — cutover, per stage (dev first, then prd)

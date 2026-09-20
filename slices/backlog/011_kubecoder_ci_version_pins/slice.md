@@ -5,8 +5,9 @@ issue: ANS-32
 # 011 — KubeCoder CI: version-pin commits instead of deploys
 
 Reduce KubeCoder's Jenkins to CI: `Build-Main` pushes `:<n>` images and commits the tags into
-`KubeCoderDeploy/chart/values.yaml` through a new JenkinsPipelineUtils method, and everything
-keyed on the old tag prefix is repointed.
+KubeCoderDeploy's stage values files through a new JenkinsPipelineUtils method, and everything
+keyed on the old tag prefix is repointed. (Stage files, not `chart/values.yaml` — D47, and the
+operator's ruling under "Carried in from slice 010's close-out (Q1)" below.)
 
 ## What is being requested and why
 
@@ -161,6 +162,40 @@ reached for a refused verb closes it.
 - **Q: Who creates/clones the repos?** A: *"The repos are there already in /work. Tell me if
   you're missing any. They're not in .kubecoder/config.yaml. I'll add some, but will do this
   myself."* `JenkinsPipelineUtils` was the one missing; the operator cloned it during triage.
+
+## Carried in from slice 010's close-out (Q1) — the operator's ruling, 2026-09-20
+
+**Image tags live in the stage values files. D47 stands; slice 010 shipped the opposite shape, and
+this slice moves it back.** The operator, on slice 010's close-out Q1: *"I don't know what to say.
+We decided on this, right? Image tags live in stage files. And if I'm not mistaken, that absolutely
+is the right place. If you've found documentation that conflicts with this, we need to make it
+clear for slice 011 that we're sticking to the plan."*
+
+The entry, verbatim:
+
+> ### Q1 — argo-cd D47 puts KubeCoder's image tags in the stage values files; slice 010 pinned them in chart/values.yaml, and its gate refuses stage-file images
+>
+> D47 (/work/AnsibleSpecs/argo-cd/decisions.md, 2026-08-16) says chart/values.yaml carries no image tag at all: a stage's tag lives only in its stage values file, and CI writes `<n>` for dev and `prd-<n>` for prd. Slice 011's slice.md (lines 42-50) plans CI writing two stage values files on that basis. Slice 010 shipped the opposite shape under its settled item 8, which the operator agreed. The seven pins sit at `dev-511` in KubeCoderDeploy chart/values.yaml, config/{dev,prd}/values.yaml name no image, and tests/render-chart.py's check_stage_values fails the gate on any image key in a stage file. design.md's Deploy repos section ("the chart's values.yaml carries defaults plus the CI-written image tags") matches the shipped shape, so the register disagrees with itself. The doc phase left D47, design.md and slice 011's text as they are. Where the tags live is a tag-scheme decision, not a doc edit: D47's `prd-<n>` retag exists so that registry-cleanup's per-prefix cap cannot delete production's image.
+>
+> **Consequence:** If slice 011 is planned from D47, it moves the pins out of chart/values.yaml and trips slice 010's render gate. If it is planned from slice 010's shape, prd runs a dev-<n> tag, which D47 says registry-cleanup's per-prefix cap can delete.
+>
+> **Provenance:** read — doc-writer, doc phase r1; argo-cd/decisions.md D47, slices/backlog/011_kubecoder_ci_version_pins/slice.md:42-50, KubeCoderDeploy tests/render-chart.py check_stage_values
+
+What conflicts is not only documentation, so this slice owns three things beyond requirement 3's
+resolution note above:
+
+1. **Move the seven image pins** out of `KubeCoderDeploy/chart/values.yaml` into
+   `config/{dev,prd}/values.yaml` — dev `<n>`, prd `prd-<n>` (D47). They sit at `dev-511` today.
+2. **Invert `KubeCoderDeploy/tests/render-chart.py`'s `check_stage_values`**, which fails the gate
+   on any image key in a stage file — the exact opposite of D47, and shipped by slice 010.
+3. **Fix `argo-cd/design.md`'s "Deploy repos" line** — *"the chart's `values.yaml` carries defaults
+   plus the CI-written image tags (D37, D45)"*, quoted above under "design.md — where the committed
+   tags live in the deploy repo". It describes what slice 010 shipped, not D47. It is deliberately
+   left standing until this slice lands, so the register does not contradict the live gate in the
+   meantime; correct it as part of the change, not before.
+
+Slice 010's own settled item 8 is what shipped the other shape, with the operator's agreement at
+the time. This ruling supersedes it for everything from here on.
 
 ## Subsumes
 

@@ -45,7 +45,9 @@ plan-writer, plan pass r2, 2026-09-13 — No phase adds KubeCoder's line. The se
 **Provenance:** read — plan-writer, plan pass r1; plan.md R10, settled 13
 **Disposition:** I don't know if that's right. I assume we have that repo here now for the migration, but I can't imagine this environment will have all deploy repos. Or was that the plan all along? If it's just for the migration, it's OK to not track it in config.yaml.
 
-### A2 — Sync argocd-prd by hand once P1 has landed, before KubeCoder first dev sync
+### ~~A2 — Sync argocd-prd by hand once P1 has landed, before KubeCoder first dev sync~~ — closed by the operator, 2026-09-20 — done
+
+<details><summary>struck — body kept for the record</summary>
 
 P1 changes ArgoCDDeploy in two ways:
 - `argocd-hook-credentials` gains the webhook-secret key that KubeCoderDeploy's webhook Terraform (P5) reads.
@@ -58,7 +60,11 @@ Argo's own Application never auto-syncs (D3), so neither change reaches the clus
 **Provenance:** read — plan-writer, plan pass r1; plan.md P1, settled 7, ruling D2
 **Disposition:** Done
 
-### A3 — Run the dev-stage diff preview from docs/runbooks/argocd.md, then delete the Application
+</details>
+
+### ~~A3 — Run the dev-stage diff preview from docs/runbooks/argocd.md, then delete the Application~~ — closed by the operator, 2026-09-20 — checked, diff preview looks ok
+
+<details><summary>struck — body kept for the record</summary>
 
 R15 closes as an operator-run check (settled 12). P7 adds the procedure and its manifest to `/work/Ansible/docs/runbooks/argocd.md`. The manifest is a hand-made Application for KubeCoderDeploy's dev stage, with no automated sync and no resources finalizer.
 
@@ -76,6 +82,8 @@ code-writer P7 r1, 2026-09-13 — The procedure is docs/runbooks/argocd.md, sect
 **Provenance:** read — plan-writer, plan pass r1; plan.md P7, settled 12
 **Disposition:** Checked and it looks ok.
 
+</details>
+
 ## Notable events
 
 Focus: A quiet run with no bail-outs and no appended phases. Before the push, P2's HelmCharts
@@ -88,7 +96,9 @@ green (N2). One consult struck S5 with a comment-only fix.
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — HelmCharts had diverged from origin/main by one unrelated commit; the test phase's push required a rebase
+### ~~N1 — HelmCharts had diverged from origin/main by one unrelated commit; the test phase's push required a rebase~~ — closed by the operator, 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 Before this phase's push, /work/HelmCharts's local main (P2's 869e19b) and origin/main had each moved one commit past their common base 65ca9db: ours was audit-prd-orphans's reconciler-awareness (P2), origin's was an unrelated elasticsearch probe change (db24d33, #932). A straight push would have been rejected as non-fast-forward. dev:rebase-agent rebased 869e19b onto db24d33 mechanically (the two commits touch disjoint files, so it was conflict-free) and re-ran kc project lint and test against the resulting tree — a tree nothing had run against yet — both GREEN. The rebased commit is c19885a, pushed to HelmCharts origin/main as part of this phase.
 
@@ -97,7 +107,11 @@ Before this phase's push, /work/HelmCharts's local main (P2's 869e19b) and origi
 **Provenance:** witnessed — test phase r1, dev:rebase-agent run; HelmCharts c19885a
 **Disposition:** Ok
 
-### N2 — All four repos pushed to origin/main; Ansible's iac-on-push (IaC/Build-Main #159) finished green
+</details>
+
+### ~~N2 — All four repos pushed to origin/main; Ansible's iac-on-push (IaC/Build-Main #159) finished green~~ — closed by the operator, 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 Pushed in this phase: ArgoCDDeploy 3f55579..d2aa093, HelmCharts db24d33..c19885a (the rebased P2 commit), KubeCoderDeploy a7796bf..021cc1b, Ansible 7a5047d..77ef98d. The Ansible push triggered Jenkins IaC/Build-Main #159 (https://jenkins.webathome.org/job/IaC/job/Build-Main/159/), whose changeset confirms it ran against exactly this slice's two P7 commits (3194f3f, 77ef98d). Result: SUCCESS in 69s — consistent with the terraform-plan + protected-VM destroy check the docs describe, converging nothing. That green is the real signal this phase can record: the commit plans cleanly against live Terraform state and destroys nothing protected.
 
@@ -105,6 +119,8 @@ Pushed in this phase: ArgoCDDeploy 3f55579..d2aa093, HelmCharts db24d33..c19885a
 
 **Provenance:** witnessed — test phase r1, Jenkins IaC/Build-Main build 159
 **Disposition:** Ok
+
+</details>
 
 ## Bugs
 
@@ -140,7 +156,7 @@ D47 (/work/AnsibleSpecs/argo-cd/decisions.md, 2026-08-16) says chart/values.yaml
 **Consequence:** If slice 011 is planned from D47, it moves the pins out of chart/values.yaml and trips slice 010's render gate. If it is planned from slice 010's shape, prd runs a dev-<n> tag, which D47 says registry-cleanup's per-prefix cap can delete.
 
 **Provenance:** read — doc-writer, doc phase r1; argo-cd/decisions.md D47, slices/backlog/011_kubecoder_ci_version_pins/slice.md:42-50, KubeCoderDeploy tests/render-chart.py check_stage_values
-**Disposition:** I don't know what to say. We decided on this, right? Image tags live in stage files. And if I'm not mistaken, that absolutely is the right place. If you've found documentation that conflicts with this, we need to make it clear for slice 011 that we're sticking to the plan.
+**Disposition:** I don't know what to say. We decided on this, right? Image tags live in stage files. And if I'm not mistaken, that absolutely is the right place. If you've found documentation that conflicts with this, we need to make it clear for slice 011 that we're sticking to the plan. — folded into slice 011, new section "Carried in from slice 010's close-out (Q1) — the operator's ruling, 2026-09-20": the entry verbatim, the ruling in the operator's words, and the three things it puts on 011 (move the seven pins from chart/values.yaml into config/{dev,prd}/values.yaml; invert tests/render-chart.py's check_stage_values; fix argo-cd/design.md's "Deploy repos" line as part of the change, not before, so the register does not contradict the live gate meanwhile). Slice 011's header line corrected to the stage-files shape.
 
 ## Suggestions
 
@@ -164,7 +180,7 @@ consult 1, 2026-09-13 — Backlog slice 014 (slices/backlog/014_deploy_repo_arch
 **Consequence:** Once slice 012 lands, the published architecture model may lose the KubeCoder workload-to-product mapping.
 
 **Provenance:** read — plan-writer, plan pass r1; HelmCharts tools/chart_tools/gen_architecture.py:574,585
-**Disposition:**
+**Disposition:** Folded into the 2026-09-20 re-cut: slices 024, 014 and 025; slice 012 gained the prd-flip ordering line.
 
 ### S2 — audit-prd-orphans reads desired storage only from HelmCharts' _shared/*.tf, so a migrated app's storage becomes an orphan candidate once _shared/ is deleted
 
@@ -197,7 +213,7 @@ doc-writer, doc phase r1, 2026-09-13 — docs/runbooks/step-ca-root-rotation.md 
 **Consequence:** After a root CA rotation, KubeCoder's controller still hands step the old root from kubecoder-controller-ca until someone updates KubeCoderDeploy's copy, so SSH host-key signing for env pods fails.
 
 **Provenance:** read, code-writer, P3, r1, chart/templates/controller-ca-configmap.yaml
-**Disposition:**
+**Disposition:** Aren't we tracking this somewhere? The list of certificate copies?
 
 ### S6 — KubeCoderDeploy terraform/ constrains no provider versions and commits no lock file, so every PreSync init takes the newest providers · minor
 
@@ -206,27 +222,7 @@ terraform/providers.tf names integrations/github, hashicorp/kubernetes and pvgin
 **Consequence:** A breaking major release of one of the three providers reaches KubeCoder's next sync without review, and a failed PreSync apply blocks that sync.
 
 **Provenance:** read, code-writer, P5, r1, KubeCoderDeploy terraform/providers.tf
-**Disposition:**
-
-### S7 — Slice 012 state mv targets for KubeCoder's ZFS objects are homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage · nit
-
-Slice 012 requirement 3 moves HelmCharts' module.zfs.homelab_zfs_dataset.this and module.zfs.kubernetes_persistent_volume_v1.this onto KubeCoderDeploy's rebuilt addresses, per stage: homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage (terraform/storage.tf). module.namespace has no counterpart; requirement 2 removes it. github_repository_webhook.argocd[0] is new in dev's state; no hand-made KubeCoderDeploy hook may exist when dev first syncs, or the create collides.
-
-doc-writer, doc phase r1, 2026-09-13 — argo-cd/phases.md B.4 now names both state mv targets. Slice 012's own slice.md does not yet name them.
-
-**Consequence:** Without these names, slice 012's state surgery has to rediscover them in terraform/, and a wrong target plans a create against the live dataset.
-
-**Provenance:** read, code-writer, P5, r1, plan.md P5 done-record
-**Disposition:**
-
-### S8 — KubeCoderDeploy: nothing in the gate covers the homelab provider's zfs_pools = var.zfs_pools (ruling F2) · minor
-
-terraform/providers.tf:23-25 is correct today, but tests/terraform.sh cannot see its absence. With the attribute blanked in a scratch copy, terraform validate reported the configuration valid and the dev and prd terraform test runs each passed 2 of 2. The cause: mock_provider "homelab" never configures the real provider, and zfs_pools has no environment fallback (HomelabTerraformProvider provider.go:261). Possible fix: a static check in tests/terraform.sh that the homelab provider block assigns zfs_pools from var.zfs_pools.
-
-**Consequence:** A later edit that drops the attribute keeps kc project test green, and the next KubeCoder sync then fails in its PreSync apply.
-
-**Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
-**Disposition:**
+**Disposition:** I think this is an accepted risk. This is about pinning the container right? Leave this for now.
 
 ### S9 — Slice 012 requirement 8's expected diff omits the Namespace's sync-wave/Prune=false annotations and the controller ConfigMap's worker/vsix pins · minor
 
@@ -239,7 +235,7 @@ doc-writer, doc phase r1, 2026-09-13 — argo-cd/phases.md B.5 now points the cu
 **Consequence:** At the dev cutover, an operator reviewing against slice 012's list alone stops the cutover on differences that are expected.
 
 **Provenance:** witnessed | code-writer, P7, r1, plan.md P7 done-record
-**Disposition:**
+**Disposition:** I have no idea. Please advise.
 
 ### S10 — Ansible argocd runbook: the diff preview's <app>-<stage>-preview name is also the Helm release name Argo renders, unlike the generated <app>-<stage> Application · minor
 
@@ -248,7 +244,7 @@ Argo passes the Application name as the Helm release name unless spec.source.hel
 **Consequence:** A later migration's preview of a chart that reads .Release.Name shows differences its real first sync would not make.
 
 **Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F4)
-**Disposition:**
+**Disposition:** What's the suggested fix? Is there really a problem? I already deleted the preview application.
 
 ### S11 — KubeCoderDeploy / slice 012: Argo's first sync leaves imagePullPolicy: Always on the five pinned containers and the old deployment annotation on bot and MCP · minor
 
@@ -259,7 +255,7 @@ consult 1, 2026-09-13 — Not owed by this slice. Ruling D3 limits R14's accepta
 **Consequence:** After slice 012's cutover the five pinned containers still pull Always on every pod start, and slice 012's D145 update would record a partial retirement that is not live.
 
 **Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md (F5)
-**Disposition:**
+**Disposition:** Help me out. Is this being tracked somewhere? Because we do need to change this for all deployments we migrate later on. You're right, it the imagePullPolicy does have to be fixed.
 
 ### ~~S5 — KubeCoderDeploy chart/values.yaml pin comment says worker/vsix take the default pull policy; the controller still pulls them Always · minor~~ — resolved by consult 1 (KubeCoderDeploy 021cc1b): chart/values.yaml:8-10 now says env pods still pull worker/vsix Always; comment only, line numbering kept; kc project lint and test re-run green; struck by consult 1
 
@@ -271,5 +267,33 @@ chart/values.yaml:8-10, added by P4, groups controllerConfig.images.{worker,vsix
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md
 **Disposition:**
+
+</details>
+
+### ~~S7 — Slice 012 state mv targets for KubeCoder's ZFS objects are homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage · nit~~ — fixed in AnsibleSpecs slice 012 slice.md, requirement 3 now names both state mv targets
+
+<details><summary>struck — body kept for the record</summary>
+
+Slice 012 requirement 3 moves HelmCharts' module.zfs.homelab_zfs_dataset.this and module.zfs.kubernetes_persistent_volume_v1.this onto KubeCoderDeploy's rebuilt addresses, per stage: homelab_zfs_dataset.env_storage and kubernetes_persistent_volume_v1.env_storage (terraform/storage.tf). module.namespace has no counterpart; requirement 2 removes it. github_repository_webhook.argocd[0] is new in dev's state; no hand-made KubeCoderDeploy hook may exist when dev first syncs, or the create collides.
+
+doc-writer, doc phase r1, 2026-09-13 — argo-cd/phases.md B.4 now names both state mv targets. Slice 012's own slice.md does not yet name them.
+
+**Consequence:** Without these names, slice 012's state surgery has to rediscover them in terraform/, and a wrong target plans a create against the live dataset.
+
+**Provenance:** read, code-writer, P5, r1, plan.md P5 done-record
+**Disposition:** Fix inline if it's easy enough to fix (a MD change?). Otherwise, close. — fixed: a markdown note under slice 012's requirement 3 names both state mv targets, module.namespace's removal and the webhook collision.
+
+</details>
+
+### ~~S8 — KubeCoderDeploy: nothing in the gate covers the homelab provider's zfs_pools = var.zfs_pools (ruling F2) · minor~~ — fixed in KubeCoderDeploy ede0394; kc project lint and test green
+
+<details><summary>struck — body kept for the record</summary>
+
+terraform/providers.tf:23-25 is correct today, but tests/terraform.sh cannot see its absence. With the attribute blanked in a scratch copy, terraform validate reported the configuration valid and the dev and prd terraform test runs each passed 2 of 2. The cause: mock_provider "homelab" never configures the real provider, and zfs_pools has no environment fallback (HomelabTerraformProvider provider.go:261). Possible fix: a static check in tests/terraform.sh that the homelab provider block assigns zfs_pools from var.zfs_pools.
+
+**Consequence:** A later edit that drops the attribute keeps kc project test green, and the next KubeCoder sync then fails in its PreSync apply.
+
+**Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:** Fix inline if possible. — fixed in KubeCoderDeploy ede0394: a block-scoped awk check in tests/terraform.sh that provider "homelab" assigns zfs_pools = var.zfs_pools. Verified it fails on both mutations the reviewer described (attribute blanked, attribute dropped) and passes on the real file; kc project lint and test green.
 
 </details>
