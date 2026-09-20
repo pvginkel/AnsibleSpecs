@@ -377,7 +377,7 @@ Record:
   Groovy's map subscript coerces a GString key: a dict built with an interpolated path can be read
   by no subscript at all, the caller's own key object included (round 1, F1).
 
-### P3 — AnsibleSpecs: the register, and slice 012, describe the shape that shipped
+### P3 — AnsibleSpecs: the register, and slice 012, describe the shape that shipped ✅ DONE 2026-09-20
 
 Target: ../AnsibleSpecs
 
