@@ -54,6 +54,33 @@ Out of scope here — R9 keeps HelmCharts' generator out of this slice, and its 
 **Provenance:** witnessed; plan-writer, planning, r1; plan.md attachments/handover-equality.md
 **Disposition:**
 
+### B2 — ArgoCDTools: ruff.toml's new `exclude` drops ruff's default exclude list repo-wide · minor
+
+P2 added a top-level `exclude = ["aac-tools/image/arch-validate.py"]` to `ruff.toml:8`, a file that had no `exclude` key before. Ruff's `exclude` overrides the built-in default list rather than extending it, so `.venv`, `venv`, `build`, `dist`, `node_modules`, `site-packages`, `__pypackages__`, `.tox` and `.mypy_cache` are no longer skipped; `ruff check --show-settings .` prints that one entry as the whole list. The repo's `.gitignore` is two lines (`__pycache__/`, `*.pyc`), so `respect-gitignore` covers none of them. Witnessed: `mkdir build && printf 'import os\nx=1\n' > build/vendored.py` then `ruff check .` from the repo root reports F401 on `build/vendored.py` (probe reverted). No such directory exists in ArgoCDTools today, which is why this is advisory rather than blocking. Using ruff's `extend-exclude` instead keeps the vendored-file exclusion and the defaults both.
+
+**Consequence:** The first time a build tree, a virtualenv or a vendored dependency lands anywhere in ArgoCDTools, `kc project lint` (and the IaC/ArgoCDTools gate that runs the same verbs) reds on third-party code the repo does not own.
+
+**Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### B3 — ArgoCDTools: the ruff exclusion does not hold for the invocation its comment promises · nit
+
+`ruff.toml:5-7` says "Neither `ruff check --fix` nor `ruff format` may touch it" of the vendored `aac-tools/image/arch-validate.py`. With `force-exclude` off (default), an explicitly named path bypasses `exclude`: `ruff format --check aac-tools/image/arch-validate.py` answers "1 file would be reformatted" and `ruff check` on the same path reports the UP015 the comment names. Only directory traversal — the repo's own lint verb — is actually covered. The md5 pin in `aac-tools/tests/test_image.py:58-62` catches the drift one gate later. Setting `force-exclude = true` would make the comment's claim true.
+
+**Consequence:** An editor-on-save formatter or a hand-run `ruff format <path>` silently rewrites the canonical validator; the drift surfaces as a red md5 test rather than being prevented.
+
+**Provenance:** witnessed; code-reviewer, phase P2, round 1; phases/P2/code_review_r1.md F2
+**Disposition:**
+
+### B4 — aac-tools (and HelmCharts): a CNPG CR's `realizes:` targets are emitted bare, unlike a container's · nit
+
+The container path maps a `realizes:` target through the cluster storage table before drawing the edge (`CEPH_SERVICE_IDS.get(tgt, tgt)`); `emit_cnpg_substrate` draws `tgt` raw. Both copies behave this way — the port carried HelmCharts' code across unchanged, which is what the ruling asked for. Latent in both today: every `cnpg:` annotation in the estate declares `cap:` targets only, and those are bare by design. It fires the first time a database substrate is annotated as realizing a storage service.
+
+**Consequence:** A `cnpg:` annotation that declares `realizes: [svc:cluster-ceph-rbd]` publishes a Realization to a reference the federation cannot resolve, where the same annotation on an `images:` entry publishes the resolvable composite id.
+
+**Provenance:** witnessed | code-writer, P3, r1 — /work/ArgoCDTools/aac-tools/image/gen_architecture.py (emit_cnpg_substrate), ported from /work/HelmCharts/tools/chart_tools/gen_architecture.py:855
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -91,4 +118,19 @@ KubeCoder's remote project surface is the other half of the picture: it walks ev
 **Consequence:** A later slice planned from this repo that writes `Target: aac-tools` (or `argocd-hook`) fails the run loop's plan check with "neither a kc project list component nor a sibling repo path" — a bail at parse time, before any work starts.
 
 **Provenance:** read; plan-writer, planning, r2; run_loop.py load_project_dirs / _resolve_target, and `kc project list` in both repos
+**Disposition:**
+
+### S3 — Three sibling-repo comments still cite /work/ArgoCDTools/presync/…, a path slice 024 moved · minor
+
+P1 moved ArgoCDTools' `presync/` package under `argocd-hook/`. The plan assigns the out-of-repo records of the move to P6 and P7, but both are scoped to the `homelab-root.crt` / `terraform.rc` inventories (`decisions.md:166`, `step-ca-root-rotation.md:71,109,140,154`, `operator-workstation.md:95`). Three citations of the package itself sit outside that scope and so have no owner in this slice:
+
+- `/work/ArgoCDDeploy/chart/templates/hook-namespace.yaml:81` — `(/work/ArgoCDTools/presync/reattach.py:18,42-49)`
+- `/work/ArgoCDDeploy/tests/render-chart.py:105` — `(/work/ArgoCDTools/presync/terraform.py:52-57)`
+- `/work/KubeCoderDeploy/terraform/providers.tf:1` — `Applied only by the Argo CD PreSync hook (/work/ArgoCDTools/presync), from its own clone.`
+
+Each justifies a live design decision to the next reader; nothing executes them, so this is a documentation-accuracy item, not a defect.
+
+**Consequence:** A reader who follows one of these comments to check whether the PreSync hook still behaves as claimed greps a path that no longer exists and has to re-derive the answer.
+
+**Provenance:** witnessed | code review, P1, round 1 — full record in phases/P1/code_review_r1.md (F1)
 **Disposition:**

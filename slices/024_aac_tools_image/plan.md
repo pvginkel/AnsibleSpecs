@@ -469,6 +469,36 @@ Constraints the repo does not state:
   passes and nothing else (G15); ArgoCDTools' suite is stdlib `unittest`, and the ported tests run
   under the `aac-tools` component P2 registers.
 
+**Done (P3).** `aac-tools/image/gen_architecture.py` is the whole port, baked as
+`/usr/local/bin/gen-architecture`: all five post-render passes, the CNPG substrate and the Ceph
+classification came across untouched, and the eight couplings became one app, one stage, an
+`architecture.yaml` at the repo root and `docs/architecture/<producer>.yaml`. `--stage` and
+`--producer` are required, `--repo` defaults to the checkout. The render is the one the releases
+ApplicationSet has Argo make, with the chart repositories added and `helm dependency build` run
+first through a temporary repository config, so a run neither reads nor rewrites the caller's helm
+configuration. Against a throwaway clone of `/work/KubeCoderDeploy` at `--stage prd` it writes 9
+elements and 16 relations that are id-for-id the published `helm-charts` prd subset, byte-identical
+over two runs, with `kube-coder-tunnel-reclaim` the single `gap:` line. 33 tests — HelmCharts'
+eleven under their own names, plus the new layer's; `kc project lint | test | build` green, the
+build running `gen-architecture --help` inside the image.
+
+Three settlements beyond the plan's text. The two cluster storage services are **referenced, not
+minted** — their ids derived from the same namespace and natural key (two published ids pinned as a
+test) and `technologyServices` gone from the envelope, because a deploy repo republishing them
+would be two producers owning one id and the prd equality would fail by two. Every resource
+carrying `argocd.argoproj.io/hook` is dropped from the render: deploy machinery, and the estate's
+PreSync Job carries `generateName` only, so it has no natural key to be keyed on. And `ruff format`
+owns these files as it owns the rest of the repo, so the port no longer diffs line-for-line against
+HelmCharts' copy.
+
+Later phases:
+- The two mechanical constraints this adds are written into P4's own list. The fixture that
+  reproduces the target is HelmCharts' `charts/kubecoder/architecture.yaml` five image lines plus
+  `introduced: '2026-06-17'`, and nothing this phase emitted is outside the published model: the
+  four cross-stage relations are absent exactly as the equality attachment predicts.
+- The annotation layer is mandatory and must carry `introduced:` — a missing file or a missing date
+  is a refused run, not a gap. An unquoted YAML date is normalized to its ISO string.
+
 ### P4 — the handover holds: the same ids, from the other producer
 
 Target: ../ArgoCDTools
@@ -489,6 +519,10 @@ Constraints the repo does not state:
 - The check needs a sibling deploy-repo checkout, a live chart repository and the live published
   dataset. The components' `test` verbs are what CI and a cold checkout run, and have none of the
   three. Keep the two apart rather than making the suite conditional.
+- It cannot be pointed at `/work/KubeCoderDeploy` itself: the generator reads `architecture.yaml`
+  at the repo root and writes `docs/architecture/<producer>.yaml` under it, so a run there lands
+  the two files the ruling keeps out. A throwaway clone with the fixture copied in is what P3 ran.
+  The generator resolves the chart dependency itself, so nothing runs `tests/build-deps.sh` first.
 - Per G12 it runs the generator from source in the `iac` sidecar, never from the image.
 
 ### P5 — `aac-tools` in the KubeCoder toolchain catalog
