@@ -23,6 +23,23 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Re-run the Jenkins job AaC/Ansible once and hand back its console — Ruling 2's canary for the library push (verification V04)
+
+**Do:** after JenkinsPipelineUtils `main` is at `2c43b0694cd94e66942644b9504d4690bed44f38` (the test phase pushed it), press *Build Now* on https://jenkins.webathome.org/job/AaC/job/Ansible/ and hand back the console output. The job is `Jenkinsfile.architecture` from github.com/pvginkel/Ansible: it loads the library, validates one YAML and archives it, and changes nothing. Its last build, #139, was SUCCESS in 20 s.
+
+**Settled by:** the console reading `Loading library JenkinsPipelineUtils@main` → `Resolved main as branch main at revision 2c43b0694cd94e66942644b9504d4690bed44f38` (build #139 resolved `f8103acb0e4862b313eb6881708cd7c59ff93514`, the pre-slice head), then `Finished: SUCCESS`.
+
+**Why it is yours:** Ruling 2 keeps the keystroke with the operator, and this pass was pre-authorized to push, not to start Jenkins builds.
+
+**What was done first:** at that commit all seven `vars/*.groovy` compile under Groovy 2.4.21 and through groovy-cps 1.31's `CpsTransformer` (S4's note has the detail), so a syntax error or a CPS-transform rejection is ruled out. What only this build shows is that Jenkins itself loads the library.
+
+**What stays open until it is done:** verification item V04 only; every other item is settled. If it is red, revert the offending library commits (`482706a`, `c5bf246`, `2c43b06` are the only ones this slice put there) and push — every job loads the library unpinned, so a revert is live on the next run.
+
+**Consequence:** Until that build is green the library push is proven only off-Jenkins; a load failure that slipped past the compile checks would fail every job that loads JenkinsPipelineUtils on its next run.
+
+**Provenance:** witnessed; test-agent, test phase r1; verification.json V04, evidence from the Jenkins API and /tmp/t011/cps_parse.groovy
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -73,6 +90,8 @@ consult 1, 2026-09-20 — The realised case this entry names was P1's input, not
 ### B2 — JenkinsPipelineUtils/cicd.writeVersionPins: the round-trip guarantee in its docstring does not hold for a value YAML reads back as a number or a boolean · minor
 
 vars/cicd.groovy:233-235 promises that a rewritten line "always parses back to the value that went in", and plainSafe (:285-293) only rejects values whose first character, or an embedded ': ' / ' #', would break plain style. A value that is legal plain YAML but resolves to another type passes: replacePin('  tag: abc', '524') returns '  tag: 524', which parses back as the integer 524, and replacePin('  tag: abc', 'no') returns '  tag: no', which go-yaml — and so Helm — reads as boolean false. None of KubeCoder's seven pins is affected: they either begin with ':' (quoted by plainSafe's first-character rule) or are whole registry:5000/... references, and all fourteen round-trip against P1's real stage files. It is the ordinary Helm pinning shape, image.tag: 524, that the claim does not cover, in a library method other apps are invited to call.
+
+test-agent, test phase r1, 2026-09-21 — Reproduced, and the false promise itself is corrected: a rehearsal against a seeded probe file (values `524`, `true`, `null` written onto plain-style lines) read back as int, bool and None, as the entry says, while `:524`, `it's 524`, `say "hi" \ back`, `a #b` and `x: y` all round-tripped as strings. `replacePin`'s docstring no longer says a rewritten line "always parses back to the value that went in": it now says a value plain style cannot carry is quoted and parses back as the string handed in, and that a plain `524`/`true`/`null` on a plain-style line reads back as a number, boolean or null (JenkinsPipelineUtils `2c43b06`, comment only, all seven `vars/*.groovy` still CPS-compile). The behaviour question the entry raises is untouched and stays open: whether the method should quote a value YAML would re-type. Nothing in slices 011 or 012 reaches it — the five tag suffixes sit on already double-quoted lines and the two whole references are non-numeric.
 
 **Consequence:** A future app that pins a bare numeric tag through this method gets an int where it asked for a string; a chart that renders the tag through printf "%s" emits %!s(int=524) instead of the tag. Nothing in slice 011 or 012 passes such a value.
 
@@ -170,6 +189,10 @@ JenkinsPipelineUtils whose test entry point parses every `vars/*.groovy`, which 
 estate-wide failure mode into a pre-push gate; and, further out, the real CPS transform
 (`com.cloudbees:groovy-cps`) to catch the serialization hazards a parse cannot see. The parse gate
 is the cheap half and catches the one failure that reaches other jobs.
+
+test-agent, test phase r1, 2026-09-21 — The "further out" half was run before the push, and it works in this environment. Adding `com.cloudbees:groovy-cps:1.31` (the latest on repo1.maven.org), `guava-11.0.1` and `groovy-sandbox-1.19` (about 1.9 MB more, the same unprivileged download into `/tmp`; `jenkins.model.Jenkins` stubbed so `utils.groovy` resolves) to the JRE 17 + `groovy-all-2.4.21` classpath, all seven `vars/*.groovy` compile through `CpsTransformer` set up the way workflow-cps sets it (a star-import of `com.cloudbees.groovy.cps`, then the transformer as a compilation customizer). Two controls show the check can fail: a transformed method throws `CpsCallableInvocation` when called outside the engine, and a `synchronized` block is rejected with `synchronized is unsupported for CPS transformation`.
+
+One correction to what the entry expects of it: the transform compile catches constructs the transformer refuses, at load time. It does not catch the serialization hazards a resumed build trips on (`NotSerializableException` shows up only when a build resumes), which still need reading. The scratch scripts (`/tmp/t011/cps_parse.groovy`, `harness.groovy`) are ephemeral; the compile check is about 25 lines and would be the body of the test entry point the entry proposes.
 
 **Consequence:** Every change to the shared library ships on reading alone, and a syntax error in any vars/*.groovy breaks every job in the estate on its next run — the failure mode Ruling 2's canary exists to catch after the fact rather than before.
 

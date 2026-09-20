@@ -4,147 +4,184 @@
       "id": "V01",
       "area": "JenkinsPipelineUtils (R1)",
       "description": "\"The new JenkinsPipelineUtils method: (deploy repo, values path, {YAML path -> tag}) -> clone, update, commit, push\" exists in the shared library, and its values-path parameter carries the whole set of files one call must move rather than the single path D45 named: D45's signature predates D47, which requires both stage files to be written in one commit, so a call that can only name chart/values.yaml cannot satisfy it (argo-cd/decisions.md:466-471 for D45's mechanism, :495-496 for the one-commit constraint).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "cicd.writeVersionPins(repo:, pins:, message:) exists in the shared library and its `pins` parameter is `values-file path -> {dotted YAML path -> value}`, so one call names every file D47 moves together. Run end to end (not inferred from the green gate): both stage files to build 524 in ONE call produced exactly one commit `jenkins <jenkins@webathome.org> 'ci: image pins from KubeCoder/Build-Main #524'` touching config/dev/values.yaml and config/prd/values.yaml and nothing else, pushed to main by a shallow (--depth 1) clone. D45 in the register records the same signature as settled at implementation.",
       "evidence": [
         "AnsibleSpecs/argo-cd/decisions.md:466-471 (D45's mechanism)",
         "AnsibleSpecs/argo-cd/decisions.md:495-496 (D47: both stage files in one commit)",
-        "JenkinsPipelineUtils/vars/ — 7 files, no clone/commit/push precedent to model on"
+        "JenkinsPipelineUtils/vars/ — 7 files, no clone/commit/push precedent to model on",
+        "JenkinsPipelineUtils/vars/cicd.groovy:35-134 (writeVersionPins), :149-167 (normalizePins)",
+        "Rehearsal, 2026-09-21: the real vars/cicd.groovy body loaded under Groovy 2.4.21 with the Jenkins steps stubbed, its emitted shell scripts executed for real under `sh -xe` (Jenkins' default) against a local bare remote seeded from KubeCoderDeploy main 49f0629 (url.insteadOf maps the github.com clone URL onto it); scratch harness /tmp/t011/harness.groovy -- S1: method returned the pushed sha, remote main 49f0629 -> one new commit; `git diff --stat`: 2 files, 14 insertions, 14 deletions",
+        "AnsibleSpecs/argo-cd/decisions.md:469-476 (D45: signature and the cross-file map recorded as settled at implementation)",
+        "S8 (same rehearsal): a dict built with interpolated GString paths and values is accepted and lands correctly (P2 round-1 F1's fix holds)"
       ]
     },
     {
       "id": "V02",
       "area": "JenkinsPipelineUtils (R1)",
       "description": "The method's write is surgical: comments, key order and every key it was not given survive; a YAML path the values file does not already hold is an error rather than a silently created key; and a run whose tags are unchanged commits and pushes nothing, saying so.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Surgical, and fails loudly where it must. S1's diff is exactly the seven pin lines per file (`\":523\"` -> `\":524\"`, the two whole references `...:523` -> `...:524`) and nothing else, so every comment, blank line, key order and unrelated key is byte-identical, and the lines' own double-quoting is kept. S3: a path the file does not hold (`images.nonexistent`) throws `holds no images.nonexistent; a path the file does not already carry is never created` and the remote does not move. S4: a values file the repo lacks throws. S6: the same file named by a String key and a GString key throws `pins names config/dev/values.yaml twice` before any clone. S2: re-running identical pins returns null, the log says `already carries these pins: nothing committed, nothing pushed.`, and the remote does not move. Known limits, already in the close-out and outside this criterion's text: a bare `524`/`true`/`null` written onto a PLAIN-style line reads back as int/bool/None (B2; S10 reproduced it, and the docstring that promised otherwise is narrowed in 2c43b06), and a duplicate path inside one file's pins map is silently last-wins (B3). Neither is reachable from the call shape slices 011/012 use: the five tag suffixes are `:<n>`/`:prd-<n>` on already double-quoted lines, and the two whole references are non-numeric strings YAML never re-types.",
       "evidence": [
         "KubeCoderDeploy/config/dev/values.yaml:1-135 (hand-written, commented throughout)",
-        "KubeCoderDeploy/config/prd/values.yaml:1-172"
+        "KubeCoderDeploy/config/prd/values.yaml:1-172",
+        "Rehearsal, 2026-09-21: the real vars/cicd.groovy body loaded under Groovy 2.4.21 with the Jenkins steps stubbed, its emitted shell scripts executed for real under `sh -xe` (Jenkins' default) against a local bare remote seeded from KubeCoderDeploy main 49f0629 (url.insteadOf maps the github.com clone URL onto it); scratch harness /tmp/t011/harness.groovy -- S1 diff: `git diff -U0 49f0629..<commit>` lists 14 changed lines (7 per file), no other file",
+        "S3/S4/S5a-c/S6/S7 each threw with the remote main unchanged; S2 returned null with the log line above",
+        "S10 probe (plain-style line, values `524`/`true`/`null`): PyYAML reads back int/bool/None -- confirms close-out B2's substance"
       ]
     },
     {
       "id": "V03",
       "area": "JenkinsPipelineUtils (R1)",
       "description": "The GitHub credential the push uses reaches neither the build log nor the deploy repo's history, following the estate's existing clone-edit-push precedent (/work/HomelabTerraformProvider/Jenkinsfile:82-95).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Follows HomelabTerraformProvider/Jenkinsfile:82-95: the same shared credential id (5f6fbd66-...), bound with withCredentials([usernamePassword(...)]) (cicd.groovy:66-71), the token expanded by the SHELL inside a script that begins `set +x` (:77-86), a git identity set on the clone, and a push script (:117-124) that names no token at all and reuses the remote the clone stored. The commit message travels in an env var, not a command line. Executed for real with a dummy token `ghp_TESTTOKEN123SECRET` under `sh -xe`: the token appears 0 times in the captured console output (the trace of the clone script is the single line `+ set +x`; the commit/push trace shows `git add`, `git commit`, `git push` with no credential) and 0 times in `git log -p --all` of the pushed remote. Jenkins' own secret masking is a further layer this rehearsal cannot exercise and is not relied on. Observation, outside this criterion's two surfaces: the token stays in the temp checkout's .git/config for the life of the agent pod, exactly as the HomelabTerraformProvider precedent's `registry` clone does.",
       "evidence": [
-        "/work/HomelabTerraformProvider/Jenkinsfile:82-95 (the estate's clone-edit-push precedent)"
+        "/work/HomelabTerraformProvider/Jenkinsfile:82-95 (the estate's clone-edit-push precedent)",
+        "/work/HomelabTerraformProvider/Jenkinsfile:82-95 (the precedent)",
+        "JenkinsPipelineUtils/vars/cicd.groovy:66-86,116-125",
+        "Rehearsal, 2026-09-21: the real vars/cicd.groovy body loaded under Groovy 2.4.21 with the Jenkins steps stubbed, its emitted shell scripts executed for real under `sh -xe` (Jenkins' default) against a local bare remote seeded from KubeCoderDeploy main 49f0629 (url.insteadOf maps the github.com clone URL onto it); scratch harness /tmp/t011/harness.groovy -- S1 console capture: 0 matches for the token; remote history: 0 matches",
+        "Jenkins AaC/Ansible #139 console: `using credential 5f6fbd66-b41c-405f-b107-85ba6fd97f10` / 'GitHub credentials' -- the id exists in this Jenkins"
       ]
     },
     {
       "id": "V04",
       "area": "Library load (Ruling 2)",
       "description": "The library still loads for every job in the estate: the operator re-runs one trivial library-loading Jenkins job that changes nothing and the output is handed back. vars/* compile together on load, so a syntax error is estate-wide (JenkinsPipelineUtils/vars/, 7 files, no tests or CI).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "Ruling 2's canary is the operator's keystroke and nothing here may substitute for it. What was done first, so the canary is unlikely to fail: at JenkinsPipelineUtils 2c43b06 (c5bf246 + one comment-only commit), before the push, all seven vars/*.groovy (a) compile under groovy-all 2.4.21, the Groovy workflow-cps uses, and (b) compile through groovy-cps 1.31's CpsTransformer, the transform Jenkins applies to library scripts -- with controls proving the check can fail (a `synchronized` block is rejected; a transformed method throws CpsCallableInvocation). That covers a syntax error and a CPS-transform rejection; it cannot cover Jenkins' own runtime, so the library LOAD is still unproven until the job below is re-run. OWED: after the push, Build Now on https://jenkins.webathome.org/job/AaC/job/Ansible/ (job AaC/Ansible, Jenkinsfile.architecture from github.com/pvginkel/Ansible: loads the library, validates one YAML, archives it; changes nothing; last build #139 SUCCESS in 20 s). Settled by: the console showing `Loading library JenkinsPipelineUtils@main` -> `Resolved main as branch main at revision 2c43b0694cd94e66942644b9504d4690bed44f38` (build #139 resolved f8103acb0e4862b313eb6881708cd7c59ff93514, the pre-slice head) and the build finishing SUCCESS. Hand the console output back.",
       "evidence": [
         "JenkinsPipelineUtils/vars/*.groovy — compiled together on library load",
         "19 Jenkinsfiles across /work load the library unpinned (`library identifier: 'JenkinsPipelineUtils'`)",
-        "/work/Ansible/Jenkinsfile.architecture:1-20 — candidate canary: loads the library, validates a YAML, archives it"
+        "/work/Ansible/Jenkinsfile.architecture:1-20 — candidate canary: loads the library, validates a YAML, archives it",
+        "/tmp/t011/cps_parse.groovy over JenkinsPipelineUtils/vars (JRE 17.0.20 + groovy-all-2.4.21 + groovy-cps-1.31 + guava-11.0.1 + groovy-sandbox-1.19; jenkins.model.Jenkins stubbed for utils.groovy): 7/7 `CPS-COMPILE OK`; control 1 `CPS method throws CpsCallableInvocation=true`; control 2 `synchronized is unsupported for CPS transformation` rejected",
+        "Jenkins AaC/Ansible #139: `Loading library JenkinsPipelineUtils@main` ... `Resolved main as branch main at revision f8103acb...` (baseline for comparison)",
+        "Ansible/Jenkinsfile.architecture:1-20 (job AaC/Ansible; the Jenkins API shows it buildable with last build #139 SUCCESS, and #139's console opens `Obtained Jenkinsfile.architecture from git https://github.com/pvginkel/Ansible.git`)"
       ]
     },
     {
       "id": "V05",
       "area": "KubeCoderDeploy pins (R6)",
       "description": "\"Move the seven image pins out of KubeCoderDeploy/chart/values.yaml into config/{dev,prd}/values.yaml — dev <n>, prd prd-<n> (D47). They sit at dev-511 today.\" — both stage files name all seven on the same build number and chart/values.yaml names no tag for any of them. The number is the newest dev-<n> the registry actually held when the phase ran, not 511: dev-511 has been evicted and can never be reproduced, so Ruling 4 has the phase choose at run time and both written tags are forward references slice 012's cutover creates.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Read from the rendered output, not from the gate: helm template of each stage shows kubecoder-{controller,bot,mcp,ingress,manual} at `:523` on dev and `:prd-523` on prd, and worker/vsix as whole references on the same build. config/dev/values.yaml:28-43 and config/prd/values.yaml:49-66 name exactly the seven; chart/values.yaml keeps only images.tunnelReclaim and controllerConfig.images.localHome. Build 523 was the newest dev-<n> for all seven images when P1 ran and still is (re-queried 2026-09-21): dev-523 present and newest for controller, bot, mcp, ingress, manual, worker and vsix; dev-511, bare 523 and prd-523 absent for all seven -- the forward references Ruling 4 accepts, carried to slice 012 as a pre-first-sync obligation (its slice.md 'Carried in from slice 011').",
       "evidence": [
         "KubeCoderDeploy/chart/values.yaml:11,12,13,17,18 (the five tag suffixes at :dev-511)",
         "KubeCoderDeploy/chart/values.yaml:668,671 (worker/vsix, whole references at dev-511)",
         "KubeCoderDeploy/config/{dev,prd}/values.yaml — neither names an image today",
         "AnsibleSpecs/argo-cd/decisions.md:493-496 (D47)",
         "http://registry:5000/v2/kubecoder-<name>/tags/list, re-queried 2026-09-20: dev-428..dev-509 then dev-514..dev-523 for all seven; no dev-511, no 511, no prd-511",
-        "/work/DockerImages/registry-cleanup/app/main.py:283-299 (the newest-10 per-prefix cap that evicted it)"
+        "/work/DockerImages/registry-cleanup/app/main.py:283-299 (the newest-10 per-prefix cap that evicted it)",
+        "`cexec iac helm template kubecoder-<stage> chart ... --values config/<stage>/values.yaml` -> dev `kubecoder-bot:523`, `...controller:523`, `...ingress:523`, `...manual:523`, `...mcp:523`, `vsix: ...:523`, `worker: ...:523`; prd the same on `prd-523`",
+        "curl http://registry:5000/v2/kubecoder-<name>/tags/list, 2026-09-21: 7/7 dev-523=True newest=523; dev-511=False; 523=False; prd-523=False",
+        "KubeCoderDeploy/config/dev/values.yaml:28-43; config/prd/values.yaml:49-66"
       ]
     },
     {
       "id": "V06",
       "area": "KubeCoderDeploy pins (R5, D37 as amended)",
       "description": "\"The committed default tag is a real <n>, never latest (D37)\" — strengthened by D47 to no default at all and by Ruling 6 to a chart that refuses to render: with a stage values file missing any one of the seven, helm template fails with a message naming the key. Removing the default alone does not do that — an absent concatenated suffix renders an untagged reference and helm exits 0, and an absent controllerConfig.images key drops silently out of the controller's ConfigMap — so the guard is in the chart, where it protects a hand-edited stage file at sync time, with the gate checking the same property from outside.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Proven on the chart itself, with the gate out of the loop: in a scratch copy of KubeCoderDeploy, deleting each of the seven pins from each stage file in turn (7 x 2 = 14 runs) makes `helm template` exit 1 with a message naming the exact key (`images.<key> is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)` / `controllerConfig.images.<key> is not set: ...`). 14/14 refused and named. The five concatenated tags are guarded per container and worker/vsix by a range-guard in controller-config.yaml, which is what closes the toYaml no-per-key-site hole; the guard sits in the chart, so it protects a hand-edited stage file at sync time when `kc project test` does not run.",
       "evidence": [
         "KubeCoderDeploy/chart/templates/controller-deployment.yaml:46,173,194 (concatenated suffixes)",
         "KubeCoderDeploy/chart/templates/bot-deployment.yaml:26",
         "KubeCoderDeploy/chart/templates/mcp-deployment.yaml:22",
         "KubeCoderDeploy/chart/templates/controller-config.yaml:12 ({{ .Values.controllerConfig | toYaml | indent 4 }} — no per-key site)",
-        "AnsibleSpecs/argo-cd/decisions.md:396-398 (the D37 amendment: never a default at all — and its 'fails to render' claim, which Ruling 6 records as untrue of a concatenated tag)"
+        "AnsibleSpecs/argo-cd/decisions.md:396-398 (the D37 amendment: never a default at all — and its 'fails to render' claim, which Ruling 6 records as untrue of a concatenated tag)",
+        "KubeCoderDeploy/chart/templates/controller-config.yaml:11-15 (range over worker/vsix, `required` each)",
+        "scratch run /tmp/t011/mutate2.py '## V06': 14/14 `helm exit=1 names-key=True`",
+        "KubeCoderDeploy `check_missing_pin` (tests/render-chart.py:250-258) additionally asserts the same 7 x 2 property on every gate run"
       ]
     },
     {
       "id": "V07",
       "area": "KubeCoderDeploy gate (R7)",
       "description": "\"Invert KubeCoderDeploy/tests/render-chart.py's check_stage_values, which fails the gate on any image key in a stage file — the exact opposite of D47\" — kc project test is green, and the gate now fails on D47's inverse: an image tag back in chart/values.yaml, a stage file missing one of the seven, a prd tag without its prd- prefix, or the two stage files naming different builds.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "`kc project test` is green at 49f0629 (driver sweep, not re-run) and the scratch baseline renders both stages (dev 24, prd 25 objects). The gate goes red on D47's inverse, verified by mutating a scratch copy (the shared tree untouched) and running tests/render-chart.py in the `iac` container: an image tag back in chart/values.yaml (three shapes: `:dev-511`, `:523`, worker under controllerConfig.images) -> red; a stage file missing one of the seven (dev -images.mcp, prd -controllerConfig.images.vsix) -> red via helm's own refusal; prd tags without `prd-` (bot, and the worker whole reference) -> red; dev with a `prd-` prefix or the old `dev-` prefix -> red; the two stages on different builds -> red; one stage split across two builds -> red; a pin naming the wrong image -> red. 17 mutations in all (the two chart-guard removals included), none blind -- plus V06's 14 chart-level refusals.",
       "evidence": [
         "KubeCoderDeploy/tests/render-chart.py:211-222 (check_stage_values, the invariant being inverted)",
         "KubeCoderDeploy/tests/render-chart.py:71,158-167,188-208,311-353 (PIN regex and the three readers of chart/values.yaml)",
-        "KubeCoderDeploy `kc project test` green at plan time: build-deps, render-chart, terraform all OK"
+        "KubeCoderDeploy `kc project test` green at plan time: build-deps, render-chart, terraform all OK",
+        "/tmp/t011/mutate2.py '## V07/V08' -- 17 gate mutations, all `red`, `BLIND MUTATIONS: none`; first FAIL lines name the property (e.g. `the stages pin builds ['522', '523'], not one; CI writes both stage files in the same commit (D47)`)",
+        "KubeCoderDeploy/tests/render-chart.py:212-259 (check_chart_values, check_pins, check_missing_pin), :261-273 (check_stage_values), :462-486 (main)"
       ]
     },
     {
       "id": "V08",
       "area": "KubeCoderDeploy gate (R7)",
       "description": "No coverage is lost in the gate rework: every image and pull-policy property the render gate asserts today either still holds or has a named successor, and images.tunnelReclaim keeps its floating reference and its check.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "check_images' assertions are unchanged in kind (the diff touches only where `references` comes from and the message text): each of the five containers runs the stage file's reference and does not pull Always; tunnel-reclaim runs `:latest` and pulls Always; the ConfigMap's images.{worker,vsix} equal the stage file's references; every controllerConfig container spec still pulls Always. The one check that left the pins function -- images.tunnelReclaim floating -- has a named successor, check_chart_values (:212-225). Mutations prove the survivors still bite: bot given `imagePullPolicy: Always` -> red (R14); tunnelReclaim pinned to a build -> red (R13); a stage naming any other image (samba.image) -> red.",
       "evidence": [
         "KubeCoderDeploy/tests/render-chart.py:311-353 (image and pull-policy assertions today)",
-        "KubeCoderDeploy/chart/values.yaml:22 (images.tunnelReclaim, floating)"
+        "KubeCoderDeploy/chart/values.yaml:22 (images.tunnelReclaim, floating)",
+        "KubeCoderDeploy `git show 49f0629^:tests/render-chart.py` vs HEAD `check_images` (:361-403): same assertions, same order",
+        "/tmp/t011/mutate2.py: `bot pulls Always again` red; `tunnelReclaim pinned to a build` red; `a stage sets some other image` red",
+        "KubeCoderDeploy/chart/values.yaml (images.tunnelReclaim `:latest` retained)"
       ]
     },
     {
       "id": "V09",
       "area": "Tag-prefix readers (R3)",
       "description": "\"Repoint everything keyed on the tag prefix\" resolves to nothing to repoint (D47): this slice changes no file in registry-cleanup, collect-versions or the version-poller, and the evidence that none of them needs a change still holds.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Nothing was repointed and nothing needed to be. The slice's diff is KubeCoderDeploy (9 files), JenkinsPipelineUtils (vars/cicd.groovy) and AnsibleSpecs docs -- none of registry-cleanup, collect-versions or the version-poller; DockerImages has no commit touching registry-cleanup or version-poller since 2026-09-19. Re-read today, the cited code still holds: `_family_and_number` splits on the generic `(?:(.+)-)?(\\d+)` (`523` -> ('', 523), `prd-523` -> ('prd', 523)); the cap groups per family; the shared-digest guard stands; the poller classifies by REBUILD_AT/TRACKING_TAG image labels; collect-versions demands only a leading `:` or `@` and treats the rest as an opaque string. A grep for dev-/prd- tag literals across the three readers' non-test code finds only comments. One reader outside R3's list, aac-tools' handover check, renders KubeCoderDeploy with `--values config/<stage>/values.yaml`, so it sees the relocated pins and satisfies the chart guards.",
       "evidence": [
         "/work/DockerImages/registry-cleanup/app/main.py:210-217 (_family_and_number splits on a generic prefix, not a fixed list)",
         "/work/DockerImages/registry-cleanup/app/main.py:344-397 (the shared-digest guard)",
         "/work/DockerImages/version-poller/app/poller.py:110,122-131 (classifies by image labels, not tag text)",
-        "/work/HelmCharts/tools/chart_tools/collect_version_dependencies.py:14-78 (deployed tag is an opaque string)"
+        "/work/HelmCharts/tools/chart_tools/collect_version_dependencies.py:14-78 (deployed tag is an opaque string)",
+        "/work/DockerImages/registry-cleanup/app/main.py:210-217 (regex), :283-299 (per-family cap), :344-352 (shared-digest guard)",
+        "/work/DockerImages/version-poller/app/poller.py:108-132 (label-based classification)",
+        "/work/HelmCharts/tools/chart_tools/collect_version_dependencies.py:49-58 (`current_value[:1] not in (\"@\", \":\")` is the only shape test)",
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:381-392 (renders with the stage values file)"
       ]
     },
     {
       "id": "V10",
       "area": "Design register (R8)",
       "description": "\"Fix argo-cd/design.md's 'Deploy repos' line ... correct it as part of the change, not before\" — design.md describes D47's shape everywhere it states where CI writes the tags, including the worked example's closing line about the chart's committed default tag, and decisions.md's D45 records the parameter shape settled at implementation rather than the single values file it named before D47.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Read at every cited site: design.md:64-66 (CI writes each stage's tag into that stage's own values file), :501-505 (the Build-Main bullet: both stage files, `<n>` and `prd-<n>`, one commit), :511-512 (every tag CI commits is a real `<n>` or `prd-<n>`, no chart default to fall back on); decisions.md:396-401 (the D37 amendment names the chart's `required` guards, not the absent default, as what fails the render, and says an untagged reference renders and helm exits 0 -- matches what P1's run showed) and :469-476 (D45 records `cicd.writeVersionPins(repo:, pins:, message:)` as settled at implementation, the map spanning files because one call is one commit -- the D40 precedent's form, not a reversal). A grep of AnsibleSpecs/argo-cd, Ansible/docs, KubeCoderDeploy README/chart/config/tests for surviving pre-D47 statements (`dev-511`, `committed default tag`, `CI-written image tags`) finds only D37's own body (decisions.md:380, left deliberately) and B.3's verbatim requirement in phases.md:251. Judgement recorded: design.md:65 says `no image tag` in D47's own words (decisions.md:493) though chart/values.yaml keeps two floating DockerImages tags; left as D47's shorthand rather than narrowing a ruled decision's phrase.",
       "evidence": [
         "AnsibleSpecs/argo-cd/design.md:65 (the Deploy repos line R8 names)",
         "AnsibleSpecs/argo-cd/design.md:500-503 (the Build-Main bullet: 'write chart/values.yaml')",
         "AnsibleSpecs/argo-cd/design.md:509 ('The chart's committed default tag is always a real <n>')",
         "AnsibleSpecs/argo-cd/decisions.md:466-471 (D45's single values-file parameter)",
-        "AnsibleSpecs/argo-cd/decisions.md:455-456 (D40, the 'shape settled at implementation' precedent)"
+        "AnsibleSpecs/argo-cd/decisions.md:455-456 (D40, the 'shape settled at implementation' precedent)",
+        "AnsibleSpecs/argo-cd/design.md:64-66,501-505,511-512",
+        "AnsibleSpecs/argo-cd/decisions.md:396-401,469-476",
+        "AnsibleSpecs a4fd09c (consult 1's narrowing of the two absolutes), 9de4486 (P3)"
       ]
     },
     {
       "id": "V11",
       "area": "Blast radius (Ruling 1)",
       "description": "Nothing live moves: no stage is deployed, redeployed or repointed by this slice, and KubeCoder keeps running from HelmCharts until slice 012's cutover. The method has no caller and the relocated pins no reader — Ruling 1's accepted consequence, and the reason this slice's verification is static.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Static, as Ruling 1 accepted, and nothing live moves. No caller of writeVersionPins exists anywhere under /work; no ArgoCDDeploy manifest names kubecoder (its tests list KubeCoderDeploy only as a permitted repo source); no HelmCharts release for kubecoder has `reconciler: argo-cd`; HelmCharts/configs/prd/kubecoder/{dev,prd}/values.yaml still exist and still deploy KubeCoder; KubeCoderDeploy has no Jenkinsfile, so its push triggers no CI, and Argo has no KubeCoder Application for its webhook to refresh. The only estate-wide surface is the library itself (the plan counts 19 Jenkinsfiles loading it unpinned, so a push is live on their next run) -- that is V04's canary, not a deploy. The slice changes no Ansible role, playbook, inventory or Terraform module, so there is no --limit, no serial/throttle question and no cluster node this touches.",
       "evidence": [
         "/work/ArgoCDDeploy — no manifest mentions kubecoder (grep over *.yaml)",
-        "/work/HelmCharts/configs/prd/kubecoder/{dev,prd}/values.yaml still deploy KubeCoder"
+        "/work/HelmCharts/configs/prd/kubecoder/{dev,prd}/values.yaml still deploy KubeCoder",
+        "grep -rn writeVersionPins /work (excluding AnsibleSpecs and the method itself): none",
+        "grep -rli kubecoder /work/ArgoCDDeploy --include=*.yaml: none; grep reconciler /work/HelmCharts/configs/prd/kubecoder: none",
+        "KubeCoderDeploy/.kubecoder/project.yaml: `There is no Jenkinsfile and no `jenkins:` key`"
       ]
     },
     {
       "id": "V12",
       "area": "Slice 012 handoff (Ruling 5)",
       "description": "Slice 012's slice.md carries the work Ruling 1 sent it: R2 — Build-Main's rewrite — stated as B.3 states it, beside the R4 entry already there, with this slice's grounding behind it (G5, G6, G8, G10, G12); and its 'Depends on' line names what slice 011 actually delivers instead of \"011 (CI commits pins)\", which Ruling 1 made false.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Slice 012's slice.md carries what Ruling 1 sent it. Its Depends-on line (:18-21) now names what slice 011 delivers -- the library method, the stage-file pins, the render gate -- and says the CI call is requirement 14 here. Requirement 14 (:116-134) carries R2 verbatim beside R4 under 'Both are amended by D47'. 'Carried in from slice 011' (:360-401) holds G5 (the tag rename cannot precede a stage cutover), G6 (R2's verify-first discharged: no library scheme to opt out of), G8 (Build-Main builds eight images; claude-shim is undecided), G10 (crane needs no toolchain work), and G12 (the pins name build 523, neither `523` nor `prd-523` exists, the bare `<n>` family already holds 176...185). The two caller-facing constraints P2 handed to P3 (values written verbatim so the leading colon is the caller's; disableConcurrentBuilds and git in the container) are not in slice 012's text -- they are in the method's docstring and are close-out S5 (consult 1 ruled it sub-bar); they are not part of this criterion.",
       "evidence": [
         "AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:18 (the dependency line Ruling 1 falsifies)",
         "AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:113-118 (item 14, 'From B.3, held back deliberately to this point' — the R4 entry R2 joins)",
-        "grep over that slice.md's 346 lines, 2026-09-20: 'Build-Main' appears nowhere; 'Deploy-PRD' only at :116 and :184"
+        "grep over that slice.md's 346 lines, 2026-09-20: 'Build-Main' appears nowhere; 'Deploy-PRD' only at :116 and :184",
+        "AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:18-21,116-134,360-401",
+        "/work/AnsibleSpecs/slices/011_kubecoder_ci_version_pins/close-out.md S5 (the two constraints, held as an entry)"
       ]
     }
   ]
