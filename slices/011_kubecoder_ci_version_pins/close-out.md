@@ -68,6 +68,15 @@ Two adjacent observations from the same registry read, recorded for whoever pick
 **Provenance:** witnessed — plan-reviewer, plan review r1; http://registry:5000/v2/kubecoder-*/tags/list queried 2026-09-20, KubeCoderDeploy/chart/values.yaml:11-18,668,671, DockerImages/registry-cleanup/app/main.py:285-299
 **Disposition:**
 
+### B2 — JenkinsPipelineUtils/cicd.writeVersionPins: the round-trip guarantee in its docstring does not hold for a value YAML reads back as a number or a boolean · minor
+
+vars/cicd.groovy:233-235 promises that a rewritten line "always parses back to the value that went in", and plainSafe (:285-293) only rejects values whose first character, or an embedded ': ' / ' #', would break plain style. A value that is legal plain YAML but resolves to another type passes: replacePin('  tag: abc', '524') returns '  tag: 524', which parses back as the integer 524, and replacePin('  tag: abc', 'no') returns '  tag: no', which go-yaml — and so Helm — reads as boolean false. None of KubeCoder's seven pins is affected: they either begin with ':' (quoted by plainSafe's first-character rule) or are whole registry:5000/... references, and all fourteen round-trip against P1's real stage files. It is the ordinary Helm pinning shape, image.tag: 524, that the claim does not cover, in a library method other apps are invited to call.
+
+**Consequence:** A future app that pins a bare numeric tag through this method gets an int where it asked for a string; a chart that renders the tag through printf "%s" emits %!s(int=524) instead of the tag. Nothing in slice 011 or 012 passes such a value.
+
+**Provenance:** witnessed — code-reviewer, P2 review r1; phases/P2/code_review_r1.md F2, traced through a Python transcription of replacePin/plainSafe
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -121,4 +130,26 @@ than closing with it.
 **Consequence:** A GitHub PAT is visible in process tables and echoed commands on every one of 45 release deploys, to serve the one release that needs it; nothing changes until version-poller migrates and the token becomes an ESO leaf.
 
 **Provenance:** read, plan-writer r2 (review fix pass) — Ruling 7 in plan.md; carried in slice.md's source material from argo-cd/design.md
+**Disposition:**
+
+### S4 — JenkinsPipelineUtils could have a real Groovy parse gate: a JVM is obtainable in this environment after all · minor
+
+G2 and Ruling 2 both rest on "nothing in this environment can check Groovy". That is true of the
+containers as they stand — `java` and `groovy` are absent here and in the `iac`, `go` and
+`aac-tools` sidecars — but not of the environment: `https://api.adoptium.net` and
+`repo1.maven.org` are both reachable, and a portable Temurin 17 JRE plus `groovy-all-2.4.21.jar`
+(the Groovy version workflow-cps compiles) is a ~54 MB unprivileged download into `/tmp` that needs
+no root. This round used exactly that to witness F1 and to verify the fix — `CompilationUnit` at
+`Phases.CONVERSION` parses all seven `vars/*.groovy`, and the method body runs off-Jenkins against
+real values files with the Jenkins steps stubbed in ~40 lines of Groovy.
+
+Two things that would follow, neither this slice's work: a `.kubecoder/project.yaml` for
+JenkinsPipelineUtils whose test entry point parses every `vars/*.groovy`, which turns the
+estate-wide failure mode into a pre-push gate; and, further out, the real CPS transform
+(`com.cloudbees:groovy-cps`) to catch the serialization hazards a parse cannot see. The parse gate
+is the cheap half and catches the one failure that reaches other jobs.
+
+**Consequence:** Every change to the shared library ships on reading alone, and a syntax error in any vars/*.groovy breaks every job in the estate on its next run — the failure mode Ruling 2's canary exists to catch after the fact rather than before.
+
+**Provenance:** witnessed | code-writer, P2, review round 2 — /work/AnsibleSpecs/slices/011_kubecoder_ci_version_pins/phases/P2/code_review_r1.md F1
 **Disposition:**

@@ -343,13 +343,14 @@ confirms its job path and hands the operator the exact re-run.
 → {dotted YAML path → value}`: one call, one commit, both stage files (D47). It returns the
 pushed sha, or null after saying nothing changed. The rewrite is a surgical line edit in
 `@NonCPS` Groovy, so `git` is the only tool it needs in the caller's container, and it is checked
-for before the clone. JenkinsPipelineUtils `482706a` on `phase/011-P2`.
+for before the clone. JenkinsPipelineUtils `c5bf246` on `phase/011-P2`.
 
 Later phases:
 
 - P3: D45's parameter shape as settled — `writeVersionPins(repo: 'owner/name', pins:
   ['config/dev/values.yaml': ['images.controller': ':524', …], 'config/prd/values.yaml': […]])`.
-  Values are written verbatim, so P1's leading colon is the caller's to supply.
+  Values are written verbatim, so P1's leading colon is the caller's to supply; paths and
+  values may be interpolated, the method normalises them.
 - P3 → slice 012: `Build-Main` declares no `disableConcurrentBuilds()`, and two builds pushing
   pins race on the second push; the call also needs `git` in whichever container it runs in.
 
@@ -358,20 +359,23 @@ Record:
 - The line's own quoting style is kept, and a value that style cannot carry (a leading `:`) is
   double-quoted, so what lands parses back to the string handed in. Thrown before anything is
   committed: a path the file does not hold, one it holds twice, a values file the repo lacks, an
-  empty dict.
+  empty dict, the same file named twice.
 - `git add --` stages only the files whose text changed; the clone is `--depth 1` on `main` into
   `pwd(tmp: true)`, removed first. The credential appears once, in the clone URL, under `set +x`
   — the push reuses the remote the clone stored, so neither the log nor the deploy repo's history
   can carry it.
-- No gate and no JVM (Ruling 2). Green in its place: a line-for-line Python transcription of
-  `applyPins`/`replacePin`, 40 checks against P1's real stage files — exactly the seven lines
-  change, each value round-trips through a YAML parser, everything else survives byte for byte, a
-  re-run changes nothing, missing and duplicate paths throw; a clone→edit→commit→push rehearsal
-  on a local bare remote (shallow push works, one commit, an unrelated dirty file stays behind);
-  `sh -n` on both emitted scripts; a delimiter check. Not committed.
-- It caught a plain value losing a space before its trailing comment. CPS hazards designed out: a
-  `Map.Entry` held across a step, a ternary broken before `?`, GString keys hashing unlike the
-  String paths built from the file.
+- No gate (Ruling 2), but a JVM is a download away — a portable Temurin JRE and `groovy-all`
+  2.4.21, the version workflow-cps compiles. Green in the gate's place: the method body itself,
+  Jenkins steps stubbed, against P1's real stage files — exactly the seven lines change per file,
+  each value round-trips through a YAML parser as a string, everything else survives byte for
+  byte, a re-run commits and pushes nothing, every guard throws before a write; all seven
+  `vars/*.groovy` parse. Plus a clone→edit→commit→push rehearsal on a local bare remote (shallow
+  push works, one commit, an unrelated dirty file stays behind) and `sh -n` on both emitted
+  scripts. Not committed.
+- CPS hazards designed out: a `Map.Entry` held across a step, a ternary broken before `?`. The
+  caller's dict is normalised whole at the entry rather than each map defending itself, because
+  Groovy's map subscript coerces a GString key: a dict built with an interpolated path can be read
+  by no subscript at all, the caller's own key object included (round 1, F1).
 
 ### P3 — AnsibleSpecs: the register, and slice 012, describe the shape that shipped
 
