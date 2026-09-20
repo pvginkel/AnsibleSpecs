@@ -31,13 +31,17 @@ given; a ruling that corrects an earlier one replaces it in place.
   mechanism and added: *"I'm not 100% sure. Right now, yes HelmCharts does this. But once we've
   fully migrated to Argo CD, this goes away. See what makes most sense."*
 
-  What the register states is therefore the half that survives that cutover — the rule at the
-  **reference site**. Third-party scanner and validator images are pinned by digest in our repos,
-  because an upstream tag moving under a gate changes what the gate accepts without a commit here.
-  Images we build ourselves are referenced by a floating tag, and nothing in our repos pins them.
-  Whether a deploy resolves that tag to a digest before it runs is the deploy path's business: the
-  register sets no rule about it and does not name HelmCharts' resolution as doctrine, so the Argo
-  CD cutover — where that resolution goes away — leaves the line standing.
+  What the register states is therefore the half that survives that cutover: the rule at the
+  **reference site**, in terms that name no deploy implementation. Third-party scanner and
+  validator images are pinned by digest, because an upstream tag moving under a gate changes what
+  the gate accepts without a commit here. Images we build ourselves are not pinned that way — we
+  control what the tag points at, so whether a given consumer takes a floating tag or pins one is
+  that site's call, and the estate does both. What a deploy then does with the tag it finds is the
+  deploy path's business and the register rules on none of it, which is what leaves the line
+  standing when HelmCharts' resolution retires at the cutover.
+
+  The wording is the phase's to choose. This ruling fixes the substance, not the sentence — V04
+  checks the outcome, and pinning it to a prose template is what cost P6 three rounds.
 
 - **R5 — ArgoCDTools goes to one folder per image.** *"I saw there's a Dockerfile in the root.
   Please rework that. Preference is to just name it Dockerfile.argocd-hook, but putting it in a
@@ -626,13 +630,12 @@ Later phases:
 Target: ../AnsibleSpecs
 
 `decisions.md` states the pin rule as R4 rules it, at the reference site: third-party scanner and
-validator images pinned by digest in our repos, because an upstream tag moving under a gate changes
-what the gate accepts without a commit here; images we build ourselves referenced by a floating tag,
-with nothing in our repos pinning them. What a deploy does with that tag is the deploy path's
-business, and the register says no more about it — it neither states nor denies that anything
-resolves the tag to a digest, which is what lets the line stand when HelmCharts' resolution retires
-at the Argo CD cutover. Today that is one sentence with no duplicate anywhere in the estate
-(`:599`, closing the section headed at `:589`).
+validator images pinned by digest, because an upstream tag moving under a gate changes what the gate
+accepts without a commit here; images we build ourselves not pinned that way, the choice between a
+floating tag and a pinned one left to the consuming site, which is what the estate already does both
+of. The line names no deploy implementation, so HelmCharts' deploy-time digest resolution retiring
+at the Argo CD cutover leaves it standing. Today that is one sentence with no duplicate anywhere in
+the estate (`:599`, closing the section headed at `:589`).
 
 The same file's root-rotation inventory names the copies of `homelab-root.crt` that a rotation must
 move in one window (`:166`), and counts them there and in two later sentences (`:171`, `:174`). This
