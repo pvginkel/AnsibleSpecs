@@ -20,12 +20,20 @@ over everything between them**, which is the 2026-08-15 record, kept as written.
 | **014 — this slice** | The producers: KubeCoderDeploy, ArgoCDDeploy, the JenkinsPipelineUtils container template, the HelmCharts pinning test, the pattern how-to | — |
 | `025_architecture_cross_app_resolution` | Cross-app references through the published set | not needed here — KubeCoder has no cross-app edge |
 
-**What this slice also waits on:** the `aac-tools` toolchain in the KubeCoder catalog (a KC-project
-task, filed at the re-cut) and the environment picking it up — the pod has no docker, so a deploy
+**What this slice also waits on:** the `aac-tools` toolchain in the KubeCoder catalog (KC-68, filed
+at the re-cut) and the environment picking it up — the pod has no docker, so a deploy
 repo's local gate reaches the tools only through `cexec aac-tools …`. That external step between the
 image and its consumers is why 024 is its own slice.
 
 **Hard ordering:** before slice 012's **prd** flip. The dev flip does not wait on this slice.
+
+**Why three slices and not two** — the operator asked (*"Do we need three slices? I generally go for
+around 7 phases in a slice. If it doesn't make sence to turn it into two slices, I'll accept the
+three."*). 024 and this slice cannot merge, because of the toolchain step between them; the only
+two-slice shape is 024 plus 025, about nine phases, which puts work no app needs yet on the path to
+012's prd flip. So three, with 025 waiting for the second migration. The cross-repo
+`arch-validate.py` migration is not a slice: ANS-78, the operator's (*"Create a card for this. I
+will action this separately."*).
 
 ### The requirements as they stand
 
