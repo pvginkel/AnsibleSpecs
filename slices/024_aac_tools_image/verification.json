@@ -192,7 +192,8 @@
         "ran md5sum over the runbook's ten-path block (docs/runbooks/step-ca-root-rotation.md:146-155) -> one distinct hash, count 10; the terraform.rc block (:163-166) -> one hash, count 4",
         "ran find /work -name homelab-root.crt (excluding .git) -> 10 regular files + 2 symlinks (HelmCharts charts/jenkins, charts/kubecoder)",
         "/work/AnsibleSpecs/decisions.md:166 (nine copies, five baked, symlink clause); /work/Ansible/docs/runbooks/step-ca-root-rotation.md:42,64-68,76,94,141,158; docs/runbooks/operator-workstation.md:95",
-        "grep 'ArgoCDTools/(image|presync|Dockerfile)' over the three records -> none"
+        "grep 'ArgoCDTools/(image|presync|Dockerfile)' over the three records -> none",
+        "Jenkins IaC/Build-Main #184 (iac-on-push, pushed by the test phase) on be64a99a446f: lint 'Passed: 0 failure(s), 0 warning(s)', terraform validate and plan run, plan 'No changes. Your infrastructure matches the configuration.', protected-VM destroy check silent, Finished: SUCCESS"
       ]
     },
     {
@@ -204,7 +205,8 @@
       "evidence": [
         "/work/Ansible/.kubecoder/config.yaml:17-21 — repos: ... `- url: https://github.com/pvginkel/Architecture` with its comment",
         "/work/Architecture/.claude/architecture/producer-manual.md and arch-validate.py present; git -C /work/Architecture status --short -> clean",
-        "close-out B16"
+        "close-out B16",
+        "Jenkins IaC/Build-Main #184 (iac-on-push, pushed by the test phase) on be64a99a446f: lint 'Passed: 0 failure(s), 0 warning(s)', terraform validate and plan run, plan 'No changes. Your infrastructure matches the configuration.', protected-VM destroy check silent, Finished: SUCCESS"
       ]
     },
     {

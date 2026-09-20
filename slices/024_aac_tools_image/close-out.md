@@ -181,6 +181,8 @@ The check's `load_dataset` (`aac-tools/checks/handover_equality.py:122-127`) use
 
 charts/kubecoder/values.yaml:585 justifies the floating tag with "as every first-party image in this catalog does". The block header at :331-332 states the opposite rule for matrix-built images — "so its entry pins that tag — frontend, modern-app, java and esp-idf" — and those four entries carry resolved tags (:381 node-24, :406 node-24, :456 jdk-21, :485 idf-5.5.3). The floating tag on aac-tools itself is what R4 asks for; only the generalisation beside it is wrong.
 
+test-agent, test phase, r1, 2026-09-20 — Comment-only residue in a file this slice touched, fixed in the test phase: HelmCharts f084505 rewords the aac-tools entry's comment to say it floats on :latest as every entry does that no build matrix produced, and points at the header that names the four matrix-built entries (frontend, modern-app, java, esp-idf) which pin. Parsed values.yaml is identical before and after; kc project test in HelmCharts green. Committed to main and held with the rest of the repo's push. Left for the completion consult to strike.
+
 **Consequence:** A reader takes the catalog's tag policy from the newest entry's comment rather than from the header, and reads four pinned entries as exceptions to a rule that does not exist.
 
 **Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F1
