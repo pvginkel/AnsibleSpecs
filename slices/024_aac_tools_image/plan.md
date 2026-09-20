@@ -499,7 +499,7 @@ Later phases:
 - The annotation layer is mandatory and must carry `introduced:` — a missing file or a missing date
   is a refused run, not a gap. An unquoted YAML date is normalized to its ISO string.
 
-### P4 — the handover holds: the same ids, from the other producer
+### P4 — the handover holds: the same ids, from the other producer ✅ DONE 2026-09-20
 
 Target: ../ArgoCDTools
 
