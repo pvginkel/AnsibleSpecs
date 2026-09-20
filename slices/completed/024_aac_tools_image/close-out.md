@@ -43,16 +43,22 @@ behind it.
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — The aac-tools image must be built before any repo selects the toolchain
+### ~~A1 — The aac-tools image must be built before any repo selects the toolchain~~ — carried out: ArgoCDTools pushed and IaC/ArgoCDTools published registry:5000/aac-tools (tags 6, latest), HelmCharts pushed and the prd controller's catalog configmap carries the aac-tools entry, environment restarted — the order held, and only then did an environment select the toolchain; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 The catalog entry this slice adds names `registry:5000/aac-tools:latest`, a tag nothing has published yet: ArgoCDTools' `IaC/ArgoCDTools` job builds it on a push to `main`, and this run holds every push. Deploying HelmCharts first is harmless on its own — the catalog is a declaration, and no repo manifest carries `{use: aac-tools}` yet, so nothing pulls the tag. The order that matters is: push ArgoCDTools (the job builds and publishes both images), then deploy HelmCharts, then restart the environments, and only then add the `tools:` entry to whichever repo wants it. Selecting the toolchain before the image exists is an ImagePullBackOff on the whole env pod, not a degraded sidecar. This is the ordering inside the KC-68 remainder, not a task of its own.
 
 **Consequence:** An environment that selects aac-tools before ArgoCDTools has published the image fails to start at all — the sidecar's missing image blocks the whole pod, so the dev container is unreachable too.
 
 **Provenance:** witnessed | code-writer, P5, r1 — the entry is at charts/kubecoder/values.yaml:581-612 on phase/024-P5; the publishing stage is ArgoCDTools' Jenkinsfile 'Build aac-tools image'
-**Disposition:**
+**Disposition:** set the dispositions you know are answered — closed, carried out — IaC/ArgoCDTools published registry:5000/aac-tools (tags 6 and latest), the prd controller's catalog configmap carries the aac-tools entry, and the environment restarted clean before any repo selected the toolchain; the order held
 
-### A2 — Run the live aac-tools check (V19) from a running container once the image and toolchain are deployed
+</details>
+
+### ~~A2 — Run the live aac-tools check (V19) from a running container once the image and toolchain are deployed~~ — carried out 2026-09-20: V19 run green from the aac-tools sidecar in pvginkel-ansible-31d661 — 9 elements, 16 relations, the one expected kube-coder-tunnel-reclaim gap line, then the validator's tick, both exit 0, matching the test phase's from-source run; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 V19 is the one acceptance item no phase can earn: this pod has no docker, podman or nerdctl, and the toolchain only reaches an environment after the operator's pushes and deploy (A1's order: push ArgoCDTools so `IaC/ArgoCDTools` publishes `registry:5000/aac-tools:latest`; push and deploy HelmCharts, which rolls the prd controller; restart the environment that selects the toolchain).
 
@@ -67,12 +73,18 @@ Then, in that environment:
 
 Expected: `wrote docs/architecture/kubecoder-deploy.yaml — 9 elements, 16 relations`, one `gap: kubecoder: image 'kube-coder-tunnel-reclaim' …` line, then `✓ docs/architecture/kubecoder-deploy.yaml`, both exit 0 — the output the same two commands gave from source in the `iac` sidecar during the test phase. The clone sits under /work rather than /tmp so the toolchain sidecar sees it, and carries the fixture as its `architecture.yaml` because KubeCoderDeploy has no annotation layer of its own until slice 014.
 
+close-out session, 2026-09-20 — Run and green in this environment (pvginkel-ansible-31d661), which now selects the toolchain — the operator pushed ArgoCDTools (IaC/ArgoCDTools published registry:5000/aac-tools, tags 6 and latest), pushed HelmCharts (the prd controller's catalog configmap carries the aac-tools entry), added `- use: aac-tools` to .kubecoder/config.yaml and restarted. The block ran exactly as written: `gen-architecture --stage prd --producer kubecoder-deploy` printed 'wrote docs/architecture/kubecoder-deploy.yaml — 9 elements, 16 relations' and the single `gap: kubecoder: image 'kube-coder-tunnel-reclaim' (in kubecoder-controller/tunnel-reclaim)` line, exit 0; `arch-validate docs/architecture/kubecoder-deploy.yaml` printed '✓ docs/architecture/kubecoder-deploy.yaml', exit 0. Identical to what the two commands gave from source in the iac sidecar during the test phase, so a running container does reach https://charts.home through its baked homelab root and the validation endpoint. The clone at /work/aac-tools-v19 was removed. V19 is earned; verification.json still records it as owed-to-operator.
+
 **Consequence:** Until it runs, nothing shows that a running aac-tools container reaches https://charts.home through its baked homelab root and https://architecture.webathome.org; the first place a broken trust store or a missing outbound path would surface is slice 014's pipeline, mid-migration.
 
 **Provenance:** witnessed | test-agent, test phase, r1 — every step short of a running container was run from source in the iac sidecar (generator, equality check, arch-validate); verification.json V19 records the item owed
-**Disposition:**
+**Disposition:** set the dispositions you know are answered — closed, carried out 2026-09-20 — V19 run green in pvginkel-ansible-31d661 once it selected the toolchain: 9 elements, 16 relations, the one expected gap line, then the validator's tick, both exit 0 (see the note above)
 
-### A3 — Push ArgoCDTools by hand when its hold lifts
+</details>
+
+### ~~A3 — Push ArgoCDTools by hand when its hold lifts~~ — carried out: /work/ArgoCDTools main is on origin/main and the job built both images; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `/work/ArgoCDTools`: `slice.md`'s operator boundary: *"Pushing stays the operator's call."* The
 
@@ -81,9 +93,13 @@ The slice's commits sit on `main` in that repo and nowhere else; every repo the 
 **Consequence:** none in this run — the driver took the hold as the ruling it is; nothing this repo deploys carries the slice until you push it.
 
 **Provenance:** witnessed — the driver's push check, against `plan.md`'s `## Push holds` section
-**Disposition:**
+**Disposition:** set the dispositions you know are answered — closed, carried out — /work/ArgoCDTools main is on origin/main and the job built both images
 
-### A4 — Push HelmCharts by hand when its hold lifts
+</details>
+
+### ~~A4 — Push HelmCharts by hand when its hold lifts~~ — carried out: /work/HelmCharts main is on origin/main and the deploy rolled the prd controller with the catalog entry; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `/work/HelmCharts`: a push deploys changed releases, and the catalog entry changes the `kubecoder`
 
@@ -92,9 +108,13 @@ The slice's commits sit on `main` in that repo and nowhere else; every repo the 
 **Consequence:** none in this run — the driver took the hold as the ruling it is; nothing this repo deploys carries the slice until you push it.
 
 **Provenance:** witnessed — the driver's push check, against `plan.md`'s `## Push holds` section
-**Disposition:**
+**Disposition:** set the dispositions you know are answered — closed, carried out — /work/HelmCharts main is on origin/main and the deploy rolled the prd controller with the catalog entry
 
-### A5 — Push ArgoCDDeploy and KubeCoderDeploy by hand — the doc phase committed to both · minor
+</details>
+
+### ~~A5 — Push ArgoCDDeploy and KubeCoderDeploy by hand — the doc phase committed to both · minor~~ — carried out: ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7 are both on origin/main; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 Closing S3 meant editing three comments in two repos the slice's diff never touched: ArgoCDDeploy 3246e89 (chart/templates/hook-namespace.yaml, tests/render-chart.py) and KubeCoderDeploy 0757cf7 (terraform/providers.tf). Both are comment-only — the rendered chart and the Terraform plan are unchanged, and each repo's own `kc project lint` and `test` are green — but the driver's gate sweep and its push cover only the four repos the slice's phases landed in, so these two commits sit on main with nothing scheduled to move them.
 
@@ -103,7 +123,9 @@ P4's done-record said nothing landed in /work/KubeCoderDeploy and that ArgoCDToo
 **Consequence:** Two repos sit one commit ahead of origin/main indefinitely. Nothing breaks — the commits are comments — but the next agent to work in either finds an unexplained local commit, and a fresh clone silently loses the correction.
 
 **Provenance:** witnessed | doc-writer, doc phase
-**Disposition:**
+**Disposition:** set the dispositions you know are answered — closed, carried out — ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7 are both on origin/main
+
+</details>
 
 ## Notable events
 
@@ -118,14 +140,18 @@ against the tree and found nine, two of them copies no record had ever named.
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — The root-rotation inventory was already two copies short before this slice touched it · minor
+### ~~N1 — The root-rotation inventory was already two copies short before this slice touched it · minor~~ — both records corrected: P6 landed the true nine in decisions.md, P7 (f3cdc60) landed nine in docs/runbooks/step-ca-root-rotation.md:65-68 — B13 and B17 about the same records stay live; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
 
 P6 rewrote `decisions.md`'s CA-root inventory expecting to move one path and add one — six copies to seven. A `find /work -name homelab-root.crt` run as the phase's gate returned nine real copies, not seven: `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt` and `/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt` are tracked, byte-identical to the canonical copy, and baked into their images by a `COPY homelab-root.crt /usr/local/share/ca-certificates/` line, exactly like the three copies the inventory did name. Neither is new: the arm64 one arrives with its image in `68151c9`, well before this slice. Rather than land a count it had just disproved, P6 recorded the true nine and named all of them; `docs/runbooks/step-ca-root-rotation.md` carries the same six-copy list and the same two omissions, and P7 is edited to land nine there. The two HelmCharts chart copies a `find` also returns (`charts/jenkins/`, `charts/kubecoder/`) are symlinks to the repo-root copy, not separate copies — both records are right to exclude them, and `decisions.md` now says so, so the next reader does not re-add them.
 
 **Consequence:** Had the gap gone unnoticed, a year-9 root rotation following either record would have updated seven copies and left two toolchain images trusting only the retired root — a failure that surfaces as those images losing TLS to every homelab endpoint, after the cutover window closed. It is corrected in decisions.md now and owed in the runbook at P7.
 
 **Provenance:** witnessed, code-writer, P6, round 1 — find /work -name homelab-root.crt -type f, then cmp against ansible/roles/baseline/files/homelab-root.crt and the images' Dockerfiles; gate script in the phase transcript
-**Disposition:**
+**Disposition:** set the dispositions you know are answered — closed, both records corrected — P6 landed the true nine in decisions.md and P7 (f3cdc60) landed nine in docs/runbooks/step-ca-root-rotation.md:65-68; B13 and B17 about the same records stay live
+
+</details>
 
 ## Bugs
 
@@ -136,15 +162,6 @@ live, twelve witnessed; eight sit in ArgoCDTools where the image was built, the 
 Ansible and AnsibleSpecs. B11 and B12 are already fixed in place and wait only to be struck.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
-
-### B16 — Ansible: declaring pvginkel/Architecture gives this environment a setup step that fails at every pod start · major
-
-P7 adds `- url: https://github.com/pvginkel/Architecture` at `.kubecoder/config.yaml:21`. Pod start runs the `setup` verb in the primary repository and in every extra `repos:` checkout that has a `project.yaml`, each its own step in the environment's setup status, and a failing one is reported as a warning naming `cd /work/<checkout> && kc project setup` (KubeCoder manual, reference/project-yaml.md:60-62, :260-263). Architecture's manifest runs every setup statement in the `modern-app` tool container — `.kubecoder/project.yaml:25,41,49` (`cexec modern-app poetry install`, `cexec modern-app npm ci` x2) — and this environment declares only `iac` and `go`. Witnessed here, running exactly what pod start runs: `cd /work/Architecture && kc project setup` -> `tooling: cexec modern-app poetry install --no-interaction [FAILED] / cexec: tool "modern-app" is not available in this environment; the tools it has are: go, iac`, exit 1. `setup` stops at the first failing statement, so the `viewer` and `service` statements never run either. No other checkout declared here behaves this way: HelmCharts' setup runs in `cexec iac`, HomelabTerraformProvider's in `cexec go`, and the rest declare none. Not fix work for this slice: V17 asks for the declaration, and the choice between carrying a `modern-app` sidecar in an 8 Gi pod and accepting a standing red step is the operator's.
-
-**Consequence:** From the next `kc env restart` on, this environment comes up with a permanent failed-setup warning for /work/Architecture — nothing is broken by it, but the setup status stops meaning 'the workspace came up clean', which is the surface a real setup failure would have to announce itself on.
-
-**Provenance:** witnessed | code-reviewer, P7, round 1 — cd /work/Architecture && kc project setup in this pod; full record in phases/P7/code_review_r1.md F1
-**Disposition:**
 
 ### B1 — HelmCharts' generator draws four cross-stage Serving edges for KubeCoder that do not exist · minor
 
@@ -257,28 +274,6 @@ The check's `load_dataset` (`aac-tools/checks/handover_equality.py:122-127`) use
 **Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F2
 **Disposition:**
 
-### B11 — HelmCharts: the aac-tools catalog entry says every first-party image here floats, and four do not · nit
-
-charts/kubecoder/values.yaml:585 justifies the floating tag with "as every first-party image in this catalog does". The block header at :331-332 states the opposite rule for matrix-built images — "so its entry pins that tag — frontend, modern-app, java and esp-idf" — and those four entries carry resolved tags (:381 node-24, :406 node-24, :456 jdk-21, :485 idf-5.5.3). The floating tag on aac-tools itself is what R4 asks for; only the generalisation beside it is wrong.
-
-test-agent, test phase, r1, 2026-09-20 — Comment-only residue in a file this slice touched, fixed in the test phase: HelmCharts f084505 rewords the aac-tools entry's comment to say it floats on :latest as every entry does that no build matrix produced, and points at the header that names the four matrix-built entries (frontend, modern-app, java, esp-idf) which pin. Parsed values.yaml is identical before and after; kc project test in HelmCharts green. Committed to main and held with the rest of the repo's push. Left for the completion consult to strike.
-
-**Consequence:** A reader takes the catalog's tag policy from the newest entry's comment rather than from the header, and reads four pinned entries as exceptions to a rule that does not exist.
-
-**Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F1
-**Disposition:**
-
-### B12 — HelmCharts: the aac-tools toolchain instructions tell agents no repo needs a copy of arch-validate · nit
-
-charts/kubecoder/values.yaml:604 — text kc env describe prints to an agent in every selecting environment — states that because the image ships the canonical validator, "no repo needs a copy of that script". HelmCharts' own Jenkinsfile.architecture:34 runs ./scripts/arch-validate.py from a Jenkins pod that has no toolchain image, and retiring the byte-identical copies under /work/{Ansible,HelmCharts,DockerImages}/scripts/ is ANS-78, which this slice puts out of scope.
-
-doc-writer, doc phase, 2026-09-20 — Resolved in the doc phase (HelmCharts fb49c5c). The instructions now say nothing has to be copied into a repo to run the validator from here, and that a repo also carrying scripts/arch-validate.py needs that copy for its own Jenkins pipeline, which runs outside this image — leave it where it is. The four hand copies were re-hashed while writing the README: KubeCoder's is the one drifted copy, the other three and the image's are the canonical 9e7e3f8c. kc project test green and helm template over configs/prd/kubecoder/prd/values.yaml still renders the entry.
-
-**Consequence:** An agent working in a repo that has selected aac-tools can read its scripts/arch-validate.py as redundant and remove it, breaking that repo's architecture pipeline, which runs the copy rather than the image.
-
-**Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F2
-**Disposition:**
-
 ### B15 — AnsibleSpecs: doctrine says our own images are not digest-pinned; HelmCharts' deploy calls its digest resolution pinning · nit
 
 decisions.md:599 is the register's only statement about image digests (grep -n digest decisions.md returns that line alone), and it says images we build ourselves are not digest-pinned. HelmCharts uses the word the other way for a real mechanism the register never records: migrate-release.py:342's --no-pin is documented as 'skip image-digest pinning via resolve-helm-args', and resolve_helm_args.py:148 resolves every chart-template image reference to @sha256: at deploy time (--set at :155), which Jenkinsfile:189-191 then uses as the trigger to deploy. Under the sentence's own definition of a pin — a reference committed here that an upstream tag move cannot shift — the claim is true, and the resolution is the opposite of a pin: it follows whatever the written tag points at now. So this is a gap in doctrine, not a false rule, and no procedure follows from it wrongly: the aac-tools reference never meets the resolver at all (get_helm_images walks charts/<chart>/templates/ only, resolve_helm_args.py:41,56, while the toolchain entries live in values.yaml), and the operative half — floating or pinned tag is the consuming site's call — holds in code at charts/kubecoder/values.yaml:331-332, :381, :406, :456, :485 against eleven :latest entries. Reviewed as blocking in P6 rounds 2 and 3 and as advisory in round 4; recording it once here rather than relitigating the wording.
@@ -301,6 +296,36 @@ decisions.md:599 is the register's only statement about image digests (grep -n d
 
 </details>
 
+### ~~B11 — HelmCharts: the aac-tools catalog entry says every first-party image here floats, and four do not · nit~~ — fixed in HelmCharts f084505, now on origin/main: the aac-tools entry's comment states the catalog's tag rule as the header does; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+charts/kubecoder/values.yaml:585 justifies the floating tag with "as every first-party image in this catalog does". The block header at :331-332 states the opposite rule for matrix-built images — "so its entry pins that tag — frontend, modern-app, java and esp-idf" — and those four entries carry resolved tags (:381 node-24, :406 node-24, :456 jdk-21, :485 idf-5.5.3). The floating tag on aac-tools itself is what R4 asks for; only the generalisation beside it is wrong.
+
+test-agent, test phase, r1, 2026-09-20 — Comment-only residue in a file this slice touched, fixed in the test phase: HelmCharts f084505 rewords the aac-tools entry's comment to say it floats on :latest as every entry does that no build matrix produced, and points at the header that names the four matrix-built entries (frontend, modern-app, java, esp-idf) which pin. Parsed values.yaml is identical before and after; kc project test in HelmCharts green. Committed to main and held with the rest of the repo's push. Left for the completion consult to strike.
+
+**Consequence:** A reader takes the catalog's tag policy from the newest entry's comment rather than from the header, and reads four pinned entries as exceptions to a rule that does not exist.
+
+**Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F1
+**Disposition:** set the dispositions you know are answered — closed, fixed in HelmCharts f084505 (now on origin/main) — the entry's comment states the catalog's tag rule as the header does
+
+</details>
+
+### ~~B12 — HelmCharts: the aac-tools toolchain instructions tell agents no repo needs a copy of arch-validate · nit~~ — fixed in HelmCharts fb49c5c, now on origin/main: the instructions no longer invite deleting a repo's validator; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+charts/kubecoder/values.yaml:604 — text kc env describe prints to an agent in every selecting environment — states that because the image ships the canonical validator, "no repo needs a copy of that script". HelmCharts' own Jenkinsfile.architecture:34 runs ./scripts/arch-validate.py from a Jenkins pod that has no toolchain image, and retiring the byte-identical copies under /work/{Ansible,HelmCharts,DockerImages}/scripts/ is ANS-78, which this slice puts out of scope.
+
+doc-writer, doc phase, 2026-09-20 — Resolved in the doc phase (HelmCharts fb49c5c). The instructions now say nothing has to be copied into a repo to run the validator from here, and that a repo also carrying scripts/arch-validate.py needs that copy for its own Jenkins pipeline, which runs outside this image — leave it where it is. The four hand copies were re-hashed while writing the README: KubeCoder's is the one drifted copy, the other three and the image's are the canonical 9e7e3f8c. kc project test green and helm template over configs/prd/kubecoder/prd/values.yaml still renders the entry.
+
+**Consequence:** An agent working in a repo that has selected aac-tools can read its scripts/arch-validate.py as redundant and remove it, breaking that repo's architecture pipeline, which runs the copy rather than the image.
+
+**Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F2
+**Disposition:** set the dispositions you know are answered — closed, fixed in HelmCharts fb49c5c (now on origin/main) — the instructions no longer invite deleting a repo's validator
+
+</details>
+
 ### ~~B14 — AnsibleSpecs: V04 asks the register to state a first-party tag norm the estate does not have · minor~~ — resolved by f2927cb (024: R4 rules the substance, not the sentence): V04 was reworded to state the outcome rather than the register's prose, and now matches the line P6 landed at decisions.md:599 — both re-read at consult 3, so the test phase has nothing left to decide unaided; struck by consult 3
 
 <details><summary>struck — body kept for the record</summary>
@@ -311,6 +336,19 @@ verification.json V04 requires decisions.md to state the pin rule as 'third-part
 
 **Provenance:** read, code-reviewer, P6 round 2, phases/P6/code_review_r2.md F2
 **Disposition:**
+
+</details>
+
+### ~~B16 — Ansible: declaring pvginkel/Architecture gives this environment a setup step that fails at every pod start · major~~ — fixed in Ansible ec4fbc3: the pvginkel/Architecture repos: entry is gone from .kubecoder/config.yaml, and this environment's restart reports issues: (none); struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+P7 adds `- url: https://github.com/pvginkel/Architecture` at `.kubecoder/config.yaml:21`. Pod start runs the `setup` verb in the primary repository and in every extra `repos:` checkout that has a `project.yaml`, each its own step in the environment's setup status, and a failing one is reported as a warning naming `cd /work/<checkout> && kc project setup` (KubeCoder manual, reference/project-yaml.md:60-62, :260-263). Architecture's manifest runs every setup statement in the `modern-app` tool container — `.kubecoder/project.yaml:25,41,49` (`cexec modern-app poetry install`, `cexec modern-app npm ci` x2) — and this environment declares only `iac` and `go`. Witnessed here, running exactly what pod start runs: `cd /work/Architecture && kc project setup` -> `tooling: cexec modern-app poetry install --no-interaction [FAILED] / cexec: tool "modern-app" is not available in this environment; the tools it has are: go, iac`, exit 1. `setup` stops at the first failing statement, so the `viewer` and `service` statements never run either. No other checkout declared here behaves this way: HelmCharts' setup runs in `cexec iac`, HomelabTerraformProvider's in `cexec go`, and the rest declare none. Not fix work for this slice: V17 asks for the declaration, and the choice between carrying a `modern-app` sidecar in an 8 Gi pod and accepting a standing red step is the operator's.
+
+**Consequence:** From the next `kc env restart` on, this environment comes up with a permanent failed-setup warning for /work/Architecture — nothing is broken by it, but the setup status stops meaning 'the workspace came up clean', which is the surface a real setup failure would have to announce itself on.
+
+**Provenance:** witnessed | code-reviewer, P7, round 1 — cd /work/Architecture && kc project setup in this pod; full record in phases/P7/code_review_r1.md F1
+**Disposition:** set the dispositions you know are answered — closed, fixed in Ansible ec4fbc3 — the pvginkel/Architecture repos: entry is gone from .kubecoder/config.yaml, and this environment's restart reports issues: (none)
 
 </details>
 
@@ -369,23 +407,6 @@ KubeCoder's remote project surface is the other half of the picture: it walks ev
 **Provenance:** read; plan-writer, planning, r2; run_loop.py load_project_dirs / _resolve_target, and `kc project list` in both repos
 **Disposition:**
 
-### S3 — Three sibling-repo comments still cite /work/ArgoCDTools/presync/…, a path slice 024 moved · minor
-
-P1 moved ArgoCDTools' `presync/` package under `argocd-hook/`. The plan assigns the out-of-repo records of the move to P6 and P7, but both are scoped to the `homelab-root.crt` / `terraform.rc` inventories (`decisions.md:166`, `step-ca-root-rotation.md:71,109,140,154`, `operator-workstation.md:95`). Three citations of the package itself sit outside that scope and so have no owner in this slice:
-
-- `/work/ArgoCDDeploy/chart/templates/hook-namespace.yaml:81` — `(/work/ArgoCDTools/presync/reattach.py:18,42-49)`
-- `/work/ArgoCDDeploy/tests/render-chart.py:105` — `(/work/ArgoCDTools/presync/terraform.py:52-57)`
-- `/work/KubeCoderDeploy/terraform/providers.tf:1` — `Applied only by the Argo CD PreSync hook (/work/ArgoCDTools/presync), from its own clone.`
-
-Each justifies a live design decision to the next reader; nothing executes them, so this is a documentation-accuracy item, not a defect.
-
-doc-writer, doc phase, 2026-09-20 — Resolved in the doc phase (ArgoCDDeploy 3246e89, KubeCoderDeploy 0757cf7). All three citations now read /work/ArgoCDTools/argocd-hook/presync/…; each cited line number was re-checked against the moved file and still holds — reattach.py:18 is VOLUMES, :42-49 the reattach body, terraform.py:52-57 the TF_VAR_stage/namespace exports. kc project lint and test green in both repos (ArgoCDDeploy helm lint + render-chart.py; KubeCoderDeploy adds terraform fmt -check over the file edited). Both commits sit on main unpushed — see the push item below.
-
-**Consequence:** A reader who follows one of these comments to check whether the PreSync hook still behaves as claimed greps a path that no longer exists and has to re-derive the answer.
-
-**Provenance:** witnessed | code review, P1, round 1 — full record in phases/P1/code_review_r1.md (F1)
-**Disposition:**
-
 ### S4 — aac-tools: the equality fixture becomes a second copy the day KubeCoderDeploy commits its own annotation layer · nit
 
 `aac-tools/checks/kubecoder-architecture.yaml` is KubeCoder's annotation layer, held here because this slice lands no file in the deploy repo (ruling). `handover_equality.py` copies it over the clone's root before rendering, so once slice 014 gives KubeCoderDeploy its own committed `architecture.yaml`, the check keeps overriding the real file with this copy and the two can drift apart unnoticed. At that point the fixture has done its job: slice 014 can delete it and default `--annotations` to the clone's own file (or drop the copy step altogether), which also makes the check prove equality for exactly the judgment the pipeline renders.
@@ -418,6 +439,27 @@ Left untouched: the Architecture repo is outside this slice's diff and outside t
 
 **Provenance:** read, doc-writer, doc phase — surveyed while reconciling this slice's doc surfaces
 **Disposition:**
+
+### ~~S3 — Three sibling-repo comments still cite /work/ArgoCDTools/presync/…, a path slice 024 moved · minor~~ — fixed by the doc phase: ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7, both now on origin/main; struck by close-out 2026-09-20
+
+<details><summary>struck — body kept for the record</summary>
+
+P1 moved ArgoCDTools' `presync/` package under `argocd-hook/`. The plan assigns the out-of-repo records of the move to P6 and P7, but both are scoped to the `homelab-root.crt` / `terraform.rc` inventories (`decisions.md:166`, `step-ca-root-rotation.md:71,109,140,154`, `operator-workstation.md:95`). Three citations of the package itself sit outside that scope and so have no owner in this slice:
+
+- `/work/ArgoCDDeploy/chart/templates/hook-namespace.yaml:81` — `(/work/ArgoCDTools/presync/reattach.py:18,42-49)`
+- `/work/ArgoCDDeploy/tests/render-chart.py:105` — `(/work/ArgoCDTools/presync/terraform.py:52-57)`
+- `/work/KubeCoderDeploy/terraform/providers.tf:1` — `Applied only by the Argo CD PreSync hook (/work/ArgoCDTools/presync), from its own clone.`
+
+Each justifies a live design decision to the next reader; nothing executes them, so this is a documentation-accuracy item, not a defect.
+
+doc-writer, doc phase, 2026-09-20 — Resolved in the doc phase (ArgoCDDeploy 3246e89, KubeCoderDeploy 0757cf7). All three citations now read /work/ArgoCDTools/argocd-hook/presync/…; each cited line number was re-checked against the moved file and still holds — reattach.py:18 is VOLUMES, :42-49 the reattach body, terraform.py:52-57 the TF_VAR_stage/namespace exports. kc project lint and test green in both repos (ArgoCDDeploy helm lint + render-chart.py; KubeCoderDeploy adds terraform fmt -check over the file edited). Both commits sit on main unpushed — see the push item below.
+
+**Consequence:** A reader who follows one of these comments to check whether the PreSync hook still behaves as claimed greps a path that no longer exists and has to re-derive the answer.
+
+**Provenance:** witnessed | code review, P1, round 1 — full record in phases/P1/code_review_r1.md (F1)
+**Disposition:** set the dispositions you know are answered — closed, fixed by the doc phase — ArgoCDDeploy 3246e89 and KubeCoderDeploy 0757cf7, both now on origin/main
+
+</details>
 
 ### ~~S5 — The rotation runbook states the CA-copy count in four places; P7's brief names three · nit~~ — resolved by P7 (f3cdc60): the fourth count place landed at ten — step-ca-root-rotation.md:141 'The ten paths are duplicates by convention' now sits above the ten-path md5sum block whose closing line at :158 reads 'All ten hashes must match'; struck by consult 3
 
