@@ -646,9 +646,12 @@ The record is rewritten in place — no supersession note, no history narration.
 
 **Done (P6).** `decisions.md:599` is now **"Image pins follow provenance."** — third-party scanner
 and validator images pinned by digest, naming trivy in `DockerImages`' scan stage and kubeconform in
-`HelmCharts`' render gate, against first-party images we build ourselves on the estate's
-floating-tag norm (`:<build>` and `:latest` published, `:latest` consumed). Narrowed by provenance,
-not by pull mechanism; rewritten in place, nothing left elsewhere. The three live hits the old
+`HelmCharts`' render gate, against images we build ourselves, which are not digest-pinned: which
+tag a consumer takes, floating or pinned, is the consuming site's call. Narrowed by provenance, not
+by pull mechanism, and stating no first-party tag norm — the estate has none. Matrix builds publish a
+resolved tag and no `:latest`, and `webhook-relay`, `argocd-hook` and the four matrix toolchain
+entries are consumed pinned; `HelmCharts/charts/kubecoder/values.yaml:331` is where the catalog
+states its own rule. Rewritten in place, nothing left elsewhere. The three live hits the old
 wording still has are slice 020's completed records and slice 014's `slice.md:649`, which quotes the
 old line as the collision and already says "The record moves with slice 024" — history, not
 doctrine, and untouched.
@@ -666,8 +669,8 @@ eleven — that stops the next reader re-adding them.
 
 Gate: no tooling in this repo, so the gate is the claims themselves — all nine paths exist, are
 regular files and are byte-identical to `ansible/roles/baseline/files/homelab-root.crt`; no real copy
-under `/work` is unnamed; exactly five resolve to a Dockerfile; both named pins carry an `@sha256:`;
-ArgoCDTools' Jenkinsfile publishes both floating tags.
+under `/work` is unnamed; exactly five resolve to a Dockerfile; the only two `@sha256:` pins in the
+estate are the two the line names, and nothing under `registry:5000/` is digest-pinned.
 
 Later phases:
 - **P7 lands nine, not seven** — its text is corrected in place. `step-ca-root-rotation.md` carries

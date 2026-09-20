@@ -171,6 +171,15 @@ charts/kubecoder/values.yaml:604 — text kc env describe prints to an agent in 
 **Provenance:** read, code-reviewer, P5 round 1, phases/P5/code_review_r1.md F2
 **Disposition:**
 
+### B13 — AnsibleSpecs: the rotation inventory still names a KubeCoder controller CA copy that was deleted two weeks before this slice · minor
+
+decisions.md:167 — the bullet immediately after the CA-root inventory P6 rewrote — states that the KubeCoder controller image bakes its own copy at /work/KubeCoder/controller/homelab-root.crt, and that it rotates like the other image-baked copies: rebuild the image, roll the controller Deployment onto the new tag. The file does not exist. KubeCoder 7e78405f (2026-09-03, "the step root from the pod") deleted it, and controller/Dockerfile carries no COPY of it — the controller now takes the root from the chart mount, exactly as the /work/HelmCharts/homelab-root.crt row at :166 already describes ("The controller keeps no copy of its own: a chart deploy carries it, no image rebuild"). Pre-existing, not introduced by slice 024. P6 re-gated this inventory against the tree but only in one direction — no real copy under /work is unnamed — so a named path that had vanished survived the sweep. Same class as N1, found by running that sweep the other way.
+
+**Consequence:** A year-9 rotation operator following the register looks for a file that is not there, and rebuilds and rolls the KubeCoder controller for a root that now reaches it through the chart mount — wasted keystrokes in the change window, and a lingering doubt about whether the controller got the new root at all.
+
+**Provenance:** witnessed, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F2
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -232,4 +241,13 @@ Each justifies a live design decision to the next reader; nothing executes them,
 **Consequence:** The check can go on proving the handover for an annotation layer the pipeline does not use — the deploy repo's committed judgment drifts from the fixture's, and a green check no longer says anything about the artifact Jenkins publishes.
 
 **Provenance:** witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
+**Disposition:**
+
+### S5 — The rotation runbook states the CA-copy count in four places; P7's brief names three · nit
+
+P6 rewrote P7's section to land nine copies instead of seven, enumerating the runbook's count sentences as step-ca-root-rotation.md:42, :64-65 and :146 (plan.md:671-673). The file states it once more, at :132 — "The seven paths are duplicates by convention, not by mechanism" — the sentence that introduces the md5sum block whose path list grows from seven to ten. An executor working the enumeration rather than sweeping the file leaves the runbook saying seven paths two lines above a ten-path block.
+
+**Consequence:** The rotation runbook contradicts itself in its own verification section, so the operator running the one-change-window check cannot tell from the page whether the block or the sentence is the one that was updated.
+
+**Provenance:** read, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F3
 **Disposition:**
