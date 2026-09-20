@@ -87,11 +87,37 @@ given; a ruling that corrects an earlier one replaces it in place.
   counterpart to reconcile with.
 
 - **Consequence of the catalog ruling, for the operator's deploy step (not a task in this slice).**
-  `charts/kubecoder/templates/controller-deployment.yaml:25` sets
-  `checksum/config: {{ .Values.controllerConfig | toYaml | sha256sum }}`, and `toolchains:` sits
-  under `controllerConfig:` (`values.yaml:78`, `:343`). Adding the entry therefore changes the
-  checksum and **restarts the KubeCoder controller on prd** when HelmCharts is next deployed. The
-  deploy is the operator's keystroke; see the push hold below.
+  The entry reaches a running environment only when HelmCharts is deployed, which is the operator's
+  keystroke — see the push hold below. That deploy rolls the KubeCoder controller on prd, but **the
+  entry does not cause the roll and adds no restart cost**: `controller-deployment.yaml:20-24`
+  carries a re-rendered `deployment.timestamp` annotation — *"Re-rendered on every helm render, so
+  every deploy rolls this pod"* — so the controller rolls on any deploy of this chart. (The
+  `checksum/config` line at `:25` does cover `controllerConfig`, under which `toolchains:` sits, but
+  it is not what makes this particular change roll anything.)
+
+- **Ruling (2026-09-20) — plan review round 1, both blocking findings accepted.** Operator:
+  *"Agree."*
+  - **The repo's curated verbs are part of the folder rework.** ArgoCDTools' `.kubecoder/project.yaml`
+    declares one component whose `build: kaniko --context .` and `test: … -s tests -t .` both break
+    on R5's move, and `aac-tools` would get no verb at all — while `kc project test` across every
+    repo the slice touched is the run loop's first test gate
+    (`/work/Ansible/docs/slice-testing-strategy.md:12`). The manifest becomes **two components**,
+    `argocd-hook` and `aac-tools`, each with its own build and test verb; the phase that adds the new
+    image declares `Creates: aac-tools`. Two components, not one with multi-command verbs, so each
+    image is separately buildable and slices 014 and 025 have a name to put in a `Target:` line.
+  - **No criterion may demand a running container.** Per G12 nothing in this pod runs images, so the
+    fresh-container reachability clause is reworded to what a build can earn — the CA root baked and
+    the declared tools present, asserted statically the way
+    `/work/ArgoCDTools/tests/test_image.py` already asserts `argocd-hook`'s contents — and live
+    reachability to charts.home and architecture.webathome.org becomes an item **owed to the
+    operator**, with the command that settles it, runnable only once the image is pushed and the
+    toolchain entry is deployed (the remainder of KC-68).
+  - Advisory findings accepted and applied: the equality attachment carries a shelf-life note (its
+    reference side is the live published dataset); its `stats.image` citation moves to
+    `/work/KubeCoderDeploy/chart/values.yaml:11-22`; and the runbook phase also updates the three
+    sentences that *count* the out-of-repo CA-root copies (`step-ca-root-rotation.md:42`, `:64-65`,
+    `:146`), which this image takes from six to seven. The two findings that landed in this section —
+    the catalog block's parent key and the restart consequence — are corrected in place above.
 
 - **Settled by the session, agreed on reading (2026-09-20).** `pvginkel/Architecture` is cloned into
   `/work` and added to `/work/Ansible/.kubecoder/config.yaml`'s `repos:`, so the work has the
@@ -150,7 +176,9 @@ Facts established by the planning session on 2026-09-20, against ArgoCDTools `d1
   `slice.md`'s table match the code verbatim.
 
 - **G5. The KubeCoder toolchain catalog is authored in HelmCharts, not in KubeCoder.**
-  `charts/kubecoder/values.yaml:343` opens `controller.toolchains:`; the `iac` entry is `:433-444`.
+  `charts/kubecoder/values.yaml:343` opens `toolchains:` **under `controllerConfig:` (`:78`)** — not
+  under `controller:` (`:21`); an entry placed under the wrong parent registers no toolchain and
+  fails silently. The `iac` entry is `:433-444`.
   An entry is ~10 lines of declaration (description, instructions, optional `homeOverlays`, and a
   `container:` with image, `imagePullPolicy`, `resources.limits.memory`). `slice.md`, `DAG.md` and
   KC-68 all treat this as another project's work and as the gate that forced the 024/014 split.
