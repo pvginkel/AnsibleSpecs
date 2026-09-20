@@ -625,7 +625,7 @@ Later phases:
 - The image must exist before any repo selects the toolchain: close-out A1, inside the KC-68
   remainder the operator already owns. No phase here acts on it.
 
-### P6 — the register says what it now means
+### P6 — the register says what it now means ✅ DONE 2026-09-20
 
 Target: ../AnsibleSpecs
 
