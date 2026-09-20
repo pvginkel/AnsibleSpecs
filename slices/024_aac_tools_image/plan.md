@@ -557,7 +557,7 @@ Later phases:
 - Nothing landed in `/work/KubeCoderDeploy` — it is clean, and the repo this slice changed is
   ArgoCDTools only.
 
-### P5 — `aac-tools` in the KubeCoder toolchain catalog
+### P5 — `aac-tools` in the KubeCoder toolchain catalog ✅ DONE 2026-09-20
 
 Target: ../HelmCharts
 
