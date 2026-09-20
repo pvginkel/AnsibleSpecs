@@ -117,7 +117,7 @@ The container path maps a `realizes:` target through the cluster storage table b
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
 **Disposition:**
 
-### B7 — ArgoCDTools: .kubecoder/project.yaml's aac-tools description still names one command · nit
+### ~~B7 — ArgoCDTools: .kubecoder/project.yaml's aac-tools description still names one command · nit~~ — resolved by the consult's own commit ArgoCDTools e03e644: .kubecoder/project.yaml's aac-tools description now names gen-architecture beside arch-validate, matching the Dockerfile header P3 extended; kc project info and kc project lint re-run green; struck by consult 3
 
 .kubecoder/project.yaml:28-33 describes the component as 'The architecture-as-code commands the estate runs inside a repo's checkout — `arch-validate`, the federation's validator, shipped as the canonical script — and the aac-tools image that carries them': an apposition that reads as the complete list and is now one of two. The sibling statement of the same fact, the Dockerfile header (aac-tools/Dockerfile:1-5), was extended in this phase for gen-architecture.
 
@@ -175,12 +175,14 @@ charts/kubecoder/values.yaml:604 — text kc env describe prints to an agent in 
 
 decisions.md:167 — the bullet immediately after the CA-root inventory P6 rewrote — states that the KubeCoder controller image bakes its own copy at /work/KubeCoder/controller/homelab-root.crt, and that it rotates like the other image-baked copies: rebuild the image, roll the controller Deployment onto the new tag. The file does not exist. KubeCoder 7e78405f (2026-09-03, "the step root from the pod") deleted it, and controller/Dockerfile carries no COPY of it — the controller now takes the root from the chart mount, exactly as the /work/HelmCharts/homelab-root.crt row at :166 already describes ("The controller keeps no copy of its own: a chart deploy carries it, no image rebuild"). Pre-existing, not introduced by slice 024. P6 re-gated this inventory against the tree but only in one direction — no real copy under /work is unnamed — so a named path that had vanished survived the sweep. Same class as N1, found by running that sweep the other way.
 
+consult 3, 2026-09-20 — Re-verified at consult 3: /work/KubeCoder/controller/homelab-root.crt does not exist and controller/Dockerfile (KubeCoder 8277e4ca) carries no COPY of it, so the bullet at decisions.md:167 is false as written and contradicts the /work/HelmCharts/homelab-root.crt row of the runbook table, which says the controller keeps no copy of its own. Judged against the generation bar and left here: V16 scopes to the artefacts this slice moved and added, and this copy is neither — it is the same pre-existing class as N1, found by sweeping the inventory the other way.
+
 **Consequence:** A year-9 rotation operator following the register looks for a file that is not there, and rebuilds and rolls the KubeCoder controller for a root that now reaches it through the chart mount — wasted keystrokes in the change window, and a lingering doubt about whether the controller got the new root at all.
 
 **Provenance:** witnessed, code-reviewer, P6 round 1, phases/P6/code_review_r1.md F2
 **Disposition:**
 
-### B14 — AnsibleSpecs: V04 asks the register to state a first-party tag norm the estate does not have · minor
+### ~~B14 — AnsibleSpecs: V04 asks the register to state a first-party tag norm the estate does not have · minor~~ — resolved by f2927cb (024: R4 rules the substance, not the sentence): V04 was reworded to state the outcome rather than the register's prose, and now matches the line P6 landed at decisions.md:599 — both re-read at consult 3, so the test phase has nothing left to decide unaided; struck by consult 3
 
 verification.json V04 requires decisions.md to state the pin rule as 'third-party scanner and validator images pinned by digest, first-party images we build following the estate's floating-tag norm', mirroring the ruling at plan.md:67-68 and the P6 brief at plan.md:613-616. P6 round 1 proved that norm does not exist — matrix-built images publish neither :<build> nor :latest, and webhook-relay, argocd-hook and four matrix toolchain entries are consumed pinned — so the phase deliberately landed a line that states no first-party tag norm at all, and says so in its done-record (plan.md:629-630). The deviation is the right call; what is missing is a ruling on V04, whose own words the test phase checks the register against.
 
@@ -196,6 +198,35 @@ decisions.md:599 is the register's only statement about image digests (grep -n d
 **Consequence:** A reader who takes decisions.md as the estate's word on digests, then meets @sha256: on every HelmCharts-deployed prd pod or greps HelmCharts' tooling for 'pin', has to work out unaided that the two uses are different mechanisms — and closing it properly means the register describing the deploy path's digest resolution, an edit wider than R4's ruling asked P6 for.
 
 **Provenance:** read, code-reviewer, P6 round 4, phases/P6/code_review_r4.md F1
+**Disposition:**
+
+### B16 — Ansible: declaring pvginkel/Architecture gives this environment a setup step that fails at every pod start · major
+
+P7 adds `- url: https://github.com/pvginkel/Architecture` at `.kubecoder/config.yaml:21`. Pod start runs the `setup` verb in the primary repository and in every extra `repos:` checkout that has a `project.yaml`, each its own step in the environment's setup status, and a failing one is reported as a warning naming `cd /work/<checkout> && kc project setup` (KubeCoder manual, reference/project-yaml.md:60-62, :260-263). Architecture's manifest runs every setup statement in the `modern-app` tool container — `.kubecoder/project.yaml:25,41,49` (`cexec modern-app poetry install`, `cexec modern-app npm ci` x2) — and this environment declares only `iac` and `go`. Witnessed here, running exactly what pod start runs: `cd /work/Architecture && kc project setup` -> `tooling: cexec modern-app poetry install --no-interaction [FAILED] / cexec: tool "modern-app" is not available in this environment; the tools it has are: go, iac`, exit 1. `setup` stops at the first failing statement, so the `viewer` and `service` statements never run either. No other checkout declared here behaves this way: HelmCharts' setup runs in `cexec iac`, HomelabTerraformProvider's in `cexec go`, and the rest declare none. Not fix work for this slice: V17 asks for the declaration, and the choice between carrying a `modern-app` sidecar in an 8 Gi pod and accepting a standing red step is the operator's.
+
+**Consequence:** From the next `kc env restart` on, this environment comes up with a permanent failed-setup warning for /work/Architecture — nothing is broken by it, but the setup status stops meaning 'the workspace came up clean', which is the surface a real setup failure would have to announce itself on.
+
+**Provenance:** witnessed | code-reviewer, P7, round 1 — cd /work/Architecture && kc project setup in this pod; full record in phases/P7/code_review_r1.md F1
+**Disposition:**
+
+### B17 — Ansible: the rotation runbook's new aac-tools row credits the homelab root for reaching architecture.webathome.org · minor
+
+`docs/runbooks/step-ca-root-rotation.md:76` reads: 'It is how a run reaches https://charts.home for the chart dependency and https://architecture.webathome.org for the dataset and the validator.' The second half is not true. Checked live from this pod: architecture.webathome.org presents `issuer=C=US, O=Let's Encrypt, CN=YE2`, so the stock trust store reaches it and the baked homelab root plays no part; charts.home presents `issuer=O=homelab-ca, CN=homelab-ca Intermediate CA`, which is the whole reason the copy exists — as the image itself says at /work/ArgoCDTools/aac-tools/Dockerfile:42-45, and as this slice's own verification.json V14 evidence line records. The same row's 'which Jenkins pulls' is also ahead of the estate: no pipeline consumes the image until slice 014 gives a deploy repo its Jenkinsfile.architecture.
+
+consult 3, 2026-09-20 — Re-verified live from this pod at consult 3, both halves: architecture.webathome.org presents issuer=C=US, O=Let's Encrypt, CN=YE2, so the stock trust store reaches it and the baked root plays no part; charts.home presents issuer=O=homelab-ca, CN=homelab-ca Intermediate CA, which is the whole reason the copy exists. Left for the operator rather than fixed in session, unlike B18's arithmetic: the sentence needs an authoring decision, not a restatement — the row's 'which Jenkins pulls' is the second half of the finding and no pipeline consumes the image until slice 014. The true clause is that the baked root is how a run reaches https://charts.home for the chart dependency, and that nothing about https://architecture.webathome.org — dataset or validator — depends on it.
+
+**Consequence:** A rotation operator reading the row puts the AaC dataset and validator inside a root change's blast radius they are not in, or blames a stale root for an arch-validate failure that cannot have that cause.
+
+**Provenance:** witnessed | code-reviewer, P7, round 1 — openssl s_client against both hosts; full record in phases/P7/code_review_r1.md F2
+**Disposition:**
+
+### ~~B18 — Ansible: the rotation runbook's find cross-check says eleven paths where the search returns twelve · nit~~ — resolved by the consult's own commit Ansible be64a99: step-ca-root-rotation.md:68 now reads twelve — this nine, plus the two symlinks and the canonical copy above; re-derived at consult 3 from find /work -name homelab-root.crt, which returns those twelve; struck by consult 3
+
+`docs/runbooks/step-ca-root-rotation.md:67-68`: 'a `find` that returns eleven paths is still this nine plus those two links.' `find /work -name homelab-root.crt` returns twelve — the nine out-of-repo copies, HelmCharts' two symlinks, and the canonical copy the same section names at :53-57, which any such search matches. P7's own gate note in plan.md records the real result ('returns exactly those ten plus HelmCharts' two symlinks').
+
+**Consequence:** The one sentence written for a reader who counts more find hits than the table has rows hands them the wrong expected number, so the cross-check it offers cannot be run as written.
+
+**Provenance:** witnessed | code-reviewer, P7, round 1 — find /work -name homelab-root.crt; full record in phases/P7/code_review_r1.md F3
 **Disposition:**
 
 ## Open questions and rulings
@@ -261,7 +292,7 @@ Each justifies a live design decision to the next reader; nothing executes them,
 **Provenance:** witnessed | code-writer, P4, r1 — /work/ArgoCDTools/aac-tools/checks/handover_equality.py
 **Disposition:**
 
-### S5 — The rotation runbook states the CA-copy count in four places; P7's brief names three · nit
+### ~~S5 — The rotation runbook states the CA-copy count in four places; P7's brief names three · nit~~ — resolved by P7 (f3cdc60): the fourth count place landed at ten — step-ca-root-rotation.md:141 'The ten paths are duplicates by convention' now sits above the ten-path md5sum block whose closing line at :158 reads 'All ten hashes must match'; struck by consult 3
 
 P6 rewrote P7's section to land nine copies instead of seven, enumerating the runbook's count sentences as step-ca-root-rotation.md:42, :64-65 and :146 (plan.md:671-673). The file states it once more, at :132 — "The seven paths are duplicates by convention, not by mechanism" — the sentence that introduces the md5sum block whose path list grows from seven to ten. An executor working the enumeration rather than sweeping the file leaves the runbook saying seven paths two lines above a ten-path block.
 
