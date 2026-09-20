@@ -508,8 +508,8 @@ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** d
   the product's trigger choice; `Deploy-PRD` is deleted, not rewritten.
 - **Rollback** (D36): revert on `main`, promote — dev follows, accepted. Emergency lever:
   force-move `prd` back to the previously promoted SHA, which loses nothing.
-- Every committed tag is a real `<n>` or `prd-<n>`, never `latest`, and the chart carries no
-  default to fall back on (D37 as amended by D47).
+- Every tag CI commits is a real `<n>` or `prd-<n>`, never `latest`, and the chart carries no
+  default for them to fall back on (D37 as amended by D47).
 
 ## Lifecycle
 

@@ -394,7 +394,7 @@ tag prefix gets repointed — registry retention/GC, `collect-versions`, the ver
 > what expresses promotion state. Read D12 as being about the artifact, not its label.
 >
 > **"Never `latest`" is strengthened to "never a default at all":** `chart/values.yaml` carries
-> no image tag, and the chart `required`-guards every tag it renders, so a stage values file
+> no image tag, and the chart `required`-guards every tag CI writes, so a stage values file
 > missing one fails to render instead of silently deploying a fallback — the same hazard this
 > decision named, reached by a different route. The guard is what fails the render, not the
 > absent default: an image reference whose tag is absent renders untagged and `helm template`
