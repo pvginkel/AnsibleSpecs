@@ -64,14 +64,45 @@ The operator's ruling that R6–R8 rest on (slice 010 close-out Q1, 2026-09-20),
   without the dev stage for a bit."* Nothing in this slice needs a bridging tag scheme, and
   slice 012 need not preserve `dev-latest` for continuity of the dev stage.
 
+- **Ruling 4 (2026-09-20) — the pinned build number is chosen at phase time, not frozen here.**
+  Operator: *"Agree."* `dev-511`, which the seven pins name today, has been evicted from the
+  registry (G12), and since `prd-<n>` is produced by retagging `<n>` — which for 511 would itself
+  have to come from `dev-511` — build 511 can never be produced by anything. The phase therefore
+  pins **the newest `dev-<n>` the registry actually holds when it runs** (today `dev-523`, giving
+  dev `523` and prd `prd-523`), and the plan records both as forward references that slice 012's
+  cutover must create before the first dev sync — by running the rewritten `Build-Main` first, or
+  by a one-off `crane tag dev-<n> <n>`. Choosing at phase time survives further aging; 511 does not.
+- **Ruling 5 (2026-09-20) — this slice tells slice 012 what Ruling 1 sent it.** Operator:
+  *"Agree."* `012_kubecoder_argo_cutover/slice.md` never names `Build-Main`, and its
+  *"Depends on: … 011 (CI commits pins)"* line (`:18`) is made false by Ruling 1. This slice
+  amends that slice.md: R2 carried in verbatim alongside the R4 entry already there (its item 14,
+  `:113-118`), with G5, G6, G8, G10 and G12 as its grounding, and the dependency line corrected to
+  what this slice actually delivers.
+- **Ruling 6 (2026-09-20) — the missing-tag guard goes in the chart, not only in the gate.**
+  Operator: *"Agree."* Removing the chart default does **not** make the render fail: a missing key
+  renders an untagged image reference and helm exits 0 (verified against the `iac` container's
+  helm), so `decisions.md:396-398`'s claim and P1's original wording were both wrong. The phase
+  adds a render-time `required` on each of the five concatenated tags and the two
+  `controllerConfig.images.*` keys, so a stage file missing one of the seven genuinely fails to
+  render; the gate keeps its own check as well. `kc project test` does not run at sync time, so
+  chart-side is what protects a hand-edited stage file.
+- **Ruling 7 (2026-09-20) — the `gitToken` finding is ruled out of scope, on the record.**
+  Operator: *"Agree."* `slice.md`'s source material carries it ("`gitToken` travels as a helm CLI
+  argument for all 45 releases; only `version-poller` consumes it … It must become an ESO leaf
+  when version-poller migrates") and asks the planner to decide deliberately. The decision: **not
+  this slice's work** — `design.md` assigns it to the version-poller migration, and nothing in
+  this slice touches the helm invocation that carries it. Filed to the intake queue so it is not
+  lost with this slice.
+
 #### Grounding — verified facts that bind this plan
 
 Established in this session's grounding pass; `slice.md` is stale where these contradict it.
 
 - **G1 — `/work/KubeCoder` is not a run-loop target from here.** Its `.kubecoder/project.yaml`
-  declares `python`, `go` and `frontend` components whose gates run `cexec python uv run pytest`,
-  `cexec go …` and `cexec frontend npm …`; this environment has none of those tool containers, so
-  `kc project test` from that root goes red and the phase bails. Recorded as a standing
+  declares `python`, `go` and `frontend` components; this environment has the `go` container
+  (`/work/Ansible/.kubecoder/config.yaml:104`, `use: go`) but **not** `python` or `frontend`, so a
+  `kc project test` from that root goes red on the `root` component's `cexec python` and the phase
+  bails. `slices/DAG.md:74-77` states the constraint in those terms. Recorded as a standing
   constraint in `slices/DAG.md` ("Not a gate, but a constraint on 011"). `../KubeCoderDeploy`,
   `../JenkinsPipelineUtils` and `../AnsibleSpecs` are all fine as targets — slice 010 used
   `../KubeCoderDeploy` three times.
@@ -88,8 +119,8 @@ Established in this session's grounding pass; `slice.md` is stale where these co
   'JenkinsPipelineUtils', changelog: false`) and the repo carries no git tags, so a merge is live
   for every job on its next run; `vars/*` compile together on load, which is why a syntax error —
   not a logic error — is the estate-wide failure mode Ruling 2 guards.
-- **G3 — the deploy repo's pins and the true size of the gate rework.** Seven pins sit at
-  `dev-511`: `images.{controller,bot,mcp,ingress,manual}` in `KubeCoderDeploy/chart/values.yaml:7-22`
+- **G3 — the deploy repo's pins and the true size of the gate rework.** Seven pins name
+  `dev-511` (a build the registry no longer holds — see G12): `images.{controller,bot,mcp,ingress,manual}` in `KubeCoderDeploy/chart/values.yaml:7-22`
   and `controllerConfig.images.{worker,vsix}` at `:668,671`. `images.tunnelReclaim` is an eighth
   entry in the same map but floats at `:latest` and is a DockerImages image, not a `Build-Main`
   pin — out of scope. `config/dev/values.yaml` and `config/prd/values.yaml` name no image today.
@@ -99,8 +130,11 @@ Established in this session's grounding pass; `slice.md` is stale where these co
   `chart/values.yaml`, while the `PIN` regex (`:71`,
   `registry:5000/kubecoder-(?P<name>[a-z]+):dev-(?P<build>[0-9]+)`) matches only the `dev-<n>`
   shape and cannot match `prd-<n>` at all. `.kubecoder/project.yaml` runs that script as the
-  `kc project test` gate. The chart's templates reference `.Values.images.*` generically, so no
-  template changes; `README.md` documents the invariant being inverted and needs updating with it.
+  `kc project test` gate. The chart's templates reference `.Values.images.*` generically, so **moving the values
+  between files** needs no template change — but Ruling 6 adds a render-time guard, which does
+  (`controller-deployment.yaml:46,173,194`, `bot-deployment.yaml:26`, `mcp-deployment.yaml:22`,
+  and `controller-config.yaml:12`, which has no per-key site because it is a single
+  `{{ .Values.controllerConfig | toYaml }}`); `README.md` documents the invariant being inverted and needs updating with it.
 - **G4 — R3 is discharged in code; nothing is repointed, and HelmCharts leaves this slice.**
   `registry-cleanup`'s family grouping (`/work/DockerImages/registry-cleanup/app/main.py:210-217`,
   `_family_and_number`) splits on a generic `(?:(.+)-)?(\d+)` rather than a fixed prefix list, so
@@ -153,6 +187,22 @@ Established in this session's grounding pass; `slice.md` is stale where these co
   `/work/DockerImages/docs/registry-management/version-poller-redesign.md` calls that a
   requirement on a still-open TTL design. The shared-digest guard covers the ordinary case, but a
   `prd-<n>` that has not been promoted is not unconditionally safe from age-based deletion.
+
+- **G12 — the registry no longer holds build 511, and the bare namespace is already occupied.**
+  Queried directly 2026-09-20 (`http://registry:5000/v2/kubecoder-<name>/tags/list`): the surviving
+  dev family is `dev-428 … dev-509`, then `dev-514 … dev-523`; **`dev-511` is absent for every
+  image**, as are `511` and `prd-511`. The nine survivors below 514 share digests with
+  `prd-26 … prd-36` and are held by the shared-digest guard; `dev-511` was never promoted, so the
+  newest-10 per-prefix cap (`registry-cleanup/app/main.py:283-299`) evicted it while
+  `chart/values.yaml` still named it in git. This is the realised form of G11's exposure, and it is
+  worse than G11 frames it: a **dev** pin deleted by the **cap**, not a prd pin by a TTL.
+  Separately, the bare `<n>` namespace is **not** empty — `kubecoder-*:176 … 185` exist, created
+  2026-07-21 with label `org.webathome.poller.pipeline: KubeCoder/KubeCoder` and tracking-tag
+  `latest`, from a Jenkins job that **no longer exists** (`KubeCoder/Build-Main` is live at build
+  523; `KubeCoder/KubeCoder` returns no results). So when `Build-Main` starts pushing bare
+  `<n>`/`latest` it inherits a tag family and a `latest` that today belong to a retired pipeline's
+  output. Nothing for this slice — it pushes no tags — but grounding slice 012 needs, and Ruling 5
+  carries it there.
 
 ## Task shape
 
@@ -267,3 +317,5 @@ amendment blocks are how it carries those, and this phase adds no new decision.
   one of the seven pins (G3).
 - `kubecoder-claude-shim`'s tag scheme — slice 012's, with the rename (G8).
 - The `registry-cleanup` TTL "keep newest of a family" gap — G11, pre-existing and independent.
+- The `gitToken` PAT travelling as a helm CLI argument for all 45 releases — Ruling 7: `design.md`
+  assigns it to the version-poller migration, and nothing here touches that invocation.
