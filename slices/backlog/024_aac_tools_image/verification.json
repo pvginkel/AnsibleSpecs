@@ -1,0 +1,140 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — the tools ship as a container",
+      "description": "One image carries several commands: both the deploy-repo architecture generator and `arch-validate` are invocable in `aac-tools`, and neither needs a script copied into a consuming repo.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — built in ArgoCDTools",
+      "description": "The image is built in ArgoCDTools, from its own folder, by that repo's Jenkinsfile on a push to `main` — beside `argocd-hook`, not in place of it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/ArgoCDTools/Jenkinsfile (today: one build stage, argocd-hook only)"]
+    },
+    {
+      "id": "V03",
+      "area": "R3 — the name",
+      "description": "Image and toolchain are both named `aac-tools`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R4 — floating tag, and the register narrowed",
+      "description": "Every reference to the image uses a floating tag, and `decisions.md` states the pin rule as narrowed by provenance — third-party scanner and validator images pinned by digest, first-party images we build following the estate's floating-tag norm — rewritten in place, with no note left elsewhere.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/AnsibleSpecs/decisions.md:599 — 'Scanner and validator images are pinned by digest.', the section's closing sentence, no duplicate in the estate"]
+    },
+    {
+      "id": "V05",
+      "area": "R5 — one folder per image",
+      "description": "ArgoCDTools is laid out one folder per image: `argocd-hook/` holds its Dockerfile, `presync/`, `image/` and `tests/`, the new image has a sibling folder, each is its own kaniko context, and no Dockerfile is left in the repo root.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/ArgoCDTools/Dockerfile:66,74 — the two files the build reads out of image/", "/work/JenkinsPipelineUtils/vars/helmCharts.groovy:83-90 — kaniko2 takes dockerfile and context"]
+    },
+    {
+      "id": "V06",
+      "area": "R6 — the tools run locally, from the same image",
+      "description": "`cexec aac-tools gen-architecture …` and `cexec aac-tools arch-validate …` run in a repo's checkout: the image meets KubeCoder's toolchain contract (bash present, no dependence on its own entrypoint, a resolvable passwd identity) and an `aac-tools` entry exists in the catalog HelmCharts authors.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648", "/work/HelmCharts/charts/kubecoder/values.yaml:343 — controllerConfig.toolchains; :427 the iac entry's shape"]
+    },
+    {
+      "id": "V07",
+      "area": "R7 — exactly one stage, named on the command line",
+      "description": "`--stage` is required and single-valued — no default, no 'all stages' — the generator never inspects the branch, and it holds no rule of its own about which stages a repo may publish.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R8 — UUIDs kept across the handover",
+      "description": "A moved element keeps its id and only its owner changes: the ported generator reuses the same uuid5 namespace constant and the same natural keys as HelmCharts' generator, so inbound edges from other producers never dangle.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/HelmCharts/tools/chart_tools/gen_architecture.py:104-105 — the NS constant", ":669-673 — the container natural key is namespace/workload/container, with no release or chart name in it"]
+    },
+    {
+      "id": "V09",
+      "area": "R8 — the equality proof on the real case",
+      "description": "Running the ported generator against the real `/work/KubeCoderDeploy` checkout for `--stage prd` yields the KubeCoder prd subset of what `helm-charts` publishes today: the same element ids and the same relation ids, with the producer field differing. The differences the check tolerates are only those named in attachments/handover-equality.md.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["published dataset read 2026-09-20: 9 helm-charts prd elements for KubeCoder, 20 relations touching them, 16 of which are the prd stage's own", "/work/HelmCharts/tools/chart_tools/gen_architecture.py:487-511 — resolve_svc_target narrows by workload name, never by namespace, which is why 4 of the 20 cross the stage boundary"]
+    },
+    {
+      "id": "V10",
+      "area": "Ruling — the generator is ported whole",
+      "description": "All five post-render passes, the CNPG substrate and the Ceph classification are present in the ported generator, even though KubeCoder exercises none of the last three; only the HelmCharts-layout couplings were stripped.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/HelmCharts/tools/chart_tools/gen_architecture.py:769-773 — reconcile_exposed_services, resolve_boundby, resolve_upstreams, resolve_secret_stores, resolve_mcp_clients", ":807 emit_cnpg_substrate", ":128-131 CEPH_DRIVERS"]
+    },
+    {
+      "id": "V11",
+      "area": "R9 — HelmCharts does not move onto the image",
+      "description": "HelmCharts' own `gen_architecture.py` and its tests are untouched by this slice; the only change in that repo is the toolchain declaration.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Generated-producer contract",
+      "description": "The generator is deterministic — regenerating twice over an unchanged checkout produces a byte-identical artifact — and everything it cannot map is printed as its own `gap: <what>` console line with the run staying green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/Architecture/.claude/architecture/producer-manual.md:522-529, :543-549"]
+    },
+    {
+      "id": "V13",
+      "area": "arch-validate",
+      "description": "The `arch-validate` the image ships is the canonical script byte for byte, not a fork.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/Architecture/.claude/architecture/arch-validate.py — md5 9e7e3f8c853efcce868fbe9d7ddedb3b, matching the copies in /work/{Ansible,HelmCharts,DockerImages}/scripts/"]
+    },
+    {
+      "id": "V14",
+      "area": "The image's contents",
+      "description": "The image carries what the two commands need at run time and nothing beyond it, and can reach both the chart repository and the validation endpoint from a fresh container — including the homelab CA root, which no default trust store carries.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["charts.home serves a leaf issued by 'O=homelab-ca, CN=homelab-ca Intermediate CA'; architecture.webathome.org serves a Let's Encrypt leaf (checked 2026-09-20)", "/work/Ansible/support/iac-image/Dockerfile:74 — the same root, same reason"]
+    },
+    {
+      "id": "V15",
+      "area": "Coverage preservation",
+      "description": "No coverage is lost across the folder move and the port: the `argocd-hook` gate passes unchanged in substance, and every test that covered a behaviour of HelmCharts' generator has a named successor covering it in the ported one.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/HelmCharts/tests/test_gen_architecture.py — 11 tests", "/work/ArgoCDTools/tests/test_image.py — the static image-contract pattern"]
+    },
+    {
+      "id": "V16",
+      "area": "The estate's records",
+      "description": "The records that inventory the artefacts this slice moved and added are true afterwards: the root-rotation inventory in `decisions.md` and the operator runbooks name the paths that exist, so their one-change-window check is runnable as written.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/AnsibleSpecs/decisions.md:166", "/work/Ansible/docs/runbooks/step-ca-root-rotation.md:71,109,140,154", "/work/Ansible/docs/runbooks/operator-workstation.md:95"]
+    },
+    {
+      "id": "V17",
+      "area": "The producer contract is on this machine",
+      "description": "`pvginkel/Architecture` is declared in this environment's repo set, so the generated-producer contract the image is written against is present by construction rather than by hand.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": ["/work/Ansible/.kubecoder/config.yaml:6-14 — the repos: list, which does not name it today"]
+    }
+  ]
+}

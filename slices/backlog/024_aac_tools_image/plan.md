@@ -101,6 +101,13 @@ given; a ruling that corrects an earlier one replaces it in place.
   generated output goes to `docs/architecture/<producer>.yaml`, uncommitted; `arch-validate` ships
   as the canonical copy byte for byte.
 
+## Task shape
+
+cross-cutting — slice.md's requirements land in four repos (R2/R5 ArgoCDTools, the catalog ruling
+HelmCharts, R4 AnsibleSpecs `decisions.md`, G2's runbook paths in Ansible) and set two new patterns
+the estate does not have yet: a repo laid out one folder per image, and a first-party tools image
+consumed by both Jenkins and a KubeCoder toolchain.
+
 ## Grounding
 
 Facts established by the planning session on 2026-09-20, against ArgoCDTools `d1849c9`, HelmCharts
@@ -248,13 +255,191 @@ Facts established by the planning session on 2026-09-20, against ArgoCDTools `d1
 
 ## Ordering constraints
 
-- Nothing blocks this slice; 014, 025 and KC-68 all wait on it (`AnsibleSpecs/slices/DAG.md`).
-- Within the slice: the ArgoCDTools folder rework lands **before** the new image's folder, so the
-  new image is added to a repo that already has the layout it belongs in.
-- The HelmCharts catalog entry lands **after** the image's Jenkinsfile build exists — the entry
-  names `registry:5000/aac-tools:latest`, which nothing publishes until then.
-- Cloning `pvginkel/Architecture` into `/work` lands **before** the generator port, which reads its
-  producer contract.
+- Nothing blocks this slice; slices 014 and 025 and KC-68 all wait on it
+  (`AnsibleSpecs/slices/DAG.md`).
+- The folder rework lands **before** the new image's folder, so the new image is added to a repo
+  that already has the layout it belongs in.
+- The catalog entry lands **after** the image's Jenkinsfile build exists — the entry names
+  `registry:5000/aac-tools:latest`, which nothing publishes until then.
+- The two record-keeping phases land last: they describe paths the earlier phases create.
+- The `/work/Architecture` checkout whose producer contract the port reads already exists — it was
+  cloned during planning, and the last phase only records it in the environment's repo set, so it
+  imposes no ordering of its own.
+
+## Push holds
+
+- `../ArgoCDTools` — `slice.md`'s operator boundary: *"Pushing stays the operator's call."* The
+  `IaC/ArgoCDTools` job builds and pushes both images on a push to `main`.
+- `../HelmCharts` — a push deploys changed releases, and the catalog entry changes the `kubecoder`
+  release: it restarts the KubeCoder controller on prd (see the consequence recorded above). The
+  operator presses this one.
+
+### P1 — ArgoCDTools: one folder per image
+
+Target: ../ArgoCDTools
+
+The repo's root stops being one image's build context. `argocd-hook/` holds that image's
+Dockerfile, its `presync/` package, its `image/` payload and its `tests/`, and is self-contained:
+everything the Dockerfile reads sits inside it, and its ignore list travels with it. The root keeps
+only what is genuinely repo-wide. The `argocd-hook` gate and the published image are unchanged in
+substance — this is a move, not a rebuild.
+
+Constraints the repo does not state:
+
+- Each image folder is its own kaniko context (R5). The builder mounts nothing else, so the two
+  files the Dockerfile copies from `image/` (`/work/ArgoCDTools/Dockerfile:66,74`) have to live
+  inside the folder, and a context-rooted `.dockerignore` goes with them.
+- No shared-library change is needed: `helmCharts.kaniko2` already takes `dockerfile` and `context`
+  (`/work/JenkinsPipelineUtils/vars/helmCharts.groovy:83-90`), and the estate's existing
+  multi-image repo instead wraps the call in `dir(...)` (`/work/DockerImages/Jenkinsfile:97`).
+  Either shape is fine.
+- The moved paths are recorded in two other repos' inventories. P6 and P7 update those; don't chase
+  them from here.
+
+### P2 — the `aac-tools` image, carrying `arch-validate`
+
+Target: ../ArgoCDTools
+
+A sibling folder builds `registry:5000/aac-tools`, and the repo's Jenkinsfile publishes it beside
+`argocd-hook` on a push to `main` (R1, R2, R3). The image is usable two ways with no per-caller
+setup: Jenkins pulls it and runs a command, and `kc cexec aac-tools <command> …` runs the same
+command inside a repo's checkout (R6). Its first command is `arch-validate`, shipped as the
+canonical script byte for byte — `/work/Architecture/.claude/architecture/arch-validate.py`, md5
+`9e7e3f8c853efcce868fbe9d7ddedb3b`, the hash the three estate copies already carry.
+
+Constraints the repo does not state:
+
+- The image must satisfy KubeCoder's toolchain contract now, even though the catalog entry is P5:
+  `bash` is mandatory because `kc cexec` runs every command as `bash -lc`, KubeCoder replaces the
+  image's own command so nothing may depend on an entrypoint, and the uid it runs as needs a passwd
+  entry or the entry needs `skipParityChecks`
+  (`/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648`; the same concern
+  `/work/ArgoCDTools/Dockerfile:78-93` already handles).
+- What it carries is fixed by what P3's generator needs at run time and nothing beyond it (G11):
+  python ≥3.12 with pyyaml, helm, git, bash, and the homelab CA root. `https://charts.home` serves
+  a `homelab-ca` leaf no default trust store carries; `https://architecture.webathome.org` is
+  publicly trusted and needs nothing. It carries no Terraform and none of HelmCharts' deploy
+  tooling.
+- That CA root is a new copy of an artefact the estate rotates in lockstep across every copy in one
+  change window. P6 and P7 add it to the two inventories.
+- R4: everything referencing this image references a floating tag.
+- This environment cannot run a container — there is no docker, podman or nerdctl, and
+  `/work/Ansible/.kubecoder/config.yaml:30` enables kaniko only. So the build itself is the proof
+  the image composes, and what it promises to contain is asserted statically, the way
+  `/work/ArgoCDTools/tests/test_image.py` already asserts it for `argocd-hook`. Note that this
+  package, unlike `presync`, is not standard-library-only.
+
+### P3 — the deploy-repo architecture generator
+
+Target: ../ArgoCDTools
+
+`gen-architecture`, the image's second command, generates a deploy repo's architecture artifact
+from a checkout of that repo — one stage per run, named on the command line — writing
+`docs/architecture/<producer>.yaml`, uncommitted, and reporting what it could not map.
+
+Constraints the repo does not state:
+
+- It is a port of `/work/HelmCharts/tools/chart_tools/gen_architecture.py` (1295 lines at
+  `c6c6357`), **whole**: everything but the eight HelmCharts-layout couplings comes across,
+  including all five post-render passes, the CNPG substrate and the Ceph classification, none of
+  which KubeCoder exercises (ruling). The couplings and their current anchors are G4.
+- A deploy repo has no `deploy_cli` — the chart renders with plain `helm template` against a
+  dependency tree resolved from the chart repository first, exactly as
+  `/work/KubeCoderDeploy/tests/render-chart.py:100-110` and `tests/build-deps.sh` already do.
+- The id namespace constant is reused verbatim, HelmCharts-shaped URL and all
+  (`gen_architecture.py:104-105`). That is the whole mechanism of R8, and the constant carries a
+  comment saying why it keeps a name that no longer describes it.
+- `introduced` cannot come from git here. HelmCharts reads the first commit touching
+  `charts/<chart>` (`:170`); a deploy repo's history dates the repo, not the app. The annotation
+  layer states it.
+- R7 exactly: `--stage` required and single-valued, no default, no "all stages", no branch check,
+  and no rule of the generator's own about which stages a repo publishes.
+- The producer id is an argument, not a constant: `kubecoder` is already taken in the federation
+  registry by `pvginkel/KubeCoder` (`/work/Architecture/pipeline-producers.yaml:120-123`).
+  Registering the deploy repo's own producer is slice 014's.
+- The generated-producer contract binds
+  (`/work/Architecture/.claude/architecture/producer-manual.md:499-549`): natural keys
+  deterministic enough that regenerating twice is byte-identical, and everything unmappable printed
+  as its own `gap: <what>` console line with the run staying green — a gap reported any other way
+  is never seen.
+- Its tests travel. HelmCharts has 11, in pytest over synthetic in-memory fixtures
+  (`/work/HelmCharts/tests/test_gen_architecture.py`), covering three of the five post-render
+  passes and nothing else (G15); ArgoCDTools' suite is stdlib `unittest`.
+
+### P4 — the handover holds: the same ids, from the other producer
+
+Target: ../ArgoCDTools
+
+A repeatable check in this repo proves R8 on the real case: the generator run against a deploy-repo
+checkout for one stage reproduces, id for id, what the current producer publishes for that app and
+stage. The KubeCoder annotation fixture it needs lives here; nothing lands in KubeCoderDeploy
+(ruling).
+
+What equality means here — the exact target set, the four published relations that are correctly
+absent, and the three fields that legitimately differ — is
+[`attachments/handover-equality.md`](attachments/handover-equality.md). Read it before writing the
+comparison; the diff is unreadable without it.
+
+Constraints the repo does not state:
+
+- The check needs a sibling deploy-repo checkout, a live chart repository and the live published
+  dataset. The repo's default `test` verb is what CI and a cold checkout run, and has none of the
+  three. Keep the two apart rather than making the suite conditional.
+- Per G12 it runs the generator from source in the `iac` sidecar, never from the image.
+
+### P5 — `aac-tools` in the KubeCoder toolchain catalog
+
+Target: ../HelmCharts
+
+An environment can select `aac-tools` and reach both commands through `kc cexec`, which is what R6
+asks for and what KC-68 was waiting on. The catalog is authored here, not in KubeCoder:
+`charts/kubecoder/values.yaml:343` opens the block and the `iac` entry at `:427` is the shape an
+entry takes.
+
+Constraints the repo does not state:
+
+- Values only. R9's limit on work in this repo is about generator work, not declarations (ruling),
+  and nothing exists on the KubeCoder side to reconcile with.
+- The entry has to meet the contract at
+  `/work/KubeCoder/manual/docs/reference/controller-yaml.md:632-648` — a raw container spec with a
+  memory limit and no `command`/`args`.
+- The image floats (R4), as every first-party toolchain image in this catalog already does.
+- Adding it changes `controllerConfig`'s checksum and so restarts the prd controller on the next
+  deploy of this repo. That deploy is the operator's keystroke and the repo is push-held; the
+  change lands, nothing rolls.
+
+### P6 — the register says what it now means
+
+Target: ../AnsibleSpecs
+
+`decisions.md` states the pin rule as the operator narrowed it (R4, ruling): third-party scanner
+and validator images pinned by digest, first-party images we build following the estate's
+floating-tag norm — not narrowed by pull mechanism, which would make the existing third-party
+scanner's pin look unnecessary. Today that is one sentence with no duplicate anywhere in the estate
+(`:599`, closing the section headed at `:589`).
+
+The same file's root-rotation inventory names the copies of `homelab-root.crt` that a rotation must
+move in one window (`:166`). This slice moves one of them and adds another; after this phase the
+inventory is true.
+
+The record is rewritten in place — no supersession note, no history narration.
+
+### P7 — the estate's records of what exists
+
+Target: root
+
+Two operator-facing records catch up with what this slice built.
+
+The runbooks that inventory the copied artefacts name the paths that exist afterwards, so their
+one-change-window check is runnable as written: `docs/runbooks/step-ca-root-rotation.md:71,109,140,154`
+(the CA-root inventory row, the `terraform.rc` list, and both `md5sum` blocks) and
+`docs/runbooks/operator-workstation.md:95`. Both the `argocd-hook` folder move and the new image's
+CA-root copy are in scope here.
+
+`.kubecoder/config.yaml`'s `repos:` declares `pvginkel/Architecture`, so the producer contract the
+generator is written against is on this machine by construction rather than by hand. The checkout
+already exists — it was made during planning — and the `kc env restart` that would otherwise
+materialise it recreates this pod, so it is the operator's and never runs mid-slice.
 
 ## Not in scope
 
@@ -268,11 +453,7 @@ Facts established by the planning session on 2026-09-20, against ArgoCDTools `d1
   instruction to copy it — ANS-78, the operator's own.
 - Any `terraform apply`, `ansible-playbook`, Argo sync or HelmCharts deploy — the operator's
   keystroke throughout.
-
-## Push holds
-
-- `../ArgoCDTools` — `slice.md`'s operator boundary: *"Pushing stays the operator's call."* The
-  `IaC/ArgoCDTools` job builds and pushes both images on a push to `main`.
-- `../HelmCharts` — a push deploys changed releases, and the catalog entry changes the `kubecoder`
-  release: it restarts the KubeCoder controller on prd (see the consequence recorded above). The
-  operator presses this one.
+- Giving the `IaC/ArgoCDTools` job a test stage. It clones and builds, and has never run the
+  repo's suite; this slice adds a second image to that job without changing its shape.
+- Deploying HelmCharts and restarting the environments so the toolchain becomes selectable — the
+  remainder of KC-68, and the operator's.

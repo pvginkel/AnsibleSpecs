@@ -41,6 +41,19 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — HelmCharts' generator draws four cross-stage Serving edges for KubeCoder that do not exist · minor
+
+The published dataset (read 2026-09-20) carries eight `Serving` edges from a KubeCoder controller to a bot or MCP adapter where only four wires exist. The mechanism is `resolve_svc_target` (/work/HelmCharts/tools/chart_tools/gen_architecture.py:487-511): a `boundBy` edge naming `svc:kubecoder-controller-api` collects every instance of the providing product, then narrows by `i["wl"] in host`. With `KUBECODER_CONTROLLER_URL = http://kubecoder-controller:8080` the workload name matches in both namespaces, and namespace is never considered, so each consumer is served by both stages' controllers.
+
+Not specific to KubeCoder: any product deployed in two namespaces whose in-cluster host names the workload gets the same fan-out.
+
+Out of scope here — R9 keeps HelmCharts' generator out of this slice, and its patches are slice 014's. Recorded because a single-stage deploy-repo run fixes it by construction (only one namespace is rendered), so the handover will quietly drop four wrong edges and that must not read as a regression when the two artifacts are compared.
+
+**Consequence:** Anyone reading the published architecture sees KubeCoder's prd controller serving the dev bot and the dev MCP adapter, and the dev controller serving both prd consumers — four asserted cross-environment dependencies that are not real.
+
+**Provenance:** witnessed; plan-writer, planning, r1; plan.md attachments/handover-equality.md
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -55,3 +68,14 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — The IaC/ArgoCDTools job publishes images without ever running the repo's suite
+
+/work/ArgoCDTools/Jenkinsfile clones and builds; there is no test stage, and `kc project test` exists only as a local verb (.kubecoder/project.yaml). That was tolerable for `argocd-hook`, whose failure mode is a failed Argo sync. `aac-tools` is different: slice 014 makes a deploy repo's architecture gate depend on it, and a broken generator would publish silently.
+
+Deliberately left out of this slice (Not in scope) rather than folded into the Jenkinsfile change it already makes.
+
+**Consequence:** A commit that reds the repo's tests still publishes to registry:5000 on a push to main — and after this slice that is two images, one of them the tool a deploy repo's architecture gate will depend on.
+
+**Provenance:** read; plan-writer, planning, r1; /work/ArgoCDTools/Jenkinsfile
+**Disposition:**
