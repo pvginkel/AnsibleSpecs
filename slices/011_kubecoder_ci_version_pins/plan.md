@@ -267,6 +267,40 @@ Two constraints the repo will not tell the executor:
   machine edits them on every build (P2). Give the image tags one small, clearly-bounded region
   per file rather than scattering them through the hand-written blocks.
 
+**Done (P1).** Build **523**, the newest `dev-<n>` all seven images carried in `registry:5000`
+when the phase ran (`dev-511` gone; `dev-514`…`dev-523` present). `config/dev/values.yaml` names
+`images.{controller,bot,mcp,ingress,manual}: ":523"` and
+`controllerConfig.images.{worker,vsix}: registry:5000/kubecoder-<name>:523`, `config/prd` the same
+seven on `prd-523`, each file holding them in one commented region. `chart/values.yaml` names no
+tag for them — `images.tunnelReclaim` and `controllerConfig.images.localHome` are what is left of
+the two maps — and the five container templates plus `controller-config.yaml` `required`-guard
+their keys. KubeCoderDeploy `49f0629` on `phase/011-P1`.
+
+Later phases:
+
+- P2: the five `images.*` values carry a **leading colon** (`":523"`) — the templates concatenate
+  them onto `registry:5000/kubecoder-<name>`. The method writes what it is handed, so the colon is
+  its caller's business; one that normalised a tag would break this repo.
+- P3: `decisions.md:396-398` names the wrong mechanism and P3's text now says so; the shape that
+  shipped includes the chart-side guard, so design.md's three sites describe stage files naming
+  all seven and a chart that refuses to render without them.
+
+Record:
+
+- The gate now reads the pins from the stage files: the chart may name none of the seven; a stage
+  file's image paths are **exactly** the seven; each fullmatches
+  `registry:5000/kubecoder-<key>:<prefix><build>`, `prefix` `""` on dev and `prd-` on prd, on one
+  build per stage and one across both (D47: CI writes them in one commit); `--set <path>=null`
+  must fail the render naming the path, which is what proves the chart's guard rather than the
+  gate's; rendered containers and the ConfigMap's `images.{worker,vsix}` are compared against the
+  stage file, and every pull-policy check is untouched.
+- Twelve mutations turn it red: a pin back in the chart; dev dropping `images.mcp` or
+  `controllerConfig.images.vsix` (helm names the key, `mcp-deployment.yaml:22` /
+  `controller-config.yaml:14`); prd bare; dev `prd-`-prefixed; the stages on different builds; one
+  stage split across two; `tunnelReclaim` pinned; `Always` back on bot; either guard removed; a
+  stage setting any other image.
+- `kc project lint` and `kc project test` green (4.9s, the 14 extra renders ~0.4s of it).
+
 ### P2 — JenkinsPipelineUtils: the shared method that commits version pins into a deploy repo
 
 Target: ../JenkinsPipelineUtils
@@ -317,8 +351,12 @@ committed default tag is always a real `<n>`", `:509`). All three describe what 
 all three must describe D47. `decisions.md`'s D45 (`:466-471`) names the single-values-file
 parameter P2 settles otherwise — record the shape as settled at implementation, the way D40 does
 (`:455-456`), not as a reversal: D47 already decided this and D45's mechanism is untouched.
-Decisions D47 has already amended in place, D37 above all, need nothing — the register's amendment
-blocks are how it carries those, and this phase adds no new decision.
+Decisions D47 has already amended in place need no new decision — the register's amendment blocks
+are how it carries those, and this phase adds none. One clause in them is false as written: the
+D37 amendment's "carries no image tag, **so** a missing stage values file fails to render"
+(`:396-398`) names the wrong mechanism — removing the default alone renders an untagged image and
+helm exits 0 (Ruling 6, verified in P1). The render fails because the chart `required`-guards all
+seven; say that.
 
 **Slice 012's `slice.md`** (Ruling 5). Ruling 1 moved `Build-Main`'s rewrite (R2) into slice 012,
 and nothing in that slice says so: it names `Build-Main` nowhere, while its item 14 (`:113-118`)
