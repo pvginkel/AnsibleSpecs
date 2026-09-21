@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — KubeCoderDeploy and KubeCoder are checked out under /work but not declared in /work/Ansible/.kubecoder/config.yaml, which this slice's phases and runbook work from · minor
+
+The repos: list in /work/Ansible/.kubecoder/config.yaml ends at Charts, with no KubeCoderDeploy and no KubeCoder, yet P1 and P2 target ../KubeCoderDeploy and D1 has the session accompanying the cutover edit /work/KubeCoder's Jenkinsfiles in this environment. Ansible's CLAUDE.md lists KubeCoderDeploy among the repos 'declared in .kubecoder/config.yaml', and argo-cd/phases.md B.2 still lists 'the /work/Ansible manifest line' as owed to the operator since slice 010. Both checkouts exist today, so nothing is blocked now.
+
+**Consequence:** If the environment is rebuilt before or during the cutover, the two repos the runbook works in may be absent until someone re-clones them by hand.
+
+**Provenance:** read; plan-reviewer, plan round 1; plan_review_r1.md
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
