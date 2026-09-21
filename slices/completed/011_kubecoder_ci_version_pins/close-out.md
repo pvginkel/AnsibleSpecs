@@ -38,7 +38,9 @@ push of two repos the driver's branch sweep does not reach.
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Re-run the Jenkins job AaC/Ansible once and hand back its console — Ruling 2's canary for the library push (verification V04)
+### ~~A1 — Re-run the Jenkins job AaC/Ansible once and hand back its console — Ruling 2's canary for the library push (verification V04)~~ — canary green: AaC/Ansible #140 resolved JenkinsPipelineUtils at 2c43b06, SUCCESS, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 **Do:** after JenkinsPipelineUtils `main` is at `2c43b0694cd94e66942644b9504d4690bed44f38` (the test phase pushed it), press *Build Now* on https://jenkins.webathome.org/job/AaC/job/Ansible/ and hand back the console output. The job is `Jenkinsfile.architecture` from github.com/pvginkel/Ansible: it loads the library, validates one YAML and archives it, and changes nothing. Its last build, #139, was SUCCESS in 20 s.
 
@@ -53,16 +55,22 @@ push of two repos the driver's branch sweep does not reach.
 **Consequence:** Until that build is green the library push is proven only off-Jenkins; a load failure that slipped past the compile checks would fail every job that loads JenkinsPipelineUtils on its next run.
 
 **Provenance:** witnessed; test-agent, test phase r1; verification.json V04, evidence from the Jenkins API and /tmp/t011/cps_parse.groovy
-**Disposition:**
+**Disposition:** "Can you progress the two A's? Yes, of one of them is just a push, by all means push." — built AaC/Ansible #140 on 2026-09-21: `Loading library JenkinsPipelineUtils@main` → `Resolved main as branch main at revision 2c43b0694cd94e66942644b9504d4690bed44f38` → `Finished: SUCCESS` (20 s); V04 set to pass
 
-### A2 — The doc phase's commits land on `main` in AnsibleSpecs and KubeCoderDeploy, outside the driver's branch sweep · minor
+</details>
+
+### ~~A2 — The doc phase's commits land on `main` in AnsibleSpecs and KubeCoderDeploy, outside the driver's branch sweep · minor~~ — pushed by the operator's request, 2026-09-21 (AnsibleSpecs cdad68f, KubeCoderDeploy 092a444)
+
+<details><summary>struck — body kept for the record</summary>
 
 Only /work/Ansible carries a phase/011-docs branch; AnsibleSpecs and KubeCoderDeploy were on main, as slice 024's doc phase also found (its A5). The doc-phase edits are therefore committed on main in both: AnsibleSpecs — argo-cd/phases.md (B.2's pin location, B.3's method signature and what slice 011 committed), history.md (the D47 turn in the promotion arc, the D45 label) and decisions.md (D37's amendment narrowed to the images CI pins); KubeCoderDeploy — both stage values files' pin comment. Gates run in place: kc project lint and kc project test green in KubeCoderDeploy, and AnsibleSpecs' substitute checks (every relative link in the three changed files resolves, no changed line over 100 columns). Nothing pushed, in any repo.
 
 **Consequence:** The driver's sweep rebase-merges and pushes only the Ansible branch, which this phase left empty — if nobody pushes AnsibleSpecs and KubeCoderDeploy, the register and the deploy repo keep the corrected text locally and the estate keeps reading the pre-011 shape.
 
 **Provenance:** witnessed; doc phase; doc_phase_result.json
-**Disposition:**
+**Disposition:** "Can you progress the two A's? Yes, of one of them is just a push, by all means push." — pushed 2026-09-21: AnsibleSpecs `08c962c..cdad68f`, KubeCoderDeploy `49f0629..092a444`; both main now level with origin
+
+</details>
 
 ## Notable events
 
