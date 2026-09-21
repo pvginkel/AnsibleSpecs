@@ -10,8 +10,9 @@ subagent.
 > no longer a queue Claude works directly. They are the inventory `/dev:triage` adjudicates and
 > cuts into slices: the grouping, the order and the owner marks below are the review's
 > suggestion to that session, not a decision, and "straightforward change, no slice" is
-> withdrawn wherever it appears. Nothing below §1 starts before triage has ruled. Intake card:
-> ANS-94 (with ANS-84, the operator's original ask, and ANS-89).
+> withdrawn wherever it appears. Nothing below §1 starts before triage has ruled. Triage's batch
+> is the accepted items of `report.md` themselves, not cards; ANS-84 (the operator's original
+> ask) and ANS-89 are the two existing cards the slices absorb.
 
 Standing rules for every step:
 
@@ -42,13 +43,13 @@ Standing rules for every step:
   already answered.
 - [x] **C** Fold in the responses: strike rejected items below and file or link the YouTrack
   cards (2026-09-21). ~~Confirm the routing (handover vs slice) of the accepted ones~~ — that
-  is triage's call now. Cards: ANS-94 is the intake card for everything accepted here, next
-  to ANS-84 (your original ask, §9); ANS-92 (J03) and ANS-93 (J10) are Later; ANS-19
+  is triage's call now. Cards: ANS-84 is your original ask (§9); ANS-94, a pointer card filed
+  on a misreading, is closed; ANS-92 (J03) and ANS-93 (J10) are Later; ANS-19
   (JCasC/Job DSL) closed as Won't Do on the J04/J05 rulings; ANS-20 (crons in the UI) closes
   when J02 lands. Rejected and struck below: J04, J05, J13, J27. J06 stays skipped, Q3 is left
   alone, Q2 keeps TrelloMcp on `test`.
-- [ ] **op** Run `/dev:triage` over this review (ANS-94, ANS-84, ANS-89). It decides what
-  becomes which slice.
+- [ ] **op** `/dev:triage` over this review's accepted items (absorbing ANS-84 and ANS-89). It
+  decides what becomes which slice.
 - [x] **op** Four rulings the fold-in turned up, ruled 2026-09-21 (recorded under your
   responses in `report.md`):
   - **J16 routing** — "I don't really mind." So as proposed: J16 joins the library helpers
