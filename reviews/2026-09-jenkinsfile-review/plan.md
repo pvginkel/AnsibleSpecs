@@ -49,18 +49,17 @@ Standing rules for every step:
   alone, Q2 keeps TrelloMcp on `test`.
 - [ ] **op** Run `/dev:triage` over this review (ANS-94, ANS-84, ANS-89). It decides what
   becomes which slice.
-- [ ] **op** Four rulings the fold-in turned up — my replies are under your responses in
-  `report.md`. Triage can take them in the same sitting:
-  - **J16 routing.** Slice 014 is already completed and never touched the 28 files. Proposed:
-    J16 joins the library helpers (§7) and delivers ANS-78 (your `arch-validate.py` card) for
-    those repos, so the files are rewritten once, together with §9's edit of them.
-  - **J19.** (1) a `load`-ed helper file inside the Ansible repo, fenced to `devUp()` and
-    `devStage()`, or (2) keep the duplication and say so in the style guide. I lean (2).
-  - **Q4.** trivy de-duplication across builds through a state file in the job's own
-    artifacts (recommended, small), or a weekly digest job (larger, in DockerImages).
-  - **Q6.** `HA_URL` is still read nightly by `AaC/Home Assistant Fleet`. To delete the global,
-    it moves into the OpenBao secret that already holds `HA_TOKEN` — your write, my two-line
-    edit.
+- [x] **op** Four rulings the fold-in turned up, ruled 2026-09-21 (recorded under your
+  responses in `report.md`):
+  - **J16 routing** — "I don't really mind." So as proposed: J16 joins the library helpers
+    (§7) and delivers ANS-78 for the 28 repos; the files are rewritten once, with §9's edit.
+  - **J19** — "I'll follow your recommendation." Keep the duplication; the style guide says it
+    is deliberate. No helper, in either repo.
+  - **Q4** — "Artifact seems fine." The state file in the job's own artifacts. You also said
+    the warnings are already noise after a few days, so this should not wait for the end of
+    the queue.
+  - **Q6 / `HA_URL`** — "Leave HA_URL where it is please. I don't put endpoints into OpenBao."
+    It stays a global env var.
 
 ## 2. Per-job settings decision document
 
@@ -106,9 +105,10 @@ secrets, timeouts, notifications), published and linked from the top of every Je
 - [ ] **C** Write the style guide from the rulings: J24 (`checkout scm` for the job's own repo),
   J23 (the one load line), J01 (the job-properties block and its placement; ~~J13~~ retention
   is the global build discarder, so files declare none), J08 (the declarative rule after §3),
-  J11/J12 (timeouts), J17 (`withVault` scope), J19 (whichever way it is ruled), the §6a result
+  J11/J12 (timeouts), J17 (`withVault` scope), J19 (the iac dev-stage duplication is deliberate:
+  those files stay self-contained), the §6a result
   (what a new repo needs for its push hook), non-secret settings inline rather than as global
-  env vars (Q6), `notify` use, `Jenkinsfile.*` naming, and header comments.
+  env vars (Q6; `HA_URL` is the ruled exception, and endpoints never go into OpenBao), `notify` use, `Jenkinsfile.*` naming, and header comments.
 - [ ] **C** Library reference pages (J22's docs half, replacing `vars/*.txt`), generated from or
   kept next to `vars/`
 - [ ] **op** Review the guide
@@ -126,13 +126,16 @@ secrets, timeouts, notifications), published and linked from the top of every Je
 - [ ] **C** Q6 — delete the dead global env vars (`ELASTICSEARCH_CLUSTER_URL`,
   `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`, `ANDROID_HOME`) after saving the global
   config; verify with one `MyDownloads/MyDownloadsClient` build (`ANDROID_HOME` comes from the
-  `android-35` image). The IoTSupport `KEYCLOAK_*` four go after §9 inlines them; `HA_URL` as
-  ruled in §1.
+  `android-35` image). The IoTSupport `KEYCLOAK_*` four go after §9 inlines them. `HA_URL` stays
+  global (ruled): endpoints do not go into OpenBao, and Architecture is public, so it cannot be
+  inlined either.
 - [ ] **C** J07 — built-in node executors 2 → 0 (API; J04 was its other home and is rejected).
   Verify with one pod build and one `IaC/Build-Main`.
 - [ ] **C** Q7 — the container cap of 3 is deliberate: say so in
   `/work/Ansible/docs/live-infra-access.md`, with what it means for a mass push.
-- [ ] **C** Q4 — trivy warning de-duplication in `DockerImages/Jenkinsfile`, as ruled in §1
+- [ ] **C** Q4 — trivy warning de-duplication in `DockerImages/Jenkinsfile` through a
+  `trivy-state.json` carried forward in the job's own artifacts; a warning only for CVE ids
+  that are new for that image. Early: the operator already reads the warnings as noise.
 
 ## 6. Library safety net — before any library refactor
 
@@ -176,10 +179,11 @@ style guide, and is written declaratively if §3 says "migrate all".
   parser and `poetry install --only main` as the one install line (Q5 — see the report).
   ~~J27 (a short-lived Secret)~~ rejected.
 - [ ] J21 — one kaniko API, applied only to files already touched here
-- [ ] J19 — open (§1). If ruled (1) it is not a library change at all: a `load`-ed
-  `support/jenkins/iac.groovy` in the Ansible repo, verified by Replays of the iac jobs.
-- [ ] J16 — open (§1). ~~It goes into slice 014 as a phase~~ — 014 is completed. Proposed: a
-  phase here, delivering ANS-78 for the 28 repos, with the file rewrite riding §9's wave 1.
+- ~~J19 — `iac` var for the dev-stage idiom~~ ruled out: the duplication stays and the §4
+  style guide says it is deliberate.
+- [ ] J16 — `architectureProducer(...)` for the 28 `Jenkinsfile.architecture` copies, calling
+  `arch-validate` from the `aac-tools` image, which delivers ANS-78 for those repos. ~~It goes
+  into slice 014 as a phase~~ — 014 is completed. The file rewrite rides §9's wave 1.
 
 ## 8. Timeouts — after the §2 rulings
 

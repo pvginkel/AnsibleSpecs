@@ -606,6 +606,8 @@ accept
 > edit to the same files, and §9 adds the `properties` block to them as well. Proposed: J16
 > joins the library helpers of plan §7 (the helper calls `arch-validate` from `aac-tools`, which
 > delivers ANS-78 for these repos), so the 28 files are rewritten once, together with §9's edit.
+>
+> **Operator (2026-09-21, in conversation):** "I don't really mind." → as proposed.
 
 ### J17 — Drop the inert `containerEnvVar` secret forwarding; scope `withVault`
 
@@ -701,6 +703,9 @@ discuss. Is there an alternative having Ansible publish a helper library? Would 
 > lines and one paging rule, against header comments that stop describing everything in view.
 > **Rule on:** (1) `load`-based helper with that fence, or (2) keep the duplication and say so
 > in the style guide.
+>
+> **Operator (2026-09-21, in conversation):** "I'll follow your recommendation." → (2): no
+> helper; the style guide records that the duplication is deliberate.
 
 ### J20 — Remove dead library code
 
@@ -953,6 +958,9 @@ I would very much like it to deduplicate. But not only in a single build. Across
 >
 > I'd do 1 now. 3 is the better long-term shape if you want vulnerability reporting rather
 > than quieter builds; it would be a Later card in DI.
+>
+> **Operator (2026-09-21, in conversation):** "Artifact seems fine. It's already noise to me and
+> it's just been running for a few days. That's not good." → option 1, and early.
 
 **Q5 — `poetry install` with the dev group.** `ElectronicsInventory/Jenkinsfile:84` installs
 the dev group; `DHCPApp:73`, `IoTSupport:79`, `ZigbeeControl:76` use `--without dev`. Which is
@@ -994,6 +1002,9 @@ Is HA_URL still used? I got rid of the notifier. If the script is still in use s
 > can be deleted. The three `KEYCLOAK_TEST_*` and `KEYCLOAK_OIDC_TOKEN_URL` are used by IoTSupport
 > only; with J04 rejected I'll inline them in its two Jenkinsfiles (IoTSupport is private) in the
 > §9 pass and delete the globals after that build is green.
+>
+> **Operator (2026-09-21, in conversation):** "Leave HA_URL where it is please. I don't put
+> endpoints into OpenBao." → `HA_URL` stays a global env var; the rest as above.
 
 **Q7 — Container cap 3.** Deliberate (node capacity), or historical? It sets the queue
 behaviour every mass push sees and where J11's timeout may sit. Either way it should be
