@@ -35,7 +35,9 @@ or KubeCoder drops out of the model. A3–A5 push the two held repos and leave t
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Create AaC/ArgoCDDeploy, then register argocd-deploy after its first green build
+### ~~A1 — Create AaC/ArgoCDDeploy, then register argocd-deploy after its first green build~~ — done: the operator created AaC/ArgoCDDeploy; registered in Architecture c95e5ee, published by AaC/Architecture #1299, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 ArgoCDDeploy's producer (P2) is committed but nothing runs it. The operator creates the AaC/ArgoCDDeploy job on ArgoCDDeploy's main branch running Jenkinsfile.architecture; that first build is also the canary for P1's new JenkinsPipelineUtils containerTemplates entry, which no gate could check. After the first green build, a pipeline-producers.yaml entry in pvginkel/Architecture registers id argocd-deploy against AaC/ArgoCDDeploy. Registering earlier fails the collector, because a registered producer with no artifacts fails discovery (/work/Architecture/tooling/collect.py:111-161). This is a new producer, not a handover, so there is no flip to order it against.
 
@@ -48,7 +50,9 @@ test-agent, r1, 2026-09-21 — The push preconditions are met: JenkinsPipelineUt
 **Consequence:** Argo CD and the webhook relay's two edges stay out of the published model, and the new pipeline shape is unproven when KubeCoder's cutover needs it.
 
 **Provenance:** read | plan-writer, r1 — plan.md R5 and the settled ruling of 2026-09-21
-**Disposition:** Done. You register it please. — registered in Architecture c95e5ee (argocd-deploy, repo pvginkel/ArgoCDDeploy, job AaC/ArgoCDDeploy) after AaC/ArgoCDDeploy #1 went green; collector clean on the last inputs plus this artifact
+**Disposition:** Done. You register it please. — registered in Architecture c95e5ee (argocd-deploy, repo pvginkel/ArgoCDDeploy, job AaC/ArgoCDDeploy) after AaC/ArgoCDDeploy #1 went green; collector clean on the last inputs plus this artifact; pushed on the operator's go, and AaC/Architecture #1299 published it (31 producers, clean)
+
+</details>
 
 ### ~~A2 — Create AaC/KubeCoderDeploy on the prd branch and register kubecoder-deploy before KubeCoder's prd flip~~ — closed by the operator, 2026-09-21
 
