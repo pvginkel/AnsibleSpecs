@@ -80,6 +80,34 @@ Rulings are dated; a ruling that corrects an earlier one replaces it in place.
   entry's shape and the operator's first `AaC/ArgoCDDeploy` build is its canary (the trade slice 011
   ruled in for the same library).
 
+- **Ruling (2026-09-21) — plan review round 1** (`plan_review_r1.md`), all four adjudicated:
+  - **Q1 — both producers register with `repo:`.** Operator: *"I won't be running the update soon.
+    Please register the repo. Do raise a card for the architecture project that we need to work on
+    this. I'll hold any update until that card is resolved."* So the owed registry entries for
+    `kubecoder-deploy` and `argocd-deploy` both carry `repo:` (`pvginkel/KubeCoderDeploy`,
+    `pvginkel/ArgoCDDeploy`), which enrols them in the central architecture update
+    (`/work/Architecture/tooling/fleet.py`). That tool clones and pushes the default branch (`main`)
+    while KubeCoderDeploy's producer builds `prd`; the mismatch is ARCH-14's, filed on this ruling,
+    and the operator holds every central update run until it is resolved. Nothing in this slice
+    works around it. The how-to states the gap — a deploy repo whose producer builds a promotion
+    branch is not yet served correctly by the central update — as a fact of today, without the card
+    id.
+  - **B1 — each deploy repo's `.architecturerc` names its real sources.** Operator: *"Ok. Again,
+    create a card for the architecture project if it needs special support for deploy/GitOps
+    repos."* The default `sources` (`:(glob)**/docs/architecture/**`) matches nothing at a deploy
+    repo's remote head, because `docs/architecture/` is uncommitted build output, and the central
+    update fails a producer whose `sources` match nothing. So each file carries `generated: true`,
+    `sources:` naming what the artifact is built from (the judgment layer, `chart/`, and the
+    published stage's `config/<stage>/`), and short `instructions:` in the manner of
+    `/work/HelmCharts/.architecturerc` (the artifact is build output; edit only the judgment layer).
+    No special support is needed for this — the tool already honours explicit `sources` — so no
+    card beyond ARCH-14.
+  - **A1 — the HelmCharts test pins only the generator's skip.** Operator: *"Ok."* The resolver half
+    is already pinned (see G3); the one test covers what is not.
+  - **A2 — the how-to states the producer id as `<app>-deploy`.** Operator: *"Ok."* `<app>` is the
+    chart name, which must equal the app's registry directory (G4) — the rule that yields both
+    ruled ids, where "the repo name in kebab case" would give `kube-coder-deploy`.
+
 #### Grounding — premise corrections
 
 Established by the planning session on 2026-09-21 against HelmCharts `78498dc`, ArgoCDTools
@@ -93,15 +121,19 @@ Established by the planning session on 2026-09-21 against HelmCharts `78498dc`, 
   creates `prd` at the prd cutover. So `AaC/KubeCoderDeploy` can have its first build only then;
   this slice commits the producer to `main`, which `prd` is born from. No phase can witness a
   Jenkins build — the jobs are the operator's.
-- **G3. HelmCharts already drops a flipped stage, silently, and nothing pins it.** HelmCharts'
-  `tools/chart_tools/gen_architecture.py` `releases()` (`:209`) enumerates every
-  `configs/prd/<chart>/<stage>/` and asks `deploy config` for its metadata;
-  `tools/deploy/deploy_cli/release.py:186` returns `chart_name = cfg.get("chart", chart_dir) if ours
+- **G3. HelmCharts already drops a flipped stage, silently; only the generator's skip is
+  unpinned.** HelmCharts' `tools/chart_tools/gen_architecture.py` `releases()` (`:209`) enumerates
+  every `configs/prd/<chart>/<stage>/` and asks `deploy config` for its metadata;
+  `tools/deploy/deploy_cli/release.py:174` returns `chart_name = cfg.get("chart", chart_dir) if ours
   else None` with `ours` = reconciler is `jenkins`; `gen_architecture.py:587` skips a release with
   no `chart_name`. The one live instance, `configs/prd/argocd/prd/release.yaml`
   (`reconciler: argo-cd`), is absent from the live dataset — zero `argo` matches from any producer.
-  `tests/test_gen_architecture.py` never mentions `chart_name` or `reconciler`. So R4 is a test
-  only; no patch. (Slice 024's planning note G14, that the published artifact still claimed Argo
+  The resolver half is pinned twice: `tests/test_release.py:218`
+  (`test_an_entry_another_reconciler_owns_is_not_validated_as_a_release`, `chart_name is None`) and
+  `tests/test_main_verbs.py:49` (`test_config_reports_a_falsy_chart_rather_than_failing`, `deploy
+  config` exits 0 reporting `chart_name: None` — the output `gen_architecture.py:584-587` reads).
+  `tests/test_gen_architecture.py` never exercises the skip. So R4 is one test of that skip only;
+  no patch. (Slice 024's planning note G14, that the published artifact still claimed Argo
   CD's deployment, was wrong.) `configs/prd/kubecoder/` still has no `release.yaml`.
 
 #### Grounding — verified facts the plan rests on
@@ -157,7 +189,12 @@ Established by the planning session on 2026-09-21 against HelmCharts `78498dc`, 
   `argocd-deploy` entry and no `AaC/KubeCoderDeploy` or `AaC/ArgoCDDeploy` job. The producer manual
   is `/work/Architecture/.claude/architecture/producer-manual.md`; its "Generated producers" section
   (`:499`) requires `.architecturerc` with `generated: true` at the producer repo root and the
-  `gap: <what>` console form.
+  `gap: <what>` console form. Its "Registration" and "Staying current" sections (`:698-742`) add the
+  registry's `repo:` field — the repo the central update (`tooling/fleet.py`) clones — and the
+  `.architecturerc` keys: `generated`, `sources` (default `:(glob)**/docs/architecture/**`; a
+  `sources` matching nothing at the remote head fails the producer, `fleet.py:698-701`) and
+  `instructions`; any other key fails it. Both existing generated/hand-authored files set `sources`
+  explicitly (`/work/HelmCharts/.architecturerc`, `/work/DockerImages/.architecturerc`).
 - **G10. The container template.** `/work/JenkinsPipelineUtils/vars/containerTemplates.groovy`: every
   entry is `containerTemplate(name: name, image: …, command: 'sleep', args: 'infinity',
   alwaysPullImage: true)`; `python` floats (`registry:5000/python`). No `aac-tools` entry. The repo
@@ -359,6 +396,8 @@ planner reads the ruling, not the superseded line.
 - Migrating the estate's copies of `arch-validate.py` (ANS-78), the chart-name/registry-path check
   (ANS-85), and a test stage in the `IaC/ArgoCDTools` job (ANS-86).
 - `recommend-resources` and `collect-versions`/version-poller, O2's other halves.
+- Teaching the central architecture update (`/work/Architecture/tooling/fleet.py`) producers that
+  build a promotion branch — ARCH-14; the operator holds update runs until it is resolved.
 - Moving ArgoCDDeploy's relay onto DockerImages' `RECEIVERS` list (DockerImages `8ca5798`):
   ArgoCDDeploy stays on its pinned relay build (`chart/values.yaml:54`), and its judgment layer
   models the two variables that build reads.
