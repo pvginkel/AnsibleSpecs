@@ -490,6 +490,27 @@ hermetic bar — no cluster, no network, no helm/kubectl/terraform subprocess
 (`.kubecoder/project.yaml:19-22`). The behaviour already holds, so this is a test only; should it
 prove otherwise, the fix is the minimum patch. Nothing else in HelmCharts changes.
 
+**Done (P6).** HelmCharts `0c37dbb` on `phase/014-P6`: `tests/test_gen_architecture.py` gains
+`test_a_release_deploy_config_reports_no_chart_for_is_left_out_of_the_artifact`, and the rest of
+the diff is two imports. The behaviour held, so there is no patch. `kc project test` is green.
+
+Later phases:
+- P7: the handover step "the flip's HelmCharts architecture build drops the app and clears the
+  duplicates" rests on HelmCharts behaviour that is now pinned by this test and by the two resolver
+  tests (`tests/test_release.py:218`, `tests/test_main_verbs.py:49`).
+
+Record:
+- The test runs `ga.main()` over a synthetic `configs/prd/` in `tmp_path` that holds two releases,
+  `web` and `argocd`. `ROOT`, `CONFIGS` and `OUTPUT` are monkeypatched to the synthetic tree,
+  `load_dataset` is replaced with an empty `Dataset`, and `run` is faked. The fake `deploy config`
+  reports `chart_name: None` for `argocd`, in the shape `_print_config` prints. The fake `deploy
+  template` renders a Deployment for either release, so a rendered `argocd` would reach the
+  artifact. It asserts that the artifact's instances are `web`'s alone and that the text contains
+  no `argocd`. The test runs no subprocess and does no network I/O.
+- Witnessed red by two mutations, both reverted. Dropping `or not meta["chart_name"]` gives a
+  `TypeError` at `charts/None`, which fails the run. Falling back to `chart_dir` for the chart name
+  puts `argocd` into the artifact, which fails the assertion.
+
 ### P7 — The how-to: a migrated app carries its own producer
 
 Target: root
