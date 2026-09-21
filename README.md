@@ -9,7 +9,7 @@ Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmChar
 - [`slices/`](slices/) — the single tracking unit for homelab work, numbered `NNN_<name>/`. Freshly triaged slices land in [`slices/backlog/`](slices/backlog/); planned and in-flight ones sit at the top of `slices/`; closed work moves to [`completed/`](slices/completed/), [`deferred/`](slices/deferred/), [`cancelled/`](slices/cancelled/) or [`archive/`](slices/archive/). The catalogue is below.
 - [`change_requests/`](change_requests/) — bundles from the retired `/write-slice` era, kept as raw input.
 - [`phases/`](phases/) — the homelab build-out, executed sequentially and now finished. Read-only history, still linked from slices for context.
-- [`reviews/`](reviews/) — point-in-time estate reviews. Latest: [`2026-07-iac-review/`](reviews/2026-07-iac-review/README.md) — full IaC review (findings, GitOps/Argo CD app note, tech radar).
+- [`reviews/`](reviews/) — point-in-time estate reviews. Latest: [`2026-09-jenkinsfile-review/`](reviews/2026-09-jenkinsfile-review/report.md) — every Jenkinsfile, the shared library and the UI-side job config (ANS-84), with its [work plan](reviews/2026-09-jenkinsfile-review/plan.md). Before that: [`2026-07-iac-review/`](reviews/2026-07-iac-review/README.md) — full IaC review (findings, GitOps/Argo CD app note, tech radar).
 - [`handovers/`](handovers/) — scratch working documents.
 
 ## Conventions
