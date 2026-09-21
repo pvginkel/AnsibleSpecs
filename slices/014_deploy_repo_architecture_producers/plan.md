@@ -433,7 +433,7 @@ Record:
   boundary, the dev↔prd controller-api edges to bot and mcp (ARCH-13), and ended "equal — every id
   matches; producer, logo and stats.image are all that differ".
 
-### P5 — The handover check reads the deploy repo's own judgment layer
+### P5 — The handover check reads the deploy repo's own judgment layer ✅ DONE 2026-09-21
 
 Target: ../ArgoCDTools
 
