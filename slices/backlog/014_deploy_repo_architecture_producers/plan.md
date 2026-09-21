@@ -260,14 +260,20 @@ overrides neither.
 Target: ../ArgoCDDeploy
 
 ArgoCDDeploy becomes the generated producer `argocd-deploy` (R5): a committed judgment layer the
-`aac-tools` generator reads (G4), the `.architecturerc` the producer manual requires of a generated
-producer (G9), and a `Jenkinsfile.architecture` that — in P1's container — builds `main` (the
-branch Argo syncs it from, HelmCharts `configs/prd/argocd/prd/release.yaml`), generates the `prd`
-stage under that id, validates it with the image's `arch-validate`, and archives it where the
-collector's filter finds it (G8). The branch built and the stage published both read off the file.
-The artifact is a build output, never committed. `kc project test` generates and validates the prd
-artifact through the `aac-tools` toolchain, so the gate runs what the pipeline runs — which needs
-G7's pre-run step: an `aac-tools` without the list form crashes on this judgment layer.
+`aac-tools` generator reads (G4), an `.architecturerc`, and a `Jenkinsfile.architecture` that — in
+P1's container — builds `main` (the branch Argo syncs it from, HelmCharts
+`configs/prd/argocd/prd/release.yaml`), generates the `prd` stage under that id, validates it with
+the image's `arch-validate`, and archives it where the collector's filter finds it (G8). The branch
+built and the stage published both read off the file. The artifact is a build output, never
+committed. `kc project test` generates and validates the prd artifact through the `aac-tools`
+toolchain, so the gate runs what the pipeline runs — which needs G7's pre-run step: an `aac-tools`
+without the list form crashes on this judgment layer.
+
+The `.architecturerc` is what the central update reads (G9, ruling B1): `generated: true`; `sources`
+naming what the artifact is built from — the judgment layer, `chart/` and `config/prd/` — each
+matching files committed at the head, since the default matches nothing here; and short
+`instructions` in the manner of `/work/HelmCharts/.architecturerc` (the artifact is build output,
+edit only the judgment layer). Those three keys and no other: any other key fails the producer.
 
 The model carries Argo CD itself, as a product element this producer owns — nobody publishes one
 today (no `argo` or `ss:redis` id in the live dataset, checked this pass) — with the instances the
@@ -283,8 +289,9 @@ not the judgment. Whatever still prints as `gap:` is named in the done-record wi
 own history does date the app. The repo's statement that it deliberately has no Jenkinsfile
 (`.kubecoder/project.yaml:8-10`) stops being true in this phase. No phase can run a Jenkins build
 (G2), and unlike the images every existing producer pipeline uses (G11), `aac-tools` runs non-root
-and shells out to git and helm. The `AaC/ArgoCDDeploy` job and the registration are the
-operator's, after that job's first green build (R5).
+and shells out to git and helm. The `AaC/ArgoCDDeploy` job and the registration — an entry
+carrying `repo: pvginkel/ArgoCDDeploy` (ruling Q1) — are the operator's, after that job's first
+green build (R5).
 
 ### P3 — The relay's own record says where its edges are modelled
 
@@ -302,12 +309,13 @@ changes; the envelope's data does not. Held from pushing (Push holds).
 
 Target: ../KubeCoderDeploy
 
-KubeCoderDeploy becomes the generated producer `kubecoder-deploy`, in P2's shape, publishing **prd
-only** (R2): its `Jenkinsfile.architecture` builds the `prd` branch and runs the generator with
-`--stage prd`, the branch stated in the file beside the stage (slice.md, 2026-09-20 ruling 3). The
-guard is that required, single-valued `--stage` and nothing else — no branch check, no generator
-rule, and no gate or pipeline here produces a dev artifact. `kc project test` generates and
-validates the prd artifact through the `aac-tools` toolchain.
+KubeCoderDeploy becomes the generated producer `kubecoder-deploy`, in P2's shape — its
+`.architecturerc` `sources` name `config/prd/`, the one stage it publishes, not `config/dev/` —
+publishing **prd only** (R2): its `Jenkinsfile.architecture` builds the `prd` branch and runs the
+generator with `--stage prd`, the branch stated in the file beside the stage (slice.md, 2026-09-20
+ruling 3). The guard is that required, single-valued `--stage` and nothing else — no branch check,
+no generator rule, and no gate or pipeline here produces a dev artifact. `kc project test` generates
+and validates the prd artifact through the `aac-tools` toolchain.
 
 The judgment layer is HelmCharts' `charts/kubecoder/architecture.yaml` copied in with an explicit
 `introduced: '2026-06-17'` — the date every published KubeCoder element carries (G5;
@@ -321,8 +329,10 @@ R3's acceptance rides this phase: `handover_equality.py` pointed at this repo's 
 against the live dataset — the cross-stage relations it excludes (ARCH-13) and the
 `kube-coder-tunnel-reclaim` gap are the expected differences (G5); record its output. There is no
 `prd` branch yet (G2): the producer lands on `main`, which `prd` is born from in slice 012. The
-`AaC/KubeCoderDeploy` job and the registration are the operator's, in the order of the ruling of
-2026-09-21 (D2).
+`AaC/KubeCoderDeploy` job and the registration — an entry carrying
+`repo: pvginkel/KubeCoderDeploy` (ruling Q1) — are the operator's, in the order of the ruling of
+2026-09-21 (D2). The central update clones and pushes `main` while this producer builds `prd`; that
+is ARCH-14's, and nothing here works around it.
 
 ### P5 — The handover check reads the deploy repo's own judgment layer
 
@@ -344,14 +354,15 @@ describing a copy. Held from pushing (Push holds).
 
 Target: ../HelmCharts
 
-R4: HelmCharts' suite gains the one test that fails if a stage whose `release.yaml` says
-`reconciler: argo-cd` either appears in the architecture artifact or fails the generator run. It
-covers both halves of the behaviour — the resolver handing back no chart for such a stage
-(`tools/deploy/deploy_cli/release.py:174`) and the generator skipping a release that has none
-(`tools/chart_tools/gen_architecture.py:587`) — inside the suite's hermetic bar (no helm, deploy CLI
-or network subprocess; `.kubecoder/project.yaml`'s `test` comment). G3: the behaviour already
-holds, so this is a test only; should it prove otherwise, the fix is the minimum patch. Nothing
-else in HelmCharts changes.
+R4: HelmCharts' suite gains the one test that pins the half of the behaviour nothing pins yet (G3,
+ruling A1): the generator, handed a release whose `deploy config` metadata reports no chart — what
+the resolver returns for a stage whose `release.yaml` says `reconciler: argo-cd`, already pinned by
+`tests/test_release.py:218` and `tests/test_main_verbs.py:49` — leaves it out of the artifact and
+finishes the run (`tools/chart_tools/gen_architecture.py:584-587`, in `main()`, `:518`). The test
+goes red if such a release appears in the artifact or fails the run. It sits inside the suite's
+hermetic bar — no cluster, no network, no helm/kubectl/terraform subprocess
+(`.kubecoder/project.yaml:19-22`). The behaviour already holds, so this is a test only; should it
+prove otherwise, the fix is the minimum patch. Nothing else in HelmCharts changes.
 
 ### P7 — The how-to: a migrated app carries its own producer
 
@@ -361,11 +372,15 @@ The reusable pattern (R5): `docs/runbooks/argocd.md` gains a section beside "Reg
 undeploying and unregistering an app" (`:213`) that takes the next migrating app from its
 HelmCharts annotation file to a registered producer of its own, with P2 and P4 as its worked
 examples. It carries what a future migration would otherwise get wrong: one pipeline publishes one
-stage from one branch (R2); the moved annotation file states `introduced:`; the producer id is the
-deploy repo's name in kebab case; the chart's name must match the registry directory (G4, ANS-85);
-an owned product element a second producer also mints collides at the collector (G6); the job and
-its registration are the operator's, registration only after the first green build (G8); and at a
-handover, registration comes before the flip, with the collector red in between (ruling of
+stage from one branch (R2); the moved annotation file states `introduced:`; the producer id is
+`<app>-deploy`, `<app>` being the chart's name, which must match the app's registry directory (G4,
+ANS-85, ruling A2); `.architecturerc` names the sources the artifact is built from, because the
+default matches nothing in a deploy repo (ruling B1); an owned product element a second producer
+also mints collides at the collector (G6); the job and its registration — whose entry carries
+`repo:` — are the operator's, registration only after the first green build (G8, ruling Q1); a
+producer that builds a promotion branch rather than the default branch is not yet served correctly
+by the central architecture update, stated as a fact of today without a card id (ruling Q1); and at
+a handover, registration comes before the flip, with the collector red in between (ruling of
 2026-09-21, D2) — a new app with no current producer, ArgoCDDeploy's case, has no flip. A reader
 following the runbook through a cutover meets the architecture step where it falls in that order.
 

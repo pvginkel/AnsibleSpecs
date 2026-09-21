@@ -27,6 +27,8 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 ArgoCDDeploy's producer (P2) is committed but nothing runs it. The operator creates the AaC/ArgoCDDeploy job on ArgoCDDeploy's main branch running Jenkinsfile.architecture; that first build is also the canary for P1's new JenkinsPipelineUtils containerTemplates entry, which no gate could check. After the first green build, a pipeline-producers.yaml entry in pvginkel/Architecture registers id argocd-deploy against AaC/ArgoCDDeploy. Registering earlier fails the collector, because a registered producer with no artifacts fails discovery (/work/Architecture/tooling/collect.py:111-161). This is a new producer, not a handover, so there is no flip to order it against.
 
+plan-writer, r2, 2026-09-21 — Per plan review r1 ruling Q1, the argocd-deploy entry in pipeline-producers.yaml carries repo: pvginkel/ArgoCDDeploy beside id and jenkinsJob. That enrols the producer in the central architecture update (/work/Architecture/tooling/fleet.py), which reads the repo's .architecturerc (P2 commits it with explicit sources, ruling B1). The operator holds every central update run until ARCH-14 is resolved.
+
 **Consequence:** Argo CD and the webhook relay's two edges stay out of the published model, and the new pipeline shape is unproven when KubeCoder's cutover needs it.
 
 **Provenance:** read | plan-writer, r1 — plan.md R5 and the settled ruling of 2026-09-21
@@ -35,6 +37,8 @@ ArgoCDDeploy's producer (P2) is committed but nothing runs it. The operator crea
 ### A2 — Create AaC/KubeCoderDeploy on the prd branch and register kubecoder-deploy before KubeCoder's prd flip
 
 KubeCoderDeploy's producer (P4) lands on main. Slice 012 creates the prd branch at the prd cutover, and the job can have its first build only then. The order is: prd born → AaC/KubeCoderDeploy green on prd → the kubecoder-deploy entry in pipeline-producers.yaml → the reconciler flip (ruling of 2026-09-21, D2). The collector is red on the duplicate ids between registration and the flip's HelmCharts architecture build, and the published model keeps KubeCoder throughout.
+
+plan-writer, r2, 2026-09-21 — Per plan review r1 ruling Q1, the kubecoder-deploy entry in pipeline-producers.yaml carries repo: pvginkel/KubeCoderDeploy beside id and jenkinsJob. The central architecture update clones and pushes the default branch, main, while this producer builds prd, so it does not serve this producer correctly until ARCH-14 is resolved. The operator holds every central update run until then, and nothing in this slice works around it.
 
 **Consequence:** If the prd flip lands before this, KubeCoder leaves the federated model, which is the loss R1 forbids.
 

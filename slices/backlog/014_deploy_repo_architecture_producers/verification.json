@@ -38,24 +38,30 @@
     {
       "id": "V04",
       "area": "R4 — HelmCharts stays on its own generator",
-      "description": "HelmCharts does not move onto the image (\"I must assume that it can keep working as is. Honestly, I'd prefer you patch it if you need changes in it.\"). HelmCharts' suite carries one test pinning that a stage flipped to reconciler: argo-cd leaves the artifact without failing the build — it goes red if the flipped stage appears in the artifact or the generator run fails — and HelmCharts' diff is that test, plus only the minimum patch should the test have found the behaviour broken.",
+      "description": "HelmCharts does not move onto the image (\"I must assume that it can keep working as is. Honestly, I'd prefer you patch it if you need changes in it.\"). HelmCharts' suite carries one test pinning that a stage flipped to reconciler: argo-cd leaves the artifact without failing the build. It pins the generator's half — a release whose deploy config metadata reports no chart is left out of the artifact and the run finishes — and goes red if such a release appears in the artifact or the run fails; the resolver's half, no chart for an argo-cd entry, stays pinned by the tests that already cover it. HelmCharts' diff is that test, plus only the minimum patch should the test have found the behaviour broken.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:174",
-        "/work/HelmCharts/tools/chart_tools/gen_architecture.py:587",
+        "/work/HelmCharts/tools/chart_tools/gen_architecture.py:584-587",
+        "/work/HelmCharts/tests/test_release.py:218",
+        "/work/HelmCharts/tests/test_main_verbs.py:49",
+        "/work/HelmCharts/.kubecoder/project.yaml:19-22",
         "/work/HelmCharts/configs/prd/argocd/prd/release.yaml"
       ]
     },
     {
       "id": "V05",
       "area": "R5 — every deploy repo gains a Jenkinsfile.architecture",
-      "description": "\"The new deploy repos all need to gain a Jenkinsfile.architecture pipeline delivering the same artifact scoped to that repo\": KubeCoderDeploy and ArgoCDDeploy each carry one that, in the aac-tools container, generates one stage under the repo's producer id (kubecoder-deploy, argocd-deploy), validates it with arch-validate and archives it at a path containing an architecture/ directory. Each repo is marked a generated producer (.architecturerc, generated: true), commits its judgment layer, and does not commit the generated artifact.",
+      "description": "\"The new deploy repos all need to gain a Jenkinsfile.architecture pipeline delivering the same artifact scoped to that repo\": KubeCoderDeploy and ArgoCDDeploy each carry one that, in the aac-tools container, generates one stage under the repo's producer id (kubecoder-deploy, argocd-deploy), validates it with arch-validate and archives it at a path containing an architecture/ directory. Each repo commits its judgment layer, does not commit the generated artifact, and carries an .architecturerc with generated: true, sources naming what the artifact is built from — the judgment layer, chart/ and the published stage's config/<stage>/ (config/prd/ in both) — every one of which matches files committed at the repo's head, and instructions saying the artifact is build output and only the judgment layer is edited; the file has no other key.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "/work/Architecture/Jenkinsfile:75",
         "/work/Architecture/.claude/architecture/producer-manual.md:499-512",
+        "/work/Architecture/.claude/architecture/producer-manual.md:726-742",
+        "/work/Architecture/tooling/fleet.py:95",
+        "/work/Architecture/tooling/fleet.py:698-701",
+        "/work/HelmCharts/.architecturerc",
         "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1004-1011"
       ]
     },
@@ -73,22 +79,24 @@
     {
       "id": "V07",
       "area": "R5 — the reusable pattern",
-      "description": "\"Both, plus the reusable pattern\": the Argo CD runbook carries, beside registering an app, the how-to that takes a migrating app to a producer of its own — the steps, the operator's job and registration after the first green build, and at a handover registration before the flip (ruling of 2026-09-21) — so every future migrated app carries its own.",
+      "description": "\"Both, plus the reusable pattern\": the Argo CD runbook carries, beside registering an app, the how-to that takes a migrating app to a producer of its own — the steps, the producer id <app>-deploy with <app> the chart name that must equal the app's registry directory, an .architecturerc naming the real sources, the operator's job and a registration carrying repo: after the first green build, and at a handover registration before the flip (ruling of 2026-09-21) — and states as a fact of today that a producer building a promotion branch rather than the default branch is not yet served correctly by the central architecture update, so every future migrated app carries its own.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/Ansible/docs/runbooks/argocd.md:213"
+        "/work/Ansible/docs/runbooks/argocd.md:213",
+        "/work/Architecture/.claude/architecture/producer-manual.md:716-725"
       ]
     },
     {
       "id": "V08",
       "area": "R5 — Jenkins jobs and registration owed to the operator",
-      "description": "The AaC/<Repo> Jenkins jobs and the pipeline-producers.yaml PR are \"Owed to the operator\": no phase creates AaC/ArgoCDDeploy or AaC/KubeCoderDeploy or edits /work/Architecture/pipeline-producers.yaml, and what the operator owes — each job, then each registration after that producer's first green build, ArgoCDDeploy's first and KubeCoderDeploy's before its prd flip — is left in the slice's close-out.",
+      "description": "The AaC/<Repo> Jenkins jobs and the pipeline-producers.yaml PR are \"Owed to the operator\": no phase creates AaC/ArgoCDDeploy or AaC/KubeCoderDeploy or edits /work/Architecture/pipeline-producers.yaml, and what the operator owes — each job, then each registration after that producer's first green build, carrying repo: (pvginkel/ArgoCDDeploy, pvginkel/KubeCoderDeploy), ArgoCDDeploy's first and KubeCoderDeploy's before its prd flip — is left in the slice's close-out.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "/work/Architecture/tooling/collect.py:111-161",
-        "/work/Architecture/tooling/collect.py:378-392"
+        "/work/Architecture/tooling/collect.py:378-392",
+        "/work/Architecture/.claude/architecture/producer-manual.md:698-710"
       ]
     },
     {
