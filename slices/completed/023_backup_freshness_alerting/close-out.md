@@ -31,7 +31,24 @@ Focus: A2 first. Until the operator runs the `openbao` playbook, the OpenBao bac
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A2 — Run the openbao playbook so the OpenBao backup declares its 52 h validity (check-mode first) · minor
+### ~~A1 — Delete the orphaned backup-server-tokens ConfigMap from the dev cluster's storage-prd namespace · nit~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+P3 removed it from HelmCharts configs/dev/storage/prd/manifests.yaml, but the live object stays: manifests.yaml goes through a plain kubectl apply that never prunes (tools/deploy/deploy_cli/helmops.py:202-203), and Jenkins deploys only configs/prd/. srvk8sdev is off by design, so the run did not touch it. While the node is up: `kubectl --kubeconfig ~/.kube/config-dev-write -n storage-prd delete configmap backup-server-tokens`. Nothing mounts it.
+
+test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get with config-dev-write, no writes): srvk8sdev is up but has no storage-prd namespace, no backup-server-tokens ConfigMap in any namespace and no backup-server Deployment, so there is no live object to delete. The dev storage release's manifests.yaml no longer ships it (HelmCharts 3419695, guarded by tests/test_storage_backup_server_metrics.py), so a later dev storage deploy will not recreate it. The operator can close this with no action.
+
+**Consequence:** The dev cluster keeps an unused ConfigMap describing the retired tokens.yaml, so anyone reading live dev state is misled about how backup-server authorizes uploads.
+
+**Provenance:** read, executor, P3, r1, plan.md P3 done-record
+**Disposition:** Close — closed
+
+</details>
+
+### ~~A2 — Run the openbao playbook so the OpenBao backup declares its 52 h validity (check-mode first) · minor~~ — carried out at the operator's request, 2026-09-21: wrapper live on srvvault1-3
+
+<details><summary>struck — body kept for the record</summary>
 
 P6 (Ansible d70be14) adds `&valid_for=52h` to `/usr/local/sbin/openbao-backup`, but the wrapper on srvvault1-3 is still the old one: read live 2026-09-19, 0 `valid_for` lines on each node, so the `openbao` scope has no declaring backup and no `openbao` stream is watched. The Postgres half needs nothing from the operator: its script is live (`VALID_FOR = "52h"`, verified in the live ConfigMap) and its first declared uploads run at 02:00 CEST.
 
@@ -46,20 +63,7 @@ To settle it, once the leader has uploaded (and after 02:00 for Postgres), with 
 **Consequence:** Until it is done the OpenBao backup is unwatched: if it stops arriving no alert fires, which is the silent failure R1 named, still open for OpenBao.
 
 **Provenance:** witnessed, test-agent, test phase, r1, read-only ssh to srvvault1-3 and verification.json V01/V05/V19
-**Disposition:** Can you do this?
-
-### ~~A1 — Delete the orphaned backup-server-tokens ConfigMap from the dev cluster's storage-prd namespace · nit~~ — closed by the operator, 2026-09-21
-
-<details><summary>struck — body kept for the record</summary>
-
-P3 removed it from HelmCharts configs/dev/storage/prd/manifests.yaml, but the live object stays: manifests.yaml goes through a plain kubectl apply that never prunes (tools/deploy/deploy_cli/helmops.py:202-203), and Jenkins deploys only configs/prd/. srvk8sdev is off by design, so the run did not touch it. While the node is up: `kubectl --kubeconfig ~/.kube/config-dev-write -n storage-prd delete configmap backup-server-tokens`. Nothing mounts it.
-
-test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get with config-dev-write, no writes): srvk8sdev is up but has no storage-prd namespace, no backup-server-tokens ConfigMap in any namespace and no backup-server Deployment, so there is no live object to delete. The dev storage release's manifests.yaml no longer ships it (HelmCharts 3419695, guarded by tests/test_storage_backup_server_metrics.py), so a later dev storage deploy will not recreate it. The operator can close this with no action.
-
-**Consequence:** The dev cluster keeps an unused ConfigMap describing the retired tokens.yaml, so anyone reading live dev state is misled about how backup-server authorizes uploads.
-
-**Provenance:** read, executor, P3, r1, plan.md P3 done-record
-**Disposition:** Close — closed
+**Disposition:** Can you do this? / operator in chat, 2026-09-21: "Please run the apply yourself." — check-mode first, as the entry says: changed=1 per node, only `Install the backup wrapper script`, the diff exactly the four comment lines and the URL line; then applied 2026-09-21 ~23:30 CEST. Read back afterwards: the new wrapper is on srvvault1-3 and each timer is active (next runs 02:17, 02:30, 02:44 CEST on 2026-09-22), so tonight's leader upload is the first one that declares 52h. V01/V05/V19's `q` check is owed once that upload has landed
 
 </details>
 
@@ -212,7 +216,7 @@ doc-writer, doc phase, 2026-09-19 — decisions.md §Backup's YouTrack entry now
 **Consequence:** The YouTrack backup is never a watched backup-server stream, and the interim CronJob-status rule stays although its own comment says slice 023 retires it.
 
 **Provenance:** witnessed, code-writer, P4, r1, HelmCharts charts/youtrack/files/backup/backup.py
-**Disposition:** Create a card for the YouTrack project please.
+**Disposition:** Create a card for the YouTrack project please. / operator in chat, 2026-09-21: HC (HelmCharts) — filed as HC-15, related to ANS-58
 
 ## Suggestions
 
