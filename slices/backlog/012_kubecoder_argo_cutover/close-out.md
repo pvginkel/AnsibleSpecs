@@ -84,3 +84,12 @@ D1 has the cutover session check each KubeCoder Jenkinsfile edit with Jenkins' d
 
 **Provenance:** witnessed; plan-writer, planning r1; linter probe against /work/KubeCoder/Jenkinsfile
 **Disposition:**
+
+### S3 — The estate documents a hand-run plan only for a HelmCharts release's Terraform, not for an Argo deploy repo's · minor
+
+live-infra-access.md:44-52 gives the route for planning a HelmCharts release: bao-login.sh, then setup-env.sh, then the deploy CLI. The deploy CLI is what injects the non-secret per-cluster config. A deploy repo's Terraform is applied only by the Argo PreSync hook, from the environment ArgoCDDeploy's values give it. setup-env.sh rebuilds only part of that environment: the OpenBao-held HOMELAB_* credentials and KUBE_CONFIG_PATH. TF_VAR_namespace, the non-secret TF_VAR_zfs_pools literal (ArgoCDDeploy/config/prd/values.yaml:269) and GITHUB_TOKEN for the github provider are left to whoever types the command. Slice 012's runbook works this out for KubeCoder's R4 plan. The general route, for any app migrating to Argo with Terraform to move, would fit in argocd.md or live-infra-access.md.
+
+**Consequence:** The next app that migrates with Terraform state works out the hook's environment again by hand for its no-destroy plan.
+
+**Provenance:** read, plan-writer, planning, r2, plan.md P3
+**Disposition:**

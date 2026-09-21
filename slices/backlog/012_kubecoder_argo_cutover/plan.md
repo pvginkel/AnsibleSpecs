@@ -333,8 +333,8 @@
 
 pre-settled — slice.md and the seeded rulings fix every mechanism the phases carry (the pinned
 containers' `IfNotPresent` and the drift replay; the promote job's retag → advance `prd` →
-`release-<n>` sequence in KubeCoderDeploy, D2/D47/D48; the runbook's per-stage order and
-state-move recipe); planning is transcription.
+`release-<m>` sequence in KubeCoderDeploy, D2/D47/D48; the runbook's per-stage order, the
+state-move recipe and the no-destroy plan's credential route); planning is transcription.
 
 ## Ordering constraints
 
@@ -432,6 +432,18 @@ What the runbook must also get right:
   `pvginkel/KubeCoderDeploy` points at the relay before dev's first sync (the Jenkins one stays);
   the plan's expected output per stage (`manage_webhook` is true for dev only); the local plaintext
   copies deleted.
+- **The no-destroy plan's environment** follows the review Q1 ruling: one operator-typed command
+  that sources `bao-login.sh` and HelmCharts' `setup-env.sh prd` and then runs the plan. `cexec`
+  layers the calling shell's environment over the sidecar's, so the exports reach the plan.
+  `setup-env.sh` supplies only the OpenBao-held `HOMELAB_*` credentials and `KUBE_CONFIG_PATH`
+  (`/work/HelmCharts/scripts/setup-env.sh:53-59,155`). The same command sets the rest of what the
+  hook's environment gives KubeCoderDeploy's Terraform, with no further OpenBao read: the stage's
+  `TF_VAR_namespace` (`/work/ArgoCDTools/argocd-hook/presync/terraform.py:56-57`); the non-secret
+  `TF_VAR_zfs_pools`, which is the hook's literal (`/work/ArgoCDDeploy/config/prd/values.yaml:269`);
+  whatever the `github` provider needs to plan (it reads `GITHUB_TOKEN`,
+  `/work/KubeCoderDeploy/terraform/providers.tf:30-33`, which neither the sidecar nor
+  `setup-env.sh` carries; this environment's own `GH_TOKEN` is at hand); and the placeholder
+  webhook secret. Claude writes the command and reads its output, never the values.
 - **The expected diff.** `argocd.md`'s table was derived for dev only, before P1 declared the pull
   policy. The runbook's diff review names P1's change as expected, says how prd's expected set is
   obtained (prd's render also carries the public MCP Service), and `argocd.md`'s table and its

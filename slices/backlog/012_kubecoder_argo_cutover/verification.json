@@ -37,11 +37,16 @@
     {
       "id": "V04",
       "area": "B.4 state surgery",
-      "description": "R4 — \"Prove with a `terraform plan` showing **no destroys** before any hook runs for real.\" The runbook's plan of KubeCoderDeploy's `terraform/` against the new key, per stage, shows zero destroys and names the output expected; it reads no secret value (placeholder webhook secret), and the hook image's terraform is checked not older than the one pushing the state before any push.",
+      "description": "R4 — \"Prove with a `terraform plan` showing **no destroys** before any hook runs for real.\" The runbook's plan of KubeCoderDeploy's `terraform/` against the new key, per stage, shows zero destroys and names the output expected. Per the review Q1 ruling it is one operator-typed command that loads the provider credentials through `bao-login.sh` and HelmCharts' `setup-env.sh prd` and runs the plan; the same command supplies the rest of the hook's environment that Terraform reads with no further OpenBao read, and keeps `TF_VAR_github_webhook_secret` a placeholder — Claude reads no OpenBao value. The hook image's terraform is checked not older than the one pushing the state before any push.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/ArgoCDTools/argocd-hook/presync/terraform.py:60-78 — the hook runs init then apply -auto-approve, no plan of its own"
+        "/work/ArgoCDTools/argocd-hook/presync/terraform.py:60-78 — the hook runs init then apply -auto-approve, no plan of its own",
+        "/work/HomelabTerraformProvider/internal/zfsdataset/resource.go:148-155 — homelab_zfs_dataset refuses to configure without HOMELAB_IAC_PROVISIONER_TOKEN, which this pod's iac sidecar lacks",
+        "/work/HelmCharts/scripts/setup-env.sh:53-59,155 — exports the OpenBao-held HOMELAB_* credentials (the provisioner token among them) and KUBE_CONFIG_PATH",
+        "/work/ArgoCDTools/argocd-hook/presync/terraform.py:56-57 — the hook exports TF_VAR_namespace",
+        "/work/ArgoCDDeploy/config/prd/values.yaml:269 — the hook's TF_VAR_zfs_pools, a non-secret literal setup-env.sh does not export",
+        "/work/KubeCoderDeploy/terraform/providers.tf:30-33 — the github provider authenticates with GITHUB_TOKEN, which neither the iac sidecar nor setup-env.sh supplies"
       ]
     },
     {
@@ -55,7 +60,7 @@
     {
       "id": "V06",
       "area": "B.5 cutover",
-      "description": "R6 — \"One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, `chart: null`; delete the stage's `values.yaml` (+ `_shared/` once both stages are over). The Jenkins pipeline fires on the path change and now *skips* the release (A.3) — Jenkins and Argo are never both live on it.\" Per the ruling, no `chart:` key; the entry also carries `repo` and `targetRevision` (`main` for dev, `prd` for prd). The runbook spells each stage's entry out in full, and `_shared/`'s deletion comes only after prd's state surgery, with the orphan audit's expected listing noted at that step.",
+      "description": "R6 — \"One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's `values.yaml` (+ `_shared/` once both stages are over). The Jenkins pipeline fires on the path change and now *skips* the release (A.3) — Jenkins and Argo are never both live on it.\" `repo` is KubeCoderDeploy's clone URL, `targetRevision` `main` for dev and `prd` for prd. The runbook spells each stage's entry out in full, and `_shared/`'s deletion comes only after prd's state surgery, with the orphan audit's expected listing noted at that step.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -76,7 +81,7 @@
     {
       "id": "V08",
       "area": "B.5 cutover",
-      "description": "R8 — \"Review the Application's diff in the UI. … **anything else stops the cutover**.\" Per the ruling, the expected set is argocd.md's diff table, re-derived if the chart moved: the pre-flight (argocd.md's \"What a cutover does not change\") runs after the chart re-sync and before the review; argocd.md's table and KubeCoder residue note match the chart as P1 leaves it (the five containers' `imagePullPolicy` now an expected change); the runbook says how prd's expected set is obtained, since the table was derived for dev.",
+      "description": "R8 — \"Review the Application's diff in the UI. Expected: the table closing the runbook's \"Previewing a migrating app's diff before its cutover\" — **anything else stops the cutover**.\" The table is re-derived if the chart moved: the pre-flight (argocd.md's \"What a cutover does not change\") runs after the chart re-sync and before the review; argocd.md's table and KubeCoder residue note match the chart as P1 leaves it (the five containers' `imagePullPolicy` now an expected change); the runbook says how prd's expected set is obtained, since the table was derived for dev.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -128,7 +133,7 @@
     {
       "id": "V14",
       "area": "CI",
-      "description": "R14 — `Build-Main`'s rewrite at dev's cutover, `Deploy-PRD`'s replacement at prd's, both as amended by D47: the runbook specifies what `Build-Main` must do after each edit — push `:<n>`/`:latest` for all eight images, keep pushing `dev-<n>` for the seven until prd's cutover, call `cicd.writeVersionPins(repo:, pins:, message:)` once with `<n>` for `config/dev/values.yaml` and `prd-<n>` for `config/prd/values.yaml` (the five `images.*` pins with their leading colon), declare `disableConcurrentBuilds()`, run the call in a container with `git`, deploy nothing — and `Deploy-PRD` is deleted only after the promote job has retagged.",
+      "description": "R14 — \"`Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main` with both stage files — dev's pins at `<n>`, prd's at `prd-<n>`.\" and \"`Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays alive until each stage cuts over.\" — `Build-Main`'s rewrite at dev's cutover, `Deploy-PRD`'s replacement at prd's. The runbook specifies what `Build-Main` must do after each edit: push `:<n>`/`:latest` for all eight images and, between the two cutovers only, `:dev-<n>` as well; call `cicd.writeVersionPins(repo:, pins:, message:)` once per build with `<n>` for `config/dev/values.yaml` and `prd-<n>` for `config/prd/values.yaml` (the five `images.*` pins with their leading colon); declare `disableConcurrentBuilds()`; run the call in a container with `git`; deploy nothing. `Deploy-PRD` is deleted, and the `:dev-<n>` push stopped, only after the promote job has retagged.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -186,10 +191,12 @@
     {
       "id": "V20",
       "area": "Operator boundary",
-      "description": "Every `terraform state rm`, `state mv`, `terraform plan`, `helm` invocation, Argo sync, registry commit and Jenkins job change in the runbook is the operator's keystroke or is pushed only on the operator's confirmation; no step reads an OpenBao secret value.",
+      "description": "Every `terraform state rm`, `state mv`, `terraform plan`, `helm` invocation, Argo sync, registry commit and Jenkins job change in the runbook is the operator's keystroke or is pushed only on the operator's confirmation. Claude reads no OpenBao secret value at any step: where a step needs one — R4's plan loading its provider credentials (review Q1 ruling) — it is loaded inside the operator's own command, and the webhook secret stays a placeholder.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "/work/Ansible/docs/live-infra-access.md:44-52 — the documented route for a Terraform plan needing OpenBao-held provider credentials: bao-login.sh and setup-env.sh loaded in the plan's own command"
+      ]
     },
     {
       "id": "V21",
