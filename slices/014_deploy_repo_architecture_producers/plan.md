@@ -348,7 +348,7 @@ Record:
 - The 25 relations are G6's 24 plus redis's `cap:cache`. Argo's components → redis is not drawn:
   `REDIS_SERVER` is a `valueFrom` (S4).
 
-### P3 — The relay's own record says where its edges are modelled
+### P3 — The relay's own record says where its edges are modelled ✅ DONE 2026-09-21
 
 Target: ../DockerImages
 
