@@ -92,7 +92,9 @@ are latent in `writeVersionPins` — no caller in 011 or 012 passes the shapes t
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-### B1 — DockerImages/registry-cleanup: the per-prefix cap has already deleted the dev-511 build that KubeCoderDeploy's committed pins name · major
+### ~~B1 — DockerImages/registry-cleanup: the per-prefix cap has already deleted the dev-511 build that KubeCoderDeploy's committed pins name · major~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 All seven `Build-Main` images in `KubeCoderDeploy/chart/values.yaml` pin `dev-511`. The registry
 no longer holds that tag for any of them: the `dev` family runs `dev-428, dev-441, dev-443,
@@ -121,9 +123,13 @@ doc-writer, 2026-09-21 — Read against what shipped: the pins are 523 and prd-5
 **Consequence:** A git-committed deployment reference is not in registry-cleanup's protection set, so once Argo deploys KubeCoder from a stage file the pinned tag can be deleted under the cap while git still names it — the Application then fails to pull. It has already happened to the pins in the repo today.
 
 **Provenance:** witnessed — plan-reviewer, plan review r1; http://registry:5000/v2/kubecoder-*/tags/list queried 2026-09-20, KubeCoderDeploy/chart/values.yaml:11-18,668,671, DockerImages/registry-cleanup/app/main.py:285-299
-**Disposition:**
+**Disposition:** This was discussed I believe. We take the current version at cut over time. Is there an issue with that? "I have a slightly different stance to this. What I want to go for is that containers have a lifetime of at most 2 weeks. I'm ensuring that all images stay fresh, pulling in at least OS fixes this way. I have a process that triggers the builds that produced an image to ensure this. If this all works as planned, there shouldn't be an issue at all. I appreciate this is playing with matches, but it feels like the holy grail of applying security patches." — suggested close (covered by DI-5); closed 2026-09-21
 
-### B2 — JenkinsPipelineUtils/cicd.writeVersionPins: the round-trip guarantee in its docstring does not hold for a value YAML reads back as a number or a boolean · minor
+</details>
+
+### ~~B2 — JenkinsPipelineUtils/cicd.writeVersionPins: the round-trip guarantee in its docstring does not hold for a value YAML reads back as a number or a boolean · minor~~ — fixed in JenkinsPipelineUtils d1e7967
+
+<details><summary>struck — body kept for the record</summary>
 
 vars/cicd.groovy:233-235 promises that a rewritten line "always parses back to the value that went in", and plainSafe (:285-293) only rejects values whose first character, or an embedded ': ' / ' #', would break plain style. A value that is legal plain YAML but resolves to another type passes: replacePin('  tag: abc', '524') returns '  tag: 524', which parses back as the integer 524, and replacePin('  tag: abc', 'no') returns '  tag: no', which go-yaml — and so Helm — reads as boolean false. None of KubeCoder's seven pins is affected: they either begin with ':' (quoted by plainSafe's first-character rule) or are whole registry:5000/... references, and all fourteen round-trip against P1's real stage files. It is the ordinary Helm pinning shape, image.tag: 524, that the claim does not cover, in a library method other apps are invited to call.
 
@@ -132,16 +138,22 @@ test-agent, test phase r1, 2026-09-21 — Reproduced, and the false promise itse
 **Consequence:** A future app that pins a bare numeric tag through this method gets an int where it asked for a string; a chart that renders the tag through printf "%s" emits %!s(int=524) instead of the tag. Nothing in slice 011 or 012 passes such a value.
 
 **Provenance:** witnessed — code-reviewer, P2 review r1; phases/P2/code_review_r1.md F2, traced through a Python transcription of replacePin/plainSafe
-**Disposition:**
+**Disposition:** Fix inline. — fixed in JenkinsPipelineUtils d1e7967: plainSafe now double-quotes a value YAML would read back as a number, boolean or null; CPS-compiled all seven vars/*.groovy and round-tripped 128 value/line cases (pre-fix code fails 32); "Yes." to the push — pushed a4d5ba1..d1e7967; canary AaC/Ansible #143 resolved JenkinsPipelineUtils at d1e7967, SUCCESS
 
-### B3 — JenkinsPipelineUtils/cicd.writeVersionPins: the duplicate-key guard covers the values-file map but not the pins map · minor
+</details>
+
+### ~~B3 — JenkinsPipelineUtils/cicd.writeVersionPins: the duplicate-key guard covers the values-file map but not the pins map · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 normalizePins throws when two keys render the same values-file name (vars/cicd.groovy:154-157). One line down, :161 writes normalised[path.toString()] = value.toString() in a loop, so two distinct keys in one file's dict rendering the same dotted path collapse silently, last one wins. Witnessed under a JVM with Jenkins steps stubbed: with String c = 'controller', the literal ['images.controller': ':800', ("images.${c}"): ':801'] keeps two keys (String and GStringImpl, both rendering images.controller — map literals do not coerce, only subscript assignment does), the method commits controller: ":801" and discards :800 with no error and a success return. The docstring at :16-18 names a pin that lands nowhere as the failure this method exists to make impossible, which is precisely what :154-157 enforces one level up.
 
 **Consequence:** A caller that names two values for one YAML path in a single file's dict has one of them silently dropped and the build reports success. No caller in slice 011 writes that shape, and neither does the call shape slice 012 inherits, so nothing in flight is affected.
 
 **Provenance:** witnessed | code reviewer, P2, review round 2, phases/P2/code_review_r2.md F1
-**Disposition:**
+**Disposition:** I'm not sure. This is self inflicted, right? If so, close. — it is: only a caller whose own dict names one YAML path twice meets it (entry body); closed 2026-09-21
+
+</details>
 
 ### ~~B4 — AnsibleSpecs/argo-cd: two of the register's new absolutes are contradicted by the chart they describe · minor~~ — resolved by consult 1 (AnsibleSpecs a4fd09c): both clauses narrowed to CI-written tags — decisions.md's D37 amendment now reads 'required-guards every tag CI writes' and design.md:511 'Every tag CI commits'; tunnelReclaim and localHome, the chart's two floating DockerImages tags, are no longer contradicted. Prose only, in files this slice's diff already touched; AnsibleSpecs has no gate, and the re-check in its place was the one P3 used — every relative link in both files resolves, no changed line over 100 columns; struck by consult 1
 
@@ -176,50 +188,6 @@ and `git` in its container. S1, S2 and S6 are slice 012's too; S3, S4 and S7 out
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — Deploy-PRD numbers its prd-<n> tags with the promote job's build number; D47 numbers them with the image build's · minor
-
-`Jenkinsfile.deploy-prd:33-38` retags `dev-${sourceDevBuild}` to `prd-${currentBuild.number}` — the promote job's own build number, in a numbering space unrelated to Build-Main's. D47 pre-writes `prd-<n>` into the prd stage values file at build time, where `<n>` is the image build's number, and has the promote job create exactly that tag. Slice 012's replacement therefore changes numbering space, not just mechanism, and the `prd-*` tags already in the registry belong to the old space. This slice writes `prd-511` into the prd stage file as its first forward reference.
-
-doc-writer, 2026-09-21 — The prd stage file shipped with prd-523, not prd-511 (Ruling 4). The numbering-space point is unchanged — the forward reference names Build-Main's build number, and Deploy-PRD's own.
-
-**Consequence:** If slice 012's promote job keeps the old numbering, it creates a tag nothing references while the stage file's prd-<n> stays unpullable — and the sync fails on an image that does not exist, which is exactly the loud-and-local failure D47 designed for, landing for the wrong reason.
-
-**Provenance:** read — plan-writer, plan pass r1; /work/KubeCoder/Jenkinsfile.deploy-prd:33-38, argo-cd/decisions.md:493-498
-**Disposition:**
-
-### S2 — The pins this slice writes are forward references: slice 012 must build before it points Argo at KubeCoderDeploy · minor
-
-P1 leaves `config/dev/values.yaml` naming build 511's bare tag and `config/prd/values.yaml` naming `prd-511`; the registry holds `dev-511` and neither of the two. Nothing creates them until a Build-Main run under the new scheme (slice 012, Ruling 1). Nothing consumes the repo today (G7), so the gap is inert — but it is an ordering constraint on the cutover, not a defect to fix here.
-
-consult 1, 2026-09-20 — Numbers superseded by Ruling 4 and P1: the stage files name build 523, not 511 — dev '523', prd 'prd-523' — and the registry holds dev-523 but neither 523 nor prd-523 (dev-511 is gone entirely, see B1). The substance is unchanged and is what slice 012 inherits: both written tags are forward references, so the cutover must create them before the first dev sync. Slice 012's slice.md carries this as its own bullet under 'Carried in from slice 011'.
-
-**Consequence:** A dev Application created before the first cutover build syncs to an image tag that does not exist and fails to pull; sequencing the build ahead of the Application avoids it entirely.
-
-**Provenance:** read — plan-writer, plan pass r1; KubeCoderDeploy/chart/values.yaml:11-18,668,671, plan.md G7 and Ruling 1
-**Disposition:**
-
-### S3 — HelmCharts: the gitToken PAT rides the helm command line for all 45 releases, and only version-poller consumes it · minor
-
-`argo-cd/design.md` records it, and slice 011's `slice.md` carried it into planning "so it isn't
-lost", asking the planner to decide deliberately because `version-poller` is one of requirement
-3's tag-prefix readers:
-
-> **`gitToken` travels as a helm CLI argument for all 45 releases**; only `version-poller`
-> consumes it. It must become an ESO leaf when version-poller migrates — Argo has no such
-> argument to inject — and a PAT on a command line lands in process tables and echoed commands
-> regardless.
-
-**The decision (Ruling 7, operator, 2026-09-20): out of scope for slice 011.** `design.md`
-assigns the fix to the version-poller migration, and nothing in slice 011 touches the helm
-invocation that carries the argument — the slice moves image tags between values files in
-KubeCoderDeploy and adds a library method. Recorded here so the item survives the slice rather
-than closing with it.
-
-**Consequence:** A GitHub PAT is visible in process tables and echoed commands on every one of 45 release deploys, to serve the one release that needs it; nothing changes until version-poller migrates and the token becomes an ESO leaf.
-
-**Provenance:** read, plan-writer r2 (review fix pass) — Ruling 7 in plan.md; carried in slice.md's source material from argo-cd/design.md
-**Disposition:**
-
 ### S4 — JenkinsPipelineUtils could have a real Groovy parse gate: a JVM is obtainable in this environment after all · minor
 
 G2 and Ruling 2 both rest on "nothing in this environment can check Groovy". That is true of the
@@ -244,7 +212,7 @@ One correction to what the entry expects of it: the transform compile catches co
 **Consequence:** Every change to the shared library ships on reading alone, and a syntax error in any vars/*.groovy breaks every job in the estate on its next run — the failure mode Ruling 2's canary exists to catch after the fact rather than before.
 
 **Provenance:** witnessed | code-writer, P2, review round 2 — /work/AnsibleSpecs/slices/011_kubecoder_ci_version_pins/phases/P2/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Yeah it should have a test suite. Can you create a card in the HelmCharts project please? "Sure, Ansible is fine." — ANS-89 (JenkinsPipelineUtils has no project)
 
 ### S5 — Slice 012 is not told that writeVersionPins writes values verbatim, nor that Build-Main needs disableConcurrentBuilds() and git in its container · major
 
@@ -255,9 +223,67 @@ consult 1, 2026-09-20 — Judged against the generation bar and left here rather
 **Consequence:** If slice 012 writes the Build-Main call from its own slice.md, the five image pins land without their leading colon and the dev cutover fails on an invalid image reference; and two concurrent builds lose the race on the second pin push.
 
 **Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F1)
-**Disposition:**
+**Disposition:** Wow this is a wall of text. Please hepl me decipher what's going on here. "Agreed about the rest." — suggested fold into 012; appended verbatim to slices/backlog/012_kubecoder_argo_cutover/slice.md
 
-### S6 — Slice 012's requirement 14 stages Deploy-PRD's replacement at prd's cutover, which leaves prd unpromotable between the two flips · minor
+### ~~S1 — Deploy-PRD numbers its prd-<n> tags with the promote job's build number; D47 numbers them with the image build's · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+`Jenkinsfile.deploy-prd:33-38` retags `dev-${sourceDevBuild}` to `prd-${currentBuild.number}` — the promote job's own build number, in a numbering space unrelated to Build-Main's. D47 pre-writes `prd-<n>` into the prd stage values file at build time, where `<n>` is the image build's number, and has the promote job create exactly that tag. Slice 012's replacement therefore changes numbering space, not just mechanism, and the `prd-*` tags already in the registry belong to the old space. This slice writes `prd-511` into the prd stage file as its first forward reference.
+
+doc-writer, 2026-09-21 — The prd stage file shipped with prd-523, not prd-511 (Ruling 4). The numbering-space point is unchanged — the forward reference names Build-Main's build number, and Deploy-PRD's own.
+
+**Consequence:** If slice 012's promote job keeps the old numbering, it creates a tag nothing references while the stage file's prd-<n> stays unpullable — and the sync fails on an image that does not exist, which is exactly the loud-and-local failure D47 designed for, landing for the wrong reason.
+
+**Provenance:** read — plan-writer, plan pass r1; /work/KubeCoder/Jenkinsfile.deploy-prd:33-38, argo-cd/decisions.md:493-498
+**Disposition:** Should be fixed. Roll into a future slice? "Agreed about the rest." — suggested close: slice 012's requirement 14 already has Deploy-PRD's replacement run `crane tag <app>:<n> <app>:prd-<n>` on Build-Main's number; closed 2026-09-21
+
+</details>
+
+### ~~S2 — The pins this slice writes are forward references: slice 012 must build before it points Argo at KubeCoderDeploy · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+P1 leaves `config/dev/values.yaml` naming build 511's bare tag and `config/prd/values.yaml` naming `prd-511`; the registry holds `dev-511` and neither of the two. Nothing creates them until a Build-Main run under the new scheme (slice 012, Ruling 1). Nothing consumes the repo today (G7), so the gap is inert — but it is an ordering constraint on the cutover, not a defect to fix here.
+
+consult 1, 2026-09-20 — Numbers superseded by Ruling 4 and P1: the stage files name build 523, not 511 — dev '523', prd 'prd-523' — and the registry holds dev-523 but neither 523 nor prd-523 (dev-511 is gone entirely, see B1). The substance is unchanged and is what slice 012 inherits: both written tags are forward references, so the cutover must create them before the first dev sync. Slice 012's slice.md carries this as its own bullet under 'Carried in from slice 011'.
+
+**Consequence:** A dev Application created before the first cutover build syncs to an image tag that does not exist and fails to pull; sequencing the build ahead of the Application avoids it entirely.
+
+**Provenance:** read — plan-writer, plan pass r1; KubeCoderDeploy/chart/values.yaml:11-18,668,671, plan.md G7 and Ruling 1
+**Disposition:** Do I need to do something with this? "Agreed about the rest." — suggested close: slice 012's slice.md already carries both forward references under 'Carried in from slice 011'; closed 2026-09-21
+
+</details>
+
+### ~~S3 — HelmCharts: the gitToken PAT rides the helm command line for all 45 releases, and only version-poller consumes it · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+`argo-cd/design.md` records it, and slice 011's `slice.md` carried it into planning "so it isn't
+lost", asking the planner to decide deliberately because `version-poller` is one of requirement
+3's tag-prefix readers:
+
+> **`gitToken` travels as a helm CLI argument for all 45 releases**; only `version-poller`
+> consumes it. It must become an ESO leaf when version-poller migrates — Argo has no such
+> argument to inject — and a PAT on a command line lands in process tables and echoed commands
+> regardless.
+
+**The decision (Ruling 7, operator, 2026-09-20): out of scope for slice 011.** `design.md`
+assigns the fix to the version-poller migration, and nothing in slice 011 touches the helm
+invocation that carries the argument — the slice moves image tags between values files in
+KubeCoderDeploy and adds a library method. Recorded here so the item survives the slice rather
+than closing with it.
+
+**Consequence:** A GitHub PAT is visible in process tables and echoed commands on every one of 45 release deploys, to serve the one release that needs it; nothing changes until version-poller migrates and the token becomes an ESO leaf.
+
+**Provenance:** read, plan-writer r2 (review fix pass) — Ruling 7 in plan.md; carried in slice.md's source material from argo-cd/design.md
+**Disposition:** We're deprecating HelmCharts. That issue goes away with it right? "Agreed about the rest." — suggested close: the argument exists only on the helm CLI path, and version-poller's migration makes it an ESO leaf (DI-5 carries the rotation); closed 2026-09-21
+
+</details>
+
+### ~~S6 — Slice 012's requirement 14 stages Deploy-PRD's replacement at prd's cutover, which leaves prd unpromotable between the two flips · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 The lede added at slices/backlog/012_kubecoder_argo_cutover/slice.md:116-117 reads 'each applied at the moment its stage flips, Build-Main's rewrite at dev's cutover, Deploy-PRD's replacement at prd's'. The G5 bullet carried into the same document at :369-375 states the opposite requirement: 'even at the dev cutover the prefix cannot simply vanish, because prd flips later and promotion must keep working from the bare <n> in between'. At dev's flip Build-Main stops pushing dev-<n>, while the surviving Deploy-PRD retags registry:5000/kubecoder-<name>:dev- (/work/KubeCoder/Jenkinsfile.deploy-prd:33-38) — a tag no new build produces. Nothing in the document names what promotes to prd in that window. Ruling 1 says only 'applied at the moment each stage flips, staged per stage'; the per-job assignment is the phase's gloss.
 
@@ -266,13 +292,19 @@ consult 1, 2026-09-20 — The tension is in Ruling 1, not in P3's gloss of it: t
 **Consequence:** A slice-012 plan written from requirement 14's lede schedules no promotion work at the dev cutover, and prd cannot be promoted for any build made between the dev and prd flips.
 
 **Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F2)
-**Disposition:**
+**Disposition:** That's not a problem. — closed 2026-09-21
 
-### S7 — slices/DAG.md still files the /work/KubeCoder gate constraint, and a KubeCoder + HelmCharts repo set, under 011 · minor
+</details>
+
+### ~~S7 — slices/DAG.md still files the /work/KubeCoder gate constraint, and a KubeCoder + HelmCharts repo set, under 011 · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 DAG.md:31 lists 011's subprojects as JenkinsPipelineUtils, KubeCoder, KubeCoderDeploy, HelmCharts — Ruling 1 moved the Build-Main edit to 012 and G4 took HelmCharts out of the slice entirely. DAG.md:74-77 heads the constraint 'Not a gate, but a constraint on 011' and mentions 012 only in its closing sentence, about the pull-policy removal rather than Build-Main. The doc phase does not hand-edit DAG.md: its own header says to re-run /dev:slice-dag after slices land, and the inventory section says re-runs reuse cached rows for slices already listed, so the stale 011 row survives a regeneration unless it is invalidated.
 
 **Consequence:** Slice 012's planner reads the '/work/KubeCoder cannot gate here' constraint as slice 011's, with its own Build-Main rewrite named only in passing, and can schedule a run-loop phase against a repo whose gate this environment cannot run.
 
 **Provenance:** read; doc phase; /work/AnsibleSpecs/slices/DAG.md:31,74-77
-**Disposition:**
+**Disposition:** Ignore. — closed 2026-09-21
+
+</details>

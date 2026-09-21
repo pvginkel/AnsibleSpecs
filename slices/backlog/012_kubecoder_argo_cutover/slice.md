@@ -405,6 +405,24 @@ it verified along the way:
   on KubeCoder's dev stage picking up new builds in the meantime, so no bridging tag scheme is
   needed and `dev-latest` need not be preserved for continuity.
 
+## Carried in from slice 011's close-out (S5) — the operator's ruling, 2026-09-21
+
+Folded in verbatim at the operator's ruling ("Agreed about the rest." on the suggestion to fold
+it into this slice). The ask: carry both constraints into the `Build-Main` call this slice
+writes — the five `images.*` pins are tag suffixes, so the caller supplies the leading colon
+(`:524`, not `524`), and `Build-Main` declares `disableConcurrentBuilds()` and runs the call in
+a container with `git`.
+
+### Slice 011 close-out S5 — Slice 012 is not told that writeVersionPins writes values verbatim, nor that Build-Main needs disableConcurrentBuilds() and git in its container · major
+
+P2 handed both constraints to P3 (plan.md:350-355) and neither reached the register or slice 012's slice.md. D45 as rewritten (argo-cd/decisions.md:469-476) gives the map's shape and no value semantics; slice 012's call description (slices/backlog/012_kubecoder_argo_cutover/slice.md:126-134) says only 'with <n> for config/dev/values.yaml and prd-<n> for config/prd/values.yaml'; the 'Carried in from slice 011' section (:360-401) carries the five grounding bullets Ruling 5 named and neither of these. The five images.* pins are tag suffixes — config/dev/values.yaml:29 holds controller: ":523" and chart/templates/controller-deployment.yaml:46 concatenates onto registry:5000/kubecoder-controller — so a caller handing '524' instead of ':524' renders registry:5000/kubecoder-controller524, which the required guard accepts. KubeCoderDeploy carries no Jenkinsfile, so nothing re-runs the render gate between a CI-written pin commit and Argo's sync. /work/KubeCoder/Jenkinsfile declares no properties([...]) block, so Build-Main has no disableConcurrentBuilds() today. cicd.groovy:29-33 does carry both rules in the method's docstring, which is what the author of the call will be reading.
+
+consult 1, 2026-09-20 — Judged against the generation bar and left here rather than appended. It is real and it is plan-described — P2's later-phase note (plan.md, under P2) addressed both constraints to P3, and P3 carried six grounding bullets into slice 012's 'Carried in from slice 011' section and neither of these. It does not clear the bar because Ruling 5, which is what the plan actually owes slice 012, enumerates what to carry (R2 verbatim, G5/G6/G8/G10/G12, the corrected Depends on line) and all of it landed; and because the constraints are not lost: vars/cicd.groovy:22-31 states all three in the method's docstring — git on PATH, 'a caller declares disableConcurrentBuilds()', and 'Values are written verbatim' with ':524' as the worked example — which is what the author of the call reads. A phase for three sentences of prose costs an executor round, a review round and another consult; this costs one word. The remediation, if the operator folds it into 012: one bullet in that section saying the five images.* pins are tag suffixes, so the caller supplies the leading colon (':524', not '524'), and one saying Build-Main needs disableConcurrentBuilds() and git in its container.
+
+**Consequence:** If slice 012 writes the Build-Main call from its own slice.md, the five image pins land without their leading colon and the dev cutover fails on an invalid image reference; and two concurrent builds lose the race on the second pin push.
+
+**Provenance:** read; code review, P3 round 1; phases/P3/code_review_r1.md (F1)
+
 ## Subsumes
 
 Trello **#124** — "ArgoCD migration — Jenkins-orchestrated push → ArgoCD CD" (the project's
