@@ -1,0 +1,168 @@
+/work/KubeCoderDeploy — P4: git diff 092a44429070..a8d3e4f895a2
+
+.architecturerc          | 15 +++++++++++++++
+ .gitignore               |  2 ++
+ .kubecoder/project.yaml  | 14 ++++++++++----
+ Jenkinsfile.architecture | 39 +++++++++++++++++++++++++++++++++++++++
+ README.md                |  8 ++++++++
+ architecture.yaml        | 25 +++++++++++++++++++++++++
+ 6 files changed, 99 insertions(+), 4 deletions(-)
+
+diff --git a/.architecturerc b/.architecturerc
+new file mode 100644
+index 0000000..14c5236
+--- /dev/null
++++ b/.architecturerc
+@@ -0,0 +1,15 @@
++generated: true
++sources:
++  - architecture.yaml
++  - chart/
++  - config/prd/
++instructions: >
++  Generated producer (id kubecoder-deploy). The artifact
++  docs/architecture/kubecoder-deploy.yaml is a build output: gitignored, produced by
++  gen-architecture from the aac-tools image, which renders chart/ with
++  config/prd/values.yaml the way Argo CD renders it. The AaC/KubeCoderDeploy Jenkins
++  job runs it (Jenkinsfile.architecture: generate the prd stage from the prd branch,
++  validate, archive); the dev stage is not published. Do not run the generator and
++  never write the artifact; edit only the judgment layer, architecture.yaml at the
++  repo root, whose schema is the generator's docstring. An image the render carries
++  that architecture.yaml does not map is reported as a gap.
+diff --git a/.gitignore b/.gitignore
+index f342d61..732e412 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -4,3 +4,5 @@
+ # tests/terraform.sh's `terraform init`; the hook initialises its own clone.
+ /terraform/.terraform/
+ /terraform/.terraform.lock.hcl
++# The architecture artifact is a build output (Jenkinsfile.architecture).
++/docs/architecture/
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index a97d6a5..440db49 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -5,9 +5,12 @@ projects:
+   root:
+     description: >-
+       KubeCoder's deploy repo: its Helm chart on the homelab-shared library
+-      dependency and the per-stage configuration Argo CD syncs KubeCoder from.
+-      There is no Jenkinsfile and no `jenkins:` key, and that is deliberate
+-      rather than missing — a deploy repo publishes no image, and Argo deploys it.
++      dependency, the per-stage configuration Argo CD syncs KubeCoder from, and
++      the judgment layer of the `kubecoder-deploy` architecture producer. Its one
++      pipeline, Jenkinsfile.architecture, publishes that producer's artifact for
++      the prd stage. There is no deploy pipeline, and that is deliberate rather
++      than missing — a deploy repo publishes no image, and Argo deploys it.
++    jenkins: AaC/KubeCoderDeploy
+     # helm lint reads the built dependency, so the deps step comes first. The
+     # hook.* values stand in for the four helm parameters the ApplicationSet
+     # passes; the library `required`-guards each one.
+@@ -22,8 +25,11 @@ projects:
+       - cexec iac terraform fmt -check -diff -recursive
+     # tests/render-chart.py renders both stages as the ApplicationSet does and
+     # asserts against the objects helm produces; tests/terraform.sh checks
+-    # terraform/ and plans each stage's tfvars against mocked providers.
++    # terraform/ and plans each stage's tfvars against mocked providers. The last
++    # two statements are the commands Jenkinsfile.architecture runs, prd only.
+     test:
+       - cexec iac tests/build-deps.sh
+       - cexec iac tests/render-chart.py
+       - cexec iac tests/terraform.sh
++      - cexec aac-tools gen-architecture --stage prd --producer kubecoder-deploy
++      - cexec aac-tools arch-validate docs/architecture/kubecoder-deploy.yaml
+diff --git a/Jenkinsfile.architecture b/Jenkinsfile.architecture
+new file mode 100644
+index 0000000..162d5c3
+--- /dev/null
++++ b/Jenkinsfile.architecture
+@@ -0,0 +1,39 @@
++// Architecture producer pipeline for the federated Architecture-as-Code model: this
++// repo publishes KubeCoder's prd stage as producer `kubecoder-deploy`.
++//
++// The artifact is generated, never committed. gen-architecture renders chart/ the way
++// Argo CD renders it, reads the judgment layer (architecture.yaml at the repo root)
++// and writes docs/architecture/kubecoder-deploy.yaml — a path containing an
++// `architecture/` directory, which the federation collector's
++// `**/architecture/**/*.yaml` filter matches.
++//
++// One pipeline publishes one stage: the artifact is attached to the pipeline, so a
++// pipeline building two stages would make it flap. The stage is prd and the branch is
++// `prd`, the one Argo syncs prd from (D34: dev tracks main, prd the prd branch). The
++// dev stage is not published.
++//
++// The agent needs outbound HTTPS to charts.home, the chart repository the
++// homelab-shared dependency resolves from, and to architecture.webathome.org for the
++// published dataset and validation.
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++podTemplate(inheritFrom: 'jenkins-agent', containers: [
++    containerTemplates.aac_tools('aac-tools')
++]) {
++    node(POD_LABEL) {
++        stage('Cloning repo') {
++            git branch: 'prd',
++                credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++                url: 'https://github.com/pvginkel/KubeCoderDeploy.git'
++        }
++
++        stage('Architecture') {
++            container('aac-tools') {
++                sh 'gen-architecture --stage prd --producer kubecoder-deploy'
++                sh 'arch-validate docs/architecture/*.yaml'
++            }
++            archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
++        }
++    }
++}
+diff --git a/README.md b/README.md
+index 4391c88..7c2e3a2 100644
+--- a/README.md
++++ b/README.md
+@@ -28,5 +28,13 @@ A replay keeps what the copy changed for Argo, all of which `kc project test`'s
+ - `chart/values.yaml` names no tag for those seven and the chart refuses to render a stage missing
+   one, and their five Deployment containers state no `imagePullPolicy`.
+ 
++`architecture.yaml` at the root, the judgment layer of the `kubecoder-deploy` architecture
++producer, is HelmCharts' `charts/kubecoder/architecture.yaml` at commit
++`8cd9185e2a5246c48ba647e4284f2be5f668ff58`, the last to touch it; `chart/` holds no copy. It adds
++`introduced: '2026-06-17'`, the date HelmCharts derives from `charts/kubecoder`'s first commit,
++which every published KubeCoder element carries: a different date keeps the ids and changes every
++element. HelmCharts publishes KubeCoder until the prd cutover, so a change to its copy is replayed
++here.
++
+ The Terraform is rebuilt, not copied: `terraform/` holds the ZFS dataset, its PV and the
+ repository's webhook, with each stage's inputs in `config/<stage>/terraform.tfvars`.
+diff --git a/architecture.yaml b/architecture.yaml
+new file mode 100644
+index 0000000..d004e6c
+--- /dev/null
++++ b/architecture.yaml
+@@ -0,0 +1,25 @@
++# The judgment layer the aac-tools generator reads to publish this repo's prd stage
++# as producer `kubecoder-deploy` (Jenkinsfile.architecture). Everything else in the
++# artifact is derived from the render; the schema is gen-architecture's docstring.
++
++# The date HelmCharts derives from the first commit touching charts/kubecoder, and
++# the one every published KubeCoder element carries. This repo's history dates the
++# repo, not the app.
++introduced: '2026-06-17'
++
++# kubecoder is an in-house app (registry:5000/kubecoder-*) whose source and
++# «SoftwareProduct» catalog belong to the kubecoder producer (pvginkel/KubeCoder),
++# so we reference its app:* products and the generator resolves them to that
++# producer's UUIDs. No capability `realizes:` is asserted from this side.
++images:
++  kubecoder-controller: app:kubecoder-controller
++  kubecoder-bot: app:kubecoder-bot
++  kubecoder-mcp: app:kubecoder-mcp
++  kubecoder-manual: app:kubecoder-manual
++  # The controller pod's front door is stock nginx with a baked routing config.
++  kubecoder-ingress: ss:nginx
++  # kube-coder-tunnel-reclaim stays unmapped (a reported gap) until the generator
++  # resolves a Service's in-house product from its own container.
++  # Mapped now, the controller workload carries two in-house services and the
++  # generator mints a duplicate kubecoder.home service instead of referencing
++  # svc:kubecoder-controller-api.

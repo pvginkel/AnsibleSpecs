@@ -1,0 +1,71 @@
+/work/HelmCharts — P6: git diff 78498dc1eadc..0c37dbb16e13
+
+tests/test_gen_architecture.py | 49 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 49 insertions(+)
+
+diff --git a/tests/test_gen_architecture.py b/tests/test_gen_architecture.py
+index bdff900..d0d99a7 100644
+--- a/tests/test_gen_architecture.py
++++ b/tests/test_gen_architecture.py
+@@ -1,8 +1,10 @@
+ """chart_tools.gen_architecture: exposed-host interfaces and MCP-client edges."""
+ 
+ import json
++import sys
+ 
+ import pytest
++import yaml
+ 
+ from chart_tools import gen_architecture as ga
+ 
+@@ -248,3 +250,50 @@ def test_every_unplaceable_upstream_is_reported_in_one_run():
+ 
+     assert edges == set()
+     assert len(errors) == 2
++
++
++def _config(chart_dir, chart_name):
++    return {"chart_name": chart_name, "chart": f"charts/{chart_name}" if chart_name else "",
++            "namespace": f"{chart_dir}-prd", "environment": "prd",
++            "release_name": f"{chart_dir}-prd", "configuration": "", "post_rollout_yaml": "",
++            "disabled": False}
++
++
++def _deployment(name):
++    return {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": name},
++            "spec": {"template": {"spec": {"containers": [
++                {"name": name, "image": f"registry:5000/{name}:latest"}]}}}}
++
++
++def test_a_release_deploy_config_reports_no_chart_for_is_left_out_of_the_artifact(
++        tmp_path, monkeypatch):
++    # `deploy config` reports chart_name None for a stage whose release.yaml
++    # names another reconciler (test_main_verbs.py pins that half).
++    configs = {"web": _config("web", "web"), "argocd": _config("argocd", None)}
++    for chart_dir in configs:
++        (tmp_path / "configs" / "prd" / chart_dir / "prd").mkdir(parents=True)
++    (tmp_path / "charts" / "web").mkdir(parents=True)
++    (tmp_path / "charts" / "web" / "architecture.yaml").write_text("images:\n  web: null\n")
++
++    def run(args, cwd):
++        if args[0] == "git":
++            return "2024-01-01\n"
++        verb, release, _stage = args[-3:]
++        chart_dir = release.removeprefix("prd/")
++        if verb == "config":
++            return "---\n" + yaml.safe_dump(configs[chart_dir])
++        return yaml.safe_dump_all([_deployment(chart_dir)])
++
++    output = tmp_path / "docs" / "architecture" / "helm-charts.yaml"
++    monkeypatch.setattr(ga, "ROOT", tmp_path)
++    monkeypatch.setattr(ga, "CONFIGS", tmp_path / "configs" / "prd")
++    monkeypatch.setattr(ga, "OUTPUT", output)
++    monkeypatch.setattr(ga, "run", run)
++    monkeypatch.setattr(ga, "load_dataset", ga.Dataset)
++    monkeypatch.setattr(sys, "argv", ["gen-architecture"])
++
++    ga.main()
++
++    artifact = yaml.safe_load(output.read_text())
++    assert [e["stats"]["release"] for e in artifact["applicationComponents"]] == ["web"]
++    assert "argocd" not in output.read_text()

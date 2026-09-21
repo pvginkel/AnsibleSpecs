@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "The runbook how-to covers every element of P7's outcome and V07. Each factual claim it makes about the generator, the handover check, the registry, fleet.py and both deploy repos checks out against the code. One advisory finding: the new-app dating rule contradicts the ArgoCDDeploy worked example.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor",
+               "impact": "advisory",
+               "category": "comment-prose",
+               "anchor": "none",
+               "summary": "argocd.md:317-318 dates a new app from the deploy repo's first commit; the ArgoCDDeploy example uses the first commit carrying the chart (2026-08-17, not 2026-08-16)"}]}

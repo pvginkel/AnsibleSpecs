@@ -1,0 +1,179 @@
+/work/ArgoCDTools — P5: git diff ff7e4437c50c..bdd280ecfb7e
+
+README.md                                    | 11 ++++++-----
+ aac-tools/checks/handover_equality.py        | 30 +++++++++++-------------------
+ aac-tools/checks/kubecoder-architecture.yaml | 27 ---------------------------
+ aac-tools/tests/test_deploy_repo.py          | 29 -----------------------------
+ 4 files changed, 17 insertions(+), 80 deletions(-)
+
+diff --git a/README.md b/README.md
+index 260afb6..54ac489 100644
+--- a/README.md
++++ b/README.md
+@@ -289,11 +289,12 @@ One check is deliberately not a `kc project` verb, and CI never runs it:
+ cexec iac python3 aac-tools/checks/handover_equality.py
+ ```
+ 
+-It clones a deploy repo, copies the annotation layer beside it into the clone, runs
+-`gen-architecture` from source over that clone for one stage, and compares what it wrote against
+-what the app's current producer publishes for that app and stage — the same element ids, the same
+-relation ids, every field equal bar three. Exit 0 means a producer could take the app over today
+-and no inbound edge in the federation would dangle. It needs a sibling deploy-repo checkout, the
++It clones a deploy repo, runs `gen-architecture` from source over that clone for one stage, and
++compares what it wrote against what the app's current producer publishes for that app and stage —
++the same element ids, the same relation ids, every field equal bar three. The render reads the
++clone's own committed `architecture.yaml` with nothing laid over it, so exit 0 is about the judgment
++layer the deploy repo's pipeline renders: a producer could take the app over today and no inbound
++edge in the federation would dangle. It needs a sibling deploy-repo checkout, the
+ chart repository and the live published dataset, and a cold checkout and the CI job have none of
+ the three. Its reference side is live, so a chart or values change published between two runs moves
+ the target: a difference it reports is something to read before it is a regression.
+diff --git a/aac-tools/checks/handover_equality.py b/aac-tools/checks/handover_equality.py
+index 48ca4fe..edf521c 100644
+--- a/aac-tools/checks/handover_equality.py
++++ b/aac-tools/checks/handover_equality.py
+@@ -3,17 +3,19 @@
+ 
+     cexec iac python3 aac-tools/checks/handover_equality.py
+ 
+-Clones a deploy repo, copies the annotation layer beside this script into it, runs the
+-generator from source over the clone for one stage, and compares what it wrote with
+-what the app's current producer publishes for that app and stage: the same element
+-ids, the same relation ids, and every field equal bar three. Exit 0 means a producer
+-could take the app over today and no inbound edge in the federation would dangle.
++Clones a deploy repo, runs the generator from source over the clone for one stage,
++and compares what it wrote with what the app's current producer publishes for that app
++and stage: the same element ids, the same relation ids, and every field equal bar
++three. The render reads the clone's own committed `architecture.yaml` with nothing laid
++over it, so exit 0 is about the judgment layer the deploy repo's pipeline renders: a
++producer could take the app over today and no inbound edge in the federation would
++dangle.
+ 
+ Not part of `kc project test`, and not meant to be: this needs a sibling deploy-repo
+ checkout, the chart repository and the live published dataset, and CI and a cold
+-checkout have none of the three. The checkout is cloned rather than used in place
+-because a run reads `architecture.yaml` at the repo root and writes
+-`docs/architecture/`, and neither file belongs to the deploy repo yet.
++checkout have none of the three. The checkout is cloned rather than used in place so
++the render sees the committed HEAD alone — an uncommitted edit to the layer proves
++nothing about what the pipeline builds.
+ 
+ The reference side is live, so a chart or values change published between two runs
+ moves the target: a container added or removed shifts the element count and its edges,
+@@ -27,7 +29,6 @@ import argparse
+ import importlib.util
+ import os
+ import re
+-import shutil
+ import subprocess
+ import sys
+ import tempfile
+@@ -38,7 +39,6 @@ import yaml
+ 
+ HERE = Path(__file__).resolve().parent
+ GENERATOR = HERE.parent / "image" / "gen_architecture.py"
+-FIXTURE = HERE / "kubecoder-architecture.yaml"
+ 
+ ELEMENT_ARRAYS = (
+     "systemSoftware",
+@@ -217,12 +217,6 @@ def parse_args(argv=None):
+         help="the deploy repo to clone and render (default: %(default)s)",
+     )
+     parser.add_argument("--stage", default="prd", help="the stage to render (default: %(default)s)")
+-    parser.add_argument(
+-        "--annotations",
+-        default=str(FIXTURE),
+-        help="the annotation layer to copy into the clone "
+-        "(default: the fixture beside this script)",
+-    )
+     parser.add_argument(
+         "--published-producer",
+         default="helm-charts",
+@@ -232,8 +226,7 @@ def parse_args(argv=None):
+         "--producer",
+         default="kubecoder-deploy",
+         # Nothing rests on the value: it names the artifact and fills the envelope's
+-        # `producer`, the one field the comparison is required to ignore. The id the
+-        # deploy repo publishes under is registered in a later slice.
++        # `producer`, the one field the comparison is required to ignore.
+         help="the producer id to generate under (default: %(default)s)",
+     )
+     parser.add_argument(
+@@ -256,7 +249,6 @@ def main():
+     with tempfile.TemporaryDirectory() as tmp:
+         repo = Path(tmp) / source.name
+         head = clone(source, repo)
+-        shutil.copyfile(args.annotations, repo / gen.ANNOTATIONS)
+         app = gen.chart_metadata(repo)["name"]
+         snapshot = Path(tmp) / "dataset.yaml"
+         snapshot.write_text(raw, encoding="utf-8")
+diff --git a/aac-tools/checks/kubecoder-architecture.yaml b/aac-tools/checks/kubecoder-architecture.yaml
+deleted file mode 100644
+index 3bab181..0000000
+--- a/aac-tools/checks/kubecoder-architecture.yaml
++++ /dev/null
+@@ -1,27 +0,0 @@
+-# KubeCoder's annotation layer, as the deploy repo will carry it once slice 014 gives
+-# KubeCoderDeploy a producer of its own. It lives here because this slice lands no file
+-# in that repo (ruling, 2026-09-20), and handover_equality.py copies it into a throwaway
+-# clone as `architecture.yaml` at the root.
+-#
+-# The `images:` block is HelmCharts' charts/kubecoder/architecture.yaml verbatim — the
+-# same judgment has to produce the same ids from the other side. `introduced:` is the
+-# date HelmCharts derives from the first commit touching charts/kubecoder; a deploy
+-# repo's history dates the repo, not the app, so the value is stated here instead.
+-introduced: '2026-06-17'
+-
+-# kubecoder is an in-house app (registry:5000/kubecoder-*) whose source and
+-# «SoftwareProduct» catalog belong to the kubecoder producer (pvginkel/KubeCoder),
+-# so we reference its app:* products and the generator resolves them to that
+-# producer's UUIDs. No capability `realizes:` is asserted from this side.
+-images:
+-  kubecoder-controller: app:kubecoder-controller
+-  kubecoder-bot: app:kubecoder-bot
+-  kubecoder-mcp: app:kubecoder-mcp
+-  kubecoder-manual: app:kubecoder-manual
+-  # The controller pod's front door is stock nginx with a baked routing config.
+-  kubecoder-ingress: ss:nginx
+-  # kube-coder-tunnel-reclaim stays unmapped (a reported gap) until the generator
+-  # resolves a Service's in-house product from its own container.
+-  # Mapped now, the controller workload carries two in-house services and the
+-  # generator mints a duplicate kubecoder.home service instead of referencing
+-  # svc:kubecoder-controller-api.
+diff --git a/aac-tools/tests/test_deploy_repo.py b/aac-tools/tests/test_deploy_repo.py
+index 2c478c4..60fd81d 100644
+--- a/aac-tools/tests/test_deploy_repo.py
++++ b/aac-tools/tests/test_deploy_repo.py
+@@ -252,32 +252,3 @@ class AnnotationLayerTests(unittest.TestCase):
+             self.assertEqual(introduced, "2026-06-17")
+             self.assertEqual(ann["images"], {"kubecoder-bot": "app:kubecoder-bot"})
+             self.assertEqual(ann["webUi"], ["kubecoder.home"])
+-
+-
+-CHECKS = Path(__file__).resolve().parent.parent / "checks"
+-
+-
+-class HandoverFixtureTests(unittest.TestCase):
+-    """The annotation layer `checks/handover_equality.py` copies into its clone.
+-
+-    The equality that check proves rests on this file: no date and every element is
+-    undated, an `images:` line missing and that container specializes nothing, so a
+-    hand-edit of it is caught here rather than a run later.
+-    """
+-
+-    def test_the_fixture_is_an_annotation_layer_the_generator_accepts(self):
+-        with _repo((CHECKS / "kubecoder-architecture.yaml").read_text(encoding="utf-8")) as root:
+-            ann, introduced = ga.annotations(root)
+-
+-        # The date every published KubeCoder element carries.
+-        self.assertEqual(introduced, "2026-06-17")
+-        self.assertEqual(
+-            set(ann["images"]),
+-            {
+-                "kubecoder-bot",
+-                "kubecoder-controller",
+-                "kubecoder-ingress",
+-                "kubecoder-manual",
+-                "kubecoder-mcp",
+-            },
+-        )

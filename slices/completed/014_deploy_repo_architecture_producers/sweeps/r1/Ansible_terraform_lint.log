@@ -1,0 +1,1 @@
+terraform: cexec iac terraform fmt -check -recursive    [  OK  ]

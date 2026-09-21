@@ -1,0 +1,92 @@
+/work/AnsibleSpecs — P8: git diff 6364ac1b0fc7..15ddf6050138
+
+argo-cd/decisions.md | 18 ++++++++++++++++--
+ argo-cd/design.md    | 17 ++++++++++-------
+ argo-cd/phases.md    |  6 +++++-
+ 3 files changed, 31 insertions(+), 10 deletions(-)
+
+diff --git a/argo-cd/decisions.md b/argo-cd/decisions.md
+index 02d8e77..0a599d2 100644
+--- a/argo-cd/decisions.md
++++ b/argo-cd/decisions.md
+@@ -607,6 +607,20 @@ carries a target-shape section so the intermediates are visibly intermediate.
+ 2026-08-12 (notes). The namespace module and whatever still handles it in the migration tooling
+ go; tracked in phases.md so it cannot be forgotten.
+ 
++**D50 — Each deploy repo publishes its own architecture.** Decided 2026-09-21 (slice 014). A
++deploy repo carries a generated producer of its own: a `Jenkinsfile.architecture` running the
++`aac-tools` image's deploy-repo generator over the repo's committed judgment layer, under the
++producer id `<app>-deploy`. One pipeline publishes one stage, from the branch that stage deploys
++from — the artifact is attached to the pipeline, so one covering two stages flaps between them.
++Which stages an app publishes is the app's call, not a generator rule: KubeCoder publishes prd
++only, from `prd`. The generator mints the ids HelmCharts' copy does, so at a handover the new
++producer is registered **before** the stage flips: until the flip both producers declare the app's
++ids, the collector fails on the duplicates and publishes nothing, and the model keeps the app as it
++was; the flip's HelmCharts architecture build clears them. Flipping first publishes a green model
++without the app. KubeCoderDeploy and ArgoCDDeploy carry the first two; the steps, and which of them
++are the operator's, are `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own
++architecture producer".
++
+ ## Open
+ 
+ **O1 — How the remaining apps migrate** — gradually or in bulk. Deliberately undecided until the
+@@ -614,8 +628,8 @@ pilot and the adoption plugin exist.
+ 
+ **O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
+ `recommend-resources`, `collect-versions` and the version-poller. Decided by endgame time;
+-design.md carries the per-tool notes so the decision has an obvious shape when it comes, and
+-records the one already settled — `gen-architecture`'s rendering source. Also in this bucket
++design.md carries the per-tool notes so the decision has an obvious shape when it comes.
++`gen-architecture` has left the bucket, decided (D50). Also in this bucket
+ (qa Q3's caveat): the `configs/dev` chart-debugging tree and the ability to hand-run a chart or its
+ Terraform ad hoc — the operator's srvk8sdev workflow must survive HelmCharts' deletion in some
+ form.
+diff --git a/argo-cd/design.md b/argo-cd/design.md
+index d69eb92..32bdb37 100644
+--- a/argo-cd/design.md
++++ b/argo-cd/design.md
+@@ -564,13 +564,16 @@ tree at once, and stops keying the chart source on the config directory name —
+ follow-up), `collect-versions`/version-poller (its role already changing to proposing pin-bump
+ commits). None blocks the pilot; each needs its decision by endgame.
+ 
+-`gen-architecture` is the one already answered. HelmCharts' copy renders via `deploy template`,
+-and a migrated app has no release to render; the `aac-tools` image carries a deploy-repo generator
+-that renders the repo's own chart the way the releases ApplicationSet has Argo render it, one stage
+-per run, writing `docs/architecture/<producer>.yaml`. It mints the same element ids HelmCharts'
+-copy does, so a handover changes an element's owner and nothing else, and inbound edges from other
+-producers never dangle. What is still owed is per repo: registering the deploy repo as a producer,
+-and giving it the job that runs the command.
++`gen-architecture` is the one already answered (D50). HelmCharts' copy renders via
++`deploy template`, and a migrated app has no release to render; the `aac-tools` image carries a
++deploy-repo generator that renders the repo's own chart the way the releases ApplicationSet has
++Argo render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
++element ids HelmCharts' copy does, so a handover changes an element's owner and nothing else, and
++inbound edges from other producers never dangle. Each deploy repo runs it from a
++`Jenkinsfile.architecture` of its own, one stage per pipeline; KubeCoderDeploy and ArgoCDDeploy
++carry theirs. What a further repo needs — the files, the producer id, the operator's job and
++registration, and a handover's register-then-flip order — is
++`/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own architecture producer".
+ 
+ ## Consequences to accept
+ 
+diff --git a/argo-cd/phases.md b/argo-cd/phases.md
+index ecf1dbc..3873f23 100644
+--- a/argo-cd/phases.md
++++ b/argo-cd/phases.md
+@@ -284,6 +284,9 @@ env pod in the stage restarts — including whichever session is driving the mig
+ 
+ - [ ] Replay onto KubeCoderDeploy what HelmCharts' `charts/kubecoder` and stage values gained
+       since the copy (the README's command); its render gate stays green.
++- [ ] At the **prd** cutover, before the registry commit: KubeCoderDeploy's architecture producer
++      green on `prd`, then registered (D50). The Architecture job stays red on the duplicate ids
++      until the registry commit's HelmCharts architecture build.
+ - [ ] One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus
+       `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's
+       `values.yaml` (+ `_shared/` once both stages are over).
+@@ -359,4 +362,5 @@ Nothing here is scheduled; it is the direction the migration-era mechanisms poin
+   migration tooling still handles it, deleted once the last app migrates.
+ - **Residual tooling finds homes** (O2): `recommend-resources` and
+   `collect-versions`/version-poller — each enumerating deploy repos instead of the config tree.
+-  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator.
++  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator, run by
++  each deploy repo's own producer pipeline (D50).

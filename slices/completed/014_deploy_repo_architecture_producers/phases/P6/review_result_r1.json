@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The one new hermetic test drives gen_architecture.main() with the real deploy-config shape for an argo-cd release (chart_name null, disabled false). It goes red when the release is left in the artifact and when the run fails: three mutations were witnessed red. The diff has no other changes and there are no findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

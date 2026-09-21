@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "R7 is met: the fixture and --annotations are gone, and the handover check renders the clone's own committed architecture.yaml. The reviewer re-ran the live check against KubeCoderDeploy a8d3e4f and it was green (9 elements, 16 relations, id for id). The deleted fixture test's guarantees have a named successor.",
+ "details": "code_review_r1.md",
+ "findings": []}

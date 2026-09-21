@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The rewritten webhook-relay header is true on every claim, checked against argocd-deploy's rendered artifact, the live dataset's helm-charts Fieldnotes relay instance, and both generators' upstream handling. The parsed YAML is unchanged and arch-validate passes. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

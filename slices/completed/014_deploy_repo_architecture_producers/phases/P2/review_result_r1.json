@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "P2 delivers the argocd-deploy producer. The judgment layer yields Argo CD's owned product, its instances and both relay edges, with no gaps and deterministic output. The .architecturerc has exactly three keys and fleet.py accepts it, and the Jenkinsfile builds main and publishes prd where the collector finds it. One advisory: the .architecturerc's schema pointer names a docstring that lives outside the repo (close-out S5).",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": ".architecturerc tells the central update's session the schema is the generator's docstring, which lives in ArgoCDTools, not in the repo it clones"
+    }
+  ]
+}

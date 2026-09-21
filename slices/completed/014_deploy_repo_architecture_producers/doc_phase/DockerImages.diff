@@ -1,0 +1,28 @@
+/work/DockerImages — P3: git diff 8ca57984c4a9..78f31bad3e56
+
+webhook-relay/architecture.yaml | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/webhook-relay/architecture.yaml b/webhook-relay/architecture.yaml
+index 502b141..ea07e45 100644
+--- a/webhook-relay/architecture.yaml
++++ b/webhook-relay/architecture.yaml
+@@ -11,10 +11,14 @@ producer: docker-images
+ # the applicationset-controller, and as a container of the Fieldnotes pod, in
+ # front of that API's GitHub hook.
+ #
+-# The consumption edges toward those receivers are not modelled: cross-producer
+-# references resolve by UUID, and neither Argo CD nor Fieldnotes is modelled by
+-# any producer yet — Argo CD's deployer, ArgoCDDeploy, is created by slice 009,
+-# which also authors that deployment's Deployment and public exposure.
++# This file is the product layer. It draws no consumption edges, because each
++# deployment's relay instance is modelled by its deployer:
++# - argocd-prd: by argocd-deploy (ArgoCDDeploy's producer), with Argo CD's
++#   server and applicationset-controller each drawn serving the instance.
++# - Fieldnotes: by helm-charts. No edge toward the Fieldnotes API is drawn.
++#   HelmCharts' charts/fieldnotes/architecture.yaml maps the image with no
++#   `upstream` wire, and an `upstream` wire reads one URL variable, while this
++#   instance takes a RECEIVERS list.
+ 
+ applicationComponents:
+   - id: app:webhook-relay,f40004d9-8623-4b53-9c8d-c5c477b745a1

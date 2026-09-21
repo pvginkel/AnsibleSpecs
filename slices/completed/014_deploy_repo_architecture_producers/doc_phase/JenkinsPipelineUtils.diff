@@ -1,0 +1,23 @@
+/work/JenkinsPipelineUtils — P1: git diff 2c43b0694cd9..a4d5ba168138
+
+vars/containerTemplates.groovy | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/vars/containerTemplates.groovy b/vars/containerTemplates.groovy
+index b33859f..3e9c513 100644
+--- a/vars/containerTemplates.groovy
++++ b/vars/containerTemplates.groovy
+@@ -27,6 +27,13 @@ def python(String name) {
+     return containerTemplate(name: name, image: 'registry:5000/python', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+ }
+ 
++/**
++ * Architecture-as-code tools container (gen-architecture, arch-validate).
++ */
++def aac_tools(String name) {
++    return containerTemplate(name: name, image: 'registry:5000/aac-tools', command: 'sleep', args: 'infinity', alwaysPullImage: true)
++}
++
+ /**
+  * Debian Bookworm slim container.
+  */

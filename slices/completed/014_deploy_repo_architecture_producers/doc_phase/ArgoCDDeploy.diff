@@ -1,0 +1,163 @@
+/work/ArgoCDDeploy — P2: git diff 3246e89dae31..844ed05e2bb0
+
+.architecturerc          | 14 ++++++++++++++
+ .gitignore               |  2 ++
+ .kubecoder/project.yaml  | 12 +++++++++---
+ Jenkinsfile.architecture | 39 +++++++++++++++++++++++++++++++++++++++
+ architecture.yaml        | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 107 insertions(+), 3 deletions(-)
+
+diff --git a/.architecturerc b/.architecturerc
+new file mode 100644
+index 0000000..39e701f
+--- /dev/null
++++ b/.architecturerc
+@@ -0,0 +1,14 @@
++generated: true
++sources:
++  - architecture.yaml
++  - chart/
++  - config/prd/
++instructions: >
++  Generated producer (id argocd-deploy). The artifact docs/architecture/argocd-deploy.yaml
++  is a build output: gitignored, produced by gen-architecture from the aac-tools image,
++  which renders chart/ with config/prd/values.yaml the way Argo CD renders it. The
++  AaC/ArgoCDDeploy Jenkins job runs it (Jenkinsfile.architecture: generate the prd
++  stage from main, validate, archive). Do not run the generator and never write the
++  artifact; edit only the judgment layer, architecture.yaml at the repo root, whose
++  schema is the generator's docstring. An image the render carries that
++  architecture.yaml does not map is reported as a gap.
+diff --git a/.gitignore b/.gitignore
+index 48b47c4..f9566e5 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,3 +1,5 @@
+ # The pinned dependency is resolved by `helm dependency build` from Chart.lock,
+ # here and on Argo's repo-server alike; the tarball itself is never committed.
+ /chart/charts/
++# The architecture artifact is a build output (Jenkinsfile.architecture).
++/docs/architecture/
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 00085ca..034a712 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -5,16 +5,22 @@ projects:
+   root:
+     description: >-
+       Argo CD's own deploy repo: the wrapper chart pinning the upstream argo-cd
+-      chart with the estate's manifests on top, and the stage configuration Argo
+-      syncs itself from. There is no Jenkinsfile and no `jenkins:` key, and that
++      chart with the estate's manifests on top, the stage configuration Argo
++      syncs itself from, and the judgment layer of the `argocd-deploy`
++      architecture producer. Its one pipeline, Jenkinsfile.architecture,
++      publishes that producer's artifact. There is no deploy pipeline, and that
+       is deliberate rather than missing — a deploy repo publishes no image, and
+       Argo deploys this one, permanently by manual sync (D3).
++    jenkins: AaC/ArgoCDDeploy
+     # helm lint reads the built dependency, so the deps step comes first.
+     lint:
+       - cexec iac tests/build-deps.sh
+       - cexec iac helm lint chart --values config/prd/values.yaml
+     # The gate is the render: tests/render-chart.py asserts what the decision
+-    # register fixes against the objects helm actually produces.
++    # register fixes against the objects helm actually produces. The last two
++    # statements are the commands Jenkinsfile.architecture runs.
+     test:
+       - cexec iac tests/build-deps.sh
+       - cexec iac tests/render-chart.py
++      - cexec aac-tools gen-architecture --stage prd --producer argocd-deploy
++      - cexec aac-tools arch-validate docs/architecture/argocd-deploy.yaml
+diff --git a/Jenkinsfile.architecture b/Jenkinsfile.architecture
+new file mode 100644
+index 0000000..62fd976
+--- /dev/null
++++ b/Jenkinsfile.architecture
+@@ -0,0 +1,39 @@
++// Architecture producer pipeline for the federated Architecture-as-Code model: this
++// repo publishes Argo CD's prd stage as producer `argocd-deploy`.
++//
++// The artifact is generated, never committed. gen-architecture renders chart/ the way
++// Argo CD renders it, reads the judgment layer (architecture.yaml at the repo root)
++// and writes docs/architecture/argocd-deploy.yaml — a path containing an
++// `architecture/` directory, which the federation collector's
++// `**/architecture/**/*.yaml` filter matches.
++//
++// One pipeline publishes one stage: the artifact is attached to the pipeline, so a
++// pipeline building two stages would make it flap. The branch is the one Argo syncs
++// this repo from (HelmCharts configs/prd/argocd/prd/release.yaml, `targetRevision`),
++// and the stage is the one that branch deploys.
++//
++// The agent needs outbound HTTPS to the argo-helm chart repository the chart's
++// dependency resolves from, and to architecture.webathome.org for the published
++// dataset and validation.
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++podTemplate(inheritFrom: 'jenkins-agent', containers: [
++    containerTemplates.aac_tools('aac-tools')
++]) {
++    node(POD_LABEL) {
++        stage('Cloning repo') {
++            git branch: 'main',
++                credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++                url: 'https://github.com/pvginkel/ArgoCDDeploy.git'
++        }
++
++        stage('Architecture') {
++            container('aac-tools') {
++                sh 'gen-architecture --stage prd --producer argocd-deploy'
++                sh 'arch-validate docs/architecture/*.yaml'
++            }
++            archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
++        }
++    }
++}
+diff --git a/architecture.yaml b/architecture.yaml
+new file mode 100644
+index 0000000..effc052
+--- /dev/null
++++ b/architecture.yaml
+@@ -0,0 +1,43 @@
++# The judgment layer the aac-tools generator reads to publish this repo's prd stage
++# as producer `argocd-deploy` (Jenkinsfile.architecture). Everything else in the
++# artifact is derived from the render; the schema is gen-architecture's docstring.
++
++# The first commit carrying the chart. This repo was created for Argo CD's standup,
++# so its history dates the app.
++introduced: '2026-08-17'
++
++# Upstream products nobody else deploys, so this producer owns their catalog entries.
++products:
++  - id: ss:argo-cd
++    label: Argo CD
++    summary: Declarative GitOps continuous delivery for Kubernetes.
++    homepage: https://argo-cd.readthedocs.io/
++  - id: ss:redis
++    label: Redis
++    summary: In-memory key-value data store.
++    homepage: https://redis.io/
++
++images:
++  # One image runs every Argo CD component, the copyutil init container and the
++  # redis-secret-init Job included. No capability: `realizes` applies to every
++  # container of the image, and the one-shots realize none.
++  argocd: ss:argo-cd
++  # Argo CD's own cache, reached by name at the argocd-prd-redis Service.
++  redis:
++    product: ss:redis
++    realizes: [cap:cache]
++  # DockerImages' component, fronting Argo CD's two webhook receivers. One wire per
++  # receiver URL the pinned build reads (chart/templates/webhook-relay.yaml).
++  webhook-relay:
++    product: app:webhook-relay
++    upstream:
++      - env: ARGOCD_WEBHOOK_URL
++        providers: [server]
++      - env: APPLICATIONSET_WEBHOOK_URL
++        providers: [applicationset-controller]
++
++# Argo CD's UI, on both names its vhost answers to. deploy-hooks.webathome.org is
++# GitHub's machine endpoint, not a UI.
++webUi:
++  - argocd.home
++  - argocd
