@@ -375,7 +375,7 @@ passes all 23 files.
 Later phases:
 - Nothing changes. Close-out S1 already carries the RECEIVERS gap the comment names.
 
-### P4 — KubeCoderDeploy carries KubeCoder's producer
+### P4 — KubeCoderDeploy carries KubeCoder's producer ✅ DONE 2026-09-21
 
 Target: ../KubeCoderDeploy
 
