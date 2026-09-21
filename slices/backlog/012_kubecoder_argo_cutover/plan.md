@@ -306,10 +306,124 @@
   storage from `configs/prd/*/_shared/*.tf`; reconciler-owned stages count as desired namespace +
   storage, no Helm release.
 
+## Task shape
+
+pre-settled — slice.md and the seeded rulings fix every mechanism the phases carry (the pinned
+containers' `IfNotPresent` and the drift replay; the promote job's retag → advance `prd` →
+`release-<n>` sequence in KubeCoderDeploy, D2/D47/D48; the runbook's per-stage order and
+state-move recipe); planning is transcription.
+
 ## Ordering constraints
 
-- The KubeCoderDeploy phases (chart; promote job) come before the runbook phase — the runbook
-  cites what they ship.
+- None beyond document order: P3's runbook cites what P1 and P2 ship. No phase performs a cutover
+  step — everything a phase merges is inert until the operator reaches the runbook step that uses
+  it (nothing syncs from KubeCoderDeploy before a stage's registry commit).
+
+### P1 — The chart owns its pinned containers' pull policy and carries HelmCharts' drift
+
+Target: ../KubeCoderDeploy
+
+Both stages' renders declare `imagePullPolicy: IfNotPresent` on the five pinned containers
+(controller, ingress, manual — `chart/templates/controller-deployment.yaml`; bot; mcp) — the S11
+ruling's item 1: declaring it is what makes Argo own the field, so the first sync replaces
+Helm's `Always` and the field stays changeable afterwards. `tunnel-reclaim` keeps `Always`.
+KubeCoderDeploy's render gate asserts the declared value, not merely the absence of `Always` (it
+checks `!= "Always"` today, `tests/render-chart.py:374`, which an undeclared field also passes).
+
+The chart and stage values also carry everything HelmCharts landed under `charts/kubecoder/` and
+`configs/prd/kubecoder/` since the recorded copy commit — the README's replay command lists it
+(at planning: five commits, `values.yaml` and `architecture.yaml` only; the root
+`architecture.yaml` copy follows its own recorded commit). A replay keeps every Argo-specific
+difference the README lists, and the README's recorded copy point moves to what was replayed.
+
+### P2 — KubeCoderDeploy's promote job
+
+Target: ../KubeCoderDeploy
+
+A Jenkinsfile in KubeCoderDeploy (D2) that, run by hand, promotes a validated `main` commit —
+`main`'s tip unless told otherwise — to prd, in D47's order:
+
+1. **Retag** the seven Build-Main images from the build tag to the `prd-<n>` tag, where the images
+   and tags are the ones the promoted commit's `config/prd/values.yaml` names (five `images.*`
+   suffixes, two whole references under `controllerConfig.images`) — read from that commit, never
+   computed from a Build-Main number. `<n>` is the bare tag Build-Main pushes after its rewrite.
+2. **Advance `prd`** to that commit — a fast-forward only (D35: `prd` never carries a commit `main`
+   doesn't). The first run creates `prd`; that is how the branch is born at prd's cutover, and
+   what lets `Jenkinsfile.architecture` go green on it (D2).
+3. **Write D48's annotated `release-<m>` tag** on the promoted commit, `<m>` the job's own build
+   number, and push it.
+
+A failure at any step leaves the later steps undone — above all, `prd` never moves to a commit
+whose `prd-<n>` tags do not all exist. One promotion at a time. No rollback parameter and no
+force-move (D47): rollback is D36's revert on `main` then promote, and the emergency pointer-move
+stays a separate deliberate act.
+
+The job holds registry and git credentials only — no cluster credential, no `cicd.helmDeploy()`
+(that is what makes the exit criterion's *"Jenkins holds no cluster credential for KubeCoder"*
+true). Git: the estate's shared GitHub credential
+(`/work/JenkinsPipelineUtils/vars/cicd.groovy:69`). Registry: `registry:5000` over plain HTTP,
+reached as `Deploy-PRD` reaches it (`/work/KubeCoder/Jenkinsfile.deploy-prd:35`); `crane` is in
+the shared `k8s` agent image (`/work/DockerImages/k8s/Dockerfile:5`), and whichever container runs
+the git steps must carry `git`.
+
+The file stays inert until the operator creates its Jenkins job by hand at prd's cutover
+(Jenkins jobs here are created in the UI); this phase creates no job. KubeCoderDeploy's
+`kc project` gate does not read Jenkinsfiles: check the file with Jenkins' linter, reachable from
+this pod — `POST https://jenkins.webathome.org/pipeline-model-converter/validate`, basic auth
+`admin:$JENKINS_TOKEN`, form field `jenkinsfile`. On a scripted pipeline it is a Groovy parse
+check only: a clean parse answers *"did not contain the 'pipeline' step"*, a syntax error
+*"Errors encountered validating Jenkinsfile"* (both observed 2026-09-22).
+
+### P3 — The KubeCoder cutover runbook
+
+Target: root
+
+A new runbook in `docs/runbooks/` (its own file, both stages — refinement) that the operator
+executes to move KubeCoder from Jenkins to Argo: dev end to end, let it sit, then prd. It carries
+R1–R14, the carried-in rulings, D1/D2 and the refinement settlements as the operator's steps —
+each an exact command runnable from this pod (argocd.md's conventions: `cexec iac`, the prd-write
+kubeconfig) or an exact UI or Jenkins action, with what its output must show and what stops the
+cutover. Every stop names the state the stage is left in and the way back from it. It points into
+`argocd.md` for the diff table, the pre-flight and the architecture-producer steps rather than
+repeating them, and the registry entries and deletions it calls for are spelled out in full — they
+are the "registry commit's content and the post-cutover deletions" triage assigned.
+
+The step order is the rulings', composed into one sequence the runbook states outright. The
+constraints that only appear when they are composed: the rewritten `Build-Main` runs before dev's
+registry commit; per stage the registry commit precedes the state surgery; `Deploy-PRD` goes only
+after the promote job (P2) has retagged, and `Build-Main`'s `dev-<n>` push stops with it;
+`configs/prd/kubecoder/_shared/` goes only after prd's state surgery, which still inits HelmCharts'
+prd state; prd's registry commit waits on *`prd` born (P2's first run) → producer green → producer
+registered*; the chart replay is repeated just before each diff review, and at prd a replay reaches
+the prd Application only through a promotion.
+
+What the runbook must also get right:
+
+- **The KubeCoder Jenkinsfile edits (D1)** are each specified by the outcome `Build-Main` must
+  have after the edit (R14 with its D47 and S5 amendments, the settled `dev-<n>` bridge and
+  claude-shim rulings), written by the accompanying session at that step, linted — on these
+  scripted files the linter is the Groovy parse check P2 describes — and pushed on the operator's
+  confirmation.
+- **The state surgery** is the ruling's recipe with its checks: the hook image's terraform is not
+  older than the sidecar's v1.16.3 (unverified at planning) before any push; no webhook on
+  `pvginkel/KubeCoderDeploy` points at the relay before dev's first sync (the Jenkins one stays);
+  the plan's expected output per stage (`manage_webhook` is true for dev only); the local plaintext
+  copies deleted.
+- **The expected diff.** `argocd.md`'s table was derived for dev only, before P1 declared the pull
+  policy. The runbook's diff review names P1's change as expected, says how prd's expected set is
+  obtained (prd's render also carries the public MCP Service), and `argocd.md`'s table and its
+  KubeCoder residue note in "What a cutover does not change" are corrected to the chart as P1
+  leaves it.
+- **prd's sync restarts the session driving it**: prd's sync and its checks are doable by the
+  operator alone, with a named point to resume from. The prd rollback rehearsal reverts a real pin
+  commit and rolls forward — two env-pod restarts, scheduled with the promotion exercise.
+- **The post-cutover section** covers both stages' Helm release Secrets, `charts/kubecoder/` and
+  `_shared/` (with the orphan audit's expected listing at that step), and is the specification of
+  the KubeCoder task D1 files for after prd — the worker/vsix ImageVolume `pullPolicy` lines
+  (`/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725`) and D145's
+  update written from what is then live, per R13's sharpening.
+- **It closes on the exit criterion**, with the check that proves each part — read as the
+  grounding reads *"Jenkins holds no cluster credential for KubeCoder"*.
 
 ## Not in scope
 
