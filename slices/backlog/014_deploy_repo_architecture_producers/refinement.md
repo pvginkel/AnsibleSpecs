@@ -16,7 +16,7 @@
 
 **If this is wrong.** Nothing breaks either way: one edge absent for a while, or one extra push and restart.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree
 
 ## D2 — At a handover, the new producer is registered before the app's stage is flipped, not after
 
@@ -34,7 +34,7 @@
 
 **If this is wrong.** A few minutes of a red job, or a few minutes of a missing app; nothing is lost permanently either way.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree
 
 ## Open facts — questions only you can answer
 
