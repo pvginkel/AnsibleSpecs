@@ -255,13 +255,30 @@ operator's first `AaC/ArgoCDDeploy` build is the canary. The image declares no E
 as its own non-root user (`/work/ArgoCDTools/aac-tools/Dockerfile:7-11`, `:71-74`); the entry
 overrides neither.
 
+**Done (P1).** `vars/containerTemplates.groovy` gains `aac_tools(String name)`, directly after
+`python`: `containerTemplate(name: name, image: 'registry:5000/aac-tools', command: 'sleep',
+args: 'infinity', alwaysPullImage: true)` — the `python` line with only the image changed; no
+`runAsUser`, no entrypoint override. JenkinsPipelineUtils `a4d5ba1` on `phase/014-P1`, unpushed.
+No gate ran: the repo has none, and this environment has no Java or Groovy toolchain to compile
+the file through.
+
+Later phases:
+- A pod declares it as `containerTemplates.aac_tools('aac-tools')` and runs steps in
+  `container('aac-tools') { … }` — the method name takes the underscore form of
+  `modern_app_dev`, since a Groovy method name cannot carry a hyphen.
+- The entry is uncompiled and unexercised until the operator's first `AaC/ArgoCDDeploy` build,
+  which needs this commit on JenkinsPipelineUtils' `main`.
+
+The method name is the only settlement beyond the plan's text; the doc comment follows the file's
+one-line form ("Architecture-as-code tools container (gen-architecture, arch-validate).").
+
 ### P2 — ArgoCDDeploy publishes Argo CD's architecture
 
 Target: ../ArgoCDDeploy
 
 ArgoCDDeploy becomes the generated producer `argocd-deploy` (R5): a committed judgment layer the
 `aac-tools` generator reads (G4), an `.architecturerc`, and a `Jenkinsfile.architecture` that — in
-P1's container — builds `main` (the branch Argo syncs it from, HelmCharts
+P1's container (`containerTemplates.aac_tools('aac-tools')`) — builds `main` (the branch Argo syncs it from, HelmCharts
 `configs/prd/argocd/prd/release.yaml`), generates the `prd` stage under that id, validates it with
 the image's `arch-validate`, and archives it where the collector's filter finds it (G8). The branch
 built and the stage published both read off the file. The artifact is a build output, never
