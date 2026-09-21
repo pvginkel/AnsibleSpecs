@@ -476,7 +476,7 @@ Record:
   - the four dev↔prd controller-api edges to bot and mcp, excluded as crossing the stage boundary (ARCH-13)
   - the closing line "equal — every id matches; producer, logo and stats.image are all that differ"
 
-### P6 — HelmCharts pins that a flipped stage leaves the artifact
+### P6 — HelmCharts pins that a flipped stage leaves the artifact ✅ DONE 2026-09-21
 
 Target: ../HelmCharts
 
