@@ -242,7 +242,7 @@ handover order); planning is transcription across the named repos.
 - ../ArgoCDTools — pushing stays the operator's call, as in slice 024: a push to `main` makes `IaC/ArgoCDTools` rebuild and republish both images.
 - ../DockerImages — a push rebuilds every image and runs the repo's Helm deploy; the one comment this slice corrects there goes out with the operator's next DockerImages push.
 
-### P1 — The `aac-tools` container template
+### P1 — The `aac-tools` container template ✅ DONE 2026-09-21
 
 Target: ../JenkinsPipelineUtils
 
