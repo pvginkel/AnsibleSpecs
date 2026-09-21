@@ -449,6 +449,33 @@ itself compares every element), so no coverage goes silently. The check's docstr
 (`handover_equality.py:6-16`) and the README's account of it (`README.md:292-299`) stop
 describing a copy. Held from pushing (Push holds).
 
+**Done (P5).** ArgoCDTools `bdd280e` on `phase/014-P5`, unpushed (Push holds). The fixture
+`aac-tools/checks/kubecoder-architecture.yaml` is deleted. `handover_equality.py` loses `FIXTURE`,
+`--annotations` and the copy step, so the clone renders its own committed `architecture.yaml`.
+`HandoverFixtureTests` is deleted. The docstring and the README's account now describe the committed
+layer, and the stale "registered in a later slice" line in the `--producer` comment is trimmed.
+`kc project test` and `lint` are green. The live check is green (below).
+
+Later phases:
+- P7: if the how-to cites the handover check, the layer must be committed before the check can
+  see it, because the check clones the checkout's HEAD. The flags are `--deploy-repo`, `--stage`
+  and `--producer`. `--annotations` no longer exists.
+
+Record:
+- The successor to `HandoverFixtureTests` has two parts. KubeCoderDeploy's `kc project test` runs
+  the generator over the committed layer, and the generator refuses a layer with no `introduced:`.
+  That refusal is pinned by `AnnotationLayerTests`. The handover check then compares every element
+  and relation, which catches a wrong date or a dropped `images:` line. Both were witnessed on
+  scratch clones with a mutation committed. Setting `introduced: '2026-06-18'` gave 9 differences,
+  one per element's `introduced`. Dropping `kubecoder-bot` gave 2 differences: the relations
+  `…-kubecoder-bot-spec` and the controller-api `serves` edge to bot were published but not generated.
+- `cexec iac python3 aac-tools/checks/handover_equality.py` (no flags; KubeCoderDeploy `main` at
+  `a8d3e4f`; live dataset) printed:
+  - published `helm-charts` 9 elements, 16 relations; generated `kubecoder-deploy` 9 elements, 16 relations
+  - one `gap:`, for `kube-coder-tunnel-reclaim`
+  - the four dev↔prd controller-api edges to bot and mcp, excluded as crossing the stage boundary (ARCH-13)
+  - the closing line "equal — every id matches; producer, logo and stats.image are all that differ"
+
 ### P6 — HelmCharts pins that a flipped stage leaves the artifact
 
 Target: ../HelmCharts
