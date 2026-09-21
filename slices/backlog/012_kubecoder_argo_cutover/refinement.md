@@ -16,7 +16,7 @@
 
 **If this is wrong.** A Jenkinsfile edit gets less review than it would have had in KubeCoder's environment, or the cutover carries an extra hand-off; neither loses data or deploys anything wrong.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree
 
 ## D2 — Which repo holds the promote job that replaces Deploy-PRD
 
@@ -34,7 +34,7 @@
 
 **If this is wrong.** The job file moves between repos later; nothing breaks.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree
 
 ## Open facts — questions only you can answer
 
