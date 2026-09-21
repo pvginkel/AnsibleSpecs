@@ -82,3 +82,12 @@ DockerImages 8ca5798 (2026-09-20) replaced the relay's two URL variables with on
 
 **Provenance:** read | plan-writer, r1 — DockerImages 8ca5798; /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570
 **Disposition:**
+
+### S2 — Environment manifest: /work/KubeCoderDeploy is checked out but not declared in .kubecoder/config.yaml · nit
+
+The `repos:` list in `/work/Ansible/.kubecoder/config.yaml` names AnsibleSpecs, HelmCharts, JenkinsPipelineUtils, DockerImages, HomelabTerraformProvider, ArgoCDDeploy, ArgoCDTools and Charts. KubeCoderDeploy is not among them, and `git log -S KubeCoderDeploy -- .kubecoder/config.yaml` is empty, so it never was. `/work/Ansible/CLAUDE.md` lists KubeCoderDeploy among the related repos and says the set is declared in that file. The manifest carries a note saying Architecture is deliberately undeclared; KubeCoderDeploy has no such note. This slice's P4 and P5 work in the checkout, and `handover_equality.py` defaults `--deploy-repo` to it.
+
+**Consequence:** A freshly created environment would come up without the KubeCoderDeploy checkout that this slice and slice 012 work in, and CLAUDE.md's statement about the declared set is untrue.
+
+**Provenance:** read | plan-reviewer, r1 — /work/Ansible/.kubecoder/config.yaml
+**Disposition:**
