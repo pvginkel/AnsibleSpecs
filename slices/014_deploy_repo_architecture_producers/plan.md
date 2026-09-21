@@ -511,7 +511,7 @@ Record:
   `TypeError` at `charts/None`, which fails the run. Falling back to `chart_dir` for the chart name
   puts `argocd` into the artifact, which fails the assertion.
 
-### P7 — The how-to: a migrated app carries its own producer
+### P7 — The how-to: a migrated app carries its own producer ✅ DONE 2026-09-21
 
 Target: root
 
