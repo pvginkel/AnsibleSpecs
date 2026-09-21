@@ -29,6 +29,10 @@ ArgoCDDeploy's producer (P2) is committed but nothing runs it. The operator crea
 
 plan-writer, r2, 2026-09-21 — Per plan review r1 ruling Q1, the argocd-deploy entry in pipeline-producers.yaml carries repo: pvginkel/ArgoCDDeploy beside id and jenkinsJob. That enrols the producer in the central architecture update (/work/Architecture/tooling/fleet.py), which reads the repo's .architecturerc (P2 commits it with explicit sources, ruling B1). The operator holds every central update run until ARCH-14 is resolved.
 
+consult 1, 2026-09-21 — The first AaC/ArgoCDDeploy build clones ArgoCDDeploy's origin main and loads JenkinsPipelineUtils from its origin main. So it needs ArgoCDDeploy 844ed05 (P2) and JenkinsPipelineUtils a4d5ba1 (P1) pushed. Both were on local main and unpushed at consult 1. Neither repo is push-held, so the run's push step carries them.
+
+test-agent, r1, 2026-09-21 — The push preconditions are met: JenkinsPipelineUtils a4d5ba1 and ArgoCDDeploy 844ed05 are on origin/main (pushed this pass). Live evidence about P1's library entry: Jenkins builds started after that push loaded JenkinsPipelineUtils at a4d5ba1 (AaC/Ansible #141, which runs containerTemplates.python('python'), finished SUCCESS), so the edited containerTemplates.groovy compiles and the existing entries still work. The aac_tools entry has not run in any pipeline yet. Before the operator's first build, the same two commands were run here from pristine clones with an empty HOME in the aac-tools image as uid 1000 (gen-architecture --stage prd --producer argocd-deploy, then arch-validate docs/architecture/argocd-deploy.yaml): 15 elements, 25 relations, no gap, validated, byte-identical to the working-tree artifact. What only the Jenkins build can prove is the pod's egress to argoproj.github.io/argo-helm and architecture.webathome.org, the workspace ownership under the non-root image, and the archive step. Green looks like: the Architecture stage prints 'wrote docs/architecture/argocd-deploy.yaml — 15 elements, 25 relations' and '✓ docs/architecture/argocd-deploy.yaml', the build archives docs/architecture/argocd-deploy.yaml, and 'Finished: SUCCESS'.
+
 **Consequence:** Argo CD and the webhook relay's two edges stay out of the published model, and the new pipeline shape is unproven when KubeCoder's cutover needs it.
 
 **Provenance:** read | plan-writer, r1 — plan.md R5 and the settled ruling of 2026-09-21
@@ -40,9 +44,22 @@ KubeCoderDeploy's producer (P4) lands on main. Slice 012 creates the prd branch 
 
 plan-writer, r2, 2026-09-21 — Per plan review r1 ruling Q1, the kubecoder-deploy entry in pipeline-producers.yaml carries repo: pvginkel/KubeCoderDeploy beside id and jenkinsJob. The central architecture update clones and pushes the default branch, main, while this producer builds prd, so it does not serve this producer correctly until ARCH-14 is resolved. The operator holds every central update run until then, and nothing in this slice works around it.
 
+consult 1, 2026-09-21 — KubeCoderDeploy a8d3e4f (P4) was on local main and unpushed at consult 1. The prd branch that slice 012 creates must be born from a main that carries it, or AaC/KubeCoderDeploy has no Jenkinsfile.architecture to build.
+
+test-agent, r1, 2026-09-21 — KubeCoderDeploy a8d3e4f is on origin/main (pushed this pass), so the prd branch slice 012 creates will carry Jenkinsfile.architecture. From a pristine clone with an empty HOME in the aac-tools image, gen-architecture --stage prd --producer kubecoder-deploy wrote 9 elements, 16 relations with the one expected gap (kube-coder-tunnel-reclaim) and arch-validate accepted it. The green build to expect on the prd branch prints the same 9/16 and the gap line. handover_equality.py, run live against KubeCoderDeploy a8d3e4f, exits 0 (recorded at V03).
+
 **Consequence:** If the prd flip lands before this, KubeCoder leaves the federated model, which is the loss R1 forbids.
 
 **Provenance:** read | plan-writer, r1 — plan.md R1, R2, ruling D2; slice 012 slice.md:313-320
+**Disposition:**
+
+### A3 — Push the two held repos: ArgoCDTools bdd280e and DockerImages 78f31ba
+
+The plan holds two repos from the run's pushes. ArgoCDTools is held because a push to main makes IaC/ArgoCDTools rebuild and republish both images. It carries P5's bdd280e: the kubecoder-architecture.yaml fixture and HandoverFixtureTests are deleted, and handover_equality.py renders the deploy repo's own committed architecture.yaml. DockerImages is held because a push rebuilds every image and runs the repo's Helm deploy. It carries P3's 78f31ba, a comment-only correction to webhook-relay/architecture.yaml saying which producer models each relay instance's edges. Neither push gates A1 or A2: the aac-tools image the deploy repos build with already carries the upstream list form (ff7e443 is on origin), and 78f31ba changes no data.
+
+**Consequence:** Until ArgoCDTools is pushed, a fresh clone runs the old handover check, which lays a second copy of KubeCoder's layer over the one KubeCoderDeploy commits. Until DockerImages is pushed, the relay's source record on GitHub still says Argo CD is modelled by no producer. The published model is unaffected by either.
+
+**Provenance:** read | consult 1 — plan.md Push holds; git log origin/main..main in /work/ArgoCDTools and /work/DockerImages
 **Disposition:**
 
 ## Notable events
@@ -54,6 +71,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      the sidecar, a wait that hit a cap, a call the harness refused. What happened, when, how it
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
+
+### N1 — A HelmCharts push rolled homeapps-prd through the standing deploy pipeline, from an upstream trigger and not from this slice's commit
+
+Pushing HelmCharts 0c37dbb (the P6 test) started IaC/HelmCharts #6628 ('Started by GitHub push by pvginkel'), which deployed nothing: every 'Deploying <release>' stage was empty and it finished SUCCESS. Build #6629 then ran on the same commit with two causes on its log ('Started by upstream project "Home" build number 23' and 'Started by GitHub push by pvginkel'), and it did deploy one prd release: homeapps@prd, a terraform apply with no changes and a helm upgrade --install with images.homeapps=@sha256:4a90330e…, rolled out successfully. The slice's commit touches only tests/test_gen_architecture.py, so no release input changed; the release selected is consistent with the upstream Home #23 trigger, though I did not establish which of the two causes picked it. The driver's fact that nothing in this pass touches prd held for the slice's own changes. The run cannot push HelmCharts without the estate's deploy pipeline running.
+
+**Consequence:** none: the homeapps rollout succeeded and the slice's change did not select it; it is recorded so the 10:53Z homeapps-prd rollout is not mistaken for slice 014's.
+
+**Provenance:** witnessed | test-agent, r1 — Jenkins IaC/HelmCharts #6628 and #6629 build logs (2026-09-21 10:49Z and 10:52Z)
+**Disposition:**
 
 ## Bugs
 
@@ -120,6 +146,8 @@ ArgoCDDeploy's .architecturerc instructions (and the header of architecture.yaml
 
 code-reviewer, P4, r1, 2026-09-21 — Confirmed in KubeCoderDeploy at a8d3e4f: .architecturerc instructions and the architecture.yaml header carry the same "generator's docstring" pointer, and its sources (architecture.yaml, chart/, config/prd/) do not include the generator. Both deploy repos now share this entry; there is no separate P4 finding.
 
+consult 1, 2026-09-21 — The how-to already names where the schema lives: docs/runbooks/argocd.md ('What the deploy repo carries') gives it as the docstring of ArgoCDTools' aac-tools/image/gen_architecture.py. The runbook's .architecturerc template carries no schema pointer. The gap that remains is the two deploy repos' .architecturerc instructions and architecture.yaml headers, plus a template decision for future apps. Choosing between carrying the contract and pointing at it is a design call, so this is left for the operator rather than fixed as residue.
+
 **Consequence:** When the central update fills a reported gap in a deploy repo's judgment layer, it edits without the schema it is told to read, and a mis-shaped entry is caught only where the generator happens to reject it.
 
 **Provenance:** read | code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
@@ -141,4 +169,13 @@ The paragraph on undeploying and unregistering in docs/runbooks/argocd.md ('Regi
 **Consequence:** An undeployed or unregistered Argo app stays in the published architecture model as running until someone deregisters its producer by hand.
 
 **Provenance:** read, code-writer, P7, r1, /work/Ansible/docs/runbooks/argocd.md
+**Disposition:**
+
+### ~~S8 — Argo CD runbook: the new-app dating rule contradicts its ArgoCDDeploy worked example · minor~~ — resolved by consult 1 (Ansible 7c4b8e6): docs/runbooks/argocd.md now says a new app takes the date of the first commit adding its deploy repo's chart/, as ArgoCDDeploy's does (3fc0b7e, 2026-08-17, re-checked with git log --diff-filter=A -- chart); struck by consult 1
+
+docs/runbooks/argocd.md:317-318 says a new app takes the date of its deploy repo's first commit. The worked example it offers for a new app, ArgoCDDeploy, dates Argo CD from the first commit carrying the chart instead: architecture.yaml:5-7 gives introduced: '2026-08-17' (3fc0b7e), while the repo's first commit is e8cb797 on 2026-08-16, a README only. That is HelmCharts' rule applied to chart/, as P2's done-record states.
+
+**Consequence:** The next new app's elements may carry an introduced date that differs from what the worked example's rule gives. No ids are affected.
+
+**Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
 **Disposition:**

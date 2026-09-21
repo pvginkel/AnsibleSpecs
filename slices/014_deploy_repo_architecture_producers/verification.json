@@ -4,57 +4,64 @@
       "id": "V01",
       "area": "R1 — KubeCoder's cutover loses nothing",
       "description": "The model loses nothing through KubeCoder's cutover: \"The architecture file is a first class element the current HelmCharts setup. Actually, it's two parts: the static files and the generator. Both absolutely need to keep working as we switch over.\" HelmCharts' static file charts/kubecoder/architecture.yaml and its generator keep publishing KubeCoder unchanged until slice 012's prd flip, and KubeCoderDeploy carries its own copy of the static file and a producer that renders KubeCoder prd from it.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "HelmCharts' static file and generator are untouched: the slice's whole HelmCharts diff is tests/test_gen_architecture.py (git diff --stat 78498dc..0c37dbb), and charts/kubecoder/architecture.yaml's last touch is still 8cd9185, before the slice. KubeCoderDeploy carries its own copy: the images block is byte-identical to HelmCharts' (diff of the two `images:` sections empty), and its committed layer renders. Witnessed this pass, from a pristine clone of KubeCoderDeploy main (a8d3e4f) in the aac-tools toolchain with an empty HOME: gen-architecture --stage prd --producer kubecoder-deploy wrote 9 elements, 16 relations, one expected gap (kube-coder-tunnel-reclaim), and arch-validate accepted it. V03 carries the equality against what helm-charts publishes.",
       "evidence": [
         "/work/HelmCharts/charts/kubecoder/architecture.yaml:5-11",
         "/work/HelmCharts/tools/chart_tools/gen_architecture.py:587",
-        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:283-306"
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:283-306",
+        "witnessed: cd /tmp/t014/kcd (git clone /work/KubeCoderDeploy) && HOME=/tmp/t014/home gen-architecture --stage prd --producer kubecoder-deploy && arch-validate docs/architecture/kubecoder-deploy.yaml -> 9/16, 1 gap, ✓",
+        "witnessed: diff <(sed -n '/^images:/,$p' /work/HelmCharts/charts/kubecoder/architecture.yaml) <(sed -n '/^images:/,$p' /work/KubeCoderDeploy/architecture.yaml) -> identical"
       ]
     },
     {
       "id": "V02",
       "area": "R2 — KubeCoderDeploy publishes prd only",
       "description": "KubeCoderDeploy's producer publishes prd only, from the prd branch: its Jenkinsfile.architecture builds the prd branch and runs the generator with --stage prd, the branch stated in the file beside the stage. The guard is the generator's required, single-valued --stage and nothing else — no branch check, no generator rule (\"Don't make it a generator rule. I may have different needs for other apps.\"); no pipeline or gate in KubeCoderDeploy produces a dev artifact. The static file charts/kubecoder/architecture.yaml has moved into KubeCoderDeploy with an explicit introduced:.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "KubeCoderDeploy/Jenkinsfile.architecture runs `git branch: 'prd'` and `gen-architecture --stage prd --producer kubecoder-deploy`, and its header states the branch and stage together (D34: dev tracks main, prd the prd branch; the dev stage is not published). The guard is the generator's `--stage` alone: gen_architecture.py:17 and :680 say the stage is required and single-valued and that nothing there reads the branch; no branch check and no generator rule was added (the ArgoCDTools diff for the slice is the handover check only). No pipeline or gate produces a dev artifact: the two test statements and the Jenkinsfile all pass --stage prd, .architecturerc's sources name config/prd/ and not config/dev/, and the artifact from a pristine clone has 0 `kubecoder-dev` ids against 39 `kubecoder-prd-` ones. architecture.yaml states introduced: '2026-06-17', the date the runbook's own query (git log --diff-filter=A --reverse ... charts/kubecoder) yields in HelmCharts.",
       "evidence": [
         "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:673-697",
-        "/work/ArgoCDTools/aac-tools/checks/kubecoder-architecture.yaml:10"
+        "/work/ArgoCDTools/aac-tools/checks/kubecoder-architecture.yaml:10",
+        "witnessed: grep -c 'kubecoder-dev' docs/architecture/kubecoder-deploy.yaml (pristine clone) -> 0; grep -o 'kubecoder-(dev|prd)-' | uniq -c -> 39 kubecoder-prd-",
+        "witnessed: git -C /work/HelmCharts log --diff-filter=A --reverse --format=%ad --date=short -- charts/kubecoder | head -1 -> 2026-06-17",
+        "/work/KubeCoderDeploy/Jenkinsfile.architecture:26 (branch 'prd'), :35 (--stage prd)"
       ]
     },
     {
       "id": "V03",
       "area": "R3 — element UUIDs are kept",
       "description": "Element UUIDs are kept: the new producer's artifact equals the KubeCoder prd subset helm-charts publishes today — same ids, only the producer differs. handover_equality.py, run over KubeCoderDeploy's committed tree (its own architecture.yaml) against the live published dataset, exits 0; the only differences are the ones it is built to set aside (producer, logo, stats.image, the relations crossing the stage boundary — ARCH-13) and the expected kube-coder-tunnel-reclaim gap.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Witnessed live this pass, against the published dataset at https://architecture.webathome.org/data/v0.1/architecture.yaml: `cd /work/ArgoCDTools && cexec iac python3 aac-tools/checks/handover_equality.py` (no flags, so it clones /work/KubeCoderDeploy HEAD a8d3e4f and renders that clone's own committed architecture.yaml) exited 0. Output: published helm-charts 9 elements, 16 relations; generated kubecoder-deploy 9 elements, 16 relations; four relations excluded as crossing the stage boundary (the dev<->prd controller-api edges to bot and mcp, ARCH-13); one `gap:` for kube-coder-tunnel-reclaim; final line 'equal — every id matches; producer, logo and stats.image are all that differ'. The same NS constant seeds both generators' ids, as the equality shows (ArgoCDTools gen_architecture.py:121, HelmCharts :104 — same producers/helm-charts URL).",
       "evidence": [
         "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:121",
         "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:50-57",
-        "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:247-289"
+        "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:247-289",
+        "witnessed: cexec iac python3 aac-tools/checks/handover_equality.py, exit 0, run 2026-09-21 in /work/ArgoCDTools"
       ]
     },
     {
       "id": "V04",
       "area": "R4 — HelmCharts stays on its own generator",
       "description": "HelmCharts does not move onto the image (\"I must assume that it can keep working as is. Honestly, I'd prefer you patch it if you need changes in it.\"). HelmCharts' suite carries one test pinning that a stage flipped to reconciler: argo-cd leaves the artifact without failing the build. It pins the generator's half — a release whose deploy config metadata reports no chart is left out of the artifact and the run finishes — and goes red if such a release appears in the artifact or the run fails; the resolver's half, no chart for an argo-cd entry, stays pinned by the tests that already cover it. HelmCharts' diff is that test, plus only the minimum patch should the test have found the behaviour broken.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "The HelmCharts diff is one file, tests/test_gen_architecture.py, +49 lines; gen_architecture.py is untouched, so no patch was needed. The test (test_a_release_deploy_config_reports_no_chart_for_is_left_out_of_the_artifact) runs ga.main() over a synthetic configs/prd of two releases in tmp_path, with a faked `deploy config` reporting chart_name None for `argocd`; it uses no subprocess, no network and no cluster (run/load_dataset are faked). Witnessed this pass: green at baseline; red under mutation 1 (drop `or not meta[\"chart_name\"]` at gen_architecture.py:587 -> TypeError: PosixPath / NoneType at :591, the run fails); red under mutation 2 (that plus `chart_name or chart_dir` -> argocd enters the artifact and the assertion fails, artifact printed `gap: argocd: image 'argocd'`). Each mutation reverted with git checkout; git status clean afterwards. The resolver half stays pinned by tests/test_release.py:218 and tests/test_main_verbs.py:49, both in the green HelmCharts sweep.",
       "evidence": [
         "/work/HelmCharts/tools/chart_tools/gen_architecture.py:584-587",
         "/work/HelmCharts/tests/test_release.py:218",
         "/work/HelmCharts/tests/test_main_verbs.py:49",
         "/work/HelmCharts/.kubecoder/project.yaml:19-22",
-        "/work/HelmCharts/configs/prd/argocd/prd/release.yaml"
+        "/work/HelmCharts/configs/prd/argocd/prd/release.yaml",
+        "witnessed: cexec iac poetry run pytest tests/test_gen_architecture.py -k release_deploy_config_reports_no_chart -> 1 passed; red under both mutations; reverted"
       ]
     },
     {
       "id": "V05",
       "area": "R5 — every deploy repo gains a Jenkinsfile.architecture",
       "description": "\"The new deploy repos all need to gain a Jenkinsfile.architecture pipeline delivering the same artifact scoped to that repo\": KubeCoderDeploy and ArgoCDDeploy each carry one that, in the aac-tools container, generates one stage under the repo's producer id (kubecoder-deploy, argocd-deploy), validates it with arch-validate and archives it at a path containing an architecture/ directory. Each repo commits its judgment layer, does not commit the generated artifact, and carries an .architecturerc with generated: true, sources naming what the artifact is built from — the judgment layer, chart/ and the published stage's config/<stage>/ (config/prd/ in both) — every one of which matches files committed at the repo's head, and instructions saying the artifact is build output and only the judgment layer is edited; the file has no other key.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed-to-operator",
+      "rationale": "Everything short of a Jenkins run is earned. Both repos carry Jenkinsfile.architecture: clone the published branch, then in container('aac-tools') run gen-architecture --stage prd --producer <id> and arch-validate docs/architecture/*.yaml, then archiveArtifacts docs/architecture/*.yaml — the path holds `architecture/`, which the collector's '**/architecture/**/*.yaml' filter (Architecture Jenkinsfile:75) matches. Both gitignore /docs/architecture/ (git check-ignore confirms; 0 tracked files there). Both .architecturerc files have exactly the keys generated, sources, instructions (generated: true; sources [architecture.yaml, chart/, config/prd/]); fleet.py's own query (git diff --name-only <empty-tree> HEAD -- <path>) matches committed files for every source — ArgoCDDeploy 1/11/1, KubeCoderDeploy 1/24/2 — and neither names config/dev/. The pipeline's two commands, run in a pristine clone of each repo with an empty HOME in the aac-tools image as uid 1000 (the closest this pod gets to the Jenkins pod), generated 15/25 (argocd-deploy, zero gaps) and 9/16 (kubecoder-deploy, the one expected gap), validated, and reproduced the working-tree artifact byte for byte. What is not earnable here: an actual Jenkins run — the pod's egress to the argo-helm repository and architecture.webathome.org, its workspace ownership under the non-root image, and the archive step. Settled by the operator: create AaC/ArgoCDDeploy (SCM https://github.com/pvginkel/ArgoCDDeploy.git, branch main, Script Path Jenkinsfile.architecture) and build it — green means the Architecture stage prints 'wrote docs/architecture/argocd-deploy.yaml — 15 elements, 25 relations', '✓ docs/architecture/argocd-deploy.yaml', 'Finished: SUCCESS', and the build archives docs/architecture/argocd-deploy.yaml (close-out A1). KubeCoderDeploy's is settled the same way once slice 012 creates its prd branch, expecting '9 elements, 16 relations' and the tunnel-reclaim gap line (close-out A2).",
       "evidence": [
         "/work/Architecture/Jenkinsfile:75",
         "/work/Architecture/.claude/architecture/producer-manual.md:499-512",
@@ -62,106 +69,127 @@
         "/work/Architecture/tooling/fleet.py:95",
         "/work/Architecture/tooling/fleet.py:698-701",
         "/work/HelmCharts/.architecturerc",
-        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1004-1011"
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1004-1011",
+        "witnessed: git clone /work/ArgoCDDeploy and /work/KubeCoderDeploy into /tmp/t014; HOME=/tmp/t014/home gen-architecture --stage prd --producer <id> && arch-validate docs/architecture/<id>.yaml -> 15/25 and 9/16, ✓ both, cmp equal to the working-tree artifacts",
+        "witnessed: git diff --name-only 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD -- <source> (fleet.py's query) -> ArgoCDDeploy 1/11/1 files, KubeCoderDeploy 1/24/2",
+        "witnessed: git check-ignore -v docs/architecture/x.yaml -> .gitignore in both; git ls-files docs/architecture -> 0"
       ]
     },
     {
       "id": "V06",
       "area": "R5 / ruling D1 — Argo CD is modelled",
       "description": "ArgoCDDeploy's producer gives the model Argo CD — the product element it owns, which nobody published before, and its running instances — and both of the webhook relay's edges: webhook-relay served by Argo CD's server and by its ApplicationSet controller. The generated artifact validates, and every gap the run still reports is named with its reason.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Witnessed in the generated argocd-deploy artifact (15 elements, 25 relations, arch-validate ✓, zero gap: lines). The model gains the two products this producer owns — ss:argo-cd (Argo CD) and ss:redis (Redis) — and their instances: the application-controller, applicationset-controller, notifications-controller, repo-server (+ copyutil), server, redis and the redis-secret-init Job, plus webhook-relay as app:… specializing DockerImages' app:webhook-relay. Both of the relay's edges are present as Serving relations: server -> relay and applicationset-controller -> relay (upstream's list form; the chart reads ARGOCD_WEBHOOK_URL and APPLICATIONSET_WEBHOOK_URL at chart/templates/webhook-relay.yaml:65-68). Its exposure references DockerImages' svc:webhook-relay (Assignment from if:deploy-hooks-webathome-org); nothing is minted for the relay. No gap is printed, so none needs a reason. The judgment calls (redis owned and realizing cap:cache; no image-level realizes on argocd; webUi argocd.home and argocd) are in the P2 done-record, and S4 records the two edges the generator cannot draw. Neither ss:argo-cd nor ss:redis is in the live dataset today (grep of the 554 KB published file for 'argo' and 'redis' is empty), and no other in-repo architecture.yaml owns them, so registering argocd-deploy will not collide.",
       "evidence": [
         "/work/ArgoCDDeploy/chart/templates/webhook-relay.yaml:65-68",
-        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1411-1435"
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1411-1435",
+        "witnessed: relations from the artifact — Serving ss:…applicationset-controller -> app:…webhook-relay; Serving ss:…server-server -> app:…webhook-relay",
+        "witnessed: curl https://architecture.webathome.org/data/v0.1/architecture.yaml | grep -i -c -e argo -e redis -> 0"
       ]
     },
     {
       "id": "V07",
       "area": "R5 — the reusable pattern",
       "description": "\"Both, plus the reusable pattern\": the Argo CD runbook carries, beside registering an app, the how-to that takes a migrating app to a producer of its own — the steps, the producer id <app>-deploy with <app> the chart name that must equal the app's registry directory, an .architecturerc naming the real sources, the operator's job and a registration carrying repo: after the first green build, and at a handover registration before the flip (ruling of 2026-09-21) — and states as a fact of today that a producer building a promotion branch rather than the default branch is not yet served correctly by the central architecture update, so every future migrated app carries its own.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "docs/runbooks/argocd.md has `## Giving an app its own architecture producer` directly after `## Registering, undeploying and unregistering an app` (heading anchors match the links). It carries: the purpose and generator; both worked examples; the five files a deploy repo carries; one stage per pipeline from one branch; `introduced:` with HelmCharts' dating query — which returns 2026-06-17 for kubecoder when run, and the new-app rule (first commit adding chart/, 2026-08-17 for ArgoCDDeploy, 3fc0b7e, as consult 1 aligned); the `<app>-deploy` id with <app> the chart `name:` that must equal the registry directory (nothing checks it yet; not the kebab-cased repo name); `.architecturerc` with its three keys and why the default sources match nothing; an owned product minted once; gaps printed and not fatal; steps 1-6 in the ruled order — commit and gate, the handover check with --deploy-repo/--stage/--producer, push the branch, the operator's job and first green build, registration carrying repo: after that build, and the flip after registration with the collector red in between; a new app has no step 6. The promotion-branch gap is stated as a fact of today with no card id (grep ARCH-14 in the file: 0). The registering section carries the paragraph telling the reader registration comes before the flip.",
       "evidence": [
         "/work/Ansible/docs/runbooks/argocd.md:213",
-        "/work/Architecture/.claude/architecture/producer-manual.md:716-725"
+        "/work/Architecture/.claude/architecture/producer-manual.md:716-725",
+        "witnessed: grep -c ARCH-14 docs/runbooks/argocd.md -> 0; grep -n '^## ' shows 214 Registering…, 253 Giving an app its own architecture producer",
+        "witnessed: git -C /work/HelmCharts log --diff-filter=A --reverse --format=%ad --date=short -- charts/kubecoder | head -1 -> 2026-06-17; git -C /work/ArgoCDDeploy log --diff-filter=A --reverse … -- chart -> 3fc0b7e 2026-08-17"
       ]
     },
     {
       "id": "V08",
       "area": "R5 — Jenkins jobs and registration owed to the operator",
       "description": "The AaC/<Repo> Jenkins jobs and the pipeline-producers.yaml PR are \"Owed to the operator\": no phase creates AaC/ArgoCDDeploy or AaC/KubeCoderDeploy or edits /work/Architecture/pipeline-producers.yaml, and what the operator owes — each job, then each registration after that producer's first green build, carrying repo: (pvginkel/ArgoCDDeploy, pvginkel/KubeCoderDeploy), ArgoCDDeploy's first and KubeCoderDeploy's before its prd flip — is left in the slice's close-out.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "No phase created a job or touched the registry: /work/Architecture is unmodified (HEAD 898df78 = origin/main, clean) and pipeline-producers.yaml has no argocd-deploy or kubecoder-deploy entry (grep -c -> 0). Jenkins has no job for either repo (findJobsWithScmUrl for ArgoCDDeploy.git and KubeCoderDeploy.git returns none). What the operator owes is in the close-out: A1 (AaC/ArgoCDDeploy first, its first green build, then the argocd-deploy entry carrying repo: pvginkel/ArgoCDDeploy), A2 (AaC/KubeCoderDeploy on prd, then the kubecoder-deploy entry carrying repo: pvginkel/KubeCoderDeploy, before the prd flip, D2's order), and A3 (the two held pushes). The `repo:` enrolment and its ARCH-14 hold are recorded: ARCH-14 exists on the tracker (Task, New, relates ANS-36) and states the promotion-branch mismatch.",
       "evidence": [
         "/work/Architecture/tooling/collect.py:111-161",
         "/work/Architecture/tooling/collect.py:378-392",
-        "/work/Architecture/.claude/architecture/producer-manual.md:698-710"
+        "/work/Architecture/.claude/architecture/producer-manual.md:698-710",
+        "witnessed: grep -c -E 'argocd-deploy|kubecoder-deploy' /work/Architecture/pipeline-producers.yaml -> 0",
+        "witnessed: mcp jenkins findJobsWithScmUrl pvginkel/ArgoCDDeploy.git and pvginkel/KubeCoderDeploy.git -> no results",
+        "witnessed: youtrack ARCH-14 read — created 2026-09-21, promotion-branch support for the central update"
       ]
     },
     {
       "id": "V09",
       "area": "R6 — the aac-tools container template",
       "description": "JenkinsPipelineUtils' containerTemplates carries an aac-tools entry referencing registry:5000/aac-tools by a floating tag (\"Yes on the floating tag.\"), in the same shape as the existing entries.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "JenkinsPipelineUtils a4d5ba1 adds aac_tools(String name) to vars/containerTemplates.groovy: containerTemplate(name: name, image: 'registry:5000/aac-tools', command: 'sleep', args: 'infinity', alwaysPullImage: true) — the `python` entry's line with only the image changed (checked by string replace), no runAsUser, no entrypoint override, and `aac_tools` follows `modern_app_dev`'s underscore precedent. The image is floating: the registry serves aac-tools:latest (tags 6, 7, 8, latest). Pushed under the driver's hold; the library is live-proven not to break existing pipelines: AaC/Ansible #141 and IaC/HelmCharts #6629 each logged 'Checking out Revision a4d5ba1…' for the library, and #141 ran containerTemplates.python('python') to 'Finished: SUCCESS' — so the edited file compiles on the controller. The aac_tools entry itself has not run in a pipeline: its pod (registry:5000/aac-tools:latest, sleep infinity, non-root) is first exercised by the operator's AaC/ArgoCDDeploy build (close-out A1, see V05).",
       "evidence": [
-        "/work/JenkinsPipelineUtils/vars/containerTemplates.groovy:26-28"
+        "/work/JenkinsPipelineUtils/vars/containerTemplates.groovy:26-28",
+        "witnessed: curl http://registry:5000/v2/aac-tools/tags/list -> {\"name\":\"aac-tools\",\"tags\":[\"6\",\"7\",\"8\",\"latest\"]}",
+        "witnessed: Jenkins AaC/Ansible #141 log: 'Resolved main as branch main at revision a4d5ba16813865cb7c5d22b11605b70557b70542', 'Finished: SUCCESS' (uses containerTemplates.python)"
       ]
     },
     {
       "id": "V10",
       "area": "R7 — the equality fixture stops being a second copy",
       "description": "aac-tools/checks/kubecoder-architecture.yaml is deleted, and the handover check proves equality for the file the pipeline actually renders — the clone's own committed judgment layer, not a copy laid over it. No coverage is lost: what the fixture's own test guarded has a named successor.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "ArgoCDTools bdd280e deletes aac-tools/checks/kubecoder-architecture.yaml, removes FIXTURE, the --annotations option and the shutil.copyfile over the clone's architecture.yaml from handover_equality.py, and updates the docstring and README's account. Nothing else references the fixture or the flag: grep of ArgoCDTools, Ansible, KubeCoderDeploy, ArgoCDDeploy, HelmCharts and Architecture for the fixture's name and `--annotations` returns only Architecture's unrelated ha-fleet tool, and completed slice 024's history. The check now proves equality for the clone's own layer: V03's live run above did exactly that (no flags) and exited 0. Coverage: HandoverFixtureTests is deleted with its subject; what it guarded has the named successor — AnnotationLayerTests.test_an_annotation_layer_without_introduced_is_refused (test_deploy_repo.py:229, the generator refuses an undated layer; in the green aac-tools sweep) plus the check comparing every element and relation (P5 witnessed mutations on scratch clones: a wrong introduced gave 9 differences, a dropped kubecoder-bot image gave 2). ArgoCDTools bdd280e is commit-only: held from pushing by the plan (close-out A3).",
       "evidence": [
         "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:41",
         "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:259",
-        "/work/ArgoCDTools/aac-tools/tests/test_deploy_repo.py:260-283"
+        "/work/ArgoCDTools/aac-tools/tests/test_deploy_repo.py:260-283",
+        "witnessed: grep -rIn -e kubecoder-architecture.yaml -e --annotations over the repos — no live reference",
+        "/work/ArgoCDTools/aac-tools/tests/test_deploy_repo.py:229 (test_an_annotation_layer_without_introduced_is_refused)"
       ]
     },
     {
       "id": "V11",
       "area": "Settled ruling — local gates",
       "description": "Each deploy repo's local test verb generates and validates its artifact through the aac-tools toolchain, and kc project test is green in both KubeCoderDeploy and ArgoCDDeploy.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Both repos' test verbs end with the two aac-tools statements, matching what Jenkinsfile.architecture runs (gen-architecture --stage prd --producer <id>; arch-validate docs/architecture/<id>.yaml). The driver's sweep at these exact commits is GREEN for both: ArgoCDDeploy@844ed05 root test ran build-deps, render-chart.py, gen-architecture and arch-validate, all OK; KubeCoderDeploy@a8d3e4f root test ran build-deps, render-chart.py, terraform.sh, gen-architecture and arch-validate, all OK. Those statements were not re-run as a suite; the same two commands were run separately here (V05, V12) and pass.",
       "evidence": [
         "/work/KubeCoderDeploy/.kubecoder/project.yaml",
-        "/work/ArgoCDDeploy/.kubecoder/project.yaml"
+        "/work/ArgoCDDeploy/.kubecoder/project.yaml",
+        "/work/AnsibleSpecs/slices/014_deploy_repo_architecture_producers/sweeps/r2/ArgoCDDeploy_root_test.log",
+        "/work/AnsibleSpecs/slices/014_deploy_repo_architecture_producers/sweeps/r2/KubeCoderDeploy_root_test.log"
       ]
     },
     {
       "id": "V12",
       "area": "Generated-producer discipline",
       "description": "Regenerating either deploy repo's artifact twice from the same commit gives byte-identical output, so no render-time randomness reaches an id or an emitted field.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Witnessed this pass. In each working tree, `rm -rf docs/architecture`, generate, copy, generate again, then cmp: argocd-deploy.yaml sha256 c379f244…c4346 both times (15 elements, 25 relations) and kubecoder-deploy.yaml sha256 b18ca690…3fae both times (9 elements, 16 relations); cmp exit 0 for both. A third generation from a pristine clone of each repo (V05) also equals the working-tree artifact byte for byte, so nothing depends on leftover state such as chart/charts/.",
       "evidence": [
-        "/work/Architecture/.claude/architecture/producer-manual.md:522-529"
+        "/work/Architecture/.claude/architecture/producer-manual.md:522-529",
+        "witnessed: sha256sum of /tmp/argocd-deploy.1.yaml and the second run's docs/architecture/argocd-deploy.yaml — identical (c379f244d19d2aac1f446c02102e783e11b008d2042e025893b95ea5c66c4346)",
+        "witnessed: same for kubecoder-deploy.yaml — identical (b18ca69072e29ea7179f8120dd2787f68c8f417608e03e8357da55528acc3fae)"
       ]
     },
     {
       "id": "V13",
       "area": "O2 — the decision recorded",
       "description": "The argo-cd set records the gen-architecture half of O2 as decided — each deploy repo carries its own generated producer, run from the aac-tools image, one stage per pipeline, a handover registering before it flips — and slice 012's record states that order in place of registering and flipping together.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Read in the specs repo at HEAD. argo-cd/decisions.md carries D50 ('Each deploy repo publishes its own architecture', decided 2026-09-21, slice 014): a generated producer per deploy repo run from the aac-tools image, id <app>-deploy, one stage per pipeline from the branch that stage deploys from, register before the stage flips with the collector red between, and the runbook section as the steps. O2 says gen-architecture has left the bucket, decided (D50). design.md's ancillary-tooling paragraph (:567-575) and phases.md (B.5's new checkbox, and the Endgame item at :364-366) cite D50 and point at the runbook. Slice 012's slice.md, 'Hard ordering against slice 014' (:313-325), now states the order prd branch born -> producer green on it -> registration -> registry flip, with the red-collector window, and points at the runbook and this plan, in place of registering and flipping together.",
       "evidence": [
         "/work/AnsibleSpecs/argo-cd/design.md:572-573",
-        "/work/AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:318-319"
+        "/work/AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:318-319",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:610 (D50) and :632 (O2)",
+        "/work/AnsibleSpecs/argo-cd/phases.md:287-289 and :364-366"
       ]
     },
     {
       "id": "V14",
       "area": "The relay's DockerImages record",
       "description": "DockerImages' webhook-relay/architecture.yaml no longer says Argo CD is modelled by no producer or that ArgoCDDeploy is yet to be created, and what it says about where each relay deployment's edges are modelled is true; its data is unchanged.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "DockerImages 78f31ba replaces the header's stale claim (that neither Argo CD nor Fieldnotes is modelled and that ArgoCDDeploy is created by slice 009) with a statement of where each instance's edges live. Checked each new statement against the source: argocd-prd's relay is modelled by argocd-deploy with the server and applicationset-controller each drawn serving it (witnessed in the generated artifact, V06); Fieldnotes' relay is modelled by helm-charts and no edge is drawn toward the Fieldnotes API, because HelmCharts charts/fieldnotes/architecture.yaml:6 maps the image with no `upstream` and fieldnotes-deployment.yaml:196 gives the relay a RECEIVERS list ('fieldnotes=http://localhost:8080/hooks/github'). The data is unchanged: yaml.safe_load of the file equals yaml.safe_load of 8ca5798's version. Commit-only; DockerImages is held from pushing (close-out A3).",
       "evidence": [
         "/work/DockerImages/webhook-relay/architecture.yaml:14-17",
-        "/work/HelmCharts/charts/fieldnotes/architecture.yaml:6"
+        "/work/HelmCharts/charts/fieldnotes/architecture.yaml:6",
+        "witnessed: python yaml.safe_load(git show 8ca5798:webhook-relay/architecture.yaml) == yaml.safe_load(working file) -> True"
       ]
     }
   ]
