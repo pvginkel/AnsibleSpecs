@@ -564,13 +564,16 @@ tree at once, and stops keying the chart source on the config directory name —
 follow-up), `collect-versions`/version-poller (its role already changing to proposing pin-bump
 commits). None blocks the pilot; each needs its decision by endgame.
 
-`gen-architecture` is the one already answered. HelmCharts' copy renders via `deploy template`,
-and a migrated app has no release to render; the `aac-tools` image carries a deploy-repo generator
-that renders the repo's own chart the way the releases ApplicationSet has Argo render it, one stage
-per run, writing `docs/architecture/<producer>.yaml`. It mints the same element ids HelmCharts'
-copy does, so a handover changes an element's owner and nothing else, and inbound edges from other
-producers never dangle. What is still owed is per repo: registering the deploy repo as a producer,
-and giving it the job that runs the command.
+`gen-architecture` is the one already answered (D50). HelmCharts' copy renders via
+`deploy template`, and a migrated app has no release to render; the `aac-tools` image carries a
+deploy-repo generator that renders the repo's own chart the way the releases ApplicationSet has
+Argo render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
+element ids HelmCharts' copy does, so a handover changes an element's owner and nothing else, and
+inbound edges from other producers never dangle. Each deploy repo runs it from a
+`Jenkinsfile.architecture` of its own, one stage per pipeline; KubeCoderDeploy and ArgoCDDeploy
+carry theirs. What a further repo needs — the files, the producer id, the operator's job and
+registration, and a handover's register-then-flip order — is
+`/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own architecture producer".
 
 ## Consequences to accept
 

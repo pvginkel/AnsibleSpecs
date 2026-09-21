@@ -576,6 +576,31 @@ orders the registry flip and the registration "together"
 (`slices/backlog/012_kubecoder_argo_cutover/slice.md:318-319`); it states D2's order instead, so its
 planner reads the ruling, not the superseded line.
 
+**Done (P8).** The `argo-cd` set carries the decision as **D50** ("Each deploy repo publishes its
+own architecture", Migration and endgame, decided 2026-09-21, slice 014). O2 says
+`gen-architecture` has left the bucket, decided (D50). design.md's ancillary-tooling paragraph and
+phases.md's endgame item cite D50 and point at the runbook section. Slice 012's record states
+the order *producer green on `prd` → registration → registry flip*, with the red-collector
+window, and points at the runbook and this plan.
+
+Later phases:
+- Test phase, V13: the witnesses are `argo-cd/decisions.md` D50 and O2, `argo-cd/design.md`'s
+  `gen-architecture` paragraph, `argo-cd/phases.md` B.5 and Endgame, and
+  `slices/backlog/012_kubecoder_argo_cutover/slice.md` "Hard ordering against slice 014".
+- Doc phase: the `argo-cd` set is already current for this slice. It needs no second pass.
+
+Settled beyond the plan's text:
+- The decided half is a new register entry, D50, rather than a longer O2 sentence, because the
+  register holds every decision. D50 also records the reason for one stage per pipeline (the
+  artifact is attached to the pipeline) and says the choice of stages is the app's, not a
+  generator rule.
+- phases.md B.5 gains one checkbox before the registry commit, prd only: KubeCoderDeploy's
+  producer green on `prd`, then registered (D50), with the Architecture job red until that
+  commit's HelmCharts architecture build. B.5 is the per-stage procedure design.md defers to, and
+  without the checkbox it would read as flipping without registering first.
+- No gate: AnsibleSpecs has no manifest and no lint config. Added lines are wrapped at ≤100
+  columns, like the surrounding text.
+
 ## Not in scope
 
 - Creating the `AaC/KubeCoderDeploy` and `AaC/ArgoCDDeploy` Jenkins jobs, and the

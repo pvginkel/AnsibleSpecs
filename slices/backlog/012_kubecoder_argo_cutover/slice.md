@@ -315,9 +315,14 @@ fine." — "It doesn't hurt anything I think. You're good to go.").
   13's deletion of `charts/kubecoder/`), and the operator ruled the architecture model first-class:
   it must keep working through the switch. KubeCoder publishes **prd only**, so the dev flip may
   proceed without 014 — it drops KubeCoder's dev elements, which is intended. The **prd** flip may
-  not: the runbook orders *`prd` branch born → KubeCoderDeploy's architecture producer green on it
-  → registry flip and the `pipeline-producers.yaml` registration together*. Details and rulings:
-  slice 014, "Carried in from the 2026-09-20 design session".
+  not: the order is *`prd` branch born → KubeCoderDeploy's architecture producer green on it →
+  its `pipeline-producers.yaml` registration → the registry flip* (slice 014's ruling of
+  2026-09-21). Until the flip both producers declare KubeCoder's prd ids, so the collector fails on
+  the duplicates and publishes nothing, and the model keeps KubeCoder as it was — the Architecture
+  job is red for those minutes, expected. The flip's HelmCharts architecture build clears them;
+  flipping first publishes a green model without KubeCoder. The steps are
+  `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own architecture producer"; the
+  rulings are slice 014's plan.
 - **Requirement 13 no longer strands the mapping.** `charts/kubecoder/architecture.yaml` moves to
   KubeCoderDeploy under slice 014; deleting `charts/kubecoder/` afterwards loses nothing.
 

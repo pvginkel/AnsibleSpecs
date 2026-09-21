@@ -284,6 +284,9 @@ env pod in the stage restarts — including whichever session is driving the mig
 
 - [ ] Replay onto KubeCoderDeploy what HelmCharts' `charts/kubecoder` and stage values gained
       since the copy (the README's command); its render gate stays green.
+- [ ] At the **prd** cutover, before the registry commit: KubeCoderDeploy's architecture producer
+      green on `prd`, then registered (D50). The Architecture job stays red on the duplicate ids
+      until the registry commit's HelmCharts architecture build.
 - [ ] One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus
       `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's
       `values.yaml` (+ `_shared/` once both stages are over).
@@ -359,4 +362,5 @@ Nothing here is scheduled; it is the direction the migration-era mechanisms poin
   migration tooling still handles it, deleted once the last app migrates.
 - **Residual tooling finds homes** (O2): `recommend-resources` and
   `collect-versions`/version-poller — each enumerating deploy repos instead of the config tree.
-  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator.
+  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator, run by
+  each deploy repo's own producer pipeline (D50).

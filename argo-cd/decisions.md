@@ -607,6 +607,20 @@ carries a target-shape section so the intermediates are visibly intermediate.
 2026-08-12 (notes). The namespace module and whatever still handles it in the migration tooling
 go; tracked in phases.md so it cannot be forgotten.
 
+**D50 — Each deploy repo publishes its own architecture.** Decided 2026-09-21 (slice 014). A
+deploy repo carries a generated producer of its own: a `Jenkinsfile.architecture` running the
+`aac-tools` image's deploy-repo generator over the repo's committed judgment layer, under the
+producer id `<app>-deploy`. One pipeline publishes one stage, from the branch that stage deploys
+from — the artifact is attached to the pipeline, so one covering two stages flaps between them.
+Which stages an app publishes is the app's call, not a generator rule: KubeCoder publishes prd
+only, from `prd`. The generator mints the ids HelmCharts' copy does, so at a handover the new
+producer is registered **before** the stage flips: until the flip both producers declare the app's
+ids, the collector fails on the duplicates and publishes nothing, and the model keeps the app as it
+was; the flip's HelmCharts architecture build clears them. Flipping first publishes a green model
+without the app. KubeCoderDeploy and ArgoCDDeploy carry the first two; the steps, and which of them
+are the operator's, are `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own
+architecture producer".
+
 ## Open
 
 **O1 — How the remaining apps migrate** — gradually or in bulk. Deliberately undecided until the
@@ -614,8 +628,8 @@ pilot and the adoption plugin exist.
 
 **O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
 `recommend-resources`, `collect-versions` and the version-poller. Decided by endgame time;
-design.md carries the per-tool notes so the decision has an obvious shape when it comes, and
-records the one already settled — `gen-architecture`'s rendering source. Also in this bucket
+design.md carries the per-tool notes so the decision has an obvious shape when it comes.
+`gen-architecture` has left the bucket, decided (D50). Also in this bucket
 (qa Q3's caveat): the `configs/dev` chart-debugging tree and the ability to hand-run a chart or its
 Terraform ad hoc — the operator's srvk8sdev workflow must survive HelmCharts' deletion in some
 form.
