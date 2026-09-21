@@ -10,9 +10,9 @@ subagent.
 > no longer a queue Claude works directly. They are the inventory `/dev:triage` adjudicates and
 > cuts into slices: the grouping, the order and the owner marks below are the review's
 > suggestion to that session, not a decision, and "straightforward change, no slice" is
-> withdrawn wherever it appears. Nothing below §1 starts before triage has ruled. Triage's batch
+> withdrawn wherever it appears. Nothing below §1a starts before triage has ruled. Triage's batch
 > is the accepted items of `report.md` themselves, not cards; ANS-84 (the operator's original
-> ask) and ANS-89 are the two existing cards the slices absorb.
+> ask) and ANS-89 are the two existing cards the slices absorb. How that runs is §1a.
 
 Standing rules for every step:
 
@@ -48,8 +48,6 @@ Standing rules for every step:
   (JCasC/Job DSL) closed as Won't Do on the J04/J05 rulings; ANS-20 (crons in the UI) closes
   when J02 lands. Rejected and struck below: J04, J05, J13, J27. J06 stays skipped, Q3 is left
   alone, Q2 keeps TrelloMcp on `test`.
-- [ ] **op** `/dev:triage` over this review's accepted items (absorbing ANS-84 and ANS-89). It
-  decides what becomes which slice.
 - [x] **op** Four rulings the fold-in turned up, ruled 2026-09-21 (recorded under your
   responses in `report.md`):
   - **J16 routing** — "I don't really mind." So as proposed: J16 joins the library helpers
@@ -61,6 +59,53 @@ Standing rules for every step:
     the queue.
   - **Q6 / `HA_URL`** — "Leave HA_URL where it is please. I don't put endpoints into OpenBao."
     It stays a global env var.
+
+## 1a. Triage, the small-changes runbook, and the carry-over check
+
+Agreed with the operator on 2026-09-21. Each step waits for the operator's go; none was started
+that day.
+
+- [ ] **op → C** `/dev:triage` over this review, run in the session that holds the review's
+  context, with three instructions that override the skill's defaults:
+  - **The report is the adjudication record.** Every item already carries the operator's
+    accept / modify / reject and, where asked, a ruling on Claude's reply. Triage does not redo
+    the categorise-and-adjudicate half and does not reopen a verdict. The report's value, effort
+    and risk columns stand in for the skill's nit pick → major scale.
+  - **No research of its own.** The skill is told to ground each item itself; here it carries
+    the report over instead. Grounding per slice still happens in `/dev:plan-slice`.
+  - **The operator's words go over verbatim** — the responses in `report.md`, the in-conversation
+    rulings recorded there, and the routing quote at the top of this plan.
+
+  Its output: the accepted items cut into slices, `slice.md` per slice, ANS-84 and ANS-89
+  absorbed by the slices that deliver them. This plan's §2–§10 grouping and order go in as the
+  proposal; the operator reshapes it.
+- [ ] **C** Small-changes runbook. Items too small to carry a slice's overhead do not become
+  slices and do not go back to ad-hoc work either: they go into one runbook in this folder
+  (`small-changes.md`), each with its exact steps, its verification and its undo, run **before**
+  the slices. Triage decides what is small; the candidates the review sees:
+  - J07 — built-in node executors 2 → 0 (one API call)
+  - Q7 — the pod cap of 3 written down in `docs/live-infra-access.md` (one paragraph)
+  - J09 — move and disable `CanonApp`, disable `Archived/FundaChecker`
+  - Q6 — delete the four dead global env vars
+  - §6a — the `githubPush()` webhook test (its result feeds the style guide)
+  - Q4 — the trivy de-duplication, because the operator wants it early; it is ~25 lines in one
+    file, but it is a behaviour change with a push, so triage may still rule it a slice item
+
+  Everything in the runbook keeps the standing rules: a push, a Replay and a Jenkins API write
+  each need the operator's OK.
+- [ ] **op** Rule on the slice cut and on the runbook's contents
+- [ ] **C** Carry-over check, after triage: every accepted item and side ask of `report.md`
+  traced to exactly one slice, to the runbook, or to a stated reason for leaving it out. A
+  completeness check, not a second opinion on the slices. What it looks for in particular:
+  - the operator's modifications — J14's IDF version per repo, J08 as a KubeCoder-only trial
+    with the verdict to follow, "there are exceptions" on concurrency (§2), TrelloMcp staying
+    on `test`, `HA_URL` staying global
+  - the ordering — the style guide live before the mass edit (§4 → §9), the self-test before
+    any library refactor (§6 → §5's J20, §7), the declarative verdict before the helpers are
+    written (§3 → §7), J26 before the wave that touches those four repos
+  - Q4's "early"
+  - the side asks that have no J-number: the style guide and docs site (§4), `job-settings.md`
+    (§2), the webhook test (§6a), the post-wave `config.xml` re-dump and diff (§9)
 
 ## 2. Per-job settings decision document
 
