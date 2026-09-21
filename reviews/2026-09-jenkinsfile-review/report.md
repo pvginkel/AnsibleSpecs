@@ -164,7 +164,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J02 — Put the Home Assistant Fleet cron into `Jenkinsfile.ha-fleet`
@@ -182,7 +182,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — do (it is a J01 row, singled out because the file argues the opposite).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J03 — Scheduled Jenkins config drift check
@@ -208,8 +208,9 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — consider.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+file as Later
 
->
+> **C (2026-09-21):** filed as ANS-92, State Later.
 
 ### J04 — JCasC for controller-level configuration only
 
@@ -239,7 +240,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — consider, leaning yes for this narrow scope; no for credentials.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+reject
 >
 
 ### J05 — Job DSL seed job for the residue
@@ -260,7 +261,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — consider later, only if J03 shows the residue actually drifts.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+reject
 >
 
 ### J06 — Multibranch pipelines / GitHub Organization folders
@@ -279,7 +280,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — skip.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+reject
 >
 
 ### J07 — Built-in node executors to 0
@@ -295,7 +296,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — consider (fold into J04 if that is accepted).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J08 — Declarative migration: adopt a rule, do not migrate the pod pipelines
@@ -362,7 +363,7 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J10 — `Firmware/KitchenDisplay`: retire or rebuild
@@ -382,8 +383,12 @@ removing a line later removes the property from the job on the next build.
 - **Recommendation** — discuss (Q1).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+accept, but not now. Create a card with the status Later please.
 
->
+> **C (2026-09-21):** filed as ANS-93, State Later, related to KDSP-1 (your existing Operator
+> Action on the same broken deploy). Until it is worked the job stays disabled, and J20 leaves
+> the KitchenDisplay-only library code (`rsync`, `dockbuild`, `gitUtils`, `ssh`/`scp`/`rsync`)
+> alone — it goes or gets rebuilt with the card.
 
 ## Theme C — Timeouts, retention, failure handling
 
@@ -418,7 +423,7 @@ an exception with the evidence; the per-job ruling comes later.
   written once.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J12 — Backstop timeout on the iac-controller jobs, with an aborted marker
@@ -448,7 +453,7 @@ an exception with the evidence; the per-job ruling comes later.
 - **Recommendation** — consider.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J13 — Build-discarder standard
@@ -469,8 +474,9 @@ an exception with the evidence; the per-job ruling comes later.
 - **Recommendation** — consider.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+reject. I configured a global build discarder. It's fine.
 
->
+> **C (2026-09-21):** struck from the plan; Appendix A's R4 is void.
 
 **On `retry`, `lock`, `post`/`finally`, workspace cleanup — nothing to add.** No `retry` anywhere
 and no evidence of transient failures that one would fix (the red runs in the history are real:
@@ -536,8 +542,11 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+accept, but the version must be a parameter. I'm not updating all ESP-IDF versions at once.
 
->
+> **C (2026-09-21):** taken as a required argument with no default —
+> `espFirmware(name: 'PaperClock', idfVersion: 'v5.5.3', …)` and `containerTemplates.idf(version)`
+> — so each repo's Jenkinsfile states its own IDF version and a bump is one repo's commit.
 
 ### J15 — One validation-Job helper for the monorepo apps
 
@@ -561,7 +570,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J16 — Architecture-producer helper for the `Jenkinsfile.architecture` copies
@@ -588,8 +597,15 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — consider — as a phase of slice 014, not a standalone change.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+accept
 
->
+> **C (2026-09-21) — routing correction, needs your nod.** The report was wrong about slice 014:
+> it is completed (ANS-36, Resolved), and it only added producers to the deploy repos — it never
+> touched these 28 files. What does touch them is ANS-78, your Operator Action to replace the
+> copied `scripts/arch-validate.py` with the `aac-tools` image. J16 and ANS-78 are the same
+> edit to the same files, and §9 adds the `properties` block to them as well. Proposed: J16
+> joins the library helpers of plan §7 (the helper calls `arch-validate` from `aac-tools`, which
+> delivers ANS-78 for these repos), so the 28 files are rewritten once, together with §9's edit.
 
 ### J17 — Drop the inert `containerEnvVar` secret forwarding; scope `withVault`
 
@@ -617,7 +633,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do (independently, or inside J14 for the firmware files).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J18 — `utils.hasChanges` → `@NonCPS`
@@ -638,7 +654,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J19 — `iac` var for the dev-stage idiom
@@ -666,8 +682,25 @@ the `generate:` closure J16 proposes) must stay CPS.
   document that it is deliberate.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+discuss. Is there an alternative having Ansible publish a helper library? Would that invite more helper methods?
 
+> **C (2026-09-21):** Yes, and it is the better shape. Two ways for a repo to carry its own
+> helpers: (a) `iac = load 'support/jenkins/iac.groovy'` in a first `script {}` step — a plain
+> Groovy file in the Ansible repo, read from the workspace, so it is always the same commit as
+> the Jenkinsfile, runs in the sandbox, and shows up in Replay; (b) a real second library fetched
+> with `library(... retriever: modernSCM(...), libraryPath: ...)` — that one floats on a branch
+> unless pinned, so helper and Jenkinsfile can be at different commits. (a) is the one to use; it
+> removes J19's main con (a two-repo change), since all five files already run on
+> `iac-controller` with a checkout.
 >
+> Would it invite more helpers? Yes. Today the second repo is the friction that keeps the iac
+> files self-contained, and `load` removes it. If you take it, I'd fence it in the style guide:
+> only `devUp()` and `devStage()` move (7 copies, and the two paging variants become one);
+> `prdStage`/`prdCheck` and every stage body stay in the files; a new helper needs three
+> copies and a judgement worth stating once. My lean is unchanged — the honest gain is ~150
+> lines and one paging rule, against header comments that stop describing everything in view.
+> **Rule on:** (1) `load`-based helper with that fence, or (2) keep the duplication and say so
+> in the style guide.
 
 ### J20 — Remove dead library code
 
@@ -686,7 +719,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J21 — One kaniko API
@@ -705,7 +738,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — consider (piggyback only).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J22 — Library docs and a self-test job
@@ -728,7 +761,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J23 — One library load line; keep floating on `main`
@@ -746,7 +779,7 @@ the `generate:` closure J16 proposes) must stay CPS.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept. See, this is something we need in the style guide.
 >
 
 ## Theme E — Jenkinsfile hygiene
@@ -781,7 +814,7 @@ readable to save nothing.
 - **Recommendation** — do (firmware ones inside J14).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J25 — Dead imports, whitespace, stale comments
@@ -802,7 +835,7 @@ readable to save nothing.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J26 — `master` → `main` for the four remaining repos
@@ -819,7 +852,7 @@ readable to save nothing.
 - **Recommendation** — consider.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+accept
 >
 
 ### J27 — Keycloak client secret inline in the IoTSupport validation Job
@@ -836,7 +869,7 @@ readable to save nothing.
 - **Recommendation** — consider, inside J15.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+reject
 >
 
 ## Observations that need no work
@@ -873,7 +906,7 @@ Each has its own slot.
 (key deleted), the repo is active on the KubeCoder toolchain. Decides J10 and half of J20.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+It's on my list. I will, but it's not deployed today.
 >
 
 **Q2 — TrelloMcp builds branch `test`.** `test` is `main` plus merged feature branches
@@ -882,7 +915,7 @@ lacks. Deliberate integration branch, or a leftover from a trial? J01's edit mus
 branch the job builds.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+Leave this. Keep it at the test branch.
 >
 
 **Q3 — copyartifact mode.** The global page shows the *Migration mode* monitor active and
@@ -893,7 +926,7 @@ works in Migration mode (or as SYSTEM). If it is Migration mode, the four
 is ever wanted, the AaC producers all need `copyArtifactPermission('AaC/Architecture')`.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+I have no idea what this is about. If this is some Jenkins hardening thing, leave it please.
 >
 
 **Q4 — trivy warnings repeat.** `DockerImages/Jenkinsfile:26` raises a Telegram warning for
@@ -901,16 +934,41 @@ every image with fixable CRITICALs on every build that rebuilds it, until the ba
 Intended, or should it de-duplicate (e.g. only when the count changed since the last build)?
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+I would very much like it to deduplicate. But not only in a single build. Across builds. That requires other work, right? Suggestions?
 
+> **C (2026-09-21):** It needs state that outlives a build, yes. Three places it could live:
 >
+> 1. **In the job's own artifacts (recommended).** Each build archives `trivy-state.json` —
+>    image → its list of fixable CRITICAL CVE ids — after copying the previous build's file
+>    forward (`copyArtifacts` from the last completed build of itself), so images this build did
+>    not rebuild keep their entry. A warning is raised only for ids that are new for that image,
+>    and it names them: "trivy: python:3.13 has 2 new fixable CRITICALs (5 total): CVE-…". About
+>    25 lines in `DockerImages/Jenkinsfile`, no new infrastructure; Jenkins never rotates away the
+>    last build, so the state survives the global discarder. Small.
+> 2. **In the bot.** jenkins-telegram-bot remembers a hash of each warning for N days. It is
+>    stateless today, so this adds a volume, and it would also swallow repeats that are real.
+> 3. **Take the signal out of the build.** A weekly job scans every registry image and posts one
+>    digest; the build-time scan only logs. This also catches CVEs published after an image was
+>    built, which a build-time scan never sees. Larger, and it lives in DockerImages.
+>
+> I'd do 1 now. 3 is the better long-term shape if you want vulnerability reporting rather
+> than quieter builds; it would be a Later card in DI.
 
 **Q5 — `poetry install` with the dev group.** `ElectronicsInventory/Jenkinsfile:84` installs
 the dev group; `DHCPApp:73`, `IoTSupport:79`, `ZigbeeControl:76` use `--without dev`. Which is
 right? J15 needs one default.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+I don't know. Please advise.
 
->
+> **C (2026-09-21):** Neither — use `poetry install --no-interaction --only main`. The install
+> runs in `/work`, the monorepo **root** project (the `run-suite` harness: honcho, psutil), not
+> the backend. Three roots have a `dev` group (pytest and ruff, for testing the harness itself),
+> which validation does not need, hence `--without dev`. ElectronicsInventory's root has no `dev`
+> group, and poetry fails on a group that does not exist (`Group(s) not found: dev (via
+> --without)`, reproduced here), which is why that one file dropped the flag. `--only main`
+> installs the same thing in all four and works with or without a dev group, so J15 needs no
+> parameter for it.
 
 **Q6 — Global environment variables.** `ANDROID_HOME`, `ELASTICSEARCH_CLUSTER_URL`,
 `S3_ENDPOINT_URL`, `KEYCLOAK_KENSHO_TEST_REALM` are set globally but appear in no Jenkinsfile;
@@ -919,15 +977,30 @@ scripts inside repos, or dead? `HA_URL` and the three `KEYCLOAK_TEST_*` are used
 — inline them in the files, or keep them global (and then in J04's YAML)?
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
+Is HA_URL still used? I got rid of the notifier. If the script is still in use somewhere, please let me know. I prefer it's deleted. Accepted on the rest.
 
+> **C (2026-09-21):** Yes, by one live job. The notifier (`CanonApp/scripts/send_message.py`) is
+> gone with the archived repo, but `AaC/Home Assistant Fleet` reads it every night:
+> `Architecture/tools/ha-fleet/gen-ha-fleet.py:100` does `os.environ["HA_URL"]`, fed from the
+> global variable. (`ThermostatProxy/tools/logparser/haloader.py` also reads it, but that is a
+> desk tool, not a pipeline.) To delete the global anyway: Architecture is a public repo, so the
+> URL should not be inlined; put it next to `HA_TOKEN` in the same OpenBao secret and read both
+> in the one `withVault` — then the global goes. That is an OpenBao write for you plus a
+> two-line edit for me, folded into J02/J17's edit of that file.
 >
+> On the rest: `ELASTICSEARCH_CLUSTER_URL` and `KEYCLOAK_KENSHO_TEST_REALM` appear in no repo at
+> all, `S3_ENDPOINT_URL` only as a value ElectronicsInventory sets itself inside its validation
+> Job, and `ANDROID_HOME` is set by the `android-35` image — all four are dead as globals and
+> can be deleted. The three `KEYCLOAK_TEST_*` and `KEYCLOAK_OIDC_TOKEN_URL` are used by IoTSupport
+> only; with J04 rejected I'll inline them in its two Jenkinsfiles (IoTSupport is private) in the
+> §9 pass and delete the globals after that build is green.
 
 **Q7 — Container cap 3.** Deliberate (node capacity), or historical? It sets the queue
 behaviour every mass push sees and where J11's timeout may sit. Either way it should be
 written down (J04, or a line in `docs/live-infra-access.md`).
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+Deliberate.
 >
 
 **Q8 — SomfyRemote in the federation.** With `AaC/SomfyRemote` deleted, does the
@@ -942,7 +1015,7 @@ into the Architecture repo as a static producer?
 Reason, or accident? Only affects the exception ruling after J01.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+Accident.
 >
 
 **Q10 — Wave plan for J01.** Pushing ~65 Jenkinsfile edits means ~67 builds (about 30 Helm
@@ -950,7 +1023,7 @@ redeploys, 8 firmware re-flashes) through three pod slots. Acceptable as one qui
 folder, or should firmware wait for J14 so those repos are pushed once?
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
-
+I have no problem just pushing these out.
 >
 
 ---
@@ -980,7 +1053,18 @@ Rules for the executor (no judgement needed beyond these):
       pipelineTriggers([cron('H 4 * * *')]),
   ])
   ```
+  **Operator:** We need to check whether githubPush works. It's buggy for me. Right now I have to: create a pipeline -> save it -> open it -> check the checkbox -> apply it -> uncheck the checkbox -> apply it -> check the checkbox -> apply it. Only at the end does the webhook get installed. My worry is that declaring it in the pipeline doesn't work. I want to test this.
 
+  > **C (2026-09-21):** Two separate things. *Existing jobs are not at risk:* the hook is per
+  > repo on GitHub, not per job, and every repo in §9 already has it (checked with
+  > `gh api repos/pvginkel/<repo>/hooks` — Charts, ArgoCDTools and HelmCharts, whose trigger is
+  > already file-declared, all deliver to `/github-webhook/`). Moving the declaration into the
+  > file changes who sets the trigger on the job, not the hook. *New jobs are the open question:*
+  > whether a first build that declares `githubPush()` installs a hook on a repo that has none.
+  > That is what the test covers — plan §6a: a throwaway repo with no hook, a job created
+  > through the API with no trigger in its `config.xml`, one hand-started build, then look for
+  > the hook and push a commit. If it does not install, the style guide says "new repo: add the
+  > hook by hand (or `gh api`)", and nothing else in the plan changes.
 - **R2 Placement.** Insert the snippet as a top-level statement immediately after the
   `library …` line (and its blank line), before the first `podTemplate(`, `withVault(` or
   `timestamps {`. Where the file already has a `properties([...])` call, edit that call as the
@@ -989,6 +1073,10 @@ Rules for the executor (no judgement needed beyond these):
 - **R3 Concurrency.** Every job gets `disableConcurrentBuilds()` — the standard. The "UI today"
   column records the current `abortPrevious` so the later ruling can restore it per job; do not
   carry it over now. Candidates for a later exception are marked in Notes, not applied.
+  **Operator:** There are exceptions.
+
+  > **C (2026-09-21):** Yes — they are ruled per job in `job-settings.md` (plan §2), and §9
+  > applies the ruled value, not the blanket standard.
 - **R4 Retention.** If J13 is accepted, add `buildDiscarder(logRotator(numToKeepStr: '30')),`
   as the first entry of every P1/P2/P3 list (`'50'` for the row marked as a candidate for 50).
   Declarative files already carry 50.

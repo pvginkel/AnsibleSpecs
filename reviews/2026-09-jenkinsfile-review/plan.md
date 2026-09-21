@@ -5,6 +5,14 @@ land. Strike through (`~~…~~`) any item whose suggestion you reject rather tha
 the record stays whole. Owner marks: **op** = operator, **C** = Claude, **S** = Sonnet
 subagent.
 
+> **Routing changed, 2026-09-21.** Operator, after the fold-in: *"I think I'd prefer doing all
+> this work in its own slices. A triage session should really be deciding that."* So §2–§10 are
+> no longer a queue Claude works directly. They are the inventory `/dev:triage` adjudicates and
+> cuts into slices: the grouping, the order and the owner marks below are the review's
+> suggestion to that session, not a decision, and "straightforward change, no slice" is
+> withdrawn wherever it appears. Nothing below §1 starts before triage has ruled. Intake card:
+> ANS-94 (with ANS-84, the operator's original ask, and ANS-89).
+
 Standing rules for every step:
 
 - **Verification.** Every edited Jenkinsfile goes through the linter at
@@ -30,10 +38,29 @@ Standing rules for every step:
 
 ## 1. Your review
 
-- [ ] **op** Fill in the response slots for J01–J27 and Q1–Q10 in `report.md`. J08 and Q8 are
+- [x] **op** Fill in the response slots for J01–J27 and Q1–Q10 in `report.md`. J08 and Q8 are
   already answered.
-- [ ] **C** Fold in the responses: strike rejected items below, confirm the routing (handover
-  vs slice) of the accepted ones, and file or link the YouTrack cards (ANS-84 covers §9)
+- [x] **C** Fold in the responses: strike rejected items below and file or link the YouTrack
+  cards (2026-09-21). ~~Confirm the routing (handover vs slice) of the accepted ones~~ — that
+  is triage's call now. Cards: ANS-94 is the intake card for everything accepted here, next
+  to ANS-84 (your original ask, §9); ANS-92 (J03) and ANS-93 (J10) are Later; ANS-19
+  (JCasC/Job DSL) closed as Won't Do on the J04/J05 rulings; ANS-20 (crons in the UI) closes
+  when J02 lands. Rejected and struck below: J04, J05, J13, J27. J06 stays skipped, Q3 is left
+  alone, Q2 keeps TrelloMcp on `test`.
+- [ ] **op** Run `/dev:triage` over this review (ANS-94, ANS-84, ANS-89). It decides what
+  becomes which slice.
+- [ ] **op** Four rulings the fold-in turned up — my replies are under your responses in
+  `report.md`. Triage can take them in the same sitting:
+  - **J16 routing.** Slice 014 is already completed and never touched the 28 files. Proposed:
+    J16 joins the library helpers (§7) and delivers ANS-78 (your `arch-validate.py` card) for
+    those repos, so the files are rewritten once, together with §9's edit of them.
+  - **J19.** (1) a `load`-ed helper file inside the Ansible repo, fenced to `devUp()` and
+    `devStage()`, or (2) keep the duplication and say so in the style guide. I lean (2).
+  - **Q4.** trivy de-duplication across builds through a state file in the job's own
+    artifacts (recommended, small), or a weekly digest job (larger, in DockerImages).
+  - **Q6.** `HA_URL` is still read nightly by `AaC/Home Assistant Fleet`. To delete the global,
+    it moves into the OpenBao secret that already holds `HA_TOKEN` — your write, my two-line
+    edit.
 
 ## 2. Per-job settings decision document
 
@@ -77,48 +104,82 @@ secrets, timeouts, notifications), published and linked from the top of every Je
   successor, reads `mkdocs.yml`, and is the same path KubeCoder's MkDocs docs will need.
   Starlight is the fallback if Zensical isn't stable by then.
 - [ ] **C** Write the style guide from the rulings: J24 (`checkout scm` for the job's own repo),
-  J23 (the one load line), J01/J13 (the job-properties block and its placement), J08 (the
-  declarative rule after §3), J11/J12 (timeouts), J17 (`withVault` scope), `notify` use,
-  `Jenkinsfile.*` naming, and header comments.
+  J23 (the one load line), J01 (the job-properties block and its placement; ~~J13~~ retention
+  is the global build discarder, so files declare none), J08 (the declarative rule after §3),
+  J11/J12 (timeouts), J17 (`withVault` scope), J19 (whichever way it is ruled), the §6a result
+  (what a new repo needs for its push hook), non-secret settings inline rather than as global
+  env vars (Q6), `notify` use, `Jenkinsfile.*` naming, and header comments.
 - [ ] **C** Library reference pages (J22's docs half, replacing `vars/*.txt`), generated from or
   kept next to `vars/`
 - [ ] **op** Review the guide
 - The header link itself is added to every Jenkinsfile in the §9 pass, so each repo is touched
   once. The site must therefore be live before §9.
 
-## 5. Stale jobs and dead code — straightforward changes, no slice
+## 5. Stale jobs, dead code and controller settings — ~~straightforward changes, no slice~~
 
 - [ ] **C** J09 — move `CanonApp` to `Archived/` and disable it; disable `Archived/FundaChecker`
-- [ ] **C** J10 — `Firmware/KitchenDisplay`, as Q1 decides (retire = delete the job)
-- [ ] **C** J20 — remove the dead library code (needs J09 and J10, and §6's self-test)
+- ~~**C** J10 — `Firmware/KitchenDisplay`, as Q1 decides (retire = delete the job)~~ Deferred,
+  not rejected: ANS-93 (Later). The job stays disabled and is skipped by §9.
+- [ ] **C** J20 — remove the dead library code (needs J09 and §6's self-test). The
+  KitchenDisplay-only code (`ssh`/`scp`/`rsync`, `containerTemplates.rsync` and `dockbuild`,
+  `gitUtils.groovy`) stays until ANS-93 is worked.
+- [ ] **C** Q6 — delete the dead global env vars (`ELASTICSEARCH_CLUSTER_URL`,
+  `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`, `ANDROID_HOME`) after saving the global
+  config; verify with one `MyDownloads/MyDownloadsClient` build (`ANDROID_HOME` comes from the
+  `android-35` image). The IoTSupport `KEYCLOAK_*` four go after §9 inlines them; `HA_URL` as
+  ruled in §1.
+- [ ] **C** J07 — built-in node executors 2 → 0 (API; J04 was its other home and is rejected).
+  Verify with one pod build and one `IaC/Build-Main`.
+- [ ] **C** Q7 — the container cap of 3 is deliberate: say so in
+  `/work/Ansible/docs/live-infra-access.md`, with what it means for a mass push.
+- [ ] **C** Q4 — trivy warning de-duplication in `DockerImages/Jenkinsfile`, as ruled in §1
 
 ## 6. Library safety net — before any library refactor
 
 - [ ] **C** J22 — a `Jenkinsfile` that loads the library at the pushed commit and asserts the pure
   functions (shares the library's `Jenkinsfile` with the §4 docs build)
 - [ ] **op/C** J22 — create the `JenkinsPipelineUtils` job (a UI/API step)
+- [ ] **C** ANS-89 (a real Groovy parse gate for the library, from slice 011's close-out) is the
+  pre-push half of the same safety net; decide with the self-test whether it rides along here
+  or stays its own card.
 - [ ] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
   `IaC/HelmCharts` run
 - [ ] **C** J23 — standard library load line in the 3 odd files, folded into those files' next
   edit (J02 and §9)
 
+## 6a. Does a file-declared `githubPush()` install the webhook? (your note on Appendix A R1)
+
+Existing jobs are not at risk: the hook is per repo, and every §9 repo already has one (checked
+through the GitHub API, including the three repos whose trigger is already file-declared). The
+open question is a **new** job on a repo without a hook. Must be answered before the §4 guide is
+written; it does not gate §9.
+
+- [ ] **op** OK to create a throwaway private repo (`pvginkel/jenkins-trigger-test`) and a
+  throwaway job for it
+- [ ] **C** Repo with a three-line Jenkinsfile declaring `pipelineTriggers([githubPush()])`; job
+  created through the API with no trigger in its `config.xml`; start build #1 by hand; check
+  `gh api repos/pvginkel/jenkins-trigger-test/hooks`; push a commit and see whether build #2
+  starts on its own. Record the result in the report, then delete the job and the repo.
+
 ## 7. Library helpers — one slice (`/dev:triage` → `/dev:plan-slice` → `/dev:run-slice`)
 
 Roughly seven phases. The slice owns the Replays, each of which needs your OK. It follows the §4
-style guide, and is written declaratively if §3 says "migrate all". If the review cuts J15, this
-shrinks toward the handover.
+style guide, and is written declaratively if §3 says "migrate all".
 
 - [ ] J17 — drop the inert `containerEnvVar` forwarding and scope `withVault`; proven by one
   Replay of `AaC/Home Assistant Fleet`
 - [ ] J14 — `espFirmware(...)` for the 8 ESP-IDF pipelines, which absorbs J24 and J25 for those
-  files and J11's timeout inside the helper; one firmware Replay (a no-op re-flash)
+  files and J11's timeout inside the helper; one firmware Replay (a no-op re-flash). As
+  modified: the IDF version is a required argument per repo (`idfVersion: 'v5.5.3'`), with no
+  default in the library, so versions move one repo at a time.
 - [ ] J15 — `validation.runSuiteJob(...)` for the 4 monorepo apps, with the `@NonCPS` suite
-  parser, the Q5 default, and J27 (a short-lived Secret) if accepted
+  parser and `poetry install --only main` as the one install line (Q5 — see the report).
+  ~~J27 (a short-lived Secret)~~ rejected.
 - [ ] J21 — one kaniko API, applied only to files already touched here
-- [ ] J19 — `iac` var for the dev-stage idiom (only if accepted; the report leans towards
-  documenting the duplication instead)
-- [ ] J16 — not here: it goes into slice 014 (architecture producers) as a phase, so the 28
-  repos are touched once
+- [ ] J19 — open (§1). If ruled (1) it is not a library change at all: a `load`-ed
+  `support/jenkins/iac.groovy` in the Ansible repo, verified by Replays of the iac jobs.
+- [ ] J16 — open (§1). ~~It goes into slice 014 as a phase~~ — 014 is completed. Proposed: a
+  phase here, delivering ANS-78 for the 28 repos, with the file rewrite riding §9's wave 1.
 
 ## 8. Timeouts — after the §2 rulings
 
@@ -130,16 +191,23 @@ shrinks toward the handover.
 ## 9. ANS-84 — move job config into the Jenkinsfiles (mechanical, Sonnet, last)
 
 - [ ] **C** Brief a Sonnet agent from Appendix A, the `job-settings.md` rulings and the §4
-  style guide. Include what rides along in the same files: the style-guide header link, J13
-  retention, J24 `checkout scm`, J25 hygiene, J23 load line, J11 timeout. If §3 says "migrate
-  all", this pass is folded into that migration instead.
-- [ ] **op** Q2 (TrelloMcp's `test` branch) and J26 (`master` → `main`) settled. J26, if
-  accepted, lands before the wave that touches those four repos.
+  style guide. Include what rides along in the same files: the style-guide header link,
+  ~~J13 retention~~ (rejected — the global build discarder stands, Appendix A's R4 is void),
+  J24 `checkout scm`, J25 hygiene, J23 load line, J11 timeout, and the four `KEYCLOAK_*`
+  values inlined in IoTSupport's two files (Q6). `Firmware/KitchenDisplay` is skipped
+  (ANS-93); its `AaC/` twin is not. If §3 says "migrate all", this pass is folded into that
+  migration instead.
+- [x] **op** Q2 and J26 settled (2026-09-21): TrelloMcp stays on `test`, so its edit lands
+  there; J26 accepted.
+- [ ] **C** J26 — rename `master` → `main` on the four MyDownloads/ScanToPdf client and server
+  repos (GitHub API) and update the eight jobs' branch spec (API, `config.xml` saved first),
+  before the wave that touches them. Needs your OK as a push-class step.
 - [ ] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Architecture`
   (J02 included), `Ansible`, `HelmCharts`, and the AaC-only repos
 - [ ] **S** Wave 2 — app repos that end in a Helm deploy (~30 no-op redeploys), in batches
   sized to the 3 pod slots
-- [ ] **S** Wave 3 — firmware repos, unless Q10 folds them into J14's push
+- [ ] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
+  batches are still sized to the 3 pod slots.
 - [ ] **C** After each wave: re-dump `config.xml` and diff against the snapshot. The only
   expected change is a `JobPropertyTrackerAction` plus the ruled `abortPrevious` values.
 - [ ] **C** Close-out: all jobs re-dumped, the "Controller config" comments in the iac files
@@ -147,8 +215,9 @@ shrinks toward the handover.
 
 ## 10. Controller-level config — after §9
 
-- [ ] **C** J03 — scheduled Jenkins config drift check against a committed snapshot
-- [ ] **op/C** J04 — JCasC for the Kubernetes cloud, pod templates, library, IaC Agent node and
-  global env (folding in J07, Q6 and Q7). HelmCharts chart change: dev first, then prd in a
-  quiet window. Likely its own slice.
-- [ ] J05 — Job DSL seed, only if J03 shows the UI-only residue actually drifting
+Nothing left to do here in this plan.
+
+- J03 — scheduled Jenkins config drift check: deferred, ANS-92 (Later). Not before §9.
+- ~~**op/C** J04 — JCasC for the Kubernetes cloud, pod templates, library, IaC Agent node and
+  global env~~ rejected. What it would have folded in moved to §5: J07, Q6, Q7.
+- ~~J05 — Job DSL seed~~ rejected.
