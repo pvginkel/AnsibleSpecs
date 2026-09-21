@@ -182,10 +182,19 @@ Established by the planning session on 2026-09-21 against HelmCharts `78498dc`, 
   carries its own generated producer, run from the `aac-tools` image. `recommend-resources` and
   `collect-versions`/version-poller stay open.
 
+## Task shape
+
+pre-settled — slice.md's re-cut and 2026-09-20 rulings plus the 2026-09-21 rulings above settle
+every mechanism its open questions left (the generator is slice 024's image, the render is the
+ApplicationSet's, ArgoCDDeploy's producer is generated, the producer ids, the how-to's home, the
+handover order); planning is transcription across the named repos.
+
 ## Ordering constraints
 
 - **Before the run starts:** ArgoCDTools `ff7e443` is pushed, `registry:5000/aac-tools:latest` is
   republished, and this environment is restarted (G7). The operator's keystrokes, not a phase.
+- ArgoCDDeploy's producer lands before KubeCoderDeploy's: it is the one created and registered
+  first, so the pipeline shape is proven outside KubeCoder's cutover (settled ruling).
 - KubeCoderDeploy commits its own `architecture.yaml` before the ArgoCDTools phase that makes the
   handover check read it (R7).
 - The how-to and the `argo-cd` decision record land after the producers they describe.
@@ -195,6 +204,147 @@ Established by the planning session on 2026-09-21 against HelmCharts `78498dc`, 
 
 - ../ArgoCDTools — pushing stays the operator's call, as in slice 024: a push to `main` makes `IaC/ArgoCDTools` rebuild and republish both images.
 - ../DockerImages — a push rebuilds every image and runs the repo's Helm deploy; the one comment this slice corrects there goes out with the operator's next DockerImages push.
+
+### P1 — The `aac-tools` container template
+
+Target: ../JenkinsPipelineUtils
+
+`containerTemplates` offers an `aac-tools` sidecar naming `registry:5000/aac-tools` by its floating
+tag (R6), so a deploy repo's `Jenkinsfile.architecture` can run `gen-architecture` and
+`arch-validate` in its pod. The library has no local gate and every pipeline in the estate loads it
+(G10): the entry copies an existing entry's shape (`vars/containerTemplates.groovy:26-28`, the
+floating `python` one), because a slip here breaks every pipeline until it is reverted — the
+operator's first `AaC/ArgoCDDeploy` build is the canary. The image declares no ENTRYPOINT and runs
+as its own non-root user (`/work/ArgoCDTools/aac-tools/Dockerfile:7-11`, `:71-74`); the entry
+overrides neither.
+
+### P2 — ArgoCDDeploy publishes Argo CD's architecture
+
+Target: ../ArgoCDDeploy
+
+ArgoCDDeploy becomes the generated producer `argocd-deploy` (R5): a committed judgment layer the
+`aac-tools` generator reads (G4), the `.architecturerc` the producer manual requires of a generated
+producer (G9), and a `Jenkinsfile.architecture` that — in P1's container — builds `main` (the
+branch Argo syncs it from, HelmCharts `configs/prd/argocd/prd/release.yaml`), generates the `prd`
+stage under that id, validates it with the image's `arch-validate`, and archives it where the
+collector's filter finds it (G8). The branch built and the stage published both read off the file.
+The artifact is a build output, never committed. `kc project test` generates and validates the prd
+artifact through the `aac-tools` toolchain, so the gate runs what the pipeline runs — which needs
+G7's pre-run step: an `aac-tools` without the list form crashes on this judgment layer.
+
+The model carries Argo CD itself, as a product element this producer owns — nobody publishes one
+today (no `argo` or `ss:redis` id in the live dataset, checked this pass) — with the instances the
+render yields (G6); and both of the relay's edges (ruling of 2026-09-21, D1): webhook-relay served
+by Argo CD's server and by its ApplicationSet controller, through `upstream`'s list form, one wire
+per variable the relay renders today (`chart/templates/webhook-relay.yaml:65-68`). The relay's
+product is DockerImages' `app:webhook-relay`, referenced, not owned. Whether Argo CD's bundled
+redis earns an owned element, and whether Argo CD's UI hosts are `webUi`, is this phase's call
+against the producer manual's "stable external identity" rule — G6's probe proved the mechanism,
+not the judgment. Whatever still prints as `gap:` is named in the done-record with its reason.
+
+`introduced:` is required (G4); ArgoCDDeploy was created for Argo CD's standup, so here the repo's
+own history does date the app. The repo's statement that it deliberately has no Jenkinsfile
+(`.kubecoder/project.yaml:8-10`) stops being true in this phase. No phase can run a Jenkins build
+(G2), and unlike the images every existing producer pipeline uses (G11), `aac-tools` runs non-root
+and shells out to git and helm. The `AaC/ArgoCDDeploy` job and the registration are the
+operator's, after that job's first green build (R5).
+
+### P3 — The relay's own record says where its edges are modelled
+
+Target: ../DockerImages
+
+`webhook-relay/architecture.yaml`'s header (`:14-17`) stops saying Argo CD is modelled by no
+producer and that ArgoCDDeploy is still to be created by slice 009 (G13), and says truthfully where
+each deployment's consumption edges live after P2. Be exact about Fieldnotes: its relay instance is
+modelled by `helm-charts`, but no edge toward the Fieldnotes API is drawn — HelmCharts
+`charts/fieldnotes/architecture.yaml:6` maps the image with no `upstream`, and its relay takes a
+`RECEIVERS` list (`charts/fieldnotes/templates/fieldnotes-deployment.yaml:196`). The comment
+changes; the envelope's data does not. Held from pushing (Push holds).
+
+### P4 — KubeCoderDeploy carries KubeCoder's producer
+
+Target: ../KubeCoderDeploy
+
+KubeCoderDeploy becomes the generated producer `kubecoder-deploy`, in P2's shape, publishing **prd
+only** (R2): its `Jenkinsfile.architecture` builds the `prd` branch and runs the generator with
+`--stage prd`, the branch stated in the file beside the stage (slice.md, 2026-09-20 ruling 3). The
+guard is that required, single-valued `--stage` and nothing else — no branch check, no generator
+rule, and no gate or pipeline here produces a dev artifact. `kc project test` generates and
+validates the prd artifact through the `aac-tools` toolchain.
+
+The judgment layer is HelmCharts' `charts/kubecoder/architecture.yaml` copied in with an explicit
+`introduced: '2026-06-17'` — the date every published KubeCoder element carries (G5;
+`/work/ArgoCDTools/aac-tools/checks/kubecoder-architecture.yaml:10`); a different date keeps the ids
+and breaks every element's equality. HelmCharts' copy stays: HelmCharts publishes KubeCoder until
+slice 012's prd flip. The repo's self-description (`.kubecoder/project.yaml:8-10`) and the README's
+record of what was copied from HelmCharts account for the new files.
+
+R3's acceptance rides this phase: `handover_equality.py` pointed at this repo's committed layer
+(`--annotations`, `/work/ArgoCDTools/aac-tools/checks/handover_equality.py:220-225`) is green
+against the live dataset — the cross-stage relations it excludes (ARCH-13) and the
+`kube-coder-tunnel-reclaim` gap are the expected differences (G5); record its output. There is no
+`prd` branch yet (G2): the producer lands on `main`, which `prd` is born from in slice 012. The
+`AaC/KubeCoderDeploy` job and the registration are the operator's, in the order of the ruling of
+2026-09-21 (D2).
+
+### P5 — The handover check reads the deploy repo's own judgment layer
+
+Target: ../ArgoCDTools
+
+R7: `aac-tools/checks/kubecoder-architecture.yaml` is deleted, and `handover_equality.py` renders
+the clone's own committed `architecture.yaml` with nothing laid over it, so a green check proves
+equality for exactly the judgment the pipeline renders. Run against KubeCoderDeploy at P4's commit
+and the live dataset, it is green; record its output.
+
+`HandoverFixtureTests` (`aac-tools/tests/test_deploy_repo.py:260-283`) tests the file this phase
+deletes. What it guarded — that the layer the equality rests on is dated and maps every KubeCoder
+image — needs a named successor (P4's gate runs the generator over the committed layer; the check
+itself compares every element), so no coverage goes silently. The check's docstring
+(`handover_equality.py:6-16`) and the README's account of it (`README.md:292-299`) stop
+describing a copy. Held from pushing (Push holds).
+
+### P6 — HelmCharts pins that a flipped stage leaves the artifact
+
+Target: ../HelmCharts
+
+R4: HelmCharts' suite gains the one test that fails if a stage whose `release.yaml` says
+`reconciler: argo-cd` either appears in the architecture artifact or fails the generator run. It
+covers both halves of the behaviour — the resolver handing back no chart for such a stage
+(`tools/deploy/deploy_cli/release.py:174`) and the generator skipping a release that has none
+(`tools/chart_tools/gen_architecture.py:587`) — inside the suite's hermetic bar (no helm, deploy CLI
+or network subprocess; `.kubecoder/project.yaml`'s `test` comment). G3: the behaviour already
+holds, so this is a test only; should it prove otherwise, the fix is the minimum patch. Nothing
+else in HelmCharts changes.
+
+### P7 — The how-to: a migrated app carries its own producer
+
+Target: root
+
+The reusable pattern (R5): `docs/runbooks/argocd.md` gains a section beside "Registering,
+undeploying and unregistering an app" (`:213`) that takes the next migrating app from its
+HelmCharts annotation file to a registered producer of its own, with P2 and P4 as its worked
+examples. It carries what a future migration would otherwise get wrong: one pipeline publishes one
+stage from one branch (R2); the moved annotation file states `introduced:`; the producer id is the
+deploy repo's name in kebab case; the chart's name must match the registry directory (G4, ANS-85);
+an owned product element a second producer also mints collides at the collector (G6); the job and
+its registration are the operator's, registration only after the first green build (G8); and at a
+handover, registration comes before the flip, with the collector red in between (ruling of
+2026-09-21, D2) — a new app with no current producer, ArgoCDDeploy's case, has no flip. A reader
+following the runbook through a cutover meets the architecture step where it falls in that order.
+
+### P8 — The Argo CD record closes `gen-architecture`'s half of O2
+
+Target: ../AnsibleSpecs
+
+The `argo-cd` set records the half of O2 this slice decides: each deploy repo carries its own
+generated producer, run from the `aac-tools` image, one stage per pipeline, and a handover registers
+before it flips. Slice 024's docs already record the rendering source as settled
+(`argo-cd/decisions.md:615-618`, `argo-cd/design.md:567-573`, `argo-cd/phases.md:360-362`); what
+`design.md:572-573` still calls owed per repo is now the runbook's how-to (P7) plus the operator's
+job and registration, and the record points there rather than restating it. Slice 012's own record
+orders the registry flip and the registration "together"
+(`slices/backlog/012_kubecoder_argo_cutover/slice.md:318-319`); it states D2's order instead, so its
+planner reads the ruling, not the superseded line.
 
 ## Not in scope
 
@@ -209,3 +359,6 @@ Established by the planning session on 2026-09-21 against HelmCharts `78498dc`, 
 - Migrating the estate's copies of `arch-validate.py` (ANS-78), the chart-name/registry-path check
   (ANS-85), and a test stage in the `IaC/ArgoCDTools` job (ANS-86).
 - `recommend-resources` and `collect-versions`/version-poller, O2's other halves.
+- Moving ArgoCDDeploy's relay onto DockerImages' `RECEIVERS` list (DockerImages `8ca5798`):
+  ArgoCDDeploy stays on its pinned relay build (`chart/values.yaml:54`), and its judgment layer
+  models the two variables that build reads.

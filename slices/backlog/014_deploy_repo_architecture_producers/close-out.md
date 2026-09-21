@@ -23,6 +23,24 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Create AaC/ArgoCDDeploy, then register argocd-deploy after its first green build
+
+ArgoCDDeploy's producer (P2) is committed but nothing runs it. The operator creates the AaC/ArgoCDDeploy job on ArgoCDDeploy's main branch running Jenkinsfile.architecture; that first build is also the canary for P1's new JenkinsPipelineUtils containerTemplates entry, which no gate could check. After the first green build, a pipeline-producers.yaml entry in pvginkel/Architecture registers id argocd-deploy against AaC/ArgoCDDeploy. Registering earlier fails the collector, because a registered producer with no artifacts fails discovery (/work/Architecture/tooling/collect.py:111-161). This is a new producer, not a handover, so there is no flip to order it against.
+
+**Consequence:** Argo CD and the webhook relay's two edges stay out of the published model, and the new pipeline shape is unproven when KubeCoder's cutover needs it.
+
+**Provenance:** read | plan-writer, r1 — plan.md R5 and the settled ruling of 2026-09-21
+**Disposition:**
+
+### A2 — Create AaC/KubeCoderDeploy on the prd branch and register kubecoder-deploy before KubeCoder's prd flip
+
+KubeCoderDeploy's producer (P4) lands on main. Slice 012 creates the prd branch at the prd cutover, and the job can have its first build only then. The order is: prd born → AaC/KubeCoderDeploy green on prd → the kubecoder-deploy entry in pipeline-producers.yaml → the reconciler flip (ruling of 2026-09-21, D2). The collector is red on the duplicate ids between registration and the flip's HelmCharts architecture build, and the published model keeps KubeCoder throughout.
+
+**Consequence:** If the prd flip lands before this, KubeCoder leaves the federated model, which is the loss R1 forbids.
+
+**Provenance:** read | plan-writer, r1 — plan.md R1, R2, ruling D2; slice 012 slice.md:313-320
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -55,3 +73,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — aac-tools: an upstream wire cannot read the webhook relay's RECEIVERS list · minor
+
+DockerImages 8ca5798 (2026-09-20) replaced the relay's two URL variables with one RECEIVERS variable holding comma-separated name=url entries. The generator's upstream wire resolves one URL per variable (parse_host, /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570), so a RECEIVERS value gives it nothing to resolve, and HelmCharts' generator has the same single-URL shape. Fieldnotes' relay already runs on RECEIVERS (HelmCharts charts/fieldnotes/templates/fieldnotes-deployment.yaml:196), and its edge toward the Fieldnotes API is not modelled: charts/fieldnotes/architecture.yaml:6 maps the image with no upstream. ArgoCDDeploy stays on its pinned pre-RECEIVERS relay build (chart/values.yaml:54), so this slice models the two variables that build reads. The day ArgoCDDeploy moves to RECEIVERS, those two wires name unset variables, and the generator fails the build on that by design.
+
+**Consequence:** ArgoCDDeploy's move to the RECEIVERS relay will fail its architecture build until the generator can read the list, and Fieldnotes' relay edge stays unmodelled meanwhile.
+
+**Provenance:** read | plan-writer, r1 — DockerImages 8ca5798; /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570
+**Disposition:**

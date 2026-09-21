@@ -1,0 +1,160 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — KubeCoder's cutover loses nothing",
+      "description": "The model loses nothing through KubeCoder's cutover: \"The architecture file is a first class element the current HelmCharts setup. Actually, it's two parts: the static files and the generator. Both absolutely need to keep working as we switch over.\" HelmCharts' static file charts/kubecoder/architecture.yaml and its generator keep publishing KubeCoder unchanged until slice 012's prd flip, and KubeCoderDeploy carries its own copy of the static file and a producer that renders KubeCoder prd from it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/charts/kubecoder/architecture.yaml:5-11",
+        "/work/HelmCharts/tools/chart_tools/gen_architecture.py:587",
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:283-306"
+      ]
+    },
+    {
+      "id": "V02",
+      "area": "R2 — KubeCoderDeploy publishes prd only",
+      "description": "KubeCoderDeploy's producer publishes prd only, from the prd branch: its Jenkinsfile.architecture builds the prd branch and runs the generator with --stage prd, the branch stated in the file beside the stage. The guard is the generator's required, single-valued --stage and nothing else — no branch check, no generator rule (\"Don't make it a generator rule. I may have different needs for other apps.\"); no pipeline or gate in KubeCoderDeploy produces a dev artifact. The static file charts/kubecoder/architecture.yaml has moved into KubeCoderDeploy with an explicit introduced:.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:673-697",
+        "/work/ArgoCDTools/aac-tools/checks/kubecoder-architecture.yaml:10"
+      ]
+    },
+    {
+      "id": "V03",
+      "area": "R3 — element UUIDs are kept",
+      "description": "Element UUIDs are kept: the new producer's artifact equals the KubeCoder prd subset helm-charts publishes today — same ids, only the producer differs. handover_equality.py, run over KubeCoderDeploy's committed tree (its own architecture.yaml) against the live published dataset, exits 0; the only differences are the ones it is built to set aside (producer, logo, stats.image, the relations crossing the stage boundary — ARCH-13) and the expected kube-coder-tunnel-reclaim gap.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:121",
+        "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:50-57",
+        "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:247-289"
+      ]
+    },
+    {
+      "id": "V04",
+      "area": "R4 — HelmCharts stays on its own generator",
+      "description": "HelmCharts does not move onto the image (\"I must assume that it can keep working as is. Honestly, I'd prefer you patch it if you need changes in it.\"). HelmCharts' suite carries one test pinning that a stage flipped to reconciler: argo-cd leaves the artifact without failing the build — it goes red if the flipped stage appears in the artifact or the generator run fails — and HelmCharts' diff is that test, plus only the minimum patch should the test have found the behaviour broken.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:174",
+        "/work/HelmCharts/tools/chart_tools/gen_architecture.py:587",
+        "/work/HelmCharts/configs/prd/argocd/prd/release.yaml"
+      ]
+    },
+    {
+      "id": "V05",
+      "area": "R5 — every deploy repo gains a Jenkinsfile.architecture",
+      "description": "\"The new deploy repos all need to gain a Jenkinsfile.architecture pipeline delivering the same artifact scoped to that repo\": KubeCoderDeploy and ArgoCDDeploy each carry one that, in the aac-tools container, generates one stage under the repo's producer id (kubecoder-deploy, argocd-deploy), validates it with arch-validate and archives it at a path containing an architecture/ directory. Each repo is marked a generated producer (.architecturerc, generated: true), commits its judgment layer, and does not commit the generated artifact.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Architecture/Jenkinsfile:75",
+        "/work/Architecture/.claude/architecture/producer-manual.md:499-512",
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1004-1011"
+      ]
+    },
+    {
+      "id": "V06",
+      "area": "R5 / ruling D1 — Argo CD is modelled",
+      "description": "ArgoCDDeploy's producer gives the model Argo CD — the product element it owns, which nobody published before, and its running instances — and both of the webhook relay's edges: webhook-relay served by Argo CD's server and by its ApplicationSet controller. The generated artifact validates, and every gap the run still reports is named with its reason.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDDeploy/chart/templates/webhook-relay.yaml:65-68",
+        "/work/ArgoCDTools/aac-tools/image/gen_architecture.py:1411-1435"
+      ]
+    },
+    {
+      "id": "V07",
+      "area": "R5 — the reusable pattern",
+      "description": "\"Both, plus the reusable pattern\": the Argo CD runbook carries, beside registering an app, the how-to that takes a migrating app to a producer of its own — the steps, the operator's job and registration after the first green build, and at a handover registration before the flip (ruling of 2026-09-21) — so every future migrated app carries its own.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/argocd.md:213"
+      ]
+    },
+    {
+      "id": "V08",
+      "area": "R5 — Jenkins jobs and registration owed to the operator",
+      "description": "The AaC/<Repo> Jenkins jobs and the pipeline-producers.yaml PR are \"Owed to the operator\": no phase creates AaC/ArgoCDDeploy or AaC/KubeCoderDeploy or edits /work/Architecture/pipeline-producers.yaml, and what the operator owes — each job, then each registration after that producer's first green build, ArgoCDDeploy's first and KubeCoderDeploy's before its prd flip — is left in the slice's close-out.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Architecture/tooling/collect.py:111-161",
+        "/work/Architecture/tooling/collect.py:378-392"
+      ]
+    },
+    {
+      "id": "V09",
+      "area": "R6 — the aac-tools container template",
+      "description": "JenkinsPipelineUtils' containerTemplates carries an aac-tools entry referencing registry:5000/aac-tools by a floating tag (\"Yes on the floating tag.\"), in the same shape as the existing entries.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/JenkinsPipelineUtils/vars/containerTemplates.groovy:26-28"
+      ]
+    },
+    {
+      "id": "V10",
+      "area": "R7 — the equality fixture stops being a second copy",
+      "description": "aac-tools/checks/kubecoder-architecture.yaml is deleted, and the handover check proves equality for the file the pipeline actually renders — the clone's own committed judgment layer, not a copy laid over it. No coverage is lost: what the fixture's own test guarded has a named successor.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:41",
+        "/work/ArgoCDTools/aac-tools/checks/handover_equality.py:259",
+        "/work/ArgoCDTools/aac-tools/tests/test_deploy_repo.py:260-283"
+      ]
+    },
+    {
+      "id": "V11",
+      "area": "Settled ruling — local gates",
+      "description": "Each deploy repo's local test verb generates and validates its artifact through the aac-tools toolchain, and kc project test is green in both KubeCoderDeploy and ArgoCDDeploy.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/KubeCoderDeploy/.kubecoder/project.yaml",
+        "/work/ArgoCDDeploy/.kubecoder/project.yaml"
+      ]
+    },
+    {
+      "id": "V12",
+      "area": "Generated-producer discipline",
+      "description": "Regenerating either deploy repo's artifact twice from the same commit gives byte-identical output, so no render-time randomness reaches an id or an emitted field.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/Architecture/.claude/architecture/producer-manual.md:522-529"
+      ]
+    },
+    {
+      "id": "V13",
+      "area": "O2 — the decision recorded",
+      "description": "The argo-cd set records the gen-architecture half of O2 as decided — each deploy repo carries its own generated producer, run from the aac-tools image, one stage per pipeline, a handover registering before it flips — and slice 012's record states that order in place of registering and flipping together.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/design.md:572-573",
+        "/work/AnsibleSpecs/slices/backlog/012_kubecoder_argo_cutover/slice.md:318-319"
+      ]
+    },
+    {
+      "id": "V14",
+      "area": "The relay's DockerImages record",
+      "description": "DockerImages' webhook-relay/architecture.yaml no longer says Argo CD is modelled by no producer or that ArgoCDDeploy is yet to be created, and what it says about where each relay deployment's edges are modelled is true; its data is unchanged.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": [
+        "/work/DockerImages/webhook-relay/architecture.yaml:14-17",
+        "/work/HelmCharts/charts/fieldnotes/architecture.yaml:6"
+      ]
+    }
+  ]
+}
