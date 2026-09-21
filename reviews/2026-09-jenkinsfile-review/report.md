@@ -341,7 +341,7 @@ removing a line later removes the property from the job on the next build.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> modify (2026-09-21, in conversation): "I would prefer to migrate to declarative pipelines, at least trying one. Let's do KubeCoder. If I think it has value, I'll migrate them all." → plan §3.
 
 ## Theme B — Stale jobs and repos
 
@@ -936,7 +936,7 @@ into the Architecture repo as a static producer?
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> Drop it (2026-09-21, in conversation): "somfyremote needs to be removed from the producer file." Done in Architecture `898df78`. iotsupport-app still emits a Specialization to `ss:somfy-remote` for the registered device; it is now a dangling ref, tolerated under `--relaxed` (collector run on build 1291's inputs exits 0). It will surface when `--relaxed` is dropped.
 
 **Q9 — `AaC/UnderfloorHeatingController` is the only AaC job with `abortPrevious=false`.**
 Reason, or accident? Only affects the exception ruling after J01.

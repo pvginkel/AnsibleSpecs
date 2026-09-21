@@ -8,37 +8,32 @@ subagent.
 Standing rules for every step:
 
 - **Verification.** Every edited Jenkinsfile goes through the linter at
-  `/pipeline-model-converter/validate`. For the 6 declarative files that is a full check. For
-  the 71 scripted ones it is a syntax check only: they pass when the reply says "did not contain
-  the 'pipeline' step". Replay runs the real job, so each Replay needs your OK.
+  `/pipeline-model-converter/validate`. For declarative files that is a full check. For
+  scripted ones it is a syntax check only: they pass when the reply says "did not contain the
+  'pipeline' step". Replay runs the real job, so each Replay needs your OK.
 - **Pushes.** Each push needs your OK. A push fires every job built from that repo, and there are
   only 3 agent pod slots. So edits are batched **one commit per repo**, and each repo is pushed
   once per step.
 - **Jenkins UI changes** (move, disable, delete, create a job) are done through the API, after
   saving the job's `config.xml` to `/work/scratch/jenkins-config/xml/`.
 
-## 0. Done, and one urgent fix
+## 0. Done
 
 - [x] **C** Clone the 41 in-scope repos plus JenkinsPipelineUtils to `/work/scratch`, and dump
   every job's `config.xml` (2026-09-21)
 - [x] **C** Fable review → `report.md` (2026-09-21)
 - [x] **C** Delete `Archived/Home` and `AaC/SomfyRemote` (2026-09-21)
-- [ ] **op → C** **Q8 — the `somfy-remote` producer.** `AaC/Architecture` still copies artifacts
-  from the deleted job, so its next run goes red. This is the only item that can't wait for your
-  review. Pick one:
-  - (a) Drop the entry from `Architecture/pipeline-producers.yaml`. SomfyRemote leaves the
-    architecture model. `IoTSupport/backend/docs/architecture/firmware-products.yaml:24` still
-    names `somfy_remote` by UUID, so check that the collector tolerates the dangling
-    reference.
-  - (b) Vendor SomfyRemote's `docs/architecture/architecture.yaml` from the archived repo into
-    Architecture as a static producer. This needs a small `Architecture/Jenkinsfile` change.
-    Choose it if the device is still in service.
+- [x] **C** Q8 — drop the `somfy-remote` producer from `Architecture/pipeline-producers.yaml`;
+  pushed as `898df78` (2026-09-21). IoTSupport still registers a SomfyRemote device. Its
+  Specialization to `ss:somfy-remote` is now a reference to an element nobody defines, which the
+  collector tolerates under `--relaxed`. It becomes a failure when `--relaxed` is dropped.
 
 ## 1. Your review
 
-- [ ] **op** Fill in the response slots for J01–J27 and Q1–Q10 in `report.md`
+- [ ] **op** Fill in the response slots for J01–J27 and Q1–Q10 in `report.md`. J08 and Q8 are
+  already answered.
 - [ ] **C** Fold in the responses: strike rejected items below, confirm the routing (handover
-  vs slice) of the accepted ones, and file or link the YouTrack cards (ANS-84 covers §7)
+  vs slice) of the accepted ones, and file or link the YouTrack cards (ANS-84 covers §9)
 
 ## 2. Per-job settings decision document
 
@@ -48,29 +43,70 @@ Standing rules for every step:
   candidates (A/S flags, retention and timeout exceptions, Q9) are marked with their evidence.
   Each row gets a response slot.
 - [ ] **op** Rule on it
-- [ ] **C** Fold the rulings into Appendix A, which becomes the §7 executor's spec
+- [ ] **C** Fold the rulings into Appendix A, which becomes the §9 executor's spec
 
-## 3. Stale jobs and dead code — straightforward changes, no slice
+## 3. Declarative trial — KubeCoder (J08, as modified)
+
+Goes early, because the outcome changes §4 (the style guide's rule), §7 (whether helpers are
+written as declarative templates) and §9 (`options{}` versus `properties([...])`).
+
+- [ ] **C** Convert `KubeCoder/Jenkinsfile` (Build-Main, 317 lines) to declarative:
+  `agent { kubernetes { yaml … } }` built from a library `containerTemplates.podYaml(...)`,
+  `options{}`/`triggers{}` for its job config, `when{}`, `post{}`. The file must pass the full
+  linter check.
+- [ ] **op** Replay `KubeCoder/Build-Main` with the converted script (a real build and dev
+  deploy), then push.
+- [ ] **op** Verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`,
+  scripted for pod pipelines). If "migrate all", the migration is a slice of its own, and it
+  folds in J14/J15, which get written declaratively.
+- Note: the KubeCoder repo isn't cloned in this environment's `/work`; work from
+  `/work/scratch/KubeCoder` or from the KubeCoder environment. Slice 012 (backlog) also edits
+  this file's `helmCharts.kaniko(...)` calls. Whichever lands second rebases onto the other.
+
+## 4. Pipeline style guide and a docs site for JenkinsPipelineUtils
+
+The aim is one way to do each thing (checkout, library load line, job properties, pod templates,
+secrets, timeouts, notifications), published and linked from the top of every Jenkinsfile.
+
+- [ ] **op** Hosting and link. Two constraints: JenkinsPipelineUtils is private, which rules out
+  free GitHub Pages; and about half the pipeline repos are public, and Architecture's rules
+  forbid internal hostnames in public repos, so a `.home` link in every Jenkinsfile would break
+  that rule. Choose a public hostname, or accept an internal link in public repos.
+- [ ] **C** Docs site in `JenkinsPipelineUtils/docs/`, built and published by the library's own
+  `Jenkinsfile`, alongside J22's self-test. Tool: Zensical. It is the Material for MkDocs team's
+  successor, reads `mkdocs.yml`, and is the same path KubeCoder's MkDocs docs will need.
+  Starlight is the fallback if Zensical isn't stable by then.
+- [ ] **C** Write the style guide from the rulings: J24 (`checkout scm` for the job's own repo),
+  J23 (the one load line), J01/J13 (the job-properties block and its placement), J08 (the
+  declarative rule after §3), J11/J12 (timeouts), J17 (`withVault` scope), `notify` use,
+  `Jenkinsfile.*` naming, and header comments.
+- [ ] **C** Library reference pages (J22's docs half, replacing `vars/*.txt`), generated from or
+  kept next to `vars/`
+- [ ] **op** Review the guide
+- The header link itself is added to every Jenkinsfile in the §9 pass, so each repo is touched
+  once. The site must therefore be live before §9.
+
+## 5. Stale jobs and dead code — straightforward changes, no slice
 
 - [ ] **C** J09 — move `CanonApp` to `Archived/` and disable it; disable `Archived/FundaChecker`
 - [ ] **C** J10 — `Firmware/KitchenDisplay`, as Q1 decides (retire = delete the job)
-- [ ] **C** J20 — remove the dead library code (needs J09 and J10). Push JenkinsPipelineUtils
-  only after §4's self-test exists, or verify by the next build of one consumer.
+- [ ] **C** J20 — remove the dead library code (needs J09 and J10, and §6's self-test)
 
-## 4. Library safety net — before any library refactor
+## 6. Library safety net — before any library refactor
 
-- [ ] **C** J22 — `vars/*.txt` docs, a README, and a `Jenkinsfile` that loads the library at the
-  pushed commit and asserts the pure functions
-- [ ] **op/C** J22 — create the `JenkinsPipelineUtils` self-test job (a UI/API step)
+- [ ] **C** J22 — a `Jenkinsfile` that loads the library at the pushed commit and asserts the pure
+  functions (shares the library's `Jenkinsfile` with the §4 docs build)
+- [ ] **op/C** J22 — create the `JenkinsPipelineUtils` job (a UI/API step)
 - [ ] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
   `IaC/HelmCharts` run
 - [ ] **C** J23 — standard library load line in the 3 odd files, folded into those files' next
-  edit (J02 and §7)
+  edit (J02 and §9)
 
-## 5. Library helpers — one slice (`/dev:triage` → `/dev:plan-slice` → `/dev:run-slice`)
+## 7. Library helpers — one slice (`/dev:triage` → `/dev:plan-slice` → `/dev:run-slice`)
 
-Roughly seven phases. The slice owns the Replays, each of which needs your OK. If the review
-cuts J15, this shrinks toward the handover.
+Roughly seven phases. The slice owns the Replays, each of which needs your OK. It follows the §4
+style guide, and is written declaratively if §3 says "migrate all". If the review cuts J15, this
+shrinks toward the handover.
 
 - [ ] J17 — drop the inert `containerEnvVar` forwarding and scope `withVault`; proven by one
   Replay of `AaC/Home Assistant Fleet`
@@ -84,18 +120,19 @@ cuts J15, this shrinks toward the handover.
 - [ ] J16 — not here: it goes into slice 014 (architecture producers) as a phase, so the 28
   repos are touched once
 
-## 6. Timeouts — after the §2 rulings
+## 8. Timeouts — after the §2 rulings
 
 - [ ] **C** J12 — 4-hour backstop plus an `aborted` marker in the 6 declarative `iac-*` files
   and `HelmCharts/Jenkinsfile`; full linter check; watch the next scheduled run
-- [ ] **C** J11 — pod-pipeline timeout. The §5 helpers already carry it; the remaining files get
-  it in the §7 wave, not in a push of their own.
+- [ ] **C** J11 — pod-pipeline timeout. The §7 helpers already carry it; the remaining files get
+  it in the §9 pass, not in a push of their own.
 
-## 7. ANS-84 — move job config into the Jenkinsfiles (mechanical, Sonnet, last)
+## 9. ANS-84 — move job config into the Jenkinsfiles (mechanical, Sonnet, last)
 
-- [ ] **C** Brief a Sonnet agent from Appendix A plus the `job-settings.md` rulings. Include
-  what rides along in the same files: J13 retention, J24 `checkout scm`, J25 hygiene, J23 load
-  line, J11 timeout.
+- [ ] **C** Brief a Sonnet agent from Appendix A, the `job-settings.md` rulings and the §4
+  style guide. Include what rides along in the same files: the style-guide header link, J13
+  retention, J24 `checkout scm`, J25 hygiene, J23 load line, J11 timeout. If §3 says "migrate
+  all", this pass is folded into that migration instead.
 - [ ] **op** Q2 (TrelloMcp's `test` branch) and J26 (`master` → `main`) settled. J26, if
   accepted, lands before the wave that touches those four repos.
 - [ ] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Architecture`
@@ -108,7 +145,7 @@ cuts J15, this shrinks toward the handover.
 - [ ] **C** Close-out: all jobs re-dumped, the "Controller config" comments in the iac files
   still accurate, ANS-84 closed
 
-## 8. Controller-level config — after §7
+## 10. Controller-level config — after §9
 
 - [ ] **C** J03 — scheduled Jenkins config drift check against a committed snapshot
 - [ ] **op/C** J04 — JCasC for the Kubernetes cloud, pod templates, library, IaC Agent node and
