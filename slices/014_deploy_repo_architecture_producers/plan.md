@@ -561,7 +561,7 @@ The new section has these parts, in order:
 Steps 4–5 are marked as the operator's. The flip is not marked, because whoever makes it is the
 cutover slice's business. The promotion-branch gap is stated without a card id.
 
-### P8 — The Argo CD record closes `gen-architecture`'s half of O2
+### P8 — The Argo CD record closes `gen-architecture`'s half of O2 ✅ DONE 2026-09-21
 
 Target: ../AnsibleSpecs
 
