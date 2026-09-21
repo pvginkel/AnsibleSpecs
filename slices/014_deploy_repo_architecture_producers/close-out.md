@@ -95,3 +95,21 @@ The `repos:` list in `/work/Ansible/.kubecoder/config.yaml` names AnsibleSpecs, 
 
 **Provenance:** read | plan-reviewer, r1 — /work/Ansible/.kubecoder/config.yaml
 **Disposition:**
+
+### ~~S3 — aac-tools: Argo CD's model gets no capability and no edges to its redis, because the generator's hooks cannot reach them · minor~~ — misnamed the variable (it is REDIS_SERVER); superseded by the corrected entry that follows; struck by code-writer P2
+
+ArgoCDDeploy's judgment layer maps the one argocd image to ss:argo-cd with no realizes. gen-architecture applies an image entry's realizes to every container of that image. Here that means the four controllers and the server, plus the copyutil init container and the redis-secret-init Job. So cap:configuration-management cannot be claimed for the controllers alone. The Delivery pipeline view selects on that capability, so it does not show Argo CD. The Argo CD components also reach redis through ARGOCD_REDIS_SERVER, a valueFrom on argocd-cmd-params-cm. Neither boundBy nor upstream reads a valueFrom, so the redis instance has no Serving edge toward its consumers. Both would need a per-container realizes, or a wire that can read a ConfigMap-sourced value.
+
+**Consequence:** The published model shows Argo CD and its redis side by side with no edge between them, and Argo CD is missing from the Delivery pipeline view.
+
+**Provenance:** witnessed | code-writer, P2, r1, the generated argocd-deploy.yaml (15 elements, 25 relations)
+**Disposition:**
+
+### S4 — aac-tools: Argo CD's model gets no capability and no edges to its redis, because the generator's hooks cannot reach them · minor
+
+ArgoCDDeploy's judgment layer maps the one argocd image to ss:argo-cd with no realizes. gen-architecture applies an image entry's realizes to every container of that image. Here that means the four controllers and the server, plus the copyutil init container and the redis-secret-init Job. So cap:configuration-management cannot be claimed for the controllers alone. The Delivery pipeline view selects on that capability, so it does not show Argo CD. The server, repo-server and application-controller reach redis through REDIS_SERVER, a valueFrom configMapKeyRef on argocd-cmd-params-cm's redis.server (rendered argocd-prd-redis:6379). Neither boundBy nor upstream reads a valueFrom, so the redis instance has no Serving edge toward its consumers. Both would need a per-container realizes, or a wire that can read a ConfigMap-sourced value.
+
+**Consequence:** The published model shows Argo CD and its redis side by side with no edge between them, and Argo CD is missing from the Delivery pipeline view.
+
+**Provenance:** witnessed | code-writer, P2, r1, the generated argocd-deploy.yaml (15 elements, 25 relations) and the prd render
+**Disposition:**

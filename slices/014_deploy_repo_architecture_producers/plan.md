@@ -310,6 +310,44 @@ and shells out to git and helm. The `AaC/ArgoCDDeploy` job and the registration 
 carrying `repo: pvginkel/ArgoCDDeploy` (ruling Q1) — are the operator's, after that job's first
 green build (R5).
 
+**Done (P2).** ArgoCDDeploy `844ed05` on `phase/014-P2`: root `architecture.yaml`, `.architecturerc`,
+`Jenkinsfile.architecture`, `/docs/architecture/` gitignored, `.kubecoder/project.yaml` redescribed
+with `jenkins: AaC/ArgoCDDeploy` and two `cexec aac-tools` test statements. `kc project test` and
+`lint` green. The prd artifact has 15 elements and 25 relations, prints zero `gap:` lines, and passes
+`arch-validate`. Two regenerations are byte-identical.
+
+Later phases:
+- P2's shape, for P4: check out with the estate's `git branch: '<branch>', credentialsId:
+  '5f6fbd66-b41c-405f-b107-85ba6fd97f10', url: …` (the branch is in the file). Then, in
+  `container('aac-tools')`, run `gen-architecture --stage prd --producer <id>` and `arch-validate
+  docs/architecture/*.yaml`, and archive `docs/architecture/*.yaml`. There is no `safe.directory` or
+  HOME step. The non-root image's first Jenkins run is the operator's first `AaC/ArgoCDDeploy` build.
+- `.architecturerc` `sources: [architecture.yaml, chart/, config/prd/]`, checked against the committed
+  files with fleet.py's own query (`git diff --name-only <empty-tree> HEAD -- …`). The test verbs are
+  `cexec aac-tools gen-architecture --stage prd --producer <id>` and `cexec aac-tools arch-validate
+  docs/architecture/<id>.yaml`.
+- `argocd-deploy` now owns `ss:argo-cd` and `ss:redis`. This is P7's live case of a second minting
+  producer colliding.
+
+Record:
+- The judgment calls:
+  - `ss:argo-cd` and `ss:redis` are owned `products:` with no logo, since the viewer bundles neither.
+  - Redis earns an element: Argo's components reach it by name (`redis.server: argocd-prd-redis:6379`).
+    It realizes `cap:cache`.
+  - `argocd` carries no `realizes`: an image-level entry would also tag copyutil and the secret-init
+    Job (close-out S4).
+  - `webUi: [argocd.home, argocd]` follows the estate's internal-UI form. `deploy-hooks.webathome.org`
+    is machine-facing and not marked.
+- The relay takes `upstream`'s list form: `ARGOCD_WEBHOOK_URL → [server]` and
+  `APPLICATIONSET_WEBHOOK_URL → [applicationset-controller]`, and both Serving edges are emitted. Its
+  exposure references DockerImages' `svc:webhook-relay`; nothing is minted.
+- `introduced: '2026-08-17'` is the first commit touching `chart/` (`3fc0b7e`), HelmCharts' dating
+  rule. The repo's first commit, 2026-08-16, is only a README.
+- The instances are G6's list plus the `argocd-prd-redis-secret-init` Job. That Job is a Helm
+  pre-install hook, kept because both generators drop only Argo's own hook annotation.
+- The 25 relations are G6's 24 plus redis's `cap:cache`. Argo's components → redis is not drawn:
+  `REDIS_SERVER` is a `valueFrom` (S4).
+
 ### P3 — The relay's own record says where its edges are modelled
 
 Target: ../DockerImages
