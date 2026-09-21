@@ -31,17 +31,6 @@ Focus: A2 first. Until the operator runs the `openbao` playbook, the OpenBao bac
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Delete the orphaned backup-server-tokens ConfigMap from the dev cluster's storage-prd namespace · nit
-
-P3 removed it from HelmCharts configs/dev/storage/prd/manifests.yaml, but the live object stays: manifests.yaml goes through a plain kubectl apply that never prunes (tools/deploy/deploy_cli/helmops.py:202-203), and Jenkins deploys only configs/prd/. srvk8sdev is off by design, so the run did not touch it. While the node is up: `kubectl --kubeconfig ~/.kube/config-dev-write -n storage-prd delete configmap backup-server-tokens`. Nothing mounts it.
-
-test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get with config-dev-write, no writes): srvk8sdev is up but has no storage-prd namespace, no backup-server-tokens ConfigMap in any namespace and no backup-server Deployment, so there is no live object to delete. The dev storage release's manifests.yaml no longer ships it (HelmCharts 3419695, guarded by tests/test_storage_backup_server_metrics.py), so a later dev storage deploy will not recreate it. The operator can close this with no action.
-
-**Consequence:** The dev cluster keeps an unused ConfigMap describing the retired tokens.yaml, so anyone reading live dev state is misled about how backup-server authorizes uploads.
-
-**Provenance:** read, executor, P3, r1, plan.md P3 done-record
-**Disposition:**
-
 ### A2 — Run the openbao playbook so the OpenBao backup declares its 52 h validity (check-mode first) · minor
 
 P6 (Ansible d70be14) adds `&valid_for=52h` to `/usr/local/sbin/openbao-backup`, but the wrapper on srvvault1-3 is still the old one: read live 2026-09-19, 0 `valid_for` lines on each node, so the `openbao` scope has no declaring backup and no `openbao` stream is watched. The Postgres half needs nothing from the operator: its script is live (`VALID_FOR = "52h"`, verified in the live ConfigMap) and its first declared uploads run at 02:00 CEST.
@@ -57,7 +46,22 @@ To settle it, once the leader has uploaded (and after 02:00 for Postgres), with 
 **Consequence:** Until it is done the OpenBao backup is unwatched: if it stops arriving no alert fires, which is the silent failure R1 named, still open for OpenBao.
 
 **Provenance:** witnessed, test-agent, test phase, r1, read-only ssh to srvvault1-3 and verification.json V01/V05/V19
-**Disposition:**
+**Disposition:** Can you do this?
+
+### ~~A1 — Delete the orphaned backup-server-tokens ConfigMap from the dev cluster's storage-prd namespace · nit~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+P3 removed it from HelmCharts configs/dev/storage/prd/manifests.yaml, but the live object stays: manifests.yaml goes through a plain kubectl apply that never prunes (tools/deploy/deploy_cli/helmops.py:202-203), and Jenkins deploys only configs/prd/. srvk8sdev is off by design, so the run did not touch it. While the node is up: `kubectl --kubeconfig ~/.kube/config-dev-write -n storage-prd delete configmap backup-server-tokens`. Nothing mounts it.
+
+test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get with config-dev-write, no writes): srvk8sdev is up but has no storage-prd namespace, no backup-server-tokens ConfigMap in any namespace and no backup-server Deployment, so there is no live object to delete. The dev storage release's manifests.yaml no longer ships it (HelmCharts 3419695, guarded by tests/test_storage_backup_server_metrics.py), so a later dev storage deploy will not recreate it. The operator can close this with no action.
+
+**Consequence:** The dev cluster keeps an unused ConfigMap describing the retired tokens.yaml, so anyone reading live dev state is misled about how backup-server authorizes uploads.
+
+**Provenance:** read, executor, P3, r1, plan.md P3 done-record
+**Disposition:** Close — closed
+
+</details>
 
 ## Notable events
 
@@ -69,7 +73,9 @@ Focus: A quiet run with no bail-out and no appended phase. N1 is the prd rollout
      resolved, what it says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — The test phase pushed all four repos in the plan's order; prd now serves backup-server's metrics and both alert rules are live and quiet
+### ~~N1 — The test phase pushed all four repos in the plan's order; prd now serves backup-server's metrics and both alert rules are live and quiet~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 Under the devlock's pre-authorization, 2026-09-19 (CEST): DockerImages 0af47c9 pushed at 00:18, build #2526 SUCCESS (2m34s), which started IaC/HelmCharts #6542 SUCCESS (1m31s): prd's backup-server rolled to `sha256:0ffa8be8…`, serving metrics on :8081. HelmCharts pushed in two steps, as the plan orders. First 2ada3db (P3, P4), IaC/HelmCharts #6543 SUCCESS (3m04s): Service annotations and containerPort 8081 (a second Recreate roll at 00:25), and the postgres-pas script declaring `VALID_FOR = "52h"`. Then the gate before P5, all read-only: `up{service="backup-server"}` 1 on `http://172.16.128.197:8081/metrics`; `backup_server_refresh_last_success_timestamp_seconds` non-zero, the first full read of the real Drive remote finishing 21 s after start; `https://backup-server.home/metrics` 404 while `/health/healthz` answers 200, port 8081 refused through the hostname, the Service exposing only 8080. Only then 93626fc (P5), #6545 SUCCESS (1m26s): the `backup-freshness` group loaded at 00:29:33, both rules `health: ok, state: inactive` at 00:29:52, and `ALERTS{alertname=~"Backup.*"}` empty over the last 3 h, so the dead-watcher alert did not fire during rollout. Ansible bb4db40 pushed (deploys nothing): IaC/Build-Main #180 SUCCESS, lint and both `terraform validate` green, plan "No changes", protected-VM check passed. IaC/Apply was not touched.
 
@@ -78,7 +84,9 @@ Both Recreate rolls of prd's backup-server ended before the 01:30 uploads. Also 
 **Consequence:** none
 
 **Provenance:** witnessed, test-agent, test phase, r1, DockerImages #2526, IaC/HelmCharts #6542 #6543 #6545, IaC/Build-Main #180, prd Prometheus and kubectl reads
-**Disposition:**
+**Disposition:** Ok — closed
+
+</details>
 
 ## Bugs
 
@@ -86,34 +94,9 @@ Focus: B7 first, witnessed: IaC/HelmCharts build logs expose a live GitHub token
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-### B3 — DockerImages backup-server: a malformed valid_for (e.g. 52h%zz) is silently dropped; the upload is stored undeclared with 201 · minor
+### ~~B1 — HelmCharts CLAUDE.md states Prometheus retains ~2 days (retentionSize 2GB); prd values set 7d / 10GB · nit~~ — fixed in HelmCharts 73560d9, before this close-out
 
-r.URL.Query() (handler.go:76) discards pairs with a malformed percent-escape, so query.Has("valid_for") (:91) sees no key. A scratch probe gave valid_for=52h%zz and valid_for=%3 each 201 with the backup stored and no .metadata.json. The planned uploaders send a literal 52h, so today this is reachable only through an uploader URL bug.
-
-**Consequence:** An uploader with a URL-building bug gets 201 and believes it declared a validity, but its stream is never watched, so a later outage of that backup raises no alert.
-
-**Provenance:** witnessed — code-reviewer, P1, round 1, phases/P1/code_review_r1.md F2
-**Disposition:**
-
-### B4 — DockerImages backup-server: RcloneBackend.Delete reports any rclone failure whose stderr says "not found" or "no such" as ErrNotFound · minor
-
-backup-server/src/internal/pipeline/backend.go Delete matches stderr substrings, so a DNS "no such host" or a missing rclone config reads as an already-deleted object. Prune and the upload cleanup skip ErrNotFound without logging. P2 review r1 F1 fixed the same classification in lsjson (rclone exit code 3 only, commit 0af47c9); Delete predates the slice and was left as is. rclone's documented file-not-found exit code is 4.
-
-**Consequence:** A prune or cleanup delete that fails for a network or config reason logs nothing, so the object stays in Drive past its retention and nobody sees why.
-
-**Provenance:** read — code-writer, P2, review-fix round 2, phases/P2/code_review_r1.md F1
-**Disposition:**
-
-### B7 — HelmCharts Jenkinsfile: IaC/HelmCharts build logs print the GitHub token (--set gitToken=…) in plaintext · minor
-
-The `Gate releases` stage's `helm lint` and `helm template` command lines (build #6542, log lines 97 and 105, and the same shape for every gated release) carry `--set gitToken=<value>` with the value expanded, and Jenkins does not mask it: the log API returns a plain `ghp_…` token. Not touched by this slice; found while reading #6542 to confirm the storage deploy. The value is deliberately not repeated here.
-
-**Consequence:** Anyone who can read IaC/HelmCharts build logs or the Jenkins API can read a live GitHub token, and it stays in every stored build log until the token is rotated and the logs are purged.
-
-**Provenance:** witnessed, test-agent, test phase, r1, IaC/HelmCharts #6542, searched with the Jenkins MCP
-**Disposition:**
-
-### B1 — HelmCharts CLAUDE.md states Prometheus retains ~2 days (retentionSize 2GB); prd values set 7d / 10GB · nit
+<details><summary>struck — body kept for the record</summary>
 
 HelmCharts CLAUDE.md (recommend-resources entry) says 'Prometheus retains ~2 (`retentionSize: 2GB`), so runs measure roughly the last two days'. configs/prd/prometheus/prd/values.yaml:3-4 sets retention: 7d and retentionSize: 10GB. Not touched by this slice.
 
@@ -124,9 +107,13 @@ doc-writer, doc phase, 2026-09-19 — Already fixed on HelmCharts main (73560d9,
 **Consequence:** A reader sizing recommend-resources runs underestimates the history Prometheus actually holds.
 
 **Provenance:** read — plan-writer, planning, r1, HelmCharts CLAUDE.md vs configs/prd/prometheus/prd/values.yaml
-**Disposition:**
+**Disposition:** Fix inline please. — already fixed on HelmCharts main by 73560d9 (CLAUDE.md:76 states retention: 7d, retentionSize: 10GB); nothing left to change
 
-### B2 — HelmCharts postgres-pas comments say only prd has a backup-server; a dev storage release carrying backup-server exists · nit
+</details>
+
+### ~~B2 — HelmCharts postgres-pas comments say only prd has a backup-server; a dev storage release carrying backup-server exists · nit~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 HelmCharts charts/postgres-pas/values.yaml:93-95 says 'only the prd cluster has a backup-server (the storage release isn't deployed on dev)', and configs/prd/postgres-pas/prd/values.yaml:51 says '(prd has one; dev does not)'. HelmCharts configs/dev/storage/prd/{values.yaml,manifests.yaml} is a dev storage release that carries backup-server's age-key ConfigMap, and the slice's refinement settled that backup-server runs on the dev cluster too. The live dev cluster was not checked (srvk8sdev is off). Not touched by this slice.
 
@@ -135,7 +122,35 @@ test-agent, test phase r1, 2026-09-19 — Live read (2026-09-19, kubectl get ns 
 **Consequence:** A reader of the postgres-pas chart believes dev has no backup-server, so they overlook the dev copy when changing backup-server or testing uploads there.
 
 **Provenance:** read — plan-reviewer, planning, r1, HelmCharts charts/postgres-pas/values.yaml vs configs/dev/storage/prd/
-**Disposition:**
+**Disposition:** The comment is correct. The dev backup server is not deployed. The dev cluster is not to run development apps. That's what the dev stage is for. The dev cluster is for writing and testing charts. Normal state is that none of my apps is deployed on it. — closed
+
+</details>
+
+### ~~B3 — DockerImages backup-server: a malformed valid_for (e.g. 52h%zz) is silently dropped; the upload is stored undeclared with 201 · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+r.URL.Query() (handler.go:76) discards pairs with a malformed percent-escape, so query.Has("valid_for") (:91) sees no key. A scratch probe gave valid_for=52h%zz and valid_for=%3 each 201 with the backup stored and no .metadata.json. The planned uploaders send a literal 52h, so today this is reachable only through an uploader URL bug.
+
+**Consequence:** An uploader with a URL-building bug gets 201 and believes it declared a validity, but its stream is never watched, so a later outage of that backup raises no alert.
+
+**Provenance:** witnessed — code-reviewer, P1, round 1, phases/P1/code_review_r1.md F2
+**Disposition:** Is this really an issue? Feels like I prefer to close this. — not today, by the entry's own body: "The planned uploaders send a literal 52h, so today this is reachable only through an uploader URL bug" — both uploaders (the OpenBao wrapper and the postgres-pas script) send a literal 52h; closed
+
+</details>
+
+### ~~B4 — DockerImages backup-server: RcloneBackend.Delete reports any rclone failure whose stderr says "not found" or "no such" as ErrNotFound · minor~~ — fixed in DockerImages 7bcc242
+
+<details><summary>struck — body kept for the record</summary>
+
+backup-server/src/internal/pipeline/backend.go Delete matches stderr substrings, so a DNS "no such host" or a missing rclone config reads as an already-deleted object. Prune and the upload cleanup skip ErrNotFound without logging. P2 review r1 F1 fixed the same classification in lsjson (rclone exit code 3 only, commit 0af47c9); Delete predates the slice and was left as is. rclone's documented file-not-found exit code is 4.
+
+**Consequence:** A prune or cleanup delete that fails for a network or config reason logs nothing, so the object stays in Drive past its retention and nobody sees why.
+
+**Provenance:** read — code-writer, P2, review-fix round 2, phases/P2/code_review_r1.md F1
+**Disposition:** Fix inline if possible. — fixed in DockerImages 7bcc242: Delete takes ErrNotFound only from rclone exit codes 4 and 3, as lsjson does; new TestRcloneDeleteFailures, go test ./... green; committed locally, push pending
+
+</details>
 
 ### ~~B5 — Ansible backup-freshness runbook §2 says the 10-minute read timeout logs 'context deadline exceeded'; the call running at the deadline logs 'signal: killed' · nit~~ — resolved in consult 1 (Ansible bb4db40): docs/runbooks/backup-freshness.md §2 now names 'signal: killed' (the call running at the 10-minute limit) beside 'context deadline exceeded' (one started after it), in any of the bullet's log lines; kc project lint re-run green; struck by consult 1
 
@@ -163,6 +178,19 @@ docs/runbooks/backup-freshness.md:185. The youtrack-backup CronJob uploads to ba
 
 </details>
 
+### ~~B7 — HelmCharts Jenkinsfile: IaC/HelmCharts build logs print the GitHub token (--set gitToken=…) in plaintext · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+The `Gate releases` stage's `helm lint` and `helm template` command lines (build #6542, log lines 97 and 105, and the same shape for every gated release) carry `--set gitToken=<value>` with the value expanded, and Jenkins does not mask it: the log API returns a plain `ghp_…` token. Not touched by this slice; found while reading #6542 to confirm the storage deploy. The value is deliberately not repeated here.
+
+**Consequence:** Anyone who can read IaC/HelmCharts build logs or the Jenkins API can read a live GitHub token, and it stays in every stored build log until the token is rotated and the logs are purged.
+
+**Provenance:** witnessed, test-agent, test phase, r1, IaC/HelmCharts #6542, searched with the Jenkins MCP
+**Disposition:** Close — closed
+
+</details>
+
 ## Open questions and rulings
 
 Focus: Q1 only: does YouTrack's upload opt in with `valid_for=52h`? Until someone decides, YouTrack stays on its CronJob-status rule. The HelmCharts rule comment claiming this slice retires that rule is wrong either way.
@@ -184,7 +212,7 @@ doc-writer, doc phase, 2026-09-19 — decisions.md §Backup's YouTrack entry now
 **Consequence:** The YouTrack backup is never a watched backup-server stream, and the interim CronJob-status rule stays although its own comment says slice 023 retires it.
 
 **Provenance:** witnessed, code-writer, P4, r1, HelmCharts charts/youtrack/files/backup/backup.py
-**Disposition:**
+**Disposition:** Create a card for the YouTrack project please.
 
 ## Suggestions
 
@@ -199,29 +227,7 @@ run_loop.py --dry-run reports P1 and P2 (Target ../DockerImages) as '(no determi
 **Consequence:** A red backup-server suite in a DockerImages phase is not caught by the driver's gate; it rests on the executor and reviewer running it.
 
 **Provenance:** witnessed — plan-writer, planning, r1, run_loop.py --dry-run output
-**Disposition:**
-
-### S2 — DockerImages backup-server api.md and README describe neither valid_for nor the metrics listener, and the doc plan names no DockerImages surface · minor
-
-backup-server/api.md documents POST /upload with only 'filename' and lists three endpoint groups on a single port; README.md's configuration table has no METRICS_LISTEN_ADDR (default :8081, GET /metrics only) and its prune step still counts every name. P1 added valid_for and P2 the metrics listener without touching either (prose docs are the doc phase's), but Ansible docs/slice-doc-plan.md lists only Ansible/AnsibleSpecs surfaces, so the doc phase may not reach these files. README.md also still names the retired backup-server-tokens ConfigMap under Deployment.
-
-doc-writer, doc phase, 2026-09-19 — Still open after the doc phase. The driver lands only the Ansible doc branch, so the DockerImages docs were not edited. What the slice made untrue or incomplete there: api.md's upload section has no valid_for and no /metrics; README.md's prune step (keep the newest retention objects) now counts backups only and deletes each pruned backup's metadata file; its env table lacks METRICS_LISTEN_ADDR (default :8081). README's restore loop decrypts only *.age, so the .metadata.json files are skipped correctly.
-
-**Consequence:** A reader of backup-server's own docs does not learn that uploads can declare a validity or that freshness metrics are served on :8081, so they wire a new uploader or scrape config from an incomplete contract.
-
-**Provenance:** read — code-writer, P2, round 1, DockerImages backup-server/api.md, backup-server/README.md
-**Disposition:**
-
-### S3 — DockerImages backup-server: no test pins the post-upload refresh running after the prune, or :8080 not serving /metrics · minor
-
-Two behaviours in P2's outcome survive a mutation run. Swapping Handler.afterUpload to refresh before it prunes (internal/handler/handler.go:163-168) leaves the suite green. So does registering GET /metrics on the :8080 mux in Handler.Routes (handler.go:47-58); TestMetrics checks only that the :8081 handler serves nothing but /metrics. The code is correct today on both points.
-
-test-agent, test phase r1, 2026-09-19 — Live state today (2026-09-19): through the ingress hostname, https://backup-server.home/metrics and https://backup-server/metrics answer 404 while /health/healthz answers 200, and port 8081 is refused via the hostname. The property holds on prd now; the entry stands because no test pins it.
-
-**Consequence:** A later change that reorders the post-upload refresh or exposes /metrics on the port nginx proxies passes the suite. The first leaves a pruned-away stream publishing for up to an hour. The second makes stream names and times answerable through backup-server.home.
-
-**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Raise. — already raised as DI-6 (a .kubecoder/project.yaml for DockerImages, operator-accepted at the Fieldnotes triage 2026-09-20); this entry added to it as evidence
 
 ### S4 — HelmCharts suite never parses the prd alerting rules as Prometheus would; no promtool in the iac image · minor
 
@@ -232,13 +238,47 @@ test-agent, test phase r1, 2026-09-19 — Both P5 rules loaded on the live prd P
 **Consequence:** A PromQL or template syntax error in a new rule passes the suite and CI; the prd Prometheus rejects the reloaded rules file and keeps evaluating the old one, so the new alert never fires and nothing says so.
 
 **Provenance:** witnessed — executor, P5, r1
-**Disposition:**
+**Disposition:** Raise. — already raised as ANS-74 (promtool in the iac toolchain, from slice 018 S2); this entry added to it as evidence
 
-### S5 — No runbook covers renewing backup-server's Drive login (the gdrive-pieter remote in /data/rclone.conf on rclone-backup-pvc) · minor
+### ~~S2 — DockerImages backup-server api.md and README describe neither valid_for nor the metrics listener, and the doc plan names no DockerImages surface · minor~~ — fixed in DockerImages b6f596f
+
+<details><summary>struck — body kept for the record</summary>
+
+backup-server/api.md documents POST /upload with only 'filename' and lists three endpoint groups on a single port; README.md's configuration table has no METRICS_LISTEN_ADDR (default :8081, GET /metrics only) and its prune step still counts every name. P1 added valid_for and P2 the metrics listener without touching either (prose docs are the doc phase's), but Ansible docs/slice-doc-plan.md lists only Ansible/AnsibleSpecs surfaces, so the doc phase may not reach these files. README.md also still names the retired backup-server-tokens ConfigMap under Deployment.
+
+doc-writer, doc phase, 2026-09-19 — Still open after the doc phase. The driver lands only the Ansible doc branch, so the DockerImages docs were not edited. What the slice made untrue or incomplete there: api.md's upload section has no valid_for and no /metrics; README.md's prune step (keep the newest retention objects) now counts backups only and deletes each pruned backup's metadata file; its env table lacks METRICS_LISTEN_ADDR (default :8081). README's restore loop decrypts only *.age, so the .metadata.json files are skipped correctly.
+
+**Consequence:** A reader of backup-server's own docs does not learn that uploads can declare a validity or that freshness metrics are served on :8081, so they wire a new uploader or scrape config from an incomplete contract.
+
+**Provenance:** read — code-writer, P2, round 1, DockerImages backup-server/api.md, backup-server/README.md
+**Disposition:** Fix inline. — fixed in DockerImages b6f596f: api.md documents valid_for, the .metadata.json file and GET /metrics on :8081; README gains the metadata and prune steps, METRICS_LISTEN_ADDR, and drops the retired backup-server-tokens ConfigMap; committed locally, push pending
+
+</details>
+
+### ~~S3 — DockerImages backup-server: no test pins the post-upload refresh running after the prune, or :8080 not serving /metrics · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+Two behaviours in P2's outcome survive a mutation run. Swapping Handler.afterUpload to refresh before it prunes (internal/handler/handler.go:163-168) leaves the suite green. So does registering GET /metrics on the :8080 mux in Handler.Routes (handler.go:47-58); TestMetrics checks only that the :8081 handler serves nothing but /metrics. The code is correct today on both points.
+
+test-agent, test phase r1, 2026-09-19 — Live state today (2026-09-19): through the ingress hostname, https://backup-server.home/metrics and https://backup-server/metrics answer 404 while /health/healthz answers 200, and port 8081 is refused via the hostname. The property holds on prd now; the entry stands because no test pins it.
+
+**Consequence:** A later change that reorders the post-upload refresh or exposes /metrics on the port nginx proxies passes the suite. The first leaves a pruned-away stream publishing for up to an hour. The second makes stream names and times answerable through backup-server.home.
+
+**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:** Close. — closed
+
+</details>
+
+### ~~S5 — No runbook covers renewing backup-server's Drive login (the gdrive-pieter remote in /data/rclone.conf on rclone-backup-pvc) · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 Writing docs/runbooks/backup-freshness.md (P6), BackupWatcherBlind's most likely total-blindness cause is a Drive login backup-server can no longer use: its full read logs 'freshness refresh: list gdrive-pieter:Homelab Backups: …' and every upload answers 500. The login lives in the gdrive-pieter remote of /data/rclone.conf on the rclone-backup-pvc volume (backup-server image sets RCLONE_CONFIG=/data/rclone.conf). No runbook in Ansible docs/runbooks/ or HelmCharts says how that token is renewed, so the new runbook states it is not covered rather than inventing a procedure.
 
 **Consequence:** When backup-server's Drive login expires or is revoked, BackupWatcherBlind fires and every upload fails, and the operator has no written procedure to renew the login and restore both backups and the watching.
 
 **Provenance:** read, code-writer, P6, r1, docs/runbooks/backup-freshness.md §2
-**Disposition:**
+**Disposition:** Close. — closed
+
+</details>
