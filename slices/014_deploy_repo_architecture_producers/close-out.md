@@ -113,3 +113,32 @@ ArgoCDDeploy's judgment layer maps the one argocd image to ss:argo-cd with no re
 
 **Provenance:** witnessed | code-writer, P2, r1, the generated argocd-deploy.yaml (15 elements, 25 relations) and the prd render
 **Disposition:**
+
+### S5 — ArgoCDDeploy: .architecturerc points the central update at an annotation contract its clone does not carry · minor
+
+ArgoCDDeploy's .architecturerc instructions (and the header of architecture.yaml) say the judgment layer's schema is "the generator's docstring". That docstring lives in pvginkel/ArgoCDTools (aac-tools/image/gen_architecture.py:41-80), and neither file says where. The central update runs its session in a clone of ArgoCDDeploy alone. Its update-architecture agent reads a generator's docstring as the annotation contract only when the sources include the generator (Architecture .claude/agents/update-architecture.md:47-48), which they cannot here. HelmCharts' .architecturerc, the model the plan cites, has its generator in its own sources. P4 copies P2's shape and P7 teaches it, so KubeCoderDeploy and every future migrated app would inherit the gap. Suggestion: have the instructions carry the contract, or name where it lives (repo and path, or gen-architecture --help if that prints it), in both deploy repos and in the how-to.
+
+code-reviewer, P4, r1, 2026-09-21 — Confirmed in KubeCoderDeploy at a8d3e4f: .architecturerc instructions and the architecture.yaml header carry the same "generator's docstring" pointer, and its sources (architecture.yaml, chart/, config/prd/) do not include the generator. Both deploy repos now share this entry; there is no separate P4 finding.
+
+**Consequence:** When the central update fills a reported gap in a deploy repo's judgment layer, it edits without the schema it is told to read, and a mis-shaped entry is caught only where the generator happens to reject it.
+
+**Provenance:** read | code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### ~~S6 — Argo CD runbook: undeploying or unregistering an app leaves its architecture producer publishing · minor~~ — its body carried a muddled sentence; superseded by the corrected entry that follows; struck by code-writer P7
+
+docs/runbooks/argocd.md's undeploy and unregister paragraph (in 'Registering, undeploying and unregistering an app') removes the Application and the registry entry, but nothing there retires the app's own producer: the AaC/<Repo> job and its pipeline-producers.yaml entry. Once an app carries its own producer (the section P7 added), the collector keeps copying that producer's last green artifact, so the model keeps the app's running instances after the app is gone. Removing the entry instead fails nothing, but the job's archived artifact must stop being copied, which only deregistration does. P7 was scoped to taking an app to a registered producer, so the retirement step is left out.
+
+**Consequence:** An undeployed or unregistered Argo app stays in the published architecture model as running, until someone deregisters its producer by hand.
+
+**Provenance:** read, code-writer, P7, r1, /work/Ansible/docs/runbooks/argocd.md
+**Disposition:**
+
+### S7 — Argo CD runbook: undeploying or unregistering an app leaves its architecture producer publishing · minor
+
+The paragraph on undeploying and unregistering in docs/runbooks/argocd.md ('Registering, undeploying and unregistering an app') deletes the Application and the registry entry. Nothing in it retires the app's own producer, which is the AaC/<Repo> job and its pipeline-producers.yaml entry. An app gets its own producer through the section P7 added. The collector keeps copying that producer's last green artifact for as long as the producer is registered. P7 covered taking an app to a registered producer, so the runbook has no step that deregisters one.
+
+**Consequence:** An undeployed or unregistered Argo app stays in the published architecture model as running until someone deregisters its producer by hand.
+
+**Provenance:** read, code-writer, P7, r1, /work/Ansible/docs/runbooks/argocd.md
+**Disposition:**

@@ -531,6 +531,36 @@ a handover, registration comes before the flip, with the collector red in betwee
 2026-09-21, D2) — a new app with no current producer, ArgoCDDeploy's case, has no flip. A reader
 following the runbook through a cutover meets the architecture step where it falls in that order.
 
+**Done (P7).** Ansible `132c3d7` on `phase/014-P7`: `docs/runbooks/argocd.md` gains `## Giving an app
+its own architecture producer` directly after the registering section. The registering section now
+has a paragraph at the flip saying that the flip drops the stage from HelmCharts' artifact, so the
+producer is registered before it, with a link to the new section. The intro sentence names the new
+section. `kc project test --project root` has no statements for root (skipped, exit 0).
+
+Later phases:
+- P8: the how-to to point at is `docs/runbooks/argocd.md#giving-an-app-its-own-architecture-producer`
+  (Ansible). It carries the operator's job and registration as numbered steps 4–5, the flip as
+  step 6, and the promotion-branch gap as its closing paragraph.
+
+The new section has these parts, in order:
+- **Why a producer.** `helm-charts` leaves a flipped stage out. The new generator keeps the ids
+  because it uses the same natural keys under the same namespace constant (the two `NS` lines are
+  identical: ArgoCDTools `gen_architecture.py:121`, HelmCharts `:104`).
+- **Worked examples.** A table of both deploy repos.
+- **What a deploy repo carries.** The five files.
+- **What a migration would otherwise get wrong.** One stage per pipeline; `introduced:`, with
+  HelmCharts' `git log --diff-filter=A` query that yields the date; the `<app>-deploy` id rule;
+  `.architecturerc` with its three keys; an owned product minted once (`argocd-deploy` owns
+  `ss:argo-cd`/`ss:redis`); `gap:` lines.
+- **The order, steps 1–6.** Commit and gate; the handover check with `--deploy-repo`/`--stage`/
+  `--producer`, after committing; push the published branch; the job and first green build; the
+  registration entry with `repo:`; at a handover, the flip, with the collector red in between. A
+  stage the new producer does not publish leaves the model at its own flip, and a new app has no
+  step 6.
+
+Steps 4–5 are marked as the operator's. The flip is not marked, because whoever makes it is the
+cutover slice's business. The promotion-branch gap is stated without a card id.
+
 ### P8 — The Argo CD record closes `gen-architecture`'s half of O2
 
 Target: ../AnsibleSpecs
@@ -539,7 +569,8 @@ The `argo-cd` set records the half of O2 this slice decides: each deploy repo ca
 generated producer, run from the `aac-tools` image, one stage per pipeline, and a handover registers
 before it flips. Slice 024's docs already record the rendering source as settled
 (`argo-cd/decisions.md:615-618`, `argo-cd/design.md:567-573`, `argo-cd/phases.md:360-362`); what
-`design.md:572-573` still calls owed per repo is now the runbook's how-to (P7) plus the operator's
+`design.md:572-573` still calls owed per repo is now the runbook's how-to (P7:
+`/work/Ansible/docs/runbooks/argocd.md`, `## Giving an app its own architecture producer`) plus the operator's
 job and registration, and the record points there rather than restating it. Slice 012's own record
 orders the registry flip and the registration "together"
 (`slices/backlog/012_kubecoder_argo_cutover/slice.md:318-319`); it states D2's order instead, so its
