@@ -45,24 +45,23 @@
 > env pod in the stage restarts — including whichever session is driving the migration.
 
 - R5. > Land KubeCoderDeploy; `helm template` renders clean with the library dependency.
-- R6. > One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`,
-  > `chart: null`; delete the stage's `values.yaml` (+ `_shared/` once both stages are over).
-  > The Jenkins pipeline fires on the path change and now *skips* the release (A.3) —
-  > Jenkins and Argo are never both live on it.
+- R6. > One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus
+  > `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's
+  > `values.yaml` (+ `_shared/` once both stages are over). The Jenkins pipeline fires on the
+  > path change and now *skips* the release (A.3) — Jenkins and Argo are never both live on it.
 
-  No `chart:` key is needed (slice 008's `resolve()`; `phases.md` B.5 now says so). The entry
-  also carries `repo: https://github.com/pvginkel/KubeCoderDeploy.git` and `targetRevision` —
+  (`phases.md` B.5 as it now stands; triage's `chart: null` is superseded by slice 008's
+  `resolve()`.) `repo: https://github.com/pvginkel/KubeCoderDeploy.git`; `targetRevision` is
   `main` for dev, `prd` for prd (D34). `deployed` and `autoSync` are required plain booleans.
 - R7. > At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the
   > still-Jenkins-owned **prd** stage — `changed()` matches `configs/prd/kubecoder/.*`, not
   > per stage (review R5). Harmless while the shared chart is untouched; know it is coming.
-- R8. > Review the Application's diff in the UI. Expected: image references, the deployment
-  > annotation, the namespace gaining a tracking annotation — **anything else stops the
+- R8. > Review the Application's diff in the UI. Expected: the table closing the runbook's
+  > "Previewing a migrating app's diff before its cutover" — **anything else stops the
   > cutover**.
 
-  **The expected set is the runbook table, not this list** (slice 010 close-out S9; operator
-  2026-09-20: *"Agreed"*): the table closing `/work/Ansible/docs/runbooks/argocd.md`'s
-  "Previewing a migrating app's diff before its cutover", built 2026-09-13 with Argo CD v3.5.1's
+  (`phases.md` B.5 as it now stands; slice 010 close-out S9, operator 2026-09-20: *"Agreed"*.)
+  The table in `/work/Ansible/docs/runbooks/argocd.md` was built 2026-09-13 with Argo CD v3.5.1's
   own `StateDiffs` against the live `kubecoder-dev` objects — re-derived if R5's re-sync moved the
   chart. The `imagePullPolicy: Always` and bot/MCP annotation removals appear in neither the diff
   nor the sync (no `last-applied-configuration` on the live objects; see the S11 ruling below).
@@ -92,20 +91,27 @@
 - R14. From B.3, held back deliberately to this point — each applied at the moment its stage
   flips, `Build-Main`'s rewrite at dev's cutover, `Deploy-PRD`'s replacement at prd's:
 
-  > `Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main`.
+  > `Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main` with
+  > both stage files — dev's pins at `<n>`, prd's at `prd-<n>`.
 
   > `Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays
   > alive until each stage cuts over.
 
-  **Both are amended by D47.** `Build-Main` drops the stage prefix from what it *pushes*, not from
-  what it *writes*: it pushes `:<n>`/`:latest` and calls `cicd.writeVersionPins(repo:, pins:,
-  message:)` with `<n>` for `config/dev/values.yaml` and `prd-<n>` for `config/prd/values.yaml` —
-  one call, one commit, and `prd-<n>` a forward reference to a tag that does not exist yet.
-  `Deploy-PRD`'s replacement is not a bare `git push origin main:prd`: it retags
-  (`crane tag <app>:<n> <app>:prd-<n>`), then advances `prd`, then writes D48's annotated
-  `release-<n>` tag (`<n>` = the promote job's own build number, D48). Do not delete `Deploy-PRD`
-  until that job retags, or prd's values file references a tag nobody creates and the sync fails
-  on an unpullable image.
+  (`phases.md` B.3 as it now stands, D47.) As a whole, with `<n>` always `Build-Main`'s build
+  number:
+  - **`Build-Main` after its rewrite** pushes `:<n>` and `:latest` for all eight images — and,
+    **between the two cutovers only**, `:dev-<n>` as well, so `Deploy-PRD` keeps promoting prd
+    unchanged (settled in refinement; `dev-latest` is not pushed). It no longer deploys dev. It
+    calls `cicd.writeVersionPins(repo:, pins:, message:)` once per build: `<n>` into
+    `config/dev/values.yaml`, `prd-<n>` into `config/prd/values.yaml` — one call, one commit, and
+    `prd-<n>` a forward reference to a tag that does not exist yet.
+  - **At prd's cutover** `Build-Main` stops pushing `:dev-<n>`, and `Deploy-PRD` is deleted — but
+    only once its replacement, the promote job (D2), has retagged: otherwise prd's values file
+    references a tag nobody creates and the sync fails on an unpullable image.
+  - **The promote job** is not a bare `git push origin main:prd`: it retags
+    (`crane tag <app>:<n> <app>:prd-<n>`, the seven pinned images), then fast-forwards `prd`, then
+    writes D48's annotated `release-<m>` tag, where `<m>` is the promote job's own build number
+    (D48) — not `<n>`.
 
   Slice 011 close-out S5 (operator, 2026-09-21: *"Agreed about the rest."* — fold into 012):
   **the five `images.*` pins are tag suffixes, so the caller supplies the leading colon (`:524`,
@@ -187,6 +193,18 @@
   at prd's cutover (Jenkins jobs here are created in the UI). Its first run creates the `prd`
   branch, which is what lets KubeCoderDeploy's architecture producer go green on it before the prd
   flip. Triggered by hand; promotes `main`'s tip by default.
+- **Review Q1 — where R4's no-destroy plan gets its credentials** (operator: *"Agree"*). Premise
+  corrected: this pod's `iac` sidecar has **no** homelab provisioner token and no GitHub token —
+  the credentials file first cited is srviac's — and `homelab_zfs_dataset` refuses to configure
+  without the token. The plan runs **in this pod through the estate's documented route for a
+  HelmCharts release's Terraform**: `. scripts/bao-login.sh` plus HelmCharts'
+  `. scripts/setup-env.sh prd` **in the same command as the plan**
+  (`/work/Ansible/docs/live-infra-access.md`, "A HelmCharts release's Terraform also needs
+  OpenBao-held provider credentials"), typed by the operator as part of R4 — already the
+  operator's keystroke. The values land in the operator's command environment; **Claude reads no
+  OpenBao value**, and `TF_VAR_github_webhook_secret` stays a placeholder. srviac's `iac -c` is
+  not the route: each run is a throwaway container, so pulled state files would not survive
+  between steps.
 
 #### Settled in refinement (shown to the operator, who agreed)
 
@@ -196,14 +214,14 @@
   Terraform against a half-moved state; the other order leaves a window where a stray deploy
   re-adopts the dataset into HelmCharts' state (the provider's create is an upsert). The flip
   creates the Application but runs no hook until the manual sync.
-- **How the state moves** (per stage, from this pod's `iac` sidecar): `state rm module.namespace`
-  in HelmCharts' state; `state pull` both states to local files; `state mv -state=<src>
-  -state-out=<dst>` for the two addresses; `state push` the **destination first**, the **source
-  second** (an interruption leaves the storage tracked twice — recoverable — never untracked);
-  then `terraform plan` of KubeCoderDeploy's `terraform/` against the new key, **zero destroys**.
-  The plan uses a placeholder `TF_VAR_github_webhook_secret` — no secret value is read. The local
-  state copies (plaintext) are deleted afterwards. The hook applies with no plan step of its own,
-  so this plan is the only look before the hook runs for real.
+- **How the state moves** (per stage, from this pod's `iac` sidecar — the moves need no provider
+  credentials): `state rm module.namespace` in HelmCharts' state; `state pull` both states to
+  local files; `state mv -state=<src> -state-out=<dst>` for the two addresses; `state push` the
+  **destination first**, the **source second** (an interruption leaves the storage tracked twice
+  — recoverable — never untracked); then `terraform plan` of KubeCoderDeploy's `terraform/`
+  against the new key, **zero destroys**, with its credentials loaded as the review Q1 ruling
+  below says. The local state copies (plaintext) are deleted afterwards. The hook applies with no
+  plan step of its own, so this plan is the only look before the hook runs for real.
 - **Between the two cutovers `Build-Main` also keeps pushing `dev-<n>`**, so `Deploy-PRD` keeps
   promoting prd unchanged while dev is on Argo and prd is not; that push stops at prd's cutover
   with `Deploy-PRD`'s deletion. `dev-latest` is not kept — nothing reads it once dev is flipped.
@@ -245,8 +263,11 @@
     refuses both flipped stages, and the promote job holds registry and git credentials only.
 - **HelmCharts state** (source): http backend via terraform-backend-git, key
   `helm-charts/prd/kubecoder/<stage>/infra.tfstate` in `pvginkel/TerraformState`@`main`
-  (`/work/HelmCharts/tools/deploy/deploy_cli/tf.py:48-68,139-151`); whole-document sops+age
-  encrypted (addresses not readable without the key). Config
+  (`/work/HelmCharts/tools/deploy/deploy_cli/tf.py:48-68,139-151`); sops+age encrypted at rest,
+  decrypted by the backend sidecar — `terraform state list` from this pod's `iac` sidecar returns,
+  for both stages, exactly `module.namespace.kubernetes_namespace_v1.this`,
+  `module.zfs.homelab_zfs_dataset.this` and `module.zfs.kubernetes_persistent_volume_v1.this`
+  (plan review r1, 2026-09-22), so after R2/R3 HelmCharts' state for the stage is empty. Config
   `configs/prd/kubecoder/_shared/infrastructure.tf`: `module "namespace"` `:6-9`, the zfs module
   takes `namespace = module.namespace.name` `:24`; addresses from
   `terraform-modules/static-zfs-pv/main.tf:82,94`. The deploy CLI refuses Jenkins-only verbs for a
@@ -268,10 +289,12 @@
 - **State move mechanics**: `terraform state mv`'s `-state`/`-state-out` are local-file-only
   (v1.16.3 `-help`), so a cross-backend move is pull → local mv → push; `state push` refuses a
   stale serial or lineage mismatch without `-force`. `moved` blocks cannot cross states. The
-  credentials a manual run needs are already in the `iac` sidecar
-  (`/work/Ansible/support/iac-agent/etc/iac/secrets.example.yaml`) except
-  `TF_VAR_github_webhook_secret` (OpenBao `eso/prd/argocd-hooks/git#webhook#github_secret` —
-  not to be read; a placeholder serves the plan). No estate runbook documents a state move yet.
+  state commands need no provider credentials; the backend sidecar carries the GitHub token and
+  age keys. The plan needs provider credentials this pod's `iac` sidecar lacks
+  (`HOMELAB_IAC_PROVISIONER_TOKEN`: `/work/HomelabTerraformProvider/internal/zfsdataset/resource.go:148-155`);
+  HelmCharts' `scripts/setup-env.sh prd` exports it and `KUBE_CONFIG_PATH` from OpenBao (review Q1
+  ruling). `TF_VAR_github_webhook_secret` (OpenBao `eso/prd/argocd-hooks/git#webhook#github_secret`)
+  is not read; a placeholder serves the plan. No estate runbook documents a state move yet.
 - **`_shared/` holds HelmCharts' Terraform for both stages** — its deletion (R6 "once both stages
   are over") must not precede prd's state surgery, which still inits HelmCharts' prd state.
 - **KubeCoder CI today**: `/work/KubeCoder/Jenkinsfile` — eight `helmCharts.kaniko(...)` stages
