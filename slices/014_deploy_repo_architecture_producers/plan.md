@@ -404,6 +404,35 @@ against the live dataset — the cross-stage relations it excludes (ARCH-13) and
 2026-09-21 (D2). The central update clones and pushes `main` while this producer builds `prd`; that
 is ARCH-14's, and nothing here works around it.
 
+**Done (P4).** KubeCoderDeploy `a8d3e4f` on `phase/014-P4`: root `architecture.yaml`, `.architecturerc`,
+`Jenkinsfile.architecture` (branch `prd`, `--stage prd`), `/docs/architecture/` gitignored,
+`.kubecoder/project.yaml` redescribed with `jenkins: AaC/KubeCoderDeploy` and two `cexec aac-tools`
+test statements, and a README paragraph recording the copy. `kc project test` and `lint` are green.
+The prd artifact has 9 elements and 16 relations and passes `arch-validate`. Two regenerations are
+byte-identical. The handover check with `--annotations` set to the committed layer is green (below).
+
+Later phases:
+- P5: the committed layer parses equal to the fixture (`yaml.safe_load` compares equal), so deleting
+  the fixture changes nothing in the render. The check clones whatever `/work/KubeCoderDeploy` has
+  checked out, and that checkout must contain `a8d3e4f`.
+- P7: the worked example keeps two copies of the annotation file until the flip. The README records
+  that its copy is HelmCharts' at `8cd9185` and that a change to HelmCharts' copy is replayed here.
+
+Record:
+- `architecture.yaml` is HelmCharts' `charts/kubecoder/architecture.yaml` verbatim, comments included,
+  under a P2-shaped header and `introduced: '2026-06-17'`.
+- `.architecturerc` `sources: [architecture.yaml, chart/, config/prd/]`. fleet.py's query matches 27
+  committed files; `config/dev/` is not named. `instructions` keeps P2's wording, so it shares S5.
+- The Jenkinsfile gives the branch as D34's (dev tracks `main`, prd the `prd` branch), not as a
+  `release.yaml` citation: `configs/prd/kubecoder/prd/release.yaml` does not exist yet.
+- The only `gap:` is `kube-coder-tunnel-reclaim` (in kubecoder-controller/tunnel-reclaim), the
+  expected one (G5).
+- `handover_equality.py --annotations /work/KubeCoderDeploy/architecture.yaml` (ArgoCDTools
+  `ff7e443`, live dataset) printed: published `helm-charts` 9 elements, 16 relations; generated
+  `kubecoder-deploy` 9 elements, 16 relations. It excluded four relations as crossing the stage
+  boundary, the dev↔prd controller-api edges to bot and mcp (ARCH-13), and ended "equal — every id
+  matches; producer, logo and stats.image are all that differ".
+
 ### P5 — The handover check reads the deploy repo's own judgment layer
 
 Target: ../ArgoCDTools
