@@ -360,6 +360,21 @@ modelled by `helm-charts`, but no edge toward the Fieldnotes API is drawn — He
 `RECEIVERS` list (`charts/fieldnotes/templates/fieldnotes-deployment.yaml:196`). The comment
 changes; the envelope's data does not. Held from pushing (Push holds).
 
+**Done (P3).** DockerImages `78f31ba` on `phase/014-P3`, unpushed (Push holds). The header of
+`webhook-relay/architecture.yaml` now says:
+- The file is the product layer, so it draws no consumption edges.
+- The argocd-prd instance is modelled by `argocd-deploy`, with Argo CD's server and
+  applicationset-controller each drawn serving it.
+- The Fieldnotes instance is modelled by `helm-charts`, with no edge toward the Fieldnotes API.
+  HelmCharts' mapping has no `upstream` wire, and a wire reads one URL variable where that
+  instance takes a `RECEIVERS` list.
+
+The parsed YAML is identical to `8ca5798`'s. `./scripts/arch-validate.py */architecture.yaml`
+passes all 23 files.
+
+Later phases:
+- Nothing changes. Close-out S1 already carries the RECEIVERS gap the comment names.
+
 ### P4 — KubeCoderDeploy carries KubeCoder's producer
 
 Target: ../KubeCoderDeploy
