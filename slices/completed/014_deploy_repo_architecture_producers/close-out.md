@@ -48,9 +48,11 @@ test-agent, r1, 2026-09-21 — The push preconditions are met: JenkinsPipelineUt
 **Consequence:** Argo CD and the webhook relay's two edges stay out of the published model, and the new pipeline shape is unproven when KubeCoder's cutover needs it.
 
 **Provenance:** read | plan-writer, r1 — plan.md R5 and the settled ruling of 2026-09-21
-**Disposition:** Done. You register it please.
+**Disposition:** Done. You register it please. — registered in Architecture c95e5ee (argocd-deploy, repo pvginkel/ArgoCDDeploy, job AaC/ArgoCDDeploy) after AaC/ArgoCDDeploy #1 went green; collector clean on the last inputs plus this artifact
 
-### A2 — Create AaC/KubeCoderDeploy on the prd branch and register kubecoder-deploy before KubeCoder's prd flip
+### ~~A2 — Create AaC/KubeCoderDeploy on the prd branch and register kubecoder-deploy before KubeCoder's prd flip~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 KubeCoderDeploy's producer (P4) lands on main. Slice 012 creates the prd branch at the prd cutover, and the job can have its first build only then. The order is: prd born → AaC/KubeCoderDeploy green on prd → the kubecoder-deploy entry in pipeline-producers.yaml → the reconciler flip (ruling of 2026-09-21, D2). The collector is red on the duplicate ids between registration and the flip's HelmCharts architecture build, and the published model keeps KubeCoder throughout.
 
@@ -63,9 +65,13 @@ test-agent, r1, 2026-09-21 — KubeCoderDeploy a8d3e4f is on origin/main (pushed
 **Consequence:** If the prd flip lands before this, KubeCoder leaves the federated model, which is the loss R1 forbids.
 
 **Provenance:** read | plan-writer, r1 — plan.md R1, R2, ruling D2; slice 012 slice.md:313-320
-**Disposition:** KubeCoderDeploy has no prd branch. I created the pipeline, but it fails because the branch is missing.
+**Disposition:** KubeCoderDeploy has no prd branch. I created the pipeline, but it fails because the branch is missing. I'll go with your recommendations. — suggested close: slice 012 carries the order (slice.md:313-325), and the job can have its first build only once 012 creates prd — struck
+
+</details>
 
 ### ~~A3 — Push the two held repos: ArgoCDTools bdd280e and DockerImages 78f31ba~~ — done by the operator (pushed), 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 The plan holds two repos from the run's pushes. ArgoCDTools is held because a push to main makes IaC/ArgoCDTools rebuild and republish both images. It carries P5's bdd280e: the kubecoder-architecture.yaml fixture and HandoverFixtureTests are deleted, and handover_equality.py renders the deploy repo's own committed architecture.yaml. DockerImages is held because a push rebuilds every image and runs the repo's Helm deploy. It carries P3's 78f31ba, a comment-only correction to webhook-relay/architecture.yaml saying which producer models each relay instance's edges. Neither push gates A1 or A2: the aac-tools image the deploy repos build with already carries the upstream list form (ff7e443 is on origin), and 78f31ba changes no data.
 
@@ -74,7 +80,11 @@ The plan holds two repos from the run's pushes. ArgoCDTools is held because a pu
 **Provenance:** read | consult 1 — plan.md Push holds; git log origin/main..main in /work/ArgoCDTools and /work/DockerImages
 **Disposition:** Pushed. — verified 2026-09-21: ArgoCDTools bdd280e and DockerImages 78f31ba are on origin/main
 
+</details>
+
 ### ~~A4 — Push ArgoCDTools by hand when its hold lifts~~ — done by the operator (pushed), 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `/work/ArgoCDTools`: pushing stays the operator's call, as in slice 024: a push to `main` makes `IaC/ArgoCDTools` rebuild and republish both images.
 
@@ -85,7 +95,11 @@ The slice's commits sit on `main` in that repo and nowhere else; every repo the 
 **Provenance:** witnessed — the driver's push check, against `plan.md`'s `## Push holds` section
 **Disposition:** Pushed — verified 2026-09-21: bdd280e is on origin/main
 
+</details>
+
 ### ~~A5 — Push DockerImages by hand when its hold lifts~~ — done by the operator (pushed), 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `/work/DockerImages`: a push rebuilds every image and runs the repo's Helm deploy; the one comment this slice corrects there goes out with the operator's next DockerImages push.
 
@@ -95,6 +109,8 @@ The slice's commits sit on `main` in that repo and nowhere else; every repo the 
 
 **Provenance:** witnessed — the driver's push check, against `plan.md`'s `## Push holds` section
 **Disposition:** Pushed — verified 2026-09-21: 78f31ba is on origin/main
+
+</details>
 
 ## Notable events
 
@@ -110,12 +126,16 @@ homeapps-prd rollout during the test phase came from an upstream trigger, not fr
 
 ### ~~N1 — A HelmCharts push rolled homeapps-prd through the standing deploy pipeline, from an upstream trigger and not from this slice's commit~~ — closed by the operator, 2026-09-21
 
+<details><summary>struck — body kept for the record</summary>
+
 Pushing HelmCharts 0c37dbb (the P6 test) started IaC/HelmCharts #6628 ('Started by GitHub push by pvginkel'), which deployed nothing: every 'Deploying <release>' stage was empty and it finished SUCCESS. Build #6629 then ran on the same commit with two causes on its log ('Started by upstream project "Home" build number 23' and 'Started by GitHub push by pvginkel'), and it did deploy one prd release: homeapps@prd, a terraform apply with no changes and a helm upgrade --install with images.homeapps=@sha256:4a90330e…, rolled out successfully. The slice's commit touches only tests/test_gen_architecture.py, so no release input changed; the release selected is consistent with the upstream Home #23 trigger, though I did not establish which of the two causes picked it. The driver's fact that nothing in this pass touches prd held for the slice's own changes. The run cannot push HelmCharts without the estate's deploy pipeline running.
 
 **Consequence:** none: the homeapps rollout succeeded and the slice's change did not select it; it is recorded so the 10:53Z homeapps-prd rollout is not mistaken for slice 014's.
 
 **Provenance:** witnessed | test-agent, r1 — Jenkins IaC/HelmCharts #6628 and #6629 build logs (2026-09-21 10:49Z and 10:52Z)
 **Disposition:** Ok
+
+</details>
 
 ## Bugs
 
@@ -140,24 +160,6 @@ Only S4 and S9 are witnessed.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — aac-tools: an upstream wire cannot read the webhook relay's RECEIVERS list · minor
-
-DockerImages 8ca5798 (2026-09-20) replaced the relay's two URL variables with one RECEIVERS variable holding comma-separated name=url entries. The generator's upstream wire resolves one URL per variable (parse_host, /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570), so a RECEIVERS value gives it nothing to resolve, and HelmCharts' generator has the same single-URL shape. Fieldnotes' relay already runs on RECEIVERS (HelmCharts charts/fieldnotes/templates/fieldnotes-deployment.yaml:196), and its edge toward the Fieldnotes API is not modelled: charts/fieldnotes/architecture.yaml:6 maps the image with no upstream. ArgoCDDeploy stays on its pinned pre-RECEIVERS relay build (chart/values.yaml:54), so this slice models the two variables that build reads. The day ArgoCDDeploy moves to RECEIVERS, those two wires name unset variables, and the generator fails the build on that by design.
-
-**Consequence:** ArgoCDDeploy's move to the RECEIVERS relay will fail its architecture build until the generator can read the list, and Fieldnotes' relay edge stays unmodelled meanwhile.
-
-**Provenance:** read | plan-writer, r1 — DockerImages 8ca5798; /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570
-**Disposition:** That means that it'll bubble up by then. Or do you want this fixed now?
-
-### ~~S2 — Environment manifest: /work/KubeCoderDeploy is checked out but not declared in .kubecoder/config.yaml · nit~~ — closed by the operator, 2026-09-21
-
-The `repos:` list in `/work/Ansible/.kubecoder/config.yaml` names AnsibleSpecs, HelmCharts, JenkinsPipelineUtils, DockerImages, HomelabTerraformProvider, ArgoCDDeploy, ArgoCDTools and Charts. KubeCoderDeploy is not among them, and `git log -S KubeCoderDeploy -- .kubecoder/config.yaml` is empty, so it never was. `/work/Ansible/CLAUDE.md` lists KubeCoderDeploy among the related repos and says the set is declared in that file. The manifest carries a note saying Architecture is deliberately undeclared; KubeCoderDeploy has no such note. This slice's P4 and P5 work in the checkout, and `handover_equality.py` defaults `--deploy-repo` to it.
-
-**Consequence:** A freshly created environment would come up without the KubeCoderDeploy checkout that this slice and slice 012 work in, and CLAUDE.md's statement about the declared set is untrue.
-
-**Provenance:** read | plan-reviewer, r1 — /work/Ansible/.kubecoder/config.yaml
-**Disposition:** That is not a problem.
-
 ### S4 — aac-tools: Argo CD's model gets no capability and no edges to its redis, because the generator's hooks cannot reach them · minor
 
 ArgoCDDeploy's judgment layer maps the one argocd image to ss:argo-cd with no realizes. gen-architecture applies an image entry's realizes to every container of that image. Here that means the four controllers and the server, plus the copyutil init container and the redis-secret-init Job. So cap:configuration-management cannot be claimed for the controllers alone. The Delivery pipeline view selects on that capability, so it does not show Argo CD. The server, repo-server and application-controller reach redis through REDIS_SERVER, a valueFrom configMapKeyRef on argocd-cmd-params-cm's redis.server (rendered argocd-prd-redis:6379). Neither boundBy nor upstream reads a valueFrom, so the redis instance has no Serving edge toward its consumers. Both would need a per-container realizes, or a wire that can read a ConfigMap-sourced value.
@@ -165,7 +167,7 @@ ArgoCDDeploy's judgment layer maps the one argocd image to ss:argo-cd with no re
 **Consequence:** The published model shows Argo CD and its redis side by side with no edge between them, and Argo CD is missing from the Delivery pipeline view.
 
 **Provenance:** witnessed | code-writer, P2, r1, the generated argocd-deploy.yaml (15 elements, 25 relations) and the prd render
-**Disposition:**  This should be fixed. Inline of card?
+**Disposition:**  This should be fixed. Inline of card? I'll go with your recommendations. — suggested card — ANS-90
 
 ### S5 — ArgoCDDeploy: .architecturerc points the central update at an annotation contract its clone does not carry · minor
 
@@ -178,25 +180,33 @@ consult 1, 2026-09-21 — The how-to already names where the schema lives: docs/
 **Consequence:** When the central update fills a reported gap in a deploy repo's judgment layer, it edits without the schema it is told to read, and a mis-shaped entry is caught only where the generator happens to reject it.
 
 **Provenance:** read | code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
-**Disposition:** What's the fix?
+**Disposition:** What's the fix? I'll go with your recommendations. — suggested card — ANS-91
 
-### ~~S7 — Argo CD runbook: undeploying or unregistering an app leaves its architecture producer publishing · minor~~ — closed by the operator, 2026-09-21
+### ~~S1 — aac-tools: an upstream wire cannot read the webhook relay's RECEIVERS list · minor~~ — closed by the operator, 2026-09-21
 
-The paragraph on undeploying and unregistering in docs/runbooks/argocd.md ('Registering, undeploying and unregistering an app') deletes the Application and the registry entry. Nothing in it retires the app's own producer, which is the AaC/<Repo> job and its pipeline-producers.yaml entry. An app gets its own producer through the section P7 added. The collector keeps copying that producer's last green artifact for as long as the producer is registered. P7 covered taking an app to a registered producer, so the runbook has no step that deregisters one.
+<details><summary>struck — body kept for the record</summary>
 
-**Consequence:** An undeployed or unregistered Argo app stays in the published architecture model as running until someone deregisters its producer by hand.
+DockerImages 8ca5798 (2026-09-20) replaced the relay's two URL variables with one RECEIVERS variable holding comma-separated name=url entries. The generator's upstream wire resolves one URL per variable (parse_host, /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570), so a RECEIVERS value gives it nothing to resolve, and HelmCharts' generator has the same single-URL shape. Fieldnotes' relay already runs on RECEIVERS (HelmCharts charts/fieldnotes/templates/fieldnotes-deployment.yaml:196), and its edge toward the Fieldnotes API is not modelled: charts/fieldnotes/architecture.yaml:6 maps the image with no upstream. ArgoCDDeploy stays on its pinned pre-RECEIVERS relay build (chart/values.yaml:54), so this slice models the two variables that build reads. The day ArgoCDDeploy moves to RECEIVERS, those two wires name unset variables, and the generator fails the build on that by design.
 
-**Provenance:** read, code-writer, P7, r1, /work/Ansible/docs/runbooks/argocd.md
-**Disposition:** Known issue, not a problem.
+**Consequence:** ArgoCDDeploy's move to the RECEIVERS relay will fail its architecture build until the generator can read the list, and Fieldnotes' relay edge stays unmodelled meanwhile.
 
-### ~~S9 — ArgoCDTools README: the hook half of "Not wired yet" is stale — the Argo CD standup it lists as outstanding has shipped · nit~~ — closed by the operator, 2026-09-21
+**Provenance:** read | plan-writer, r1 — DockerImages 8ca5798; /work/ArgoCDTools/aac-tools/image/gen_architecture.py:551-570
+**Disposition:** That means that it'll bubble up by then. Or do you want this fixed now? I'll go with your recommendations. — suggested close: the generator fails the architecture build on an unset wire variable by design, so the RECEIVERS move surfaces in the change that makes it — struck
 
-The doc phase rewrote the architecture bullet of ArgoCDTools' README "Not wired yet" section (the aac-tools image is published — registry tags 6, 7, 8 and latest — and the two deploy repos now carry producer pipelines whose jobs are the operator's). It left the hook half as it stood, because that half is not this slice's behavior: the lead still says "the standup that runs the hook is not [shipped]", and the bullets say the argocd-hooks namespace, the tf-presync ServiceAccount and the argocd-hook-credentials ExternalSecret belong to a standup still to come, that the run's PAT is a fine-grained one still to be minted, and that no app syncs through the hook yet. `kubectl get ns argocd-hooks` shows the namespace Active for 16 days, and the argo-cd set's history records the git token as one classic PAT (D41), not a fine-grained one. A pass that grounds each hook bullet against live state and the argo-cd register, then trims the section to what is really outstanding, closes this.
+</details>
 
-**Consequence:** A reader of ArgoCDTools' README is told the Argo CD standup and its hook credentials are still to come, and that the PAT must be fine-grained, when the standup is live and the token is a classic PAT.
+### ~~S2 — Environment manifest: /work/KubeCoderDeploy is checked out but not declared in .kubecoder/config.yaml · nit~~ — closed by the operator, 2026-09-21
 
-**Provenance:** witnessed | doc-writer, doc phase, r1, kubectl get ns argocd-hooks (Active 16d); /work/AnsibleSpecs/argo-cd/history.md "The git token: per-repo scoping → one classic PAT (D41)"; ArgoCDTools README.md "Not wired yet"
-**Disposition:** Close.
+<details><summary>struck — body kept for the record</summary>
+
+The `repos:` list in `/work/Ansible/.kubecoder/config.yaml` names AnsibleSpecs, HelmCharts, JenkinsPipelineUtils, DockerImages, HomelabTerraformProvider, ArgoCDDeploy, ArgoCDTools and Charts. KubeCoderDeploy is not among them, and `git log -S KubeCoderDeploy -- .kubecoder/config.yaml` is empty, so it never was. `/work/Ansible/CLAUDE.md` lists KubeCoderDeploy among the related repos and says the set is declared in that file. The manifest carries a note saying Architecture is deliberately undeclared; KubeCoderDeploy has no such note. This slice's P4 and P5 work in the checkout, and `handover_equality.py` defaults `--deploy-repo` to it.
+
+**Consequence:** A freshly created environment would come up without the KubeCoderDeploy checkout that this slice and slice 012 work in, and CLAUDE.md's statement about the declared set is untrue.
+
+**Provenance:** read | plan-reviewer, r1 — /work/Ansible/.kubecoder/config.yaml
+**Disposition:** That is not a problem.
+
+</details>
 
 ### ~~S3 — aac-tools: Argo CD's model gets no capability and no edges to its redis, because the generator's hooks cannot reach them · minor~~ — misnamed the variable (it is REDIS_SERVER); superseded by the corrected entry that follows; struck by code-writer P2
 
@@ -224,6 +234,19 @@ docs/runbooks/argocd.md's undeploy and unregister paragraph (in 'Registering, un
 
 </details>
 
+### ~~S7 — Argo CD runbook: undeploying or unregistering an app leaves its architecture producer publishing · minor~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+The paragraph on undeploying and unregistering in docs/runbooks/argocd.md ('Registering, undeploying and unregistering an app') deletes the Application and the registry entry. Nothing in it retires the app's own producer, which is the AaC/<Repo> job and its pipeline-producers.yaml entry. An app gets its own producer through the section P7 added. The collector keeps copying that producer's last green artifact for as long as the producer is registered. P7 covered taking an app to a registered producer, so the runbook has no step that deregisters one.
+
+**Consequence:** An undeployed or unregistered Argo app stays in the published architecture model as running until someone deregisters its producer by hand.
+
+**Provenance:** read, code-writer, P7, r1, /work/Ansible/docs/runbooks/argocd.md
+**Disposition:** Known issue, not a problem.
+
+</details>
+
 ### ~~S8 — Argo CD runbook: the new-app dating rule contradicts its ArgoCDDeploy worked example · minor~~ — resolved by consult 1 (Ansible 7c4b8e6): docs/runbooks/argocd.md now says a new app takes the date of the first commit adding its deploy repo's chart/, as ArgoCDDeploy's does (3fc0b7e, 2026-08-17, re-checked with git log --diff-filter=A -- chart); struck by consult 1
 
 <details><summary>struck — body kept for the record</summary>
@@ -234,5 +257,18 @@ docs/runbooks/argocd.md:317-318 says a new app takes the date of its deploy repo
 
 **Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
 **Disposition:**
+
+</details>
+
+### ~~S9 — ArgoCDTools README: the hook half of "Not wired yet" is stale — the Argo CD standup it lists as outstanding has shipped · nit~~ — closed by the operator, 2026-09-21
+
+<details><summary>struck — body kept for the record</summary>
+
+The doc phase rewrote the architecture bullet of ArgoCDTools' README "Not wired yet" section (the aac-tools image is published — registry tags 6, 7, 8 and latest — and the two deploy repos now carry producer pipelines whose jobs are the operator's). It left the hook half as it stood, because that half is not this slice's behavior: the lead still says "the standup that runs the hook is not [shipped]", and the bullets say the argocd-hooks namespace, the tf-presync ServiceAccount and the argocd-hook-credentials ExternalSecret belong to a standup still to come, that the run's PAT is a fine-grained one still to be minted, and that no app syncs through the hook yet. `kubectl get ns argocd-hooks` shows the namespace Active for 16 days, and the argo-cd set's history records the git token as one classic PAT (D41), not a fine-grained one. A pass that grounds each hook bullet against live state and the argo-cd register, then trims the section to what is really outstanding, closes this.
+
+**Consequence:** A reader of ArgoCDTools' README is told the Argo CD standup and its hook credentials are still to come, and that the PAT must be fine-grained, when the standup is live and the token is a classic PAT.
+
+**Provenance:** witnessed | doc-writer, doc phase, r1, kubectl get ns argocd-hooks (Active 16d); /work/AnsibleSpecs/argo-cd/history.md "The git token: per-repo scoping → one classic PAT (D41)"; ArgoCDTools README.md "Not wired yet"
+**Disposition:** Close.
 
 </details>
