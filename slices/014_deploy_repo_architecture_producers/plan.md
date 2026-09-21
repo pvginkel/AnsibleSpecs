@@ -272,7 +272,7 @@ Later phases:
 The method name is the only settlement beyond the plan's text; the doc comment follows the file's
 one-line form ("Architecture-as-code tools container (gen-architecture, arch-validate).").
 
-### P2 — ArgoCDDeploy publishes Argo CD's architecture
+### P2 — ArgoCDDeploy publishes Argo CD's architecture ✅ DONE 2026-09-21
 
 Target: ../ArgoCDDeploy
 
