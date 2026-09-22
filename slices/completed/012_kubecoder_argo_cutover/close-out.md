@@ -78,7 +78,7 @@ helmCharts.kaniko2 accepts only one destination, or two (latest with <n>, or <pr
 **Consequence:** none
 
 **Provenance:** read | code-writer, P3, r1, JenkinsPipelineUtils vars/helmCharts.groovy resolveTrackingTag; Build-Main config.xml
-**Disposition:** This should be fixed in JenkinsPipelineUtils. Please fix inline. That being said, I don't see from the code why this limitation would exist. It's iterating over a list. Please advise. / I want to discuss this.
+**Disposition:** This should be fixed in JenkinsPipelineUtils. Please fix inline. That being said, I don't see from the code why this limitation would exist. It's iterating over a list. Please advise. / I want to discuss this. / Yes I would like the <n> tag to be removed.
 
 ### ~~N2 — Test phase r1: pushed both repos under the devlock hold and re-confirmed every live premise the runbook rests on · nit~~ — closed by the operator, 2026-09-22
 
@@ -178,7 +178,7 @@ Witnessed 2026-09-22 with throwaway pods in the development namespace: argocd-ho
 **Consequence:** The cutover cannot pass B3 until the operator rules; the ruled check fails as the estate stands.
 
 **Provenance:** witnessed | code-writer, P3, r1, docs/runbooks/kubecoder-cutover.md B3
-**Disposition:** Do we need to fix this? / I think the proper answer should be to pin Terraform in the image itself, maybe in more places with the same pin. I'd rather do that then start pinning the hook image tag in all deploy repos.
+**Disposition:** Do we need to fix this? / I think the proper answer should be to pin Terraform in the image itself, maybe in more places with the same pin. I'd rather do that then start pinning the hook image tag in all deploy repos. / Yes, file this. — ANS-98 (under EPIC-2)
 
 ## Suggestions
 
