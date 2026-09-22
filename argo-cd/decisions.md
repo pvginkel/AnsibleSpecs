@@ -349,7 +349,8 @@ branch topology through the registry's per-stage `targetRevision`).
 **D35 — Promotion is a branch advance; `prd` never carries a commit `main` doesn't.** Decided
 for KubeCoder 2026-08-12 (notes; FF model confirmed by operator; supersedes the `commit-tree`
 mechanic, dissolving review H7). `Deploy-PRD` is deleted, not rewritten — no `crane`, no retag.
-What performs the advance is the product's trigger choice (scope note); for a single-branch
+What performs the advance is the product's trigger choice (scope note) — KubeCoder's is a
+promote job run by hand, its Jenkinsfile in KubeCoderDeploy; for a single-branch
 deploy repo, the merge-and-push at the end of a workflow simply *is* the deploy. Atomicity
 comes free: chart, Terraform and image version sit together in a validated `main` tree, so
 promotion moves them as a unit, in a combination dev actually ran.
@@ -499,8 +500,8 @@ fail.
   amendment). A stage's tag lives only in its stage values file.
 - CI on `main` writes both stage files in one commit: dev gets `<n>`, prd gets `prd-<n>` — **a
   tag that does not exist yet.**
-- The promote job creates it — `crane tag <app>:<n> <app>:prd-<n>` — and then fast-forwards
-  `prd` to `main`.
+- The promote job creates it — `crane tag <app>:<n> <app>:prd-<n>`, for a `prd-<n>` that does
+  not exist yet — and then fast-forwards `prd` to the promoted `main` commit.
 
 *Why the forward reference is sound.* `prd-<n>` is predictable from `<n>` at build time, so
 pre-writing a reference that CI will later satisfy is ordinary rather than deferred or implicit.
@@ -528,7 +529,9 @@ construction.
 
 *Rollback needs nothing new.* D36 survives unchanged and was checked against this model: revert
 on `main` then promote works, and the force-move lever works, because the older `prd-<n>` still
-exists. A rollback parameter on the promote job was considered and rejected — it duplicates D36,
+exists. The promote job leaves an existing `prd-<n>` as it is, so promoting a revert retags
+nothing and does not need that build's `<n>`, which the bare family's cap may already have
+reaped. A rollback parameter on the promote job was considered and rejected — it duplicates D36,
 and folding the emergency lever into the routine promote job is how a parameter slip rolls
 production back during an ordinary release. The lever stays a separate deliberate act.
 

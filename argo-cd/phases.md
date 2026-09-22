@@ -225,18 +225,21 @@ pins its own: the tag lives in `config/<stage>/values.yaml`, and the chart names
       documents; today's digest scraper never reached them.
 - [ ] Leave `images.tunnelReclaim` floating: DockerImages toolchain image, out of scope by
       operator decision — the boundary is "the seven Build-Main images", not the block.
-- [ ] Retire the D145 `imagePullPolicy: Always` overrides on the five pinned chart Deployment
-      containers — controller, ingress, manual, mcp, bot. `tunnel-reclaim` and every
+- [ ] Replace the D145 `imagePullPolicy: Always` overrides on the five pinned chart Deployment
+      containers — controller, ingress, manual, mcp, bot — with a declared `IfNotPresent`.
+      Dropping the field would not remove it: Argo's first sync leaves a field Helm set and the
+      new render omits at its Helm value (argocd.md's "What a cutover does not change"), so
+      the chart declares it and takes it over. `tunnel-reclaim` and every
       controllerConfig container spec keep theirs: those images float. The controller's own
       worker/vsix ImageVolume `pullPolicy` lines, and D145's update (its sunset checklist is
       stale), wait until both stages run from pins — B.5's cleanup, after prd.
 
-Everything above that a repository can hold is committed (slices 010 and 011): KubeCoderDeploy —
-the chart on `homelab-shared` 0.2.0, both stages' values and tfvars, the rebuilt Terraform, and
-render and Terraform gates — plus ArgoCDDeploy's hook changes, the webhook-secret key and the
-dropped `namespaces` rule, and KubeCoder's manifest line. Owed to the operator: a manual sync of
-`argocd-prd`, without which neither hook change is live and KubeCoder's first PreSync apply lacks
-its webhook secret; the `/work/Ansible` manifest line; and A.5's diff preview.
+Everything above that a repository can hold is committed (slices 010 to 012): KubeCoderDeploy —
+the chart on `homelab-shared` 0.2.0 with the declared pull policy, both stages' values and
+tfvars, the rebuilt Terraform, and render and Terraform gates — plus ArgoCDDeploy's hook changes,
+the webhook-secret key and the dropped `namespaces` rule, and KubeCoder's manifest line. The
+manual sync of `argocd-prd` that makes both hook changes live is done. Owed to the operator: the
+`/work/Ansible` manifest line, and A.5's diff preview.
 
 ### B.3 — CI (D37 as amended by D47, D45 — KubeCoder's per-app choices)
 
@@ -247,9 +250,11 @@ its webhook secret; the `/work/Ansible` manifest line; and A.5's diff preview.
       both stage files — dev's pins at `<n>`, prd's at `prd-<n>`. The prefix is a literal at
       each of the eight `helmCharts.kaniko(...)` call sites, so dropping it is a per-repo edit:
       the library carries no `<stage>-<n>` scheme to opt out of, and the other releases are
-      untouched.
-- [ ] `Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays
-      alive until each stage cuts over.
+      untouched. Between the two cutovers it also tags each build `dev-<n>`, with `crane tag`
+      since the kaniko step takes at most two destinations, so `Deploy-PRD` keeps promoting
+      prd; that tag stops with `Deploy-PRD`.
+- [ ] `Deploy-PRD` is **deleted at the prd cutover** (D35), not before, and only once the
+      promote job has retagged; the old path stays alive until each stage cuts over.
 - [ ] Every tag CI commits is a real `<n>` or `prd-<n>`, never `latest` (D37 as amended by D47).
 
 Committed (slice 011): the method, and KubeCoderDeploy carrying both stages' pins behind a render
@@ -258,11 +263,16 @@ the chart. The two Jenkins-side items wait for the cutover that flips each stage
 B.5, so nothing calls the method yet and the committed pins are forward references: dev's `<n>`
 does not exist until `Build-Main` pushes it, prd's `prd-<n>` until the promote job retags. The
 "repoint everything keyed on the tag prefix" verify item resolves to nothing to repoint (the D37
-amendment).
+amendment). The promote job is committed too (slice 012): KubeCoderDeploy's `Jenkinsfile.promote`,
+inert until its Jenkins job is created by hand at prd's cutover.
 
 ### B.4 — Terraform state surgery (D32) — **the step that can delete production**
 
-Operator keystrokes throughout; per stage:
+Operator keystrokes throughout; per stage, after B.5's registry commit and before its diff
+review. Once the stage is flipped, HelmCharts' deploy CLI refuses it, so no Jenkins deploy can
+run Terraform against a half-moved state; the flip itself runs no hook, only the manual sync
+does. KubeCoder's cutover, this surgery included, is the runbook
+`/work/Ansible/docs/runbooks/kubecoder-cutover.md`, command by command.
 
 - [ ] Read the new state key off the hook's scheme —
       `argocd/<repo>/<stage>/terraform.tfstate` (D32), derived by the entrypoint, not chosen
@@ -295,7 +305,9 @@ env pod in the stage restarts — including whichever session is driving the mig
 - [ ] At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the
       still-Jenkins-owned **prd** stage — `changed()` matches `configs/prd/kubecoder/.*`, not
       per stage (review R5). Harmless while the shared chart is untouched; know it is coming.
-- [ ] Review the Application's diff in the UI. Expected: the table closing the runbook's
+- [ ] B.4's state surgery, proven by its no-destroy plan.
+- [ ] Run argocd.md's pre-flight ("What a cutover does not change"), then review the
+      Application's diff in the UI. Expected: the table closing argocd.md's
       "Previewing a migrating app's diff before its cutover" — **anything else stops the
       cutover**.
 - [ ] Sync once, manually, at the chosen moment. Verify Synced/Healthy, controller

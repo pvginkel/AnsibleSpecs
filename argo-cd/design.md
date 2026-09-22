@@ -504,8 +504,13 @@ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** d
   `prd-<n>` in one commit, push `main` (D47). The webhook fires; the dev stage syncs.
   `cicd.helmDeploy()` is gone from the job; Jenkins holds no cluster credential (D1).
 - **Promotion** advances `prd` to a validated `main` commit (D35) — a fast-forward by
-  construction, since `prd` never carries a commit `main` doesn't. What performs the advance is
-  the product's trigger choice; `Deploy-PRD` is deleted, not rewritten.
+  construction, since `prd` never carries a commit `main` doesn't. KubeCoderDeploy's promote job
+  (`Jenkinsfile.promote`, run by hand) performs it, each step only once the one before it
+  succeeded: it creates every `prd-<n>` the commit's `config/prd/values.yaml` pins from `<n>`,
+  leaving one that already exists as it is (D47); fast-forwards `prd`, its first run creating
+  the branch; and writes the annotated `release-<m>` tag, `<m>` its own build number (D48). It
+  holds GitHub and registry access, no cluster credential. `Deploy-PRD` is deleted, not
+  rewritten — at prd's cutover, once the promote job has retagged.
 - **Rollback** (D36): revert on `main`, promote — dev follows, accepted. Emergency lever:
   force-move `prd` back to the previously promoted SHA, which loses nothing.
 - Every tag CI commits is a real `<n>` or `prd-<n>`, never `latest`, and the chart carries no
@@ -555,8 +560,10 @@ The `reconciler:` key is the single ownership fact (D38):
   `plan`, `output`, `config`, `wait` — stay usable, and `config` must never join the refusal
   set: `gen-architecture` runs it for every prd stage and does not catch a non-zero exit.
 - Cutover is two registry commits — register with `autoSync: false`, review the live diff, sync
-  manually, flip to `true` (D5). The full per-stage procedure, including the Terraform state
-  surgery (D32) and the KubeCoder-specific values work, is phases.md's.
+  manually, flip to `true` (D5). The per-stage checklist, including the KubeCoder-specific
+  values work and the Terraform state surgery (D32), which runs between the first registry
+  commit and the diff review, is phases.md's. KubeCoder's procedure, command by command, is the
+  runbook `/work/Ansible/docs/runbooks/kubecoder-cutover.md`.
 
 **Ancillary tooling** that stops covering a migrated app enumerates the same key (O2):
 `recommend-resources` (becomes clone-edit-push against deploy repos, spanning them and the config
