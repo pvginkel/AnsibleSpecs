@@ -78,7 +78,7 @@ helmCharts.kaniko2 accepts only one destination, or two (latest with <n>, or <pr
 **Consequence:** none
 
 **Provenance:** read | code-writer, P3, r1, JenkinsPipelineUtils vars/helmCharts.groovy resolveTrackingTag; Build-Main config.xml
-**Disposition:** This should be fixed in JenkinsPipelineUtils. Please fix inline. That being said, I don't see from the code why this limitation would exist. It's iterating over a list. Please advise. / I want to discuss this. / Yes I would like the <n> tag to be removed.
+**Disposition:** This should be fixed in JenkinsPipelineUtils. Please fix inline. That being said, I don't see from the code why this limitation would exist. It's iterating over a list. Please advise. / I want to discuss this. / Yes I would like the <n> tag to be removed. / Please raise a card for N1. — ANS-99 (under EPIC-2)
 
 ### ~~N2 — Test phase r1: pushed both repos under the devlock hold and re-confirmed every live premise the runbook rests on · nit~~ — closed by the operator, 2026-09-22
 
