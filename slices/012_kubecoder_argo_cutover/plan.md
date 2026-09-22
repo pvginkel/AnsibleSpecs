@@ -383,7 +383,7 @@ Record:
 - README bullet: *"their five Deployment containers state no `imagePullPolicy`"* now reads
   *"declare `imagePullPolicy: IfNotPresent`, so Argo owns the field Helm set to `Always`"*.
 
-### P2 — KubeCoderDeploy's promote job
+### P2 — KubeCoderDeploy's promote job ✅ DONE 2026-09-22
 
 Target: ../KubeCoderDeploy
 
