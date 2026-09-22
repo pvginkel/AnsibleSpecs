@@ -452,7 +452,7 @@ Record:
   to `prd` has no `+`, so GitHub refuses a non-fast-forward. A scratch-repo rehearsal showed prd
   created, fast-forwarded, a backward push refused, and `release-1` not matching `release-11`.
 
-### P3 — The KubeCoder cutover runbook
+### P3 — The KubeCoder cutover runbook ✅ DONE 2026-09-22
 
 Target: root
 
