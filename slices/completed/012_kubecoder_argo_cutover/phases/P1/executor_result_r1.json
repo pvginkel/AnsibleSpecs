@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "The five pinned containers now declare imagePullPolicy: IfNotPresent, and the render gate requires that declared value; tunnel-reclaim keeps Always. HelmCharts' values.yaml drift (aac-tools entry, maxEnvironments 8) is replayed and the README copy point moved to fb49c5c. KubeCoderDeploy 4bb7823, kc project test green.", "refuted": []}

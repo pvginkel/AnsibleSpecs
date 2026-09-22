@@ -1,0 +1,356 @@
+/work/KubeCoderDeploy — P1: git diff 0ac8b27fe07f..4bb782369ccb
+
+README.md                                  | 11 ++++++-----
+ chart/templates/bot-deployment.yaml        |  1 +
+ chart/templates/controller-deployment.yaml |  3 +++
+ chart/templates/mcp-deployment.yaml        |  1 +
+ chart/values.yaml                          | 37 ++++++++++++++++++++++++++++++++++++-
+ tests/render-chart.py                      |  5 +++--
+ 6 files changed, 50 insertions(+), 8 deletions(-)
+
+diff --git a/README.md b/README.md
+index 9c54ecc..28ade36 100644
+--- a/README.md
++++ b/README.md
+@@ -14,12 +14,12 @@ own architecture producer".
+ 
+ `chart/` and `config/{dev,prd}/values.yaml` are copies of HelmCharts' `charts/kubecoder` and
+ `configs/prd/kubecoder/{dev,prd}/values.yaml`, and `chart/files/ca/homelab-root.crt` of its
+-`homelab-root.crt`, at HelmCharts commit `65ca9dbea91d5e363817210c57004e2107ef9cf5` — the last to
+-touch any of them when they were copied. HelmCharts deploys KubeCoder until the cutover, so what
+-landed there since is not here yet:
++`homelab-root.crt`, at HelmCharts commit `fb49c5c55cb5d782fec72d5176c20f2fd458d559` — the last to
++touch any of them when they were last replayed. HelmCharts deploys KubeCoder until the cutover,
++so what landed there since is not here yet:
+ 
+ ```
+-git -C /work/HelmCharts log 65ca9dbea91d5e363817210c57004e2107ef9cf5..origin/main -- \
++git -C /work/HelmCharts log fb49c5c55cb5d782fec72d5176c20f2fd458d559..origin/main -- \
+   charts/kubecoder configs/prd/kubecoder homelab-root.crt
+ ```
+ 
+@@ -33,7 +33,8 @@ A replay keeps what the copy changed for Argo, all of which `kc project test`'s
+ - each stage file sets `global.environment` and names exactly Build-Main's seven image pins, dev on
+   the bare build number and prd on the `prd-<n>` retag of the same build (D47);
+ - `chart/values.yaml` names no tag for those seven and the chart refuses to render a stage missing
+-  one, and their five Deployment containers state no `imagePullPolicy`.
++  one, and their five Deployment containers declare `imagePullPolicy: IfNotPresent`, so Argo owns
++  the field Helm set to `Always`.
+ 
+ `architecture.yaml` at the root, the judgment layer of the `kubecoder-deploy` architecture
+ producer, is HelmCharts' `charts/kubecoder/architecture.yaml` at commit
+diff --git a/chart/templates/bot-deployment.yaml b/chart/templates/bot-deployment.yaml
+index 5d53144..c9d693b 100644
+--- a/chart/templates/bot-deployment.yaml
++++ b/chart/templates/bot-deployment.yaml
+@@ -24,6 +24,7 @@ spec:
+       containers:
+         - name: kubecoder-bot
+           image: registry:5000/kubecoder-bot{{ required "images.bot is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.bot }}
++          imagePullPolicy: IfNotPresent
+           ports:
+             - containerPort: 8080
+           env:
+diff --git a/chart/templates/controller-deployment.yaml b/chart/templates/controller-deployment.yaml
+index 0b7f4f6..74a0a83 100644
+--- a/chart/templates/controller-deployment.yaml
++++ b/chart/templates/controller-deployment.yaml
+@@ -44,6 +44,7 @@ spec:
+       containers:
+         - name: kubecoder-controller
+           image: registry:5000/kubecoder-controller{{ required "images.controller is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.controller }}
++          imagePullPolicy: IfNotPresent
+           ports:
+             - containerPort: 8080
+           env:
+@@ -171,6 +172,7 @@ spec:
+         # points HERE, not at the controller; the controller is no longer directly addressable.
+         - name: ingress
+           image: registry:5000/kubecoder-ingress{{ required "images.ingress is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.ingress }}
++          imagePullPolicy: IfNotPresent
+           ports:
+             - containerPort: 8090
+           readinessProbe:
+@@ -192,6 +194,7 @@ spec:
+         # control-plane outage. Liveness still restarts it if it wedges.
+         - name: manual
+           image: registry:5000/kubecoder-manual{{ required "images.manual is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.manual }}
++          imagePullPolicy: IfNotPresent
+           ports:
+             - containerPort: 8081
+           env:
+diff --git a/chart/templates/mcp-deployment.yaml b/chart/templates/mcp-deployment.yaml
+index 4df8f10..16db960 100644
+--- a/chart/templates/mcp-deployment.yaml
++++ b/chart/templates/mcp-deployment.yaml
+@@ -20,6 +20,7 @@ spec:
+       containers:
+         - name: kubecoder-mcp
+           image: registry:5000/kubecoder-mcp{{ required "images.mcp is not set: config/<stage>/values.yaml carries Build-Main's seven pins (D47)" .Values.images.mcp }}
++          imagePullPolicy: IfNotPresent
+           # The Streamable-HTTP MCP surface (path /mcp). Unlike the bot (outbound-only), the
+           # adapter serves inbound, so it carries a Service (mcp-service.yaml, plus the
+           # internet-reachable mcp-public-service.yaml where a stage configures one).
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 9117a98..281a502 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -576,6 +576,41 @@ controllerConfig:
+         imagePullPolicy: Always
+         resources:
+           limits: { memory: 4Gi }
++    aac-tools:
++      # Slice 024, serving the deploy repos. The one entry here whose image is not from
++      # KubeCoder's own build matrix: ArgoCDTools builds and publishes registry:5000/aac-tools,
++      # which is why the name carries neither the kube-coder- prefix nor the -toolchain suffix.
++      # It floats on `:latest`, as every entry here does that no build matrix produced — the
++      # header above names the four matrix-built entries that pin a resolved tag instead.
++      # No homeOverlays: the generator writes its helm repository list to a temporary file per
++      # run, so it neither reads nor rewrites the caller's helm configuration, and helm's
++      # repository cache lands under the controller's built-in `.cache`. The image bakes the
++      # homelab step-ca root that no default trust store carries, so https://charts.home resolves
++      # from here with no configuration in the selecting repo.
++      # 1Gi covers a `helm dependency build` plus a render plus one python pass: that is the work
++      # slice 024's handover-equality check ran green inside the 1Gi `iac` sidecar.
++      description: >-
++        The estate's architecture-as-code commands: gen-architecture for a deploy repo's
++        architecture artifact, and arch-validate for checking an artifact against the federation.
++      instructions: >-
++        The architecture-as-code toolchain, for producing and checking a deploy repo's
++        architecture artifact. `gen-architecture --stage <stage> --producer <id>` runs in the
++        repo's checkout: it renders that repo's chart the way Argo CD renders it, reads the
++        annotation layer from `architecture.yaml` at the repo root, and writes
++        `docs/architecture/<producer>.yaml`. Both flags are required — there is no default stage,
++        no way to ask for all of them, and nothing reads the branch. `arch-validate <file>`
++        submits an artifact to the federation's validation service; it is the canonical validator
++        byte for byte, so nothing has to be copied into a repo to run it from here. A repo that
++        also carries `scripts/arch-validate.py` needs that copy for its own Jenkins pipeline,
++        which runs outside this image — leave it where it is. Both commands need the network:
++        chart dependencies come from https://charts.home, and the merged dataset and the
++        validation endpoint from https://architecture.webathome.org. python3 and helm are here
++        because these two commands need them — this is not a general toolset.
++      container:
++        image: registry:5000/aac-tools:latest
++        imagePullPolicy: Always
++        resources:
++          limits: { memory: 1Gi }
+   # The kubeconfig files this deployment projects under ~/.kube (D085), in projection order.
+   # `catalogKey` is the catalog Secret key holding the file and `file` the bare name it lands as,
+   # so this list is also the set of catalog keys every env's catalog must carry. An entry without
+@@ -717,7 +752,7 @@ controllerConfig:
+   # refused admission (D140), so add an entry per node you run env pods on.
+   nodes:
+     srvk8s4:
+-      maxEnvironments: 5
++      maxEnvironments: 8
+   # When a repo has no .kubecoder/config.yaml, the controller drops a default one in (launch
+   # in the repo dir, this trust level + the default profile) so any whitelisted repo onboards
+   # without a hand-authored manifest. `github` is the trust grant for those auto-onboarded
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 1061c7e..7bb853f 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -371,8 +371,9 @@ def check_images(stage, docs):
+             f"{references[key]} (D47)",
+         )
+         check(
+-            spec.get("imagePullPolicy") != "Always",
+-            f"{stage}: {deployment}/{name} runs a pinned image but still pulls Always (R14)",
++            spec.get("imagePullPolicy") == "IfNotPresent",
++            f"{stage}: {deployment}/{name} runs a pinned image pulling "
++            f"{spec.get('imagePullPolicy')}, not a declared IfNotPresent (R14)",
+         )
+     reclaim = container(docs, "kubecoder-controller", "tunnel-reclaim") or {}
+     check(
+
+/work/KubeCoderDeploy — P2: git diff 4bb782369ccb..f6a8fba6de8f
+
+Jenkinsfile.promote | 180 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 180 insertions(+)
+
+diff --git a/Jenkinsfile.promote b/Jenkinsfile.promote
+new file mode 100644
+index 0000000..9753efb
+--- /dev/null
++++ b/Jenkinsfile.promote
+@@ -0,0 +1,180 @@
++// KubeCoder's promote job (D2): moves a validated commit on `main` to prd, which Argo CD syncs
++// from the `prd` branch (D34). Run by hand; it promotes main's tip unless `commit` names an
++// earlier commit on main.
++//
++// D47's order, each step run only once the one before it succeeded, so `prd` never names a
++// `prd-<n>` tag that does not exist:
++//   1. every image the commit's config/prd/values.yaml pins to `prd-<n>` gets that tag, retagged
++//      from Build-Main's `<n>`;
++//   2. `prd` fast-forwards to the commit, and the first run creates it (D35);
++//   3. D48's annotated `release-<m>` tag goes on the commit, `<m>` this job's build number.
++//
++// No rollback parameter and no force-move (D47): a rollback is a revert on main, promoted like
++// any other commit (D36). The job holds the estate's GitHub credential and reaches the registry
++// over plain HTTP; it holds no cluster credential and deploys nothing itself.
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++properties([
++    disableConcurrentBuilds(),
++    parameters([
++        string(name: 'commit', defaultValue: '', trim: true,
++            description: 'SHA of the commit on main to promote, full or abbreviated. Empty promotes the tip of main.')
++    ])
++])
++
++podTemplate(inheritFrom: 'jenkins-agent', containers: [
++    // crane, and git for the steps against the deploy repo.
++    containerTemplates.k8s('k8s')
++]) {
++    node(POD_LABEL) {
++        container('k8s') {
++            String checkout = "${pwd(tmp: true)}/KubeCoderDeploy"
++            String release = "release-${currentBuild.number}"
++            String sha
++            List<Map<String, String>> pins
++
++            stage('Resolving the commit') {
++                String requested = params.commit ?: ''
++                if (requested && !(requested ==~ /[0-9a-f]{7,40}/)) {
++                    error("commit must be the SHA of a commit on main, full or abbreviated; got '${requested}'")
++                }
++
++                withCredentials([usernamePassword(
++                    // The estate's shared GitHub credential, the one every pipeline reaches
++                    // GitHub with.
++                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++                    usernameVariable: 'GIT_USER',
++                    passwordVariable: 'GIT_TOKEN')]) {
++
++                    // set +x: this is the one line where the shell expands the token. Every
++                    // later git command reuses the remote the clone stores.
++                    sh """
++                        set +x
++                        set -eu
++
++                        rm -rf '${checkout}'
++                        git clone --quiet \\
++                            "https://\${GIT_USER}:\${GIT_TOKEN}@github.com/pvginkel/KubeCoderDeploy.git" '${checkout}'
++                        git -C '${checkout}' config user.name 'jenkins'
++                        git -C '${checkout}' config user.email 'jenkins@webathome.org'
++                    """
++                }
++
++                String revision = requested ?: 'origin/main'
++                sha = sh(script: "git -C '${checkout}' rev-parse --verify '${revision}^{commit}'", returnStdout: true).trim()
++
++                if (sh(script: "git -C '${checkout}' merge-base --is-ancestor '${sha}' origin/main", returnStatus: true) != 0) {
++                    error("${sha} is not on main, and prd carries only commits main does (D35)")
++                }
++
++                String current = sh(script: "git -C '${checkout}' rev-parse --quiet --verify refs/remotes/origin/prd || true", returnStdout: true).trim()
++                if (current == sha) {
++                    error("prd is already at ${sha}: nothing to promote")
++                }
++                if (current && sh(script: "git -C '${checkout}' merge-base --is-ancestor '${current}' '${sha}'", returnStatus: true) != 0) {
++                    error("prd is at ${current}, which ${sha} does not descend from: a promotion only " +
++                        "fast-forwards prd (D35), and a rollback is a revert on main, promoted (D36)")
++                }
++
++                if (sh(script: "git -C '${checkout}' ls-remote --tags origin 'refs/tags/${release}'", returnStdout: true).trim()) {
++                    error("${release} already exists on origin")
++                }
++
++                pins = prdPins(readYaml(text: sh(
++                    script: "git -C '${checkout}' show '${sha}:config/prd/values.yaml'",
++                    returnStdout: true)))
++
++                echo "Promoting ${sha} to prd as ${release}" + (current ? ", from ${current}" : '; this creates prd')
++                currentBuild.description = "${release}: ${sha.substring(0, 12)}"
++            }
++
++            stage('Retagging the images') {
++                for (int i = 0; i < pins.size(); i++) {
++                    Map<String, String> pin = pins[i]
++
++                    // An existing `prd-<n>` was retagged from `<n>` by an earlier promotion and is
++                    // left as it is. D47 caps the bare family apart from the `prd-` one, so a
++                    // rollback promoting an older commit (D36) can pin a `prd-<n>` whose `<n>` is
++                    // already reaped.
++                    sh """
++                        set -eu
++
++                        if crane --insecure digest '${pin.image}:${pin.tag}' >/dev/null 2>&1; then
++                            echo '${pin.image}:${pin.tag} exists; left as it is'
++                        else
++                            crane --insecure tag '${pin.image}:${pin.build}' '${pin.tag}'
++                        fi
++                    """
++                }
++            }
++
++            stage('Advancing prd') {
++                // No `+` and no --force: GitHub refuses the push unless it fast-forwards prd,
++                // whatever moved prd since the check above.
++                sh "git -C '${checkout}' push origin '${sha}:refs/heads/prd'"
++            }
++
++            stage('Recording the release') {
++                String references = ''
++                for (int i = 0; i < pins.size(); i++) {
++                    references += "${pins[i].image}:${pins[i].tag}\n"
++                }
++
++                withEnv(["RELEASE_MESSAGE=${release}: ${sha} promoted to prd by ${env.JOB_NAME} #${currentBuild.number}\n\n${references}"]) {
++                    sh """
++                        set -eu
++
++                        git -C '${checkout}' tag -a '${release}' -m "\$RELEASE_MESSAGE" '${sha}'
++                        git -C '${checkout}' push origin 'refs/tags/${release}'
++                    """
++                }
++            }
++        }
++    }
++}
++
++/**
++ * Build-Main's seven pins in a prd values file (D47), as the references prd deploys: the five
++ * `images.*` tag suffixes the chart appends to `registry:5000/kubecoder-<key>`, and the two whole
++ * references under `controllerConfig.images`.
++ *
++ * Every one must be a `prd-<n>` tag in registry:5000, which is also what keeps each reference
++ * safe to quote into a shell line.
++ *
++ * @param values  config/prd/values.yaml of the commit being promoted, as readYaml parses it.
++ * @return [image:, build: '<n>', tag: 'prd-<n>'] per pin.
++ */
++List<Map<String, String>> prdPins(Map values) {
++    Map suffixes = values.images instanceof Map ? values.images : [:]
++    Map controllerConfig = values.controllerConfig instanceof Map ? values.controllerConfig : [:]
++    Map wholeReferences = controllerConfig.images instanceof Map ? controllerConfig.images : [:]
++
++    List<String> paths = []
++    List<String> references = []
++    List<String> suffixed = ['controller', 'bot', 'mcp', 'ingress', 'manual']
++    for (int i = 0; i < suffixed.size(); i++) {
++        String key = suffixed[i]
++        paths << "images.${key}".toString()
++        references << (suffixes[key] == null ? null : "registry:5000/kubecoder-${key}${suffixes[key]}".toString())
++    }
++    List<String> whole = ['worker', 'vsix']
++    for (int i = 0; i < whole.size(); i++) {
++        String key = whole[i]
++        paths << "controllerConfig.images.${key}".toString()
++        references << wholeReferences[key]?.toString()
++    }
++
++    List<Map<String, String>> pins = []
++    for (int i = 0; i < references.size(); i++) {
++        String reference = references[i]
++        if (reference == null || !(reference ==~ /registry:5000\/kubecoder-[a-z]+:prd-[0-9]+/)) {
++            error("config/prd/values.yaml pins ${paths[i]} to '${reference}', not a " +
++                'registry:5000/kubecoder-<name>:prd-<n> reference (D47)')
++        }
++        int colon = reference.lastIndexOf(':')
++        String tag = reference.substring(colon + 1)
++        pins << [image: reference.substring(0, colon), build: tag.substring('prd-'.length()), tag: tag]
++    }
++    return pins
++}

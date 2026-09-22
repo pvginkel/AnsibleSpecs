@@ -1,0 +1,13 @@
+{"outcome": "signoff",
+ "summary": "The cutover runbook composes every ruled ordering constraint and covers V01–V22's runbook-side content. Its state surgery, no-destroy plan, registry entries, sync checks and prd expected diff hold against the code, the live estate and a render-vs-render comparison of both stages. Four advisory findings remain, none blocking.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "The Conventions say only the no-destroy plan touches OpenBao-held credentials, but the pre-flight dumps the stage's eight ESO Secrets to /tmp/live.json and names no keystroke owner"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "P2's hand-written release-<m> tag command omits the seven image references its own prose and the job's message require"},
+  {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "failing-test",
+   "summary": "X1 expects helm list to print nothing; Helm 4.3 prints its header row on an empty namespace"},
+  {"id": "F4", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "P3 leaves /work/KubeCoderDeploy detached at origin/prd; P6/P7's git pull --ff-only then fails"}
+ ]}

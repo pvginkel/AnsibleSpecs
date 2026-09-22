@@ -1,0 +1,6 @@
+{"outcome": "signoff",
+ "summary": "Jenkinsfile.promote meets P2's outcome and V15. It retags the promoted commit's seven prd pins, then fast-forwards prd (creating it on the first run), then pushes release-<build number>. All refusals run before the registry is touched, and it holds the GitHub credential only. One advisory: a failed release-tag push after prd moved cannot be finished by a re-run.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional",
+               "anchor": "none",
+               "summary": "After prd moves, a failed release-<m> push is refused on re-run ('nothing to promote'), so the job never writes that promotion's D48 tag"}]}

@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The five pinned containers declare IfNotPresent, tunnel-reclaim keeps Always, and the render gate fails when the field is undeclared or wrong; three mutations confirmed it. The HelmCharts replay is exact and keeps every Argo-specific difference, and the README copy point is correct. One advisory comment nit.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "chart/values.yaml:11 still says the five pinned containers 'take the default pull policy'; they now declare IfNotPresent"}]}
