@@ -4,216 +4,255 @@
       "id": "V01",
       "area": "B.4 state surgery",
       "description": "R1 — \"Name the new state key for KubeCoderDeploy's Terraform.\" The runbook names each stage's key off the hook's scheme — `argocd/KubeCoderDeploy/<stage>/terraform.tfstate` in `pvginkel/TerraformState` — and targets the move at it.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: kubecoder-cutover.md's Facts table (\"State moved to\") and the per-stage `$DST` shorthand both name `argocd/KubeCoderDeploy/<stage>/terraform.tfstate`, matching backend.py's `state_key()` exactly (basename of the clone URL + `/<stage>/terraform.tfstate`). Live: pulled `argocd/KubeCoderDeploy/dev/terraform.tfstate` through the pod's terraform-backend-git sidecar — it exists as an empty state (`serial: 0, lineage: \"\"`, 0 resources), i.e. the hook has never written it and the key is exactly what the runbook targets.",
       "evidence": [
-        "/work/ArgoCDTools/argocd-hook/presync/backend.py:52-54 — state_key() returns argocd/<repo basename>/<stage>/terraform.tfstate"
+        "/work/ArgoCDTools/argocd-hook/presync/backend.py:52-54 — state_key() returns argocd/<repo basename>/<stage>/terraform.tfstate",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:70 (Facts table) and :155 ($DST) — argocd/KubeCoderDeploy/<stage>/terraform.tfstate",
+        "Live 2026-09-22: `terraform state pull` against argocd%2FKubeCoderDeploy%2Fdev%2Fterraform.tfstate via the pod's terraform-backend-git sidecar returns {\"serial\":0,\"lineage\":\"\",\"resources\":[]} — key not yet written"
       ]
     },
     {
       "id": "V02",
       "area": "B.4 state surgery",
       "description": "R2 — \"`terraform state rm module.namespace` **before** the first sync adopts the namespace — the rm now means *handing it to Argo*, and the two tools must never both believe they own it.\" The runbook has the operator run it, per stage, in that stage's HelmCharts state, before that stage's first sync.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: \"The state surgery\" section step 2 runs `terraform state rm module.namespace` against `$W/src` (HelmCharts' state) as step 2 of 6, strictly before step 8 (dev's manual sync) in the sequence table, and the sequence's own ordering-constraints paragraph states the registry commit (which flips the stage inert for Jenkins but starts no sync) precedes the surgery, and the surgery precedes the manual sync. D3/D4/D5-D7 all sit between the surgery and D8's sync. Live: HelmCharts' dev and prd states both still list `module.namespace.kubernetes_namespace_v1.this` today (surgery not yet run, consistent with the cutover being unexecuted), so R2's rm has correctly not fired ahead of anything.",
       "evidence": [
         "/work/HelmCharts/configs/prd/kubecoder/_shared/infrastructure.tf:6 — module \"namespace\"",
-        "/work/HelmCharts/tools/deploy/deploy_cli/tf.py:59-66 — source key helm-charts/<cluster>/<chart_dir>/<stage>/<phase>.tfstate"
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:177-184 (state surgery step 2) and :101-127 (the sequence, D3 before D8)",
+        "Live 2026-09-22: `terraform state list` against helm-charts/prd/kubecoder/{dev,prd}/infra.tfstate both list exactly module.namespace.kubernetes_namespace_v1.this, module.zfs.homelab_zfs_dataset.this, module.zfs.kubernetes_persistent_volume_v1.this — unmoved"
       ]
     },
     {
       "id": "V03",
       "area": "B.4 state surgery",
       "description": "R3 — \"`state mv` the ZFS addresses to their rebuilt names.\" Per stage, `module.zfs.homelab_zfs_dataset.this` → `homelab_zfs_dataset.env_storage` and `module.zfs.kubernetes_persistent_volume_v1.this` → `kubernetes_persistent_volume_v1.env_storage`, by the ruled recipe (pull both states, local move, push the destination first and the source second, local plaintext copies deleted); `module.namespace` has no counterpart; before dev's first sync no webhook on KubeCoderDeploy points at the relay, so `github_repository_webhook.argocd[0]`'s create cannot collide.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: \"The state surgery\" steps 3-6 implement exactly this recipe (pull both, local `state mv` of the two zfs addresses only, push destination-then-source, `rm -rf $W/moves`); `terraform/storage.tf` declares the two rebuilt addresses. D4 explicitly greps GitHub's hook list and stops the cutover if a hook already points at the relay. Live: `terraform/storage.tf` declares `homelab_zfs_dataset.env_storage` and `kubernetes_persistent_volume_v1.env_storage`; `terraform/webhook.tf`'s `github_repository_webhook.argocd` is `count = var.manage_webhook ? 1 : 0`, and `config/dev/terraform.tfvars:8` sets `manage_webhook = true` while `config/prd/terraform.tfvars:8` sets `false` — matching the Facts table row. `gh api repos/pvginkel/KubeCoderDeploy/hooks` today lists only id 683107093 at the Jenkins URL — no hook at the relay, so R3's create cannot yet collide.",
       "evidence": [
         "/work/HelmCharts/terraform-modules/static-zfs-pv/main.tf:82,94 — the two source resources",
-        "/work/KubeCoderDeploy/terraform/storage.tf — homelab_zfs_dataset.env_storage, kubernetes_persistent_volume_v1.env_storage",
+        "/work/KubeCoderDeploy/terraform/storage.tf:13,23 — homelab_zfs_dataset.env_storage, kubernetes_persistent_volume_v1.env_storage",
         "/work/KubeCoderDeploy/terraform/webhook.tf — github_repository_webhook.argocd, count on manage_webhook, URL https://deploy-hooks.webathome.org/api/webhook",
-        "/work/KubeCoderDeploy/config/dev/terraform.tfvars:8 — manage_webhook = true; config/prd/terraform.tfvars:8 — false"
+        "/work/KubeCoderDeploy/config/dev/terraform.tfvars:8 — manage_webhook = true; config/prd/terraform.tfvars:8 — false",
+        "Live 2026-09-22: `gh api repos/pvginkel/KubeCoderDeploy/hooks` → only 683107093 https://jenkins.webathome.org/github-webhook/"
       ]
     },
     {
       "id": "V04",
       "area": "B.4 state surgery",
       "description": "R4 — \"Prove with a `terraform plan` showing **no destroys** before any hook runs for real.\" The runbook's plan of KubeCoderDeploy's `terraform/` against the new key, per stage, shows zero destroys and names the output expected. Per the review Q1 ruling it is one operator-typed command that loads the provider credentials through `bao-login.sh` and HelmCharts' `setup-env.sh prd` and runs the plan; the same command supplies the rest of the hook's environment that Terraform reads with no further OpenBao read, and keeps `TF_VAR_github_webhook_secret` a placeholder — Claude reads no OpenBao value. The hook image's terraform is checked not older than the one pushing the state before any push.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: \"The no-destroy plan\" section is exactly one `( . bao-login.sh && ... . setup-env.sh prd && ... )` subshell, typed for the operator, that also sets TF_DATA_DIR, TF_VAR_namespace, TF_VAR_zfs_pools (a literal, not read from OpenBao), TF_VAR_github_webhook_secret=plan-placeholder and GITHUB_TOKEN=$GH_TOKEN; Claude never runs it and never reads a secret in it. B3 runs the terraform-version check before any push. Live: TF_VAR_zfs_pools's literal in the runbook is byte-identical to the hook's own value; GH_TOKEN is set in this pod (as the runbook assumes); B3's version check reproduced live (below, V-B3-equivalent) shows the hook is still older, so R4/B3 would correctly stop the cutover today, exactly as the runbook says.",
       "evidence": [
         "/work/ArgoCDTools/argocd-hook/presync/terraform.py:60-78 — the hook runs init then apply -auto-approve, no plan of its own",
         "/work/HomelabTerraformProvider/internal/zfsdataset/resource.go:148-155 — homelab_zfs_dataset refuses to configure without HOMELAB_IAC_PROVISIONER_TOKEN, which this pod's iac sidecar lacks",
-        "/work/HelmCharts/scripts/setup-env.sh:53-59,155 — exports the OpenBao-held HOMELAB_* credentials (the provisioner token among them) and KUBE_CONFIG_PATH",
-        "/work/ArgoCDTools/argocd-hook/presync/terraform.py:56-57 — the hook exports TF_VAR_namespace",
-        "/work/ArgoCDDeploy/config/prd/values.yaml:269 — the hook's TF_VAR_zfs_pools, a non-secret literal setup-env.sh does not export",
-        "/work/KubeCoderDeploy/terraform/providers.tf:30-33 — the github provider authenticates with GITHUB_TOKEN, which neither the iac sidecar nor setup-env.sh supplies"
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:231-269 (the no-destroy plan) and :428-451 (B3)",
+        "/work/ArgoCDDeploy/config/prd/values.yaml:269 — TF_VAR_zfs_pools '{\"zpool2\":\"srvk8s1\",\"zpool3\":\"srvk8s2\",\"zpool4\":\"srvk8s3\",\"zpool5\":\"srvk8s4\"}', identical to the runbook's literal",
+        "Live 2026-09-22: `cexec iac terraform version` → v1.16.3; a throwaway pod on `registry:5000/argocd-hook:1` prints `Terraform v1.15.8` — the hook is still older, B3 would still stop the cutover as documented"
       ]
     },
     {
       "id": "V05",
       "area": "B.5 cutover",
       "description": "R5 — \"Land KubeCoderDeploy; `helm template` renders clean with the library dependency.\" KubeCoderDeploy's render gate is green on what P1 and P2 leave, and the runbook replays HelmCharts' chart drift again just before each stage's diff review, gate green.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: \"The chart replay check\" section ends with `cd /work/KubeCoderDeploy && git pull --ff-only && kc project test` and D5/P7 both invoke it before their diff review. Established GREEN: the dispatch's sweep ran KubeCoderDeploy's root lint/build/test at a340167 (current HEAD, pushed this pass) all GREEN, which is exactly `kc project test`'s render gate (tests/render-chart.py) on what P1+P2 left.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:271-299 (the chart replay check, ends `kc project test`)",
+        "Dispatch sweep: KubeCoderDeploy@a34016708b8c root lint/build/test GREEN — sweeps/r2/KubeCoderDeploy_root_test.log"
+      ]
     },
     {
       "id": "V06",
       "area": "B.5 cutover",
       "description": "R6 — \"One registry commit: `reconciler: argo-cd`, `deployed: true`, `autoSync: false`, plus `repo` and `targetRevision`; no `chart:` key is needed (A.3). Delete the stage's `values.yaml` (+ `_shared/` once both stages are over). The Jenkins pipeline fires on the path change and now *skips* the release (A.3) — Jenkins and Argo are never both live on it.\" `repo` is KubeCoderDeploy's clone URL, `targetRevision` `main` for dev and `prd` for prd. The runbook spells each stage's entry out in full, and `_shared/`'s deletion comes only after prd's state surgery, with the orphan audit's expected listing noted at that step.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: D2 and P4 each write the full five-line `release.yaml` heredoc (reconciler/deployed/autoSync/repo/targetRevision, dev→main, prd→prd) and `git rm` the stage's `values.yaml`; X2 deletes `_shared/` only after both stages' surgery, citing the orphan audit's expected listing. Independently read HelmCharts' `deploy_cli/release.py:161-180`: for `reconciler != \"jenkins\"`, `ours` is False, so `chart_name` is forced to `None` and neither the chart-existence check nor `_UPSTREAM_KEYS` ever fires — confirming `chart:` is genuinely irrelevant for an argo-cd entry, not just conventionally omitted. `main.py:133-139` refuses Jenkins-only verbs for a non-jenkins reconciler, i.e. `deploy template`/`deploy plan` skip it — the mechanism R7 and D2's checks rely on. Live: `configs/prd/kubecoder/{dev,prd}/` still hold only `values.yaml` today (no `release.yaml` yet, `_shared/` still present) — consistent with the cutover being unexecuted.",
       "evidence": [
-        "/work/HelmCharts/tools/deploy/deploy_cli/main.py:133 — Jenkins-only verbs refuse a non-jenkins reconciler",
-        "/work/HelmCharts/configs/prd/kubecoder/ — dev/ and prd/ hold only values.yaml; no release.yaml exists yet"
+        "/work/HelmCharts/tools/deploy/deploy_cli/main.py:133-139 — Jenkins-only verbs refuse a non-jenkins reconciler",
+        "/work/HelmCharts/tools/deploy/deploy_cli/release.py:161-180 — reconciler != jenkins forces chart_name = None, skipping the chart-existence/_UPSTREAM_KEYS checks entirely",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:526-542 (D2), :778-793 (P4), :925-937 (X2)",
+        "Live 2026-09-22: configs/prd/kubecoder/{dev,prd,_shared} hold only values.yaml + infrastructure.tf; no release.yaml"
       ]
     },
     {
       "id": "V07",
       "area": "B.5 cutover",
       "description": "R7 — \"At the **dev** cutover, expect that same commit to trigger a Jenkins redeploy of the still-Jenkins-owned **prd** stage — `changed()` matches `configs/prd/kubecoder/.*`, not per stage (review R5). Harmless while the shared chart is untouched; know it is coming.\" The runbook says so at dev's registry commit.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: D2's \"The push does three things\" list states this verbatim, including \"prd's release is upgraded in place, and its control-plane pods may roll\" and \"Env pods are created by the controller and are not part of the release\" — a correct qualification since the shared chart itself is untouched by the registry-only commit.",
       "evidence": [
-        "/work/HelmCharts/Jenkinsfile:198-204 — changed() matches configs/prd/${chart_dir}/.*"
+        "/work/HelmCharts/Jenkinsfile:198-204 — changed() matches configs/prd/${chart_dir}/.*",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:544-553 (D2's push effects, R7)"
       ]
     },
     {
       "id": "V08",
       "area": "B.5 cutover",
       "description": "R8 — \"Review the Application's diff in the UI. Expected: the table closing the runbook's \"Previewing a migrating app's diff before its cutover\" — **anything else stops the cutover**.\" The table is re-derived if the chart moved: the pre-flight (argocd.md's \"What a cutover does not change\") runs after the chart re-sync and before the review; argocd.md's table and KubeCoder residue note match the chart as P1 leaves it (the five containers' `imagePullPolicy` now an expected change); the runbook says how prd's expected set is obtained, since the table was derived for dev.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Read argocd.md's table directly (lines 504-524): it lists the five containers' `imagePullPolicy` Always→IfNotPresent as an expected diff row, and closes with \"prd's set has the same rows... one more object: Service/kubecoder-mcp-public\". \"What a cutover does not change\" (lines 526-589) now explicitly states \"The five pinned containers' imagePullPolicy... is not residue\" and the residue note lists exactly two items (stale bot/mcp deployment timestamp; Helm labels/annotations) — matching the S11 ruling's post-P1 correction. kubecoder-cutover.md's D5-D7/P7-P9 run the replay check and pre-flight before every diff review, and its diff-review section explicitly derives prd's set from dev's (kubecoder-prd for kubecoder-dev, prd-latest for dev-latest, + the public MCP Service).",
       "evidence": [
-        "/work/KubeCoderDeploy/chart/templates/mcp-public-service.yaml:1 — rendered only where service.mcpPublic.serverName is set (prd)"
+        "/work/Ansible/docs/runbooks/argocd.md:504-524 (the diff table, imagePullPolicy row present) and :569-578 (residue note, imagePullPolicy explicitly not residue)",
+        "/work/KubeCoderDeploy/chart/templates/mcp-public-service.yaml:1 — rendered only where service.mcpPublic.serverName is set (prd)",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:341-361 (the diff review, derives prd's set from dev's)"
       ]
     },
     {
       "id": "V09",
       "area": "B.5 cutover",
       "description": "R9 — \"Sync once, manually, at the chosen moment. Verify Synced/Healthy, controller `1/1 Running`, ConfigMap correct, env pods back.\" The moment is the operator's; prd's sync and its checks can be done by the operator alone, with a named point to resume from.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: \"The sync checks\" (shared by D8 and P10) run all four: sync/health status, the hook Job log, `deploy,pods` at `1/1`/`4/4`, the pinned-image imagePullPolicy line, and every env pod that was listed pre-sync back Running. P10 is written for the operator alone (\"Note the resume point: resume at P10 step 4\"), matching the runbook's own Conventions note that a prd sync ends this session.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:363-395 (the sync checks) and :818-843 (P10, named resume point)"
+      ]
     },
     {
       "id": "V10",
       "area": "B.5 cutover",
       "description": "R10 — \"Flip `autoSync: true`.\" A registry commit per stage, after that stage's checks pass.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: D9 (`sed -i 's/^autoSync: false$/autoSync: true/'`) and P11 (\"Repeat D9 for prd's release.yaml\") both run only after their stage's D8/P10 checks pass, and both verify `{\"prune\":true,\"selfHeal\":false}` on the Application afterwards.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:636-656 (D9) and :844-847 (P11)"
+      ]
     },
     {
       "id": "V11",
       "area": "B.5 cutover",
       "description": "R11 — \"Exercise the loop once on dev: image build → tags commit → webhook → auto-sync.\" The runbook gives the steps and what each link must show.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: D10 names the four links (image build, tags commit, webhook, auto-sync) each with its own check command and expected output (green Build-Main + all eight tags; the pin commit message on origin/main; the relay/argocd-server log lines; the synced revision/phase/automated flag).",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:658-681 (D10, four links each with a check)"
+      ]
     },
     {
       "id": "V12",
       "area": "B.5 cutover",
       "description": "R12 — \"prd additionally: promotion exercised once (`prd` advanced to the validated `main` SHA), and a rollback rehearsed (revert on `main`, promote — D36).\" The rehearsal reverts a real pin commit and rolls forward, scheduled with the promotion exercise.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: P13 runs exactly three prd syncs in one operator-scheduled window — promotion, rollback (a real `git revert --no-edit HEAD` of the pin commit, then `Promote-PRD`), roll-forward (revert the revert, promote again, with the retag correctly skipped: \"exists; left as it is\") — matching D36 and D47's caps.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:871-904 (P13, promotion/rollback/roll-forward)"
+      ]
     },
     {
       "id": "V13",
       "area": "B.5 post-cutover",
       "description": "R13 — \"Afterwards, unhurried: delete the orphaned `sh.helm.release.v1.kubecoder-<stage>.*` Secrets, `charts/kubecoder/` in HelmCharts, and the D145 overrides (B.2).\" The runbook's post-cutover section covers both stages' Secrets and `charts/kubecoder/`, and specifies the KubeCoder task filed for after prd's cutover: the controller's worker and vsix ImageVolume `pullPolicy: \"Always\"` lines removed, and D145 updated from what is then live (partial retirement; the stale checklist corrected).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: X1 deletes the Helm-release Secrets (label selector `owner=helm,name=kubecoder-<stage>`) and re-checks with `helm list` (corrected by the 2b873dc consult commit to expect the header row, not nothing — a real helm behaviour, confirmed by inspection). X2 removes `charts/kubecoder` and `_shared/` after both stages' surgery, with the orphan-audit expectation stated inline. X3 specifies the KubeCoder task in full: the exact two `podcomposer.py` lines, the D145 partial-retirement caveat (worker/vsix only; dev container/services/toolchains/samba/kaniko/localHome stay Always), and the corrected checklist items (`_image_builder_sidecar` not `_busybox_share_init`; vsix's own ImageVolume pullPolicy). Live: the two cited line numbers are still exactly 1718 and 1725 in podcomposer.py today.",
       "evidence": [
-        "/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725 — worker and vsix ImageVolume pullPolicy: Always"
+        "/work/KubeCoder/controller/src/kubecoder_controller/podcomposer.py:1718,1725 — worker and vsix ImageVolume pullPolicy: Always (line numbers confirmed live 2026-09-22)",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:906-973 (X1-X3)"
       ]
     },
     {
       "id": "V14",
       "area": "CI",
       "description": "R14 — \"`Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main` with both stage files — dev's pins at `<n>`, prd's at `prd-<n>`.\" and \"`Deploy-PRD` is **deleted at the prd cutover** (D35), not before; the old path stays alive until each stage cuts over.\" — `Build-Main`'s rewrite at dev's cutover, `Deploy-PRD`'s replacement at prd's. The runbook specifies what `Build-Main` must do after each edit: push `:<n>`/`:latest` for all eight images and, between the two cutovers only, `:dev-<n>` as well; call `cicd.writeVersionPins(repo:, pins:, message:)` once per build with `<n>` for `config/dev/values.yaml` and `prd-<n>` for `config/prd/values.yaml` (the five `images.*` pins with their leading colon); declare `disableConcurrentBuilds()`; run the call in a container with `git`; deploy nothing. `Deploy-PRD` is deleted, and the `:dev-<n>` push stopped, only after the promote job has retagged.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: D1 specifies all five points verbatim, including the literal `cicd.writeVersionPins` call block with the leading colons on the five suffixed pins and whole references for worker/vsix, `properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])` (correctly a full `properties` replacement, not a bare `disableConcurrentBuilds()`, so the push trigger isn't dropped), and \"Deploys nothing\" (the `Deploy Helm charts` stage removed). P12 deletes `Deploy-PRD` and stops the `dev-<n>` tag only after P2's promote-job retag. The plan.md \"Record\" section's N1 correction — `dev-<n>` is a separate `crane tag` step because kaniko2 takes at most two destinations — is carried through verbatim in D1 point 3. Live: `KubeCoder/Build-Main` (#524) and `KubeCoder/Deploy-PRD` (#37) are both still on their pre-cutover form today — confirms no run-loop phase touched `../KubeCoder`, as scoped out.",
       "evidence": [
         "/work/KubeCoder/Jenkinsfile:218-222 — first of eight helmCharts.kaniko call sites with the dev- literal",
         "/work/JenkinsPipelineUtils/vars/cicd.groovy:23-30 — git on PATH, disableConcurrentBuilds(), values written verbatim",
-        "/work/KubeCoderDeploy/chart/templates/controller-deployment.yaml:46 — images.controller concatenated onto registry:5000/kubecoder-controller"
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:455-525 (D1) and :849-869 (P12)",
+        "Live 2026-09-22: Jenkins KubeCoder/Build-Main last build #524 SUCCESS (pre-rewrite form), KubeCoder/Deploy-PRD last build #37 SUCCESS — both untouched by this slice, as scoped"
       ]
     },
     {
       "id": "V15",
       "area": "Promote job",
       "description": "KubeCoderDeploy carries a hand-triggered promote job (D2) that retags the seven images the promoted commit's `config/prd/values.yaml` names to their `prd-<n>` tags, then fast-forwards `prd` to that commit (creating `prd` on its first run), then writes and pushes D48's annotated `release-<m>` tag, `<m>` its own build number; it promotes `main`'s tip by default, refuses anything but a fast-forward, carries no rollback parameter, stops before moving `prd` if any retag fails, and holds registry and git credentials only.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Read `Jenkinsfile.promote` in full: four stages run strictly in order (Resolving the commit → Retagging the images → Advancing prd → Recording the release), each `sh` block under `set -eu` so a failure in retagging halts before the `git push origin sha:refs/heads/prd` in the next stage; the push has no `+`/`--force`, so GitHub itself refuses a non-fast-forward; `prdPins()` reads the seven references from `git show <sha>:config/prd/values.yaml` and `error()`s on anything not matching `registry:5000/kubecoder-<name>:prd-<n>`; the only credential is `withCredentials([usernamePassword(credentialsId: '5f6fbd66-...')])`, no kubeconfig/kubectl/helmDeploy anywhere in the file; no `commit`-side rollback/force parameter exists. Independently ran the file through Jenkins' declarative linter (same command the runbook and P2 both use): clean parse (\"did not contain the 'pipeline' step\").",
       "evidence": [
         "/work/JenkinsPipelineUtils/vars/cicd.groovy:69 — the estate's shared GitHub credential",
         "/work/DockerImages/k8s/Dockerfile:5 — crane in the shared k8s agent image",
-        "/work/KubeCoderDeploy/config/prd/values.yaml — five images.* suffixes :prd-523, two controllerConfig.images whole references"
+        "/work/KubeCoderDeploy/config/prd/values.yaml — five images.* suffixes :prd-523, two controllerConfig.images whole references",
+        "/work/KubeCoderDeploy/Jenkinsfile.promote — read in full 2026-09-22; four ordered stages, no cluster credential, no force-move",
+        "Live 2026-09-22: POST /pipeline-model-converter/validate against Jenkinsfile.promote → \"did not contain the 'pipeline' step\" (clean parse)"
       ]
     },
     {
       "id": "V16",
       "area": "Chart",
       "description": "The five pinned containers (controller, ingress, manual, bot, mcp) declare `imagePullPolicy: IfNotPresent` in both stages' renders, and KubeCoderDeploy's render gate fails a render that does not declare it; `tunnel-reclaim` keeps `Always`.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Read commit 4bb7823 (P1) in full: `bot-deployment.yaml`, `mcp-deployment.yaml`, and `controller-deployment.yaml` (controller, ingress, manual — three containers in one Deployment template) each gained a bare `imagePullPolicy: IfNotPresent` line beside the pinned `image:`; `tests/render-chart.py`'s `check_images()` was changed from `spec.get(\"imagePullPolicy\") != \"Always\"` (passes on an undeclared field too) to `spec.get(\"imagePullPolicy\") == \"IfNotPresent\"` (fails an undeclared field). `tunnel-reclaim`'s own check (unchanged in the diff) still asserts `Always` separately. Established GREEN: the dispatch's sweep confirms KubeCoderDeploy's root test (which runs this gate) is green at the current HEAD.",
       "evidence": [
-        "/work/KubeCoderDeploy/tests/render-chart.py:374 — today's check is only != \"Always\""
+        "/work/KubeCoderDeploy/tests/render-chart.py:374 — now spec.get(\"imagePullPolicy\") == \"IfNotPresent\" (was != \"Always\")",
+        "Commit 4bb7823 diff, read in full: bot-deployment.yaml, mcp-deployment.yaml, controller-deployment.yaml (x3) each add imagePullPolicy: IfNotPresent",
+        "Dispatch sweep: KubeCoderDeploy@a34016708b8c root test GREEN"
       ]
     },
     {
       "id": "V17",
       "area": "Chart",
       "description": "KubeCoderDeploy carries every change HelmCharts landed under `charts/kubecoder/` and `configs/prd/kubecoder/` since the recorded copy commit, keeps every Argo-specific difference its README lists, and records the new copy point.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Read commit 4bb7823's `chart/values.yaml` and README diffs directly: the replay is `git diff 65ca9db origin/main -- charts/kubecoder/values.yaml` applied with no conflicts, adding the aac-tools toolchain entry and raising srvk8s4's maxEnvironments to 8 — a strict superset, nothing dropped. The README's copy-point commit was moved from `65ca9db` to `fb49c5c` in the same commit, and its bullet list was updated to describe the now-declared `imagePullPolicy`. `configs/prd/kubecoder/` and `homelab-root.crt` were untouched since `65ca9db` per the same record, so no replay was owed there.",
+      "evidence": [
+        "Commit 4bb7823 diff, read in full: README.md copy point 65ca9db→fb49c5c; chart/values.yaml +37/-1 (aac-tools entry, maxEnvironments 5→8)"
+      ]
     },
     {
       "id": "V18",
       "area": "Ordering",
       "description": "The runbook states one sequence in which: the owed Argo self-sync is confirmed before dev's first sync; the rewritten `Build-Main` runs before dev's registry commit, so the first dev sync names a build that exists; per stage the registry commit precedes the state surgery; prd's registry commit waits on `prd` born (the promote job's first run) → KubeCoderDeploy's architecture producer green on it → its `pipeline-producers.yaml` registration.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: \"The sequence\" (numbered 1-22) and its \"rests on these constraints\" paragraph state all four orderings explicitly, matching plan.md's own ordering-constraints list verbatim. B2 (Argo self-sync) sits before D1; D1 before D2; D2 before D3 (per-stage, registry before surgery); P2→P3→P4 is the prd chain (prd born → producer green → registered → registry commit). Live-corroborated: B2's premises still hold today (Argo's own Application Synced/Healthy, the webhook-secret key present, the ClusterRole narrowed to exactly [\"persistentvolumes\"]/[\"secrets\"]), and AaC/KubeCoderDeploy's build #1 fails today exactly as the ordering predicts — `fatal: couldn't find remote ref refs/heads/prd` — because P3 (prd born) has not run yet.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:101-146 (the sequence and its ordering constraints)",
+        "Live 2026-09-22: kubectl get application argocd-prd → Synced Healthy; the argocd-hook-credentials Secret carries TF_VAR_github_webhook_secret; clusterrole/tf-presync's rules are exactly [\"persistentvolumes\"] and [\"secrets\"]",
+        "Live 2026-09-22: AaC/KubeCoderDeploy build #1 (triggered by this session's push) FAILURE — \"fatal: couldn't find remote ref refs/heads/prd\", exactly the expected pre-P2/P3 state"
+      ]
     },
     {
       "id": "V19",
       "area": "Sequencing",
       "description": "\"Dev stage end to end first. **Let it sit.** Then prd.\"",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Static: the runbook's top-level structure is literally `## Before either stage` → `## Dev` (D1-D10) → `## Let it sit` (its own section, undetermined length, \"Nothing sets the length\") → `## Prd` (P1-P13) → `## After both stages, unhurried` (X1-X3) → `## Exit`.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md — section headers at :396 (Before either stage), :453 (Dev), :683 (Let it sit), :689 (Prd), :906 (After both stages), :975 (Exit)"
+      ]
     },
     {
       "id": "V20",
       "area": "Operator boundary",
       "description": "Every `terraform state rm`, `state mv`, `terraform plan`, `helm` invocation, Argo sync, registry commit and Jenkins job change in the runbook is the operator's keystroke or is pushed only on the operator's confirmation. Claude reads no OpenBao secret value at any step: where a step needs one — R4's plan loading its provider credentials (review Q1 ruling) — it is loaded inside the operator's own command, and the webhook secret stays a placeholder.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Read every step of the runbook: every `git push`/`terraform state push`/`terraform apply` (via the hook)/UI *Sync*/*Build Now*/Jenkins job-creation step is phrased as the operator's action (\"Push on confirmation\", \"in the UI\", \"typed by the operator\"), consistent with the Conventions section's opening rule. The one step that needs an OpenBao credential — the no-destroy plan — is a single subshell the operator types themselves; Claude's own role in this test phase mirrors that discipline: no `bao kv get` or equivalent was run at any point in this pass, and the webhook secret used throughout is the documented placeholder `plan-placeholder`.",
       "evidence": [
-        "/work/Ansible/docs/live-infra-access.md:44-52 — the documented route for a Terraform plan needing OpenBao-held provider credentials: bao-login.sh and setup-env.sh loaded in the plan's own command"
+        "/work/Ansible/docs/live-infra-access.md:44-52 — the documented route for a Terraform plan needing OpenBao-held provider credentials: bao-login.sh and setup-env.sh loaded in the plan's own command",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:16-59 (Conventions: \"the operator's keystroke\", \"Claude reads no OpenBao value\")",
+        "This test-phase pass read no OpenBao value; only `bao-login.sh` was sourced for a `>/dev/null` no-op check, never a `bao kv get`"
       ]
     },
     {
       "id": "V21",
       "area": "Runbook form",
       "description": "The runbook is its own file in `/work/Ansible/docs/runbooks/`, covers both stages, points into `argocd.md` for the diff table, the pre-flight and the architecture-producer steps rather than repeating them, and every stop condition names the state the stage is left in and the way back.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Confirmed the file's location and structure directly: `docs/runbooks/kubecoder-cutover.md`, a new file (P1 diff shows no prior version); its per-stage procedures are written once over `$STAGE` and reused by both Dev and Prd sections; it links `argocd.md#previewing-a-migrating-apps-diff-before-its-cutover`, `#what-a-cutover-does-not-change` and `#giving-an-app-its-own-architecture-producer` rather than repeating their content. Every numbered step's \"Stops\" subsection (checked across D1-D10, P2, P3, the state surgery, the no-destroy plan, the pre-flight, the diff review, the sync checks) names the state left behind and cites one of WB-1/WB-2/WB-3 or states explicitly that no way back is needed.",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md — full read 2026-09-22, both stages, links into argocd.md at :304,343,351,753; \"Ways back\" section at :1019-1111"
+      ]
     },
     {
       "id": "V22",
       "area": "Exit",
       "description": "\"**Exit:** both stages on Argo; a full build → dev → promote → prd cycle and one rollback done through git alone; Jenkins holds no cluster credential for KubeCoder.\" Owed to the operator; the runbook closes with the check that proves each part, the last read as: no Jenkins job deploys KubeCoder (`Build-Main` calls no `cicd.helmDeploy()`, `Deploy-PRD` is gone, HelmCharts refuses both stages, the promote job holds no cluster credential).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "verified",
+      "rationale": "Static: the \"Exit\" section's three numbered checks map exactly onto the three exit-criterion clauses: (1) both Applications Synced/Healthy at the right revision with autoprune true; (2) the `release-*` tags and the prd Application's `.status.history` entries prove the cycle+rollback through git; (3) `grep -c helmDeploy` = 0 and no `Jenkinsfile.deploy-prd`, only `Build-Main`+`Promote-PRD` remain in the KubeCoder folder, both stages refused by HelmCharts' deploy CLI, and the promote job's Jenkinsfile greps clean for `credentialsId|helmDeploy|kubectl|kubeconfig` (only the GitHub credential). This matches grounding's own reading of the criterion (`cicd.groovy:1-3`: `helmDeploy()` is the shared cluster-credentialed path).",
       "evidence": [
-        "/work/JenkinsPipelineUtils/vars/cicd.groovy:1-3 — helmDeploy() builds IaC/HelmCharts, the shared deploy path"
+        "/work/JenkinsPipelineUtils/vars/cicd.groovy:1-3 — helmDeploy() builds IaC/HelmCharts, the shared deploy path",
+        "/work/Ansible/docs/runbooks/kubecoder-cutover.md:975-1017 (Exit, three checks)",
+        "Independently confirmed today: /work/KubeCoderDeploy/Jenkinsfile.promote greps clean for credentialsId (only 5f6fbd66-...) and has no kubectl/kubeconfig/helmDeploy occurrence"
       ]
     }
   ]

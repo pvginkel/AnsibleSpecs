@@ -53,6 +53,19 @@ helmCharts.kaniko2 accepts only one destination, or two (latest with <n>, or <pr
 **Provenance:** read | code-writer, P3, r1, JenkinsPipelineUtils vars/helmCharts.groovy resolveTrackingTag; Build-Main config.xml
 **Disposition:**
 
+### N2 — Test phase r1: pushed both repos under the devlock hold and re-confirmed every live premise the runbook rests on · nit
+
+Pushed Ansible (36e3235..2b873dc) and KubeCoderDeploy (a8d3e4f..a340167) to origin/main, pre-authorized under the driver's devlock hold. IaC/Build-Main #190 (iac-on-push) SUCCESS for both pushed Ansible commits, terraform plan ending 'No changes. Your infrastructure matches the configuration.' — no destroys, protected-VM check implicitly clean. Jenkins' own auto-registered push trigger also fired AaC/KubeCoderDeploy build #1: FAILURE on 'fatal: couldn't find remote ref refs/heads/prd' — exactly the expected pre-P2/P3 state (the prd branch is not born until the promote job's first run), not a slice defect; matches the grounding's own note that this job 'fails on the missing prd branch'.
+
+Re-confirmed live, today, every factual premise the runbook and verification.json cite: B2's Argo self-sync (argocd-prd Application Synced/Healthy, TF_VAR_github_webhook_secret present on the hook's credentials Secret, clusterrole/tf-presync narrowed to exactly ["persistentvolumes"]/["secrets"]); B3's hook/sidecar Terraform mismatch (argocd-hook:1 still v1.15.8 inside a throwaway pod, iac sidecar v1.16.3 — the runbook's stop would still fire exactly as documented); KubeCoderDeploy's one GitHub webhook is still only Jenkins' (683107093), none at the relay; HelmCharts' dev/prd Terraform states are both still exactly the three pre-surgery resources (module.namespace + the two zfs addresses), unmoved; KubeCoderDeploy's argocd/KubeCoderDeploy/dev/terraform.tfstate key is still an empty state (serial 0) — the hook has never applied; no kubecoder-dev or kubecoder-prd Application exists yet; configs/prd/kubecoder/{dev,prd}/ still hold only values.yaml, no release.yaml. All consistent with the cutover being entirely unexecuted, as this slice scopes it — 'Not in scope: Executing the cutover.'
+
+All 22 verification.json items settled 'verified' on this pass — every item's own wording is a static claim about what the runbook/chart/promote job says or does (this slice's deliverable is the runbook itself, not a live cutover), each independently re-derived from the diff and cross-checked live where the runbook cites a live fact (state contents, webhook lists, Jenkins job state, the HelmCharts deploy_cli's reconciler != jenkins short-circuit that makes R6's 'no chart: key needed' literally true). No new finding surfaced this pass beyond what B1-B4/Q1/S1-S9/A1/N1 already record.
+
+**Consequence:** none — a record of this pass's push and live corroboration
+
+**Provenance:** witnessed, test phase, round 1
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -68,6 +81,35 @@ tools/chart_tools/audit_prd_orphans.py lists live ZFS with 'zfs list -r zpool2' 
 **Consequence:** The hand-run orphan audit is blind to every dataset outside zpool2 (KubeCoder's included) and reports a phantom desired dataset 'prd'.
 
 **Provenance:** witnessed | code-writer, P3, r1, desired_state() simulation
+**Disposition:**
+
+### B2 — Ansible docs/runbooks/kubecoder-cutover.md: the Conventions say only the no-destroy plan touches OpenBao-held credentials, but the pre-flight dumps the stage's eight ESO Secrets to /tmp/live.json and names no keystroke owner · minor
+
+kubecoder-cutover.md:23-25 says 'Claude reads no OpenBao value. Only the no-destroy plan needs OpenBao-held credentials.' The pre-flight it calls (:301-322) runs argocd.md:554-556, kubectl get ...,secret,... -o json > /tmp/live.json. That writes the stage's ESO-materialised Secrets (kubecoder-github-token, kubecoder-bot-token, the step-ca provisioner password and five more) in plaintext into the dev container. Line 321 acknowledges the plaintext, but the step never says whose keystroke it is, and under the runbook's Conventions a read falls to the accompanying session. The values land in a file, not the transcript.
+
+consult 1, 2026-09-22 — This bears on V20 (Claude reads no OpenBao value at any step). The runbook meets V20 everywhere else; the pre-flight is the one step where it holds only if the operator types the live.json dump, or the dump drops the Secrets' .data before it reaches disk. Left for the operator's ruling rather than a phase: the values reach a file, not a transcript, and the fix is one sentence or one filter in kubecoder-cutover.md's pre-flight, or in argocd.md's generic pre-flight that it calls.
+
+**Consequence:** A session that trusts the Conventions line runs a command that returns OpenBao-sourced credentials without asking for the per-path permission the house rule requires.
+
+**Provenance:** read | code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
+**Disposition:**
+
+### ~~B3 — Ansible docs/runbooks/kubecoder-cutover.md X1: 'helm list must print nothing', but Helm 4.3 prints its header row on a namespace with no releases · nit~~ — resolved by consult 1 (Ansible 2b873dc): X1 now expects only Helm's header row from helm list; kc project lint re-run green; struck by consult 1
+
+kubecoder-cutover.md:919,923. Running 'cexec iac helm list -n development' (helm v4.3.0, no releases in the namespace) printed exactly one line, the NAME/NAMESPACE/REVISION/... header.
+
+**Consequence:** At X1 the operator sees a header line where the runbook promised no output.
+
+**Provenance:** witnessed | code-reviewer, P3, r1, phases/P3/code_review_r1.md F3
+**Disposition:**
+
+### B4 — Ansible docs/runbooks/kubecoder-cutover.md P3: the equality check leaves /work/KubeCoderDeploy detached at origin/prd, and P6/P7's 'git pull --ff-only' then fails · nit
+
+kubecoder-cutover.md:757-758 has the operator check /work/KubeCoderDeploy out at origin/prd's commit for the handover equality check, and no step returns it to main. The no-destroy plan requires the working tree to be at origin/main via 'git -C /work/KubeCoderDeploy pull --ff-only' (:248), and the replay check runs 'git pull --ff-only' (:298). Whenever main has moved past prd, both fail on the detached HEAD.
+
+**Consequence:** In the middle of prd's surgery and plan the operator hits 'You are not currently on a branch', and the runbook does not say what to do.
+
+**Provenance:** read | code-reviewer, P3, r1, phases/P3/code_review_r1.md F4
 **Disposition:**
 
 ## Open questions and rulings
@@ -121,7 +163,7 @@ live-infra-access.md:44-52 gives the route for planning a HelmCharts release: ba
 **Provenance:** read, plan-writer, planning, r2, plan.md P3
 **Disposition:**
 
-### S4 — KubeCoderDeploy chart/values.yaml:11 still says the five pinned containers 'take the default pull policy'; P1 made them declare IfNotPresent · nit
+### ~~S4 — KubeCoderDeploy chart/values.yaml:11 still says the five pinned containers 'take the default pull policy'; P1 made them declare IfNotPresent · nit~~ — resolved by consult 1 (KubeCoderDeploy a340167): chart/values.yaml's images comment now says the five containers declare imagePullPolicy IfNotPresent; kc project lint and test re-run green; struck by consult 1
 
 The images: block comment in KubeCoderDeploy's chart/values.yaml was not updated when P1 added an explicit imagePullPolicy: IfNotPresent to the five pinned containers. The README's parallel sentence was updated. The value it implies is still right; what it gets wrong is that the containers now declare the field rather than taking a default.
 
@@ -134,6 +176,8 @@ The images: block comment in KubeCoderDeploy's chart/values.yaml was not updated
 
 The root project's description says 'Its one pipeline, Jenkinsfile.architecture … There is no deploy pipeline'. Since P2 (f6a8fba) the repo also carries Jenkinsfile.promote, the hand-run promote job (D2). Promotion deploys nothing itself, so 'no deploy pipeline' still holds; 'one pipeline' does not. The doc phase updates the README from the diff. project.yaml is kc metadata, and a doc pass can miss it.
 
+consult 1, 2026-09-22 — Re-read: README.md carries no false claim. It names Jenkinsfile.architecture as the architecture producer, not as the repo's only pipeline; it just does not mention Jenkinsfile.promote. The false sentence, 'Its one pipeline, Jenkinsfile.architecture', is only in .kubecoder/project.yaml:9-10, which this slice's diff does not touch.
+
 **Consequence:** kc project info tells an agent the repo has one pipeline, so the promote job goes unmentioned until someone reads the tree.
 
 **Provenance:** read, code-writer, P2, r1, /work/KubeCoderDeploy/.kubecoder/project.yaml
@@ -142,6 +186,8 @@ The root project's description says 'Its one pipeline, Jenkinsfile.architecture 
 ### S6 — KubeCoderDeploy Jenkinsfile.promote: a promotion whose release-<m> push fails after prd moved cannot be finished by a re-run · minor
 
 If 'Recording the release' fails after 'Advancing prd' succeeded (Jenkinsfile.promote:115, then 128-129), the re-run refuses at :72-74 with 'prd is already at <sha>: nothing to promote'. D48's annotated tag for that promotion is then never written by the job. Every other partial failure converges on a re-run. Possible remedies: the P3 runbook names the manual recovery (git tag -a release-<m> on the promoted sha, then push), or the job treats 'prd already at sha' with no release tag on the sha as 'record only'.
+
+code-reviewer, P3, r1, 2026-09-22 — The P3 runbook now gives the manual recovery (kubecoder-cutover.md:740-746), but its command passes a single -m with the first line only. Its own prose, and the job's message (Jenkinsfile.promote:124-128), add a blank line and the seven image references. A tag written by copying the command is the one D48 release record that lacks the images it promoted (code_review_r1.md F2).
 
 **Consequence:** After a failed tag push, the operator gets a red build and a refusal on re-run, and the release has no D48 record unless the tag is written by hand.
 
