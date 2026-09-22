@@ -93,3 +93,21 @@ live-infra-access.md:44-52 gives the route for planning a HelmCharts release: ba
 
 **Provenance:** read, plan-writer, planning, r2, plan.md P3
 **Disposition:**
+
+### S4 — KubeCoderDeploy chart/values.yaml:11 still says the five pinned containers 'take the default pull policy'; P1 made them declare IfNotPresent · nit
+
+The images: block comment in KubeCoderDeploy's chart/values.yaml was not updated when P1 added an explicit imagePullPolicy: IfNotPresent to the five pinned containers. The README's parallel sentence was updated. The value it implies is still right; what it gets wrong is that the containers now declare the field rather than taking a default.
+
+**Consequence:** A reader of values.yaml is told the field is left to Kubernetes' default when the chart declares it; the render gate stops anyone acting on that.
+
+**Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### S5 — KubeCoderDeploy's .kubecoder/project.yaml description and README still name Jenkinsfile.architecture as the repo's one pipeline; P2 added Jenkinsfile.promote · nit
+
+The root project's description says 'Its one pipeline, Jenkinsfile.architecture … There is no deploy pipeline'. Since P2 (f6a8fba) the repo also carries Jenkinsfile.promote, the hand-run promote job (D2). Promotion deploys nothing itself, so 'no deploy pipeline' still holds; 'one pipeline' does not. The doc phase updates the README from the diff. project.yaml is kc metadata, and a doc pass can miss it.
+
+**Consequence:** kc project info tells an agent the repo has one pipeline, so the promote job goes unmentioned until someone reads the tree.
+
+**Provenance:** read, code-writer, P2, r1, /work/KubeCoderDeploy/.kubecoder/project.yaml
+**Disposition:**

@@ -421,6 +421,37 @@ this pod — `POST https://jenkins.webathome.org/pipeline-model-converter/valida
 check only: a clean parse answers *"did not contain the 'pipeline' step"*, a syntax error
 *"Errors encountered validating Jenkinsfile"* (both observed 2026-09-22).
 
+**Done (P2).** KubeCoderDeploy `f6a8fba` on `phase/012-P2`, on top of P1: `Jenkinsfile.promote`.
+It is scripted, declares `disableConcurrentBuilds()`, and takes one string parameter `commit`
+(empty means main's tip). It runs in the shared `k8s` container (crane and git). The linter gave a
+clean parse, and a broken control file failed. `kc project test` and `lint` are green.
+
+Later phases:
+- P3: the operator creates the job at prd's cutover as a Pipeline from SCM:
+  `https://github.com/pvginkel/KubeCoderDeploy.git`, branch `main`, script path
+  `Jenkinsfile.promote`, credential `5f6fbd66-…`. `properties()` registers the parameter and the
+  concurrency lock on the first run. That run takes main's tip, creates `prd` and writes `release-1`.
+- P3: the job refuses, before touching the registry: a commit not on main, `prd` already at the
+  commit (*"nothing to promote"*), a non-fast-forward, `release-<m>` already on origin, and a prd pin
+  that is not `registry:5000/kubecoder-<name>:prd-<n>`. Each refusal is a red build that changed
+  nothing.
+- P3: an existing `prd-<n>` is left as it is; the log says *"exists; left as it is"*. So the
+  rollback rehearsal and the roll-forward retag nothing, and only move `prd` and write a tag.
+- P3: the linter only parses the file. The first real run is the first check of the sandbox and
+  of the steps. If it fails before *Advancing prd*, the only thing changed is some new `prd-<n>`
+  aliases.
+
+Record:
+- Settled beyond the text: step 1 creates each `prd-<n>` only if it is missing, from `<n>`. D47
+  caps the bare family apart from the `prd-` one. With an unconditional retag, a D36 rollback
+  would fail once its `<n>` was reaped, even though the `prd-<n>` it deploys still exists.
+- The pins are read through `readYaml` from `git show <sha>:config/prd/values.yaml`. Only
+  `registry:5000/kubecoder-<name>:prd-<n>` passes, so nothing else reaches a shell line. The file
+  runs sandboxed, so parsing uses `==~`/`substring`/`error()`, not `@NonCPS` or `Matcher`.
+- Git follows `cicd.writeVersionPins`: the token goes in the clone URL under `set +x`. The push
+  to `prd` has no `+`, so GitHub refuses a non-fast-forward. A scratch-repo rehearsal showed prd
+  created, fast-forwarded, a backward push refused, and `release-1` not matching `release-11`.
+
 ### P3 — The KubeCoder cutover runbook
 
 Target: root
