@@ -235,7 +235,7 @@ pins its own: the tag lives in `config/<stage>/values.yaml`, and the chart names
       stale), wait until both stages run from pins — B.5's cleanup, after prd.
 
 Everything above that a repository can hold is committed (slices 010 to 012): KubeCoderDeploy —
-the chart on `homelab-shared` 0.2.0 with the declared pull policy, both stages' values and
+the chart on `homelab-shared` 0.2.1 (hook `argocd-hook:10`, Terraform 1.16.3) with the declared pull policy, both stages' values and
 tfvars, the rebuilt Terraform, and render and Terraform gates — plus ArgoCDDeploy's hook changes,
 the webhook-secret key and the dropped `namespaces` rule, and KubeCoder's manifest line. The
 manual sync of `argocd-prd` that makes both hook changes live is done. Owed to the operator: the
