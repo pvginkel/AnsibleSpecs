@@ -44,6 +44,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — Two of the ruled Build-Main behaviours could not be written as ruled: the dev-<n> bridge tag and a bare disableConcurrentBuilds() · minor
+
+helmCharts.kaniko2 accepts only one destination, or two (latest with <n>, or <prefix>-latest with <prefix>-<n>), so ':dev-<n>' cannot be a third kaniko destination beside ':<n>' and ':latest'. The runbook's D1 adds it with 'crane --insecure tag … dev-<n>' in the k8s container. Build-Main's job holds DisableConcurrentBuildsJobProperty (abortPrevious true) and a GitHubPushTrigger in its UI configuration, and a scripted properties() step replaces the job's properties. So D1 specifies properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])]) and checks config.xml after the first run.
+
+**Consequence:** none
+
+**Provenance:** read | code-writer, P3, r1, JenkinsPipelineUtils vars/helmCharts.groovy resolveTrackingTag; Build-Main config.xml
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -52,6 +61,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — HelmCharts audit-prd-orphans never sees KubeCoder's storage: it enumerates ZFS on zpool2 only, and it reads the conditional dataset name in kubecoder's _shared/ as 'prd' · minor
+
+tools/chart_tools/audit_prd_orphans.py lists live ZFS with 'zfs list -r zpool2' only, and KubeCoder's datasets are on zpool5. _resolve() takes the first quoted string of 'var.stage == "prd" ? "kubecoder" : "kubecoder-${var.stage}"', so the desired zpool2 set carries a spurious 'prd'. PVs are not diffed by name. Simulated with desired_state() on a copy of configs/ with both stages flipped and _shared/ removed: the only changes are helm_releases losing both kubecoder stages, owned_elsewhere gaining them, and zfs_zpool2 losing 'prd'. The refinement expected the audit to list KubeCoder's storage as an orphan once _shared/ is deleted. The runbook's X2 states what the audit actually lists, and the tool is not changed (out of scope).
+
+**Consequence:** The hand-run orphan audit is blind to every dataset outside zpool2 (KubeCoder's included) and reports a phantom desired dataset 'prd'.
+
+**Provenance:** witnessed | code-writer, P3, r1, desired_state() simulation
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -59,6 +77,15 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
+
+### Q1 — The runbook's B3 check fails today: the pinned hook image argocd-hook:1 carries Terraform v1.15.8, older than the iac sidecar's v1.16.3 that pushes the moved state · major
+
+Witnessed 2026-09-22 with throwaway pods in the development namespace: argocd-hook:1 (the homelab-shared 0.2.0 hook.imageTag pin, which KubeCoderDeploy's render uses) prints Terraform v1.15.8, and argocd-hook:9 prints v1.16.3. v1.15.8 did read a synthetic state stamped v1.16.3 (terraform state list, exit 0). HelmCharts' kubecoder states are already stamped 1.16.3. The ruling's check is 'not older', so the runbook stops at B3 and names two ways forward, for the operator to choose: pin a newer hook (argocd-hook:9, through the library chart's estate-wide pin or KubeCoderDeploy's own hook.imageTag, after reading what ArgoCDTools changed in the hook between 1 and 9), or accept the older hook on the read evidence.
+
+**Consequence:** The cutover cannot pass B3 until the operator rules; the ruled check fails as the estate stands.
+
+**Provenance:** witnessed | code-writer, P3, r1, docs/runbooks/kubecoder-cutover.md B3
+**Disposition:**
 
 ## Suggestions
 
@@ -110,4 +137,40 @@ The root project's description says 'Its one pipeline, Jenkinsfile.architecture 
 **Consequence:** kc project info tells an agent the repo has one pipeline, so the promote job goes unmentioned until someone reads the tree.
 
 **Provenance:** read, code-writer, P2, r1, /work/KubeCoderDeploy/.kubecoder/project.yaml
+**Disposition:**
+
+### S6 — KubeCoderDeploy Jenkinsfile.promote: a promotion whose release-<m> push fails after prd moved cannot be finished by a re-run · minor
+
+If 'Recording the release' fails after 'Advancing prd' succeeded (Jenkinsfile.promote:115, then 128-129), the re-run refuses at :72-74 with 'prd is already at <sha>: nothing to promote'. D48's annotated tag for that promotion is then never written by the job. Every other partial failure converges on a re-run. Possible remedies: the P3 runbook names the manual recovery (git tag -a release-<m> on the promoted sha, then push), or the job treats 'prd already at sha' with no release tag on the sha as 'record only'.
+
+**Consequence:** After a failed tag push, the operator gets a red build and a refusal on re-run, and the release has no D48 record unless the tag is written by hand.
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### S7 — No exercised, non-cascading way exists to hand a registered stage back to Jenkins: the runbook's WB-2 is derived, not tried · minor
+
+Removing an entry, or setting deployed: false, deletes the Application, and its resources finalizer deletes the namespace (D24, D27, argocd.md 'Undeploy'; argocd.md says the same of a never-synced preview). The runbook forbids a revert as a way back and gives WB-2 instead. WB-2 scales the applicationset-controller to 0, removes the Application's finalizer, deletes the Application, moves the storage back, reverts the registry, re-imports the namespace and scales the controller back up. None of it has run. A throwaway app would prove it, and argocd.md could then carry it next to Undeploy.
+
+**Consequence:** A stage that must return to Jenkins mid-cutover relies on an untried procedure that briefly stops Application generation estate-wide.
+
+**Provenance:** read | code-writer, P3, r1, argo-cd decisions D24/D27
+**Disposition:**
+
+### S8 — KubeCoder's own docs describe Deploy-PRD and the dev-prefixed tags as current; the cutover retires both, and no task updates the docs · minor
+
+docs/operations/{deploy-hazards,config-key-rollout,slice-test-plan,live-verification,slice-doc-plan}.md, docs/conventions/uv-workspace.md and worker/docs/claude-shim/image.md in /work/KubeCoder name KubeCoder/Deploy-PRD as prd's promotion path, or dev-<n>/dev-latest as Build-Main's tags. The ruled KubeCoder task (runbook X3) covers only the pull-policy lines and D145. The docs could join that task.
+
+**Consequence:** After prd's cutover, KubeCoder's operations docs send a reader to a job that no longer exists and to tags no build pushes.
+
+**Provenance:** read | code-writer, P3, r1, grep of /work/KubeCoder
+**Disposition:**
+
+### S9 — argocd.md's Webhooks section says to list hooks with 'gh api …', but gh is only in the iac sidecar, not the dev container · nit
+
+'gh' is at /home/ubuntu/bin/gh in the iac sidecar; in the dev container it is 'command not found'. The cutover runbook uses 'cexec iac gh api repos/pvginkel/KubeCoderDeploy/hooks'. argocd.md was left as is (not this phase's outcome).
+
+**Consequence:** A reader following argocd.md's Webhooks section gets 'gh: command not found' and has to find the sidecar.
+
+**Provenance:** witnessed | code-writer, P3, r1
 **Disposition:**

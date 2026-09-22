@@ -515,6 +515,44 @@ What the runbook must also get right:
 - **It closes on the exit criterion**, with the check that proves each part — read as the
   grounding reads *"Jenkins holds no cluster credential for KubeCoder"*.
 
+**Done (P3).** Ansible `a411915` on `phase/012-P3`: `docs/runbooks/kubecoder-cutover.md`.
+
+- Its sequence is B1–B3, D1–D10, "Let it sit", P1–P13, X1–X3, Exit, and the ways back WB-1–WB-3.
+- The per-stage procedures are written once over `$STAGE`: the surgery, the plan, the replay
+  check, the pre-flight, the diff review and the sync checks.
+- `argocd.md`'s diff table carries the five containers' `imagePullPolicy` `Always` →
+  `IfNotPresent`, and prd's set: the dev rows plus `Service/kubecoder-mcp-public`, tracking-id
+  only. Its KubeCoder residue note now lists two things.
+- The root gate has no test statements. Every link and anchor resolves.
+
+Later phases:
+- Test: V01–V22 map onto the runbook's steps by their R-ids. Nothing in it has run live. B3 stops
+  as the estate stands (close-out Q1).
+- Doc: `argocd.md` is already corrected. Close-out S9, `argocd.md`'s bare `gh api`, is open.
+
+Record:
+- B3, witnessed: `argocd-hook:1` carries Terraform v1.15.8 and `:9` carries v1.16.3; 1.15.8
+  lists a state stamped 1.16.3. The check fails as ruled, and the runbook names both ways forward.
+- The surgery was rehearsed on local copies of dev's HelmCharts state, since deleted:
+  - A move into the pulled empty destination keeps `lineage: ""`, so the move targets a new file.
+  - `state mv` leaves plaintext `.backup` files.
+  - `$HOME` is mirrored into the sidecar as a cwd; `/tmp` is not.
+- The plan's environment:
+  - The homelab provider gates each config group on its first field, so setup-env's Ceph and S3
+    credentials stay inert.
+  - `TF_DATA_DIR` keeps `.terraform/` out of KubeCoderDeploy's tree.
+  - `-upgrade` mirrors the hook's lock-less clone.
+  - `config-prd-write` passes setup-env's srvk8s1 check.
+- Build-Main's spec is corrected from the rulings' text (N1):
+  - `dev-<n>` is a `crane tag`, because kaniko2 takes at most two destinations.
+  - `properties()` keeps abort-previous and the push trigger.
+- A registry revert cascades to the namespace (D24/D27), so no stop's way back is a revert. WB-2
+  (S7, unexercised) is the non-cascading return.
+- The orphan audit lists no KubeCoder storage, before or after `_shared/` goes (B1). The
+  refinement's expectation did not hold, and X2 states what the audit does list.
+- The promote job is named `KubeCoder/Promote-PRD`. X3's task holds R13's two items;
+  KubeCoder's stale docs are S8.
+
 ## Not in scope
 
 - **Executing the cutover.** Every live step is the operator's keystroke after delivery; the
