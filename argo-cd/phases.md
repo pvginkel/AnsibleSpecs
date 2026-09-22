@@ -219,7 +219,7 @@ pins its own: the tag lives in `config/<stage>/values.yaml`, and the chart names
 (D47).
 
 - [ ] Pin `images.{controller,bot,mcp,ingress,manual}` in both stage values files, to one
-      build — dev on `<n>`, prd on `prd-<n>`. `chart/values.yaml` names no tag for them and
+      build — dev on `dev-<n>`, prd on `prd-<n>`. `chart/values.yaml` names no tag for them and
       each template `required`-guards its key, so a stage that omits one fails to render.
 - [ ] Pin `controllerConfig.images.{worker,vsix}` the same way — the unpinned half D145
       documents; today's digest scraper never reached them.
@@ -246,22 +246,20 @@ manual sync of `argocd-prd` that makes both hook changes live is done. Owed to t
 - [ ] The JenkinsPipelineUtils method `cicd.writeVersionPins(repo:, pins:, message:)`, where
       `pins` is `{values file → {dotted YAML path → value}}` → clone, write every file it
       names, one commit, push `main`.
-- [ ] `Build-Main`: tag `:<n>`/`:latest` (stage prefix dropped), call the method on `main` with
-      both stage files — dev's pins at `<n>`, prd's at `prd-<n>`. The prefix is a literal at
-      each of the eight `helmCharts.kaniko(...)` call sites, so dropping it is a per-repo edit:
-      the library carries no `<stage>-<n>` scheme to opt out of, and the other releases are
-      untouched. Between the two cutovers it also tags each build `dev-<n>`, with `crane tag`
-      since the kaniko step takes at most two destinations, so `Deploy-PRD` keeps promoting
-      prd; that tag stops with `Deploy-PRD`.
+- [ ] `Build-Main`: keep its `:dev-<n>`/`:dev-latest` destinations, and call the method on
+      `main` with both stage files — dev's pins at `dev-<n>`, prd's at `prd-<n>` (D47 as
+      amended 2026-09-22; ANS-99). The stage prefix stays, so there is no kaniko edit and no
+      bridge tag, and `Deploy-PRD` keeps promoting prd from `dev-<n>` until it is deleted.
 - [ ] `Deploy-PRD` is **deleted at the prd cutover** (D35), not before, and only once the
       promote job has retagged; the old path stays alive until each stage cuts over.
-- [ ] Every tag CI commits is a real `<n>` or `prd-<n>`, never `latest` (D37 as amended by D47).
+- [ ] Every tag CI commits is a real `dev-<n>` or `prd-<n>`, never a `*-latest` (D37 as amended
+      by D47).
 
 Committed (slice 011): the method, and KubeCoderDeploy carrying both stages' pins behind a render
 gate that enforces the shape — exactly the seven per stage file, one build across both, none in
 the chart. The two Jenkins-side items wait for the cutover that flips each stage and land with
-B.5, so nothing calls the method yet and the committed pins are forward references: dev's `<n>`
-does not exist until `Build-Main` pushes it, prd's `prd-<n>` until the promote job retags. The
+B.5, so nothing calls the method yet and the committed pins are hand-set: dev's `dev-523` is not a
+build CI pinned, and prd's `prd-523` does not exist until the promote job retags. The
 "repoint everything keyed on the tag prefix" verify item resolves to nothing to repoint (the D37
 amendment). The promote job is committed too (slice 012): KubeCoderDeploy's `Jenkinsfile.promote`,
 inert until its Jenkins job is created by hand at prd's cutover.

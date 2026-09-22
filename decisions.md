@@ -55,6 +55,10 @@ Why three tiers, not two: Ansible at the resource layer is a thin wrapper around
 
 The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified bring-up steps (`.microk8s.yaml`, MetalLB IPAddressPools, registry mirror config, procedural install docs) in a third location that today belongs on the Ansible side. The microk8s build-out absorbed its contents into the `microk8s` role and inventory; KubernetesConfig is now **marked for deletion** (it holds secrets) — tracked in [`slices/runtime-secrets-sweep.md`](slices/runtime-secrets-sweep.md) §4. The operator runs their own ingress controller and own container registry from HelmCharts — `core/ingress` and `core/registry` are not enabled.
 
+### Terraform version
+
+**One pinned Terraform version, in every image that installs it** (ANS-98): ArgoCDTools' `argocd-hook`, Ansible's `support/iac-image` (srviac and the `IaC/*` pipelines), and DockerImages' `kube-coder-iac-toolchain` (the KubeCoder `iac` sidecar) and `modern-app-dev`. Each installs `terraform=${TERRAFORM_VERSION}-1` from HashiCorp's apt suite; today `1.16.3`. A state is stamped with the version that last wrote it, and the tools hand states to each other — the sidecar moves a state the Argo CD hook then applies — so an unpinned rebuild could leave one side older than the state it reads. Bump all four together, then move `homelab-shared`'s `hook.imageTag` to the rebuilt hook. Pinning the hook's image tag per deploy repo instead was rejected at slice 012's close-out: the version belongs in the image.
+
 ## Secrets — OpenBao
 
 - **OpenBao**, not HashiCorp Vault proper. Linux Foundation fork, MPL 2.0, API-compatible with Vault. All Vault integrations work unchanged: `community.hashi_vault` (Ansible), External Secrets Operator (Helm), HashiCorp Vault Jenkins plugin.

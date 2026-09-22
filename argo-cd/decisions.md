@@ -404,6 +404,10 @@ tag prefix gets repointed — registry retention/GC, `collect-versions`, the ver
 > The "everything keyed on the tag prefix gets repointed" verify item resolves to *nothing to
 > repoint*: the prefix keeps meaning what it always meant, and `collect-versions` was never
 > prefix-keyed.
+>
+> **The last remnant goes too (2026-09-22, operator; ANS-99).** The bare `:<n>`/`:latest` build
+> tags this decision introduced are dropped: `Build-Main` keeps pushing `dev-<n>` and
+> `dev-latest`, as before the migration (D47's amendment).
 
 **D38 — Migration-era coexistence is driven by the `reconciler:` key.** Decided (lifecycle,
 minus the `deploy apply` exemption D31 removed). `_RELEASE_KEYS` gains the new keys — the
@@ -534,6 +538,17 @@ nothing and does not need that build's `<n>`, which the bare family's cap may al
 reaped. A rollback parameter on the promote job was considered and rejected — it duplicates D36,
 and folding the emergency lever into the routine promote job is how a parameter slip rolls
 production back during an ordinary release. The lever stays a separate deliberate act.
+
+> **Amended 2026-09-22 (operator, slice 012 close-out N1; ANS-99): the build tag is `dev-<n>`,
+> not a bare `<n>`.** Wherever this decision reads `<n>` as a tag, read `dev-<n>`: CI writes dev
+> `dev-<n>` and prd `prd-<n>`, and the promote job runs `crane tag <app>:dev-<n>
+> <app>:prd-<n>`. `Build-Main` keeps the two destinations it already had, `dev-<n>` and
+> `dev-latest`, so its kaniko step is unchanged, no bridge tag is needed between KubeCoder's two
+> cutovers, and `Deploy-PRD` keeps working until it is deleted. The bare family was also already
+> occupied, by `kubecoder-*:176 … 185` and `latest` from the retired `KubeCoder/KubeCoder` job.
+> The design is otherwise unchanged: the forward reference is `prd-<n>` predicted from
+> `dev-<n>`, the shared-digest guard now protects `prd-<n>` against reaping `dev-<n>`, and the
+> promotable-staleness cap is the `dev-` family's.
 
 **D48 — Promotion is recorded by an annotated `release-<n>` tag on the deploy repo.** Decided
 2026-08-16 (operator). Promotion is a fast-forward, which creates **no commit** — so `git log
