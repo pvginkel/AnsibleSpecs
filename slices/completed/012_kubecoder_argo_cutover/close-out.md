@@ -78,7 +78,7 @@ helmCharts.kaniko2 accepts only one destination, or two (latest with <n>, or <pr
 **Consequence:** none
 
 **Provenance:** read | code-writer, P3, r1, JenkinsPipelineUtils vars/helmCharts.groovy resolveTrackingTag; Build-Main config.xml
-**Disposition:** This should be fixed in JenkinsPipelineUtils. Please fix inline. That being said, I don't see from the code why this limitation would exist. It's iterating over a list. Please advise.
+**Disposition:** This should be fixed in JenkinsPipelineUtils. Please fix inline. That being said, I don't see from the code why this limitation would exist. It's iterating over a list. Please advise. / I want to discuss this.
 
 ### ~~N2 — Test phase r1: pushed both repos under the devlock hold and re-confirmed every live premise the runbook rests on · nit~~ — closed by the operator, 2026-09-22
 
@@ -178,7 +178,7 @@ Witnessed 2026-09-22 with throwaway pods in the development namespace: argocd-ho
 **Consequence:** The cutover cannot pass B3 until the operator rules; the ruled check fails as the estate stands.
 
 **Provenance:** witnessed | code-writer, P3, r1, docs/runbooks/kubecoder-cutover.md B3
-**Disposition:** Do we need to fix this?
+**Disposition:** Do we need to fix this? / I think the proper answer should be to pin Terraform in the image itself, maybe in more places with the same pin. I'd rather do that then start pinning the hook image tag in all deploy repos.
 
 ## Suggestions
 
@@ -188,15 +188,6 @@ witnessed. The doc phase closed S1, S5, S9 and S6's runbook half; S6's job-side 
 change to `Jenkinsfile.promote`.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### S2 — Jenkins' declarative linter only parse-checks a scripted Jenkinsfile — D1's lint catches syntax errors, not a wrong step or argument
-
-D1 has the cutover session check each KubeCoder Jenkinsfile edit with Jenkins' declarative linter. KubeCoder's Jenkinsfile (and KubeCoderDeploy's) is a scripted pipeline, and on one the linter at https://jenkins.webathome.org/pipeline-model-converter/validate only parses Groovy: /work/KubeCoder/Jenkinsfile as it stands answers "did not contain the 'pipeline' step" (a clean parse), and an unbalanced brace answers "Errors encountered validating Jenkinsfile" (probed 2026-09-22 as admin with $JENKINS_TOKEN). A misspelled library call such as cicd.writeVersionPin, or a wrong argument name, passes. D1's own trade-off still holds — a bad rewrite fails loudly in its first build while dev is un-flipped — so the plan proceeds as ruled; P2 and P3 state the linter's real reach.
-
-**Consequence:** The lint step reads as more assurance than it gives; the first Build-Main build after each edit is the real check of the rewrite.
-
-**Provenance:** witnessed; plan-writer, planning r1; linter probe against /work/KubeCoder/Jenkinsfile
-**Disposition:** Is it necessary to do something with this?
 
 ### S3 — The estate documents a hand-run plan only for a HelmCharts release's Terraform, not for an Argo deploy repo's · minor
 
@@ -220,15 +211,6 @@ doc-writer, doc phase, 2026-09-22 — The runbook half is closed in the doc phas
 **Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
 **Disposition:** Raise. — ANS-96
 
-### S7 — No exercised, non-cascading way exists to hand a registered stage back to Jenkins: the runbook's WB-2 is derived, not tried · minor
-
-Removing an entry, or setting deployed: false, deletes the Application, and its resources finalizer deletes the namespace (D24, D27, argocd.md 'Undeploy'; argocd.md says the same of a never-synced preview). The runbook forbids a revert as a way back and gives WB-2 instead. WB-2 scales the applicationset-controller to 0, removes the Application's finalizer, deletes the Application, moves the storage back, reverts the registry, re-imports the namespace and scales the controller back up. None of it has run. A throwaway app would prove it, and argocd.md could then carry it next to Undeploy.
-
-**Consequence:** A stage that must return to Jenkins mid-cutover relies on an untried procedure that briefly stops Application generation estate-wide.
-
-**Provenance:** read | code-writer, P3, r1, argo-cd decisions D24/D27
-**Disposition:** Please suggest a fix.
-
 ### S8 — KubeCoder's own docs describe Deploy-PRD and the dev-prefixed tags as current; the cutover retires both, and no task updates the docs · minor
 
 docs/operations/{deploy-hazards,config-key-rollout,slice-test-plan,live-verification,slice-doc-plan}.md, docs/conventions/uv-workspace.md and worker/docs/claude-shim/image.md in /work/KubeCoder name KubeCoder/Deploy-PRD as prd's promotion path, or dev-<n>/dev-latest as Build-Main's tags. The ruled KubeCoder task (runbook X3) covers only the pull-policy lines and D145. The docs could join that task.
@@ -250,6 +232,19 @@ doc-writer, doc phase, 2026-09-22 — Closed in the doc phase (AnsibleSpecs 0fea
 
 **Provenance:** read; plan-writer, planning r1; plan.md rulings D2, argo-cd/decisions.md D35
 **Disposition:** Fix inline. — already fixed in the doc phase, AnsibleSpecs 0fea119
+
+</details>
+
+### ~~S2 — Jenkins' declarative linter only parse-checks a scripted Jenkinsfile — D1's lint catches syntax errors, not a wrong step or argument~~ — closed by the operator, 2026-09-22
+
+<details><summary>struck — body kept for the record</summary>
+
+D1 has the cutover session check each KubeCoder Jenkinsfile edit with Jenkins' declarative linter. KubeCoder's Jenkinsfile (and KubeCoderDeploy's) is a scripted pipeline, and on one the linter at https://jenkins.webathome.org/pipeline-model-converter/validate only parses Groovy: /work/KubeCoder/Jenkinsfile as it stands answers "did not contain the 'pipeline' step" (a clean parse), and an unbalanced brace answers "Errors encountered validating Jenkinsfile" (probed 2026-09-22 as admin with $JENKINS_TOKEN). A misspelled library call such as cicd.writeVersionPin, or a wrong argument name, passes. D1's own trade-off still holds — a bad rewrite fails loudly in its first build while dev is un-flipped — so the plan proceeds as ruled; P2 and P3 state the linter's real reach.
+
+**Consequence:** The lint step reads as more assurance than it gives; the first Build-Main build after each edit is the real check of the rewrite.
+
+**Provenance:** witnessed; plan-writer, planning r1; linter probe against /work/KubeCoder/Jenkinsfile
+**Disposition:** Is it necessary to do something with this? / Ok. — suggested close; closed
 
 </details>
 
@@ -280,6 +275,19 @@ doc-writer, doc phase, 2026-09-22 — Closed in the doc phase (KubeCoderDeploy 1
 
 **Provenance:** read, code-writer, P2, r1, /work/KubeCoderDeploy/.kubecoder/project.yaml
 **Disposition:** Fix inline. — already fixed in the doc phase, KubeCoderDeploy 10d95cc (pushed)
+
+</details>
+
+### ~~S7 — No exercised, non-cascading way exists to hand a registered stage back to Jenkins: the runbook's WB-2 is derived, not tried · minor~~ — folded into ANS-97, 2026-09-22
+
+<details><summary>struck — body kept for the record</summary>
+
+Removing an entry, or setting deployed: false, deletes the Application, and its resources finalizer deletes the namespace (D24, D27, argocd.md 'Undeploy'; argocd.md says the same of a never-synced preview). The runbook forbids a revert as a way back and gives WB-2 instead. WB-2 scales the applicationset-controller to 0, removes the Application's finalizer, deletes the Application, moves the storage back, reverts the registry, re-imports the namespace and scales the controller back up. None of it has run. A throwaway app would prove it, and argocd.md could then carry it next to Undeploy.
+
+**Consequence:** A stage that must return to Jenkins mid-cutover relies on an untried procedure that briefly stops Application generation estate-wide.
+
+**Provenance:** read | code-writer, P3, r1, argo-cd decisions D24/D27
+**Disposition:** Please suggest a fix. / Ok. — suggested fold into ANS-97; added to ANS-97 as a comment
 
 </details>
 
