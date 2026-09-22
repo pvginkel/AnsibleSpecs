@@ -359,6 +359,30 @@ The chart and stage values also carry everything HelmCharts landed under `charts
 `architecture.yaml` copy follows its own recorded commit). A replay keeps every Argo-specific
 difference the README lists, and the README's recorded copy point moves to what was replayed.
 
+**Done (P1).** KubeCoderDeploy `4bb7823` on `phase/012-P1`: the five pinned containers declare
+`imagePullPolicy: IfNotPresent`; `tunnel-reclaim` keeps `Always`; the render gate fails a render
+whose pinned container does not declare `IfNotPresent` (an undeclared field fails too, checked
+by hand). `chart/values.yaml` carries HelmCharts' drift; the README's copy point is now
+`fb49c5c55cb5d782fec72d5176c20f2fd458d559`. `kc project test` green.
+
+Later phases:
+- P3: the replay command in the README now starts at `fb49c5c`. At P1 it listed nothing: an
+  empty log before a diff review means no replay is needed. The rendered change from P1 is only
+  the five containers' `imagePullPolicy`, which goes from live `Always` to `IfNotPresent`. The
+  replay brought the ConfigMap closer to what HelmCharts deployed, not further from it.
+- P3: KubeCoderDeploy's `main` is still `0ac8b27` (unpushed, slice 014); P1 sits on top of it.
+
+Record:
+- Replay = `git diff 65ca9db origin/main -- charts/kubecoder/values.yaml` applied to
+  `chart/values.yaml` with offsets and no conflict. It adds the `aac-tools` toolchain catalog
+  entry (`registry:5000/aac-tools:latest`, `Always`, which the gate's `CONFIG_CONTAINERS` check
+  accepts) and raises `nodes.srvk8s4.maxEnvironments` from 5 to 8. `configs/prd/kubecoder/` and
+  `homelab-root.crt` are untouched since `65ca9db`.
+- `charts/kubecoder/architecture.yaml`: `8cd9185` is still its last commit, and the root
+  `architecture.yaml` already carries it. That recorded point does not move.
+- README bullet: *"their five Deployment containers state no `imagePullPolicy`"* now reads
+  *"declare `imagePullPolicy: IfNotPresent`, so Argo owns the field Helm set to `Always`"*.
+
 ### P2 — KubeCoderDeploy's promote job
 
 Target: ../KubeCoderDeploy
