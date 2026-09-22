@@ -342,7 +342,7 @@ state-move recipe and the no-destroy plan's credential route); planning is trans
   step — everything a phase merges is inert until the operator reaches the runbook step that uses
   it (nothing syncs from KubeCoderDeploy before a stage's registry commit).
 
-### P1 — The chart owns its pinned containers' pull policy and carries HelmCharts' drift
+### P1 — The chart owns its pinned containers' pull policy and carries HelmCharts' drift ✅ DONE 2026-09-22
 
 Target: ../KubeCoderDeploy
 
