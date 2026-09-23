@@ -93,7 +93,7 @@ end to end on the first builds.
 | homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory, elasticsearch | architecture: cross-app edges lost at handover, or the generator fails on hosts it can't resolve (ANS-80 / slice 025) |
 | version-poller | its GitHub token arrives as HelmCharts' `gitToken` value; needs an OpenBao leaf (`bao kv put`) |
 | headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
-| storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets: ANS-49 is live; each scaffold still pins `homelab-shared` 0.2.1 and must move to 0.3.0 before its first sync, and the first of them proves the per-namespace grant on a first sync |
+| storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets: ANS-49 is live, and the six scaffolds are on `homelab-shared` 0.3.0 (local commits; iot's re-scaffold takes it from the tool). The first of them to sync proves the per-namespace grant on a first sync |
 | charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
 | mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
 | iot | chart named `iotsupport`: the producer ids need chart name = app |
