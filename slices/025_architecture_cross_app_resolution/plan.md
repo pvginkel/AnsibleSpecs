@@ -317,7 +317,7 @@ Settled:
 - **Tests.** 11 cases. Each mutation makes some fail: the old prefix scope 5, the old claim-all split 4, link-only interface scope 1, a Serving-only rule 1. `tests/support.py` `load(name, folder="image")` now also loads the check.
 - **Smoke.** `main()` over `/work/ArgoCDDeploy` against the live set runs clean. Every difference is an addition: P1's 5 in-cluster interfaces and 7 links, plus changes at HEAD that are not yet published.
 
-### P4 — The migration's arch gate proves both halves of a move
+### P4 — The migration's arch gate proves both halves of a move ✅ DONE 2026-09-23
 
 Target: root
 
