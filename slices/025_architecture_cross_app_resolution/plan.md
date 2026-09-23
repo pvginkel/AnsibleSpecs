@@ -368,7 +368,7 @@ Settled:
 - HelmCharts' half runs even when the app's own check finds losses, so one run reports both. It is skipped when the check crashes; that `Traceback` stop is unchanged.
 - Smoke run, not a test (Ruling A1), with the check's output faked and `HOME` redirected: a differing field stopped the app. With calendar-support left out, HelmCharts built green in about 19 s and drew jenkins' 2 edges as published. A `--dataset` file worked.
 
-### P5 — The Argo CD register records the published-interface decision
+### P5 — The Argo CD register records the published-interface decision ✅ DONE 2026-09-23
 
 Target: ../AnsibleSpecs
 
