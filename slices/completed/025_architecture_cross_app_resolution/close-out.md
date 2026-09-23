@@ -33,7 +33,9 @@ the live set. Nothing is proven live until then. A3 pushes the two doc commits t
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Push HelmCharts with ~/bulk-migration/hc-push.sh, then settle V02 and V13 against the live set
+### ~~A1 — Push HelmCharts with ~/bulk-migration/hc-push.sh, then settle V02 and V13 against the live set~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 HelmCharts' patched generator (a8f0bbb, 16d1af6, e134d28) is on local main only, 3 commits ahead of origin. Ruling Q1 bars the run loop from pushing it, because any push to HelmCharts main deploys whatever releases have drifted to prd unattended (IaC/HelmCharts, Jenkinsfile:35, :192-193). The bulk-migration session owes these steps, in order, as its first work after this slice (D54):
 
@@ -48,9 +50,13 @@ orchestrator, operator-requested A1 run, 2026-09-23 — Done. hc-push.sh pushed 
 **Consequence:** Until the push and re-run happen, V02 (collect green) and V13 (the 16 held apps pass the arch gate) stay unproven. The 16 held apps stay held, and any arch run against the live set stops them on cross-app edges.
 
 **Provenance:** read, consult 1, plan.md Ruling Q1 and Push holds; verification.json V02, V13
-**Disposition:**
+**Disposition:** Agree — suggested close (done: A1 run 2026-09-23, HelmCharts pushed, V02/V13 pass live) — struck
 
-### A2 — Push HelmCharts by hand when its hold lifts
+</details>
+
+### ~~A2 — Push HelmCharts by hand when its hold lifts~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `/work/HelmCharts`: any push to `main` deploys drifted releases to prd unattended; the bulk-migration session pushes it after this slice (Ruling Q1).
 
@@ -61,16 +67,22 @@ orchestrator, operator-requested A1 run, 2026-09-23 — HelmCharts was pushed as
 **Consequence:** none in this run — the driver took the hold as the ruling it is; nothing this repo deploys carries the slice until you push it.
 
 **Provenance:** witnessed — the driver's push check, against `plan.md`'s `## Push holds` section
-**Disposition:**
+**Disposition:** Agree — suggested close (done: HelmCharts pushed as A1 step 1) — struck
 
-### A3 — Push the doc phase commits in ArgoCDTools (27dfc88) and AnsibleSpecs (334b152)
+</details>
+
+### ~~A3 — Push the doc phase commits in ArgoCDTools (27dfc88) and AnsibleSpecs (334b152)~~ — done: ArgoCDTools 27dfc88 on origin, AnsibleSpecs pushed with this close-out; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 The doc phase updated ArgoCDTools README.md (gen-architecture publishes in-cluster interfaces and resolves cross-app hosts through them; what the handover check compares) and AnsibleSpecs argo-cd/design.md and argo-cd/bulk-migration.md. The driver lands and pushes only the Ansible doc branch, so these two commits are on local main in their repos. Neither is held: ArgoCDTools is pushed normally (Ruling Q1), and a README-only push rebuilds the aac-tools image and deploys nothing. HelmCharts carries no doc-phase commit.
 
 **Consequence:** Until pushed, the ArgoCDTools README on GitHub still says the handover check compares every relation id, and the argo-cd set on origin still holds the 16 apps on slice 025
 
 **Provenance:** witnessed, doc-writer, doc phase, r1 — git log in /work/ArgoCDTools and /work/AnsibleSpecs
-**Disposition:**
+**Disposition:** Agree — suggested push with the close-out commit — ArgoCDTools 27dfc88 was already on origin; AnsibleSpecs pushed with this close-out
+
+</details>
 
 ## Notable events
 
@@ -86,14 +98,18 @@ not live (N1).
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — The 16 held apps hold on a snapshot carrying the local HelmCharts render, and still stop on the live set
+### ~~N1 — The 16 held apps hold on a snapshot carrying the local HelmCharts render, and still stop on the live set~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 Test phase r1 built a snapshot from the live published set with every helm-charts element and relation replaced by a full local HelmCharts render (e134d28: 298 elements, 591 relations; against the live set a pure addition of 53 in-cluster interfaces and 174 Associations). `argo_migrate.py arch` over the 16 held apps, each scaffolded first, holds for all 16: the check ends `equal`, and HelmCharts without the app builds and redraws all 23 edges it draws today. The same gate on the live set stops jenkins at HelmCharts' half and electronics-inventory and infra-statistics in the generator, as expected until HelmCharts publishes. Scaffolds, snapshot and logs are in /work/scratch/025-test-r1/; the record is in the slice's test_r1/. The harness redirected the tool's HOME, so ~/bulk-migration/state and logs were not touched.
 
 **Consequence:** none — the operator can expect the 16 to pass `arch` after the HelmCharts push; V02 and V13 stay owed to that push (A1)
 
 **Provenance:** witnessed test-phase r1 — slices/025_architecture_cross_app_resolution/test_r1/arch-gate-snapshot-16-apps.txt
-**Disposition:**
+**Disposition:** Agree — suggested close — struck
+
+</details>
 
 ## Bugs
 
@@ -104,7 +120,18 @@ B6. All six are in this slice's repos.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-### B1 — ArgoCDTools gen-architecture: a Service's dns.webathome.org/hostname host gets no interface when the Service also has server-name, so it resolves in one render but not across renders · minor
+### B4 — Ansible argo_migrate.py arch: a consumer already flipped in the local HelmCharts tree, but still attributed to helm-charts in the dataset, makes its provider's HelmCharts half stop falsely · minor
+
+The HelmCharts half gates on the dataset's 'drawn by helm-charts' edges (argo_migrate.py:819-822) but renders the current HelmCharts tree, which skips flipped releases (HelmCharts gen_architecture.py:643). A consumer flipped locally, or pushed but not yet collected (D50), still reads as helm-charts', so its provider's gate reports 'helm-charts would no longer draw: <rid>' for an edge the consumer's new producer will draw against the kept id. It is a false stop, never a false pass, and it clears once that producer publishes. Held pairs this can hit: electronics-inventory/guacamole to postgres-pas, infra-statistics/intercom to jenkins, electronics-inventory/zigbee2mqtt to keycloak. It does not occur when arch runs over a batch before any flip.
+
+**Consequence:** If a provider's arch runs after one of its consumers has flipped but before that consumer's new producer publishes, the provider stops at arch on an edge that would survive, until the collect catches up
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
+**Disposition:** Agree — suggested card ANS, related to ANS-103 — ANS-106
+
+### ~~B1 — ArgoCDTools gen-architecture: a Service's dns.webathome.org/hostname host gets no interface when the Service also has server-name, so it resolves in one render but not across renders · minor~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 reconcile_exposed_services mints interfaces from server-name, else dns-hostname (gen_architecture.py:1206). Only minted interfaces are linked (:1368-1370). build_provider_index registers both annotations' hosts (:662-665). A consumer in another render therefore fails fatally on the second host, which one render resolves. Latent: no prd Service in HelmCharts sets both. P2 copies the same shape.
 
@@ -113,52 +140,61 @@ P2 executor r1, 2026-09-23 — HelmCharts' generator (a8f0bbb) behaves the same:
 **Consequence:** none today; a future Service annotated with both would make its DNS host fail every cross-app consumer's architecture build
 
 **Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Agree — suggested close (latent, no case today) — struck
 
-### B2 — ArgoCDTools + HelmCharts gen-architecture: a Service selecting on statefulset.kubernetes.io/pod-name is never placed, so it publishes no in-cluster interface and its exposed hosts link nothing · minor
+</details>
+
+### ~~B2 — ArgoCDTools + HelmCharts gen-architecture: a Service selecting on statefulset.kubernetes.io/pod-name is never placed, so it publishes no in-cluster interface and its exposed hosts link nothing · minor~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 dnsmasq's per-pod Services dns-0 and dns-1 (charts/dnsmasq/templates/dns-service.yaml:42,73) select on the StatefulSet pod-name label, which a pod template never carries, so build_provider_index finds no backing workload. In the local HelmCharts render of 2026-09-23 they get no svcif interface, and the exposed interfaces if:dns1-home / if:dns2-home have only their Assignment to svc:dnsmasq-prd-dns-0/-1, with no instance Association. The handover check now also scopes an interface by that Assignment, so dnsmasq's own check still compares them. The generators' resolution cannot place these hosts, in one render or across renders.
 
 **Consequence:** none today — nothing outside dnsmasq's namespace names dns1.home, dns2.home or dns-0/dns-1.dnsmasq-prd.svc; a consumer that does fails its architecture build as an unresolved host
 
 **Provenance:** witnessed, executor, P3, r1, /tmp/p3-hc-render.yaml (HelmCharts main e134d28 rendered against the live set)
-**Disposition:**
+**Disposition:** Agree — suggested close (latent, no case today) — struck
 
-### B3 — ArgoCDTools handover_equality.py: an in-house app's exposed interface that no instance links is in no app's scope, so losing it passes the check · minor
+</details>
+
+### ~~B3 — ArgoCDTools handover_equality.py: an in-house app's exposed interface that no instance links is in no app's scope, so losing it passes the check · minor~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 app_elements() takes an interface only through an Association from the app's own instances, or an Assignment into the app's own services (handover_equality.py:179-186). An in-house app's exposed interface is assigned to DockerImages' shared svc:, so it is scoped only once the published set carries its P2 instance link. On the live set before HelmCharts publishes, 17 helm-charts interfaces belong to no app. They include jenkins-mcp, telegram-mcp, trello-mcp and youtrack-mcp hosts, which the old prefix scope did compare. If a deploy repo dropped one, the check would report nothing. The same would hold for good for a future in-house Service that the provider index cannot place (B2's class). In the P2 snapshot, every helm-charts interface belongs to exactly one app.
 
 **Consequence:** none under the plan's order, where held apps are gated on the snapshot or after the HelmCharts push; an arch run against the live set before that push would miss a dropped in-house exposed host
 
 **Provenance:** witnessed, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Agree — suggested close (latent, no case today) — struck
 
-### B4 — Ansible argo_migrate.py arch: a consumer already flipped in the local HelmCharts tree, but still attributed to helm-charts in the dataset, makes its provider's HelmCharts half stop falsely · minor
+</details>
 
-The HelmCharts half gates on the dataset's 'drawn by helm-charts' edges (argo_migrate.py:819-822) but renders the current HelmCharts tree, which skips flipped releases (HelmCharts gen_architecture.py:643). A consumer flipped locally, or pushed but not yet collected (D50), still reads as helm-charts', so its provider's gate reports 'helm-charts would no longer draw: <rid>' for an edge the consumer's new producer will draw against the kept id. It is a false stop, never a false pass, and it clears once that producer publishes. Held pairs this can hit: electronics-inventory/guacamole to postgres-pas, infra-statistics/intercom to jenkins, electronics-inventory/zigbee2mqtt to keycloak. It does not occur when arch runs over a batch before any flip.
+### ~~B5 — Ansible argo_migrate.py arch: a failed dataset fetch aborts the whole multi-app run with a traceback instead of a per-app STOP · minor~~ — fixed in Ansible 02b5580; struck by close-out
 
-**Consequence:** If a provider's arch runs after one of its consumers has flipped but before that consumer's new producer publishes, the provider stops at arch on an edge that would survive, until the collect catches up
-
-**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
-**Disposition:**
-
-### B5 — Ansible argo_migrate.py arch: a failed dataset fetch aborts the whole multi-app run with a traceback instead of a per-app STOP · minor
+<details><summary>struck — body kept for the record</summary>
 
 dataset_snapshot calls urllib.request.urlopen in the dev container (argo_migrate.py:751) and does not handle failure; main catches only Stop (:1240-1243). A timeout or HTTP error during 'arch a b c …' ends the run, and the remaining apps are never gated. This goes against the tool's 'every step … exits non-zero with a STOP line' (:20-21). Before P4, the check fetched the URL itself, and a failure became a per-app STOP through the Traceback path.
 
 **Consequence:** A network blip during a batch arch run leaves the rest of the batch ungated; the operator has to spot the traceback and re-run
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Agree — suggested fix now — fixed in Ansible 02b5580
 
-### B6 — AnsibleSpecs README: slice 025's catalogue entry links slices/backlog/025_… and says it waits for the second migration · cosmetic
+</details>
+
+### ~~B6 — AnsibleSpecs README: slice 025's catalogue entry links slices/backlog/025_… and says it waits for the second migration · cosmetic~~ — fixed in AnsibleSpecs 17ede0d; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 README.md:30 links `slices/backlog/025_architecture_cross_app_resolution/slice.md`, but the slice sits at `slices/025_architecture_cross_app_resolution/`, so the link is dead. The entry also says the slice "waits for the second migration", which the plan's premise correction retired: 16 apps are held on this slice alone.
 
 **Consequence:** A reader following the Pending catalogue to slice 025 hits a missing file and reads a stale dependency, until the slice's close moves it and rewrites the entry
 
 **Provenance:** witnessed, code-writer, P5, r1, /work/AnsibleSpecs/README.md:30
-**Disposition:**
+**Disposition:** Agree — suggested fix now — fixed in AnsibleSpecs 17ede0d
+
+</details>
 
 ## Open questions and rulings
 
@@ -169,23 +205,31 @@ youtrack-mcp-server's Association. Q1 only moves a stale-wire failure one publis
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
-### Q1 — A Service a render drops while its own container still points at it resolves through the render's last publication for one cycle · minor
+### ~~Q1 — A Service a render drops while its own container still points at it resolves through the render's last publication for one cycle · minor~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 Resolution through the published set (aac-tools `resolve_host`, P1; HelmCharts inherits it in P2) applies to any host the render does not place. That includes a host in a namespace the render itself renders. Suppose a chart drops a Service while one of its own containers still points at it. The interface from the app's previous publication still links the old instance, so the build passes and draws the edge. The next build fails as before, once the publication that dropped the interface has landed. The fatal outcome could be restored for this case by skipping the published lookup for namespaces the render itself renders. That rule is not in the plan, so it was not added. P4's subset render is unaffected either way, because the departed app's namespace is not rendered.
 
 **Consequence:** a wire left pointing at a removed in-namespace Service fails one publish cycle late; the edge drawn in between points at the instance the previous publication linked
 
 **Provenance:** read, code-writer, P1, r1, ArgoCDTools aac-tools/image/gen_architecture.py resolve_host
-**Disposition:**
+**Disposition:** Agree — suggested close (the fatal still fires, one cycle later) — struck
 
-### Q2 — The handover check attributes a non-Serving relation to its source's producer, not only a Serving edge to its consumer's · minor
+</details>
+
+### ~~Q2 — The handover check attributes a non-Serving relation to its source's producer, not only a Serving edge to its consumer's · minor~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 P3's text names the Serving rule. In the live set, one relation touching a held app is not Serving: youtrack-mcp-server's rel:youtrack-mcp-server-consumes-youtrack, an Association from its app:youtrack-mcp-server to youtrack's svc:youtrack-prd-youtrack. That producer draws it against an id youtrack's move keeps. Under a Serving-only rule it would be youtrack's loss and would stop youtrack's arch gate. The check now lists it under 'drawn by youtrack-mcp-server'. Every other relation type the generators emit (Specialization, Realization, Assignment, Association) is drawn from its source's side. Over the 16 held apps the only non-Serving relation this changes is this one (live set and snapshot, 2026-09-23).
 
 **Consequence:** youtrack's handover check no longer reports that Association as a loss; if the operator wants such edges held against the app instead, youtrack stops on it
 
 **Provenance:** witnessed, executor, P3, r1, ArgoCDTools ce5efb9 (test_an_edge_another_producer_draws_from_its_own_element_is_its_sources)
-**Disposition:**
+**Disposition:** Agree — suggested close, accepting the source's-producer rule — struck
+
+</details>
 
 ## Suggestions
 
@@ -194,15 +238,6 @@ repos, and both are read. S4 affects the bulk migration now: it blocks keycloak'
 design-assistant's non-prd stages at `arch`. S3, S4 and S5 are witnessed.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### S1 — IoTSupport's architecture producer could follow the new interface links instead of bridging hosts by hint stem
-
-IoTSupport's generator resolves a device fleet's hosts, such as Keycloak's auth.ginbov.nl and the MQTT broker, to a provider instance in the published set with a heuristic. It finds the elements whose stats carry the host, then picks the capability realizer whose hint stem shares leading tokens with them (/work/scratch/IoTSupport backend/tools/gen-architecture.py:206-253). Its own docstring says the host-bearing element 'is linked to the realizing ss: only by a shared release/hint stem, NOT by a relation edge'. Once this slice ships, every interface links directly to the instances behind it, so the producer could follow that relation instead of guessing from names. Nothing breaks if it doesn't. The heuristic only reads hosts, and the new in-cluster interfaces carry cluster DNS names, which no device fleet URL names. This slice doesn't touch the repo.
-
-**Consequence:** none today — the heuristic keeps working; it stays a name-matching guess that a future rename of keycloak's release or workload could break
-
-**Provenance:** read, plan-writer, planning, r1, /work/scratch/IoTSupport backend/tools/gen-architecture.py
-**Disposition:**
 
 ### S2 — The Architecture producer manual does not describe the new cross-producer host lookup (in-cluster interfaces linked to instances) · minor
 
@@ -213,9 +248,33 @@ code-writer, P1, r1, 2026-09-23 — The convention P1 settled, which is what suc
 **Consequence:** a producer author outside the deploy estate who wants to resolve an in-cluster host has only generator source to learn the convention from, including the link relation type and the host form
 
 **Provenance:** read — plan-reviewer, plan review r1, plan_review_r1.md
-**Disposition:**
+**Disposition:** Agree — suggested card ARCH — ARCH-16
 
-### S3 — Pin the published-lookup order and serving_at's instance filter with tests in aac-tools · minor
+### S4 — HelmCharts gen-architecture has no way to name a chart's prd release alone, so the arch gate cannot run a non-prd stage whose chart also has a prd stage · minor
+
+The arch gate renders HelmCharts without the app by naming every other release. The generator selects a release by its release name or by its bare chart name (tools/chart_tools/gen_architecture.py:638), and the bare chart name is the only name of a prd release. That name also selects every other stage of the chart. So when the stage that moves is not prd but the chart has a prd stage, prd cannot be rendered without the moving stage. argo_migrate.py's hc_releases_without stops the app in that case and says why. Today this affects keycloak dev and design-assistant dev/tst/uat. The held apps move prd, so none of them is affected. The fix would be a HelmCharts patch: accept `<chart>@prd`, or add an exclude flag.
+
+**Consequence:** moving keycloak's dev stage, or any non-prd stage of design-assistant, stops at argo_migrate.py arch with 'gen-architecture cannot render <app>'s prd release without its <stage> one' until gen-architecture can leave a single release out
+
+**Provenance:** witnessed, code-writer, P4, r1, Ansible f2db525 support/argo-migrate/argo_migrate.py hc_releases_without
+**Disposition:** Agree — suggested card HC — HC-16
+
+### ~~S1 — IoTSupport's architecture producer could follow the new interface links instead of bridging hosts by hint stem~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
+
+IoTSupport's generator resolves a device fleet's hosts, such as Keycloak's auth.ginbov.nl and the MQTT broker, to a provider instance in the published set with a heuristic. It finds the elements whose stats carry the host, then picks the capability realizer whose hint stem shares leading tokens with them (/work/scratch/IoTSupport backend/tools/gen-architecture.py:206-253). Its own docstring says the host-bearing element 'is linked to the realizing ss: only by a shared release/hint stem, NOT by a relation edge'. Once this slice ships, every interface links directly to the instances behind it, so the producer could follow that relation instead of guessing from names. Nothing breaks if it doesn't. The heuristic only reads hosts, and the new in-cluster interfaces carry cluster DNS names, which no device fleet URL names. This slice doesn't touch the repo.
+
+**Consequence:** none today — the heuristic keeps working; it stays a name-matching guess that a future rename of keycloak's release or workload could break
+
+**Provenance:** read, plan-writer, planning, r1, /work/scratch/IoTSupport backend/tools/gen-architecture.py
+**Disposition:** Agree — suggested close (heuristic keeps working; IoTSupport has no tracker project) — struck
+
+</details>
+
+### ~~S3 — Pin the published-lookup order and serving_at's instance filter with tests in aac-tools · minor~~ — closed by the operator, 2026-09-23; struck by close-out
+
+<details><summary>struck — body kept for the record</summary>
 
 Swapping resolve_host's in-cluster-form-before-host order (gen_architecture.py:685) passes all 24 tests. So does deleting serving_at's 'src in container_of' filter (:494). A test per detail would keep P2's AST-identical copy from drifting unnoticed.
 
@@ -226,22 +285,19 @@ test-agent r1, 2026-09-23 — Witnessed: in a scratch copy of each generator, dr
 **Consequence:** none today; drift in either detail would go unnoticed in both generators
 
 **Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
-**Disposition:**
+**Disposition:** Agree — suggested close (HelmCharts' copy is pinned; aac-tools drift is remote) — struck
 
-### S4 — HelmCharts gen-architecture has no way to name a chart's prd release alone, so the arch gate cannot run a non-prd stage whose chart also has a prd stage · minor
+</details>
 
-The arch gate renders HelmCharts without the app by naming every other release. The generator selects a release by its release name or by its bare chart name (tools/chart_tools/gen_architecture.py:638), and the bare chart name is the only name of a prd release. That name also selects every other stage of the chart. So when the stage that moves is not prd but the chart has a prd stage, prd cannot be rendered without the moving stage. argo_migrate.py's hc_releases_without stops the app in that case and says why. Today this affects keycloak dev and design-assistant dev/tst/uat. The held apps move prd, so none of them is affected. The fix would be a HelmCharts patch: accept `<chart>@prd`, or add an exclude flag.
+### ~~S5 — argo_migrate.py arch's success line names no app, so a batch run's lines cannot be told apart · minor~~ — fixed in Ansible 02b5580; struck by close-out
 
-**Consequence:** moving keycloak's dev stage, or any non-prd stage of design-assistant, stops at argo_migrate.py arch with 'gen-architecture cannot render <app>'s prd release without its <stage> one' until gen-architecture can leave a single release out
-
-**Provenance:** witnessed, code-writer, P4, r1, Ansible f2db525 support/argo-migrate/argo_migrate.py hc_releases_without
-**Disposition:**
-
-### S5 — argo_migrate.py arch's success line names no app, so a batch run's lines cannot be told apart · minor
+<details><summary>struck — body kept for the record</summary>
 
 `cmd_arch` ends with `log("architecture handover holds (N addition(s); HelmCharts without the app draws its M edge(s); edges other producers draw: …)")`. A STOP line carries the namespace (`STOP jenkins-prd at arch`), the success line does not. With `arch a b c …` the operator matches lines to apps by argument order. Adding the app's namespace to that one line would fix it.
 
 **Consequence:** A batch arch run over many apps prints indistinguishable success lines; the operator counts lines against the argument list to find which app is which
 
 **Provenance:** witnessed test-phase r1 — test_r1/arch-gate-snapshot-16-apps.txt
-**Disposition:**
+**Disposition:** Agree — suggested fix now — fixed in Ansible 02b5580
+
+</details>
