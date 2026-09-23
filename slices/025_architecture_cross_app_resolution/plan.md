@@ -266,7 +266,7 @@ Settled:
 - **Full render**: green, 298 elements and 591 relations, and the live `arch-validate` passes.
 - **Tests.** `tests/test_gen_architecture.py` grows from 22 to 41 cases (19 new). 15 of them port P1's `PublishedInterfaceTests`/`AcrossRendersTests`, the pinned literals included. Two are `main()`-level cases: each renders the providers and a consumer, flips the providers and uses the artifact as the dataset, and gets the same edges with the same ids. The second (review r1 F1) covers keycloak's exposed host and postgres-pas' CNPG pooler, so it pins `publish_service_interfaces` after `reconcile_exposed_services` and after the pooler merge. The last 2 pin close-out S3's details, the published in-cluster-before-host order and `serving_at`'s instance-only filter. Each of these 3 was witnessed failing under its mutation.
 
-### P3 — The handover check scopes an app exactly and knows whose edges are whose
+### P3 — The handover check scopes an app exactly and knows whose edges are whose ✅ DONE 2026-09-23
 
 Target: ../ArgoCDTools
 
