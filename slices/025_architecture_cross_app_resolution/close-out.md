@@ -50,6 +50,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — The 16 held apps hold on a snapshot carrying the local HelmCharts render, and still stop on the live set
+
+Test phase r1 built a snapshot from the live published set with every helm-charts element and relation replaced by a full local HelmCharts render (e134d28: 298 elements, 591 relations; against the live set a pure addition of 53 in-cluster interfaces and 174 Associations). `argo_migrate.py arch` over the 16 held apps, each scaffolded first, holds for all 16: the check ends `equal`, and HelmCharts without the app builds and redraws all 23 edges it draws today. The same gate on the live set stops jenkins at HelmCharts' half and electronics-inventory and infra-statistics in the generator, as expected until HelmCharts publishes. Scaffolds, snapshot and logs are in /work/scratch/025-test-r1/; the record is in the slice's test_r1/. The harness redirected the tool's HOME, so ~/bulk-migration/state and logs were not touched.
+
+**Consequence:** none — the operator can expect the 16 to pass `arch` after the HelmCharts push; V02 and V13 stay owed to that push (A1)
+
+**Provenance:** witnessed test-phase r1 — slices/025_architecture_cross_app_resolution/test_r1/arch-gate-snapshot-16-apps.txt
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -173,6 +182,8 @@ Swapping resolve_host's in-cluster-form-before-host order (gen_architecture.py:6
 
 P2 executor r1, 2026-09-23 — HelmCharts' copy is pinned: tests/test_gen_architecture.py (16d1af6) has a test for each detail, each witnessed failing under its mutation. The aac-tools suite still pins neither.
 
+test-agent r1, 2026-09-23 — Witnessed: in a scratch copy of each generator, dropping serving_at's instance filter, or trying the exposed host before the in-cluster form in resolve_host, turns HelmCharts' suite red and leaves aac-tools' green (test_r1/generator-mutations.txt, M4 and M5). The other four mutations of the new behaviour fail both suites.
+
 **Consequence:** none today; drift in either detail would go unnoticed in both generators
 
 **Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
@@ -185,4 +196,13 @@ The arch gate renders HelmCharts without the app by naming every other release. 
 **Consequence:** moving keycloak's dev stage, or any non-prd stage of design-assistant, stops at argo_migrate.py arch with 'gen-architecture cannot render <app>'s prd release without its <stage> one' until gen-architecture can leave a single release out
 
 **Provenance:** witnessed, code-writer, P4, r1, Ansible f2db525 support/argo-migrate/argo_migrate.py hc_releases_without
+**Disposition:**
+
+### S5 — argo_migrate.py arch's success line names no app, so a batch run's lines cannot be told apart · minor
+
+`cmd_arch` ends with `log("architecture handover holds (N addition(s); HelmCharts without the app draws its M edge(s); edges other producers draw: …)")`. A STOP line carries the namespace (`STOP jenkins-prd at arch`), the success line does not. With `arch a b c …` the operator matches lines to apps by argument order. Adding the app's namespace to that one line would fix it.
+
+**Consequence:** A batch arch run over many apps prints indistinguishable success lines; the operator counts lines against the argument list to find which app is which
+
+**Provenance:** witnessed test-phase r1 — test_r1/arch-gate-snapshot-16-apps.txt
 **Disposition:**

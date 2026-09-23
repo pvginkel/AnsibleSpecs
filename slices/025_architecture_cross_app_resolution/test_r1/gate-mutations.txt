@@ -1,0 +1,13 @@
+# argo_migrate.py arch jenkins --dataset <snapshot with one mutation>   (Ansible f2db525)
+
+== A: the jenkins container's `summary` edited in the snapshot (a differing field on a kept id)
+[argo-migrate] STOP jenkins-prd at arch: the handover does not hold:
+element ss:jenkins-prd-jenkins-jenkins,9cd4acc8-3e13-5945-bd46-3eaf17ed0afa: summary: published "SystemSoftware container 'jenkins' of workload 'jenkins' in release 'jenkins'. (edited)" != generated "SystemSoftware container 'jenkins' of workload 'jenkins' in release 'jenkins'."
+
+== B: an extra field on the published helm-charts-drawn edge jenkins → infra-statistics (HelmCharts would redraw it differently)
+[argo-migrate] STOP jenkins-prd at arch: the handover does not hold:
+helm-charts would redraw rel:jenkins-prd-jenkins-jenkins-serves-infra-statistics-prd-infra-statistics-infra-statistics-app-continuous-integration: published {... 'note': 'x'} != generated {...}
+
+== C: the same edge published under another id (HelmCharts would no longer draw the id the snapshot has)
+[argo-migrate] STOP jenkins-prd at arch: the handover does not hold:
+helm-charts would no longer draw: rel:jenkins-prd-jenkins-jenkins-serves-infra-statistics-prd-infra-statistics-infra-statistics-app-continuous-integration-x

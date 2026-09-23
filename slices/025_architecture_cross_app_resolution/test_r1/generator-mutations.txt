@@ -1,0 +1,21 @@
+# One mutation at a time applied to a scratch copy of each generator; the copy's own suite must go red.
+# aac-tools: `python3 -m unittest discover -b -s tests -t .` (the copy's one baseline error,
+# test_both_images_bake_the_same_ca_root, reads sibling repos and errors in any copy).
+# HelmCharts: `pytest tests/test_gen_architecture.py`, PYTHONPATH on the copy; baseline 41 passed.
+
+mutation                                                   aac-tools                        HelmCharts
+M1 link() also links init containers                       6 failures                       red (1st failure of -x)
+M2 serving() keeps init containers                         3 failures                       red
+M3 resolve_host has no published-interface fallback        7 failures                       red
+M4 serving_at keeps sources that are not instances         NOT caught (baseline error only) red
+M5 published lookup tries the exposed host before          NOT caught (baseline error only) red
+   the in-cluster form
+M6 exposed-host interfaces are not linked                  4 failures                       red
+
+M4 and M5 are what close-out S3 asks aac-tools to pin: HelmCharts carries those two tests, aac-tools does not.
+
+# The handover check (aac-tools/tests/test_handover_equality.py), P3's four mutations re-run:
+old prefix scope        5 fail
+old claim-all split     4 fail
+link-only interface scope 1 fail
+Serving-only ownership  1 fail

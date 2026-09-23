@@ -4,121 +4,179 @@
       "id": "V01",
       "area": "R1 — cross-app resolution",
       "description": "Cross-app references resolve through the published set, iteratively — \"App A deploys partial architecture -> Publish aggregated set -> App B uses published set and builds its own -> Publish aggregated set -> App A can deploy its complete set. We can do the same with our migration.\" A consumer in a deploy repo resolves a provider still in HelmCharts, and HelmCharts resolves a provider that has left, each through the provider's interfaces in the published set. Each draws the same instance → instance Serving edge, with the same id, that HelmCharts' one-process resolution draws today. This run does not push HelmCharts (Ruling Q1), so the test phase proves both directions against a dataset snapshot whose helm-charts envelope is the local HelmCharts render. Verified 2026-09-23: ArgoCDTools aac-tools/image/gen_architecture.py:628-638 — today resolve_host stops at the hint table after the render (verified 2026-09-23); HelmCharts tools/chart_tools/gen_architecture.py:476 — the same resolve_host (AST-identical, 2026-09-23).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Both directions were proven on a dataset snapshot whose helm-charts envelope is the local HelmCharts render (HelmCharts e134d28, unpushed per Ruling Q1). Consumers that left HelmCharts resolve the providers still in it through the providers' interfaces and draw the same edges with the same ids; HelmCharts without a departed provider draws that provider's edges, with the same ids, through the published interfaces. The same runs against the live set, which holds none of the interfaces, fail as expected — so the resolution really goes through the published interfaces.",
+      "evidence": [
+        "`argo_migrate.py arch <16 held apps> --dataset snapshot.yaml`: all 16 hold, every check ends `equal — every id matches` (test_r1/arch-gate-snapshot-16-apps.txt)",
+        "aac-tools direction: electronics-inventory's render (ArgoCDTools ce5efb9) resolves `postgres-pooler-rw.postgres-pas-prd.svc.cluster.local` to `ss:postgres-pas-prd-postgres-pooler-rw` (edges …-serves-electronics-inventory-…-app/-setup) and `auth.ginbov.nl` to `ss:keycloak-prd-keycloak-keycloak`, instance → instance; its 22 relations equal HelmCharts' published 22",
+        "HelmCharts direction: with each provider left out (jenkins, postgres-pas, keycloak, elasticsearch, git-sync, youtrack, telegram-mcp, trello-mcp, homeassistant-mcp) HelmCharts builds and redraws all 23 `drawn by helm-charts` edges, each whole relation dict equal to the snapshot's (jenkins 2, keycloak 7, postgres-pas 6, elasticsearch 3, the rest 1)",
+        "Live set (no interfaces): jenkins stops at 'HelmCharts does not build without jenkins-prd' on `jenkins.webathome.org` and `jenkins-mcp.home`; electronics-inventory and infra-statistics stop in the generator on hosts that resolve to no provider (test_r1/arch-gate-live-set-negative.txt)",
+        "Source: aac-tools image/gen_architecture.py `resolve_host` + `Dataset.serving_at`; HelmCharts tools/chart_tools/gen_architecture.py `resolve_host` (AST-identical, checked with ast.dump over every function)"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — the published set stays valid",
       "description": "The published set stays valid at every step of a migration — \"We just have to make sure that we keep the published set in a valid state as we migrate stuff.\" After the bulk-migration session pushes HelmCharts and `AaC/HelmCharts` publishes the patched producer's artifact, the `AaC/Architecture` collect is green. Owed after that push (Ruling Q1): the run loop does not push HelmCharts, so the test phase does not settle this criterion. Before that, the pre-flip gate holds the line at each move (V12). Verified 2026-09-23: /work/AnsibleSpecs/argo-cd/decisions.md:632-644 — D50: the collector publishes nothing while both producers declare an app's ids, until the flip's HelmCharts build clears them.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Not settled by the test phase (Ruling Q1): the run loop does not push HelmCharts, so `AaC/HelmCharts` has not published the patched producer's artifact and no collect has run on it. Until then the pre-flight gate is what keeps the set valid (V12, proven). Measured ahead of the push: the patched full render is a pure addition over the live set (53 in-cluster interfaces, 174 Associations, no id lost, no field but `logo` changed) and passes the live arch-validate.",
+      "evidence": [
+        "Owed: `~/bulk-migration/hc-push.sh` (the bulk-migration session, D54), then `AaC/HelmCharts` builds green and the `AaC/Architecture` collect that follows it is green; `track_build.py AaC/HelmCharts --hash <pushed sha>`",
+        "Pre-push measurement: snapshot build, full render 298 elements / 591 relations vs. 245 / 417 published (test_r1/README.md); `arch-validate` on docs/architecture/helm-charts.yaml: ✓"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — no second-pass trigger",
       "description": "Nothing has to trigger app A's second pass — \"when we hit something like this for a new app, we manage this bootstrapping manually. It's not something we have to account for now.\" No partial-run flag and no automatic re-run of a consumer is built. In both generators an unresolved host still fails the run: every error goes to stderr and no artifact is written. Verified 2026-09-23: ArgoCDTools aac-tools/image/gen_architecture.py:986-990; HelmCharts tools/chart_tools/gen_architecture.py:778-783.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "No partial-run flag exists in either generator, and an unresolved host is still fatal in both: every error to stderr, exit 1, no artifact. Seen against real renders on the live set.",
+      "evidence": [
+        "aac-tools image/gen_architecture.py:1052-1056 and HelmCharts tools/chart_tools/gen_architecture.py:834-839: `errors` → stderr → `N unresolved edge(s); no output written` → SystemExit(1); aac-tools' only flags are --stage/--producer/--repo (:739-751), HelmCharts' none",
+        "electronics-inventory on the live set: `gen-architecture: 3 unresolved edge(s); no output written`; jenkins' HelmCharts half: `2 unresolved edge(s); no output written` (test_r1/arch-gate-live-set-negative.txt); the error text now ends `(in-cluster / exposed host / cross-producer / published interface)`",
+        "No trigger for a consumer's second pass was built: the diffs touch only the generators, the handover check, `argo_migrate.py arch` and the register"
+      ]
     },
     {
       "id": "V04",
       "area": "R4 — HelmCharts patched, not reworked",
       "description": "HelmCharts is patched, not reworked — \"I must assume that it can keep working as is. Honestly, I'd prefer you patch it if you need changes in it. I want to limit the amount of work we do on that repo.\" HelmCharts keeps its own generator and patches it in place. It keeps building when a provider leaves it, and apps that have left resolve the providers still in it. Verified 2026-09-23: HelmCharts tools/deploy/deploy_cli/release.py:174 — a flipped app's chart_name is None, so the generator skips it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "HelmCharts keeps its own generator, patched in place (+112/−16 in tools/chart_tools/gen_architecture.py, +503/−1 in its tests); no aac-tools generator was adopted and no other HelmCharts file changed. It builds with a provider left out, and apps that left resolve the providers still in it.",
+      "evidence": [
+        "`git diff --stat 399b281..e134d28` in HelmCharts: only tools/chart_tools/gen_architecture.py and tests/test_gen_architecture.py",
+        "Full render with nothing left out: green, 298 elements / 591 relations, arch-validate ✓",
+        "Provider-left-out renders: 16 `HelmCharts without <app>` renders green (test_r1/arch-gate-snapshot-16-apps.txt); tools/deploy/deploy_cli/release.py:174 sets chart_name None for a flipped app so the generator skips it"
+      ]
     },
     {
       "id": "V05",
       "area": "D1/D2 — published interfaces",
       "description": "Every provider publishes each in-cluster Service as an interface element: the existing applicationInterfaces kind, with the host in `stats`. This includes the CNPG pooler Services. Every interface, the in-cluster ones and the existing exposed-host ones, is linked directly to the instances behind its Service and not through the application service. The link is an `Association` from the instance to the interface, the same from ApplicationComponent and SystemSoftware instances (Ruling Q2). An interface links only the containers that serve — never a pod's init containers — and no marker field is added to instance elements (Ruling D2). The artifacts pass arch-validate with no Architecture schema change. Verified 2026-09-23: the published relations.schema.json x-allowedTriples allows Association from both SystemSoftware and ApplicationComponent to ApplicationInterface; ArgoCDTools aac-tools/image/gen_architecture.py:600-625 (provider index; its backing set includes init containers via w[\"all\"], :614-616), :1113-1116 (pooler Services), :1178-1193 (exposed-host interfaces, Assignment to the service only).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Every Service the render places is published as an `if:` interface at `<svc>.<ns>.svc` (poolers included) and every interface, in-cluster and exposed-host, is linked by an Association from each non-init instance behind it; the existing interface → service Assignment is unchanged; no init container is linked; no schema change; the artifacts validate.",
+      "evidence": [
+        "Full HelmCharts render vs. live set: 53 new elements, all `if:` with `stats.url` ending `.svc`; 174 new relations, all `Association`, ids `rel:<instance hint>-behind-<interface hint>`",
+        "Jenkins in the snapshot: `if:jenkins-jenkins-prd-svc` (jenkins.jenkins-prd.svc) links only `ss:…-jenkins-jenkins`, not `ss:…-install-homelab-ca`; `if:jenkins-mcp-jenkins-prd-svc` links the auth (SystemSoftware) and filter (ApplicationComponent) instances — both source types validate",
+        "`arch-validate` (live service): helm-charts.yaml full render ✓; aac-tools artifacts for jenkins, postgres-pas, keycloak, elasticsearch ✓ (Ansible scripts/arch-validate.py)",
+        "Mutations: linking init containers breaks 6 aac-tools tests and a HelmCharts test (test_r1/generator-mutations.txt)"
+      ]
     },
     {
       "id": "V06",
       "area": "D1 — the two generators in lockstep",
       "description": "For the same Service, the aac-tools generator and HelmCharts' generator emit the same interface elements (same ids, every field equal) and the same relations. A moved provider therefore shows no field difference at handover.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The two generators emit the same elements and relations for the same Service: the whole surface is AST-identical, and 16 apps' aac-tools renders equal HelmCharts' render field for field.",
+      "evidence": [
+        "ast.dump comparison, ArgoCDTools ce5efb9 vs HelmCharts e134d28: Dataset, resolve_host, serving, publish_service_interfaces, resolve_boundby, build_provider_index, CROSS_PRODUCER_HOST_HINTS, cross_producer_id, normalize_incluster, resolve_svc_target and resolve_secret_stores identical; reconcile_exposed_services and resolve_mcp_clients differ in a docstring only; resolve_upstreams by aac-tools' list-of-wires form (predates the slice)",
+        "16 handover checks: published (HelmCharts render) and generated (aac-tools) hold equal element and relation counts and 'equal — every id matches; producer, logo and stats.image are all that differ' (jenkins 14/30, postgres-pas 4/11 incl. its pooler interface, keycloak 5/8, elasticsearch 11/21 incl. `if:kibana`, …)"
+      ]
     },
     {
       "id": "V07",
       "area": "D1 — same providers, same edge ids",
       "description": "Resolution through the published set picks exactly the providers that in-process resolution picks: the capability's realizers, and the containers a wire's `providers` names. No init container becomes a provider; the live case is jenkins' install-homelab-ca init container, which realizes cap:continuous-integration. Cross-app Serving edges stay instance → instance and keep their ids. Verified 2026-09-23: ArgoCDTools aac-tools/image/gen_architecture.py:1393, :1464, :1567 — in-process resolution drops init containers.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Resolution through the published set keeps exactly the providers in-process resolution keeps, and cross-app Serving edges stay instance → instance with unchanged ids. Jenkins' init container is not a provider.",
+      "evidence": [
+        "jenkins: HelmCharts without jenkins draws `rel:jenkins-prd-jenkins-jenkins-serves-infra-statistics-…-continuous-integration` (source the `jenkins` container, not `install-homelab-ca`) and `…-jenkins-mcp-filter-serves-intercom-…-mcp`, both whole-dict equal to the snapshot's (gate on jenkins ✓)",
+        "Mutation M2 (serving() keeps init containers) fails aac-tools `test_an_init_container_is_never_a_provider`, `test_a_cap_recipe_draws_the_edge_one_render_draws` and HelmCharts' equivalent; M3 (no fallback) fails 7 aac-tools tests (test_r1/generator-mutations.txt)",
+        "aac-tools AcrossRendersTests (8) and HelmCharts' ports assert the relations dict equals the one-render dict for a cap recipe with an init container and a non-realizing sidecar, a CNPG pooler, `auth.ginbov.nl`, an upstream wire and an MCP binding"
+      ]
     },
     {
       "id": "V08",
       "area": "D1 — the hint table",
       "description": "CROSS_PRODUCER_HOST_HINTS holds only the three non-Kubernetes providers in both copies: OpenBao `secrets.home`, Ceph `ceph` and Home Assistant. Keycloak's `auth.ginbov.nl` resolves with no table entry. Verified 2026-09-23: ArgoCDTools aac-tools/image/gen_architecture.py:135-139; HelmCharts tools/chart_tools/gen_architecture.py:121-125.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "CROSS_PRODUCER_HOST_HINTS holds three entries in both copies — OpenBao `secrets.home`, Ceph `ceph`, Home Assistant `homeassistant.webathome.org` — and is AST-identical between them. Keycloak's `auth.ginbov.nl` resolves with no table entry.",
+      "evidence": [
+        "ArgoCDTools image/gen_architecture.py:140-144; HelmCharts tools/chart_tools/gen_architecture.py:127-131",
+        "electronics-inventory's render on the snapshot draws `rel:keycloak-prd-keycloak-keycloak-serves-electronics-inventory-…-electronics-inventory-app-iam` from `auth.ginbov.nl` (its relations equal the published 22); zigbee2mqtt holds too"
+      ]
     },
     {
       "id": "V09",
       "area": "Handover check — the name-prefix quirk",
       "description": "The handover check's name-prefix quirk is fixed — \"`app_elements()` matches by string prefix, so `youtrack` pulls in `youtrack-mcp`'s elements and reports a false loss.\" youtrack's check no longer includes any youtrack-mcp element. An app's own interfaces are compared field by field whatever their host is called; elasticsearch's `if:kibana` is one example. Verified 2026-09-23: ArgoCDTools aac-tools/checks/handover_equality.py:146-161.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The check scopes an app exactly. youtrack's 6 elements hold nothing of youtrack-mcp, and an app's off-name exposed interfaces are in its scope and compared field by field.",
+      "evidence": [
+        "`app_elements(snapshot, 'helm-charts', 'youtrack')` → 6 ids: `app:youtrack-prd-…` ×2, `ss:youtrack-prd-…`, `svc:youtrack-prd-youtrack`, `if:youtrack-youtrack-prd-svc` and `if:issues-webathome-org` — no `youtrack-mcp-prd-` id; the youtrack check on the snapshot ends `equal`",
+        "elasticsearch → 11 ids including `if:kibana`, `if:kibana-home` and `if:kibana-elasticsearch-prd-svc`; its check ends `equal`",
+        "Mutation: the old prefix scope fails 5 of the 11 handover fixture tests"
+      ]
     },
     {
       "id": "V10",
       "area": "Handover check — whose edges are whose",
       "description": "An edge drawn by the consumer's producer, meaning a Serving edge into a consumer outside the app, is not reported as the app's loss. It is listed under that consumer's producer. Keycloak's 21 bare-UUID relations are IoTSupport's `keycloak —Serving→ <IoT device>` edges and are classified that way. Verified 2026-09-23: ArgoCDTools aac-tools/checks/handover_equality.py:164-181 — every relation with one endpoint in the app is claimed; /work/scratch/IoTSupport backend/tools/gen-architecture.py:356-364 — IoTSupport mints the rel:<uuid5> ids.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "A Serving edge drawn by a consumer outside the app is listed under that consumer's producer and is not the app's loss. Keycloak's 21 bare-UUID relations are classified as IoTSupport's.",
+      "evidence": [
+        "keycloak check on the snapshot: `drawn by iotsupport-app:` ×21 bare-UUID `rel:<uuid>` ids and `drawn by helm-charts:` ×7; ends `equal`; gate line `edges other producers draw: iotsupport-app 21` (test_r1/arch-gate-snapshot-16-apps.txt)",
+        "Across the 16: 23 helm-charts-drawn edges, 35 under `iotsupport-app`, 1 under `youtrack-mcp-server`; none of them contains `published but not generated`",
+        "Mutation: the old claim-all split fails 4 handover fixture tests"
+      ]
     },
     {
       "id": "V11",
       "area": "Arch gate — field differences",
       "description": "A differing field on a kept id stops `argo_migrate.py arch`. Verified 2026-09-23: Ansible support/argo-migrate/argo_migrate.py:742 greps for \"differs\"; ArgoCDTools aac-tools/checks/handover_equality.py:201-204 prints \"<id>: <field>: published … != generated …\", so today a field difference passes the gate.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "A differing field on a kept id stops the gate. Reproduced with a mutated snapshot.",
+      "evidence": [
+        "Snapshot with the jenkins container's `summary` edited: `STOP jenkins-prd at arch: the handover does not hold: element ss:jenkins-prd-jenkins-jenkins,…: summary: published \"… (edited)\" != generated \"…\"` (test_r1/gate-mutations.txt A)",
+        "argo_migrate.py: `diffs = lines starting 'element '/'relation '`, only `… generated but not published: ` is an addition (support/argo-migrate/argo_migrate.py, cmd_arch)"
+      ]
     },
     {
       "id": "V12",
       "area": "Arch gate — both halves of a move",
       "description": "Before an app flips, `argo_migrate.py arch` proves both halves of the move. The app's new producer drops no id the published set carries for it. HelmCharts' patched generator, rendering every release except the app's against the same dataset snapshot with nothing overlaid, builds green and still draws every edge from the app to a consumer that stays in HelmCharts, with the same id. The gate runs against a snapshot file as well as the live set; the test phase proves it on a snapshot whose helm-charts envelope is the local HelmCharts render. Verified 2026-09-23: HelmCharts tools/chart_tools/gen_architecture.py:521, :584 (subset render), :343-345 (default DockerImages overlay); Ansible support/argo-migrate/argo_migrate.py:735-736 (cmd_arch passes no --dataset); ArgoCDTools aac-tools/checks/handover_equality.py:233 (the check takes --dataset).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "`argo_migrate.py arch` proves both halves against one snapshot with nothing overlaid, from a file (`--dataset`) as well as the live URL. It stops on a lost or redrawn edge and on a HelmCharts that cannot build without the app; it passes on the snapshot.",
+      "evidence": [
+        "16 held apps on the snapshot: all hold, HelmCharts builds green without each and draws all 23 helm-charts-drawn edges (test_r1/arch-gate-snapshot-16-apps.txt)",
+        "Mutated snapshots: an extra field on the published edge → `helm-charts would redraw …`; the edge under another id → `helm-charts would no longer draw …` (test_r1/gate-mutations.txt B, C)",
+        "Live set: jenkins → `HelmCharts does not build without jenkins-prd:` with the two unresolved edges (test_r1/arch-gate-live-set-negative.txt)",
+        "Side effects held to scratch: harness redirected HOME/deploy-repo location; ~/bulk-migration/state/jenkins-prd.json untouched (mtime 13:03). HelmCharts' gitignored docs/architecture/helm-charts.yaml is overwritten by each run, as the done-record says"
+      ]
     },
     {
       "id": "V13",
       "area": "Acceptance proof",
       "description": "The bulk migration's own handover check (`argo_migrate.py arch`) is re-run, after HelmCharts' patched producer has published, over the 16 apps held on this slice: homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory and elasticsearch. Every id loss attributable to cross-app resolution is gone. Any app that still stops is named with its cause, and no such cause is cross-app resolution. Owed after the bulk-migration session's HelmCharts push (Ruling Q1): the run loop does not push HelmCharts, so the test phase does not settle this criterion. Verified 2026-09-23: ~/bulk-migration/logs/handover-all.txt — the pre-slice failures (2026-09-23).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "Owed after the bulk-migration session's HelmCharts push (Ruling Q1); the test phase does not settle it. As supporting evidence, the same 16 apps were scaffolded and gated on a snapshot carrying the local HelmCharts render: all 16 hold, and no loss or field difference remains, including the previously failing electronics-inventory, zigbee2mqtt, jenkins, keycloak, postgres-pas and youtrack. Against the live set the gate still stops, as expected before the push.",
+      "evidence": [
+        "Owed: `~/bulk-migration/hc-push.sh`, wait for `AaC/HelmCharts` and the `AaC/Architecture` collect, then `python3 support/argo-migrate/argo_migrate.py arch homeassistant-mcp calendar-support git-sync guacamole infra-statistics intercom jenkins keycloak postgres-pas telegram-mcp trello-mcp youtrack youtrack-mcp zigbee2mqtt electronics-inventory elasticsearch` (scaffold first where the deploy repo is not in /work; no --dataset fetches the live set)",
+        "Supporting: test_r1/arch-gate-snapshot-16-apps.txt"
+      ]
     },
     {
       "id": "V14",
       "area": "Decision record",
       "description": "The argo-cd decision register records ruling D1 next to D50. The record covers three points: every provider publishes each in-cluster Service as an interface linked to its instances; cross-app edges resolve through those interfaces and stay instance → instance; an unresolved host stays fatal, with a new app's bootstrap done by hand. Verified 2026-09-23: /work/AnsibleSpecs/argo-cd/decisions.md:632-644 — D50.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "D55 in argo-cd/decisions.md, right after D50, records all three points.",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:646-662 — interface per in-cluster Service linked to its instances (init containers never, none through the application service); cross-app edge resolves through them and stays instance → instance; unresolved host stays fatal, new-app bootstrap by hand; hint table = OpenBao, Ceph, Home Assistant",
+        "AnsibleSpecs 7c4a1cc: the only decisions.md change is the 18 added lines"
+      ]
     },
     {
       "id": "V15",
       "area": "Coverage",
       "description": "Neither generator's suite loses coverage, and every deleted test has a named successor. The new emission, the instance links and the resolution through the published set are covered by tests in both repos. The handover check's exact scoping, its relation-ownership classification and the name-prefix fix are covered by fixture tests in the aac-tools suite that `kc project test` runs (Ruling A1).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "No test was deleted in either repo, and the new behaviour is covered in both. Both suites go red under each mutation of the new behaviour except two that aac-tools' suite does not pin (M4, M5) — already close-out S3, and HelmCharts pins both.",
+      "evidence": [
+        "`git diff` of the test files: no removed `def test_`; HelmCharts tests/test_gen_architecture.py 22 → 41 collected (`pytest --collect-only`); aac-tools 23 new (4 PublishedInterfaceTests, 8 AcrossRendersTests, 11 handover tests), 57 tests pass under `unittest discover`",
+        "Handover fixture tests are in the aac-tools suite `kc project test` runs (aac-tools/tests/test_handover_equality.py, Ruling A1); P4 (argo_migrate.py) has no test by ruling",
+        "Mutations, aac-tools: M1 6, M2 3, M3 7, M6 4 failures, M4/M5 not caught; HelmCharts: all six caught; handover: 5/4/1/1 (test_r1/generator-mutations.txt)"
+      ]
     }
   ]
 }

@@ -1,0 +1,12 @@
+[argo-migrate] STOP jenkins-prd at arch: the handover does not hold:
+HelmCharts does not build without jenkins-prd:
+gen-architecture: boundBy: infra-statistics/infra-statistics infra-statistics-prd.infra-statistics.infra-statistics-app: JENKINS_ENDPOINT='https://jenkins.webathome.org' -> host 'jenkins.webathome.org' resolves to no provider (in-cluster / exposed host / cross-producer / published interface)
+gen-architecture: mcp client intercom intercom-prd.intercom-server: server 'jenkins' host 'jenkins-mcp.home' resolves to no provider (in-cluster / exposed host / cross-producer / published interface)
+gen-architecture: 2 unresolved edge(s); no output written
+[argo-migrate] STOP electronics-inventory-prd at arch: generator failed:
+gen-architecture: boundBy: electronics-inventory/electronics-inventory electronics-inventory-prd.electronics-inventory.electronics-inventory-app: DATABASE_URL='postgresql+psycopg://$(DB_USER):$(DB_PASSWORD)@postgres-pooler-rw.postgres-pas-prd.svc.cluster.local/$(DB_NAME)?sslmode=prefer' -> host 'postgres-pooler-rw.postgres-pas-prd.svc.cluster.local' resolves to no provider (in-cluster / exposed host / cross-producer / published interface)
+gen-architecture: boundBy: electronics-inventory/electronics-inventory electronics-inventory-prd.electronics-inventory.electronics-inventory-app: OIDC_ISSUER_URL='https://auth.ginbov.nl/realms/homelab' -> host 'auth.ginbov.nl' resolves to no provider (in-cluster / exposed host / cross-producer / published interface)
+gen-architecture: 3 unresolved edge(s); no output written
+[argo-migrate] STOP infra-statistics-prd at arch: generator failed:
+gen-architecture: boundBy: infra-statistics/infra-statistics infra-statistics-prd.infra-statistics.infra-statistics-app: JENKINS_ENDPOINT='https://jenkins.webathome.org' -> host 'jenkins.webathome.org' resolves to no provider (in-cluster / exposed host / cross-producer / published interface)
+gen-architecture: 1 unresolved edge(s); no output written

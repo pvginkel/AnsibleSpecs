@@ -1,0 +1,255 @@
+# argo_migrate.py arch <16 held apps> --dataset snapshot.yaml (Ansible f2db525; ArgoCDTools ce5efb9; HelmCharts e134d28)
+# success lines of the one 16-app run, in argument order; the per-app logs below are the last run of each app on the snapshot
+# (jenkins, infra-statistics, electronics-inventory were re-run after the negative controls, same result):
+homeassistant-mcp        [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+calendar-support         [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: iotsupport-app 1)
+git-sync                 [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+guacamole                [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+infra-statistics         [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: iotsupport-app 1)
+intercom                 [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: iotsupport-app 12)
+jenkins                  [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 2 edge(s); edges other producers draw: none)
+keycloak                 [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 7 edge(s); edges other producers draw: iotsupport-app 21)
+postgres-pas             [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 6 edge(s); edges other producers draw: none)
+telegram-mcp             [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+trello-mcp               [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+youtrack                 [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: youtrack-mcp-server 1)
+youtrack-mcp             [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+zigbee2mqtt              [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+electronics-inventory    [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+elasticsearch            [argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 3 edge(s); edges other producers draw: none)
+
+===== homeassistant-mcp-prd.arch.txt
+handover equality — homeassistant-mcp prd
+  deploy repo  /work/scratch/025-test-r1/deploy/HomeassistantMcpDeploy at 4a4cf575c41f
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 5 elements, 9 relations
+  generated    homeassistant-mcp-deploy: 5 elements, 9 relations
+  drawn by helm-charts: rel:homeassistant-mcp-prd-homeassistant-mcp-ha-mcp-server-serves-intercom-prd-intercom-intercom-server-mcp
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/homeassistant-mcp-deploy.yaml — 5 elements, 9 relations
+
+# HelmCharts without homeassistant-mcp-prd
+wrote docs/architecture/helm-charts.yaml — 293 elements, 582 relations
+===== calendar-support-prd.arch.txt
+handover equality — calendar-support prd
+  deploy repo  /work/scratch/025-test-r1/deploy/CalendarSupportDeploy at f267bbe264e2
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 4 elements, 8 relations
+  generated    calendar-support-deploy: 4 elements, 8 relations
+  drawn by iotsupport-app: rel:bf093527-f8d4-5d43-b18d-6d910a9d7221
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/calendar-support-deploy.yaml — 4 elements, 8 relations
+
+# HelmCharts without calendar-support-prd
+wrote docs/architecture/helm-charts.yaml — 294 elements, 583 relations
+===== git-sync-prd.arch.txt
+handover equality — git-sync prd
+  deploy repo  /work/scratch/025-test-r1/deploy/GitSyncDeploy at 36e25bb5564e
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 10 elements, 25 relations
+  generated    git-sync-deploy: 10 elements, 25 relations
+  drawn by helm-charts: rel:git-sync-prd-gitblit-gitblit-mcp-server-serves-intercom-prd-intercom-intercom-server-mcp
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/git-sync-deploy.yaml — 10 elements, 25 relations
+
+# HelmCharts without git-sync-prd
+wrote docs/architecture/helm-charts.yaml — 288 elements, 566 relations
+===== guacamole-prd.arch.txt
+handover equality — guacamole prd
+  deploy repo  /work/scratch/025-test-r1/deploy/GuacamoleDeploy at 08345170fa7e
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 6 elements, 14 relations
+  generated    guacamole-deploy: 6 elements, 14 relations
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/guacamole-deploy.yaml — 6 elements, 14 relations
+
+# HelmCharts without guacamole-prd
+wrote docs/architecture/helm-charts.yaml — 292 elements, 577 relations
+===== infra-statistics-prd.arch.txt
+handover equality — infra-statistics prd
+  deploy repo  /work/scratch/025-test-r1/deploy/InfraStatisticsDeploy at dfda5de409ec
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 4 elements, 8 relations
+  generated    infra-statistics-deploy: 4 elements, 8 relations
+  drawn by iotsupport-app: rel:5782e023-ee2a-5ac5-ab2e-e0481078b1b9
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/infra-statistics-deploy.yaml — 4 elements, 8 relations
+
+# HelmCharts without infra-statistics-prd
+wrote docs/architecture/helm-charts.yaml — 294 elements, 583 relations
+===== intercom-prd.arch.txt
+handover equality — intercom prd
+  deploy repo  /work/scratch/025-test-r1/deploy/IntercomDeploy at 17f9cc4b3f63
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 2 elements, 9 relations
+  generated    intercom-deploy: 2 elements, 9 relations
+  drawn by iotsupport-app: rel:029e0d36-709f-5791-901e-722260e6efaa
+  drawn by iotsupport-app: rel:0a716d46-8ee1-5b73-a27d-499dc1305ac8
+  drawn by iotsupport-app: rel:0b5817b4-50f2-5141-84e5-81f9875cea35
+  drawn by iotsupport-app: rel:57c51f5b-cddc-51c3-bca3-cc7a424a3858
+  drawn by iotsupport-app: rel:5830dc8d-6741-50ba-afbe-82455f928123
+  drawn by iotsupport-app: rel:58dfc29b-39bc-5ea7-b62d-5e284832040e
+  drawn by iotsupport-app: rel:6c51156f-84e0-5626-8d00-e24841d5adbf
+  drawn by iotsupport-app: rel:859c8c45-178e-5b02-90f6-6a872eac2256
+  drawn by iotsupport-app: rel:96e6b7aa-6660-5dad-b06d-02ec5b7be1c2
+  drawn by iotsupport-app: rel:ac76256d-fe47-5ef1-a0d1-94171869f075
+  drawn by iotsupport-app: rel:c6c80b99-ab06-5749-8345-97e5a39ee88c
+  drawn by iotsupport-app: rel:cdedff38-075f-57dd-bbd9-34756a0513cc
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/intercom-deploy.yaml — 2 elements, 9 relations
+
+# HelmCharts without intercom-prd
+wrote docs/architecture/helm-charts.yaml — 296 elements, 582 relations
+===== jenkins-prd.arch.txt
+handover equality — jenkins prd
+  deploy repo  /work/scratch/025-test-r1/deploy/JenkinsDeploy at e465fa32424d
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 14 elements, 30 relations
+  generated    jenkins-deploy: 14 elements, 30 relations
+  drawn by helm-charts: rel:jenkins-prd-jenkins-jenkins-serves-infra-statistics-prd-infra-statistics-infra-statistics-app-continuous-integration
+  drawn by helm-charts: rel:jenkins-prd-jenkins-mcp-filter-serves-intercom-prd-intercom-intercom-server-mcp
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/jenkins-deploy.yaml — 14 elements, 30 relations
+
+# HelmCharts without jenkins-prd
+wrote docs/architecture/helm-charts.yaml — 284 elements, 561 relations
+===== keycloak-prd.arch.txt
+handover equality — keycloak prd
+  deploy repo  /work/scratch/025-test-r1/deploy/KeycloakDeploy at 92634dce1d36
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 5 elements, 8 relations
+  generated    keycloak-deploy: 5 elements, 8 relations
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-calendar-support-prd-calendar-support-calendar-support-app-iam
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-dnsmasq-prd-dhcp-dhcpapp-app-iam
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-electronics-inventory-prd-electronics-inventory-electronics-inventory-app-iam
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-iot-prd-iotsupport-iotsupport-app-iam
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-iot-prd-iotsupport-iotsupport-setup-iam
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-iot-prd-iotsupport-rotation-cronjob-iotsupport-setup-iam
+  drawn by helm-charts: rel:keycloak-prd-keycloak-keycloak-serves-zigbee2mqtt-prd-zigbee-control-zigbee-control-app-iam
+  drawn by iotsupport-app: rel:07e2447d-3978-5f39-b469-7e528294069f
+  drawn by iotsupport-app: rel:0e4b4b8f-f10b-5c5f-8827-f0a6476114ea
+  drawn by iotsupport-app: rel:14b751c8-abb1-5fa8-9123-a4813fbda820
+  drawn by iotsupport-app: rel:1d937a1b-d924-59b8-857a-e27de2fb2520
+  drawn by iotsupport-app: rel:2e589942-0897-512c-8630-d1182ecc36b8
+  drawn by iotsupport-app: rel:2ee5a364-25d5-5321-bfde-0b4049df01b5
+  drawn by iotsupport-app: rel:31cf989a-a0d8-5e8f-b486-25fe98baff3c
+  drawn by iotsupport-app: rel:3df085ba-f95b-5000-9017-a3d546ec5f62
+  drawn by iotsupport-app: rel:51181a23-ca97-5743-9654-613c14ef7cc5
+  drawn by iotsupport-app: rel:6f0a45cc-e96b-5e06-a24a-35d4b0d8c38e
+  drawn by iotsupport-app: rel:8084dab0-5bb8-58b5-a826-937c3403ad18
+  drawn by iotsupport-app: rel:875aa3c7-047f-587e-8a55-c355229f97ce
+  drawn by iotsupport-app: rel:9ff210f4-7b24-5bbb-a71c-b3676087d6e2
+  drawn by iotsupport-app: rel:b328c2c2-eccb-56c4-9d16-8735fdd67842
+  drawn by iotsupport-app: rel:ba2bbe75-9d31-5942-b607-65800b06f6bd
+  drawn by iotsupport-app: rel:c43f6f13-69e8-54c7-bbca-e15405db0afa
+  drawn by iotsupport-app: rel:dc2bfa09-0b2c-5368-bd98-c87364472b65
+  drawn by iotsupport-app: rel:e67ccdff-dbde-5450-8cc8-44b5f843162f
+  drawn by iotsupport-app: rel:ed8658e1-ddb7-5c3d-9dc1-9a76d8e39b52
+  drawn by iotsupport-app: rel:f461fdc4-35f5-5717-9bbe-b8250df62192
+  drawn by iotsupport-app: rel:f81edc03-c424-541d-aa99-807d8b674e12
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/keycloak-deploy.yaml — 5 elements, 8 relations
+
+# HelmCharts without keycloak-prd
+wrote docs/architecture/helm-charts.yaml — 293 elements, 583 relations
+===== postgres-pas-prd.arch.txt
+handover equality — postgres-pas prd
+  deploy repo  /work/scratch/025-test-r1/deploy/PostgresPasDeploy at e92291c8e6f4
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 4 elements, 11 relations
+  generated    postgres-pas-deploy: 4 elements, 11 relations
+  drawn by helm-charts: rel:postgres-pas-prd-postgres-pooler-rw-serves-electronics-inventory-prd-electronics-inventory-electronics-inventory-app-relational-database
+  drawn by helm-charts: rel:postgres-pas-prd-postgres-pooler-rw-serves-electronics-inventory-prd-electronics-inventory-electronics-inventory-setup-relational-database
+  drawn by helm-charts: rel:postgres-pas-prd-postgres-pooler-rw-serves-guacamole-prd-guacamole-guacamole-setup-relational-database
+  drawn by helm-charts: rel:postgres-pas-prd-postgres-pooler-rw-serves-iot-prd-iotsupport-iotsupport-app-relational-database
+  drawn by helm-charts: rel:postgres-pas-prd-postgres-pooler-rw-serves-iot-prd-iotsupport-iotsupport-setup-relational-database
+  drawn by helm-charts: rel:postgres-pas-prd-postgres-pooler-rw-serves-iot-prd-iotsupport-rotation-cronjob-iotsupport-setup-relational-database
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/postgres-pas-deploy.yaml — 4 elements, 11 relations
+
+# HelmCharts without postgres-pas-prd
+wrote docs/architecture/helm-charts.yaml — 294 elements, 580 relations
+===== telegram-mcp-prd.arch.txt
+handover equality — telegram-mcp prd
+  deploy repo  /work/scratch/025-test-r1/deploy/TelegramMcpDeploy at 44a105ac42fe
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 4 elements, 7 relations
+  generated    telegram-mcp-deploy: 4 elements, 7 relations
+  drawn by helm-charts: rel:telegram-mcp-prd-telegram-mcp-mcp-server-serves-intercom-prd-intercom-intercom-server-mcp
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/telegram-mcp-deploy.yaml — 4 elements, 7 relations
+
+# HelmCharts without telegram-mcp-prd
+wrote docs/architecture/helm-charts.yaml — 294 elements, 584 relations
+===== trello-mcp-prd.arch.txt
+handover equality — trello-mcp prd
+  deploy repo  /work/scratch/025-test-r1/deploy/TrelloMcpDeploy at 51c7a40adb2f
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 8 elements, 25 relations
+  generated    trello-mcp-deploy: 8 elements, 25 relations
+  drawn by helm-charts: rel:trello-mcp-prd-trello-mcp-filter-serves-intercom-prd-intercom-intercom-server-mcp
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/trello-mcp-deploy.yaml — 8 elements, 25 relations
+
+# HelmCharts without trello-mcp-prd
+wrote docs/architecture/helm-charts.yaml — 290 elements, 566 relations
+===== youtrack-prd.arch.txt
+handover equality — youtrack prd
+  deploy repo  /work/scratch/025-test-r1/deploy/YoutrackDeploy at 1b4438355b0a
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 6 elements, 9 relations
+  generated    youtrack-deploy: 6 elements, 9 relations
+  drawn by helm-charts: rel:youtrack-prd-youtrack-youtrack-serves-youtrack-mcp-prd-youtrack-mcp-mcp-server-upstream
+  drawn by youtrack-mcp-server: rel:youtrack-mcp-server-consumes-youtrack
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/youtrack-deploy.yaml — 6 elements, 9 relations
+
+# HelmCharts without youtrack-prd
+wrote docs/architecture/helm-charts.yaml — 292 elements, 582 relations
+===== youtrack-mcp-prd.arch.txt
+handover equality — youtrack-mcp prd
+  deploy repo  /work/scratch/025-test-r1/deploy/YoutrackMcpDeploy at f001f9e76ec8
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 4 elements, 8 relations
+  generated    youtrack-mcp-deploy: 4 elements, 8 relations
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/youtrack-mcp-deploy.yaml — 4 elements, 8 relations
+
+# HelmCharts without youtrack-mcp-prd
+wrote docs/architecture/helm-charts.yaml — 294 elements, 583 relations
+===== zigbee2mqtt-prd.arch.txt
+handover equality — zigbee2mqtt prd
+  deploy repo  /work/scratch/025-test-r1/deploy/Zigbee2mqttDeploy at 4c3e0b743aeb
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 12 elements, 27 relations
+  generated    zigbee2mqtt-deploy: 12 elements, 27 relations
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/zigbee2mqtt-deploy.yaml — 12 elements, 27 relations
+
+# HelmCharts without zigbee2mqtt-prd
+wrote docs/architecture/helm-charts.yaml — 286 elements, 564 relations
+===== electronics-inventory-prd.arch.txt
+handover equality — electronics-inventory prd
+  deploy repo  /work/scratch/025-test-r1/deploy/ElectronicsInventoryDeploy at 84ee12e050dc
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 7 elements, 22 relations
+  generated    electronics-inventory-deploy: 7 elements, 22 relations
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/electronics-inventory-deploy.yaml — 7 elements, 22 relations
+
+# HelmCharts without electronics-inventory-prd
+wrote docs/architecture/helm-charts.yaml — 291 elements, 569 relations
+===== elasticsearch-prd.arch.txt
+handover equality — elasticsearch prd
+  deploy repo  /work/scratch/025-test-r1/deploy/ElasticsearchDeploy at 24f788837d29
+  dataset      /work/scratch/025-test-r1/snapshot.yaml
+  published    helm-charts: 11 elements, 21 relations
+  generated    elasticsearch-deploy: 11 elements, 21 relations
+  drawn by helm-charts: rel:elasticsearch-prd-elasticsearch-elasticsearch-serves-iot-prd-iotsupport-iotsupport-app-logging
+  drawn by helm-charts: rel:elasticsearch-prd-elasticsearch-elasticsearch-serves-iot-prd-iotsupport-iotsupport-setup-logging
+  drawn by helm-charts: rel:elasticsearch-prd-elasticsearch-elasticsearch-serves-iot-prd-iotsupport-rotation-cronjob-iotsupport-setup-logging
+  equal — every id matches; producer, logo and stats.image are all that differ
+wrote docs/architecture/elasticsearch-deploy.yaml — 11 elements, 21 relations
+
+# HelmCharts without elasticsearch-prd
+wrote docs/architecture/helm-charts.yaml — 287 elements, 570 relations
