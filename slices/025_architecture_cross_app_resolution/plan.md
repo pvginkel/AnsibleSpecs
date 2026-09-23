@@ -251,6 +251,21 @@ Constraints:
 
 The phase's tests go in `tests/test_gen_architecture.py`.
 
+**Done (P2).** HelmCharts' `gen-architecture` publishes the same interfaces and links as aac-tools and resolves hosts the same way. For the same Service, the two renders are identical in every id, field and relation. HelmCharts builds green when a provider leaves it and draws that provider's edges with the same ids. HelmCharts `a8f0bbb`, `16d1af6` on `phase/025-P2`, not pushed (Ruling Q1).
+
+Later phases:
+- P3/test phase: a local HelmCharts render now carries a `svcif.*` interface and its `—Association→` links for every Service it renders. Measured against the live set (2026-09-23), a full render keeps every published helm-charts id, and no field differs except the collector's `logo`. Its only additions are 53 in-cluster interfaces and 174 Associations.
+- P4: `gen-architecture` selects releases by positional chart-dir names (or `<chart>@<stage>`) and has no exclude flag. "Every release except the app's" means naming every other `configs/prd/<chart>` dir: run with no arguments, a not-yet-flipped app is rendered. The shape that worked, from `/work/HelmCharts`: `cexec iac env ARCH_DATASET_URL=<file> ARCH_DATASET_OVERLAY= poetry run gen-architecture <release...>`. It writes `docs/architecture/helm-charts.yaml`, and a full render takes about 17 s. A render fails on any consumer whose provider is neither rendered nor linked in the snapshot, and the live set before the push links none.
+- P4/test phase: the aac-tools generator reads `git remote get-url origin`, and a fresh scaffold has none (`cmd_arch` adds it).
+
+Settled:
+- **Lockstep.** `Dataset`, `resolve_host`, `serving`, `publish_service_interfaces`, `resolve_boundby` and `build_provider_index` are AST-identical to ArgoCDTools `7806d46`, docstrings included. `resolve_upstreams` still differs only by aac-tools' list-of-wires form, which predates this slice. `resolve_mcp_clients` differs only in its docstring. The HelmCharts copies of the three resolvers now use the `serving(...)` filter and the new error text.
+- **`stage_of_ns`.** No HelmCharts release sets `namespace:`, so each release renders its own `<chart_dir>-<stage>` namespace. `main` records `{env, introduced}` per release, where `introduced` is `first_commit_date(charts/<chart>)`, the same value its instances carry. `publish_service_interfaces` runs right after `reconcile_exposed_services`.
+- **Identity witnessed** (2026-09-23): jenkins and postgres-pas were scaffolded with `cmd_scaffold`, its `WORK`/`HOME` redirected to scratch so the bulk-migration state was untouched. Each was rendered by aac-tools and by HelmCharts against one live snapshot with nothing overlaid. jenkins came to 14 elements and 30 relations, postgres-pas to 4 and 11 (its pooler interface included). Every id, field and relation matched.
+- **Departed provider witnessed.** HelmCharts rendered keycloak, infra-statistics, electronics-inventory and guacamole with the two aac-tools renders overlaid. The build was green and drew the 4 edges from jenkins/postgres-pas with the ids that a render holding both sides draws. Nothing else was lost. Without the overlay the same render fails on exactly those 4 edges.
+- **Full render**: green, 298 elements and 591 relations, and the live `arch-validate` passes.
+- **Tests.** `tests/test_gen_architecture.py` grows from 22 to 40 cases (18 new). 15 of them port P1's `PublishedInterfaceTests`/`AcrossRendersTests`, the pinned literals included. One is a `main()`-level case: it renders two releases, flips the provider and uses the artifact as the dataset, and gets the same edge with the same id. The last 2 pin close-out S3's details, the published in-cluster-before-host order and `serving_at`'s instance-only filter. Each of the 2 was witnessed failing under its mutation.
+
 ### P3 — The handover check scopes an app exactly and knows whose edges are whose
 
 Target: ../ArgoCDTools
