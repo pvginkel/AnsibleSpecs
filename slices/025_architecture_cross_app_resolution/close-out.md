@@ -63,6 +63,15 @@ dnsmasq's per-pod Services dns-0 and dns-1 (charts/dnsmasq/templates/dns-service
 **Provenance:** witnessed, executor, P3, r1, /tmp/p3-hc-render.yaml (HelmCharts main e134d28 rendered against the live set)
 **Disposition:**
 
+### B3 — ArgoCDTools handover_equality.py: an in-house app's exposed interface that no instance links is in no app's scope, so losing it passes the check · minor
+
+app_elements() takes an interface only through an Association from the app's own instances, or an Assignment into the app's own services (handover_equality.py:179-186). An in-house app's exposed interface is assigned to DockerImages' shared svc:, so it is scoped only once the published set carries its P2 instance link. On the live set before HelmCharts publishes, 17 helm-charts interfaces belong to no app. They include jenkins-mcp, telegram-mcp, trello-mcp and youtrack-mcp hosts, which the old prefix scope did compare. If a deploy repo dropped one, the check would report nothing. The same would hold for good for a future in-house Service that the provider index cannot place (B2's class). In the P2 snapshot, every helm-charts interface belongs to exactly one app.
+
+**Consequence:** none under the plan's order, where held apps are gated on the snapshot or after the HelmCharts push; an arch run against the live set before that push would miss a dropped in-house exposed host
+
+**Provenance:** witnessed, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -125,4 +134,13 @@ P2 executor r1, 2026-09-23 — HelmCharts' copy is pinned: tests/test_gen_archit
 **Consequence:** none today; drift in either detail would go unnoticed in both generators
 
 **Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
+**Disposition:**
+
+### S4 — HelmCharts gen-architecture has no way to name a chart's prd release alone, so the arch gate cannot run a non-prd stage whose chart also has a prd stage · minor
+
+The arch gate renders HelmCharts without the app by naming every other release. The generator selects a release by its release name or by its bare chart name (tools/chart_tools/gen_architecture.py:638), and the bare chart name is the only name of a prd release. That name also selects every other stage of the chart. So when the stage that moves is not prd but the chart has a prd stage, prd cannot be rendered without the moving stage. argo_migrate.py's hc_releases_without stops the app in that case and says why. Today this affects keycloak dev and design-assistant dev/tst/uat. The held apps move prd, so none of them is affected. The fix would be a HelmCharts patch: accept `<chart>@prd`, or add an exclude flag.
+
+**Consequence:** moving keycloak's dev stage, or any non-prd stage of design-assistant, stops at argo_migrate.py arch with 'gen-architecture cannot render <app>'s prd release without its <stage> one' until gen-architecture can leave a single release out
+
+**Provenance:** witnessed, code-writer, P4, r1, Ansible f2db525 support/argo-migrate/argo_migrate.py hc_releases_without
 **Disposition:**

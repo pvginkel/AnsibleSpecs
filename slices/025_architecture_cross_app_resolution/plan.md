@@ -353,6 +353,21 @@ HelmCharts render. After the push, the bulk-migration session runs it against th
 No test rides this phase (Ruling A1). Ansible `root` has no test verb, so the phase is reviewed by
 reading, and the test phase exercises the gate live.
 
+**Done (P4).** `argo_migrate.py arch` checks both halves of a move against one dataset snapshot. The app's own check stops the app on any loss or differing field. HelmCharts, rendering every release but the app's with nothing overlaid, must build and draw every `drawn by helm-charts` edge exactly as the snapshot publishes it. Edges other producers draw are counted on the success line and not gated. Ansible `f2db525` on `phase/025-P4`.
+
+Later phases:
+- Test phase: `argo_migrate.py arch <app...> --dataset <file>` points both halves at a snapshot. The file must be under `/work` or `$HOME`, where the iac sidecar can read it. With no `--dataset`, the live set is fetched once into `~/bulk-migration/logs/<ns>.dataset.yaml`.
+- Test phase: every gate run overwrites HelmCharts' `docs/architecture/helm-charts.yaml` with the render without the app, unless that render fails. Build a snapshot's helm-charts envelope from a fresh full render. P4 left the file as a full render against the live set with no overlay (591 relations).
+- Test phase: the HelmCharts render's output is appended to `~/bulk-migration/logs/<ns>.arch.txt` under `# HelmCharts without <ns>`. When it fails, the STOP shows its last 15 non-`gap:` stderr lines.
+- Test phase: against the live set, jenkins stops at HelmCharts' half. infra-statistics' `jenkins.webathome.org` and intercom's `jenkins-mcp.home` resolve to no provider, as expected until HelmCharts publishes.
+
+Settled:
+- A difference is any check line that starts `element ` or `relation `. Only `… generated but not published: ` is an addition. Every other difference stops the app: a loss or a differing field.
+- HelmCharts' half compares each listed edge's whole relation dict with the snapshot's, as the check compares the app's own relations. Matching the id alone is not enough.
+- The release list mirrors gen-architecture's `releases()`. It is every `configs/prd/<chart>/<stage>` but the app's, named `<chart>` for prd and `<chart>@<stage>` for other stages. A bare chart name selects every stage of that chart. So the gate stops a non-prd stage whose chart has a prd stage and gives that reason (close-out S4). For keycloak prd the gate renders `keycloak@dev`.
+- HelmCharts' half runs even when the app's own check finds losses, so one run reports both. It is skipped when the check crashes; that `Traceback` stop is unchanged.
+- Smoke run, not a test (Ruling A1), with the check's output faked and `HOME` redirected: a differing field stopped the app. With calendar-support left out, HelmCharts built green in about 19 s and drew jenkins' 2 edges as published. A `--dataset` file worked.
+
 ### P5 — The Argo CD register records the published-interface decision
 
 Target: ../AnsibleSpecs
