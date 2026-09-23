@@ -34,8 +34,8 @@
     },
     {
       "id": "V05",
-      "area": "D1 — published interfaces",
-      "description": "Every provider publishes each in-cluster Service as an interface element: the existing applicationInterfaces kind, with the host in `stats`. This includes the CNPG pooler Services. Every interface, the in-cluster ones and the existing exposed-host ones, is linked directly to the instances behind its Service and not through the application service. The artifacts pass arch-validate with no Architecture schema change. Verified 2026-09-23: ArgoCDTools aac-tools/image/gen_architecture.py:600-625 (provider index), :1113-1116 (pooler Services), :1178-1193 (exposed-host interfaces, Assignment to the service only).",
+      "area": "D1/D2 — published interfaces",
+      "description": "Every provider publishes each in-cluster Service as an interface element: the existing applicationInterfaces kind, with the host in `stats`. This includes the CNPG pooler Services. Every interface, the in-cluster ones and the existing exposed-host ones, is linked directly to the instances behind its Service and not through the application service. An interface links only the containers that serve — never a pod's init containers — and no marker field is added to instance elements (Ruling D2). The artifacts pass arch-validate with no Architecture schema change. Verified 2026-09-23: ArgoCDTools aac-tools/image/gen_architecture.py:600-625 (provider index; its backing set includes init containers via w[\"all\"], :614-616), :1113-1116 (pooler Services), :1178-1193 (exposed-host interfaces, Assignment to the service only).",
       "verdict": null,
       "rationale": "",
       "evidence": []

@@ -150,12 +150,13 @@ resolves through it:
 
 Constraints the repo will not tell you:
 
-- **Which instances an interface links:** the containers behind its Service that serve it; init
-  containers are not linked. In-process resolution drops init containers everywhere (`:1393`,
-  `:1464`, `:1567`), and without them in the links the published set needs no marker to tell them
-  apart. There is a live case: jenkins' `install-homelab-ca` init container realizes
-  `cap:continuous-integration` just as the `jenkins` container does (published set, 2026-09-23).
-  This is question Q1 in `plan_questions_r1.md`.
+- **Which instances an interface links (Ruling D2):** the containers behind its Service that serve
+  it, never a pod's init containers. The provider index's backing set includes them (`w["all"]`,
+  `:614-616`); the links do not. No marker field is added to instance elements. In-process
+  resolution drops init containers everywhere (`:1393`, `:1464`, `:1567`), so leaving them out of
+  the links is what keeps resolution through the published set exact. The live case: jenkins'
+  `install-homelab-ca` init container realizes `cap:continuous-integration` just as the `jenkins`
+  container does (published set, 2026-09-23).
 - **Edges stay instance → instance** (D1). An interface is the lookup and the viewer's view, never
   an edge endpoint. Only interfaces linked to instances resolve anything. An interface another
   producer publishes without links (Ansible's `if:proxmox-api-prd`, for example) resolves nothing,
