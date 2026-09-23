@@ -43,6 +43,8 @@ HelmCharts' patched generator (a8f0bbb, 16d1af6, e134d28) is on local main only,
 
 Before step 2 completes, the gate is expected to stop jenkins at HelmCharts' half: infra-statistics' `jenkins.webathome.org` and intercom's `jenkins-mcp.home` resolve to no provider (P4 done-record). The ArgoCDTools push, which rebuilds the aac-tools image, is not held and is not part of this action.
 
+orchestrator, operator-requested A1 run, 2026-09-23 — Done. hc-push.sh pushed HelmCharts e134d28 (tests green); IaC/HelmCharts #6695 succeeded and deployed no release. AaC/HelmCharts #277 published and the AaC/Architecture collect #1419 is green (V02 pass). All 16 were scaffolded from e134d28 and `arch` against the live set holds for every one: 0 additions, 23 HelmCharts edges redrawn, no stop (V13 pass; test_r1/arch-gate-live-set-16-apps.txt). argo-cd/bulk-migration.md no longer holds them on architecture.
+
 **Consequence:** Until the push and re-run happen, V02 (collect green) and V13 (the 16 held apps pass the arch gate) stay unproven. The 16 held apps stay held, and any arch run against the live set stops them on cross-app edges.
 
 **Provenance:** read, consult 1, plan.md Ruling Q1 and Push holds; verification.json V02, V13
@@ -53,6 +55,8 @@ Before step 2 completes, the gate is expected to stop jenkins at HelmCharts' hal
 `plan.md`'s `## Push holds` section holds `/work/HelmCharts`: any push to `main` deploys drifted releases to prd unattended; the bulk-migration session pushes it after this slice (Ruling Q1).
 
 The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual.
+
+orchestrator, operator-requested A1 run, 2026-09-23 — HelmCharts was pushed as step 1 of A1; origin/main is at e134d28.
 
 **Consequence:** none in this run — the driver took the hold as the ruling it is; nothing this repo deploys carries the slice until you push it.
 

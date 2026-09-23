@@ -18,10 +18,10 @@
       "id": "V02",
       "area": "R2 — the published set stays valid",
       "description": "The published set stays valid at every step of a migration — \"We just have to make sure that we keep the published set in a valid state as we migrate stuff.\" After the bulk-migration session pushes HelmCharts and `AaC/HelmCharts` publishes the patched producer's artifact, the `AaC/Architecture` collect is green. Owed after that push (Ruling Q1): the run loop does not push HelmCharts, so the test phase does not settle this criterion. Before that, the pre-flip gate holds the line at each move (V12). Verified 2026-09-23: /work/AnsibleSpecs/argo-cd/decisions.md:632-644 — D50: the collector publishes nothing while both producers declare an app's ids, until the flip's HelmCharts build clears them.",
-      "verdict": "owed to operator",
-      "rationale": "Not settled by the test phase (Ruling Q1): the run loop does not push HelmCharts, so `AaC/HelmCharts` has not published the patched producer's artifact and no collect has run on it. Until then the pre-flight gate is what keeps the set valid (V12, proven). Measured ahead of the push: the patched full render is a pure addition over the live set (53 in-cluster interfaces, 174 Associations, no id lost, no field but `logo` changed) and passes the live arch-validate.",
+      "verdict": "pass",
+      "rationale": "Settled 2026-09-23 by close-out A1. The HelmCharts push (e134d28, via `~/bulk-migration/hc-push.sh`, tests green) triggered IaC/HelmCharts #6695, which succeeded and deployed no release (every Deploying stage empty). AaC/HelmCharts #277 published the patched producer's artifact, and the `AaC/Architecture` collect #1419 that copied it is green.",
       "evidence": [
-        "Owed: `~/bulk-migration/hc-push.sh` (the bulk-migration session, D54), then `AaC/HelmCharts` builds green and the `AaC/Architecture` collect that follows it is green; `track_build.py AaC/HelmCharts --hash <pushed sha>`",
+        "IaC/HelmCharts #6695 SUCCESS; AaC/HelmCharts #277 SUCCESS; AaC/Architecture #1419 SUCCESS, 'Copied 1 artifact from \"AaC » HelmCharts\" build number 277'",
         "Pre-push measurement: snapshot build, full render 298 elements / 591 relations vs. 245 / 417 published (test_r1/README.md); `arch-validate` on docs/architecture/helm-charts.yaml: ✓"
       ]
     },
@@ -148,10 +148,10 @@
       "id": "V13",
       "area": "Acceptance proof",
       "description": "The bulk migration's own handover check (`argo_migrate.py arch`) is re-run, after HelmCharts' patched producer has published, over the 16 apps held on this slice: homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory and elasticsearch. Every id loss attributable to cross-app resolution is gone. Any app that still stops is named with its cause, and no such cause is cross-app resolution. Owed after the bulk-migration session's HelmCharts push (Ruling Q1): the run loop does not push HelmCharts, so the test phase does not settle this criterion. Verified 2026-09-23: ~/bulk-migration/logs/handover-all.txt — the pre-slice failures (2026-09-23).",
-      "verdict": "owed to operator",
-      "rationale": "Owed after the bulk-migration session's HelmCharts push (Ruling Q1); the test phase does not settle it. As supporting evidence, the same 16 apps were scaffolded and gated on a snapshot carrying the local HelmCharts render: all 16 hold, and no loss or field difference remains, including the previously failing electronics-inventory, zigbee2mqtt, jenkins, keycloak, postgres-pas and youtrack. Against the live set the gate still stops, as expected before the push.",
+      "verdict": "pass",
+      "rationale": "Settled 2026-09-23 by close-out A1, after the collect in V02. All 16 held apps were scaffolded from HelmCharts e134d28 and `argo_migrate.py arch` with no --dataset (the live set) printed 'architecture handover holds' for every one: 0 additions, no stop. HelmCharts without each app draws 23 edges in total, the same as the snapshot proof. jenkins, which stopped on the live set before the push, holds.",
       "evidence": [
-        "Owed: `~/bulk-migration/hc-push.sh`, wait for `AaC/HelmCharts` and the `AaC/Architecture` collect, then `python3 support/argo-migrate/argo_migrate.py arch homeassistant-mcp calendar-support git-sync guacamole infra-statistics intercom jenkins keycloak postgres-pas telegram-mcp trello-mcp youtrack youtrack-mcp zigbee2mqtt electronics-inventory elasticsearch` (scaffold first where the deploy repo is not in /work; no --dataset fetches the live set)",
+        "test_r1/arch-gate-live-set-16-apps.txt (scaffold and arch output, live set)",
         "Supporting: test_r1/arch-gate-snapshot-16-apps.txt"
       ]
     },

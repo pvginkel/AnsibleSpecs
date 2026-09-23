@@ -1,0 +1,37 @@
+# A1, 2026-09-23: argo_migrate.py scaffold <16>, HelmCharts e134d28
+[argo-migrate] scaffolded /work/HomeassistantMcpDeploy from HelmCharts e134d28; modules: none
+[argo-migrate] scaffolded /work/CalendarSupportDeploy from HelmCharts e134d28; modules: none
+[argo-migrate] scaffolded /work/GitSyncDeploy from HelmCharts e134d28; modules: static-cephfs-pv
+[argo-migrate] scaffolded /work/GuacamoleDeploy from HelmCharts e134d28; modules: postgres-db
+[argo-migrate] scaffolded /work/InfraStatisticsDeploy from HelmCharts e134d28; modules: static-cephfs-pv
+[argo-migrate] scaffolded /work/IntercomDeploy from HelmCharts e134d28; modules: static-cephfs-pv
+[argo-migrate] scaffolded /work/JenkinsDeploy from HelmCharts e134d28; modules: static-cephfs-pv
+[argo-migrate] scaffolded /work/KeycloakDeploy from HelmCharts e134d28; modules: postgres-db, static-cephfs-pv
+[argo-migrate] scaffolded /work/PostgresPasDeploy from HelmCharts e134d28; modules: static-zfs-pv
+[argo-migrate] scaffolded /work/TelegramMcpDeploy from HelmCharts e134d28; modules: none
+[argo-migrate] scaffolded /work/TrelloMcpDeploy from HelmCharts e134d28; modules: none
+[argo-migrate] scaffolded /work/YoutrackDeploy from HelmCharts e134d28; modules: static-rbd-pv
+[argo-migrate] scaffolded /work/YoutrackMcpDeploy from HelmCharts e134d28; modules: none
+[argo-migrate] values: images differs below the top level; writing live values whole
+[argo-migrate] scaffolded /work/Zigbee2mqttDeploy from HelmCharts e134d28; modules: static-cephfs-pv
+[argo-migrate] scaffolded /work/ElectronicsInventoryDeploy from HelmCharts e134d28; modules: postgres-db, s3-storage
+[argo-migrate] values: images differs below the top level; writing live values whole
+[argo-migrate] scaffolded /work/ElasticsearchDeploy from HelmCharts e134d28; modules: static-cephfs-pv, static-rbd-pv
+
+# argo_migrate.py arch <16>, no --dataset (live set after AaC/Architecture #1419)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: iotsupport-app 1)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: iotsupport-app 1)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: iotsupport-app 12)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 2 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 7 edge(s); edges other producers draw: iotsupport-app 21)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 6 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 1 edge(s); edges other producers draw: youtrack-mcp-server 1)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 0 edge(s); edges other producers draw: none)
+[argo-migrate] architecture handover holds (0 addition(s); HelmCharts without the app draws its 3 edge(s); edges other producers draw: none)

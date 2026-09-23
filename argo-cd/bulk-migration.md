@@ -90,13 +90,18 @@ end to end on the first builds.
 
 | App | Blocker |
 | --- | --- |
-| homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory, elasticsearch | architecture: both halves of `arch` hold on a snapshot carrying HelmCharts' local render (D55); owed: push HelmCharts (`~/bulk-migration/hc-push.sh`) so its producer publishes the in-cluster interfaces, then re-run `arch` against the live set |
 | version-poller | its GitHub token arrives as HelmCharts' `gitToken` value; needs an OpenBao leaf (`bao kv put`) |
 | headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
 | storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets: ANS-49 is live, and the six scaffolds are on `homelab-shared` 0.3.0 (local commits; iot's re-scaffold takes it from the tool). The first of them to sync proves the per-namespace grant on a first sync |
 | charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
 | mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
 | iot | chart named `iotsupport`: the producer ids need chart name = app |
+
+The architecture hold on homeassistant-mcp, calendar-support, git-sync, guacamole,
+infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack,
+youtrack-mcp, zigbee2mqtt, electronics-inventory and elasticsearch lifted on 2026-09-23 (D55,
+slice 025 close-out A1). HelmCharts was pushed and published the in-cluster interfaces, and `arch`
+holds for all 16 against the live set. Those still in a row above stay held for that row's reason.
 
 **Chart patterns the tool rewrites:** the `deployment` timestamp (a literal from the last Helm
 deploy); the SSE gateway's `randAlphaNum` callback secret (an ESO `Password` generator, created
