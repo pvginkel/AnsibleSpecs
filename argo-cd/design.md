@@ -576,7 +576,10 @@ commits). None blocks the pilot; each needs its decision by endgame.
 deploy-repo generator that renders the repo's own chart the way the releases ApplicationSet has
 Argo render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
 element ids HelmCharts' copy does, so a handover changes an element's owner and nothing else, and
-inbound edges from other producers never dangle. Each deploy repo runs it from a
+inbound edges from other producers never dangle. A provider in another app, whether still in
+HelmCharts or in a deploy repo of its own, resolves through the interfaces both generators
+publish, in-cluster and exposed hosts alike, each linked to the instances behind its Service
+(D55); the cross-app edge keeps its id whichever side moves first. Each deploy repo runs it from a
 `Jenkinsfile.architecture` of its own, one stage per pipeline; KubeCoderDeploy and ArgoCDDeploy
 carry theirs. What a further repo needs — the files, the producer id, the operator's job and
 registration, and a handover's register-then-flip order — is

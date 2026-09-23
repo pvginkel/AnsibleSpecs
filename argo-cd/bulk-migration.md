@@ -90,7 +90,7 @@ end to end on the first builds.
 
 | App | Blocker |
 | --- | --- |
-| homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory, elasticsearch | architecture: cross-app edges lost at handover, or the generator fails on hosts it can't resolve (ANS-80 / slice 025) |
+| homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory, elasticsearch | architecture: both halves of `arch` hold on a snapshot carrying HelmCharts' local render (D55); owed: push HelmCharts (`~/bulk-migration/hc-push.sh`) so its producer publishes the in-cluster interfaces, then re-run `arch` against the live set |
 | version-poller | its GitHub token arrives as HelmCharts' `gitToken` value; needs an OpenBao leaf (`bao kv put`) |
 | headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
 | storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets: ANS-49 is live, and the six scaffolds are on `homelab-shared` 0.3.0 (local commits; iot's re-scaffold takes it from the tool). The first of them to sync proves the per-namespace grant on a first sync |
