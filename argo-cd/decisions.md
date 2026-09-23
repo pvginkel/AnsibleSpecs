@@ -315,16 +315,20 @@ covers what the hook genuinely does — the PV reattach (D29), whose target name
 as an argument, and whatever the kubernetes provider manages — and it is the same identity the
 entrypoint builds the run's kubeconfig from.
 
-That RBAC is a **ClusterRole and ClusterRoleBinding**, not a Role in the hook namespace, and
-cluster-wide is structural rather than generous: the objects a deploy repo's Terraform creates
-land in `<app>-<stage>`, derived per sync and created by that app's own chart, so there is no
-namespace to bind in when the chart renders. Its rules are the whole lifecycle on the two core
-kinds a deploy repo's Terraform reaches through the kubernetes provider — `persistentvolumes` and
-`secrets` — and no wildcard, because a resource Terraform manages needs its whole lifecycle,
-create through delete. `namespaces` is never granted: Argo applies each app's chart-owned
-Namespace before it creates the hook Job (design.md), so no run creates one, and a cluster-wide
-grant would let any app's Terraform delete every other app's namespace. ArgoCDDeploy's render
-gate refuses a rule naming it.
+That RBAC is **split by where each grant has to reach** (amended 2026-09-23, ANS-49). Its rules
+are the whole lifecycle on the two core kinds a deploy repo's Terraform reaches through the
+kubernetes provider, and no wildcard, because a resource Terraform manages needs its whole
+lifecycle, create through delete. `persistentvolumes` are cluster-scoped, so their ClusterRole
+`tf-presync` is bound by a **ClusterRoleBinding**. `secrets` sit in a second ClusterRole,
+`tf-presync-app`, which ArgoCDDeploy defines and binds nowhere. `homelab-shared`'s hook include
+binds it with a **RoleBinding in the app's own namespace**, the `<app>-<stage>` it is handed per
+sync. That RoleBinding is a PreSync hook itself, one wave ahead of the Job: a plain chart object is
+applied in the Sync phase, after the hook has run, so on an app's first sync it would not yet
+exist. A run therefore reaches the Secrets of the namespace being synced and no other. `namespaces`
+is never granted: Argo applies each app's chart-owned Namespace before it creates the hook Job
+(design.md), so no run creates one, and a grant would let any app's Terraform delete every other
+app's namespace. ArgoCDDeploy's render gate refuses a rule naming it, and refuses `secrets` in the
+cluster-wide role.
 
 ## Promotion and CI
 
@@ -573,13 +577,13 @@ hook run is exactly what the hook namespace holds (D33): the enumerated provider
 RBAC. Stated plainly: write access to a deploy repo branch is arbitrary Terraform execution
 inside a pod bounded by those credentials.
 
-**The ServiceAccount's RBAC is cluster-wide, which widens that bound** (D33 explains why it has
-to be): `secrets` across every namespace, so a deploy repo's Terraform can read any Secret in the
-cluster — Argo's own repo credential and OIDC client secret among them. Recorded as the shipped
-position, not as the end state: rendering a per-namespace RoleBinding from the library chart
-alongside the hook Job would narrow it to the namespace being synced. That narrowing is owed
-before the first migration whose Terraform manages Secrets (Triage #991); KubeCoder's manages
-none.
+**The ServiceAccount's Secrets grant is scoped to the namespace being synced** (amended
+2026-09-23, ANS-49). As shipped it was cluster-wide, so a deploy repo's Terraform could read any
+Secret in the cluster, Argo's own repo credential and OIDC client secret among them. D33 now splits
+it: PersistentVolumes stay cluster-wide because they are cluster-scoped, and Secrets are bound per
+app, in `<app>-<stage>`, by a RoleBinding the library chart renders beside the hook Job. What stays
+cluster-wide is the PV lifecycle, so a hostile deploy repo can still delete or rebind another
+app's volume.
 
 **The git token is a classic PAT carrying `repo` on every private repository the operator owns.**
 This decision originally specified a fine-grained token — state repo read-write, deploy repos
