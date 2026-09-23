@@ -23,6 +23,21 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Push HelmCharts with ~/bulk-migration/hc-push.sh, then settle V02 and V13 against the live set
+
+HelmCharts' patched generator (a8f0bbb, 16d1af6, e134d28) is on local main only, 3 commits ahead of origin. Ruling Q1 bars the run loop from pushing it, because any push to HelmCharts main deploys whatever releases have drifted to prd unattended (IaC/HelmCharts, Jenkinsfile:35, :192-193). The bulk-migration session owes these steps, in order, as its first work after this slice (D54):
+
+1. Run `~/bulk-migration/hc-push.sh`. It rebases onto origin, runs `kc project test` and pushes only if the tests are green. Watch IaC/HelmCharts for the releases it rolls out.
+2. Wait for `AaC/HelmCharts` to publish the new artifact and for the `AaC/Architecture` collect to pick it up. The collect must be green (V02). The live set should then carry helm-charts' `svcif.*` in-cluster interfaces and their `—Association→` links.
+3. Re-scaffold each of the 16 held apps with `argo_migrate.py scaffold`, then run `argo_migrate.py arch <app...>` with no `--dataset`, which reads the live set. The apps are homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory and elasticsearch. No app may stop on a cross-app resolution loss (V13). An app that still stops is named with its cause.
+
+Before step 2 completes, the gate is expected to stop jenkins at HelmCharts' half: infra-statistics' `jenkins.webathome.org` and intercom's `jenkins-mcp.home` resolve to no provider (P4 done-record). The ArgoCDTools push, which rebuilds the aac-tools image, is not held and is not part of this action.
+
+**Consequence:** Until the push and re-run happen, V02 (collect green) and V13 (the 16 held apps pass the arch gate) stay unproven. The 16 held apps stay held, and any arch run against the live set stops them on cross-app edges.
+
+**Provenance:** read, consult 1, plan.md Ruling Q1 and Push holds; verification.json V02, V13
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
