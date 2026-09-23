@@ -315,7 +315,7 @@ covers what the hook genuinely does — the PV reattach (D29), whose target name
 as an argument, and whatever the kubernetes provider manages — and it is the same identity the
 entrypoint builds the run's kubeconfig from.
 
-That RBAC is **split by where each grant has to reach** (amended 2026-09-23, ANS-49). Its rules
+That RBAC is **split by where each grant has to reach** (amended 2026-09-23). Its rules
 are the whole lifecycle on the two core kinds a deploy repo's Terraform reaches through the
 kubernetes provider, and no wildcard, because a resource Terraform manages needs its whole
 lifecycle, create through delete. `persistentvolumes` are cluster-scoped, so their ClusterRole
@@ -578,7 +578,7 @@ RBAC. Stated plainly: write access to a deploy repo branch is arbitrary Terrafor
 inside a pod bounded by those credentials.
 
 **The ServiceAccount's Secrets grant is scoped to the namespace being synced** (amended
-2026-09-23, ANS-49). As shipped it was cluster-wide, so a deploy repo's Terraform could read any
+2026-09-23). As shipped it was cluster-wide, so a deploy repo's Terraform could read any
 Secret in the cluster, Argo's own repo credential and OIDC client secret among them. D33 now splits
 it: PersistentVolumes stay cluster-wide because they are cluster-scoped, and Secrets are bound per
 app, in `<app>-<stage>`, by a RoleBinding the library chart renders beside the hook Job. What stays

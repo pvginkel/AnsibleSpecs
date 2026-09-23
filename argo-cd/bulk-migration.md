@@ -17,7 +17,8 @@ every Jenkins job's `config.xml` + Jenkinsfile (which repo builds which image, w
    DockerImages' single job. Undecided: see "Open".
 2. **Terraform that writes Secrets.** `postgres-db` and `s3-storage` create
    `kubernetes_secret_v1`; `postgres-pas`, `storage` and `youtrack` do so directly. ANS-49
-   (narrow the hook's cluster-wide Secrets grant) is a stated prerequisite for them.
+   (narrow the hook's cluster-wide Secrets grant) was the prerequisite; delivered 2026-09-23:
+   Secrets are granted per app namespace by `homelab-shared` 0.3.0, which these apps need.
    `postgres-db` also needs the `postgresql` provider to reach the database from the hook,
    which has never been tried.
 3. **Storage kind.** Only ZFS (KubeCoder) has run through the hook. RBD and CephFS
@@ -45,7 +46,7 @@ No release has a `configuration.tf`; Keycloak config is outside HelmCharts (ANS-
 - several builders: `fieldnotes`, `newsfilter`, `scantopdf`, `media` (+ZFS dataset),
   `git-sync`.
 
-**W3: Secret-writing TF.** Blocked on ANS-49, and on the image-pin decision where they build
+**W3: Secret-writing TF.** ANS-49 is delivered (their charts need `homelab-shared` 0.3.0); still blocked on the image-pin decision where they build
 their own images:
 `electronics-inventory`, `iot`, `guacamole` (postgres-db, s3); `youtrack`, `postgres-pas`
 (TF Secrets, upstream images); `design-assistant` (4 stages, its build jobs are archived).
@@ -92,7 +93,7 @@ end to end on the first builds.
 | homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory, elasticsearch | architecture: cross-app edges lost at handover, or the generator fails on hosts it can't resolve (ANS-80 / slice 025) |
 | version-poller | its GitHub token arrives as HelmCharts' `gitToken` value; needs an OpenBao leaf (`bao kv put`) |
 | headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
-| storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets (ANS-49) |
+| storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets: ANS-49 is live; each scaffold still pins `homelab-shared` 0.2.1 and must move to 0.3.0 before its first sync, and the first of them proves the per-namespace grant on a first sync |
 | charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
 | mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
 | iot | chart named `iotsupport`: the producer ids need chart name = app |
