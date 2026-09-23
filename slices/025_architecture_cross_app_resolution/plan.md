@@ -304,6 +304,19 @@ P2 does not publish during this run, so a live run of the check reads a dataset 
 `--dataset` (`:233`). In that file, the helm-charts envelope is replaced by a local HelmCharts
 render.
 
+**Done (P3).** `handover_equality.py` scopes an app exactly: its own instances, services and interfaces, and none of a neighbour's. It lists each relation drawn outside the app under the producer that draws it, and does not compare those. The comparison is now `handover()`, driven by 11 fixture tests in `aac-tools/tests/test_handover_equality.py`. ArgoCDTools `ce5efb9` on `phase/025-P3`.
+
+Later phases:
+- P4: after the `excluded (crosses the stage boundary)` lines, the check prints one line per relation another producer draws: `  drawn by <producer>: <rel id>`. The helm-charts list is the lines that start `  drawn by helm-charts: `. None of them contains `published but not generated`, so that grep still catches exactly the app's own losses. The field-difference line is unchanged (`handover_equality.py:248-251`).
+- P4/test phase: the 16 held apps list 23 helm-charts-drawn edges, all Serving: homeassistant-mcp 1, git-sync 1, jenkins 2, keycloak 7, postgres-pas 6, telegram-mcp 1, trello-mcp 1, youtrack 1, elasticsearch 3. They also list 35 under `iotsupport-app` (keycloak's 21 among them) and 1 under `youtrack-mcp-server`. The counts are the same on the live set and on the snapshot, where the helm-charts envelope is HelmCharts `e134d28` rendered against the live set.
+- Test phase: in the live set before HelmCharts publishes, an in-house app's exposed interfaces are linked to nothing, so they come out as additions rather than being compared. In the snapshot every helm-charts interface belongs to exactly one app.
+
+Settled:
+- **Scope.** An instance or service is the app's when its producer matches, it carries `environment`, and its hint starts `<app>-<environment>-` (the namespace, `<app>-<stage>`). An interface is the app's when an app instance links it (`—Association→`) or it is assigned (`—Assignment→`) to an app service. The Assignment path is what reaches dnsmasq's `if:dns1-home`/`if:dns2-home`: their Services select on the StatefulSet pod name, so nothing links them (close-out B2). A product carries no `environment` and belongs to no app. So elasticsearch's Specialization to `ss:elasticsearch` is compared again; before this phase it was excluded as crossing the stage boundary.
+- **Ownership.** A Serving edge is drawn by its consumer's producer, and every other type by its source's producer. This goes beyond the plan's Serving-only rule (close-out Q2). It moves youtrack-mcp-server's `rel:youtrack-mcp-server-consumes-youtrack` Association out of youtrack's losses. A relation whose drawing element no envelope publishes is listed under `(unpublished)`, because the relaxed collector publishes dangling endpoints. The cross-stage exclusion runs first and is unchanged.
+- **Tests.** 11 cases. Each mutation makes some fail: the old prefix scope 5, the old claim-all split 4, link-only interface scope 1, a Serving-only rule 1. `tests/support.py` `load(name, folder="image")` now also loads the check.
+- **Smoke.** `main()` over `/work/ArgoCDDeploy` against the live set runs clean. Every difference is an addition: P1's 5 in-cluster interfaces and 7 links, plus changes at HEAD that are not yet published.
+
 ### P4 — The migration's arch gate proves both halves of a move
 
 Target: root
@@ -313,20 +326,21 @@ exactly when the published set would lose something at its move:
 
 - **A differing field on a kept id stops the app.** Today it does not. The gate looks for the word
   "differs" (`:742`), which the check never prints; the check reports
-  `<id>: <field>: published … != generated …` (`handover_equality.py:201-204`).
+  `<id>: <field>: published … != generated …` (`handover_equality.py:248-251`).
 - **The app's own producer holds** — the check as P3 left it.
 - **HelmCharts' side holds.** Every edge from the app to a consumer that stays in HelmCharts (the
-  check's helm-charts-drawn list) must still be drawn, with the same id, by HelmCharts' patched
+  check's `  drawn by helm-charts: <rel id>` lines) must still be drawn, with the same id, by HelmCharts' patched
   generator rendering every release except the app's. That render passing also proves HelmCharts
   keeps building once the app leaves. It is needed before the flip. Under D50
   (`/work/AnsibleSpecs/argo-cd/decisions.md:632-644`) the collector publishes nothing while both
   producers declare the app's ids, until the flip's HelmCharts build clears them. A HelmCharts build
   that cannot resolve the departed provider never clears them.
-- **Edges drawn by other producers are reported, not stopped on.** IoTSupport's keycloak edges are
-  the example: they resolve against the kept id.
+- **Edges drawn by other producers are reported, not stopped on.** IoTSupport's keycloak edges and
+  youtrack-mcp-server's Association to youtrack's service are examples: they resolve against the
+  kept id.
 
 Both sides must read **one dataset snapshot with nothing overlaid**. The check already empties the
-overlay (`handover_equality.py:100-106`), but HelmCharts' generator overlays
+overlay (`handover_equality.py:112-118`), but HelmCharts' generator overlays
 `../DockerImages/*/architecture.yaml` by default. HelmCharts' render writes into HelmCharts' tree
 (`docs/architecture/*.yaml`, gitignored). Both run in the `iac` sidecar, as the check does today.
 

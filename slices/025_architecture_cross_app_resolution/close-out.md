@@ -43,6 +43,26 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — ArgoCDTools gen-architecture: a Service's dns.webathome.org/hostname host gets no interface when the Service also has server-name, so it resolves in one render but not across renders · minor
+
+reconcile_exposed_services mints interfaces from server-name, else dns-hostname (gen_architecture.py:1206). Only minted interfaces are linked (:1368-1370). build_provider_index registers both annotations' hosts (:662-665). A consumer in another render therefore fails fatally on the second host, which one render resolves. Latent: no prd Service in HelmCharts sets both. P2 copies the same shape.
+
+P2 executor r1, 2026-09-23 — HelmCharts' generator (a8f0bbb) behaves the same: reconcile_exposed_services and publish_service_interfaces are identical across the two copies, so a fix must land in both.
+
+**Consequence:** none today; a future Service annotated with both would make its DNS host fail every cross-app consumer's architecture build
+
+**Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### B2 — ArgoCDTools + HelmCharts gen-architecture: a Service selecting on statefulset.kubernetes.io/pod-name is never placed, so it publishes no in-cluster interface and its exposed hosts link nothing · minor
+
+dnsmasq's per-pod Services dns-0 and dns-1 (charts/dnsmasq/templates/dns-service.yaml:42,73) select on the StatefulSet pod-name label, which a pod template never carries, so build_provider_index finds no backing workload. In the local HelmCharts render of 2026-09-23 they get no svcif interface, and the exposed interfaces if:dns1-home / if:dns2-home have only their Assignment to svc:dnsmasq-prd-dns-0/-1, with no instance Association. The handover check now also scopes an interface by that Assignment, so dnsmasq's own check still compares them. The generators' resolution cannot place these hosts, in one render or across renders.
+
+**Consequence:** none today — nothing outside dnsmasq's namespace names dns1.home, dns2.home or dns-0/dns-1.dnsmasq-prd.svc; a consumer that does fails its architecture build as an unresolved host
+
+**Provenance:** witnessed, executor, P3, r1, /tmp/p3-hc-render.yaml (HelmCharts main e134d28 rendered against the live set)
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -58,6 +78,15 @@ Resolution through the published set (aac-tools `resolve_host`, P1; HelmCharts i
 **Consequence:** a wire left pointing at a removed in-namespace Service fails one publish cycle late; the edge drawn in between points at the instance the previous publication linked
 
 **Provenance:** read, code-writer, P1, r1, ArgoCDTools aac-tools/image/gen_architecture.py resolve_host
+**Disposition:**
+
+### Q2 — The handover check attributes a non-Serving relation to its source's producer, not only a Serving edge to its consumer's · minor
+
+P3's text names the Serving rule. In the live set, one relation touching a held app is not Serving: youtrack-mcp-server's rel:youtrack-mcp-server-consumes-youtrack, an Association from its app:youtrack-mcp-server to youtrack's svc:youtrack-prd-youtrack. That producer draws it against an id youtrack's move keeps. Under a Serving-only rule it would be youtrack's loss and would stop youtrack's arch gate. The check now lists it under 'drawn by youtrack-mcp-server'. Every other relation type the generators emit (Specialization, Realization, Assignment, Association) is drawn from its source's side. Over the 16 held apps the only non-Serving relation this changes is this one (live set and snapshot, 2026-09-23).
+
+**Consequence:** youtrack's handover check no longer reports that Association as a loss; if the operator wants such edges held against the app instead, youtrack stops on it
+
+**Provenance:** witnessed, executor, P3, r1, ArgoCDTools ce5efb9 (test_an_edge_another_producer_draws_from_its_own_element_is_its_sources)
 **Disposition:**
 
 ## Suggestions
@@ -85,4 +114,15 @@ code-writer, P1, r1, 2026-09-23 — The convention P1 settled, which is what suc
 **Consequence:** a producer author outside the deploy estate who wants to resolve an in-cluster host has only generator source to learn the convention from, including the link relation type and the host form
 
 **Provenance:** read — plan-reviewer, plan review r1, plan_review_r1.md
+**Disposition:**
+
+### S3 — Pin the published-lookup order and serving_at's instance filter with tests in aac-tools · minor
+
+Swapping resolve_host's in-cluster-form-before-host order (gen_architecture.py:685) passes all 24 tests. So does deleting serving_at's 'src in container_of' filter (:494). A test per detail would keep P2's AST-identical copy from drifting unnoticed.
+
+P2 executor r1, 2026-09-23 — HelmCharts' copy is pinned: tests/test_gen_architecture.py (16d1af6) has a test for each detail, each witnessed failing under its mutation. The aac-tools suite still pins neither.
+
+**Consequence:** none today; drift in either detail would go unnoticed in both generators
+
+**Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
 **Disposition:**
