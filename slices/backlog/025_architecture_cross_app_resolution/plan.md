@@ -103,14 +103,179 @@
   registers `<app>-deploy` (D50, `argo_migrate.py` `cmd_register`).
 - The Architecture repo is not checked out in this environment; nothing in this slice changes it.
 
+## Task shape
+
+cross-cutting — ruling D1 sets a new publishing pattern (an interface element per in-cluster Service, every interface linked to its backing instances) that must land identically in two generators in two repos (ArgoCDTools, HelmCharts), plus the migration tool's handover check in Ansible.
+
 ## Ordering constraints
 
-- HelmCharts' patch (publishing in-cluster interfaces with direct instance links, and resolving
+- HelmCharts' patch (P2: publishing in-cluster interfaces with direct instance links, and resolving
   unknown hosts through the published set) must land and **publish** before any provider with
   inbound edges leaves HelmCharts; the held apps stay held until then, so the proof runs after
   `AaC/HelmCharts` and the `AaC/Architecture` collect have picked it up.
-- The aac-tools change and the HelmCharts patch must emit identical interface elements and
+- The aac-tools change (P1) and the HelmCharts patch (P2) must emit identical interface elements and
   relations for the same Service, so a moved provider shows no field difference at handover.
+- The proof re-scaffolds before it gates: none of the held apps' deploy repos is in `/work` today
+  (2026-09-23), so each is rebuilt with `argo_migrate.py scaffold` before `argo_migrate.py arch`
+  runs on it.
+
+### P1 — The aac-tools generator publishes in-cluster interfaces and resolves hosts through them
+
+Target: ../ArgoCDTools
+
+`gen-architecture` (`aac-tools/image/gen_architecture.py`) publishes the shape ruling D1 sets, and
+resolves through it:
+
+- **Emission.** There is one interface element for every in-cluster Service the render can place.
+  That means every Service its provider index registers with a non-empty backing set
+  (`build_provider_index`, `:600-625`) and every CNPG pooler Service (`:1113-1116`, `:974-975`).
+  Every interface the run emits, these and the exposed-host ones (`reconcile_exposed_services`,
+  `:1178-1193`), is linked directly to the instances behind its Service. The existing
+  interface → service `Assignment` stays as it is.
+- **Resolution.** A host the run cannot place in its own render or in the three-entry hint table
+  (`:135-139` — OpenBao, Ceph, Home Assistant; it stays as it is) resolves through the linked
+  interfaces in the published dataset before the run fails. It must pick **exactly the providers
+  in-process resolution would pick**. A `cap:` recipe keeps only the instances that realize the
+  capability. An `upstream` or `mcpClients` wire keeps only the containers its `providers` names.
+  No container becomes a provider that in-process resolution would drop. The resulting Serving
+  edge is the one HelmCharts draws today in one process: the same endpoints and the same id. The
+  hint table's results pass through unfiltered today (`:1383-1384`, `:1460-1461`, `:1562-1563`);
+  results from the published interfaces must not.
+- **An unresolved host stays fatal**: every error goes to stderr, the run exits 1 and writes no
+  artifact (`:986-990`). No partial-run flag is added (R3).
+
+Constraints the repo will not tell you:
+
+- **Which instances an interface links:** the containers behind its Service that serve it; init
+  containers are not linked. In-process resolution drops init containers everywhere (`:1393`,
+  `:1464`, `:1567`), and without them in the links the published set needs no marker to tell them
+  apart. There is a live case: jenkins' `install-homelab-ca` init container realizes
+  `cap:continuous-integration` just as the `jenkins` container does (published set, 2026-09-23).
+  This is question Q1 in `plan_questions_r1.md`.
+- **Edges stay instance → instance** (D1). An interface is the lookup and the viewer's view, never
+  an edge endpoint. Only interfaces linked to instances resolve anything. An interface another
+  producer publishes without links (Ansible's `if:proxmox-api-prd`, for example) resolves nothing,
+  as today.
+- **Ids.** Interface and relation ids are deterministic. They are built from a natural key both
+  generators share and that survives a move (a move keeps the namespace). They must never collide
+  with the exposed-host interfaces, which are keyed on the bare host (`appif.<host>`, `:1179`):
+  short `.home` names such as `kibana` and `git` are exposed hosts too.
+- **Schema.** The relation that links an instance to its interface must be allowed from both
+  SystemSoftware and ApplicationComponent to ApplicationInterface. Realization, Association,
+  Serving, Flow and Triggering are allowed from both. Composition is allowed only from
+  ApplicationComponent, and Assignment from neither. This was probed against
+  `https://architecture.webathome.org/api/validate` on 2026-09-23; the full matrix is
+  `…/schema/v0.1/generated/relations.schema.json`. Nothing in the Architecture repo changes.
+- **`svc:`-target recipes stay own-render** (`resolve_svc_target`, `:641-665`). All ten published
+  today are same-pod or same-release (published set, 2026-09-23).
+- P2 copies this shape into HelmCharts' generator exactly, so the done-record states what got
+  settled: the natural keys, the linking relation type, and the host form in `stats`.
+
+The phase's tests go in `aac-tools/tests/test_gen_architecture.py`.
+
+### P2 — HelmCharts' generator is patched to the same shape
+
+Target: ../HelmCharts
+
+HelmCharts' own generator (`tools/chart_tools/gen_architecture.py`) is patched in place, not moved
+onto the aac-tools copy (R4). It emits exactly what P1 landed: the interface elements, their instance
+links and the resolution through the published set. For the same Service it produces the same
+element ids, every field equal, and the same relation ids. Two things follow:
+
+- **HelmCharts keeps building when a provider leaves it.** A consumer still in HelmCharts resolves
+  the departed provider's host through the published interfaces. It draws the edge it draws today,
+  with the same id. Today that host fails the run (hazard 1).
+- **Apps that have left can resolve the providers still in HelmCharts**, because HelmCharts now
+  publishes those providers' interfaces.
+
+Constraints:
+
+- **Keep the resolvers identical.** Today `resolve_host`, `build_provider_index`, `resolve_boundby`
+  and `Dataset` are AST-identical across the two copies, and `reconcile_exposed_services` differs
+  only in formatting (compared 2026-09-23). Keep it that way.
+- **A departed provider is a subset render.** The generator takes release names (`:521`, `:584`),
+  and a flipped app is already skipped: `tools/deploy/deploy_cli/release.py:174` leaves
+  `chart_name` unset for `reconciler: argo-cd`. So "HelmCharts without app X" can be run without
+  touching config.
+- **The identity with P1 is proven before anything publishes.** Render one provider both ways.
+  `argo_migrate.py scaffold <app>` (Ansible, `support/argo-migrate/`) builds its deploy repo from
+  HelmCharts. The generators read `ARCH_DATASET_URL` as a file when it has no scheme. Use
+  `ARCH_DATASET_OVERLAY=""` so the local DockerImages checkout is not overlaid (`:343-345`).
+- Pushing `tools/` redeploys nothing; `AaC/HelmCharts` publishes the new artifact.
+
+The phase's tests go in `tests/test_gen_architecture.py`.
+
+### P3 — The handover check scopes an app exactly and knows whose edges are whose
+
+Target: ../ArgoCDTools
+
+`aac-tools/checks/handover_equality.py` compares what a deploy repo would publish with **exactly**
+what the app's current producer publishes for it:
+
+- **Exact scoping (the ruled prefix quirk).** `app_elements()` (`:146-161`) matches on the hint
+  prefix, so `youtrack` pulls in `youtrack-mcp`'s instance and interfaces and reports a false loss
+  (`~/bulk-migration/logs/handover-all.txt`). The same match fails the other way too: an app's own
+  exposed-host interfaces whose host does not start with the app's name fall out of the target. 23
+  of helm-charts' 52 interfaces are like that, elasticsearch's `if:kibana` among them. Those
+  interfaces surface as additions and are never compared field by field. After this phase the check
+  takes all of the app's own elements, its interfaces included (they now link to its instances),
+  and none of a neighbour's.
+- **Relation ownership.** `split_relations()` (`:164-181`) claims every relation that has one
+  endpoint in the app. A generator draws a Serving edge from the consumer's side. So a Serving edge
+  into a consumer outside the app is drawn by that consumer's producer, and it survives the move
+  because the provider keeps its id. It is not the app's to generate and not the app's loss. The
+  check reports these edges separately, grouped by the consumer's producer, so that P4 can prove the
+  helm-charts ones.
+- **Keycloak's undiagnosed loss** is this class. Its 21 bare-UUID relations are
+  `keycloak —Serving→ <IoT device>` edges drawn by IoTSupport's producer (`iotsupport-app`) against
+  keycloak's kept instance id. IoTSupport's `backend/tools/gen-architecture.py:356-364` mints
+  `rel:<uuid5>` ids and resolves Keycloak from the published set; the checkout is
+  `/work/scratch/IoTSupport`. That is the cross-app pattern R1 describes, so this rule covers it.
+- A kept id whose fields differ is still a difference. Additions are still allowed.
+
+Until P2 has published, the check can be exercised on a dataset file in which the helm-charts
+envelope is replaced by a local HelmCharts render.
+
+### P4 — The migration's arch gate proves both halves of a move
+
+Target: root
+
+`argo_migrate.py arch` (`support/argo-migrate/argo_migrate.py`, `cmd_arch`, `:729-747`) stops an app
+exactly when the published set would lose something at its move:
+
+- **A differing field on a kept id stops the app.** Today it does not. The gate looks for the word
+  "differs" (`:742`), which the check never prints; the check reports
+  `<id>: <field>: published … != generated …` (`handover_equality.py:201-204`).
+- **The app's own producer holds** — the check as P3 left it.
+- **HelmCharts' side holds.** Every edge from the app to a consumer that stays in HelmCharts (the
+  check's helm-charts-drawn list) must still be drawn, with the same id, by HelmCharts' patched
+  generator rendering every release except the app's. That render passing also proves HelmCharts
+  keeps building once the app leaves. It is needed before the flip. Under D50
+  (`/work/AnsibleSpecs/argo-cd/decisions.md:632-644`) the collector publishes nothing while both
+  producers declare the app's ids, until the flip's HelmCharts build clears them. A HelmCharts build
+  that cannot resolve the departed provider never clears them.
+- **Edges drawn by other producers are reported, not stopped on.** IoTSupport's keycloak edges are
+  the example: they resolve against the kept id.
+
+Both sides must read **one dataset snapshot with nothing overlaid**. The check already empties the
+overlay (`handover_equality.py:100-106`), but HelmCharts' generator overlays
+`../DockerImages/*/architecture.yaml` by default. HelmCharts' render writes into HelmCharts' tree
+(`docs/architecture/*.yaml`, gitignored). Both run in the `iac` sidecar, as the check does today.
+
+### P5 — The Argo CD register records the published-interface decision
+
+Target: ../AnsibleSpecs
+
+`argo-cd/decisions.md` records ruling D1 as a decision. That register is where D50 records how
+deploy repos publish their architecture (`:632-644`). The entry states:
+
+- every provider publishes each in-cluster Service as an interface linked to the instances behind
+  it;
+- a cross-app edge resolves through those interfaces in the published set and stays
+  instance → instance;
+- an unresolved host stays fatal, and bootstrapping a new app is done by hand (R3).
+
+Written in place, next to D50, with no history narration.
 
 ## Not in scope
 
@@ -120,3 +285,7 @@
 - Reworking HelmCharts' generator onto the aac-tools copy (R4).
 - Apps held for reasons other than architecture (ANS-49 Secret-writing Terraform, attended tier,
   post-render hooks, version-poller's token, the upstream-chart companion).
+- Rebuilding the AaC jobs of deploy repos that already publish. `aac-tools` floats on `:latest`
+  with `alwaysPullImage` (`JenkinsPipelineUtils/vars/containerTemplates.groovy:34`), so each one
+  picks up the new generator at its next build.
+- Other producers' own host resolution, such as IoTSupport's hint-stem bridge.
