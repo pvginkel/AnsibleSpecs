@@ -122,8 +122,9 @@ that day.
   - the side asks that have no J-number: the style guide and docs site (§4), `job-settings.md`
     (§2), the webhook test (§6a), the post-wave `config.xml` re-dump and diff (§9)
   - *(refresh)* the 29 jobs added by the Argo migration (28 `AaC/*Deploy` P1 rows;
-    `Promote-PRD` needs nothing), and Q10's re-ask: the wave plan was agreed for no-op
-    redeploys, and 18 rebuilds are prd rollouts through Argo now
+    `Promote-PRD` needs nothing). Q10 was re-asked because 18 rebuilds are prd rollouts
+    through Argo now, and re-confirmed: they can still be pushed.
+  - the style guide's delivery form: a skill, not a header link (§4, ruled 2026-09-23)
 
 ## 2. Per-job settings decision document
 
@@ -161,17 +162,33 @@ written as declarative templates) and §9 (`options{}` versus `properties([...])
 ## 4. Pipeline style guide and a docs site for JenkinsPipelineUtils
 
 The aim is one way to do each thing (checkout, library load line, job properties, pod templates,
-secrets, timeouts, notifications), published and linked from the top of every Jenkinsfile.
+secrets, timeouts, notifications), published on the docs site and ~~linked from the top of every
+Jenkinsfile~~ reached through a **skill** — a short one that carries the rules and points at the
+site, as `kubecoder-env` points at the operator manual — so it is in front of whoever writes the
+next Jenkinsfile.
 
-- [ ] **op** Hosting and link. Two constraints: JenkinsPipelineUtils is private, which rules out
-  free GitHub Pages; and about half the pipeline repos are public, and Architecture's rules
-  forbid internal hostnames in public repos, so a `.home` link in every Jenkinsfile would break
-  that rule. Choose a public hostname, or accept an internal link in public repos.
+> **Ruled 2026-09-23.** Operator: *"I suggested we put a link to a style guide into the
+> Jenkinsfiles. That of course won't help when building new ones. Instead I want a skill.
+> Likely KubeCoderConfig is good enough for this, but we can review that once we get to it."*
+> And: *"Btw the skill is itself still a reference to the online docs. The kubecoder env skill
+> is like that also."* KubeCoderConfig is the `kubecoder` Claude Code plugin marketplace; its
+> skills live under `kubecoder/skills/` next to `kubecoder-env`, `onboard` and
+> `youtrack-usage`, and every environment loads them. Whether the guide's skill is one of those
+> or lives elsewhere is reviewed when this section is worked. No header link goes into any
+> Jenkinsfile; §9 drops that ride-along.
+
+- [ ] **op** Hosting. JenkinsPipelineUtils is private, which rules out free GitHub Pages.
+  ~~About half the pipeline repos are public, and Architecture's rules forbid internal
+  hostnames in public repos, so a `.home` link in every Jenkinsfile would break that rule.
+  Choose a public hostname, or accept an internal link in public repos.~~ That constraint went
+  with the link: the only pointer to the site is the skill, in a private repo, so a `.home`
+  hostname is fine. Choose the host.
 - [ ] **C** Docs site in `JenkinsPipelineUtils/docs/`, built and published by the library's own
   `Jenkinsfile`, alongside J22's self-test. Tool: Zensical. It is the Material for MkDocs team's
   successor, reads `mkdocs.yml`, and is the same path KubeCoder's MkDocs docs will need.
   Starlight is the fallback if Zensical isn't stable by then.
-- [ ] **C** Write the style guide from the rulings: J24 (`checkout scm` for the job's own repo),
+- [ ] **C** Write the style guide on the docs site, and the skill that carries its rules and
+  points at it, from the rulings: J24 (`checkout scm` for the job's own repo),
   J23 (the one load line), J01 (the job-properties block and its placement; ~~J13~~ retention
   is the global build discarder, so files declare none), J08 (the declarative rule after §3),
   J11/J12 (timeouts), J17 (`withVault` scope), J19 (the iac dev-stage duplication is deliberate:
@@ -181,8 +198,10 @@ secrets, timeouts, notifications), published and linked from the top of every Je
 - [ ] **C** Library reference pages (J22's docs half, replacing `vars/*.txt`), generated from or
   kept next to `vars/`
 - [ ] **op** Review the guide
-- The header link itself is added to every Jenkinsfile in the §9 pass, so each repo is touched
-  once. The site must therefore be live before §9.
+- ~~The header link itself is added to every Jenkinsfile in the §9 pass, so each repo is touched
+  once. The site must therefore be live before §9.~~ No link (ruled above). The ordering
+  stands for a different reason: the §9 executor works from the skill and the site it points
+  at, so both exist before §9.
 
 ## 5. Stale jobs, dead code and controller settings — ~~straightforward changes, no slice~~
 
@@ -269,7 +288,8 @@ style guide, and is written declaratively if §3 says "migrate all".
 ## 9. ANS-84 — move job config into the Jenkinsfiles (mechanical, Sonnet, last)
 
 - [ ] **C** Brief a Sonnet agent from Appendix A, the `job-settings.md` rulings and the §4
-  style guide. Include what rides along in the same files: the style-guide header link,
+  style guide. Include what rides along in the same files: ~~the style-guide header link~~
+  (withdrawn 2026-09-23 — the guide is a skill, §4),
   ~~J13 retention~~ (rejected — the global build discarder stands, Appendix A's R4 is void),
   J24 `checkout scm`, J25 hygiene, J23 load line, J11 timeout, and the four `KEYCLOAK_*`
   values inlined in IoTSupport's two files (Q6). `Firmware/KitchenDisplay` is skipped
@@ -288,7 +308,7 @@ style guide, and is written declaratively if §3 says "migrate all".
 - [ ] **S** Wave 2 — app repos, in batches sized to the 3 pod slots. *(refresh)* 18 of them
   end in a pin write, which is a prd rollout through Argo on every rebuild (new tag, deploy-repo
   commit, sync, pod restart) plus an `AaC/*Deploy` build; 6 end in a Helm deploy (no-op).
-  Q10 is re-asked in the report on that basis; it is answered before this wave starts.
+  Q10 was re-asked on that basis and answered 2026-09-23: "Yes, they can still be pushed."
 - [ ] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
   batches are still sized to the 3 pod slots.
 - [ ] **C** After each wave: re-dump `config.xml` (`jenkins-config/refresh.py`) and diff

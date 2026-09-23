@@ -868,6 +868,15 @@ accept
 accept. See, this is something we need in the style guide.
 >
 
+> **Operator (2026-09-23, in conversation) — on the style guide's form:** "I suggested we put a
+> link to a style guide into the Jenkinsfiles. That of course won't help when building new
+> ones. Instead I want a skill. Likely KubeCoderConfig is good enough for this, but we can
+> review that once we get to it." And: "Btw the skill is itself still a reference to the
+> online docs. The kubecoder env skill is like that also." → plan §4: the guide stays on the
+> docs site; a skill (KubeCoderConfig's `kubecoder` plugin, to be confirmed when §4 is worked)
+> carries its rules and points at the site, as `kubecoder-env` points at the operator manual;
+> no header link in any Jenkinsfile, and §9 drops that ride-along.
+
 ## Theme E — Jenkinsfile hygiene
 
 **Hard-coded constants, judged:** `registry:5000` appears in 28 files and the library, the
@@ -1137,7 +1146,7 @@ I have no problem just pushing these out.
 > time in a quiet slot?
 >
 > **Operator response:** <!-- accept | modify | reject | discuss -->
->
+> Yes, they can still be pushed. (2026-09-23)
 
 ---
 
