@@ -146,7 +146,7 @@ cross-cutting — ruling D1 sets a new publishing pattern (an interface element 
 
 - ../HelmCharts — any push to `main` deploys drifted releases to prd unattended; the bulk-migration session pushes it after this slice (Ruling Q1).
 
-### P1 — The aac-tools generator publishes in-cluster interfaces and resolves hosts through them
+### P1 — The aac-tools generator publishes in-cluster interfaces and resolves hosts through them ✅ DONE 2026-09-23
 
 Target: ../ArgoCDTools
 
