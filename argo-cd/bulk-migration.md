@@ -71,17 +71,26 @@ their own images:
   from a per-image config. No promote pipelines: every stage follows `main`. No Image Updater.
   W2 is unblocked.
 
-## State (2026-09-23 ~12:45Z)
+## State (2026-09-23 ~19:00Z)
 
 Tool: `Ansible/support/argo-migrate/argo_migrate.py`; run record ANS-103.
 
-**On Argo CD, autoSync on (12):** filebeat, models, pgadmin, fieldnotes, homeapps,
-iac-provisioner, newsfilter, source, scantopdf, ginbov-nl, webathome-org, media. Every cutover
-rendered identically to the live release, and none restarted a pod. media's samba PV moved into
+**On Argo CD, autoSync on (24):** filebeat, models, pgadmin, fieldnotes, homeapps,
+iac-provisioner, newsfilter, source, scantopdf, ginbov-nl, webathome-org, media; then
+homeassistant-mcp, calendar-support, telegram-mcp, infra-statistics, intercom, trello-mcp,
+youtrack-mcp, git-sync, guacamole, youtrack, postgres-pas (batch 3); version-poller, its
+`GIT_TOKEN` now an ExternalSecret on `eso/prd/version-poller/prd/git`. Every cutover
+rendered identically to the live release, and none restarted a pod. guacamole was the first
+Secret-writing app to sync: its hook refreshed the `postgres-db` Secret through the
+per-namespace grant (ANS-49 proven live). media's samba PV moved into
 Terraform (an `import` block), because the `releases` project admits no PersistentVolume.
 
 **Pins (D53) live:** DockerImages' `deploy-pins.json`, and the Jenkinsfiles of FieldnotesApp,
-Home, NewsFilter, ScanToPdf, Ginbov, Webathome, MyDownloads and Architecture. Proven
+Home, NewsFilter, ScanToPdf, Ginbov, Webathome, MyDownloads, Architecture, YouTrackMCPServer,
+GitblitMCPServer, GitblitMCPSupportPlugin, IntercomServer and mcp-server-trello (branch `test`).
+Committed locally, not pushed, until their apps sync: ZigbeeControl, ElectronicsInventory, and
+SSEGateway's pin stage for those two (it keeps `helmDeploy()` for dnsmasq, iot and
+design-assistant). Proven
 end to end on the first builds.
 
 **Disabled in HelmCharts, not migrated:** open-webui, shell, design-assistant.
@@ -90,9 +99,9 @@ end to end on the first builds.
 
 | App | Blocker |
 | --- | --- |
-| version-poller | its GitHub token arrives as HelmCharts' `gitToken` value; needs an OpenBao leaf (`bao kv put`) |
+| zigbee2mqtt, electronics-inventory | preflight stuck field: the Helm-owned `env[SSE_CALLBACK_SECRET].value` collides with the rewrite's `valueFrom` (the server rejects both). Needs a cutover mechanism, see ANS-103 |
 | headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
-| storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets: ANS-49 is live, and the six scaffolds are on `homelab-shared` 0.3.0 (local commits; iot's re-scaffold takes it from the tool). The first of them to sync proves the per-namespace grant on a first sync |
+| storage, iot, keycloak | Terraform writes Secrets: ANS-49 is live and proven on guacamole's first sync. storage and keycloak are attended; iot waits on its chart rename (below) |
 | charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
 | mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
 | iot | chart named `iotsupport`: the producer ids need chart name = app |
