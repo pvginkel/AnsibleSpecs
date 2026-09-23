@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "Ruling D2 applied: P1's linking constraint now states that an interface links only serving containers, never init containers, with no marker field on instances; V05 carries the same rule. All r1 citations were re-verified against unchanged repo heads, the plan parses (5 phases, all targets resolve), and it is committed at 94c682c."}
