@@ -643,6 +643,24 @@ without the app. KubeCoderDeploy and ArgoCDDeploy carry the first two; the steps
 are the operator's, are `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own
 architecture producer".
 
+**D55 — Cross-app architecture edges resolve through published in-cluster interfaces.** Decided
+2026-09-23 (slice 025; operator: "I'm not opposed to going the interface route."). Both
+Kubernetes generators, aac-tools' deploy-repo one (D50) and HelmCharts' own copy, publish each
+in-cluster Service they render, CNPG pooler Services included, as an `applicationInterfaces`
+element with its host (`<svc>.<ns>.svc`) in `stats`. Every interface, these and the exposed-host
+ones, is linked to the workload instances behind its Service by an `Association` from each
+serving instance. Init containers are never linked, and no link goes through the application
+service, which for an in-house app is DockerImages' and shared by every deployment of the
+product. A generator resolves a host its own render cannot place through those links in the
+published set, keeping only the providers in-process resolution would keep. The cross-app
+`Serving` edge stays instance → instance with the id one-process resolution gives it, so an edge
+does not change when either end moves producer. The hand-kept host-hint table covers only
+providers outside Kubernetes: OpenBao, Ceph and Home Assistant. An unresolved host stays fatal:
+the run fails and writes no artifact, and there is no partial run. Nothing re-runs a consumer
+when its provider first publishes, so a new app is bootstrapped into the published set by hand.
+The two generators emit identical interfaces and links for the same Service, since at a handover
+a differing field on a kept id is a loss.
+
 **D51 — The remaining apps migrate in bulk (O1).** Decided 2026-09-23 (operator, after
 KubeCoder's cutover, ANS-102): "My preference is we do a bulk migration." A scripted run takes
 the apps in waves, recorded in [`bulk-migration.md`](bulk-migration.md). Phase C's plugin is not

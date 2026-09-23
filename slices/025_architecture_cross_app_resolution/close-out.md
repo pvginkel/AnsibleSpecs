@@ -72,6 +72,33 @@ app_elements() takes an interface only through an Association from the app's own
 **Provenance:** witnessed, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
 **Disposition:**
 
+### B4 — Ansible argo_migrate.py arch: a consumer already flipped in the local HelmCharts tree, but still attributed to helm-charts in the dataset, makes its provider's HelmCharts half stop falsely · minor
+
+The HelmCharts half gates on the dataset's 'drawn by helm-charts' edges (argo_migrate.py:819-822) but renders the current HelmCharts tree, which skips flipped releases (HelmCharts gen_architecture.py:643). A consumer flipped locally, or pushed but not yet collected (D50), still reads as helm-charts', so its provider's gate reports 'helm-charts would no longer draw: <rid>' for an edge the consumer's new producer will draw against the kept id. It is a false stop, never a false pass, and it clears once that producer publishes. Held pairs this can hit: electronics-inventory/guacamole to postgres-pas, infra-statistics/intercom to jenkins, electronics-inventory/zigbee2mqtt to keycloak. It does not occur when arch runs over a batch before any flip.
+
+**Consequence:** If a provider's arch runs after one of its consumers has flipped but before that consumer's new producer publishes, the provider stops at arch on an edge that would survive, until the collect catches up
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
+**Disposition:**
+
+### B5 — Ansible argo_migrate.py arch: a failed dataset fetch aborts the whole multi-app run with a traceback instead of a per-app STOP · minor
+
+dataset_snapshot calls urllib.request.urlopen in the dev container (argo_migrate.py:751) and does not handle failure; main catches only Stop (:1240-1243). A timeout or HTTP error during 'arch a b c …' ends the run, and the remaining apps are never gated. This goes against the tool's 'every step … exits non-zero with a STOP line' (:20-21). Before P4, the check fetched the URL itself, and a failure became a per-app STOP through the Traceback path.
+
+**Consequence:** A network blip during a batch arch run leaves the rest of the batch ungated; the operator has to spot the traceback and re-run
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F2
+**Disposition:**
+
+### B6 — AnsibleSpecs README: slice 025's catalogue entry links slices/backlog/025_… and says it waits for the second migration · cosmetic
+
+README.md:30 links `slices/backlog/025_architecture_cross_app_resolution/slice.md`, but the slice sits at `slices/025_architecture_cross_app_resolution/`, so the link is dead. The entry also says the slice "waits for the second migration", which the plan's premise correction retired: 16 apps are held on this slice alone.
+
+**Consequence:** A reader following the Pending catalogue to slice 025 hits a missing file and reads a stale dependency, until the slice's close moves it and rewrites the entry
+
+**Provenance:** witnessed, code-writer, P5, r1, /work/AnsibleSpecs/README.md:30
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->

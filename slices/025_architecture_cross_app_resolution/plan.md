@@ -383,6 +383,24 @@ deploy repos publish their architecture (`:632-644`). The entry states:
 
 Written in place, next to D50, with no history narration.
 
+**Done (P5).** `argo-cd/decisions.md` records ruling D1 as **D55**, directly after D50 in
+"Migration and endgame". The entry covers the three points and the rulings that shape them: the
+Association link, no init containers, the three-entry hint table, and the two generators in
+lockstep. AnsibleSpecs, on `phase/025-P5`.
+
+Later phases:
+- Test phase: V14 is D55, `argo-cd/decisions.md` right after D50.
+- Doc phase: cite D55 for the interface convention; the register now carries it, so a doc restates
+  the rule by pointing there.
+
+Record:
+- The number is D55, the next free one; the register groups entries by section, not by number.
+- Provenance is "Decided 2026-09-23 (slice 025; operator: …)", quoting D1's interface-route line.
+- The host form is written `<svc>.<ns>.svc`, the `stats.url` P1 emits.
+- No other register entry changed: D50 already says the generator mints HelmCharts' ids, and O2
+  already records gen-architecture as leaving HelmCharts' bucket.
+- The specs repo has no lint; the gate was the diff read and the 100-column check on the new lines.
+
 ## Not in scope
 
 - Migrating any of the held apps — that is the bulk migration's run (ANS-103), after this slice.
