@@ -51,6 +51,15 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
+### Q1 — A Service a render drops while its own container still points at it resolves through the render's last publication for one cycle · minor
+
+Resolution through the published set (aac-tools `resolve_host`, P1; HelmCharts inherits it in P2) applies to any host the render does not place. That includes a host in a namespace the render itself renders. Suppose a chart drops a Service while one of its own containers still points at it. The interface from the app's previous publication still links the old instance, so the build passes and draws the edge. The next build fails as before, once the publication that dropped the interface has landed. The fatal outcome could be restored for this case by skipping the published lookup for namespaces the render itself renders. That rule is not in the plan, so it was not added. P4's subset render is unaffected either way, because the departed app's namespace is not rendered.
+
+**Consequence:** a wire left pointing at a removed in-namespace Service fails one publish cycle late; the edge drawn in between points at the instance the previous publication linked
+
+**Provenance:** read, code-writer, P1, r1, ArgoCDTools aac-tools/image/gen_architecture.py resolve_host
+**Disposition:**
+
 ## Suggestions
 
 Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
@@ -70,6 +79,8 @@ IoTSupport's generator resolves a device fleet's hosts, such as Keycloak's auth.
 ### S2 — The Architecture producer manual does not describe the new cross-producer host lookup (in-cluster interfaces linked to instances) · minor
 
 After this slice, a provider's in-cluster Service is published as an `if:` element with its host in `stats`, linked to the serving instances. A consumer in another producer resolves a host through those links. This becomes a federation-wide contract: close-out S1 already proposes that IoTSupport adopt it. But it will be documented only in the two generators' code and in the argo-cd decision register. The producer manual in pvginkel/Architecture, the federation's contract document, is out of this slice's scope (plan: Not in scope) and is not checked out here.
+
+code-writer, P1, r1, 2026-09-23 — The convention P1 settled, which is what such a manual entry would describe: an interface per in-cluster Service at `stats.url: <svc>.<ns>.svc` (natural key `svcif.<ns>.<svc>`), and every interface linked by an `Association` from each non-init instance behind it (`rel:<instance hint>-behind-<interface hint>`).
 
 **Consequence:** a producer author outside the deploy estate who wants to resolve an in-cluster host has only generator source to learn the convention from, including the link relation type and the host form
 

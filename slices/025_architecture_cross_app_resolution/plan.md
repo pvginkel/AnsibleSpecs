@@ -199,6 +199,22 @@ Constraints the repo will not tell you:
 
 The phase's tests go in `aac-tools/tests/test_gen_architecture.py`.
 
+**Done (P1).** `gen-architecture` publishes one interface per in-cluster Service, poolers included, and links every interface to its non-init instances. A host the render cannot place resolves through those links in the published set, filtered the way the render's own providers are. ArgoCDTools `7806d46` on `phase/025-P1`.
+
+Later phases:
+- P2 copies these AST-identically: `Dataset` (four new indexes, `serving_at`, `instance`), `resolve_host`, `serving`, `publish_service_interfaces`, the `serving(...)` filter in the three resolvers, and the error text `(in-cluster / exposed host / cross-producer / published interface)`. `main` calls `publish_service_interfaces` right after `reconcile_exposed_services`, after the pooler merge. It passes `stage_of_ns`: ns → `{"env", "introduced"}` of the release that renders that namespace. If two HelmCharts releases share a namespace, settle the value before copying.
+- P2's tests assert the pinned literals in aac-tools' `PublishedInterfaceTests`: `if:postgres-pooler-rw-postgres-pas-prd-svc,0e13a990-5ea1-589e-86bd-e17c54e4cd00`, `if:jenkins-jenkins-prd-svc,e2aa1339-6343-578b-b9dd-e69a433c69c1` and `rel:jenkins-prd-jenkins-jenkins-behind-jenkins-jenkins-prd-svc`.
+- P3: an interface belongs to the app whose instance links it (`—Association→`, id `rel:<instance hint>-behind-<interface hint>`). An in-cluster interface's `stats.url` ends `.<ns>.svc`. Against a published set without P2's interfaces, the new elements and links are additions.
+
+Settled shape:
+- **In-cluster interface.** Natural key `svcif.<ns>.<svc>`, host `<svc>.<ns>.svc`, id `composite("if", kebab(host), key)`. Fields: `label: <host>`, `summary: "In-cluster endpoint <host> of Service '<svc>'."`, the release's `introduced` and `environment`, `lifecycle: active`, `cluster: prd`, `stats: {url: <host>}`. It has no `webUi` and no Assignment. One is emitted per `incluster` key after the pooler merge: exactly the non-empty backing sets, plus the poolers.
+- **Link.** An `Association` from instance to interface, id `rel:<instance hint>-behind-<interface hint>`, from every backing id whose record is not `is_init`. An in-cluster interface takes `incluster[(ns, svc)]`. Each minted `appif.<host>` interface takes `external[host]`. Only minted interfaces are linked, because `external` also holds the hosts of a Service's second annotation. The exposed interface's Assignment is unchanged.
+- **Resolution order in `resolve_host`.** Own `incluster`, then own `external`, then the hint table (unfiltered, `is_cross` True), then `ds.serving_at("<svc>.<ns>.svc")`, then `ds.serving_at(host)`. Published results come back with `is_cross` False and go through `serving()` like the render's own.
+- **`Dataset` indexes.** `interfaces_at` maps `stats.url` to interface ids. `linked` maps each Association into an `if:` target to its sources. `container_of` holds `stats.container`, or the name in a CNPG instance's `stats.resource`. `realized` maps each Realization source to its bare targets. `serving_at` keeps only sources that are instances (present in `container_of`), and each only once: a snapshot with the same render overlaid holds every link twice.
+- **Unchanged.** `svc:`-target recipes and the hint table. No flag was added, and an unresolved host still fails the run.
+- **Witnessed.** On 2026-09-23 ArgoCDDeploy prd was rendered with the old and the new generator against the live set. The only difference is 5 in-cluster interfaces and 7 Associations, and the artifact passes the live `arch-validate`.
+- **Tests.** `PublishedInterfaceTests` (4) and `AcrossRendersTests` (8). The across-renders cases assert that the relations dict equals the one-render dict for: Jenkins with its CA init container and a non-realizing sidecar, a CNPG pooler, `auth.ginbov.nl`, an upstream wire and an MCP binding.
+
 ### P2 — HelmCharts' generator is patched to the same shape
 
 Target: ../HelmCharts
@@ -218,7 +234,9 @@ Constraints:
 
 - **Keep the resolvers identical.** Today `resolve_host`, `build_provider_index`, `resolve_boundby`
   and `Dataset` are AST-identical across the two copies, and `reconcile_exposed_services` differs
-  only in formatting (compared 2026-09-23). Keep it that way.
+  only in formatting (compared 2026-09-23). Keep it that way. P1 adds `serving` and
+  `publish_service_interfaces` to that set, and changes `resolve_upstreams` and
+  `resolve_mcp_clients` to use `serving` (see P1's done-record).
 - **A departed provider is a subset render.** The generator takes release names (`:521`, `:584`),
   and a flipped app is already skipped: `tools/deploy/deploy_cli/release.py:174` leaves
   `chart_name` unset for `reconciler: argo-cd`. So "HelmCharts without app X" can be run without
