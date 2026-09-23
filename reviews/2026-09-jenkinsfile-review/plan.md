@@ -14,6 +14,14 @@ subagent.
 > is the accepted items of `report.md` themselves, not cards; ANS-84 (the operator's original
 > ask) and ANS-89 are the two existing cards the slices absorb. How that runs is §1a.
 
+> **Refreshed 2026-09-23** against Jenkins and fresh pulls of every clone. The Argo CD bulk
+> migration (ANS-102, ANS-103) ran between the review and today and is not finished; HelmCharts
+> is slated for deletion (D43). `report.md` carries the deltas in its refresh block — 105 jobs
+> in scope, 29 new (28 `AaC/*Deploy` producers, `KubeCoder/Promote-PRD`), `Deploy-PRD` gone, 18
+> pipelines that now end in a pin write to a deploy repo instead of a Helm deploy — and
+> Appendix A is at 105 rows. The operator refreshes once more when HelmCharts goes; until then
+> the HelmCharts rows are transitional. What it changes in this plan is marked *(refresh)*.
+
 Standing rules for every step:
 
 - **Verification.** Every edited Jenkinsfile goes through the linter at
@@ -24,7 +32,10 @@ Standing rules for every step:
   only 3 agent pod slots. So edits are batched **one commit per repo**, and each repo is pushed
   once per step.
 - **Jenkins UI changes** (move, disable, delete, create a job) are done through the API, after
-  saving the job's `config.xml` to `/work/scratch/jenkins-config/xml/`.
+  saving the job's `config.xml` to `/work/scratch/jenkins-config/xml/` (a deleted job's file
+  moves to `xml-deleted/`). `refresh.py` in this folder (`python3 refresh.py
+  /work/scratch/jenkins-config`, with `JENKINS_TOKEN` in the environment) re-dumps the tree,
+  every `config.xml`, the plugin list and `jobs-ui-config.md` in one go.
 
 ## 0. Done
 
@@ -36,6 +47,10 @@ Standing rules for every step:
   pushed as `898df78` (2026-09-21). IoTSupport still registers a SomfyRemote device. Its
   Specialization to `ss:somfy-remote` is now a reference to an element nobody defines, which the
   collector tolerates under `--relaxed`. It becomes a failure when `--relaxed` is dropped.
+- [x] **C** Refresh against Jenkins (2026-09-23): re-dumped every job (`refresh.py`), pulled the
+  42 existing clones, cloned the 28 deploy repos (`clone-list.txt` is now 70 incl.
+  JenkinsPipelineUtils), rewrote the report's counts, references and Appendix A, and re-asked
+  Q10. Owed: one more refresh when HelmCharts is deleted (operator's call on timing).
 
 ## 1. Your review
 
@@ -106,6 +121,9 @@ that day.
   - Q4's "early"
   - the side asks that have no J-number: the style guide and docs site (§4), `job-settings.md`
     (§2), the webhook test (§6a), the post-wave `config.xml` re-dump and diff (§9)
+  - *(refresh)* the 29 jobs added by the Argo migration (28 `AaC/*Deploy` P1 rows;
+    `Promote-PRD` needs nothing), and Q10's re-ask: the wave plan was agreed for no-op
+    redeploys, and 18 rebuilds are prd rollouts through Argo now
 
 ## 2. Per-job settings decision document
 
@@ -113,7 +131,8 @@ that day.
   builds (yes/no), abort the previous build (yes/no), build retention, timeout, trigger and
   branch. Each row is pre-filled with the standard and today's value, and the report's
   candidates (A/S flags, retention and timeout exceptions, Q9) are marked with their evidence.
-  Each row gets a response slot.
+  Each row gets a response slot. *(refresh)* 105 rows; `KubeCoder/Build-Main` already carries
+  its ruling (`abortPrevious: true`, in the file since 2026-09-23) — record it, do not re-ask.
 - [ ] **op** Rule on it
 - [ ] **C** Fold the rulings into Appendix A, which becomes the §9 executor's spec
 
@@ -122,18 +141,22 @@ that day.
 Goes early, because the outcome changes §4 (the style guide's rule), §7 (whether helpers are
 written as declarative templates) and §9 (`options{}` versus `properties([...])`).
 
-- [ ] **C** Convert `KubeCoder/Jenkinsfile` (Build-Main, 317 lines) to declarative:
+- [ ] **C** Convert `KubeCoder/Jenkinsfile` (Build-Main, 341 lines) to declarative:
   `agent { kubernetes { yaml … } }` built from a library `containerTemplates.podYaml(...)`,
   `options{}`/`triggers{}` for its job config, `when{}`, `post{}`. The file must pass the full
-  linter check.
-- [ ] **op** Replay `KubeCoder/Build-Main` with the converted script (a real build and dev
-  deploy), then push.
+  linter check. *(refresh)* The file already declares both properties
+  (`properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])`)
+  and ends in `cicd.writeVersionPins()` to KubeCoderDeploy; the conversion carries the former
+  into `options{}`/`triggers{}` and the latter into a `script {}` step.
+- [ ] **op** Replay `KubeCoder/Build-Main` with the converted script (a real build and, through
+  the pin commit, a dev rollout by Argo), then push.
 - [ ] **op** Verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`,
   scripted for pod pipelines). If "migrate all", the migration is a slice of its own, and it
   folds in J14/J15, which get written declaratively.
 - Note: the KubeCoder repo isn't cloned in this environment's `/work`; work from
-  `/work/scratch/KubeCoder` or from the KubeCoder environment. Slice 012 (backlog) also edits
-  this file's `helmCharts.kaniko(...)` calls. Whichever lands second rebases onto the other.
+  `/work/scratch/KubeCoder` or from the KubeCoder environment. ~~Slice 012 (backlog) also edits
+  this file's `helmCharts.kaniko(...)` calls. Whichever lands second rebases onto the other.~~
+  *(refresh)* Slice 012 is completed; nothing else is queued on the file.
 
 ## 4. Pipeline style guide and a docs site for JenkinsPipelineUtils
 
@@ -192,7 +215,7 @@ secrets, timeouts, notifications), published and linked from the top of every Je
   pre-push half of the same safety net; decide with the self-test whether it rides along here
   or stays its own card.
 - [ ] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
-  `IaC/HelmCharts` run
+  `IaC/HelmCharts` run (or `DockerImages`, the other caller, once HelmCharts is gone)
 - [ ] **C** J23 — standard library load line in the 3 odd files, folded into those files' next
   edit (J02 and §9)
 
@@ -223,18 +246,23 @@ style guide, and is written declaratively if §3 says "migrate all".
   default in the library, so versions move one repo at a time.
 - [ ] J15 — `validation.runSuiteJob(...)` for the 4 monorepo apps, with the `@NonCPS` suite
   parser and `poetry install --only main` as the one install line (Q5 — see the report).
-  ~~J27 (a short-lived Secret)~~ rejected.
+  ~~J27 (a short-lived Secret)~~ rejected. *(refresh)* The deploy tail is a fourth difference
+  now (ElectronicsInventory and ZigbeeControl write pins, DHCPApp and IoTSupport still
+  `helmDeploy`); the helper stops before it.
 - [ ] J21 — one kaniko API, applied only to files already touched here
 - ~~J19 — `iac` var for the dev-stage idiom~~ ruled out: the duplication stays and the §4
   style guide says it is deliberate.
-- [ ] J16 — `architectureProducer(...)` for the 28 `Jenkinsfile.architecture` copies, calling
-  `arch-validate` from the `aac-tools` image, which delivers ANS-78 for those repos. ~~It goes
-  into slice 014 as a phase~~ — 014 is completed. The file rewrite rides §9's wave 1.
+- [ ] J16 — `architectureProducer(...)` for the 57 `Jenkinsfile.architecture` copies, calling
+  `arch-validate` from the `aac-tools` image, which delivers ANS-78 for the 28 app repos. ~~It
+  goes into slice 014 as a phase~~ — 014 is completed. The file rewrite rides §9's wave 1.
+  *(refresh)* The 29 deploy-repo producers are already on `aac-tools` (one body; `KubeCoderDeploy`
+  clones `prd`): ANS-78 is delivered for them, and the helper only removes their boilerplate.
 
 ## 8. Timeouts — after the §2 rulings
 
 - [ ] **C** J12 — 4-hour backstop plus an `aborted` marker in the 6 declarative `iac-*` files
-  and `HelmCharts/Jenkinsfile`; full linter check; watch the next scheduled run
+  and `HelmCharts/Jenkinsfile` (skip it if HelmCharts' deletion lands first); full linter
+  check; watch the next scheduled run
 - [ ] **C** J11 — pod-pipeline timeout. The §7 helpers already carry it; the remaining files get
   it in the §9 pass, not in a push of their own.
 
@@ -245,21 +273,27 @@ style guide, and is written declaratively if §3 says "migrate all".
   ~~J13 retention~~ (rejected — the global build discarder stands, Appendix A's R4 is void),
   J24 `checkout scm`, J25 hygiene, J23 load line, J11 timeout, and the four `KEYCLOAK_*`
   values inlined in IoTSupport's two files (Q6). `Firmware/KitchenDisplay` is skipped
-  (ANS-93); its `AaC/` twin is not. If §3 says "migrate all", this pass is folded into that
-  migration instead.
+  (ANS-93); its `AaC/` twin is not. `KubeCoderDeploy/Jenkinsfile.architecture` keeps its
+  explicit `prd` clone (the J24 exception). If §3 says "migrate all", this pass is folded into
+  that migration instead.
 - [x] **op** Q2 and J26 settled (2026-09-21): TrelloMcp stays on `test`, so its edit lands
   there; J26 accepted.
 - [ ] **C** J26 — rename `master` → `main` on the four MyDownloads/ScanToPdf client and server
   repos (GitHub API) and update the eight jobs' branch spec (API, `config.xml` saved first),
   before the wave that touches them. Needs your OK as a push-class step.
-- [ ] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Architecture`
-  (J02 included), `Ansible`, `HelmCharts`, and the AaC-only repos
-- [ ] **S** Wave 2 — app repos that end in a Helm deploy (~30 no-op redeploys), in batches
-  sized to the 3 pod slots
+- [ ] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Ansible`,
+  `HelmCharts` (if it still exists), the AaC-only repos and *(refresh)* the 28 deploy repos.
+  `Architecture` (J02 included) moves to wave 2: its push now pins `architecture_viewer` into
+  WebathomeOrgDeploy.
+- [ ] **S** Wave 2 — app repos, in batches sized to the 3 pod slots. *(refresh)* 18 of them
+  end in a pin write, which is a prd rollout through Argo on every rebuild (new tag, deploy-repo
+  commit, sync, pod restart) plus an `AaC/*Deploy` build; 6 end in a Helm deploy (no-op).
+  Q10 is re-asked in the report on that basis; it is answered before this wave starts.
 - [ ] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
   batches are still sized to the 3 pod slots.
-- [ ] **C** After each wave: re-dump `config.xml` and diff against the snapshot. The only
-  expected change is a `JobPropertyTrackerAction` plus the ruled `abortPrevious` values.
+- [ ] **C** After each wave: re-dump `config.xml` (`jenkins-config/refresh.py`) and diff
+  against the snapshot. The only expected change is a `JobPropertyTrackerAction` plus the
+  ruled `abortPrevious` values.
 - [ ] **C** Close-out: all jobs re-dumped, the "Controller config" comments in the iac files
   still accurate, ANS-84 closed
 

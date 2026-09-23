@@ -2,6 +2,65 @@
 
 Date: 2026-09-21. Reviewed from fresh clones under `/work/scratch` (paths below are relative to it).
 
+> **Refreshed 2026-09-23** against Jenkins (the source of truth for jobs) and fresh pulls of
+> every clone. The dump is reproducible now: `refresh.py <dir>` in this folder (a copy sits in
+> `jenkins-config/`); the deleted jobs' `config.xml` sit in `jenkins-config/xml-deleted/`. The Argo CD bulk migration (ANS-102,
+> ANS-103; argo-cd D51–D54) ran between the review and this refresh and is **not finished**;
+> HelmCharts is slated for deletion (D43), and the operator refreshes once more when it goes.
+> What changed, and where it lands below:
+>
+> - **Jobs: 112 pipeline jobs, 105 in scope (was 86 / 77).** Added: 28 `AaC/<App>Deploy`
+>   producers, one per Argo deploy repo, and `KubeCoder/Promote-PRD`
+>   (`KubeCoderDeploy/Jenkinsfile.promote`). Gone: `Archived/Home` and `AaC/SomfyRemote` (this
+>   review) and `KubeCoder/Deploy-PRD` with its Jenkinsfile (the cutover, KubeCoder `f145d33`).
+>   No existing job's UI config changed except `AaC/Architecture`'s regenerated upstream list
+>   (57 jobs). Controller: built-in executors still 2 (J07); the nine global env vars still set
+>   (Q6); the pod cap was not re-read (no API for it).
+> - **Files: 105 Jenkinsfiles in 69 repos, 6,401 lines; 6 declarative, 99 scripted.** Library
+>   1,048 lines, 104 consumers; three library commits since the review
+>   (`containerTemplates.aac_tools`; `writeVersionPins` opens its clone to both users after
+>   `KubeCoder/Build-Main #525` failed on it; `plainSafe` quotes what YAML would retype).
+> - **16 app pipelines no longer deploy.** Their last stage is `cicd.writeVersionPins()` into
+>   the app's deploy repo, which Argo CD syncs: Architecture, ElectronicsInventory,
+>   FieldnotesApp, Ginbov, GitblitMCPServer, GitblitMCPSupportPlugin, Home, IntercomServer,
+>   KubeCoder, MyDownloads, NewsFilter, ScanToPdf, TrelloMcp, Webathome, YouTrackMCPServer,
+>   ZigbeeControl. `SSEGateway` and `DockerImages` write pins *and* still call
+>   `cicd.helmDeploy()` (DockerImages per image, from each image's `deploy-pins.json`), so
+>   `helmDeploy` remains in 6 files: Charts, DHCPApp, DockerImages, IoTSupport, SSEGateway,
+>   TerraformRegistry (23 before). **Consequence for every push wave (J01, Q10, plan §9):** a
+>   rebuild of one of the 18 pin writers is no longer a no-op redeploy. It pushes a new image
+>   tag, commits the pin to the deploy repo, Argo syncs it and the prd pods restart on the new
+>   tag — the same code, a real rollout — and the commit fires that deploy repo's
+>   `AaC/*Deploy` job and, through it, `AaC/Architecture`.
+> - **`FieldnotesApp` violates `writeVersionPins`'s contract now**, not prospectively: no
+>   concurrency guard in the UI or the file, and it writes pins since `b6a5016` (J01).
+> - **`KubeCoder/Build-Main` and `DockerImages` declare concurrency in the file** — KubeCoder
+>   with `abortPrevious: true` (the **A** candidate, applied) and its push trigger too;
+>   DockerImages the standard. Two Appendix A rows shrink. `KubeCoder/Jenkinsfile` is 341 lines
+>   (plan §3); slice 012 is completed, so nothing else is queued on it.
+> - **The 28 `AaC/*Deploy` producers** are one body (27 identical once the producer id and
+>   URL are normalised; `KubeCoderDeploy` clones `prd`, the branch Argo syncs prd from, while
+>   the job's SCM is `main`): `containerTemplates.aac_tools`, `gen-architecture --stage prd
+>   --producer <id>`, `arch-validate` from the image — no copied `scripts/arch-validate.py`, so
+>   ANS-78 is already delivered for them. Each has UI-only `disableConcurrentBuilds(abortPrevious)`
+>   and push (J01: 28 new P1 rows), clones itself with the hard-coded
+>   `git branch:/credentialsId:/url:` (J24 — `KubeCoderDeploy` is the one file where
+>   `checkout scm` would be wrong), and is a new, eighth `Jenkinsfile.architecture` body for
+>   J16. All 28 repos carry the Jenkins webhook (§6a's claim still holds). Builds take 0.3–1.5
+>   min.
+> - **`KubeCoder/Promote-PRD`** declares `disableConcurrentBuilds()` and its `commit`
+>   parameter in the file, uses the standard load line and has no trigger (hand-started):
+>   nothing for ANS-84. The promote-by-build-number model the `Deploy-PRD` row and J13
+>   describe is gone: a promotion is a commit on `KubeCoderDeploy` `main`, each `prd-<n>` pin
+>   retagged from `dev-<n>`, `prd` fast-forwarded, `release-<m>` tagged.
+> - **HelmCharts:** `HelmCharts/Jenkinsfile` is unchanged since `9693a44` (2026-09-19); only a
+>   comment in its `Jenkinsfile.architecture` moved. What changed is what it deploys: 29 of
+>   the 58 prd `release.yaml`s now say `reconciler: argo-cd` and the stage loop skips them. The
+>   HelmCharts rows below (`IaC/HelmCharts`, `AaC/HelmCharts`, J12's second file, J18's
+>   verification run) lapse with the repo.
+> - Counts, line references and Appendix A are updated to this state. Rejected items (J04,
+>   J05, J06, J13, J27) keep their 09-21 figures.
+
 **Reviewed:** 77 Jenkinsfiles in 41 repos (5,272 lines; 6 declarative, 71 scripted), the
 `JenkinsPipelineUtils` shared library (7 `vars/*.groovy`, 1,019 lines, no `src/`, no `vars/*.txt`),
 the UI-side config of all 86 pipeline jobs (`jenkins-config/jobs-ui-config.md` and the raw
@@ -12,8 +71,9 @@ list, and a handful of console logs. Doctrine from `/work/AnsibleSpecs/decisions
 
 **Skipped:** the Archived-folder jobs whose GitHub repo is archived — `Archived/DesignAssistant/*`
 (4), `Archived/FundaChecker`, `Archived/Firmware/SomfyRemote`, `Archived/ThermostatDisplay`. Their
-repos were not cloned; only their `config.xml` was read. 79 jobs remain in scope; two of those
-are already decided (below), so Appendix A covers 77.
+repos were not cloned; only their `config.xml` was read. 79 jobs remained in scope on 2026-09-21;
+two of those were already decided (below), so Appendix A covered 77. After the 2026-09-23 refresh
+it covers 105.
 
 **Corrections to the brief, established from the live instance** (they change some of the
 analysis):
@@ -84,7 +144,7 @@ M (a day or two, including verification), L (more). Risk is what a wrong move co
 | J03 | Scheduled Jenkins config drift check (job + node `config.xml` diffed against a committed snapshot) | ANS-84 | med | M | low | consider |
 | J12 | 4-hour backstop `timeout` on the iac-controller jobs, with an `aborted` marker so it is not silent | Timeouts | med | S | low | consider |
 | J13 | Build-discarder standard (30 builds) everywhere; exceptions listed | Retention | low-med | S | low | consider |
-| J16 | Architecture-producer helper for the 28 `Jenkinsfile.architecture` copies — inside slice 014 | Library | med | M | low | consider |
+| J16 | Architecture-producer helper for the 57 `Jenkinsfile.architecture` copies (28 app repos + 29 deploy repos) | Library | med | M | low | consider |
 | J11 | Wall-clock timeout standard (60 min, inside `node(POD_LABEL)`) for pod pipelines; exceptions listed | Timeouts | low-med | M | med | consider |
 | J19 | `iac` library var for the dev-stage idiom duplicated across the 5 scheduled/apply files | Library | med | M | med | consider |
 | J25 | Dead `Utils` imports, trailing whitespace, stale comments and dead cache paths | Hygiene | low | S | none | do |
@@ -109,14 +169,17 @@ action that records file-declared properties (`JobPropertyTrackerAction` for scr
 
 - **Already file-declared** (nothing to move): the six declarative `Ansible/Jenkinsfile.iac-*`
   jobs (concurrency, discarder, cron/push all in `options{}`/`triggers{}`); the `properties([...])`
-  in `ArgoCDTools`, `Charts`, `HelmCharts` (concurrency + push); the parameters of `DockerImages`,
-  `KubeCoder/Deploy-PRD`, `YouTrackConfiguration`; the `copyArtifactPermission` of the four
+  in `ArgoCDTools`, `Charts`, `HelmCharts` (concurrency + push) and, since 2026-09-23,
+  `KubeCoder/Build-Main` (concurrency with `abortPrevious: true` + push); the concurrency guard
+  and parameters of `DockerImages` (guard since 2026-09-23) and `KubeCoder/Promote-PRD`; the
+  parameters of `YouTrackConfiguration`; the `copyArtifactPermission` of the four
   MyDownloads/ScanToPdf client/server jobs; the dynamic `pipelineTriggers` of `AaC/Architecture`.
-- **UI-only, movable:** `disableConcurrentBuilds` on 63 of the 77 jobs in Appendix A (all
-  `abortPrevious=true` except `AaC/UnderfloorHeatingController` and `DockerImages`), the GitHub
-  push trigger on 66, the cron on `AaC/Home Assistant Fleet`. Five jobs have no concurrency guard
-  at all (`AaC/Ansible`, `AaC/HelmCharts`, `AaC/YouTrackMCPServer`, `FieldnotesApp`,
-  `MyDownloads/MyDownloadsServer`).
+- **UI-only, movable:** `disableConcurrentBuilds` on 88 of the 105 jobs in Appendix A (all
+  `abortPrevious=true` except `AaC/UnderfloorHeatingController`), the GitHub push trigger on 93,
+  the cron on `AaC/Home Assistant Fleet`. Five jobs have no concurrency guard at all
+  (`AaC/Ansible`, `AaC/HelmCharts`, `AaC/YouTrackMCPServer`, `FieldnotesApp`,
+  `MyDownloads/MyDownloadsServer`). Figures as of the 2026-09-23 refresh; the 28 `AaC/*Deploy`
+  jobs are all in the UI-only set.
 - **Cannot live in a Jenkinsfile:** job existence and folder, SCM URL, branch spec, script
   path, lightweight checkout, the disabled flag, the three pod templates (`jenkins-agent`,
   `jenkins-agent-large`, `kaniko`) and the cloud's container cap of 3, the global library
@@ -137,16 +200,21 @@ removing a line later removes the property from the job on the next build.
   into it — a second call replaces the first's tracked set. Per-job exceptions (`abortPrevious`,
   allowing concurrency) are the operator's later ruling; Appendix A defaults every job to the
   standard, shows today's `abortPrevious` value, and flags candidates.
-- **Where** — All 71 scripted files; the exact per-job declaration is Appendix A. The five
-  jobs without any guard today gain one.
+- **Where** — The 99 scripted files, less the six that already declare everything (Appendix A
+  says which); the exact per-job declaration is Appendix A. The five jobs without any guard
+  today gain one.
 - **Pros** — Job behaviour is in git and reviewable; the cron-vanishing incident
   (`Ansible/Jenkinsfile.iac-scheduled-drift:178-183`) cannot recur for the moved fields; the
-  five unguarded jobs get guarded (`FieldnotesApp` will need it: `cicd.writeVersionPins`'s
-  contract, `JenkinsPipelineUtils/vars/cicd.groovy:23-25`, requires it).
-- **Cons** — Every edited repo builds once on push: ~67 builds through a 3-pod cap, of which
-  ~30 end in `cicd.helmDeploy()` and 8 re-flash firmware via `scripts/upload.sh`. All no-ops in
-  effect, but hours of queue if pushed at once — do it in waves (AaC first, then a folder at a
-  time). `TrelloMcp` builds branch `test`, so its edit must land there.
+  five unguarded jobs get guarded (`FieldnotesApp` needs it now: it has called
+  `cicd.writeVersionPins` since 2026-09-23, and the contract,
+  `JenkinsPipelineUtils/vars/cicd.groovy:23-27`, requires the guard).
+- **Cons** — Every edited repo builds once on push: ~93 builds through a 3-pod cap. The 28
+  deploy-repo producers and the other AaC jobs are cheap; 8 re-flash firmware via
+  `scripts/upload.sh`; 6 end in `cicd.helmDeploy()`; and 18 end in `cicd.writeVersionPins()`,
+  which since the Argo migration is not a no-op — a new tag, a deploy-repo commit, an Argo sync
+  and a pod restart per app, on the same code (refresh note at the top). Hours of queue if
+  pushed at once — do it in waves (AaC first, then a folder at a time). `TrelloMcp` builds
+  branch `test`, so its edit must land there.
   Cost of doing nothing: the residue stays invisible; a UI slip on any of 66 jobs is a silent
   behaviour change.
 - **Effort / risk** — M / low. Verification: (1) POST every edited file to the validator and
@@ -315,19 +383,20 @@ accept
   an `agent` block cannot take those. A migration needs a parallel `containerTemplates.podYaml(
   ['python', 'kaniko'])` returning a YAML string (callable from the agent block the way
   `libraryResource` is), plus YAML for the 12 inline `containerTemplate(...)` calls with
-  `envVars`/`runAsUser`/resources (`KubeCoder/Jenkinsfile:19-23`, `MyDownloadsClient/Jenkinsfile:9-11`,
+  `envVars`/`runAsUser`/resources (`KubeCoder/Jenkinsfile:25-29`, `MyDownloadsClient/Jenkinsfile:9-11`,
   the `idf` container in 8 firmware files, …).
-- **What it cannot express** — dynamic stages: `DockerImages/Jenkinsfile:86-143` (a stage per
+- **What it cannot express** — dynamic stages: `DockerImages/Jenkinsfile:113-171` (a stage per
   image variant from JSON), `HelmCharts/Jenkinsfile:158-185` (a stage per release),
   `Intercom/Jenkinsfile:28-49` (a stage pair per hardware version), and
-  `Architecture/Jenkinsfile:45-55` (triggers computed from YAML) would keep `script {}` blocks
+  `Architecture/Jenkinsfile:46-56` (triggers computed from YAML) would keep `script {}` blocks
   or stay scripted.
 - **What it buys** — full validator coverage for converted files; `when {}` instead of
   `Utils.markStageSkippedForConditional` (`Ansible/Jenkinsfile.iac-image:22`); `post {}`.
   It buys nothing for ANS-84: scripted `properties([...])` is tracked exactly like
   `options{}`/`triggers{}`, as the tracker actions in `jenkins-config/xml/` show.
-- **What it costs** — ~65 rewrites, a YAML layer in the library, and a Replay per job to prove
-  each — for most jobs a real deploy. J14/J15/J16 already collapse ~50 of those files to a few
+- **What it costs** — ~93 rewrites (65 before the deploy-repo producers), a YAML layer in the
+  library, and a Replay per job to prove each — for most jobs a real deploy or, since the Argo
+  migration, a real rollout. J14/J15/J16 already collapse ~50 of those files to a few
   lines; a template-style var in the library can even *be* a declarative `pipeline {}` (the
   "Declarative Pipelines in Shared Libraries" pattern), so whether those helpers are written
   declaratively is a design choice inside J14–J16, not a migration.
@@ -335,8 +404,8 @@ accept
   `options{}` is where their config lives); scripted for pod pipelines that call the library's
   pod builders or generate stages; a new simple pod pipeline may be declarative only if the
   library offers `podYaml()`. Do not convert existing files for their own sake.
-- **Consequence for Appendix A** — it assumes scripted `properties([...])` for all 71 scripted
-  files and no change for the 6 declarative ones. If the operator chooses to convert a family
+- **Consequence for Appendix A** — it assumes scripted `properties([...])` for all 99 scripted
+  files (71 before the deploy-repo producers) and no change for the 6 declarative ones. If the operator chooses to convert a family
   under J14–J16, the same values move into `options{}`/`triggers{}` of the template.
 - **Recommendation** — adopt the rule; no migration.
 
@@ -401,7 +470,7 @@ an exception with the evidence; the per-job ruling comes later.
   `node(POD_LABEL) { }`, wrapping every stage. Not around `podTemplate` and not in
   `properties` — the wait for one of the 3 pod slots must not count, or a mass push turns slow
   successes into aborts (the 06-04 queue would have aborted ~40 healthy builds).
-- **Where** — The 70 pod files; only 4 have any bound today (`ArgoCDTools/Jenkinsfile:25,42`,
+- **Where** — The 98 pod files (70 before the deploy-repo producers); only 4 have any bound today (`ArgoCDTools/Jenkinsfile:25,42`,
   `Charts/Jenkinsfile:33`, `TerraformRegistry/Jenkinsfile:16`, `DockerImages/Jenkinsfile:118`,
   all around kaniko). The validation Jobs already carry `activeDeadlineSeconds: 3600`
   (`ElectronicsInventory/Jenkinsfile:58` and siblings) and the library's wait loops fail on
@@ -429,12 +498,14 @@ accept
 ### J12 — Backstop timeout on the iac-controller jobs, with an aborted marker
 
 - **What** — Standard for the six declarative `Ansible/Jenkinsfile.iac-*` and
-  `HelmCharts/Jenkinsfile`: `options { timeout(time: 4, unit: 'HOURS') }` (scripted:
+  `HelmCharts/Jenkinsfile` (the latter only while the repo exists — it is slated for deletion,
+  D43): `options { timeout(time: 4, unit: 'HOURS') }` (scripted:
   `timeout(time: 4, unit: 'HOURS') { timestamps { node('iac-controller') … } }`), plus
   `post { aborted { script { notify.error("${env.JOB_NAME} #${env.BUILD_NUMBER} aborted (timeout or hand)") } } }`
   so an abort reaches Telegram — the bot is quiet on ABORTED.
 - **Where** — These jobs share the single `iac-controller` executor: a hung one blocks every
-  `cicd.helmDeploy()` from 23 pipelines and every scheduled job behind it. History: `IaC/Scheduled
+  `cicd.helmDeploy()` from the pipelines still on it (6 since the Argo migration, 23 before)
+  and every scheduled job behind it. History: `IaC/Scheduled
   Calico Rollout` #1 ran 154 min (2026-07-04, before the shell `timeout` on its dev stage existed),
   `IaC/Scheduled Update` #13 62.6 min. `Ansible/Jenkinsfile.iac-scheduled-certs:165-170`
   explicitly refuses a *stage-sized* bound on the TLS stage (a 9-minute handler phase); a 4-hour
@@ -559,7 +630,11 @@ accept, but the version must be a parameter. I'm not updating all ESP-IDF versio
   `IoTSupport:17-215`, `ZigbeeControl:17-164` are one ~150-line block with three differences:
   sidecars, env, and `poetry install --no-interaction` (ElectronicsInventory, `:84`) versus
   `--without dev` (the other three) — Q5. `SSEGateway:27-119` is a sibling (prebuilt image,
-  JUnit XML smuggled through the log) that could share the wait/collect half.
+  JUnit XML smuggled through the log) that could share the wait/collect half. Since 2026-09-23
+  there is a fourth difference, the deploy tail: `ElectronicsInventory` and `ZigbeeControl`
+  end in `cicd.writeVersionPins()` to their deploy repos, `DHCPApp` and `IoTSupport` still in
+  `cicd.helmDeploy()` until they migrate — the helper stops before the tail and leaves it to
+  the file.
 - **Pros** — ~600 lines to ~120; every harness fix lands once (today a fix is four edits, and
   the `--without dev` divergence shows they already drift); the parser gets its `@NonCPS`.
 - **Cons** — The biggest single refactor here; verification is a Replay of four 6-to-22-minute
@@ -585,11 +660,15 @@ accept
   `IoTSupport` (generates with Vault), `Ansible` (validates one named file). Also: the
   `scripts/arch-validate.py` they call is copied into 29 repos in **six** different versions
   (md5 over the clones: 24 identical, 5 divergent) — the real duplication is the tool, not the
-  Jenkinsfile.
+  Jenkinsfile. Since 2026-09-23 there are 29 more files, an eighth body: the deploy-repo
+  producers (`<App>Deploy/Jenkinsfile.architecture`, and `KubeCoderDeploy`'s, which clones the
+  `prd` branch). They already run `gen-architecture` and `arch-validate` from the `aac-tools`
+  image, so ANS-78 is delivered for them and the helper only removes their boilerplate: an
+  explicit clone, a pod template, two `sh` lines, an archive.
 - **Pros** — One producer contract; the validator moves to the `aac-tools` image (slice 024,
   completed) instead of 29 script copies.
 - **Cons** — Slice 014 (`deploy_repo_architecture_producers`, backlog) is about to touch these
-  same files; doing this separately means touching 28 repos twice. It also fires 28 AaC builds
+  same files; doing this separately means touching 28 repos twice. It also fires 57 AaC builds
   and one `AaC/Architecture` rebuild per wave — cheap (0.4 min each) but through the 3-pod cap.
 - **Effort / risk** — M / low. Verify: Replay `AaC/Ansible` (read-only) and one monorepo
   producer.
@@ -756,8 +835,10 @@ accept
   the pure functions: `cicd.applyPins`/`replacePin`/`plainSafe`, `helmCharts.resolveTrackingTag`,
   `notify.escape`, `utils.hasChanges`, and references every var so each compiles.
 - **Where** — No `.txt`, no README, no CI: `ls JenkinsPipelineUtils` shows only `vars/`. The
-  library is trusted and floating on `main`, so a broken push breaks the next build of all 76
-  consumers — the two `cicd` commits of 2026-09-20/21 went in that way.
+  library is trusted and floating on `main`, so a broken push breaks the next build of all 104
+  consumers — the two `cicd` commits of 2026-09-20/21 went in that way, and so did the three of
+  2026-09-22/23 (`a4d5ba1`, `d1e7967`, `062b106`), the last of them the fix for a failure that
+  surfaced in a consumer (`KubeCoder/Build-Main #525`, `AccessDeniedException` in `writeFile`).
 - **Pros** — The only automated check the library can get without groovy/JenkinsPipelineUnit
   in the pod, and the place J18/J20 are verified.
 - **Cons** — A job that runs the trusted library at an unreviewed commit — it is the operator's
@@ -771,16 +852,16 @@ accept
 
 ### J23 — One library load line; keep floating on `main`
 
-- **What** — Normalise `Home/Jenkinsfile:1`, `Architecture/Jenkinsfile.ha-fleet:34`,
-  `KubeCoder/Jenkinsfile.deploy-prd:1` (`library('JenkinsPipelineUtils') _`) to the other 73
-  files' `library identifier: 'JenkinsPipelineUtils', changelog: false`. Stance on pinning: do
-  not pin. One committer, 76 consumers, and a bump per consumer per change would be 76 builds
-  through the pod cap; J22 is the safety net instead. Keep *Allow default version to be
-  overridden* on for J22.
+- **What** — Normalise `Home/Jenkinsfile:1` and `Architecture/Jenkinsfile.ha-fleet:34`
+  (`library('JenkinsPipelineUtils') _`; `KubeCoder/Jenkinsfile.deploy-prd:1` was the third and
+  is gone) to the other 102 files' `library identifier: 'JenkinsPipelineUtils', changelog: false`.
+  Stance on pinning: do not pin. One committer, 104 consumers, and a bump per consumer per
+  change would be 104 builds through the pod cap; J22 is the safety net instead. Keep *Allow
+  default version to be overridden* on for J22.
 - **Where** — Global config: default version `main`, include-in-changesets off (so
   `changelog: false` is belt-and-braces; the `_` form is a harmless `LoadedClasses` property
   access that reads as an `@Library` typo).
-- **Effort / risk** — S / low; fold into J01's edits of those three files.
+- **Effort / risk** — S / low; fold into J01's edits of those two files.
 - **Recommendation** — do.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
@@ -802,16 +883,19 @@ readable to save nothing.
   'https://github.com/pvginkel/<Repo>.git'` with `checkout scm` (inside the same `dir()` where
   one is used). Keep explicit `git` only for secondary repos (`esp-libs`, `opentherm_library`,
   `HelmCharts` in KitchenDisplay).
-- **Where** — `CanonApp:6-8`, `Charts:21-23`, `ArgoCDTools:20-22`, `DockerImages:49-51`,
+- **Where** — `CanonApp:6-8`, `Charts:21-23`, `ArgoCDTools:20-22`, `DockerImages:76-78`,
   `DockerImages/Jenkinsfile.architecture:19-21`, `TerraformRegistry:10-12`,
   `HomelabTerraformProvider:12-14`, `IntercomServer:9-11`, `MyDownloadsClient:17-19`,
   `ScanToPdfClient:17-19`, `ScanToPdfServer:13-15`, `KitchenDisplay:11-13`, plus the five
   firmware files that clone themselves (`CalendarDisplay:24-26`, `DoorbellReceiver:24-26`,
-  `GestureDevice:24-26`, `ThermostatProxy:30-32`, `UnderfloorHeatingController:24-26`). 53
-  files already use `checkout scm`.
+  `GestureDevice:24-26`, `ThermostatProxy:30-32`, `UnderfloorHeatingController:24-26`). Since
+  2026-09-23 also the 28 deploy-repo producers (`<App>Deploy/Jenkinsfile.architecture:16-18`;
+  `ArgoCDDeploy` at `:26-28`) — all but `KubeCoderDeploy/Jenkinsfile.architecture:26-28`, whose
+  job reads the file from `main` and deliberately clones `prd`, the branch Argo syncs prd from:
+  that one keeps the explicit `git`. 53 files already use `checkout scm`.
 - **Pros** — The branch lives in one place (the job) instead of two; the four `master` jobs
   stop carrying it twice; `currentBuild.changeSets` and `GIT_COMMIT` come from the same
-  checkout the job resolved; 17 fewer copies of the credential id.
+  checkout the job resolved; 44 fewer copies of the credential id.
 - **Cons** — Behaviour is identical for a job whose SCM is that repo — which is every one of
   these. One case to watch: `DockerImages/Jenkinsfile:49` clones and then the pipeline reads
   `utils.hasChanges` — `checkout scm` populates the same changeset.
@@ -896,12 +980,19 @@ reject
 - `notify`'s marker protocol and the bot's loud-only-on-FAILURE rule fit each other; the
   firmware and validation pipelines correctly raise nothing.
 - Secrets reach shells by environment expansion, not Groovy interpolation
-  (`SSEGateway:139`, `HomelabTerraformProvider:93`, `cicd.groovy:83`); `KubeCoder/Jenkinsfile.deploy-prd:23`
-  validates `source_build` as an integer before it reaches `crane`.
+  (`SSEGateway:139`, `HomelabTerraformProvider:93`, `cicd.groovy:85`).
+  `KubeCoderDeploy/Jenkinsfile.promote:39` validates `commit` against a SHA pattern before it
+  reaches `git`, `:67-78` refuse anything that is not a fast-forward of `prd`, and `:115` pushes
+  without `+` or `--force` so GitHub enforces the same rule (it replaced
+  `Jenkinsfile.deploy-prd`'s integer check on `source_build`).
+- The 18 `cicd.writeVersionPins()` stages written for the Argo migration are one shape: the
+  same two-line comment, the `k8s` container, one call with the deploy repo and its pins. Keep
+  that convention when the style guide (plan §4) codifies the deploy tail.
 - `DockerImages/Jenkinsfile:10-31`: `catchError(... catchInterruptions: false)` around trivy is
   the right shape for a scan that must never change the result but must still honour an abort.
-- The `build job: 'IaC/HelmCharts', wait: false` fan-in from 23 pipelines coalesces in the
-  queue (unparameterised job), so bursts do not pile up deploys.
+- The `build job: 'IaC/HelmCharts', wait: false` fan-in from the pipelines on
+  `cicd.helmDeploy()` (6 since the Argo migration, 23 before) coalesces in the queue
+  (unparameterised job), so bursts do not pile up deploys.
 
 ## Open questions for the operator
 
@@ -1037,6 +1128,17 @@ folder, or should firmware wait for J14 so those repos are pushed once?
 I have no problem just pushing these out.
 >
 
+> **C (2026-09-23, refresh) — re-ask.** You answered this for no-op redeploys. The Argo
+> migration changed what a rebuild does for 18 of these repos: a push now builds a new image
+> tag, commits the pin to the deploy repo, Argo syncs it and the prd pods restart on the new
+> tag — the same code, but a real rollout with a restart per app, and a deploy-repo commit
+> and `AaC/*Deploy` build each. The rest is as before: 6 Helm redeploys, 8 firmware
+> re-flashes, ~60 cheap AaC builds. Still "just push them out", or do those 18 go one at a
+> time in a quiet slot?
+>
+> **Operator response:** <!-- accept | modify | reject | discuss -->
+>
+
 ---
 
 ## Appendix A — ANS-84 move inventory
@@ -1113,87 +1215,118 @@ half, so the plain standard fits better. No job is a candidate for allowing conc
 | Jenkins job | Jenkinsfile | UI today | Declaration to add | Stays in UI | Notes |
 |---|---|---|---|---|---|
 | AaC/Ansible | Ansible/Jenkinsfile.architecture | push (no DCB) | P1 after line 1 | — | gains a concurrency guard |
-| AaC/Architecture | Architecture/Jenkinsfile | DCB(abort); push + upstream [file, dynamic] | change line 54 to `properties([disableConcurrentBuilds(), pipelineTriggers(triggers)])` | — | the only file whose `properties` must stay inside `node` (needs `readYaml`); the upstream list regenerates from `pipeline-producers.yaml` — remove `somfy-remote` there with the job deletion |
-| AaC/CalendarDisplay | CalendarDisplay/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/DHCPApp | DHCPApp/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11 | — | |
-| AaC/DockerImages | DockerImages/Jenkinsfile.architecture | DCB(abort); push | P1 after line 12 | — | |
-| AaC/DoorbellReceiver | DoorbellReceiver/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/ElectronicsInventory | ElectronicsInventory/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11 | — | |
-| AaC/GestureDevice | GestureDevice/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/Ginbov | Ginbov/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — | |
-| AaC/GitblitMCPServer | GitblitMCPServer/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — | |
-| AaC/GitblitMCPSupportPlugin | GitblitMCPSupportPlugin/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — | |
-| AaC/HelmCharts | HelmCharts/Jenkinsfile.architecture | push (no DCB) | P1 after line 17 | — | gains a concurrency guard |
+| AaC/Architecture | Architecture/Jenkinsfile | DCB(abort); push + upstream [file, dynamic] | change line 55 to `properties([disableConcurrentBuilds(), pipelineTriggers(triggers)])` | — | the only file whose `properties` must stay inside `node` (needs `readYaml`); the upstream list regenerates from `pipeline-producers.yaml` — `somfy-remote` was removed there (`898df78`, Q8); the list spans 57 jobs since the Argo migration; rebuild rolls prd through Argo (pins `architecture_viewer` into WebathomeOrgDeploy) |
+| AaC/ArgoCDDeploy | ArgoCDDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 19 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :26-28 |
+| AaC/CalendarDisplay | CalendarDisplay/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/CalendarSupportDeploy | CalendarSupportDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/DHCPApp | DHCPApp/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11 | — |  |
+| AaC/DockerImages | DockerImages/Jenkinsfile.architecture | DCB(abort); push | P1 after line 12 | — |  |
+| AaC/DoorbellReceiver | DoorbellReceiver/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/ElectronicsInventory | ElectronicsInventory/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11 | — |  |
+| AaC/ElectronicsInventoryDeploy | ElectronicsInventoryDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/FieldnotesDeploy | FieldnotesDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/FilebeatDeploy | FilebeatDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/GestureDevice | GestureDevice/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/Ginbov | Ginbov/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — |  |
+| AaC/GinbovNlDeploy | GinbovNlDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/GitblitMCPServer | GitblitMCPServer/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — |  |
+| AaC/GitblitMCPSupportPlugin | GitblitMCPSupportPlugin/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — |  |
+| AaC/GitSyncDeploy | GitSyncDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/GuacamoleDeploy | GuacamoleDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/HelmCharts | HelmCharts/Jenkinsfile.architecture | push (no DCB) | P1 after line 18 | — | gains a concurrency guard; lapses with HelmCharts' deletion (D43) |
 | AaC/Home Assistant Fleet | Architecture/Jenkinsfile.ha-fleet | DCB(abort); cron `H 4 * * *` | P3 with `cron('H 4 * * *')` after line 34; delete the comment lines 27–28 and 52–53 | `HA_URL` global env var | J02; replace line 34 with the standard load line (J23) |
-| AaC/InfraStatisticsDisplay | InfraStatisticsDisplay/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/Intercom | Intercom/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/IntercomServer | IntercomServer/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/IoTSupport | IoTSupport/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11, before `withVault(` | `KEYCLOAK_OIDC_TOKEN_URL` global env var | |
+| AaC/HomeappsDeploy | HomeappsDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/HomeassistantMcpDeploy | HomeassistantMcpDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/IacProvisionerDeploy | IacProvisionerDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/InfraStatisticsDeploy | InfraStatisticsDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/InfraStatisticsDisplay | InfraStatisticsDisplay/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/Intercom | Intercom/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/IntercomDeploy | IntercomDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/IntercomServer | IntercomServer/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/IoTSupport | IoTSupport/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11, before `withVault(` | `KEYCLOAK_OIDC_TOKEN_URL` global env var |  |
 | AaC/KitchenDisplay | KitchenDisplay/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | unaffected by J10 |
-| AaC/KubeCoder | KubeCoder/Jenkinsfile.architecture | DCB(abort); push | P1 after line 14 | — | |
+| AaC/KubeCoder | KubeCoder/Jenkinsfile.architecture | DCB(abort); push | P1 after line 14 | — |  |
+| AaC/KubeCoderDeploy | KubeCoderDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 19 | — | deploy-repo producer (2026-09-23); the job's SCM is `main`, the clone at :26-28 is `prd` on purpose — keep the explicit `git` (J24 exception) |
+| AaC/MediaDeploy | MediaDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/ModelsDeploy | ModelsDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/MyDownloadsClient | MyDownloadsClient/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | branch `*/master` | branch `master` (R5) |
 | AaC/MyDownloadsServer | MyDownloadsServer/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | branch `*/master` | branch `master` (R5) |
-| AaC/NewsFilter | NewsFilter/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — | |
-| AaC/PaperClock | PaperClock/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — | |
-| AaC/SSEGateway | SSEGateway/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — | |
+| AaC/NewsFilter | NewsFilter/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — |  |
+| AaC/NewsfilterDeploy | NewsfilterDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/PaperClock | PaperClock/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
+| AaC/PgadminDeploy | PgadminDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/PostgresPasDeploy | PostgresPasDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/ScanToPdfClient | ScanToPdfClient/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | branch `*/master` | branch `master` (R5) |
+| AaC/ScantopdfDeploy | ScantopdfDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/ScanToPdfServer | ScanToPdfServer/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | branch `*/master` | branch `master` (R5) |
+| AaC/SourceDeploy | SourceDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/SSEGateway | SSEGateway/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — |  |
+| AaC/TelegramMcpDeploy | TelegramMcpDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/TrelloMcpDeploy | TrelloMcpDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/UnderfloorHeatingController | UnderfloorHeatingController/Jenkinsfile.architecture | DCB(queue); push | P1 after line 6 | — | already on the standard (Q9) |
-| AaC/Webathome | Webathome/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — | |
+| AaC/VersionPollerDeploy | VersionPollerDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/Webathome | Webathome/Jenkinsfile.architecture | DCB(abort); push | P1 after line 5 | — |  |
+| AaC/WebathomeOrgDeploy | WebathomeOrgDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/YoutrackDeploy | YoutrackDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/YoutrackMcpDeploy | YoutrackMcpDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/YouTrackMCPServer | YouTrackMCPServer/Jenkinsfile.architecture | push (no DCB) | P1 after line 5 | — | gains a concurrency guard |
-| AaC/ZigbeeControl | ZigbeeControl/Jenkinsfile.architecture | DCB(abort); push | P1 after line 10 | — | |
+| AaC/Zigbee2mqttDeploy | Zigbee2mqttDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
+| AaC/ZigbeeControl | ZigbeeControl/Jenkinsfile.architecture | DCB(abort); push | P1 after line 10 | — |  |
 | CanonApp | CanonApp/Jenkinsfile | DCB(abort); push | none — the repo is archived and cannot take an edit | all of it | J09 retires the job |
 | DHCP/DHCPApp | DHCPApp/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (validate 6 min median, then kaniko + helmDeploy) |
-| DockerImages | DockerImages/Jenkinsfile | DCB(queue); push; param `image` [file] | change lines 33–37 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), parameters([string(name: 'image', defaultValue: '')])])` | — | already on the standard; the `scanImage` def above the call is unaffected |
-| ElectronicsInventory/ElectronicsInventory | ElectronicsInventory/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (21.5 min median, busiest validation job) |
-| FieldnotesApp | FieldnotesApp/Jenkinsfile | push (no DCB) | P1 after line 1 | — | gains a guard — required by `cicd.writeVersionPins`'s contract once it is used |
+| DockerImages | DockerImages/Jenkinsfile | DCB(queue) [file]; push; param `image` [file] | add `pipelineTriggers([githubPush()]),` to the `properties([...])` at lines 56–61 | — | already on the standard, declared in the file since 2026-09-23; the `scanImage` and `collectPins` defs above the call are unaffected; rebuild rolls prd through Argo for the images that carry a `deploy-pins.json`, through Helm for the rest |
+| ElectronicsInventory/ElectronicsInventory | ElectronicsInventory/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (21.5 min median, busiest validation job); rebuild rolls prd through Argo (pin write) |
+| FieldnotesApp | FieldnotesApp/Jenkinsfile | push (no DCB) | P1 after line 1 | — | gains a guard — required by `cicd.writeVersionPins`'s contract, which it has called since 2026-09-23 (`b6a5016`); rebuild rolls prd through Argo |
 | Firmware/CalendarDisplay | CalendarDisplay/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S** (OTA upload in the deploy stage); J14 rewrites the file |
 | Firmware/DoorbellReceiver | DoorbellReceiver/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
 | Firmware/GestureDevice | GestureDevice/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
 | Firmware/InfraStatisticsDisplay | InfraStatisticsDisplay/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
 | Firmware/Intercom | Intercom/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
-| Firmware/IntercomServer | IntercomServer/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
+| Firmware/IntercomServer | IntercomServer/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
 | Firmware/KitchenDisplay | KitchenDisplay/Jenkinsfile | DISABLED; DCB(abort); push | only if J10 keeps the job: P1 after line 1 | disabled flag | J10 |
 | Firmware/PaperClock | PaperClock/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
 | Firmware/ThermostatProxy | ThermostatProxy/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
 | Firmware/UnderfloorHeatingController | UnderfloorHeatingController/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
-| Ginbov | Ginbov/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
-| Gitblit/GitblitMCPServer | GitblitMCPServer/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | drop the unused import on line 1 while there (J25) |
-| Gitblit/GitblitMCPSupportPlugin | GitblitMCPSupportPlugin/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | same |
-| Home | Home/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | only after `Archived/Home` is deleted (shared file); replace line 1 with the standard load line (J23) |
+| Ginbov | Ginbov/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
+| Gitblit/GitblitMCPServer | GitblitMCPServer/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | drop the unused import on line 1 while there (J25); rebuild rolls prd through Argo (pin write) |
+| Gitblit/GitblitMCPSupportPlugin | GitblitMCPSupportPlugin/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | same; rebuild rolls prd through Argo (pin write) |
+| Home | Home/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | only after `Archived/Home` is deleted (shared file); replace line 1 with the standard load line (J23); rebuild rolls prd through Argo (pin write) |
 | IaC/Apply | Ansible/Jenkinsfile.iac-apply | DCB(queue) [file]; discarder 50 [file]; no trigger | nothing | — | declarative; hand-started by design |
 | IaC/ArgoCDTools | ArgoCDTools/Jenkinsfile | DCB(queue) [file]; push [file] | nothing | — | already the standard |
 | IaC/Build-Main | Ansible/Jenkinsfile.iac-on-push | DCB(queue) [file]; discarder 50 [file]; push [file] | nothing | — | declarative |
 | IaC/Charts | Charts/Jenkinsfile | DCB(queue) [file]; push [file] | nothing | — | already the standard |
-| IaC/HelmCharts | HelmCharts/Jenkinsfile | DCB(queue) [file]; push [file] | nothing | — | already the standard |
+| IaC/HelmCharts | HelmCharts/Jenkinsfile | DCB(queue) [file]; push [file] | nothing | — | already the standard; lapses with HelmCharts' deletion (D43) |
 | IaC/HomelabTerraformProvider | HomelabTerraformProvider/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | candidate **S** (commits and pushes to TerraformRegistry) |
-| IaC/IaC Docker Image | Ansible/Jenkinsfile.iac-image | DCB(abort); push | P1 after line 3 | — | |
+| IaC/IaC Docker Image | Ansible/Jenkinsfile.iac-image | DCB(abort); push | P1 after line 3 | — |  |
 | IaC/Scheduled Calico Rollout | Ansible/Jenkinsfile.iac-scheduled-calico | DCB(queue) [file]; discarder 50 [file]; cron `H 4 * * 3` [file] | nothing | — | declarative |
 | IaC/Scheduled Certs | Ansible/Jenkinsfile.iac-scheduled-certs | DCB(queue) [file]; discarder 50 [file]; cron `H 4 * * 5` [file] | nothing | — | declarative |
 | IaC/Scheduled Drift | Ansible/Jenkinsfile.iac-scheduled-drift | DCB(queue) [file]; discarder 50 [file]; cron `H 11 * * *` [file] | nothing | — | declarative |
 | IaC/Scheduled Update | Ansible/Jenkinsfile.iac-scheduled-update | DCB(queue) [file]; discarder 50 [file]; cron `H 4 * * 0` [file] | nothing | — | declarative |
-| IaC/TerraformRegistry | TerraformRegistry/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
+| IaC/TerraformRegistry | TerraformRegistry/Jenkinsfile | DCB(abort); push | P1 after line 1 | — |  |
 | IoTSupport/IoTSupport | IoTSupport/Jenkinsfile | DCB(abort); push | P1 after line 3 | `KEYCLOAK_TEST_*` global env vars | candidate **A** (10 min median validation) |
-| KubeCoder/Build-Main | KubeCoder/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | candidate **A** (10 min median, busiest repo, all green); retention candidate 50 (R4) |
-| KubeCoder/Deploy-PRD | KubeCoder/Jenkinsfile.deploy-prd | DCB(abort); param `source_build` [file]; no trigger | change lines 3–7 to `properties([disableConcurrentBuilds(), parameters([string(name: 'source_build', defaultValue: '', description: 'Source KubeCoder/Build-Main dev build number to promote. Leave empty to use the last successful build.')])])` | — | candidate **S** (seven sequential retags; an abort leaves a half-promoted set); replace line 1 with the standard load line (J23) |
-| MyDownloads/MyDownloads | MyDownloads/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
+| KubeCoder/Build-Main | KubeCoder/Jenkinsfile | DCB(abort) [file]; push [file] | nothing | — | declared in the file 2026-09-23 with `abortPrevious: true` — the **A** candidate, applied; retention candidate void (J13 rejected); rebuild rolls dev through Argo (pins into KubeCoderDeploy `main`), prd only via Promote-PRD |
+| KubeCoder/Promote-PRD | KubeCoderDeploy/Jenkinsfile.promote | DCB(queue) [file]; param `commit` [file]; no trigger | nothing | — | hand-started by design; replaced `Deploy-PRD` (deleted 2026-09-23 with its Jenkinsfile); the retag → fast-forward → tag sequence is one an abort must not cut, and the file already declares the queueing standard |
+| MyDownloads/MyDownloads | MyDownloads/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
 | MyDownloads/MyDownloadsClient | MyDownloadsClient/Jenkinsfile | DCB(abort); push; copyPerm `MyDownloads` [file] | change lines 3–5 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), copyArtifactPermission('MyDownloads')])` | branch `*/master` | candidate **S** (archives an apk two jobs copy, then triggers both); branch `master` (R5) |
 | MyDownloads/MyDownloadsServer | MyDownloadsServer/Jenkinsfile | push (no DCB); copyPerm `MyDownloads` [file] | change lines 3–5 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), copyArtifactPermission('MyDownloads')])` | branch `*/master` | gains a concurrency guard; branch `master` (R5) |
-| NewsFilter | NewsFilter/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | drop the unused import on line 1 (J25) |
-| ScanToPdf/ScanToPdf | ScanToPdf/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
+| NewsFilter | NewsFilter/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | drop the unused import on line 1 (J25); rebuild rolls prd through Argo (pin write) |
+| ScanToPdf/ScanToPdf | ScanToPdf/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
 | ScanToPdf/ScanToPdfClient | ScanToPdfClient/Jenkinsfile | DCB(abort); push; copyPerm `ScanToPdf` [file] | change lines 3–5 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), copyArtifactPermission('ScanToPdf')])` | branch `*/master` | candidate **S** (archive + downstream trigger); branch `master` (R5) |
 | ScanToPdf/ScanToPdfServer | ScanToPdfServer/Jenkinsfile | DCB(abort); push; copyPerm `ScanToPdf` [file] | change lines 3–5 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), copyArtifactPermission('ScanToPdf')])` | branch `*/master` | candidate **S**; branch `master` (R5) |
-| SSEGateway/SSEGateway | SSEGateway/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **S** (pushes `stable`, then deploys); drop the unused import (J25) |
-| TrelloMcp | mcp-server-trello/Jenkinsfile | DCB(abort); push | P1 after line 3 | branch `*/test` | edit on branch `test` (R5, Q2); drop the unused import (J25) |
-| Webathome | Webathome/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
+| SSEGateway/SSEGateway | SSEGateway/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **S** (pushes `stable`, then deploys); drop the unused import (J25); rebuild rolls prd through Argo (pins into Zigbee2mqttDeploy and ElectronicsInventoryDeploy) and through Helm for the rest |
+| TrelloMcp | mcp-server-trello/Jenkinsfile | DCB(abort); push | P1 after line 3 | branch `*/test` | edit on branch `test` (R5, Q2); drop the unused import (J25); rebuild rolls prd through Argo (pin write) |
+| Webathome | Webathome/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
 | YouTrack/YouTrackConfiguration | YouTrackConfiguration/Jenkinsfile | DCB(abort); push; param `ROTATE_TOKEN` [file] | change lines 6–12 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), parameters([booleanParam(name: 'ROTATE_TOKEN', defaultValue: false, description: 'Also rewrite the webhook token into every project that has webhook URLs. YouTrack masks the token it holds, so a rotation cannot be detected, only asked for.')])])` | — | candidate **S** (every build applies to YouTrack) |
-| YouTrack/YouTrackMCPServer | YouTrackMCPServer/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | |
-| ZigbeeControl/ZigbeeControl | ZigbeeControl/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (5.5 min median validation); drop the unused import (J25) |
+| YouTrack/YouTrackMCPServer | YouTrackMCPServer/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
+| ZigbeeControl/ZigbeeControl | ZigbeeControl/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (5.5 min median validation); drop the unused import (J25); rebuild rolls prd through Argo (pin write) |
 
-Counts: 77 rows; 59 files gain a new `properties([...])` (one of them, `Firmware/KitchenDisplay`,
-only if J10 keeps the job), 8 merge into an existing one, 10 need nothing (6 declarative,
-`ArgoCDTools`, `Charts`, `HelmCharts`, plus `CanonApp`, which cannot be edited). Candidate flags:
-**A** ×5 (`DHCP/DHCPApp`, `ElectronicsInventory`, `IoTSupport`, `KubeCoder/Build-Main`,
-`ZigbeeControl`), **S** ×15 (the 8 ESP firmware jobs, `HomelabTerraformProvider`,
-`KubeCoder/Deploy-PRD`, `MyDownloadsClient`, `ScanToPdfClient`, `ScanToPdfServer`, `SSEGateway`,
-`YouTrackConfiguration`).
+Counts (refreshed 2026-09-23): 105 rows; 86 files gain a new `properties([...])` (one of them,
+`Firmware/KitchenDisplay`, only if J10 keeps the job; 28 of them the deploy-repo producers),
+7 merge into an existing one, 12 need nothing (6 declarative, `ArgoCDTools`, `Charts`,
+`HelmCharts`, `KubeCoder/Build-Main`, `KubeCoder/Promote-PRD`, plus `CanonApp`, which cannot be
+edited). Candidate flags: **A** ×4 still open (`DHCP/DHCPApp`, `ElectronicsInventory`,
+`IoTSupport`, `ZigbeeControl`; `KubeCoder/Build-Main`'s is applied in the file), **S** ×14 (the
+8 ESP firmware jobs, `HomelabTerraformProvider`, `MyDownloadsClient`, `ScanToPdfClient`,
+`ScanToPdfServer`, `SSEGateway`, `YouTrackConfiguration`; `KubeCoder/Promote-PRD` already
+queues). 18 rows are marked as Argo rollouts on rebuild. On 2026-09-21 the table had 77 rows:
+59 new, 8 merged, 10 nothing.
