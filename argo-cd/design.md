@@ -66,8 +66,10 @@ config/
   that stage's own values file (D45, D47).
 - **Terraform is rebuilt, not copied**, when an app migrates (D12 rework licence). The
   `*.tfvars` never travel through Argo — the hook reads them from its own clone (D14).
-- **Upstream-chart-only apps have no `chart/`** (D18): the repo is `/{terraform,config}`, and
-  the chart comes straight from its upstream Helm repository via a multi-source Application.
+- **Upstream-chart apps carry only a companion `chart/`** (D18, D56): the app's chart comes
+  straight from its upstream Helm repository via a multi-source Application, and the deploy
+  repo's own `chart/` renders the estate's additions: the stage Namespace, the hook include, and
+  any former `manifests.yaml`.
 
 ### ArgoCDDeploy — Argo manages itself
 
@@ -278,7 +280,20 @@ The upstream-chart set differs only in the source block — multi-source (D18):
         - repoURL: '{{ .repo }}'
           targetRevision: '{{ .targetRevision }}'      # …and a git branch (D18's wart)
           ref: values
+        - repoURL: '{{ .repo }}'                        # the companion chart (D56)
+          targetRevision: '{{ .targetRevision }}'
+          path: chart
+          helm:
+            parameters:                                 # the same four as releases-local
+              - { name: hook.repo, value: '{{ .repo }}' }
+              - { name: hook.revision, value: '$ARGOCD_APP_REVISION' }
+              - { name: hook.stage, value: '{{ index .path.segments 3 }}' }
+              - { name: hook.namespace, value: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}' }
 ```
+
+The companion is source 2, not a wrapper: it never depends on the upstream chart, and it takes
+no stage values file, only the hook parameters. In a multi-source Application each source is
+built at its own revision, so `$ARGOCD_APP_REVISION` here is the deploy repo's SHA.
 
 This covers six of the nine upstream releases. The late-migration set is five charts with two
 distinct problems (D18): **post-render patching** — `grafana`, `prometheus` and local chart
@@ -466,11 +481,11 @@ which wins. Any later library default has to be read the same way; a plain `.Val
 library template is always the app's value. The four arguments are `required`-guarded, so a
 chart that forgets one fails to render rather than passing an empty argument.
 
-**Upstream-chart apps with Terraform** have no local chart to include the template, so their
-deploy repo carries the rendered Job manifest in a `hook/` directory added as a third
-(directory) source. That is per-app duplication, accepted: few of the six candidates have
-Terraform at all, and the alternative is the wrapper chart D18 exists to avoid. Apps with no
-Terraform simply don't include the template — no hook, no cost.
+**Upstream-chart apps** include the template from their companion `chart/` (D56), the third
+source of the multi-source Application, which carries the same hook parameters as a local chart.
+A `hook/` directory of rendered manifests was the earlier plan; a directory source cannot receive
+`$ARGOCD_APP_REVISION`, so it could not hand the hook its SHA. Apps with no Terraform simply don't
+include the template: no hook, no cost.
 
 **Credentials and identity** (D33, D41), the complete inventory of what `argocd-hooks` holds:
 

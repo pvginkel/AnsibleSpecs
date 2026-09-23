@@ -157,7 +157,8 @@ repository; fallback is plain HTTP (internal-only, tarballs unsigned either way)
 **D18 — Upstream-chart-only apps use a multi-source Application; no wrapper charts.** Decided
 2026-08-12 (notes). Source 0 is the chart from its Helm repo, `targetRevision` carrying the
 chart version; source 1 is the deploy repo with `ref: values` supplying
-`$values/config/{stage}/values.yaml`. Such a repo is `/{terraform,config}` with no `chart/`.
+`$values/config/{stage}/values.yaml`. Such a repo is `/{terraform,config}` with no `chart/`
+(amended by D56: a companion `chart/` of estate content only, as a third source).
 Covers six of the nine upstream releases. The late-migration set is five: `grafana` and
 `prometheus` (post-render patches — a CMP or Kustomize-with-Helm when they migrate),
 `external-secrets` (post-rollout script), plus local charts `mosquitto` (post-render) and
@@ -695,6 +696,18 @@ purpose alone. What holds it in check is the script's stop rules. A plan that de
 replaces, a pre-flight or diff outside the expected set, or a sync that does not reach
 `Synced Healthy` parks the app before its sync, or at WB-1 after it, and the run moves on. The
 critical-path apps stay attended.
+
+**D56 — An upstream-chart app's deploy repo carries a companion `chart/` as a third source.**
+Decided 2026-09-23 (operator: follow the recommendation; ANS-103). Amends D18's "no `chart/`"
+and replaces design.md's `hook/` directory, which as a directory source cannot receive
+`$ARGOCD_APP_REVISION` and so cannot hand the hook its SHA (D30). The companion is a small local
+chart that renders only estate content: the stage Namespace (D25), the `homelab-shared` hook
+include where the app has Terraform, and what HelmCharts applied as `manifests.yaml`. It is not a
+wrapper: it does not depend on the upstream chart, which stays source 0 with its values from
+`$values`. `releases-upstream` adds it as source 2, `path: chart`, with the same four hook
+parameters as `releases-local`, `hook.revision` included, since in a multi-source Application
+each source is built at its own revision. Every upstream-chart app gets one, Terraform or not,
+because the Namespace is chart content on both sets alike.
 
 ## Open
 
