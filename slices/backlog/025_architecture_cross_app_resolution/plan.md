@@ -132,7 +132,10 @@ cross-cutting — ruling D1 sets a new publishing pattern (an interface element 
 - HelmCharts' patch (P2: publishing in-cluster interfaces with direct instance links, and resolving
   unknown hosts through the published set) must land and **publish** before any provider with
   inbound edges leaves HelmCharts; the held apps stay held until then, so the proof runs after
-  `AaC/HelmCharts` and the `AaC/Architecture` collect have picked it up.
+  `AaC/HelmCharts` and the `AaC/Architecture` collect have picked it up. That publish happens after
+  this run, when the bulk-migration session pushes HelmCharts (Ruling Q1). Everything this run
+  proves about resolution through the published set, it proves against a dataset snapshot whose
+  helm-charts envelope is the local HelmCharts render.
 - The aac-tools change (P1) and the HelmCharts patch (P2) must emit identical interface elements and
   relations for the same Service, so a moved provider shows no field difference at handover.
 - The proof re-scaffolds before it gates: none of the held apps' deploy repos is in `/work` today
@@ -185,16 +188,14 @@ Constraints the repo will not tell you:
   generators share and that survives a move (a move keeps the namespace). They must never collide
   with the exposed-host interfaces, which are keyed on the bare host (`appif.<host>`, `:1179`):
   short `.home` names such as `kibana` and `git` are exposed hosts too.
-- **Schema.** The relation that links an instance to its interface must be allowed from both
-  SystemSoftware and ApplicationComponent to ApplicationInterface. Realization, Association,
-  Serving, Flow and Triggering are allowed from both. Composition is allowed only from
-  ApplicationComponent, and Assignment from neither. This was probed against
-  `https://architecture.webathome.org/api/validate` on 2026-09-23; the full matrix is
-  `…/schema/v0.1/generated/relations.schema.json`. Nothing in the Architecture repo changes.
+- **The link is an `Association` from the instance to the interface** (Ruling Q2), the same type
+  from ApplicationComponent and SystemSoftware instances. The published relation schema allows
+  both triples (`https://architecture.webathome.org/schema/v0.1/generated/relations.schema.json`,
+  `x-allowedTriples`, read 2026-09-23). Nothing in the Architecture repo changes.
 - **`svc:`-target recipes stay own-render** (`resolve_svc_target`, `:641-665`). All ten published
   today are same-pod or same-release (published set, 2026-09-23).
 - P2 copies this shape into HelmCharts' generator exactly, so the done-record states what got
-  settled: the natural keys, the linking relation type, and the host form in `stats`.
+  settled: the natural keys and the host form in `stats`.
 
 The phase's tests go in `aac-tools/tests/test_gen_architecture.py`.
 
@@ -226,7 +227,9 @@ Constraints:
   `argo_migrate.py scaffold <app>` (Ansible, `support/argo-migrate/`) builds its deploy repo from
   HelmCharts. The generators read `ARCH_DATASET_URL` as a file when it has no scheme. Use
   `ARCH_DATASET_OVERLAY=""` so the local DockerImages checkout is not overlaid (`:343-345`).
-- Pushing `tools/` redeploys nothing; `AaC/HelmCharts` publishes the new artifact.
+- **This run does not push HelmCharts** (Push holds, Ruling Q1): any push to `main` rolls whatever
+  has drifted out to prd. The patch lands on local `main` only. The bulk-migration session pushes
+  it after the slice, and `AaC/HelmCharts` then publishes the new artifact.
 
 The phase's tests go in `tests/test_gen_architecture.py`.
 
@@ -258,8 +261,15 @@ what the app's current producer publishes for it:
   `/work/scratch/IoTSupport`. That is the cross-app pattern R1 describes, so this rule covers it.
 - A kept id whose fields differ is still a difference. Additions are still allowed.
 
-Until P2 has published, the check can be exercised on a dataset file in which the helm-charts
-envelope is replaced by a local HelmCharts render.
+**The check's logic gets fixture tests in the aac-tools suite** (Ruling A1): the exact scoping, the
+name-prefix fix and the relation-ownership classification, over hand-built envelopes. The
+end-to-end run stays outside `kc project test`, because it needs a deploy-repo clone, the chart
+repository and the live dataset (`handover_equality.py:14-16`). The fixture tests need none of
+these. The tests go in `aac-tools/tests/`.
+
+P2 does not publish during this run, so a live run of the check reads a dataset file through
+`--dataset` (`:233`). In that file, the helm-charts envelope is replaced by a local HelmCharts
+render.
 
 ### P4 — The migration's arch gate proves both halves of a move
 
@@ -286,6 +296,15 @@ Both sides must read **one dataset snapshot with nothing overlaid**. The check a
 overlay (`handover_equality.py:100-106`), but HelmCharts' generator overlays
 `../DockerImages/*/architecture.yaml` by default. HelmCharts' render writes into HelmCharts' tree
 (`docs/architecture/*.yaml`, gitignored). Both run in the `iac` sidecar, as the check does today.
+
+The gate can also be pointed at a snapshot **file** instead of the live URL. Today it always
+fetches the live set, because `cmd_arch` never passes the check's `--dataset`. This run does not
+push HelmCharts (Ruling Q1), so the live set does not yet carry the in-cluster interfaces. The test
+phase proves the gate on a snapshot in which the helm-charts envelope is replaced by a local
+HelmCharts render. After the push, the bulk-migration session runs it against the live set.
+
+No test rides this phase (Ruling A1). Ansible `root` has no test verb, so the phase is reviewed by
+reading, and the test phase exercises the gate live.
 
 ### P5 — The Argo CD register records the published-interface decision
 
