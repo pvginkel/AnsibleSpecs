@@ -69,3 +69,34 @@ their own images:
 - Image pins (D53): app builds call `cicd.writeVersionPins`, and DockerImages drives its pins
   from a per-image config. No promote pipelines: every stage follows `main`. No Image Updater.
   W2 is unblocked.
+
+## State (2026-09-23 ~12:45Z)
+
+Tool: `Ansible/support/argo-migrate/argo_migrate.py`; run record ANS-103.
+
+**On Argo CD, autoSync on (12):** filebeat, models, pgadmin, fieldnotes, homeapps,
+iac-provisioner, newsfilter, source, scantopdf, ginbov-nl, webathome-org, media. Every cutover
+rendered identically to the live release, and none restarted a pod. media's samba PV moved into
+Terraform (an `import` block), because the `releases` project admits no PersistentVolume.
+
+**Pins (D53) live:** DockerImages' `deploy-pins.json`, and the Jenkinsfiles of FieldnotesApp,
+Home, NewsFilter, ScanToPdf, Ginbov, Webathome, MyDownloads and Architecture. Proven
+end to end on the first builds.
+
+**Disabled in HelmCharts, not migrated:** open-webui, shell, design-assistant.
+
+**Held, and why:**
+
+| App | Blocker |
+| --- | --- |
+| homeassistant-mcp, calendar-support, git-sync, guacamole, infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack, youtrack-mcp, zigbee2mqtt, electronics-inventory, elasticsearch | architecture: cross-app edges lost at handover, or the generator fails on hosts it can't resolve (ANS-80 / slice 025) |
+| version-poller | its GitHub token arrives as HelmCharts' `gitToken` value; needs an OpenBao leaf (`bao kv put`) |
+| headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
+| storage, youtrack, postgres-pas, electronics-inventory, iot, guacamole, keycloak | Terraform writes Secrets (ANS-49) |
+| charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
+| mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
+| iot | chart named `iotsupport`: the producer ids need chart name = app |
+
+**Chart patterns the tool rewrites:** the `deployment` timestamp (a literal from the last Helm
+deploy); the SSE gateway's `randAlphaNum` callback secret (an ESO `Password` generator, created
+once); closed `values.schema.json` files (the new keys admitted).
