@@ -75,11 +75,13 @@ their own images:
 
 Tool: `Ansible/support/argo-migrate/argo_migrate.py`; run record ANS-103.
 
-**On Argo CD, autoSync on (24):** filebeat, models, pgadmin, fieldnotes, homeapps,
+**On Argo CD, autoSync on (26):** filebeat, models, pgadmin, fieldnotes, homeapps,
 iac-provisioner, newsfilter, source, scantopdf, ginbov-nl, webathome-org, media; then
 homeassistant-mcp, calendar-support, telegram-mcp, infra-statistics, intercom, trello-mcp,
 youtrack-mcp, git-sync, guacamole, youtrack, postgres-pas (batch 3); version-poller, its
-`GIT_TOKEN` now an ExternalSecret on `eso/prd/version-poller/prd/git`. Every cutover
+`GIT_TOKEN` now an ExternalSecret on `eso/prd/version-poller/prd/git`; zigbee2mqtt and
+electronics-inventory, their SSE Deployments replaced on the first sync (`Replace=true`, then
+dropped), the only cutovers that rolled a pod. Every cutover
 rendered identically to the live release, and none restarted a pod. guacamole was the first
 Secret-writing app to sync: its hook refreshed the `postgres-db` Secret through the
 per-namespace grant (ANS-49 proven live). media's samba PV moved into
@@ -88,8 +90,7 @@ Terraform (an `import` block), because the `releases` project admits no Persiste
 **Pins (D53) live:** DockerImages' `deploy-pins.json`, and the Jenkinsfiles of FieldnotesApp,
 Home, NewsFilter, ScanToPdf, Ginbov, Webathome, MyDownloads, Architecture, YouTrackMCPServer,
 GitblitMCPServer, GitblitMCPSupportPlugin, IntercomServer and mcp-server-trello (branch `test`).
-Committed locally, not pushed, until their apps sync: ZigbeeControl, ElectronicsInventory, and
-SSEGateway's pin stage for those two (it keeps `helmDeploy()` for dnsmasq, iot and
+Also ZigbeeControl, ElectronicsInventory, and SSEGateway's pin stage for those two (it keeps `helmDeploy()` for dnsmasq, iot and
 design-assistant). Proven
 end to end on the first builds.
 
@@ -99,8 +100,7 @@ end to end on the first builds.
 
 | App | Blocker |
 | --- | --- |
-| zigbee2mqtt, electronics-inventory | preflight stuck field: the Helm-owned `env[SSE_CALLBACK_SECRET].value` collides with the rewrite's `valueFrom` (the server rejects both). Needs a cutover mechanism, see ANS-103 |
-| headlamp and the upstream set | the `releases-upstream` ApplicationSet renders no Namespace, no hook and no extra manifests; needs a design step and an ArgoCDDeploy change |
+| headlamp and the upstream set | D56's companion chart is live in ArgoCDDeploy; aac-tools' generator cannot render the upstream chart yet (the question is carded) |
 | storage, iot, keycloak | Terraform writes Secrets: ANS-49 is live and proven on guacamole's first sync. storage and keycloak are attended; iot waits on its chart rename (below) |
 | charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
 | mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
