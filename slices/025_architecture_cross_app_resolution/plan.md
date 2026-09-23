@@ -215,7 +215,7 @@ Settled shape:
 - **Witnessed.** On 2026-09-23 ArgoCDDeploy prd was rendered with the old and the new generator against the live set. The only difference is 5 in-cluster interfaces and 7 Associations, and the artifact passes the live `arch-validate`.
 - **Tests.** `PublishedInterfaceTests` (4) and `AcrossRendersTests` (8). The across-renders cases assert that the relations dict equals the one-render dict for: Jenkins with its CA init container and a non-realizing sidecar, a CNPG pooler, `auth.ginbov.nl`, an upstream wire and an MCP binding.
 
-### P2 — HelmCharts' generator is patched to the same shape
+### P2 — HelmCharts' generator is patched to the same shape ✅ DONE 2026-09-23
 
 Target: ../HelmCharts
 
