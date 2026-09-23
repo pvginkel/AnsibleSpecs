@@ -50,6 +50,43 @@ copies; element and edge ids do not change either way.
 
 **Operator.** Overruled in chat, 2026-09-23 — the interface route, not the stats list: "There you go. So that's what I prefer then. Please check the open points, but I'm not opposed to going the interface route." Once the two points were checked (about 70 new elements; unambiguous if each interface links straight to the workloads behind it, not through the service) and put back as the resulting decision: "Agree". Every provider publishes each in-cluster Service as an interface element carrying its host, every interface (new and existing exposed-host ones) links directly to its backing workloads, and both generators resolve an unknown host through those interfaces in the published set. The claim above that interfaces need an Architecture contract change was wrong: the interface element kind and its host-in-stats shape already exist.
 
+## D2 — Whether an interface links a pod's init containers as well as the containers that serve
+
+**Context.** The plan is now written around your ruling on D1: every in-cluster Service is
+published as an interface element carrying its host, each interface links directly to the
+containers behind that Service, and both generators resolve a host they cannot place in their own
+render through those interfaces in the published set. Nothing else in the plan waits on you. The
+ruling, as it was put to you, said the links reproduce the backing set the generator already
+computes in memory today.
+
+**The ask.** Say which containers an interface links. That in-memory set includes a pod's init
+containers, but every resolver drops them before drawing an edge — so the question is whether the
+published links carry them too.
+
+**Background.** The published set cannot tell an init container from a serving one: an instance
+element carries its release, workload, container and image, nothing more. There is one live case
+today. Jenkins' CA-installing init container realizes the same capability as the Jenkins container
+itself. Were both linked, a consumer resolving Jenkins' host through the interface would get a
+second, spurious edge from the init container — an edge HelmCharts has never drawn.
+
+**Why yours.** It narrows the wording of the ruling you just gave, and it changes what the viewer
+shows on an interface.
+
+**Recommendation.** Link only the containers that serve; init containers are not linked. An init
+container has exited before the Service answers, so linking it puts something untrue in the model;
+and leaving it out needs no new field on existing elements — every field added to a kept element is
+one more thing both generators must emit identically at every handover. Trade-off: the interface's
+links are no longer literally the whole in-memory set the D1 ruling cited — "the same set" now
+reads "minus the init containers". The plan is written this way.
+
+**The other way.** Link the whole set as the ruling's wording says, and mark every init-container
+element so resolvers can skip it — the viewer then shows init containers on their pod's interfaces;
+it costs a new field on existing elements that both generators must emit identically.
+
+**If this is wrong.** A generator change in one phase; no ids change.
+
+**Operator.** Agree (in chat, 2026-09-23).
+
 ## Open facts — questions only you can answer
 
 None — the material left nothing only you can answer.

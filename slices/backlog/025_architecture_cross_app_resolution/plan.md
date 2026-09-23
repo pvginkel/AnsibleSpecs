@@ -29,8 +29,8 @@
   Service as an interface element** (the existing `applicationInterfaces` kind, host in `stats`, the
   same shape exposed-host interfaces have today — no Architecture schema change). **Each interface —
   the new in-cluster ones and the existing exposed-host ones — is linked directly to the workload
-  instances behind its Service** (the same backing set the generator's in-memory provider index
-  computes today), not through the application service: for in-house apps that service is
+  instances behind its Service** (the backing set the generator's in-memory provider index
+  computes today, minus init containers — see Ruling D2), not through the application service: for in-house apps that service is
   DockerImages' and shared by every deployment of the product, so walking through it is ambiguous.
   **Both generators resolve a host they cannot find in their own render through those interfaces in
   the published set** before failing. Cross-app `Serving` edges stay instance → instance, so their
@@ -39,6 +39,10 @@
   `secrets.home`, Ceph `ceph`, Home Assistant). Expected size: roughly 60–80 new interface elements
   (prd runs ~140 Services, 59 of them KubeCoder env pods outside HelmCharts, a few system ones)
   against ~750 non-relation elements published today.
+- Ruling D2 (plan question Q1, operator: "Agree"): **an interface links only the containers that
+  serve — never a pod's init containers.** No marker field is added to instance elements. (An init
+  container has exited before the Service answers; Jenkins' `install-homelab-ca` would otherwise
+  yield a spurious second edge.)
 - Settled, operator did not object: **no partial-run flag** is built; an unresolved host stays
   fatal (R3 — bootstrapping a new app is manual; existing apps cannot deadlock because the published
   set already holds every element).
