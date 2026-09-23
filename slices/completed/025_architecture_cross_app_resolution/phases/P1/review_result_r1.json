@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "P1 meets its outcome: in-cluster interfaces for every placed Service and pooler, non-init Association links on every interface, and published-set resolution filtered like the render's own. Confirmed by a real ArgoCDDeploy render (arch-validate green) and mutation runs. Two advisory findings.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "A Service's second host annotation (dns hostname beside server-name) gets no interface, so that host resolves in one render but not across renders; latent, no prd Service sets both"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "Published-lookup order (in-cluster form before host) and serving_at's instance filter survive mutation; no test pins them"}
+ ]}

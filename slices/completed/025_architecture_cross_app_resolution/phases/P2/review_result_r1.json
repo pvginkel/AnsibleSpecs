@@ -1,0 +1,7 @@
+{"outcome": "issues",
+ "summary": "The generator patch is correct and in lockstep with aac-tools 7806d46: shared functions are AST-identical and the remaining differences predate the slice. One blocking coverage gap: the main()-level orderings that make HelmCharts publish exposed-host links and pooler interfaces survive mutation, and all 40 tests stay green.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "coverage-gap",
+   "summary": "main() order unpinned: calling publish_service_interfaces before reconcile_exposed_services (no exposed-host links) or before the pooler merge (no pooler interfaces) keeps all 40 tests green"}
+ ]}

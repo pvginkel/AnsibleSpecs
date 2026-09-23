@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "r1 F1 resolved: the new main()-level test over keycloak's exposed host and postgres-pas' CNPG pooler fails under both of r1's ordering mutations (re-run by the reviewer on e134d28) and passes on the branch. The test-only fix commit introduces no new problems.",
+ "details": "code_review_r2.md",
+ "findings": []}

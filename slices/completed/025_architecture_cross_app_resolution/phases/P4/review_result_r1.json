@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "cmd_arch meets P4's outcome: both halves read one un-overlaid snapshot (file or URL fetched once), a differing field now stops the app, and HelmCharts rendering every release but the app's must build and draw each helm-charts-drawn edge dict-equal to the snapshot; other producers' edges are reported. Two minor advisory robustness notes, nothing blocking.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "A consumer flipped locally but still attributed to helm-charts in the dataset makes its provider's HelmCharts half stop falsely (conservative, transient)"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "dataset_snapshot's urlopen failure escapes main's `except Stop` and aborts the remaining apps with a traceback instead of a per-app STOP"}
+ ]}

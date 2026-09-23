@@ -1,7 +1,8 @@
 # Close-out — slice 025 architecture_cross_app_resolution
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-23 16:27 → 18:04 · 5 phases · 0 bail-outs · 1 test round · doc phase done · $41.84
+(planner 29 %, research 6 %, rework 2 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,12 +14,21 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 025 makes cross-app architecture edges resolve through the published set (argo-cd D55).
+Both Kubernetes generators, aac-tools' (ArgoCDTools) and HelmCharts' own copy, now publish each
+Service they place as an in-cluster interface at `<svc>.<ns>.svc`. They link every interface,
+exposed hosts included, to its serving instances by an `Association`, and resolve a host their
+render cannot place through those links. Cross-app `Serving` edges keep their ids. The handover
+check scopes an app exactly and lists the edges other producers draw. `argo_migrate.py arch` now
+proves both halves of a move against one snapshot. On a snapshot carrying HelmCharts' local
+render, all 16 held apps pass. HelmCharts itself is not pushed (Ruling Q1), so the live proof is
+still owed. The doc phase updated the Argo CD runbook, ArgoCDTools' README and the argo-cd
+design and bulk-migration pages.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A1 comes first: push HelmCharts with `hc-push.sh`, then re-run `arch` over the 16 against
+the live set. Nothing is proven live until then. A3 pushes the two doc commits the driver does not land.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -38,9 +48,31 @@ Before step 2 completes, the gate is expected to stop jenkins at HelmCharts' hal
 **Provenance:** read, consult 1, plan.md Ruling Q1 and Push holds; verification.json V02, V13
 **Disposition:**
 
+### A2 — Push HelmCharts by hand when its hold lifts
+
+`plan.md`'s `## Push holds` section holds `/work/HelmCharts`: any push to `main` deploys drifted releases to prd unattended; the bulk-migration session pushes it after this slice (Ruling Q1).
+
+The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual.
+
+**Consequence:** none in this run — the driver took the hold as the ruling it is; nothing this repo deploys carries the slice until you push it.
+
+**Provenance:** witnessed — the driver's push check, against `plan.md`'s `## Push holds` section
+**Disposition:**
+
+### A3 — Push the doc phase commits in ArgoCDTools (27dfc88) and AnsibleSpecs (334b152)
+
+The doc phase updated ArgoCDTools README.md (gen-architecture publishes in-cluster interfaces and resolves cross-app hosts through them; what the handover check compares) and AnsibleSpecs argo-cd/design.md and argo-cd/bulk-migration.md. The driver lands and pushes only the Ansible doc branch, so these two commits are on local main in their repos. Neither is held: ArgoCDTools is pushed normally (Ruling Q1), and a README-only push rebuilds the aac-tools image and deploys nothing. HelmCharts carries no doc-phase commit.
+
+**Consequence:** Until pushed, the ArgoCDTools README on GitHub still says the handover check compares every relation id, and the argo-cd set on origin still holds the 16 apps on slice 025
+
+**Provenance:** witnessed, doc-writer, doc phase, r1 — git log in /work/ArgoCDTools and /work/AnsibleSpecs
+**Disposition:**
+
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: The run had no bail-outs and no appended phases. Only P2 took a second round: review r1's F1
+gave it a `main()`-level test of the publish order. The test phase proved the result on a snapshot,
+not live (N1).
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -61,9 +93,10 @@ Test phase r1 built a snapshot from the live published set with every helm-chart
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B4 is the worst, because the bulk migration's waves can hit it: a false arch stop between a
+consumer's flip and its first publish. B5 follows, a batch left ungated by one fetch failure. Both
+are read, not witnessed. B1–B3 are latent (none today). Three of the six are witnessed: B2, B3 and
+B6. All six are in this slice's repos.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -125,7 +158,8 @@ README.md:30 links `slices/backlog/025_architecture_cross_app_resolution/slice.m
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Q2 matters most. It decides whether youtrack's arch gate passes or stops on
+youtrack-mcp-server's Association. Q1 only moves a stale-wire failure one publish cycle later.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -151,8 +185,9 @@ P3's text names the Serving rule. In the live set, one relation touching a held 
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S2 (the Architecture producer manual) and S1 (IoTSupport) belong outside this slice's
+repos, and both are read. S4 affects the bulk migration now: it blocks keycloak's dev stage and
+design-assistant's non-prd stages at `arch`. S3, S4 and S5 are witnessed.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 

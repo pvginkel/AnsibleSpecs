@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The handover check scopes each app exactly and attributes every relation to the producer that draws it. Probed across all configs/prd apps on the live set and the P2 snapshot: no element is claimed twice, and there are 0 relation misattributions against HelmCharts' render. The 11 fixture tests are real and pass. One advisory: an in-house exposed interface that nothing links is in no app's scope.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "An in-house exposed interface that no instance links (all 17 on the live set before HelmCharts publishes; any B2-class Service later) is in no app's scope, so losing it passes the check silently"}]}

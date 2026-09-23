@@ -1,0 +1,1352 @@
+/work/ArgoCDTools — P1: git diff 08c997476ed3..7806d46e1de3
+
+aac-tools/image/gen_architecture.py      | 149 +++++++++++++---
+ aac-tools/tests/test_gen_architecture.py | 490 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 618 insertions(+), 21 deletions(-)
+
+diff --git a/aac-tools/image/gen_architecture.py b/aac-tools/image/gen_architecture.py
+index 890e52b..02f2720 100644
+--- a/aac-tools/image/gen_architecture.py
++++ b/aac-tools/image/gen_architecture.py
+@@ -10,7 +10,9 @@ manifests. Every container of every workload (init + main) becomes a running ins
+ element, keyed `<namespace>.<workload>.<container>` with a deterministic UUID5 id.
+ Each instance Specializes its product, is Served by the Kubernetes platform, realizes
+ any annotated capabilities, and — where it mounts a Ceph PVC — is Served by the
+-matching cluster storage service.
++matching cluster storage service. Every Service the render places is published as an
++interface at its in-cluster host, and every interface (exposed hosts too) is linked to
++the instances serving behind it (publish_service_interfaces).
+ 
+ One run emits exactly one stage: the artifact is attached to a pipeline, and a
+ pipeline that listened to two stages would make the artifact flap. `--stage` is
+@@ -36,7 +38,10 @@ edges a deployment defines but does not own the recipe for:
+ Cross-producer ids (the DockerImages `app:`/`svc:` UUIDs, Ansible's OpenBao/platform
+ UUIDs) are resolved from the published merged dataset (`load_dataset`), with local
+ producer checkouts overlaid so freshly-authored — not-yet-published — recipes resolve
+-while testing.
++while testing. So is a provider another app deploys: a host this render cannot place
++resolves to the instances the published interfaces at that host link, filtered
++exactly as this render's own providers are (resolve_host). A host that resolves
++nowhere fails the run.
+ 
+ Judgment lives in `architecture.yaml` at the repo root:
+ 
+@@ -425,9 +430,11 @@ def render(repo, meta, stage, namespace, release_name):
+ class Dataset:
+     """In-memory index over the published merged model + local overlays.
+ 
+-    Only used to resolve *cross-producer* references to their UUIDs and to
+-    read the consumer recipes (boundBy edges, app->service realizations) that
+-    other producers author. We never look our own elements up here.
++    Used to resolve *cross-producer* references to their UUIDs, to read the
++    consumer recipes (boundBy edges, app->service realizations) that other
++    producers author, and to place a host this render cannot: at the containers
++    the published interfaces at that host link (see publish_service_interfaces).
++    A host this render places is never looked up here.
+     """
+ 
+     def __init__(self):
+@@ -436,6 +443,10 @@ class Dataset:
+         self.boundby_by_source = {}  # bare source id -> [relation,...] (boundBy set)
+         self.app_provides_svc = {}  # bare app id -> [svc composite id,...]
+         self.svc_provider_app = {}  # bare svc id -> bare app id
++        self.interfaces_at = {}  # interface stats.url -> [interface id,...]
++        self.linked = {}  # interface id -> [source id,...] (—Association→ it)
++        self.container_of = {}  # instance id -> the name a wire's `providers` matches
++        self.realized = {}  # source id -> {bare Realization target,...}
+ 
+     def add_envelope(self, env):
+         for key, val in (env or {}).items():
+@@ -451,19 +462,49 @@ class Dataset:
+                         continue
+                     prefix, _, _rest = el["id"].partition(":")
+                     self.by_hint[(prefix, hint_of(el["id"]))] = el["id"]
++                    stats = el.get("stats") or {}
++                    if key == "applicationInterfaces" and "url" in stats:
++                        self.interfaces_at.setdefault(stats["url"], []).append(el["id"])
++                    if "container" in stats:
++                        self.container_of[el["id"]] = stats["container"]
++                    elif "resource" in stats:  # a CNPG instance: `<Kind>/<name>`
++                        self.container_of[el["id"]] = stats["resource"].split("/", 1)[1]
+         for r in (env or {}).get("relations") or []:
+             self.relations.append(r)
+             if "boundBy" in r:
+                 self.boundby_by_source.setdefault(bare(r["source"]), []).append(r)
+             if r.get("type") == "Realization":
++                self.realized.setdefault(r["source"], set()).add(bare(r["target"]))
+                 s, t = bare(r["source"]), bare(r["target"])
+                 if s.startswith("app:") and t.startswith("svc:"):
+                     self.app_provides_svc.setdefault(s, []).append(r["target"])
+                     self.svc_provider_app[t] = s
++            if r.get("type") == "Association" and r["target"].startswith("if:"):
++                self.linked.setdefault(r["target"], []).append(r["source"])
+ 
+     def full(self, kind, hint):
+         return self.by_hint.get((kind, hint))
+ 
++    def serving_at(self, url):
++        """The instances the published interfaces at `url` link, each once."""
++        ids = [
++            src
++            for iface in self.interfaces_at.get(url, [])
++            for src in self.linked.get(iface, [])
++            if src in self.container_of
++        ]
++        return list(dict.fromkeys(ids))
++
++    def instance(self, pid):
++        """A linked published instance as the resolvers read their own. A link
++        never names an init container (publish_service_interfaces)."""
++        return {
++            "id": pid,
++            "container": self.container_of[pid],
++            "is_init": False,
++            "realizes": self.realized.get(pid, set()),
++        }
++
+ 
+ def load_dataset(repo):
+     """Build the cross-producer index: live merged dataset + local overlay.
+@@ -626,7 +667,13 @@ def build_provider_index(all_services, workloads_by_ns):
+ 
+ 
+ def resolve_host(host, consumer_ns, external, incluster, ds):
+-    """(provider instance ids, is_cross_producer) or ([], None) if unresolved."""
++    """(provider instance ids, is_cross_producer) or ([], None) if unresolved.
++
++    This render's Services first, then the hint table, then the instances the
++    published interfaces link — in-cluster form before exposed host, the order
++    this render's own lookup takes. Those are instances like this render's own
++    (is_cross_producer False): the caller filters them the same way (serving).
++    """
+     nk = normalize_incluster(host, consumer_ns)
+     if nk and nk in incluster:
+         return incluster[nk], False
+@@ -635,9 +682,20 @@ def resolve_host(host, consumer_ns, external, incluster, ds):
+     xid = cross_producer_id(host, ds)
+     if xid:
+         return [xid], True
++    for url in ([f"{nk[1]}.{nk[0]}.svc"] if nk else []) + [host]:
++        linked = ds.serving_at(url)
++        if linked:
++            return linked, False
+     return [], None
+ 
+ 
++def serving(pids, inst_by_id, ds):
++    """The serving instances behind resolved provider ids, as instance records:
++    this render's own, else the published ones an interface links."""
++    records = [inst_by_id[p] if p in inst_by_id else ds.instance(p) for p in pids]
++    return [r for r in records if not r["is_init"]]
++
++
+ def resolve_svc_target(svc_target, value, consumer, instances_by_product, ds):
+     """A boundBy `svc:<id>` names an in-house provider service: map it to the
+     app that realizes it, then to the long-running instance we deploy of that
+@@ -976,6 +1034,14 @@ def main():
+ 
+     errors = []
+     reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds, gaps)
++    publish_service_interfaces(
++        incluster,
++        external,
++        inst_by_id,
++        {ns: {"env": env, "introduced": introduced}},
++        elements,
++        add_rel,
++    )
+     resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, add_rel, errors)
+     resolve_upstreams(instances, inst_by_id, external, incluster, ds, add_rel, errors)
+     resolve_secret_stores(secret_stores, instances, ds, add_rel, errors)
+@@ -1273,6 +1339,54 @@ def _inhouse_service_for(matched, ds):
+     return None
+ 
+ 
++def publish_service_interfaces(incluster, external, inst_by_id, stage_of_ns, elements, add_rel):
++    """Publish every Service this render places as an interface linked to its instances.
++
++    Each in-cluster Service (the provider index's, CNPG poolers included) becomes an
++    ApplicationInterface keyed `svcif.<ns>.<svc>`, its host `<svc>.<ns>.svc` in
++    `stats.url`. Every interface — these and the exposed hosts
++    reconcile_exposed_services minted — is linked by an Association from each
++    instance behind it, directly and not through the application service (an
++    in-house app's service is shared by every deployment of the product). Another
++    render resolves a host it cannot place through these links (resolve_host), so
++    they name exactly what this render's own lookup filters from: the backing set
++    without its init containers, which have exited before the Service answers.
++    `stage_of_ns` maps a namespace to the `env` and `introduced` of its release.
++    """
++
++    def link(interface_id, backing):
++        for pid in backing:
++            inst = inst_by_id[pid]
++            if not inst["is_init"]:
++                add_rel(
++                    f"rel:{inst['hint']}-behind-{hint_of(interface_id)}",
++                    pid,
++                    interface_id,
++                    "Association",
++                )
++
++    for ikey, interface in elements["applicationInterfaces"].items():
++        if ikey.startswith("appif."):
++            link(interface["id"], external[interface["stats"]["url"]])
++
++    for (ns, svc), backing in incluster.items():
++        host = f"{svc}.{ns}.svc"
++        ikey = f"svcif.{ns}.{svc}"
++        stage = stage_of_ns[ns]
++        interface = {
++            "id": composite("if", kebab(host), ikey),
++            "label": host,
++            "summary": f"In-cluster endpoint {host} of Service '{svc}'.",
++            "introduced": stage["introduced"],
++            "lifecycle": "active",
++            "environment": stage["env"],
++            "cluster": "prd",
++            "stats": {"url": host},
++        }
++        elements["applicationInterfaces"][ikey] = interface
++        link(interface["id"], backing)
++
++
+ def resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, add_rel, errors):
+     """Emit provider —Serving→ consumer for every resolvable boundBy recipe.
+ 
+@@ -1377,7 +1491,8 @@ def resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, a
+                             errors.append(
+                                 f"gen-architecture: boundBy: {loc}: {var}={value!r} -> "
+                                 f"host {host!r} resolves to no provider "
+-                                f"(in-cluster / exposed host / cross-producer)"
++                                f"(in-cluster / exposed host / cross-producer / "
++                                f"published interface)"
+                             )
+                             continue
+                         if is_cross:
+@@ -1387,11 +1502,9 @@ def resolve_boundby(instances_by_product, inst_by_id, external, incluster, ds, a
+                             # capability — and that serve it (a one-shot init
+                             # container sharing the image is not a provider).
+                             provider_ids = [
+-                                p
+-                                for p in pids
+-                                if p in inst_by_id
+-                                and not inst_by_id[p]["is_init"]
+-                                and tgt_bare in inst_by_id[p]["realizes"]
++                                r["id"]
++                                for r in serving(pids, inst_by_id, ds)
++                                if tgt_bare in r["realizes"]
+                             ]
+                             if not provider_ids:
+                                 errors.append(
+@@ -1454,15 +1567,13 @@ def resolve_upstreams(instances, inst_by_id, external, incluster, ds, add_rel, e
+                     errors.append(
+                         f"gen-architecture: upstream: {loc}: {var}={value!r} -> "
+                         f"host {host!r} resolves to no provider "
+-                        f"(in-cluster / exposed host / cross-producer)"
++                        f"(in-cluster / exposed host / cross-producer / published interface)"
+                     )
+                     continue
+             if is_cross:
+                 provider_ids = pids
+             else:
+-                backing = [
+-                    inst_by_id[p] for p in pids if p in inst_by_id and not inst_by_id[p]["is_init"]
+-                ]
++                backing = serving(pids, inst_by_id, ds)
+                 have = {i["container"] for i in backing}
+                 missing = [c for c in wanted if c not in have]
+                 if not wanted or missing:
+@@ -1556,16 +1667,14 @@ def resolve_mcp_clients(
+                 errors.append(
+                     f"gen-architecture: mcp client {loc}: server "
+                     f"{name!r} host {host!r} resolves to no provider "
+-                    f"(in-cluster / exposed host / cross-producer)"
++                    f"(in-cluster / exposed host / cross-producer / published interface)"
+                 )
+                 continue
+             if is_cross:
+                 provider_ids = pids
+             else:
+                 wanted = providers.get(name) or []
+-                backing = [
+-                    inst_by_id[p] for p in pids if p in inst_by_id and not inst_by_id[p]["is_init"]
+-                ]
++                backing = serving(pids, inst_by_id, ds)
+                 have = {i["container"] for i in backing}
+                 missing = [c for c in wanted if c not in have]
+                 if not wanted or missing:
+diff --git a/aac-tools/tests/test_gen_architecture.py b/aac-tools/tests/test_gen_architecture.py
+index 0ddf5d4..adc6ad3 100644
+--- a/aac-tools/tests/test_gen_architecture.py
++++ b/aac-tools/tests/test_gen_architecture.py
+@@ -3,7 +3,9 @@
+ The successors of HelmCharts' `tests/test_gen_architecture.py` — the same eleven
+ behaviours, under the same names, over the same synthetic in-memory fixtures — plus
+ the list form of `upstream`, which only this port accepts. They exercise the
+-post-render passes, which the port carries across whole.
++post-render passes, which the port carries across whole. Last, the interfaces every
++render publishes for its Services, and the resolution of a provider another render
++deploys through them: it draws the edge one render drawing both sides draws.
+ """
+ 
+ from __future__ import annotations
+@@ -391,3 +393,489 @@ class UpstreamTests(unittest.TestCase):
+ 
+         self.assertEqual(edges, set())
+         self.assertEqual(len(errors), 2)
++
++
++STAGE = {"env": "prd", "introduced": "2024-07-24"}
++CI = "cap:continuous-integration"
++
++
++def _relations():
++    relations = {}
++
++    def add_rel(rid, source, target, rtype):
++        relations[rid] = {"source": source, "target": target, "type": rtype}
++
++    return relations, add_rel
++
++
++def _pooler(ns, name, realizes):
++    """A CNPG instance record, as emit_cnpg_substrate appends one."""
++    hint = f"{ns}-{name}"
++    return dict(
++        _inst(ns, name, name),
++        id=ga.composite("ss", hint, f"{ns}.{name}"),
++        hint=hint,
++        realizes=realizes,
++        resource=f"Pooler/{name}",
++    )
++
++
++def _exposed_interface(host):
++    """An exposed-host interface as reconcile_exposed_services mints it."""
++    return {"id": ga.composite("if", ga.kebab(host), f"appif.{host}"), "stats": {"url": host}}
++
++
++def _publish(pod, incluster, external):
++    """The envelope a provider's own render publishes: its instances as main writes
++    them, their Realizations, and its interfaces with their links."""
++    elements = {"applicationInterfaces": {f"appif.{h}": _exposed_interface(h) for h in external}}
++    relations, add_rel = _relations()
++    ga.publish_service_interfaces(
++        incluster,
++        external,
++        {i["id"]: i for i in pod},
++        {ns: STAGE for ns, _svc in incluster},
++        elements,
++        add_rel,
++    )
++    for i in pod:
++        for cap in i["realizes"]:
++            add_rel(f"rel:{i['hint']}-realizes-{ga.hint_of(cap)}", i["id"], cap, "Realization")
++    return {
++        "applicationComponents": [
++            {
++                "id": i["id"],
++                "stats": (
++                    {"resource": i["resource"]}
++                    if "resource" in i
++                    else {"container": i["container"]}
++                ),
++            }
++            for i in pod
++        ],
++        "applicationInterfaces": list(elements["applicationInterfaces"].values()),
++        "relations": [dict(r, id=rid) for rid, r in relations.items()],
++    }
++
++
++def _one_render_and_across(resolve, consumer, pod, incluster, external, recipes=None):
++    """What `resolve` draws when one render holds both sides (HelmCharts today), and
++    when the provider's render has published and the consumer's render holds only
++    the consumer."""
++    one = ga.Dataset()
++    one.add_envelope(recipes)
++    across = ga.Dataset()
++    across.add_envelope(recipes)
++    across.add_envelope(_publish(pod, incluster, external))
++    return (
++        resolve([consumer, *pod], incluster, external, one),
++        resolve([consumer], {}, {}, across),
++    )
++
++
++def _boundby(instances, incluster, external, ds):
++    relations, add_rel = _relations()
++    errors = []
++    by_product = {}
++    for i in instances:
++        if i["product"]:
++            by_product.setdefault(i["product"], []).append(i)
++    ga.resolve_boundby(
++        by_product, {i["id"]: i for i in instances}, external, incluster, ds, add_rel, errors
++    )
++    return relations, errors
++
++
++def _upstreams(instances, incluster, external, ds):
++    relations, add_rel = _relations()
++    errors = []
++    ga.resolve_upstreams(
++        instances, {i["id"]: i for i in instances}, external, incluster, ds, add_rel, errors
++    )
++    return relations, errors
++
++
++def _recipe(product, var, cap):
++    """A consumer producer's boundBy recipe: `product` reaches `cap` through `var`."""
++    return {
++        "relations": [
++            {
++                "id": f"rel:{ga.hint_of(product)}-uses-{ga.hint_of(cap)}",
++                "source": f"{product},00000000-0000-0000-0000-000000000004",
++                "target": cap,
++                "type": "Association",
++                "boundBy": f"env:{var}",
++            }
++        ]
++    }
++
++
++def _consumer(ns, var, value, product="app:bot"):
++    return dict(_inst(ns, "bot", "bot"), product=product, env={var: value})
++
++
++# Jenkins as prd runs it: the init container installing the homelab CA realizes the
++# capability just as the server does (published set, 2026-09-23), beside a sidecar
++# that realizes nothing.
++JENKINS_POD = [
++    dict(_inst("jenkins-prd", "jenkins", "install-homelab-ca", is_init=True), realizes={CI}),
++    dict(_inst("jenkins-prd", "jenkins", "jenkins"), realizes={CI}),
++    _inst("jenkins-prd", "jenkins", "exporter"),
++]
++JENKINS_SVC = {("jenkins-prd", "jenkins"): [i["id"] for i in JENKINS_POD]}
++
++
++class PublishedInterfaceTests(unittest.TestCase):
++    def test_every_in_cluster_service_is_an_interface_at_its_host(self):
++        pooler = _pooler("postgres-pas-prd", "postgres-pooler-rw", set())
++        incluster = {
++            **JENKINS_SVC,
++            ("postgres-pas-prd", "postgres-pooler-rw"): [pooler["id"]],
++        }
++        elements = {"applicationInterfaces": {}}
++        _relations_, add_rel = _relations()
++
++        ga.publish_service_interfaces(
++            incluster,
++            {},
++            {i["id"]: i for i in [*JENKINS_POD, pooler]},
++            {"jenkins-prd": STAGE, "postgres-pas-prd": {"env": "prd", "introduced": "2025-01-02"}},
++            elements,
++            add_rel,
++        )
++
++        interfaces = elements["applicationInterfaces"]
++        self.assertEqual(
++            set(interfaces),
++            {"svcif.jenkins-prd.jenkins", "svcif.postgres-pas-prd.postgres-pooler-rw"},
++        )
++        # Pinned: HelmCharts' generator mints the same element for the same Service.
++        self.assertEqual(
++            interfaces["svcif.postgres-pas-prd.postgres-pooler-rw"],
++            {
++                "id": "if:postgres-pooler-rw-postgres-pas-prd-svc,"
++                "0e13a990-5ea1-589e-86bd-e17c54e4cd00",
++                "label": "postgres-pooler-rw.postgres-pas-prd.svc",
++                "summary": "In-cluster endpoint postgres-pooler-rw.postgres-pas-prd.svc "
++                "of Service 'postgres-pooler-rw'.",
++                "introduced": "2025-01-02",
++                "lifecycle": "active",
++                "environment": "prd",
++                "cluster": "prd",
++                "stats": {"url": "postgres-pooler-rw.postgres-pas-prd.svc"},
++            },
++        )
++
++    def test_an_interface_links_the_instances_serving_behind_it_never_an_init_container(self):
++        server = dict(
++            JENKINS_POD[1],
++            id=ga.composite("ss", "jenkins-prd-jenkins-jenkins", "jenkins-prd.jenkins.jenkins"),
++        )
++        pod = [JENKINS_POD[0], server, JENKINS_POD[2]]
++        elements = {"applicationInterfaces": {}}
++        relations, add_rel = _relations()
++
++        ga.publish_service_interfaces(
++            {("jenkins-prd", "jenkins"): [i["id"] for i in pod]},
++            {},
++            {i["id"]: i for i in pod},
++            {"jenkins-prd": STAGE},
++            elements,
++            add_rel,
++        )
++
++        interface = elements["applicationInterfaces"]["svcif.jenkins-prd.jenkins"]["id"]
++        self.assertEqual(
++            interface, "if:jenkins-jenkins-prd-svc,e2aa1339-6343-578b-b9dd-e69a433c69c1"
++        )
++        # The same Association from a SystemSoftware and an ApplicationComponent instance.
++        self.assertEqual(
++            relations,
++            {
++                "rel:jenkins-prd-jenkins-jenkins-behind-jenkins-jenkins-prd-svc": {
++                    "source": server["id"],
++                    "target": interface,
++                    "type": "Association",
++                },
++                "rel:jenkins-prd-jenkins-exporter-behind-jenkins-jenkins-prd-svc": {
++                    "source": JENKINS_POD[2]["id"],
++                    "target": interface,
++                    "type": "Association",
++                },
++            },
++        )
++
++    def test_an_exposed_host_interface_is_linked_to_its_instances_beside_its_assignment(self):
++        ns = "web-prd"
++        web = _inst(ns, "web", "web")
++        init = _inst(ns, "web", "migrate", is_init=True)
++        backing = [init["id"], web["id"]]
++        for case, ds_factory, product in EXPOSURE_CASES:
++            with self.subTest(case=case):
++                exposed = [
++                    {
++                        "doc": _service("web", ["web.home"]),
++                        "ns": ns,
++                        "env": "prd",
++                        "introduced": "2024-01-01",
++                        "release": "web",
++                        "exposures": {},
++                        "webUi": [],
++                    }
++                ]
++                elements = {"applicationServices": {}, "applicationInterfaces": {}}
++                relations, add_rel = _relations()
++                ga.reconcile_exposed_services(
++                    exposed,
++                    {ns: [_workload(ns, "web", product)]},
++                    elements,
++                    add_rel,
++                    ds_factory(),
++                    [],
++                )
++                assignment = dict(relations)
++
++                ga.publish_service_interfaces(
++                    {(ns, "web"): backing},
++                    {"web.home": backing},
++                    {i["id"]: i for i in (web, init)},
++                    {ns: STAGE},
++                    elements,
++                    add_rel,
++                )
++
++                interfaces = elements["applicationInterfaces"]
++                links = {
++                    (r["source"], r["target"])
++                    for r in relations.values()
++                    if r["type"] == "Association"
++                }
++                self.assertEqual(
++                    links,
++                    {
++                        (web["id"], interfaces["appif.web.home"]["id"]),
++                        (web["id"], interfaces["svcif.web-prd.web"]["id"]),
++                    },
++                )
++                self.assertEqual(
++                    {rid: r for rid, r in relations.items() if r["type"] != "Association"},
++                    assignment,
++                )
++
++    def test_an_in_cluster_interface_never_takes_an_exposed_hosts_id(self):
++        """Short `.home` names are exposed hosts too: `kibana` is one."""
++        kibana = _inst("elasticsearch-prd", "kibana", "kibana")
++        elements = {"applicationInterfaces": {"appif.kibana": _exposed_interface("kibana")}}
++        _relations_, add_rel = _relations()
++
++        ga.publish_service_interfaces(
++            {("elasticsearch-prd", "kibana"): [kibana["id"]]},
++            {"kibana": [kibana["id"]]},
++            {kibana["id"]: kibana},
++            {"elasticsearch-prd": STAGE},
++            elements,
++            add_rel,
++        )
++
++        ids = [i["id"] for i in elements["applicationInterfaces"].values()]
++        self.assertEqual(len(ids), 2)
++        self.assertEqual(len({ga.hint_of(i) for i in ids}), 2)
++
++
++class AcrossRendersTests(unittest.TestCase):
++    """A provider another render deploys resolves through its published interfaces to
++    the edge one render drawing both sides draws: the same endpoints, the same id."""
++
++    def test_a_cap_recipe_draws_the_edge_one_render_draws(self):
++        pooler = _pooler("postgres-pas-prd", "postgres-pooler-rw", {"cap:relational-database"})
++        cluster = _pooler("postgres-pas-prd", "postgres", {"cap:relational-database"})
++        keycloak = dict(_inst("keycloak-prd", "keycloak", "keycloak"), realizes={"cap:identity"})
++        cases = (
++            (
++                "in-cluster host, init container and non-realizer behind it",
++                _consumer("bot-prd", "JENKINS_URL", "http://jenkins.jenkins-prd.svc:8080/"),
++                JENKINS_POD,
++                JENKINS_SVC,
++                {},
++                _recipe("app:bot", "JENKINS_URL", CI),
++                JENKINS_POD[1]["id"],
++            ),
++            (
++                "CNPG pooler",
++                _consumer(
++                    "bot-prd",
++                    "DATABASE_URL",
++                    "postgresql://bot@postgres-pooler-rw.postgres-pas-prd.svc:5432/bot",
++                ),
++                [pooler, cluster],
++                {("postgres-pas-prd", "postgres-pooler-rw"): [pooler["id"]]},
++                {},
++                _recipe("app:bot", "DATABASE_URL", "cap:relational-database"),
++                pooler["id"],
++            ),
++            (
++                "exposed host with no hint-table entry",
++                _consumer("bot-prd", "OIDC_ISSUER", "https://auth.ginbov.nl/realms/homelab"),
++                [keycloak],
++                {("keycloak-prd", "keycloak"): [keycloak["id"]]},
++                {"auth.ginbov.nl": [keycloak["id"]]},
++                _recipe("app:bot", "OIDC_ISSUER", "cap:identity"),
++                keycloak["id"],
++            ),
++        )
++        for case, consumer, pod, incluster, external, recipes, provider in cases:
++            with self.subTest(case=case):
++                (one, one_errors), (across, across_errors) = _one_render_and_across(
++                    _boundby, consumer, pod, incluster, external, recipes
++                )
++
++                self.assertEqual(one_errors, [])
++                self.assertEqual(across_errors, [])
++                self.assertEqual(across, one)
++                self.assertEqual(
++                    [(r["source"], r["target"], r["type"]) for r in across.values()],
++                    [(provider, consumer["id"], "Serving")],
++                )
++
++    def test_an_init_container_is_never_a_provider(self):
++        pod = [
++            JENKINS_POD[0],
++            _inst("jenkins-prd", "jenkins", "jenkins"),  # serves, realizes nothing
++        ]
++        consumer = _consumer("bot-prd", "JENKINS_URL", "http://jenkins.jenkins-prd.svc:8080/")
++
++        (one, one_errors), (across, across_errors) = _one_render_and_across(
++            _boundby,
++            consumer,
++            pod,
++            {("jenkins-prd", "jenkins"): [i["id"] for i in pod]},
++            {},
++            _recipe("app:bot", "JENKINS_URL", CI),
++        )
++
++        self.assertEqual((one, across), ({}, {}))
++        for errors in (one_errors, across_errors):
++            self.assertEqual(len(errors), 1)
++            self.assertIn(f"does not Realize {CI}", errors[0])
++
++    def test_an_upstream_keeps_only_the_containers_it_names(self):
++        pod = [_inst("trello-prd", "trello", c) for c in ("auth", "filter", "server")]
++        proxy = _proxy("proxy-prd", "proxy", "http://trello.trello-prd.svc:8080/mcp", ["server"])
++
++        (one, one_errors), (across, across_errors) = _one_render_and_across(
++            _upstreams, proxy, pod, {("trello-prd", "trello"): [i["id"] for i in pod]}, {}
++        )
++
++        self.assertEqual((one_errors, across_errors), ([], []))
++        self.assertEqual(across, one)
++        self.assertEqual(
++            [(r["source"], r["target"]) for r in across.values()],
++            [(_id("server", pod), proxy["id"])],
++        )
++
++    def test_an_mcp_server_keeps_only_the_containers_the_binding_names(self):
++        def resolve(instances, incluster, external, ds):
++            relations, add_rel = _relations()
++            errors = []
++            ga.resolve_mcp_clients(
++                [
++                    {
++                        "ns": "intercom-prd",
++                        "chart": "intercom",
++                        "container": "intercom-server",
++                        "configMap": "mcp-servers",
++                        "key": "servers.json",
++                        "hostField": "url",
++                        "providers": {"trello": ["filter", "server"]},
++                    }
++                ],
++                {
++                    ("intercom-prd", "mcp-servers"): {
++                        "servers.json": json.dumps({"servers": [TRELLO]})
++                    }
++                },
++                {i["id"]: i for i in instances},
++                instances,
++                external,
++                incluster,
++                ds,
++                add_rel,
++                errors,
++            )
++            return relations, errors
++
++        ids = [i["id"] for i in TRELLO_POD]
++        (one, one_errors), (across, across_errors) = _one_render_and_across(
++            resolve, CLIENT, TRELLO_POD, {("trello-prd", "trello"): ids}, {"trello.home": ids}
++        )
++
++        self.assertEqual((one_errors, across_errors), ([], []))
++        self.assertEqual(across, one)
++        self.assertEqual({r["source"] for r in across.values()}, {_id("filter"), _id("server")})
++
++    def test_an_interface_nothing_links_resolves_nothing(self):
++        """Another producer's interface (Ansible's `if:proxmox-api-prd`) names no instance."""
++        ds = ga.Dataset()
++        ds.add_envelope(
++            {
++                "applicationInterfaces": [
++                    {
++                        "id": "if:proxmox-api-prd,00000000-0000-0000-0000-000000000005",
++                        "stats": {"url": "proxmox.home"},
++                    }
++                ]
++            }
++        )
++        proxy = _proxy("proxy-prd", "proxy", "https://proxmox.home/api", ["server"])
++
++        edges, errors = _resolve_upstreams([proxy], ds=ds)
++
++        self.assertEqual(edges, set())
++        self.assertEqual(len(errors), 1)
++        self.assertIn("resolves to no provider", errors[0])
++
++    def test_the_render_and_the_hint_table_come_before_the_published_set(self):
++        published = _inst("jenkins-prd", "jenkins", "published")
++        ds = ga.Dataset()
++        ds.add_envelope(_publish([published], {("jenkins-prd", "jenkins"): [published["id"]]}, {}))
++        ds.add_envelope(_publish([published], {}, {"secrets.home": [published["id"]]}))
++        ds.add_envelope(
++            {
++                "applicationServices": [
++                    {"id": "svc:openbao-api-prd,00000000-0000-0000-0000-000000000006"}
++                ]
++            }
++        )
++        own = JENKINS_POD[1]["id"]
++
++        self.assertEqual(
++            ga.resolve_host(
++                "jenkins.jenkins-prd.svc", "bot-prd", {}, {("jenkins-prd", "jenkins"): [own]}, ds
++            ),
++            ([own], False),
++        )
++        self.assertEqual(
++            ga.resolve_host("secrets.home", "bot-prd", {}, {}, ds),
++            (["svc:openbao-api-prd,00000000-0000-0000-0000-000000000006"], True),
++        )
++        self.assertEqual(
++            ga.resolve_host("jenkins.jenkins-prd", "bot-prd", {}, {}, ds),
++            ([published["id"]], False),
++        )
++
++    def test_an_envelope_read_twice_names_each_instance_once(self):
++        """A snapshot with its producer's render overlaid holds every link twice."""
++        envelope = _publish(JENKINS_POD, JENKINS_SVC, {})
++        ds = ga.Dataset()
++        ds.add_envelope(envelope)
++        ds.add_envelope(envelope)
++
++        self.assertEqual(
++            ds.serving_at("jenkins.jenkins-prd.svc"), [JENKINS_POD[1]["id"], JENKINS_POD[2]["id"]]
++        )
++
++    def test_the_hint_table_holds_only_the_providers_outside_kubernetes(self):
++        self.assertEqual(
++            set(ga.CROSS_PRODUCER_HOST_HINTS),
++            {"secrets.home", "ceph", "homeassistant.webathome.org"},
++        )
+
+/work/ArgoCDTools — P3: git diff 7806d46e1de3..ce5efb97a3f8
+
+aac-tools/checks/handover_equality.py     | 148 +++++++++++++++++-------
+ aac-tools/tests/support.py                |  13 ++-
+ aac-tools/tests/test_handover_equality.py | 307 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 422 insertions(+), 46 deletions(-)
+
+diff --git a/aac-tools/checks/handover_equality.py b/aac-tools/checks/handover_equality.py
+index edf521c..0776d29 100644
+--- a/aac-tools/checks/handover_equality.py
++++ b/aac-tools/checks/handover_equality.py
+@@ -5,11 +5,13 @@
+ 
+ Clones a deploy repo, runs the generator from source over the clone for one stage,
+ and compares what it wrote with what the app's current producer publishes for that app
+-and stage: the same element ids, the same relation ids, and every field equal bar
+-three. The render reads the clone's own committed `architecture.yaml` with nothing laid
+-over it, so exit 0 is about the judgment layer the deploy repo's pipeline renders: a
+-producer could take the app over today and no inbound edge in the federation would
+-dangle.
++and stage: the same element ids, the same ids for the relations the app's producer
++draws, and every field equal bar three. A relation another producer draws against one
++of the app's ids is listed under that producer and not compared — the move keeps the
++id it resolves against. The render reads the clone's own committed `architecture.yaml`
++with nothing laid over it, so exit 0 is about the judgment layer the deploy repo's
++pipeline renders: a producer could take the app over today and no inbound edge in the
++federation would dangle.
+ 
+ Not part of `kc project test`, and not meant to be: this needs a sibling deploy-repo
+ checkout, the chart repository and the live published dataset, and CI and a cold
+@@ -34,6 +36,7 @@ import sys
+ import tempfile
+ import urllib.request
+ from pathlib import Path
++from typing import NamedTuple
+ 
+ import yaml
+ 
+@@ -56,6 +59,15 @@ ELEMENT_ARRAYS = (
+ IGNORED_FIELDS = frozenset({"producer", "logo"})
+ IGNORED_STATS = frozenset({"image"})
+ 
++# The arrays whose elements are minted from a natural key that starts with their
++# namespace: a container instance (`<ns>.<workload>.<container>`), a CNPG instance
++# (`<ns>.<name>`), an application service (hint `<ns>-<service>`).
++NAMESPACED_ARRAYS = ("systemSoftware", "applicationComponents", "applicationServices")
++
++# What a relation is listed under when the element that draws it is in no envelope:
++# the relaxed collector publishes a relation whose endpoint no producer publishes.
++UNPUBLISHED = "(unpublished)"
++
+ 
+ def _generator_module():
+     """The generator's own constants, so the check cannot drift from the file it runs.
+@@ -144,41 +156,76 @@ def relations(envelope):
+ 
+ 
+ def app_elements(dataset, producer, app):
+-    """Everything `producer` publishes for `app`, in every stage.
+-
+-    The published model keys a container to its app through `stats.release`, but an
+-    ingress interface carries no release at all. What both carry is an id minted from
+-    a natural key that starts with the app's name. An exposed host renamed off that
+-    prefix drops out of the target and surfaces as an extra on the generated side —
+-    the check fails rather than passing quietly.
++    """Everything `producer` publishes for `app`, in every stage, and nothing of a neighbour's.
++
++    The app's namespace in a stage is `<app>-<stage>` (gen_architecture's `main`), so
++    the hint of each of its instances and services starts `<app>-<stage>-` — the stage
++    is what keeps `youtrack-mcp-prd-…` out of `youtrack`. An interface is keyed on its
++    host, not its namespace: it is the app's when one of the app's instances links it
++    (—Association→, gen_architecture's publish_service_interfaces) or when it is
++    assigned to one of the app's services. The second reaches an exposed host whose
++    Service the provider index cannot place, which is linked to nothing — dnsmasq's
++    `dns1.home`, behind a Service that selects on `statefulset.kubernetes.io/pod-name`.
++    A product catalog entry carries no stage and is no app's.
+     """
+-    return {
++    own = {
+         e["id"]: e
+-        for array in ELEMENT_ARRAYS
++        for array in NAMESPACED_ARRAYS
+         for e in (dataset.get(array) or [])
+         if e.get("producer") == producer
+-        and (hint(e["id"]) == app or hint(e["id"]).startswith(f"{app}-"))
++        and "environment" in e
++        and hint(e["id"]).startswith(f"{app}-{e['environment']}-")
+     }
++    rels = dataset.get("relations") or []
++    reached = {r["target"] for r in rels if r["type"] == "Association" and r["source"] in own}
++    reached |= {r["source"] for r in rels if r["type"] == "Assignment" and r["target"] in own}
++    own.update(
++        (e["id"], e)
++        for e in (dataset.get("applicationInterfaces") or [])
++        if e.get("producer") == producer and e["id"] in reached
++    )
++    return own
+ 
+ 
+ def split_relations(dataset, target_ids, app_ids):
+-    """The published relations the target owns, and the cross-stage ones among them.
+-
+-    A relation belongs to the target when at least one endpoint is in it. Left out are
+-    those whose other endpoint is the same app in another stage: the current producer
+-    renders every stage in one run and resolves a Service consumer by host alone, so
+-    both stages' providers match and every consumer gets an edge from each. A
+-    single-stage run has one namespace's instances to choose from and draws the true
+-    edge only — the omission is a property of the handover, not a hole in the port.
++    """The published relations touching the target: its own, the cross-stage ones, and
++    those other producers draw, keyed by that producer.
++
++    A relation is drawn by the producer of the element it describes: a Serving edge by
++    its consumer's, which resolves the provider in its own render or through the
++    published set; every other type by its source's. One the target draws is the
++    target's to generate. One drawn outside it — IoTSupport's `keycloak —Serving→
++    <device>`, the edge a HelmCharts consumer draws from a provider that moves —
++    resolves against an id the move keeps, so it is listed, not compared.
++
++    Left out entirely are those whose other endpoint is the same app in another stage:
++    the current producer renders every stage in one run and resolves a Service
++    consumer by host alone, so both stages' providers match and every consumer gets an
++    edge from each. A single-stage run has one namespace's instances to choose from and
++    draws the true edge only — the omission is a property of the handover, not a hole
++    in the port.
+     """
+-    target, cross = {}, {}
++    producer_of = {
++        el["id"]: el["producer"]
++        for key, items in dataset.items()
++        if key != "relations" and isinstance(items, list)
++        for el in items
++        if isinstance(el, dict) and "producer" in el
++    }
++    target, cross, elsewhere = {}, {}, {}
+     for r in dataset.get("relations") or []:
+         if r["source"] not in target_ids and r["target"] not in target_ids:
+             continue
+         other = r["target"] if r["source"] in target_ids else r["source"]
+-        bucket = cross if other in app_ids and other not in target_ids else target
+-        bucket[r["id"]] = r
+-    return target, cross
++        if other in app_ids and other not in target_ids:
++            cross[r["id"]] = r
++            continue
++        drawer = r["target"] if r["type"] == "Serving" else r["source"]
++        if drawer in target_ids:
++            target[r["id"]] = r
++        else:
++            elsewhere.setdefault(producer_of.get(drawer, UNPUBLISHED), {})[r["id"]] = r
++    return target, cross, elsewhere
+ 
+ 
+ def normalize(element):
+@@ -205,6 +252,26 @@ def differences(published, generated, label, prepare=lambda e: e):
+     return lines
+ 
+ 
++class Handover(NamedTuple):
++    """One app and stage: what its current producer publishes, and what would change."""
++
++    target: dict  # element id -> element
++    relations: dict  # relation id -> relation, those the target draws
++    cross: dict  # relation id -> relation, across the stage boundary
++    elsewhere: dict  # producer -> {relation id -> relation} it draws against the target
++    differences: list  # one line per id lost, id added or field changed
++
++
++def handover(dataset, producer, app, stage, envelope):
++    """Compare `envelope` with what `producer` publishes in `dataset` for `app`'s `stage`."""
++    published = app_elements(dataset, producer, app)
++    target = {i: e for i, e in published.items() if e.get("environment") == stage}
++    target_rel, cross, elsewhere = split_relations(dataset, set(target), set(published))
++    diffs = differences(target, elements(envelope), "element", normalize)
++    diffs += differences(target_rel, relations(envelope), "relation")
++    return Handover(target, target_rel, cross, elsewhere, diffs)
++
++
+ def parse_args(argv=None):
+     parser = argparse.ArgumentParser(
+         prog="handover_equality.py",
+@@ -254,30 +321,31 @@ def main():
+         snapshot.write_text(raw, encoding="utf-8")
+         envelope = generate(repo, args.stage, args.producer, str(snapshot))
+ 
+-    published = app_elements(dataset, args.published_producer, app)
+-    target = {i: e for i, e in published.items() if e.get("environment") == args.stage}
+-    target_rel, cross = split_relations(dataset, set(target), set(published))
+-    generated, generated_rel = elements(envelope), relations(envelope)
++    result = handover(dataset, args.published_producer, app, args.stage, envelope)
+ 
+     print(f"handover equality — {app} {args.stage}")
+     print(f"  deploy repo  {source} at {head[:12]}")
+     print(f"  dataset      {args.dataset}")
+     print(
+-        f"  published    {args.published_producer}: {len(target)} elements, "
+-        f"{len(target_rel)} relations"
++        f"  published    {args.published_producer}: {len(result.target)} elements, "
++        f"{len(result.relations)} relations"
+     )
+     print(
+-        f"  generated    {args.producer}: {len(generated)} elements, {len(generated_rel)} relations"
++        f"  generated    {args.producer}: {len(elements(envelope))} elements, "
++        f"{len(relations(envelope))} relations"
+     )
+-    for rid in sorted(cross):
++    for rid in sorted(result.cross):
+         print(f"  excluded (crosses the stage boundary): {rid}")
++    for by in sorted(result.elsewhere):
++        for rid in sorted(result.elsewhere[by]):
++            print(f"  drawn by {by}: {rid}")
+ 
+-    diffs = differences(target, generated, "element", normalize)
+-    diffs += differences(target_rel, generated_rel, "relation")
+-    if diffs:
+-        for line in diffs:
++    if result.differences:
++        for line in result.differences:
+             print(line)
+-        raise SystemExit(f"{len(diffs)} difference(s): the handover does not hold as it stands")
++        raise SystemExit(
++            f"{len(result.differences)} difference(s): the handover does not hold as it stands"
++        )
+     print("  equal — every id matches; producer, logo and stats.image are all that differ")
+ 
+ 
+diff --git a/aac-tools/tests/support.py b/aac-tools/tests/support.py
+index 64caa4d..414fa93 100644
+--- a/aac-tools/tests/support.py
++++ b/aac-tools/tests/support.py
+@@ -1,7 +1,8 @@
+-"""Loading a command the image bakes, the way a test can reach it.
++"""Loading a command the image bakes, or a check beside it, the way a test can reach it.
+ 
+-`gen-architecture` is installed as a file on PATH, not as a package on PYTHONPATH, so
+-there is no module to import by name — the source is loaded from its path instead.
++`gen-architecture` is installed as a file on PATH, not as a package on PYTHONPATH, and
++a check is a script run by path, so there is no module to import by name — the source
++is loaded from its path instead.
+ """
+ 
+ from __future__ import annotations
+@@ -9,11 +10,11 @@ from __future__ import annotations
+ import importlib.util
+ from pathlib import Path
+ 
+-IMAGE = Path(__file__).resolve().parent.parent / "image"
++ROOT = Path(__file__).resolve().parent.parent
+ 
+ 
+-def load(name):
+-    spec = importlib.util.spec_from_file_location(f"aac_tools_{name}", IMAGE / f"{name}.py")
++def load(name, folder="image"):
++    spec = importlib.util.spec_from_file_location(f"aac_tools_{name}", ROOT / folder / f"{name}.py")
+     module = importlib.util.module_from_spec(spec)
+     spec.loader.exec_module(module)
+     return module
+diff --git a/aac-tools/tests/test_handover_equality.py b/aac-tools/tests/test_handover_equality.py
+new file mode 100644
+index 0000000..8521271
+--- /dev/null
++++ b/aac-tools/tests/test_handover_equality.py
+@@ -0,0 +1,307 @@
++"""The handover check: which published ids are the app's, and whose edges are whose.
++
++Hand-built envelopes in the shapes the federation publishes — no deploy-repo clone,
++chart repository or live dataset, the three things the check's end-to-end run needs.
++The cases are the published set's own: youtrack next to youtrack-mcp, elasticsearch's
++kibana host, dnsmasq's per-pod Services, keycloak serving IoTSupport's devices.
++"""
++
++from __future__ import annotations
++
++import unittest
++
++from .support import load
++
++he = load("handover_equality", folder="checks")
++gen = he.gen
++
++HC = "helm-charts"
++ARRAYS = he.ELEMENT_ARRAYS
++
++
++class _Published:
++    """A merged dataset under construction: elements by array, and relations."""
++
++    def __init__(self):
++        self.doc = {array: [] for array in ARRAYS}
++        self.doc["relations"] = []
++
++    def add(self, array, element):
++        self.doc[array].append(element)
++        return element["id"]
++
++    def instance(self, app, stage, workload, container, array="applicationComponents"):
++        ns = f"{app}-{stage}"
++        hint = f"{ns}-{workload}-{container}"
++        prefix = "ss" if array == "systemSoftware" else "app"
++        return self.add(
++            array,
++            {
++                "id": gen.composite(prefix, hint, f"{ns}.{workload}.{container}"),
++                "label": f"{workload}/{container} ({stage})",
++                "environment": stage,
++                "producer": HC,
++                "stats": {
++                    "release": gen.release_label(app, stage),
++                    "workload": workload,
++                    "container": container,
++                    "image": f"registry:5000/{container}:latest",
++                },
++            },
++        )
++
++    def service(self, app, stage, name, producer=HC):
++        hint = f"{app}-{stage}-{name}"
++        return self.add(
++            "applicationServices",
++            {
++                "id": gen.composite("svc", hint, f"svc.{hint}"),
++                "label": f"{name} ({stage})",
++                "environment": stage,
++                "producer": producer,
++            },
++        )
++
++    def interface(self, host, stage="prd"):
++        return self.add(
++            "applicationInterfaces",
++            {
++                "id": gen.composite("if", gen.kebab(host), f"key.{host}"),
++                "label": host,
++                "environment": stage,
++                "producer": HC,
++                "stats": {"url": host},
++            },
++        )
++
++    def product(self, name):
++        return self.add(
++            "systemSoftware", {"id": gen.product_id(f"ss:{name}"), "label": name, "producer": HC}
++        )
++
++    def elsewhere(self, array, bare, producer):
++        """An element another producer publishes, `bare` its `<kind>:<name>`."""
++        return self.add(array, {"id": gen.product_id(bare), "producer": producer})
++
++    def rel(self, rid, source, target, rtype):
++        self.doc["relations"].append({"id": rid, "source": source, "target": target, "type": rtype})
++        return rid
++
++    def link(self, instance_id, interface_id):
++        return self.rel(
++            f"rel:{he.hint(instance_id)}-behind-{he.hint(interface_id)}",
++            instance_id,
++            interface_id,
++            "Association",
++        )
++
++
++def _generated(published, element_ids, relation_ids, **changed):
++    """The envelope a deploy repo's render would write: these published ids, under its
++    own producer, with `changed` fields (`id -> {field: value}`) edited in."""
++    envelope = {array: [] for array in ARRAYS}
++    for array in ARRAYS:
++        for e in published.doc[array]:
++            if e["id"] in element_ids:
++                envelope[array].append(dict(e, producer="app-deploy", **changed.get(e["id"], {})))
++    envelope["relations"] = [r for r in published.doc["relations"] if r["id"] in relation_ids]
++    return envelope
++
++
++def _own_relations(published, element_ids):
++    return {
++        r["id"]
++        for r in published.doc["relations"]
++        if r["source"] in element_ids or r["target"] in element_ids
++    }
++
++
++class AppScopeTests(unittest.TestCase):
++    def test_a_neighbour_whose_name_extends_the_app_is_not_the_apps(self):
++        ds = _Published()
++        youtrack = ds.instance("youtrack", "prd", "youtrack", "youtrack", "systemSoftware")
++        issues = ds.interface("issues.webathome.org")
++        ds.link(youtrack, issues)
++        mcp = ds.instance("youtrack-mcp", "prd", "youtrack-mcp", "mcp-server")
++        mcp_if, mcp_home = ds.interface("youtrack-mcp"), ds.interface("youtrack-mcp.home")
++        mcp_ifs = {mcp_if, mcp_home}
++        for interface in mcp_ifs:
++            ds.link(mcp, interface)
++        shared = ds.elsewhere("applicationServices", "svc:youtrack-mcp", "youtrack-mcp-server")
++        ds.rel("rel:youtrack-mcp-prd-youtrack-mcp-exposes", mcp_if, shared, "Assignment")
++
++        self.assertEqual(set(he.app_elements(ds.doc, HC, "youtrack")), {youtrack, issues})
++        self.assertEqual(set(he.app_elements(ds.doc, HC, "youtrack-mcp")), {mcp} | mcp_ifs)
++
++        own = {youtrack, issues}
++        envelope = _generated(ds, own, _own_relations(ds, own))
++        self.assertEqual(he.handover(ds.doc, HC, "youtrack", "prd", envelope).differences, [])
++
++    def test_an_interface_off_the_apps_name_is_compared_field_by_field(self):
++        ds = _Published()
++        kibana = ds.instance("elasticsearch", "prd", "kibana", "kibana-app", "systemSoftware")
++        interface = ds.interface("kibana")
++        ds.link(kibana, interface)
++
++        self.assertIn(interface, he.app_elements(ds.doc, HC, "elasticsearch"))
++        own = {kibana, interface}
++        envelope = _generated(
++            ds, own, _own_relations(ds, own), **{interface: {"label": "kibana.home"}}
++        )
++        self.assertEqual(
++            he.handover(ds.doc, HC, "elasticsearch", "prd", envelope).differences,
++            [f"element {interface}: label: published 'kibana' != generated 'kibana.home'"],
++        )
++
++    def test_an_interface_is_the_apps_through_a_link_or_its_own_service_alone(self):
++        ds = _Published()
++        dns = ds.instance("dnsmasq", "prd", "dns", "dnsmasq", "systemSoftware")
++        headless = ds.interface("dns-headless.dnsmasq-prd.svc")
++        ds.link(dns, headless)
++        # A Service selecting on the StatefulSet pod name: the render places no
++        # instance behind it, so its exposed host is linked to nothing.
++        per_pod = ds.service("dnsmasq", "prd", "dns-0")
++        dns1 = ds.interface("dns1.home")
++        ds.rel("rel:dnsmasq-prd-dns1-home-exposes", dns1, per_pod, "Assignment")
++        # Named after the app, but neither linked nor assigned to anything of it.
++        stray = ds.interface("dnsmasq")
++        # Assigned to an in-house product's service, which every deployment shares.
++        shared = ds.elsewhere("applicationServices", "svc:dnsmasq-management-api", "docker-images")
++        through_shared = ds.interface("dns.home")
++        ds.rel("rel:dnsmasq-prd-dns-home-exposes", through_shared, shared, "Assignment")
++
++        self.assertEqual(
++            set(he.app_elements(ds.doc, HC, "dnsmasq")), {dns, headless, per_pod, dns1}
++        )
++        self.assertNotIn(stray, he.app_elements(ds.doc, HC, "dnsmasq"))
++
++    def test_every_stage_of_the_app_but_no_product_it_specializes(self):
++        ds = _Published()
++        prd = ds.instance("keycloak", "prd", "keycloak", "keycloak", "systemSoftware")
++        dev = ds.instance("keycloak", "dev", "keycloak", "keycloak", "systemSoftware")
++        product = ds.product("keycloak")
++
++        published = he.app_elements(ds.doc, HC, "keycloak")
++        self.assertEqual(set(published), {prd, dev})
++        self.assertNotIn(product, published)
++        self.assertEqual(
++            set(he.handover(ds.doc, HC, "keycloak", "prd", _generated(ds, {prd}, set())).target),
++            {prd},
++        )
++
++
++def _keycloak():
++    """keycloak's prd instance and the consumers the published set draws it serving."""
++    ds = _Published()
++    kc = ds.instance("keycloak", "prd", "keycloak", "keycloak", "systemSoftware")
++    device = ds.elsewhere(
++        "systemSoftware", "ss:infra-statistics-display-33zykxe5", "iotsupport-app"
++    )
++    # IoTSupport mints `rel:<uuid5>` ids and resolves keycloak through the published set.
++    iot_edge = ds.rel("rel:07e2447d-3978-5f39-b469-7e528294069f", kc, device, "Serving")
++    calendar = ds.instance("calendar-support", "prd", "calendar-support", "calendar-support-app")
++    hc_edge = ds.rel(f"rel:{he.hint(kc)}-serves-{he.hint(calendar)}-iam", kc, calendar, "Serving")
++    return ds, kc, iot_edge, hc_edge
++
++
++class RelationOwnershipTests(unittest.TestCase):
++    def test_a_serving_edge_into_a_consumer_outside_the_app_is_listed_under_the_consumers_producer(
++        self,
++    ):
++        ds, kc, iot_edge, hc_edge = _keycloak()
++        platform = ds.elsewhere("systemSoftware", "ss:microk8s-prd", "ansible")
++        own = ds.rel(f"rel:{he.hint(kc)}-platform", platform, kc, "Serving")
++
++        result = he.handover(ds.doc, HC, "keycloak", "prd", _generated(ds, {kc}, {own}))
++        self.assertEqual(set(result.relations), {own})
++        self.assertEqual(
++            {by: set(rels) for by, rels in result.elsewhere.items()},
++            {"iotsupport-app": {iot_edge}, HC: {hc_edge}},
++        )
++        self.assertEqual(result.differences, [])
++
++    def test_a_serving_edge_into_the_app_is_the_apps_to_draw(self):
++        ds, kc, _iot_edge, _hc_edge = _keycloak()
++        pooler = ds.instance("postgres-pas", "prd", "postgres", "pooler-rw", "systemSoftware")
++        db_edge = ds.rel(f"rel:{he.hint(pooler)}-serves-{he.hint(kc)}-db", pooler, kc, "Serving")
++
++        result = he.handover(ds.doc, HC, "keycloak", "prd", _generated(ds, {kc}, set()))
++        self.assertEqual(set(result.relations), {db_edge})
++        self.assertEqual(result.differences, [f"relation published but not generated: {db_edge}"])
++
++    def test_an_edge_another_producer_draws_from_its_own_element_is_its_sources(self):
++        ds = _Published()
++        youtrack = ds.instance("youtrack", "prd", "youtrack", "youtrack", "systemSoftware")
++        svc = ds.service("youtrack", "prd", "youtrack")
++        provides = ds.rel(
++            "rel:youtrack-prd-youtrack-provides-youtrack", youtrack, svc, "Realization"
++        )
++        client = ds.elsewhere(
++            "applicationComponents", "app:youtrack-mcp-server", "youtrack-mcp-server"
++        )
++        consumes = ds.rel("rel:youtrack-mcp-server-consumes-youtrack", client, svc, "Association")
++
++        result = he.handover(
++            ds.doc, HC, "youtrack", "prd", _generated(ds, {youtrack, svc}, {provides})
++        )
++        self.assertEqual(set(result.relations), {provides})
++        self.assertEqual(
++            {by: set(rels) for by, rels in result.elsewhere.items()},
++            {"youtrack-mcp-server": {consumes}},
++        )
++        self.assertEqual(result.differences, [])
++
++    def test_a_consumer_no_envelope_publishes_is_listed_as_unpublished(self):
++        ds, kc, _iot_edge, _hc_edge = _keycloak()
++        dangling = ds.rel("rel:keycloak-serves-gone", kc, "ss:gone,0", "Serving")
++
++        result = he.handover(ds.doc, HC, "keycloak", "prd", _generated(ds, {kc}, set()))
++        self.assertEqual(set(result.elsewhere[he.UNPUBLISHED]), {dangling})
++        self.assertEqual(result.differences, [])
++
++    def test_an_edge_to_the_same_app_in_another_stage_is_excluded(self):
++        ds = _Published()
++        prd = ds.instance("keycloak", "prd", "keycloak", "keycloak", "systemSoftware")
++        dev_consumer = ds.instance("keycloak", "dev", "keycloak", "config-cli")
++        across = ds.rel(
++            f"rel:{he.hint(prd)}-serves-{he.hint(dev_consumer)}", prd, dev_consumer, "Serving"
++        )
++
++        result = he.handover(ds.doc, HC, "keycloak", "prd", _generated(ds, {prd}, set()))
++        self.assertEqual(set(result.cross), {across})
++        self.assertEqual((result.relations, result.elsewhere, result.differences), ({}, {}, []))
++
++    def test_a_product_named_like_the_app_is_no_stage_of_it(self):
++        ds = _Published()
++        es = ds.instance("elasticsearch", "prd", "elasticsearch", "elasticsearch", "systemSoftware")
++        spec = ds.rel(f"rel:{he.hint(es)}-spec", es, ds.product("elasticsearch"), "Specialization")
++
++        result = he.handover(ds.doc, HC, "elasticsearch", "prd", _generated(ds, {es}, {spec}))
++        self.assertEqual((set(result.relations), result.cross), ({spec}, {}))
++        self.assertEqual(result.differences, [])
++
++
++class DifferenceTests(unittest.TestCase):
++    def test_an_addition_is_reported_and_a_kept_id_that_differs_is_a_difference(self):
++        ds = _Published()
++        kc = ds.instance("keycloak", "prd", "keycloak", "keycloak", "systemSoftware")
++        stats = ds.doc["systemSoftware"][0]["stats"]
++        added = gen.composite("if", "auth-ginbov-nl", "key.auth.ginbov.nl")
++        # producer, logo and stats.image may differ; label may not.
++        moved = {"label": "keycloak (prd, moved)", "logo": "keycloak"}
++        moved["stats"] = dict(stats, image="quay.io/keycloak/keycloak:26")
++        envelope = _generated(ds, {kc}, set(), **{kc: moved})
++        envelope["applicationInterfaces"].append({"id": added, "producer": "app-deploy"})
++
++        self.assertEqual(
++            he.handover(ds.doc, HC, "keycloak", "prd", envelope).differences,
++            [
++                f"element generated but not published: {added}",
++                f"element {kc}: label: published 'keycloak/keycloak (prd)' "
++                "!= generated 'keycloak (prd, moved)'",
++            ],
++        )
++
++
++if __name__ == "__main__":
++    unittest.main()
