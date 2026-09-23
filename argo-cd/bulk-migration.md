@@ -59,7 +59,7 @@ their own images:
 - `step-ca`;
 - `registry`: Argo and the hook pull from it;
 - `charts`: serves `homelab-shared`, the D17 trap;
-- `tfmirror`: check whether the hook's `terraform init` uses it;
+- `tfmirror`: the hook's `terraform init` goes through it (`argocd-hook/image/terraform.rc`);
 - `jenkins`, `cloudnative-pg`, `storage` (TF Secrets), `elasticsearch`;
 - `grafana`, `prometheus`, `mosquitto`: post-render, D18.
 
