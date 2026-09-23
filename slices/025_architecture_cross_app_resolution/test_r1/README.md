@@ -19,3 +19,15 @@ location to scratch, so `~/bulk-migration` was not touched.
   in the generator on hosts that resolve to no provider, with no artifact.
 - `gate-mutations.txt` — the gate on the snapshot with one field or one edge mutated.
 - `generator-mutations.txt` — six mutations of each generator against its own suite.
+
+## The push (procedure §4)
+
+Ansible `f2db525`, ArgoCDTools `ce5efb9` and AnsibleSpecs were pushed to `main`; HelmCharts is held
+(Ruling Q1) and was not.
+
+- `IaC/Build-Main` #199 on `f2db525`: SUCCESS (1m19s) — Lint, Terraform validate (both roots), Plan +
+  destroy check ("No changes. Your infrastructure matches the configuration."). Nothing converges.
+- `IaC/ArgoCDTools` #11 on `ce5efb9`: SUCCESS (2m01s) — rebuilds the aac-tools image on the floating
+  `:latest` tag; every deploy repo's AaC job picks the new generator up at its next build.
+
+No rebase was needed: origin had not moved on any of the three repos.
