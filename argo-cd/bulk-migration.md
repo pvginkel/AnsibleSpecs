@@ -63,14 +63,9 @@ their own images:
 - `jenkins`, `cloudnative-pg`, `storage` (TF Secrets), `elasticsearch`;
 - `grafana`, `prometheus`, `mosquitto`: post-render, D18.
 
-## Open (operator)
+## Rulings (2026-09-23)
 
-- **Image-pin model for everyone but KubeCoder.** Either (a) KubeCoder's per-build
-  `cicd.writeVersionPins`, which means editing ~17 Jenkinsfiles, with the shared-image
-  builders (DockerImages, SSEGateway) fanning out to every deploy repo that uses the image; or
-  (b) Argo CD Image Updater, which writes digests back to each deploy repo from the registry.
-  (b) is one new component and no Jenkinsfile work, and matches the brief's
-  industry-standard aim. Recommended: (b), decided before W2.
-- **ANS-82**: adopt in place (as KubeCoder did) as the default.
-- **Standing authorisation** for the unattended run: pushes, repo/job creation, state
-  surgery, no-destroy plans, Argo syncs, with the stop rules the run script enforces.
+- Bulk (D51); adopt in place (D52); the run is Claude's, bounded by its stop rules (D54).
+- Image pins (D53): app builds call `cicd.writeVersionPins`, and DockerImages drives its pins
+  from a per-image config. No promote pipelines: every stage follows `main`. No Image Updater.
+  W2 is unblocked.

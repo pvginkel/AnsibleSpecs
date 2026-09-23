@@ -612,8 +612,8 @@ the estate's IaC control host.
 ## Migration and endgame
 
 **D42 — The pilot is KubeCoder, dev stage end to end first, then prd.** Decided (CR; plan).
-Bulk-vs-gradual for the remaining apps is **O1** — the old plan's "gradual migration, one app at
-a time" line overstated what was decided.
+Bulk-vs-gradual for the remaining apps was **O1**, decided bulk (D51); the old plan's "gradual
+migration, one app at a time" line overstated what had been decided.
 
 **D43 — HelmCharts is deleted at the end of the project.** Decided 2026-08-12 (notes). The
 `release.yaml` registry under `configs/prd/` is a migration mechanism, not the target state.
@@ -639,10 +639,44 @@ without the app. KubeCoderDeploy and ArgoCDDeploy carry the first two; the steps
 are the operator's, are `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own
 architecture producer".
 
+**D51 — The remaining apps migrate in bulk (O1).** Decided 2026-09-23 (operator, after
+KubeCoder's cutover, ANS-102): "My preference is we do a bulk migration." A scripted run takes
+the apps in waves, recorded in [`bulk-migration.md`](bulk-migration.md). Phase C's plugin is not
+built first: KubeCoder's run record is the checklist the script mechanises. Critical-path apps
+are migrated attended, in daytime.
+
+**D52 — Adopt in place is the default migration mode (ANS-82).** Decided 2026-09-23 (operator).
+The Application takes over the live Helm release, as KubeCoder's did: no outage, and the
+pre-flight lists the Helm residue that survives the cutover. Recreating stays available per app
+where adoption cannot work.
+
+**D53 — Image pins: builds write them, DockerImages declaratively; no promote pipelines.**
+Decided 2026-09-23 (operator). Every image a deploy repo runs is pinned in its
+`config/<stage>/values.yaml`, and git is the deployed state.
+- **An app's own build** writes its pins with `cicd.writeVersionPins` (D45) in place of
+  `cicd.helmDeploy()`.
+- **DockerImages** does it declaratively. An image folder carries a config naming each deploy
+  repo, values file and YAML path that uses the image, and the build updates each one after a
+  push. Shared images (`ssegateway`, `samba`, `debian`, …) fan out that way.
+- **No stage promotes from another.** Every stage follows the deploy repo's `main`, and a build
+  pins all of them in one commit. KubeCoder's promote job (D2, D47) was that app's choice and
+  stays; DesignAssistant, the other app that promoted, is archived. Keycloak's `dev` supports
+  development, it does not test releases, so both its stages always deploy.
+- **Argo CD Image Updater is rejected** (operator: "I prefer not to use Argo CD Image Updater").
+
+**D54 — The bulk run is Claude's to execute.** Decided 2026-09-23 (operator: "Of course", to a
+standing authorisation for the run). For the migration only, Claude creates the deploy repos,
+Jenkins jobs and GitHub webhooks, pushes to them and to HelmCharts, Architecture, DockerImages
+and the app repos, performs the state surgery and the no-destroy plans, and syncs the
+Applications. This overrides the operator's-keystroke rule (`Ansible/CLAUDE.md`) for this
+purpose alone. What holds it in check is the script's stop rules. A plan that destroys or
+replaces, a pre-flight or diff outside the expected set, or a sync that does not reach
+`Synced Healthy` parks the app before its sync, or at WB-1 after it, and the run moves on. The
+critical-path apps stay attended.
+
 ## Open
 
-**O1 — How the remaining apps migrate** — gradually or in bulk. Deliberately undecided until the
-pilot and the adoption plugin exist.
+**O1** — decided: bulk (D51).
 
 **O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
 `recommend-resources`, `collect-versions` and the version-poller. Decided by endgame time;

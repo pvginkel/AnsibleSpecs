@@ -337,7 +337,7 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
 - **Destroy** (D28): the lifecycle's missing transition — `terraform destroy` from
   *undeployed*, webhook removal, unregistration. No design exists; leaving *undeployed* stays a
   human decision until this phase is designed and built. Interlocks: Trello **#66**.
-- **Remaining apps** (O1): gradual vs bulk, decided once the plugin exists. The post-render
+- **Remaining apps** (O1): decided bulk, without the plugin first (D51); the run is [`bulk-migration.md`](bulk-migration.md). The post-render
   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
 - **`recommend-resources` reworked to span deploy repos** (O2; from slice 008's close-out, B5).
   It walks `configs/prd/` and binds each release's chart source to the *config directory* name
