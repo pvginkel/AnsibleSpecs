@@ -104,3 +104,76 @@
     [plan-writer r2] [1m01s] [tool_use: Bash] Confirm init containers in backing set; parse-check plan
     [plan-writer r2] [1m05s] [tool_use: Bash] Re-run dry-run from Ansible; check wl_all
     [plan-writer r2] [1m14s] [tool_use: Bash] Commit plan r2 changes to spec repo
+    [plan-writer r2] [1m18s] [tool_use: Bash] Write and commit r2 verdict file
+    [plan-writer r2] [1m19s] [tool_use: ToolSearch] ToolSearch
+    [plan-writer r2] [1m21s] [text] The plan is done and committed. I'm filing one note about the dry-run parse che…
+    [plan-writer r2] [1m26s] [tool_use: mcp__fieldnotes__post] mcp__fieldnotes__post
+    [plan-writer r2] [1m28s] [tool_use: ToolSearch] ToolSearch
+    [plan-writer r2] [1m32s] [tool_use: mcp__fieldnotes__react] mcp__fieldnotes__react
+    [plan-writer r2] [1m42s] [text] Slice 025's plan is finished, with your answer to the one open question applied…
+    [plan-writer r2] [1m42s] [result] Done (102.1s): Slice 025's plan is finished, with your answer to the one open question applied…
+[15:53:01] [plan-writer r2] → done: Ruling D2 applied: P1's linking constraint now states that an interface links only serving containers, never init containers, with no marker field on instances;
+[15:53:01] [plan-reviewer r1] session starting
+    [plan-reviewer r1] [0s] [init] Session started (claude-opus-5-5)
+[15:53:02] [plan-reviewer r1] session e021536c-7577-458b-a49f-96a8e67b6f82 — transcript /home/ubuntu/.claude/projects/-work-Ansible/e021536c-7577-458b-a49f-96a8e67b6f82.jsonl
+    [plan-reviewer r1] [2s] [tool_use: Bash] List slice folder and read slice, plan, verification
+    [plan-reviewer r1] [4s] [tool_use: Read] slice.md
+    [plan-reviewer r1] [4s] [tool_use: Read] plan.md
+    [plan-reviewer r1] [5s] [tool_use: Read] verification.json
+    [plan-reviewer r1] [9s] [tool_use: Bash] Read refinement, questions, state, close-out list
+    [plan-reviewer r1] [9s] [tool_use: Bash] Read design philosophy and plan log
+    [plan-reviewer r1] [39s] [tool_use: Bash] List project components and plugin files
+    [plan-reviewer r1] [42s] [tool_use: Bash] Read plan template and task shape definitions
+    [plan-reviewer r1] [45s] [text] I've read the slice, plan, criteria and refinement. Next I'm checking the plan'…
+    [plan-reviewer r1] [45s] [tool_use: Bash] Read run-loop push rules and testing strategy
+    [plan-reviewer r1] [57s] [tool_use: Bash] Check repo heads and file layout
+    [plan-reviewer r1] [1m00s] [tool_use: Bash] Map aac-tools generator structure
+    [plan-reviewer r1] [1m02s] [tool_use: Read] gen_architecture.py (lines 100-229)
+    [plan-reviewer r1] [1m03s] [tool_use: Read] gen_architecture.py (lines 420-679)
+    [plan-reviewer r1] [1m09s] [tool_use: Read] gen_architecture.py (lines 699-1028)
+    [plan-reviewer r1] [1m12s] [tool_use: Read] gen_architecture.py (lines 1080-1620)
+    [plan-reviewer r1] [1m24s] [text] Still verifying citations. The generator code checks out so far. Next: the hand…
+    [plan-reviewer r1] [1m25s] [tool_use: Bash] Read handover equality check
+    [plan-reviewer r1] [1m25s] [tool_use: Bash] Map argo_migrate.py and read cmd_arch
+    [plan-reviewer r1] [1m49s] [tool_use: Bash] Map HelmCharts generator and check cited lines
+    [plan-reviewer r1] [1m52s] [tool_use: Read] gen_architecture.py (lines 200-224)
+    [plan-reviewer r1] [1m52s] [tool_use: Read] gen_architecture.py (lines 520-809)
+    [plan-reviewer r1] [2m04s] [tool_use: Bash] Read D50 in argo-cd decisions
+    [plan-reviewer r1] [2m28s] [tool_use: Bash] Read argo_migrate header and scaffold
+    [plan-reviewer r1] [2m34s] [tool_use: Bash] Inspect bulk-migration logs
+    [plan-reviewer r1] [2m37s] [text] Checked the migration tool and the handover logs. Next I'm reading the rest of …
+    [plan-reviewer r1] [2m38s] [tool_use: Bash] Read full handover-all log summary
+    [plan-reviewer r1] [2m45s] [tool_use: Bash] Extract per-app failure causes
+    [plan-reviewer r1] [3m49s] [text] Plan's diagnosis of the 16 held apps holds up against the logs. Now checking th…
+    [plan-reviewer r1] [3m51s] [tool_use: Bash] Verify HelmCharts release skip, Jenkinsfile, gitignore
+    [plan-reviewer r1] [3m54s] [tool_use: Bash] AST-compare the two generators; check image pull
+    [plan-reviewer r1] [4m02s] [tool_use: Bash] Diff differing functions without docstrings
+    [plan-reviewer r1] [4m11s] [tool_use: Bash] Read HelmCharts AaC Jenkinsfile and changed()
+    [plan-reviewer r1] [4m11s] [tool_use: Bash] Read run-loop push and test phase rules
+    [plan-reviewer r1] [4m18s] [tool_use: Bash] Read HelmCharts deploy Jenkinsfile head and args
+    [plan-reviewer r1] [4m22s] [tool_use: Bash] Check when resolve-helm-args yields non-empty args
+    [plan-reviewer r1] [4m25s] [tool_use: Bash] Read resolve_helm_args digest comparison logic
+    [plan-reviewer r1] [4m36s] [text] Found a likely problem with the plan's "pushing HelmCharts redeploys nothing" c…
+    [plan-reviewer r1] [4m38s] [tool_use: Bash] Inspect HelmCharts push helper and upstream releases
+    [plan-reviewer r1] [5m29s] [tool_use: Bash] Fetch published dataset and survey interface relations
+    [plan-reviewer r1] [5m46s] [tool_use: Bash] Fetch relation schema and look for ApplicationInterface rules
+    [plan-reviewer r1] [5m49s] [tool_use: Bash] List allowed relation types into ApplicationInterface
+    [plan-reviewer r1] [5m59s] [tool_use: Bash] Check AaC job triggers, handover tests, project gates
+    [plan-reviewer r1] [6m14s] [tool_use: Bash] Check svc-target recipes and keycloak relations
+    [plan-reviewer r1] [6m22s] [text] Verifying the last held app (zigbee2mqtt) has a scaffold/arch record, then writ…
+    [plan-reviewer r1] [6m22s] [tool_use: Bash] Look for zigbee2mqtt arch records
+    [plan-reviewer r1] [6m45s] [tool_use: Bash] Check HelmCharts deploy_cmd and project gates
+    [plan-reviewer r1] [6m51s] [tool_use: Bash] Check how sibling targets resolve gates
+    [plan-reviewer r1] [6m54s] [tool_use: Bash] Read Target gate resolution rules
+    [plan-reviewer r1] [7m28s] [tool_use: Bash] Check AaC HelmCharts job trigger
+    [plan-reviewer r1] [7m35s] [tool_use: Bash] Verify interfaces carry no in-cluster names; jenkins init case
+    [plan-reviewer r1] [8m15s] [tool_use: Bash] Verify IoTSupport citation; read close_out usage
+    [plan-reviewer r1] [8m20s] [tool_use: Bash] Read close_out append usage and current file
+    [plan-reviewer r1] [8m39s] [text] I have what I need. Pinning exact line numbers for the one blocking-grade findi…
+    [plan-reviewer r1] [8m40s] [tool_use: Bash] Pin line numbers for push finding
+    [plan-reviewer r1] [9m04s] [tool_use: Write] plan_review_r1.md
+    [plan-reviewer r1] [9m12s] [tool_use: Bash] Write verdict, append close-out suggestion, commit
+    [plan-reviewer r1] [9m23s] [text] The review is done and the verdict is **questions**. The plan itself is sound, …
+    [plan-reviewer r1] [9m23s] [result] Done (563.9s): The review is done and the verdict is **questions**. The plan itself is sound, …
+[16:02:26] [plan-reviewer r1] → questions: The plan is complete and correct against slice.md and the code, but it rests on a false claim that pushing HelmCharts redeploys nothing (any push rolls drifted 
+[16:02:26] REVIEW PENDING ADJUDICATION — /work/AnsibleSpecs/slices/backlog/025_architecture_cross_app_resolution/plan_review_r1.md

@@ -43,6 +43,20 @@
   serve — never a pod's init containers.** No marker field is added to instance elements. (An init
   container has exited before the Service answers; Jenkins' `install-homelab-ca` would otherwise
   yield a spurious second edge.)
+- Ruling Q1 (plan review r1, operator: "Agree"): **the run loop does not push HelmCharts.** The
+  bulk-migration session pushes it with `~/bulk-migration/hc-push.sh` under D54, as its first step
+  after this slice, then re-runs the handover check over the held apps. The two criteria that need
+  HelmCharts' patched producer published — the collect green after HelmCharts publishes, and the
+  proof over the 16 held apps — are owed after that push (Outstanding actions), not settled by the
+  test phase. ArgoCDTools is pushed normally (it rebuilds the aac-tools image, deploys nothing).
+- Ruling Q2 (plan review r1, operator: "Agree"): **the instance → interface link is an
+  `Association`**, uniformly from ApplicationComponent and SystemSoftware instances alike.
+  (`Assignment` is not allowed from either, `Composition` not from SystemSoftware, and `Serving`
+  would read like the cross-app dependency edges.)
+- Ruling A1 (plan review r1, operator: "Agree"): **the handover check's logic (P3) gets fixture
+  tests in ArgoCDTools' test suite** covering the scoping, the relation-ownership classification and
+  the name-prefix fix. P4 (the migration tool's side, Ansible `root`, no test verb) stays
+  review-only.
 - Settled, operator did not object: **no partial-run flag** is built; an unresolved host stays
   fatal (R3 — bootstrapping a new app is manual; existing apps cannot deadlock because the published
   set already holds every element).
@@ -96,9 +110,11 @@
   departed provider (jenkins → infra-statistics/intercom; postgres-pas → electronics-inventory,
   guacamole, iot); keycloak's loss (bare-UUID relation ids) is **not yet diagnosed** — the planner
   diagnoses it; if it is not a cross-app-resolution loss it is reported, not fixed here.
-- **Pushing a HelmCharts generator change redeploys nothing:** the HelmCharts `Jenkinsfile`'s
-  `changed()` acts only on chart sources, config trees and the shared Terraform surface, not
-  `tools/`.
+- **Any HelmCharts push can deploy to prd** (corrected by review r1 Q1): `IaC/HelmCharts` runs on
+  every push to `main` (`Jenkinsfile:35`), and a release deploys when it changed *or* its `args`
+  are non-empty (`:192-193`) — any image digest that moved since the last deploy, or an upstream
+  chart behind its latest (`resolve_helm_args.py:152,157,179-180`). A `tools/`-only push therefore
+  rolls out whatever has drifted. Hence the push hold below.
 - **The collector's `--relaxed`** (Architecture `tooling/collect.py`, used by prd's `AaC/Architecture`
   job) downgrades a dangling cross-producer reference to a warning. With no partial-run flag it
   does not interact with this slice.
@@ -122,6 +138,10 @@ cross-cutting — ruling D1 sets a new publishing pattern (an interface element 
 - The proof re-scaffolds before it gates: none of the held apps' deploy repos is in `/work` today
   (2026-09-23), so each is rebuilt with `argo_migrate.py scaffold` before `argo_migrate.py arch`
   runs on it.
+
+## Push holds
+
+- ../HelmCharts — any push to `main` deploys drifted releases to prd unattended; the bulk-migration session pushes it after this slice (Ruling Q1).
 
 ### P1 — The aac-tools generator publishes in-cluster interfaces and resolves hosts through them
 

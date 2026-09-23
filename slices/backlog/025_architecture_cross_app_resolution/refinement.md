@@ -112,8 +112,9 @@ None — the material left nothing only you can answer.
 - The handover check matches apps by name prefix, so youtrack pulls in youtrack-mcp and is flagged
   without a real loss; that quirk is fixed in the migration tool as part of this slice.
 - Order: HelmCharts' patch lands and publishes before any provider with inbound edges leaves it; the
-  aac-tools change lands in either order. Pushing a HelmCharts generator change redeploys nothing —
-  the deploy job acts only on chart, config and shared Terraform changes.
+  aac-tools change lands in either order. *Corrected by the plan review, operator agreed:* any
+  HelmCharts push can roll out drifted releases to prd, so the run loop does not push HelmCharts;
+  the migration session pushes it after the slice, and the proof is owed after that push.
 - Size: about four phases over three repos — the aac-tools generator (ArgoCDTools), the matching
   HelmCharts patch, the migration tool's handover check plus the proof over the held apps (Ansible),
   then the test and doc phases.
