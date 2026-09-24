@@ -163,7 +163,7 @@ Covers six of the nine upstream releases. The late-migration set is five: `grafa
 `prometheus` (post-render patches — a CMP or Kustomize-with-Helm when they migrate),
 `external-secrets` (post-rollout script), plus local charts `mosquitto` (post-render) and
 `nginx` (post-install) — those scripts run through the deploy CLI's `_run_hook`, a mechanism
-with no Argo equivalent designed yet. Wart to
+with no Argo equivalent designed yet (D59 replaces each script). Wart to
 document: the two `targetRevision` keys mean different things in one Application — a chart
 version and a git branch. Argo's naming, not fixable here.
 
@@ -624,7 +624,8 @@ migration, one app at a time" line overstated what had been decided.
 `release.yaml` registry under `configs/prd/` is a migration mechanism, not the target state.
 Meanwhile, prefer not to add new things to HelmCharts. What replaces its residual roles is
 **O2**; the two-ApplicationSet shape (D21) and the registry itself are revisited then. phases.md
-carries a target-shape section so the intermediates are visibly intermediate.
+carries a target-shape section so the intermediates are visibly intermediate. Amended by D60:
+the repository is archived, not deleted.
 
 **D44 — The namespace Terraform logic is deleted once the last app migrates.** Decided
 2026-08-12 (notes). The namespace module and whatever still handles it in the migration tooling
@@ -708,6 +709,49 @@ wrapper: it does not depend on the upstream chart, which stays source 0 with its
 parameters as `releases-local`, `hook.revision` included, since in a multi-source Application
 each source is built at its own revision. Every upstream-chart app gets one, Terraform or not,
 because the Namespace is chart content on both sets alike.
+
+**D57 — An upstream app's deploy repo names its upstream chart for the generator.** Decided
+2026-09-24 (operator: option (a), ANS-107). aac-tools' `gen-architecture` renders only the
+deploy repo's `chart/`, which for an upstream app is the companion (D56). The deploy repo's
+`.architecturerc` gains an `upstream:` block (`repo`, `chart`, `version`); the generator renders
+that chart with the stage's values and the companion beside it, and HelmCharts'
+`charts/<app>/architecture.yaml` annotation layer moves into the deploy repo with it. The
+version then lives twice, in `.architecturerc` and in the registry entry, so a check fails the
+build when the two disagree. Rejected: the generator reading the registry (it couples to what
+D43 retires) and moving the pin into the deploy repo (a D22 change).
+
+**D58 — The attended tier is Claude's too, started on the operator's green light.** Decided
+2026-09-24 (operator). Amends D54's "the critical-path apps stay attended": Claude runs them
+under the same stop rules, lowest risk first, and pings the operator on a snag rather than
+before each sync. The operator gives a green light before the tier starts and checks in along
+the way; if this environment is down, the operator resumes the run from their VM through
+ANS-103. Until the green light, a critical-path app is prepared at most up to its flip.
+
+**D59 — The chart hook scripts are replaced, not carried.** Decided 2026-09-24 (operator:
+follow the recommendation). Amends D18's late-migration set, which needs no CMP:
+- `mosquitto`'s post-render only stamps the `deployment` annotation, which the tool already
+  turns into a literal;
+- `grafana`'s and `prometheus`'s post-install scripts only print, and are dropped. Their
+  post-render binds a claim to a pre-created PV (`storageClassName: ""` plus `volumeName`): chart
+  values where the chart can say it, else an `ignoreDifferences` on that field;
+- `external-secrets`' post-rollout ConfigMap (`homelab-root-ca`) goes into the companion chart,
+  and its post-rollout ClusterSecretStore syncs in a later wave than ESO's webhook;
+- `nginx`'s post-install annotates the microk8s addon's `kubernetes-dashboard` Service in
+  `kube-system`. It is dropped: the annotations are already live and survive an addon re-apply
+  (they are not in its last-applied configuration). Rebuilding the cluster means re-adding them
+  by hand, which the nginx deploy repo's README records.
+
+**D60 — The disabled apps stay in HelmCharts, which is archived rather than deleted.** Decided
+2026-09-24 (operator). `open-webui`, `shell` and `design-assistant` are not migrated. At the
+end the operator archives the HelmCharts repository and removes its pipelines, leaving these
+three in place for when they come back. Amends D43's "deleted".
+
+**D61 — A migrated app is cleaned up after a 24-hour soak.** Decided 2026-09-24 (operator).
+Once an app has run 24 hours on Argo CD without incident, Claude deletes its HelmCharts copy
+(`configs/prd/<app>/`, and `charts/<app>` where no other release uses it) and its orphaned
+`sh.helm.release.v1.<app>-prd.*` Secrets, without asking per app. HelmCharts tests that read
+the app's files are rehomed first. DockerImages' `helmDeploy()` stage and HelmCharts'
+`gitToken` injection go last, once no Helm-deployed app needs them.
 
 ## Open
 
