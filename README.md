@@ -11,6 +11,7 @@ Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmChar
 - [`phases/`](phases/) — the homelab build-out, executed sequentially and now finished. Read-only history, still linked from slices for context.
 - [`reviews/`](reviews/) — point-in-time estate reviews. Latest: [`2026-09-jenkinsfile-review/`](reviews/2026-09-jenkinsfile-review/report.md) — every Jenkinsfile, the shared library and the UI-side job config (ANS-84), with its [work plan](reviews/2026-09-jenkinsfile-review/plan.md). Before that: [`2026-07-iac-review/`](reviews/2026-07-iac-review/README.md) — full IaC review (findings, GitOps/Argo CD app note, tech radar).
 - [`handovers/`](handovers/) — scratch working documents.
+- [`backstage/`](backstage/) — the Backstage (backstage.io) research spike of 2026-09-24: [`research.md`](backstage/research.md) is the verdict, the estate design and the proposed slicing; `notes/` holds the sourced product research behind it. No decision taken yet.
 
 ## Conventions
 
