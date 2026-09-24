@@ -713,12 +713,15 @@ because the Namespace is chart content on both sets alike.
 **D57 — An upstream app's deploy repo names its upstream chart for the generator.** Decided
 2026-09-24 (operator: option (a), ANS-107). aac-tools' `gen-architecture` renders only the
 deploy repo's `chart/`, which for an upstream app is the companion (D56). The deploy repo's
-`.architecturerc` gains an `upstream:` block (`repo`, `chart`, `version`); the generator renders
-that chart with the stage's values and the companion beside it, and HelmCharts'
-`charts/<app>/architecture.yaml` annotation layer moves into the deploy repo with it. The
-version then lives twice, in `.architecturerc` and in the registry entry, so a check fails the
-build when the two disagree. Rejected: the generator reading the registry (it couples to what
-D43 retires) and moving the pin into the deploy repo (a D22 change).
+annotation layer, `architecture.yaml`, gains an `upstream:` block (`repo`, `chart`, an exact
+`version`); the generator renders that chart with the stage's values and the companion beside
+it, and HelmCharts' `charts/<app>/architecture.yaml` moves into the deploy repo as that layer.
+The block is not in `.architecturerc`, as first proposed: Architecture's `tooling/fleet.py`
+fails a producer whose `.architecturerc` carries any key but `generated`, `sources` and
+`instructions`. The version lives twice, in `architecture.yaml` and in the registry entry;
+`argo_migrate.py` writes the registry's from the deploy repo's and refuses the two unequal at
+`verify`, `preflight` and `autosync`. Rejected: the generator reading the registry (it couples
+to what D43 retires) and moving the pin into the deploy repo (a D22 change).
 
 **D58 — The attended tier is Claude's too, started on the operator's green light.** Decided
 2026-09-24 (operator). Amends D54's "the critical-path apps stay attended": Claude runs them
