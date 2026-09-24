@@ -26,7 +26,7 @@ What it costs, honestly:
   (§5.3) — but yours.
 - The docs are not TechDocs-shaped yet. Every repo that should show docs needs an `mkdocs.yml`, an
   `index.md` and links that survive rendering (§5.6).
-- Three technical assumptions must survive a prototype before anything else is built (§8).
+- Two technical assumptions must survive a prototype before anything else is built (§8).
 
 What changes the cost/benefit versus the first read: **the upgrade burden can be delegated.** A
 KubeCoder timer runs an agent weekly that bumps, builds, smoke-tests and pushes on green, and files a
@@ -76,7 +76,8 @@ For `youtrack-prd`, one page:
   Relations: part of system `youtrack`, depends on the Postgres substrate, the backup server, the
   Ceph RBD PV — from the architecture relations.
 - **Argo CD** — sync and health, last syncs, revision history, per-resource status.
-- **CI/CD** — the `YoutrackDeploy` job's builds; on the System page, the app repo's build job too.
+- **CI/CD** — the deploy repo's jobs (`AaC/YoutrackDeploy`); on the System page, the app
+  repo's build job too.
 - **Kubernetes** — everything in namespace `youtrack-prd`: workloads, pods (with a one-shot log
   view), ingresses, jobs/cronjobs, PVCs, and the error summary.
 - **Metrics** — CPU/memory of the namespace from Prometheus; the app's Grafana alerts.
@@ -98,10 +99,9 @@ Details, versions and publish dates in [`notes/plugin-survey-2026-09-24.md`](not
 - `@backstage-community/plugin-argocd` — pick this over Roadie's: native multi-instance
   annotation, new-frontend-system support, released 2026-09-23. Requires the Kubernetes plugin
   (fine).
-- `@backstage-community/plugin-jenkins` — builds per job; user + API token. **Caveat**: the
-  README says it is restricted to GitHub-backed organisation-folder projects with Git SCM; the
-  estate's jobs are root-level per-repo jobs — a prototype must confirm the annotation
-  `jenkins.io/job-full-name: YoutrackDeploy` works against that layout.
+- `@backstage-community/plugin-jenkins` — builds per job; user + API token. The README's
+  "organisation folders only" restriction is stale: the backend handles standalone jobs and
+  plain folders (§5.5).
 - `@roadiehq/backstage-plugin-prometheus` — a graph card per entity from a `prometheus.io/rule`
   annotation; the collector can generate a per-namespace query for every Component. Roadie,
   last release April 2026 — the one first-wave plugin with a slower cadence.
@@ -243,9 +243,12 @@ carry).
 - Argo CD: the community plugin's backend talks to `argocd-prd-server.argocd-prd.svc` with the
   `backstage` account's token; `argocd/instance-name: prd`. Apps on the dev cluster are still
   managed by the prd Argo CD, so one instance covers both.
-- Jenkins: `jenkins.webathome.org` with the API token; Components annotate their deploy job,
-  Systems their build job. Job name = repo name at the Jenkins root is the estate convention; the
-  plugin's organisation-folder assumption is **prototype item P2**.
+- Jenkins: `jenkins.webathome.org` with the API token; Components annotate their deploy repo's
+  jobs, Systems their app repo's. The plugin's backend (`jenkinsApi.ts`, read 2026-09-24) treats
+  a job without children as a standalone project and a folder as the set of its children, and the
+  annotation takes a comma-separated list — so the README's "organisation folders only" is stale,
+  and a System can annotate a whole folder (`IaC`) to show every job in it. What the emitter
+  needs is a *derivable* job path per repo — §5.8.
 
 ### 5.6 TechDocs onboarding — the docs cleanup
 
@@ -302,6 +305,61 @@ documented self-hosted pattern) if build-on-view ever annoys.
 - **Notifications**: core plugin, in-app only in v1; the Telegram module is a later small module.
 - **Logs**: no plugin. Each Component links to Kibana Discover with `kubernetes.namespace:<ns>`
   pre-filtered, and the Kubernetes tab has one-shot pod logs.
+
+### 5.8 Jenkins layout — one rule the emitter can derive
+
+Not required by Backstage. The operator's standing rule is that the jobs may be reorganised, and
+this is the layout the catalog can derive job paths from without per-app data.
+
+The live tree on 2026-09-24 (112 jobs): `AaC/` — 58, one per repo, the one uniform folder;
+`IaC/` — 12, Ansible's own seven pipelines plus five other repos' builds (ArgoCDTools, Charts,
+HelmCharts, HomelabTerraformProvider, TerraformRegistry); `Firmware/` — 10; `KubeCoder/` —
+`Build-Main`, `Promote-PRD`; eight app builds at the root (CanonApp, DockerImages,
+FieldnotesApp, Ginbov, Home, NewsFilter, TrelloMcp, Webathome); nine product folders holding one
+to three builds (DHCP, ElectronicsInventory, Gitblit, IoTSupport, MyDownloads, ScanToPdf,
+SSEGateway, YouTrack, ZigbeeControl); `Archived/` — 4, their repos archived. Three conventions
+coexist for "the build of app X": at the root, as `X/X`, or as `X/<Repo>`. Names carry spaces
+(`IaC/Scheduled Certs`, `AaC/Home Assistant Fleet`, `IaC/IaC Docker Image`) and a branch-era
+vocabulary (`Build-Main`) that stopped meaning anything when every job came to build one branch —
+`IaC/Build-Main` is the on-push validation, not a build. `Ansible/.kubecoder/project.yaml` names
+`IaC/Deploy`, which does not exist.
+
+**The rule: `<Purpose>/<Repo>`.** The folder says what a run does — its blast radius; the job is
+named exactly after its GitHub repository; no spaces. Folders:
+
+- `AaC/<Repo>` — publishes the repo's architecture. Unchanged.
+- `Build/<Repo>` — builds and publishes artifacts, writes pins. The eight root jobs, the nine
+  product folders' members, `KubeCoder/Build-Main` → `Build/KubeCoder`, and the five
+  non-Ansible builds out of `IaC/` (HelmCharts lapses).
+- `Firmware/<Repo>` — device firmware. Unchanged; a second build class because it flashes devices.
+- `IaC/<Name>` — Ansible's own pipelines only, the ones that touch real infrastructure:
+  `OnPush` (today `Build-Main`), `Apply`, `Image` (today `IaC Docker Image`), `ScheduledCerts`,
+  `ScheduledDrift`, `ScheduledUpdate`, `ScheduledCalico`. The one folder whose members are not
+  repos; the `ansible` System annotates the folder and gets every job.
+- `Ops/<Repo>` — hand-started operational jobs: `Ops/KubeCoderDeploy` (today
+  `KubeCoder/Promote-PRD`, from `KubeCoderDeploy/Jenkinsfile.promote`) and
+  `Ops/YouTrackConfiguration` if that job applies configuration rather than building something.
+- `Archived/` — deleted, once its four `config.xml` are committed beside the September review.
+- A job whose name differs from its repository is renamed to match (`TrelloMcp` builds
+  `mcp-server-trello`).
+
+What the emitter then derives: Component `<app>-<stage>` → `AaC/<DeployRepo>`, plus
+`Ops/<DeployRepo>` when the deploy repo carries a promote; System `<app>` → `Build/<AppRepo>` or
+`Firmware/<AppRepo>` by element kind, plus `AaC/<AppRepo>`; System `ansible` → `IaC`.
+
+Cost of the move: Jenkins' *Move* keeps history and configuration, and push triggers match on
+the repository URL, so nothing re-registers. References to update, all found by grep on
+2026-09-24: `KubeCoder/.kubecoder/project.yaml` and `Ansible/.kubecoder/project.yaml`
+(`jenkins:`), `JenkinsPipelineUtils` (`build job: 'IaC/HelmCharts'` — lapses with HelmCharts),
+the version-poller's `config.yaml`, the KubeCoder cutover runbook and the two cert-expiry
+runbooks, and the promote Jenkinsfile's message text. One consequence to plan for: every image
+carries an `org.webathome.poller.pipeline` label naming the job that built it, and the poller
+reads that label to know which job to trigger on an upstream change — images built before the
+move name jobs that no longer exist until their next build. A rename map in the poller, or a
+rebuild pass (`Build/DockerImages` covers most images in one run), closes that.
+
+Handover-sized (UI moves plus reference edits), best done after HelmCharts is deleted and before
+slice 2 (§9), so the emitter derives job paths from day one.
 
 ## 6. Keeping it current: the timer-driven upgrade agent
 
@@ -388,11 +446,15 @@ Not needed now; needed at `/dev:plan-slice`. Recommendations first.
 - **D6 Search on Postgres.**
 - **D7 Docs scope for v1**: Ansible, Architecture, KubeCoder, DockerImages, HelmCharts,
   AnsibleSpecs; deploy repos excluded; app repos in a later fleet run.
+- **D8 Jenkins jobs move to `<Purpose>/<Repo>`** (§5.8): `AaC/`, `Build/`, `Firmware/`,
+  `IaC/`, `Ops/`; `Archived/` deleted; no spaces in job names. The operator has already said the
+  jobs may be reorganised; the ruling is on this particular layout.
 
 Prototype items the first slice must settle before the others are planned:
 
 - **P1** the namespace-only Kubernetes selector (§5.4).
-- **P2** the Jenkins plugin against root-level per-repo jobs (§5.5).
+- ~~P2 the Jenkins plugin against the current job layout~~ — resolved from the plugin's source
+  on 2026-09-24: standalone jobs and plain folders are supported (§5.5). What remains is D8.
 - **P3** the collector-emitted catalog renders the intended page for three apps of different
   shapes (a deploy-only app like `youtrack`, an app with a source repo like `electronics-inventory`,
   an infra-ish one like `dnsmasq`) without hand edits.
@@ -403,8 +465,9 @@ Cross-repo and Architecture-led context, so Ansible-led per the repo rule; route
 `/dev:triage` → `/dev:plan-slice` → `/dev:run-slice`, one at a time.
 
 1. **Stand-up and prototype** — `Backstage` + `BackstageDeploy`, OIDC, the Kubernetes/Argo CD/
-   Jenkins plugins, a hand-written catalog for three apps, P1–P3 answered. Ends with the page
-   in prd for three apps or a documented no-go.
+   Jenkins plugins, a hand-written catalog for three apps, P1 and P3 answered. Ends with the
+   page in prd for three apps or a documented no-go. The Jenkins layout change (D8) runs beside
+   it as a straightforward-changes handover, not a slice.
 2. **Catalog from Architecture** — the emitter, the schema additions, every app on the page, the
    home page from the web-UI interfaces, Prometheus/Grafana cards.
 3. **Docs onboarding** — D7's repos onto TechDocs, search on, the fleet run planned for the app
