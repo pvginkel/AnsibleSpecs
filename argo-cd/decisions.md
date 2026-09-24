@@ -751,8 +751,10 @@ three in place for when they come back. Amends D43's "deleted".
 
 **D61 — A migrated app is cleaned up after a 24-hour soak.** Decided 2026-09-24 (operator).
 Once an app has run 24 hours on Argo CD without incident, Claude deletes its HelmCharts copy
-(`configs/prd/<app>/`, and `charts/<app>` where no other release uses it) and its orphaned
-`sh.helm.release.v1.<app>-prd.*` Secrets, without asking per app. HelmCharts tests that read
+(`configs/prd/<app>/_shared/`, and `charts/<app>` where no other release uses it) and its
+orphaned `sh.helm.release.v1.<app>-<stage>.*` Secrets, without asking per app. The stage's
+`release.yaml` is the registry entry and stays: removing it deletes the Application, and the
+cascade deletes the namespace (D24, D27). HelmCharts tests that read
 the app's files are rehomed first. DockerImages' `helmDeploy()` stage and HelmCharts'
 `gitToken` injection go last, once no Helm-deployed app needs them.
 
