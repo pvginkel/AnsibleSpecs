@@ -71,7 +71,7 @@ their own images:
   from a per-image config. No promote pipelines: every stage follows `main`. No Image Updater.
   W2 is unblocked.
 
-## State (2026-09-24 19:24Z)
+## State (2026-09-24 19:50Z)
 
 Tool: `Ansible/support/argo-migrate/argo_migrate.py`; run record ANS-103.
 
@@ -93,24 +93,25 @@ only dnsmasq and design-assistant).
 **Attended tier (2026-09-24, on the operator's "Go", D58):** tfmirror, charts, registry,
 storage, dnsmasq, keycloak (prd and dev), jenkins, elasticsearch, cloudnative-pg (server-side,
 D62), step-ca, ceph-csi-rbd, ceph-csi-cephfs, csi-driver-smb, external-secrets (server-side),
-mosquitto and nginx are on Argo, 48 registry entries in all. Only dnsmasq's `dhcp` (the SSE
-rewrite) rolled at cutover, and elasticsearch's setup Job ran once under its hashed name; the
-first DockerImages pins rolled their pods once afterwards.
+mosquitto, nginx, and then grafana and prometheus are on Argo: 50 registry entries in all, every
+one `Synced Healthy`. Only dnsmasq's `dhcp` (the SSE rewrite) and grafana (its admin login moved
+to OpenBao's `eso/prd/grafana/prd/admin`, reset in the pod to that value) rolled at cutover, and
+elasticsearch's setup Job ran once under its hashed name; the first DockerImages pins rolled their
+pods once afterwards. prometheus's alertmanager StatefulSet was recreated with
+`--cascade=orphan` (D59) and adopted its pod without a restart.
+
+**Cleanup (D61):** the last batch synced at 19:45Z, so the one pass is due from 2026-09-25 19:45Z.
+It waits on the operator's ruling on the `configs/dev/<app>` entries.
 
 **Disabled in HelmCharts, not migrated (D60):** open-webui, shell, design-assistant.
 
-**Held, and why:**
-
-| App | Blocker |
-| --- | --- |
-| prometheus | five HelmCharts tests check its alert rules against other charts; rehome or retire them (operator) |
-| grafana | its chart generates the admin password; waits on the operator's `bao kv put` for an ESO-held one |
+**Held:** none.
 
 The architecture hold on homeassistant-mcp, calendar-support, git-sync, guacamole,
 infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack,
 youtrack-mcp, zigbee2mqtt, electronics-inventory and elasticsearch lifted on 2026-09-23 (D55,
 slice 025 close-out A1). HelmCharts was pushed and published the in-cluster interfaces, and `arch`
-holds for all 16 against the live set. Those still in a row above stay held for that row's reason.
+holds for all 16 against the live set.
 
 **Chart patterns the tool rewrites:** the `deployment` timestamp (a literal from the last Helm
 deploy); the SSE gateway's `randAlphaNum` callback secret (an ESO `Password` generator, created

@@ -738,7 +738,12 @@ follow the recommendation). Amends D18's late-migration set, which needs no CMP:
   checksum still rolls the pod on a config change;
 - `grafana`'s and `prometheus`'s post-install scripts only print, and are dropped. Their
   post-render binds a claim to a pre-created PV (`storageClassName: ""` plus `volumeName`): chart
-  values where the chart can say it, else an `ignoreDifferences` on that field;
+  values where the chart can say it. As run, no `ignoreDifferences` was needed. grafana's
+  `storageClassName: ""`, which its chart cannot render, is a drop like mosquitto's. prometheus's
+  alertmanager StatefulSet cannot name the volume, and its claim template is immutable and
+  replaced whole on apply: the first sync deleted the StatefulSet with `--cascade=orphan` and
+  created it without `volumeName`, adopting the running pod at its old revision. The PV is
+  pre-bound to the claim by `claimRef`, so the claim binds it either way;
 - `external-secrets`' post-rollout ConfigMap (`homelab-root-ca`) goes into the companion chart,
   and its post-rollout ClusterSecretStore syncs in a later wave than ESO's webhook;
 - `nginx`'s post-install annotates the microk8s addon's `kubernetes-dashboard` Service in
@@ -760,7 +765,9 @@ orphaned `sh.helm.release.v1.<app>-<stage>.*` Secrets, without asking per app. `
 settled before that pass. The stage's
 `release.yaml` is the registry entry and stays: removing it deletes the Application, and the
 cascade deletes the namespace (D24, D27). HelmCharts tests that read
-the app's files are rehomed first. DockerImages' `helmDeploy()` stage and HelmCharts'
+the app's files are rehomed first, or retired: the five prometheus alert tests and grafana's
+Keycloak login test were (operator, 2026-09-24), since deploy repos run no tests and the alert
+timings checked other apps' CronJobs, which a copy in PrometheusDeploy could not follow. DockerImages' `helmDeploy()` stage and HelmCharts'
 `gitToken` injection go last, once no Helm-deployed app needs them.
 
 **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
