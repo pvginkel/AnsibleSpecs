@@ -71,7 +71,7 @@ their own images:
   from a per-image config. No promote pipelines: every stage follows `main`. No Image Updater.
   W2 is unblocked.
 
-## State (2026-09-24 ~18:00Z)
+## State (2026-09-24 19:24Z)
 
 Tool: `Ansible/support/argo-migrate/argo_migrate.py`; run record ANS-103.
 
@@ -90,12 +90,12 @@ GitblitMCPServer, GitblitMCPSupportPlugin, IntercomServer, mcp-server-trello (br
 ZigbeeControl, ElectronicsInventory, IoTSupport and SSEGateway (whose `helmDeploy()` now serves
 only dnsmasq and design-assistant).
 
-**Attended tier:** prepared up to the flip and waiting on the operator's green light (D58).
-16 of 18 render identically and are published; `arch` holds for all 18; grafana (a generated
-admin password) and step-ca (install-only RBAC) wait on rulings. ANS-103's body carries the run
-order and the prerequisites, among them ArgoCDDeploy `f3d9785`: the project's cluster-scoped
-whitelist and the `syncOptions` pass-through (D62, proposed) for cloudnative-pg and
-external-secrets, whose CRDs exceed the last-applied limit.
+**Attended tier (2026-09-24, on the operator's "Go", D58):** tfmirror, charts, registry,
+storage, dnsmasq, keycloak (prd and dev), jenkins, elasticsearch, cloudnative-pg (server-side,
+D62), step-ca, ceph-csi-rbd, ceph-csi-cephfs, csi-driver-smb, external-secrets (server-side),
+mosquitto and nginx are on Argo, 48 registry entries in all. Only dnsmasq's `dhcp` (the SSE
+rewrite) rolled at cutover, and elasticsearch's setup Job ran once under its hashed name; the
+first DockerImages pins rolled their pods once afterwards.
 
 **Disabled in HelmCharts, not migrated (D60):** open-webui, shell, design-assistant.
 
@@ -103,9 +103,8 @@ external-secrets, whose CRDs exceed the last-applied limit.
 
 | App | Blocker |
 | --- | --- |
-| charts, registry, tfmirror, storage, dnsmasq, keycloak (prd, dev), jenkins, elasticsearch, cloudnative-pg, ceph-csi-*, csi-driver-smb, external-secrets, mosquitto, prometheus, nginx | attended: prepared, waiting on the green light (D58) |
-| grafana | the chart generates its admin password; `lookup` is empty under Argo's render (ruling) |
-| step-ca | the chart renders its bootstrap RBAC on `.Release.IsInstall`, which `helm template` always is (ruling) |
+| prometheus | five HelmCharts tests check its alert rules against other charts; rehome or retire them (operator) |
+| grafana | its chart generates the admin password; waits on the operator's `bao kv put` for an ESO-held one |
 
 The architecture hold on homeassistant-mcp, calendar-support, git-sync, guacamole,
 infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack,
