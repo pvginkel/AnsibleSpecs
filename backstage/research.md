@@ -355,8 +355,10 @@ the version-poller's `config.yaml`, the KubeCoder cutover runbook and the two ce
 runbooks, and the promote Jenkinsfile's message text. One consequence to plan for: every image
 carries an `org.webathome.poller.pipeline` label naming the job that built it, and the poller
 reads that label to know which job to trigger on an upstream change — images built before the
-move name jobs that no longer exist until their next build. A rename map in the poller, or a
-rebuild pass (`Build/DockerImages` covers most images in one run), closes that.
+move name jobs that no longer exist until their next build. **Ruled 2026-09-24: a rebuild pass
+follows the move** — every moved build job runs once from its new path (`Build/DockerImages`
+covers most images in one run), so the labels are current before the poller's next cycle; no
+rename map in the poller.
 
 Handover-sized (UI moves plus reference edits), best done after HelmCharts is deleted and before
 slice 2 (§9), so the emitter derives job paths from day one.
