@@ -2,7 +2,8 @@
 
 Scope: the whole ANS intake queue, `project: ANS State: New Type: Task` — every card on New, at
 the operator's request ("Everything on New"). 29 cards, no close-out cards among them. Fetched
-2026-09-24 with `get_issues` (comments included), in the order `search_issues` listed them.
+2026-09-24 with `get_issues` (comments included), in the order `search_issues` listed them. ANS-115
+was added by the operator mid-session ("I have a late one, ANS-115.") and is appended last.
 
 Everything below is verbatim from the tracker, with two mechanical rules: heading lines inside a
 card's own text carry two extra `#` (none occurred), and a live credential value would be replaced
@@ -778,6 +779,21 @@ Return URL in Keycloak:
 Login works when logging in through [https://argocd.home](https://argocd.home "‌").
 
 The error is a plain text result. My guess is it’s an ArgoCD error (page).
+
+### Comments
+
+None.
+
+## ANS-115 — Figure out how to run recommend resources
+
+- Reporter: pvginkel
+- Created: 2026-09-24
+- Updated: 2026-09-24
+- State: New · Type: Task · Tags: none
+
+### Description
+
+We need to figure out how to run recommend resources. I'm guessing the answer will be to just clone all deploy repos and do this using a script. I'm also guessing that we don't yet have a home for this tool.
 
 ### Comments
 
