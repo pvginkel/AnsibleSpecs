@@ -773,8 +773,8 @@ timings checked other apps' CronJobs, which a copy in PrometheusDeploy could not
 `gitToken` injection go last, once no Helm-deployed app needs them.
 
 **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
-Proposed 2026-09-24 (Claude, within the D54 run; ANS-103), for the operator to confirm.
-Client-side apply writes `kubectl.kubernetes.io/last-applied-configuration`, and the API
+Proposed 2026-09-24 (Claude, within the D54 run; ANS-103); decided 2026-09-24 (operator: follow
+the recommendation). Client-side apply writes `kubectl.kubernetes.io/last-applied-configuration`, and the API
 server refuses an annotation over 256 KiB, which Helm never writes. cloudnative-pg's
 `clusters` and `poolers` CRDs (275 KB and 352 KB as JSON) and external-secrets'
 `secretstores` and `clustersecretstores` (358 KB each) are over it, so those two apps sync
@@ -782,6 +782,16 @@ with `ServerSideApply=true`. The releases ApplicationSets' templatePatch passes 
 list through, guarded by `hasKey` so an entry without the key renders exactly as before
 (ArgoCDDeploy `f3d9785`). `argo_migrate.py` adds the key at `flip` when a rendered object is
 over the limit, and its preflight diffs those apps server-side.
+
+Server-side apply stays an opt-in per app, not the estate's default. After an app's first Argo
+sync, last-applied is Argo's own render, so client-side apply removes a field a chart drops.
+Stuck fields were a Helm-handover problem, and server-side apply would not clear that residue
+either, because Helm still owns those fields. Making it the default would move the field
+ownership of every object in the other apps, and each would need its preflight re-run
+server-side. It rejects a render with duplicate keys in a keyed list (two env vars of one name)
+that client-side apply accepts. Accurate diffs would take server-side diff's dry-run applies
+against the microk8s API servers. Revisit if Argo CD makes server-side apply its default, or a
+second reason appears besides oversized objects.
 
 ## Open
 
