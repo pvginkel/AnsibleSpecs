@@ -761,6 +761,17 @@ cascade deletes the namespace (D24, D27). HelmCharts tests that read
 the app's files are rehomed first. DockerImages' `helmDeploy()` stage and HelmCharts'
 `gitToken` injection go last, once no Helm-deployed app needs them.
 
+**D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
+Proposed 2026-09-24 (Claude, within the D54 run; ANS-103), for the operator to confirm.
+Client-side apply writes `kubectl.kubernetes.io/last-applied-configuration`, and the API
+server refuses an annotation over 256 KiB, which Helm never writes. cloudnative-pg's
+`clusters` and `poolers` CRDs (275 KB and 352 KB as JSON) and external-secrets'
+`secretstores` and `clustersecretstores` (358 KB each) are over it, so those two apps sync
+with `ServerSideApply=true`. The releases ApplicationSets' templatePatch passes an entry's
+list through, guarded by `hasKey` so an entry without the key renders exactly as before
+(ArgoCDDeploy `f3d9785`). `argo_migrate.py` adds the key at `flip` when a rendered object is
+over the limit, and its preflight diffs those apps server-side.
+
 ## Open
 
 **O1** — decided: bulk (D51).
