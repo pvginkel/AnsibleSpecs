@@ -154,10 +154,10 @@ prunes state for an unregistered app until D28 is designed.
       ApplicationSet, not one app. (`release.yaml` is the exception, not the rule: the glob
       matches 16 files out of 52 app-stage directories, so migrating a local-chart app usually
       means **creating** an entry rather than editing one — KubeCoder included.)
-- [ ] Point a no-sync Application at an existing live release and check the live-vs-git diff
-      reads sensibly — diff quality proven before Phase B stakes a cutover on it. **Still open**:
-      the procedure, against KubeCoderDeploy's dev stage, is the runbook's "Previewing a migrating
-      app's diff before its cutover" — an operator run owed ahead of B.5's diff review.
+- [x] Point a no-sync Application at an existing live release and check the live-vs-git diff
+      reads sensibly — diff quality proven before Phase B stakes a cutover on it. Proven by the
+      bulk migration (2026-09-23/24): every one of its 47 app-stages was flipped with autoSync
+      off, and its preflight diff read against the live release before the first sync.
 - [ ] SSO login works; local admin break-glass works (D9). SSO proven 2026-09-04; **break-glass
       still open** — never exercised.
 
@@ -167,7 +167,8 @@ cascade (D27).
 
 A.5 ran on **2026-09-13** against ProofDeploy (Trello #849 holds the record; the operator's
 runbook lifted from it is `/work/Ansible/docs/runbooks/argocd.md`). Everything checked above was
-witnessed; the three items left open are marked in place. D19's relative
+witnessed; the items left open are marked in place (the diff-quality item was proven later, by
+the bulk migration). D19's relative
 `../config/{stage}/values.yaml` and D17's homelab-CA trust on the repo-server both worked on the
 deployed version — neither fallback was needed. Two predictions reversed: Argo applies the
 `sync-wave: "-1"` Namespace during its dry-run pass, *before* the PreSync hook, so an app's
