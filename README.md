@@ -26,8 +26,12 @@ slice's own documents hold the detail.
 
 ## Pending
 
-Argo CD adoption — seven slices cut from [`argo-cd/phases.md`](argo-cd/phases.md) on 2026-08-13, in dependency order (A.1/A.2 parallel; A.3 gates A.4; all of Phase A gates Phase B), plus 014 triaged on 2026-08-15 from a gap the phases document never covered, re-cut on 2026-09-20 into 024, 014 and 025:
+Triaged 2026-09-24 from the ANS intake queue (the record: `handovers/triage_2026-09-24.md` at `1b6cd36`):
 
+- **[026](slices/backlog/026_aac_tools_generator_and_producers/slice.md)** — aac-tools and the producers: generator fixes (in-house service per container, Argo CD's capability and redis edges, the app-name equality), the annotation contract in `gen-architecture --help`, Alertmanager's Telegram edge, and every copied `arch-validate.py` onto the toolchain (minor).
+- **[027](slices/backlog/027_build_and_test_gates/slice.md)** — Build and test gates: a Groovy parse gate for JenkinsPipelineUtils, a test stage before ArgoCDTools publishes, promtool over PrometheusDeploy's alert rules, and retiring the modern-app-dev images (test gap).
+- **[028](slices/backlog/028_argo_cd_and_service_residuals/slice.md)** — Argo CD and service residuals: a standing sync-failed alert, login through `https://argocd/`, the PreSync hook's `terraform init`, the promote re-run after a failed tag push, and gitblit's stalled index (minor).
+- **[029](slices/backlog/029_helmcharts_decommission/slice.md)** — HelmCharts decommission: the D61 cleanup, the version-poller and helm-charts producer, `collect-versions` deleted and a home for `recommend-resources`, the Argo CD registry move, and the docs (improvement).
 
 ## Completed
 
