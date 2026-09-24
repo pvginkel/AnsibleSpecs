@@ -101,7 +101,7 @@ pods once afterwards. prometheus's alertmanager StatefulSet was recreated with
 `--cascade=orphan` (D59) and adopted its pod without a restart.
 
 **Cleanup (D61):** the last batch synced at 19:45Z, so the one pass is due from 2026-09-25 19:45Z.
-It waits on the operator's ruling on the `configs/dev/<app>` entries.
+`configs/dev/<app>` stays, and with it every `charts/<app>` a dev entry renders (D61).
 
 **Disabled in HelmCharts, not migrated (D60):** open-webui, shell, design-assistant.
 

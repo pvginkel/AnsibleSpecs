@@ -762,7 +762,9 @@ has run 24 hours on Argo CD without incident, Claude deletes, for every migrated
 (`configs/prd/<app>/_shared/`, and `charts/<app>` where no other release uses it) and its
 orphaned `sh.helm.release.v1.<app>-<stage>.*` Secrets, without asking per app. `configs/dev/<app>`
 (the chart-development tree) renders `charts/<app>` for most apps, so what happens to it is
-settled before that pass. The stage's
+settled before that pass: it stays (operator, 2026-09-24), and so does every `charts/<app>` a
+dev entry renders. For those apps (21 of the migrated ones) the pass removes only
+`configs/prd/<app>/_shared/` and the Helm leftovers. The stage's
 `release.yaml` is the registry entry and stays: removing it deletes the Application, and the
 cascade deletes the namespace (D24, D27). HelmCharts tests that read
 the app's files are rehomed first, or retired: the five prometheus alert tests and grafana's
