@@ -749,10 +749,13 @@ follow the recommendation). Amends D18's late-migration set, which needs no CMP:
 end the operator archives the HelmCharts repository and removes its pipelines, leaving these
 three in place for when they come back. Amends D43's "deleted".
 
-**D61 — A migrated app is cleaned up after a 24-hour soak.** Decided 2026-09-24 (operator).
-Once an app has run 24 hours on Argo CD without incident, Claude deletes its HelmCharts copy
+**D61 — The migrated apps are cleaned up in one pass, after a 24-hour soak.** Decided
+2026-09-24 (operator: "in one go, after the last batch has also soaked"). Once the last batch
+has run 24 hours on Argo CD without incident, Claude deletes, for every migrated app, its HelmCharts copy
 (`configs/prd/<app>/_shared/`, and `charts/<app>` where no other release uses it) and its
-orphaned `sh.helm.release.v1.<app>-<stage>.*` Secrets, without asking per app. The stage's
+orphaned `sh.helm.release.v1.<app>-<stage>.*` Secrets, without asking per app. `configs/dev/<app>`
+(the chart-development tree) renders `charts/<app>` for most apps, so what happens to it is
+settled before that pass. The stage's
 `release.yaml` is the registry entry and stays: removing it deletes the Application, and the
 cascade deletes the namespace (D24, D27). HelmCharts tests that read
 the app's files are rehomed first. DockerImages' `helmDeploy()` stage and HelmCharts'
