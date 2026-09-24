@@ -732,8 +732,10 @@ ANS-103. Until the green light, a critical-path app is prepared at most up to it
 
 **D59 — The chart hook scripts are replaced, not carried.** Decided 2026-09-24 (operator:
 follow the recommendation). Amends D18's late-migration set, which needs no CMP:
-- `mosquitto`'s post-render only stamps the `deployment` annotation, which the tool already
-  turns into a literal;
+- `mosquitto`'s post-render only stamps the `deployment` annotation, into the t3n subchart's
+  Deployment, which has no pod-annotation value. The render drops it; client-side apply leaves
+  the live annotation, which neither the render nor last-applied names, and the chart's config
+  checksum still rolls the pod on a config change;
 - `grafana`'s and `prometheus`'s post-install scripts only print, and are dropped. Their
   post-render binds a claim to a pre-created PV (`storageClassName: ""` plus `volumeName`): chart
   values where the chart can say it, else an `ignoreDifferences` on that field;

@@ -71,40 +71,41 @@ their own images:
   from a per-image config. No promote pipelines: every stage follows `main`. No Image Updater.
   W2 is unblocked.
 
-## State (2026-09-23 ~19:00Z)
+## State (2026-09-24 ~18:00Z)
 
 Tool: `Ansible/support/argo-migrate/argo_migrate.py`; run record ANS-103.
 
-**On Argo CD, autoSync on (26):** filebeat, models, pgadmin, fieldnotes, homeapps,
+**On Argo CD, autoSync on (28):** filebeat, models, pgadmin, fieldnotes, homeapps,
 iac-provisioner, newsfilter, source, scantopdf, ginbov-nl, webathome-org, media; then
 homeassistant-mcp, calendar-support, telegram-mcp, infra-statistics, intercom, trello-mcp,
-youtrack-mcp, git-sync, guacamole, youtrack, postgres-pas (batch 3); version-poller, its
-`GIT_TOKEN` now an ExternalSecret on `eso/prd/version-poller/prd/git`; zigbee2mqtt and
-electronics-inventory, their SSE Deployments replaced on the first sync (`Replace=true`, then
-dropped), the only cutovers that rolled a pod. Every cutover
-rendered identically to the live release, and none restarted a pod. guacamole was the first
-Secret-writing app to sync: its hook refreshed the `postgres-db` Secret through the
-per-namespace grant (ANS-49 proven live). media's samba PV moved into
-Terraform (an `import` block), because the `releases` project admits no PersistentVolume.
+youtrack-mcp, git-sync, guacamole, youtrack, postgres-pas (batch 3); version-poller;
+zigbee2mqtt and electronics-inventory (SSE, `Replace=true` on the first sync); and on
+2026-09-24 headlamp, the first upstream-chart app (D56, D57), and iot, its chart renamed from
+`iotsupport` in the deploy repo alone. Every cutover rendered identically to the live release;
+only the SSE Deployments rolled.
 
 **Pins (D53) live:** DockerImages' `deploy-pins.json`, and the Jenkinsfiles of FieldnotesApp,
 Home, NewsFilter, ScanToPdf, Ginbov, Webathome, MyDownloads, Architecture, YouTrackMCPServer,
-GitblitMCPServer, GitblitMCPSupportPlugin, IntercomServer and mcp-server-trello (branch `test`).
-Also ZigbeeControl, ElectronicsInventory, and SSEGateway's pin stage for those two (it keeps `helmDeploy()` for dnsmasq, iot and
-design-assistant). Proven
-end to end on the first builds.
+GitblitMCPServer, GitblitMCPSupportPlugin, IntercomServer, mcp-server-trello (branch `test`),
+ZigbeeControl, ElectronicsInventory, IoTSupport and SSEGateway (whose `helmDeploy()` now serves
+only dnsmasq and design-assistant).
 
-**Disabled in HelmCharts, not migrated:** open-webui, shell, design-assistant.
+**Attended tier:** prepared up to the flip and waiting on the operator's green light (D58).
+16 of 18 render identically and are published; `arch` holds for all 18; grafana (a generated
+admin password) and step-ca (install-only RBAC) wait on rulings. ANS-103's body carries the run
+order and the prerequisites, among them ArgoCDDeploy `f3d9785`: the project's cluster-scoped
+whitelist and the `syncOptions` pass-through (D62, proposed) for cloudnative-pg and
+external-secrets, whose CRDs exceed the last-applied limit.
+
+**Disabled in HelmCharts, not migrated (D60):** open-webui, shell, design-assistant.
 
 **Held, and why:**
 
 | App | Blocker |
 | --- | --- |
-| headlamp and the upstream set | D56's companion chart is live in ArgoCDDeploy; aac-tools' generator cannot render the upstream chart yet (the question is carded) |
-| storage, iot, keycloak | Terraform writes Secrets: ANS-49 is live and proven on guacamole's first sync. storage and keycloak are attended; iot waits on its chart rename (below) |
-| charts, registry, tfmirror, dnsmasq, nginx, jenkins, keycloak, ceph-csi-*, csi-driver-smb, external-secrets, step-ca, cloudnative-pg, storage | attended (critical path); charts, registry and tfmirror are otherwise ready |
-| mosquitto, nginx, grafana, prometheus | post-render or post-install hooks (D18) |
-| iot | chart named `iotsupport`: the producer ids need chart name = app |
+| charts, registry, tfmirror, storage, dnsmasq, keycloak (prd, dev), jenkins, elasticsearch, cloudnative-pg, ceph-csi-*, csi-driver-smb, external-secrets, mosquitto, prometheus, nginx | attended: prepared, waiting on the green light (D58) |
+| grafana | the chart generates its admin password; `lookup` is empty under Argo's render (ruling) |
+| step-ca | the chart renders its bootstrap RBAC on `.Release.IsInstall`, which `helm template` always is (ruling) |
 
 The architecture hold on homeassistant-mcp, calendar-support, git-sync, guacamole,
 infra-statistics, intercom, jenkins, keycloak, postgres-pas, telegram-mcp, trello-mcp, youtrack,
