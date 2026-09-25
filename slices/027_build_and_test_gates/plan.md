@@ -175,6 +175,42 @@ load time. Witness both failures before handing back.
   stays out of git.
 - The repo has no Jenkins job, so the manifest names none.
 
+**Done (P1).** JenkinsPipelineUtils `e7f51bc` on `phase/027-P1`: `.kubecoder/project.yaml` (one
+`root` component, no `jenkins:`) whose test verb is `cexec java mvn -B -q -f tests/pom.xml test`. It
+runs a Maven module under `tests/` whose JUnit suite loads every `vars/*.groovy` by name through the
+controller's trusted-shell setup, plus three controls. `/tests/target/` is gitignored.
+
+Later phases:
+- P2: `kc project test` now gates `vars/containerTemplates.groovy`. A syntax error or a construct
+  the CPS transform refuses in the new template turns it red.
+- P3: a one-off Jenkinsfile compile is a copy into `vars/`, with a probe name, and a `kc project
+  test` run in JenkinsPipelineUtils (see P3's text).
+- A `vars/` import of a jenkins-core or plugin class needs a class-only stub under
+  `tests/src/test/java/`, like `jenkins/model/Jenkins.java`. Neither is on the gate's classpath.
+
+Record:
+- The pin sits in `tests/pom.xml` `<properties>`. `groovy-cps.version` `4376.v30c8c00684a_3`
+  carries a comment: it is the controller's workflow-cps version and is bumped with it.
+  `groovy.version` 2.4.21 and `groovy-sandbox.version` 1.34.1 are copied from that version's pom.
+  guava 33.4.8-jre arrives transitively at the pom's version. `dependency:tree` shows only
+  groovy-cps, guava (+ failureaccess, listenablefuture, jspecify), groovy-all, groovy-sandbox and
+  junit-jupiter. groovy-cps resolved from `repo.jenkins-ci.org`.
+- Settled beyond the plan: the Groovy is `groovy-all` 2.4.21, not `groovy`. The pom leaves the
+  flavour to its user, and the controller's jenkins-core 2.568.3 ships groovy-all 2.4.21.
+  `vars/helmCharts.groovy:5` imports `groovy.json`, which the plain jar lacks, and the first run
+  went red on it. groovy-sandbox's transitive `groovy` is excluded.
+- The shell follows `CpsGroovyShellFactory.forTrusted()` at the tag: no sandbox, the three star
+  imports and a plain `CpsTransformer` with a safepoint. Trusted decorators are `NULL` by default.
+  `CpsScript`, `CpsClosure2` and `Safepoint` are workflow-cps plugin classes, so
+  `SerializableScript`, `CpsClosure` and a no-op safepoint stand in. `src/` and `vars/` are on the
+  loader's path, as `ClasspathAdder` puts them.
+- Controls: a syntax error is refused; `synchronized` is refused with "synchronized is unsupported
+  for CPS transformation"; a transformed method throws `CpsCallableInvocation` outside the engine.
+- Witnessed with `kc project test`, edits reverted. `def broken( {` in `vars/notify.groovy` gave
+  `[FAILED]` with "unexpected token". A `synchronized` block in `vars/gitUtils.groovy` gave
+  `[FAILED]`. A new `vars/gateProbe.groovy` ran as an 11th case with no gate edit and went red with
+  a `synchronized` block. The clean tree gives `[  OK  ]` over 10 cases.
+
 ### P2 — JenkinsPipelineUtils: a container template for the iac toolchain image
 
 Target: ../JenkinsPipelineUtils
@@ -203,8 +239,11 @@ kaniko runs, so nothing reaches `registry:5000`.
 - The only full check of a Jenkinsfile change is the job itself. The pipeline is scripted, so the
   declarative validator named in the grounding above does not apply. A replay runs the real job
   and needs the operator's OK. The push to `main` at the end of the run triggers the job, which
-  publishes both images when it is green. Prove what can be proven offline (P1's harness can
-  compile a Jenkinsfile as a one-off check). The first run after the push is the live witness.
+  publishes both images when it is green. Prove what can be proven offline. P1's harness compiles
+  a Jenkinsfile as a one-off: copy it to `vars/<probe>.groovy` in JenkinsPipelineUtils, run `kc
+  project test` there, and delete the copy. The harness uses the trusted shell, while the controller
+  runs a Jenkinsfile from SCM sandboxed, so this proves the transform accepts the file and says
+  nothing about script approvals. The first run after the push is the live witness.
 - The suites shell out to `git`, `helm` and `openssl`. The agent pod is not the KubeCoder sidecar:
   user, `HOME` and working directory all differ. Whatever the suites assume about their
   environment has to hold in the pod as well.
