@@ -337,7 +337,7 @@ Record:
 - Witnessed red: 8 rule mutations and 6 routing mutations; round 2, the r1 F1 cases on the old
   stand-in, its `[3m]` mutation (F2), and 7 mutations of the new hold.
 
-### P4 — KubeCoderDeploy: a promote re-run records a tagless release
+### P4 — KubeCoderDeploy: a promote re-run records a tagless release ✅ DONE 2026-09-25
 
 Target: ../KubeCoderDeploy
 
