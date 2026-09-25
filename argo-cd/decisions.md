@@ -789,11 +789,11 @@ synthetic series (slice 027), among them the starvation and wedged-counter episo
 node-memory test walked. Three retired tests timed a backup alert against another app's CronJob,
 which a test in PrometheusDeploy cannot follow; PrometheusDeploy's tests assert each rule's own
 thresholds and windows and model no schedule. The retired Alertmanager routing test's successor
-is slice 028's routing assertions against the rendered Alertmanager config, in the same test verb
-(its Ruling T1). The Keycloak login test restated the release's own values (its OIDC settings and
-ExternalSecret mapping), and its last case read HelmCharts' dev-cluster copy, which GrafanaDeploy
-cannot see. DockerImages' `helmDeploy()` stage and HelmCharts' `gitToken` injection go last, once
-no Helm-deployed app needs them.
+is `tests/alert-routing.py`, which walks the rendered Alertmanager config's route tree, in the
+same test verb (slice 028's Ruling T1). The Keycloak login test restated the release's own values
+(its OIDC settings and ExternalSecret mapping), and its last case read HelmCharts' dev-cluster
+copy, which GrafanaDeploy cannot see. DockerImages' `helmDeploy()` stage and HelmCharts'
+`gitToken` injection go last, once no Helm-deployed app needs them.
 
 **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
 Proposed 2026-09-24 (Claude, within the D54 run; ANS-103); decided 2026-09-24 (operator: follow

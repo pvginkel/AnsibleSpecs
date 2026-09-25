@@ -390,6 +390,11 @@ receivers, which is what both-or-`502` buys.
 - **Notifications to Alertmanager** (D7): the notifications engine's native alertmanager
   service, with `on-sync-failed` and `on-health-degraded` as the minimum trigger set. The chart
   ships the controller with empty `triggers`/`templates`, so both are authored, not toggled.
+  They are the failure event; the standing state is PrometheusDeploy's alert rules over the
+  application controller's metrics. The controller's metrics Service carries the
+  `prometheus.io/scrape` annotation Prometheus discovers targets by, and the controller exports
+  the `SyncError` application condition (`--metrics-application-conditions`), which is what
+  tells a failed auto-sync Argo no longer retries from drift or a retry in flight.
 - **SSO via Keycloak from day one** (D9); local admin stays as break-glass.
 - `controller.operation.processors: 2` (D8); `resourceTrackingMethod: annotation` (D4).
 
@@ -523,9 +528,11 @@ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** d
   (`Jenkinsfile.promote`, run by hand) performs it, each step only once the one before it
   succeeded: it creates every `prd-<n>` the commit's `config/prd/values.yaml` pins from `dev-<n>`,
   leaving one that already exists as it is (D47); fast-forwards `prd`, its first run creating
-  the branch; and writes the annotated `release-<m>` tag, `<m>` its own build number (D48). It
-  holds GitHub and registry access, no cluster credential. `Deploy-PRD` is deleted, not
-  rewritten — at prd's cutover, once the promote job has retagged.
+  the branch; and writes the annotated `release-<m>` tag, `<m>` its own build number (D48). A
+  re-run for the commit `prd` is already at finishes a promotion whose tag step failed: with no
+  `release-*` tag on the commit it writes the tag alone, and a recorded commit has nothing to
+  promote. It holds GitHub and registry access, no cluster credential. `Deploy-PRD` is deleted,
+  not rewritten — at prd's cutover, once the promote job has retagged.
 - **Rollback** (D36): revert on `main`, promote — dev follows, accepted. Emergency lever:
   force-move `prd` back to the previously promoted SHA, which loses nothing.
 - Every tag CI commits is a real `dev-<n>` or `prd-<n>`, never a `*-latest`, and the chart carries no
