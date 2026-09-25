@@ -364,6 +364,34 @@ repository. This is a hand run: the repo's test verb renders the chart and plans
 and nothing in it executes the pipeline script. The Jenkins run is owed after the operator's
 push (Ruling D3).
 
+**Done (P4).** KubeCoderDeploy `4dda8ce` on `phase/028-P4`: when `origin/prd` is already the
+resolved commit and no `release-*` tag points at it, `Jenkinsfile.promote` runs only *Resolving the
+commit* and *Recording the release*. It writes `release-<this build>` with the first line
+`release-<m>: <sha> was already on prd; recorded by <job> #<m>` and the seven references as
+usual. With a release tag on the commit it refuses:
+`prd is already at <sha>, released as <tags>: nothing to promote`.
+
+Later phases:
+- P5: nothing from P4.
+- Doc phase: three places still say a re-run after a failed *Recording the release* refuses:
+  KubeCoderDeploy README "Promotion" (its refusal list names "a `prd` already at the commit"), and
+  Ansible `docs/runbooks/kubecoder-cutover.md` :176 and :775-783. The re-run is now the recovery,
+  and the hand recipe is the fallback.
+
+Record:
+- The tag lookup is `git tag --list 'release-*' --points-at <sha>` in the job's fresh clone,
+  which fetches every tag. It matches the runbook recipe's hand-written tag too.
+- The non-fast-forward and existing-`release-<m>` checks still run on the record-only path. A
+  commit is its own ancestor, so the first passes there.
+- The tagger date is the recording build's; the message says the commit was already on prd.
+- Hand run: the Jenkinsfile ran under Groovy 4 (java toolchain) with stubbed steps and a real
+  `sh`. A local bare repo stood in for origin via `url.insteadOf`, and a pre-receive hook failed
+  the tag push. Ten builds covered promotion (creating prd, and after a record-only), record-only
+  (full and abbreviated sha: no crane call, no ref change but the tag), refusal on a job tag and on
+  the recipe's tag, non-fast-forward, and an existing `release-<m>` on the record-only path. The
+  harness is not committed.
+- Jenkins' linter, a Groovy parse only, accepts the file.
+
 ### P5 — GitSyncDeploy: gitblit's init container prunes stale branch entries from gb_lucene.conf
 
 Target: ../GitSyncDeploy
