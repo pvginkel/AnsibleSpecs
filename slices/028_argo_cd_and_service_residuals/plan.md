@@ -194,7 +194,7 @@ Record:
   as "some minutes after the failure (past Argo CD's own sync retries)", with no number.
 - `argo-cd/history.md` is unchanged: an amendment of this size carries no arc.
 
-### P2 — ArgoCDDeploy: the controller's application metrics reach Prometheus, and https://argocd is an allowed URL
+### P2 — ArgoCDDeploy: the controller's application metrics reach Prometheus, and https://argocd is an allowed URL ✅ DONE 2026-09-25
 
 Target: ../ArgoCDDeploy
 
@@ -262,6 +262,11 @@ Record:
   into a shared `server_names()`.
 - Each new assertion was witnessed red against a mutated values file or render. 69 → 70 objects;
   the architecture artifact is unchanged.
+- Review r1 (settled): v3.5.1 also sets `SyncError`, with no failed sync behind it, from the
+  auto-sync prune guard ("auto-sync will wipe out all resources", `controller/appcontroller.go:2431-2441`;
+  every generated app has `prune: true` and no `allowEmpty`) and on a failed `SetAppOperation`
+  (`:2458-2460`). Both leave the app OutOfSync with no operation running, so P3's standing
+  failed-sync alert covers them too, and its text should not claim the retries were spent.
 
 ### P3 — PrometheusDeploy: standing Argo CD alerts, and D7's events without a false "resolved"
 
