@@ -4,121 +4,182 @@
       "id": "V01",
       "area": "R1 — JenkinsPipelineUtils Groovy gate",
       "description": "JenkinsPipelineUtils: a real Groovy parse gate — \"a `.kubecoder/project.yaml` for JenkinsPipelineUtils whose test entry point parses every `vars/*.groovy`, which turns the estate-wide failure mode into a pre-push gate\". `kc project test` in the repo is green and compiles every `vars/*.groovy` through the CPS transform at the controller's own version, `com.cloudbees:groovy-cps` `4376.v30c8c00684a_3` (the controller's workflow-cps, per the plan review r1 Q1 ruling), with groovy-sandbox 1.34.1 and guava 33.4.8-jre as that artifact's pom declares, on Groovy 2.4.21. It compiles them as the controller's trusted-library shell does, outside the script-security sandbox. Its libraries are resolved by Maven on the Java toolchain from `https://repo.jenkins-ci.org/public/`, and neither Maven Central's groovy-cps 1.31 nor a hand-downloaded runtime is on the classpath (today the repo has no `.kubecoder/` and seven `vars/*.groovy` files).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The gate exists and compiles the library the way the controller does. `.kubecoder/project.yaml` gives JenkinsPipelineUtils a `root` component whose test verb is `cexec java mvn -B -q -f tests/pom.xml test`. The harness (`LibraryCompileTest`) builds a `GroovyClassLoader` with the star imports `com.cloudbees.groovy.cps`, `hudson.model`, `jenkins.model`, a plain `CpsTransformer` with a safepoint and no sandbox transformer (the trusted-library shell, outside script-security), and `src/` and `vars/` on the loader path; it loads each `vars/*.groovy` by name. The resolved classpath, read with `mvn dependency:tree` in the java sidecar, is groovy-cps 4376.v30c8c00684a_3 (+ guava 33.4.8-jre and its three helpers), groovy-all 2.4.21 and groovy-sandbox 1.34.1: no groovy-cps 1.31, no hand-downloaded runtime, and `repo.jenkins-ci.org` is the only repository the pom declares. The driver's sweep r2 has the gate green on the pushed tree (`[  OK  ]`); the gate is a syntax-and-transform check, and this verdict rests on the classpath and harness read plus the two reds in V02, not on that green alone.",
+      "evidence": [
+        "JenkinsPipelineUtils/.kubecoder/project.yaml:14 — test verb",
+        "JenkinsPipelineUtils/tests/pom.xml:12-24 (pins and their comment), :26-32 (the only <repository>, repo.jenkins-ci.org)",
+        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:37-54 (trusted shell), :58-76 (per-file load by name)",
+        "test phase r1: `cexec java mvn -B -f tests/pom.xml dependency:tree` → groovy-cps:4376.v30c8c00684a_3, guava:33.4.8-jre, groovy-all:2.4.21, groovy-sandbox:1.34.1, BUILD SUCCESS",
+        "sweeps/r2/JenkinsPipelineUtils_root_test.log — `[  OK  ]` at JenkinsPipelineUtils a43f45e"
+      ]
     },
     {
       "id": "V02",
       "area": "R1 — JenkinsPipelineUtils Groovy gate",
       "description": "The gate can fail: a syntax error in any `vars/*.groovy` turns it red, and so does a construct the CPS transform refuses at load time (e.g. a `synchronized` block). Both reds are witnessed.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Both reds re-witnessed this pass, on the pushed tree with the probe file removed afterwards (`git status` clean). A `vars/gateProbe.groovy` holding `def f() { synchronized (this) { 1 } }` turned `kc project test`'s Maven run red: `gateProbe.groovy: 1: synchronized is unsupported for CPS transformation @ line 1, column 11`. A `vars/gateProbe.groovy` holding `def broken( {` turned it red: `unexpected token: { @ line 1, column 13`. Both runs show `Tests run: 11, Errors: 1`. The suite also carries its own controls (`syntaxErrorIsRefused`, `synchronizedBlockIsRefused`, `methodBodiesAreCpsTransformed`), which run in every green pass.",
+      "evidence": [
+        "test phase r1: synchronized probe → `[ERROR] Tests run: 11, Failures: 0, Errors: 1` and the CPS refusal text",
+        "test phase r1: `def broken( {` probe → `[ERROR] Tests run: 11 … Errors: 1`, `unexpected token: {`",
+        "LibraryCompileTest.java:78-108 — the three controls"
+      ]
     },
     {
       "id": "V03",
       "area": "R1 — JenkinsPipelineUtils Groovy gate",
       "description": "\"Every\" holds going forward: a file added to `vars/` is compiled by the gate without the gate being edited.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The same probe runs showed a file added to `vars/` covered with no gate edit: with `vars/gateProbe.groovy` present the suite ran 11 cases (the 7 library files, the probe, and the 3 controls) against 10 without it, and the probe's case went red. The case list is `Files.list(vars/)` filtered to `*.groovy`, so it is directory-driven.",
+      "evidence": [
+        "LibraryCompileTest.java:58-69 — `libraryVariables()` lists vars/ at run time",
+        "test phase r1: `Tests run: 11` with the probe present; the driver's clean sweep has the 10-case run green"
+      ]
     },
     {
       "id": "V04",
       "area": "R1 — JenkinsPipelineUtils Groovy gate",
       "description": "The gate changes nothing Jenkins loads: none of its files sit under `src/`, `vars/` or `resources/`, and its build output is not tracked by git.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Nothing the gate adds sits under `src/`, `vars/` or `resources/`: the slice's tracked gate files are `.gitignore`, `.kubecoder/project.yaml` and `tests/{pom.xml,src/test/java/…}`; the only `vars/` change in the slice's diff is P2's `containerTemplates.groovy` addition (V08). `git check-ignore -v tests/target/x` resolves to `.gitignore:1:/tests/target/`, and no `tests/target` path is tracked (`git ls-files tests` lists three files). Jenkins loads the pushed `main`, which carries exactly that.",
+      "evidence": [
+        "`git ls-files` in JenkinsPipelineUtils: .gitignore, .kubecoder/project.yaml, tests/pom.xml, tests/src/test/java/…/Jenkins.java, …/LibraryCompileTest.java, vars/*.groovy (7)",
+        "`git diff origin/main..HEAD --stat` before the push: 6 files, only vars/containerTemplates.groovy under vars/",
+        "JenkinsPipelineUtils/.gitignore:1 — /tests/target/"
+      ]
     },
     {
       "id": "V15",
       "area": "R1 / plan review r1 Q1 ruling — transform pin",
       "description": "The gate's transform pin can be kept in step with the controller: the groovy-cps version and the versions taken from its pom sit in one place, which says they track the controller's workflow-cps and are bumped when it is upgraded, the way the iac toolchain's promtool pin names prd's server (DockerImages `1c1945a`, `kube-coder-iac-toolchain/Dockerfile`, the comment above the promtool `RUN`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The pin sits in one place, `tests/pom.xml`'s `<properties>` block. Its comment says `groovy-cps.version` is the controller's workflow-cps plugin version, bumped when the controller's workflow-cps is upgraded, and that `groovy.version` and `groovy-sandbox.version` are that groovy-cps pom's (guava arrives transitively at the pom's version). The iac toolchain's promtool pin, the model the item names, carries the same kind of comment above its `RUN`.",
+      "evidence": [
+        "JenkinsPipelineUtils/tests/pom.xml:12-24",
+        "DockerImages/kube-coder-iac-toolchain/Dockerfile:19 (PROMETHEUS_VERSION=3.14.0) and the comment above the promtool RUN at :113-115 — \"bump it with prd's server\""
+      ]
     },
     {
       "id": "V05",
       "area": "R2 — ArgoCDTools test stage",
       "description": "The IaC/ArgoCDTools job no longer publishes images without running the suite: it runs both images' suites — the same commands as the repo's local test verb — in the iac toolchain image, before either image build (today `Jenkinsfile:16-56` has only the clone and the two kaniko stages).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The ArgoCDTools Jenkinsfile has a `Test` stage between `Cloning repo` and `Build argocd-hook image`, in `container('iac')`, running `python3 -m unittest discover -b -s tests -t .` from `dir('argocd-hook')` then `dir('aac-tools')`. That is each component's local test verb without its `cexec iac` prefix. The live run (V07) shows exactly this order.",
+      "evidence": [
+        "ArgoCDTools/Jenkinsfile:30-42 (Test stage), :44+ (kaniko stages after it)",
+        "ArgoCDTools/.kubecoder/project.yaml — the components' test verbs",
+        "IaC/ArgoCDTools #15 log: `{ (Cloning repo)` line 150, `{ (Test)` line 177, `{ (Build argocd-hook image)` line 218, `{ (Build aac-tools image)` line 804"
+      ]
     },
     {
       "id": "V06",
       "area": "R2 — ArgoCDTools test stage",
       "description": "The consequence \"A commit that reds the repo's tests still publishes to registry:5000 on a push to main\" no longer holds: a red suite ends the build before either kaniko stage, so neither `argocd-hook` nor `aac-tools` is published from it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "By construction, not by a live red build. The Test stage precedes both kaniko stages inside the one scripted `node` block, and the Jenkinsfile contains no `try`/`catch`, `catchError`, `unstable`, `returnStatus` or `|| true` (grep, this pass), so a non-zero `sh` in either suite aborts the build before either kaniko stage runs. P3's record shows a failing control test making `unittest` exit 1 in the same image as uid 1000. A red job was not run: forcing one needs a replay of the real job, which the plan puts behind the operator's OK.",
+      "evidence": [
+        "ArgoCDTools/Jenkinsfile — stage order at :30 (Test), :44 (Build argocd-hook), :61 (Build aac-tools); no catch/returnStatus constructs",
+        "plan.md P3 Done record — failing-control witness (`unittest` exit 1)",
+        "IaC/ArgoCDTools #15 log — Test stage lines 177-216 precede the first kaniko line 218+"
+      ]
     },
     {
       "id": "V07",
       "area": "R2 — ArgoCDTools test stage",
       "description": "The first IaC/ArgoCDTools run after the push is green, and its log shows both suites running in the iac toolchain container before the image builds.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The first `IaC/ArgoCDTools` run after the push, build #15, finished SUCCESS (150 s). Its log shows stage `Test` running `python3 -m unittest discover -b -s tests -t .` in `argocd-hook` (`Ran 58 tests … OK`) then `aac-tools` (`Ran 63 tests … OK`) in the pod's `iac` container, before both kaniko stages. The pod spec in the log has the `iac` container on `registry:5000/kube-coder-iac-toolchain` with `runAsUser: 1000` and `TF_PLUGIN_CACHE_DIR` empty. The run loaded JenkinsPipelineUtils `main` at a43f45e, so the pushes went in the order close-out A3 asks for. Both images were published: `argocd-hook:15` and `aac-tools:15` are in the registry beside `latest`. The log carries the expected git stderr from the failure-path tests (`upload-pack: not our ref`, `Authentication failed for 'http://127.0.0.1:…'`); the suites still end `OK`.",
+      "evidence": [
+        "https://jenkins.webathome.org/job/IaC/job/ArgoCDTools/15/ — SUCCESS, `Loading library JenkinsPipelineUtils@main … revision a43f45e0fc5c`",
+        "build #15 log lines 177-216 (Test stage), 194 `Ran 58 tests`, 206 `Ran 63 tests`, 218/804 (kaniko stages), 1252 `Finished: SUCCESS`",
+        "registry:5000/v2/argocd-hook/tags/list and aac-tools/tags/list — both now list \"15\""
+      ]
     },
     {
       "id": "V08",
       "area": "R2 / D1 — shared container template",
       "description": "JenkinsPipelineUtils' `containerTemplates` offers the iac toolchain image (`registry:5000/kube-coder-iac-toolchain`) as a sidecar template, and the ArgoCDTools job takes its test container from it (today `vars/containerTemplates.groovy:12-76` has no kube-coder-* toolchain entry).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "`containerTemplates.iac_toolchain(String name)` exists on JenkinsPipelineUtils `main`: image `registry:5000/kube-coder-iac-toolchain`, `sleep infinity`, `alwaysPullImage`, `runAsUser: '1000'`, `TF_PLUGIN_CACHE_DIR` set to empty; `modern_app_dev` is untouched. The ArgoCDTools Jenkinsfile takes its test container from it (`containerTemplates.iac_toolchain('iac')`), and build #15's pod spec is that template's output.",
+      "evidence": [
+        "JenkinsPipelineUtils/vars/containerTemplates.groovy:46-50",
+        "ArgoCDTools/Jenkinsfile:17-22 — `containerTemplates.iac_toolchain('iac')`",
+        "IaC/ArgoCDTools #15 log: pod container `iac`, image registry:5000/kube-coder-iac-toolchain, runAsUser 1000, env TF_PLUGIN_CACHE_DIR=\"\""
+      ]
     },
     {
       "id": "V09",
       "area": "R3 — PrometheusDeploy alert rules",
       "description": "promtool in the iac toolchain so alert rules are unit-tested: PrometheusDeploy's local test verb runs `promtool check rules` with the iac toolchain's promtool, pinned to prd's Prometheus 3.14.0 (DockerImages `kube-coder-iac-toolchain/Dockerfile:19,116-122`), over the alerting rules as the chart renders them from `config/prd/values.yaml` (`:58-298`). There is no Jenkins stage.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "PrometheusDeploy's test verb runs `cexec iac tests/alert-rules.sh` (added to `.kubecoder/project.yaml`'s `test` list). The script renders the upstream chart's `templates/cm.yaml` at `architecture.yaml`'s `upstream` pin (prometheus 29.33.0) with `config/prd/values.yaml`, extracts the `alerting_rules.yml` key, and runs `promtool check rules` then `promtool test rules`. The iac sidecar's promtool is 3.14.0, the version pinned in DockerImages' iac toolchain and the one prd's Prometheus runs. No Jenkinsfile stage was added (the repo's only Jenkinsfile is `Jenkinsfile.architecture`, untouched).",
+      "evidence": [
+        "PrometheusDeploy/.kubecoder/project.yaml:20",
+        "PrometheusDeploy/tests/alert-rules.sh:1-17",
+        "`cexec iac promtool --version` → promtool, version 3.14.0",
+        "sweeps/r2/PrometheusDeploy_root_test.log — `cexec iac tests/alert-rules.sh [  OK  ]` at 5a680b4",
+        "AaC/PrometheusDeploy #5 — SUCCESS after the push (Jenkinsfile.architecture only)"
+      ]
     },
     {
       "id": "V10",
       "area": "R3 — PrometheusDeploy alert rules",
       "description": "promtool unit tests cover every alert in the rendered rules file, each with a firing case and a quiet case, and the memory-pressure group carries the scenarios slice 018 witnessed. The test verb runs them.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Five test files, one per rule group, cover all eight alerts, each with a firing case and a quiet case: NodeMemoryStalled/StallElevated/StallCounterWedged (node-memory-pressure.yml), NodeKubeReservedMissing, S3MirrorStale, YouTrackBackupStale, BackupOverdue and BackupWatcherBlind, each read from the `alertname:` assertions with `exp_alerts` and empty `exp_alerts` at matching times. The node-memory file carries the slice 018 scenarios: the 2026-08-02 starvation firing both stall alerts and not the wedge warning; a srvk8s2-shaped wedge firing only the wedge warning and holding through a memory dip; the reboot resolving it; a healthy memory-tight node staying quiet; each signal alone corroborating a stall; no carry-over of the wedge warning into a real stall after a reboot. The test verb runs them (`promtool test rules` in the script); the sweep is green on this tree.",
+      "evidence": [
+        "PrometheusDeploy/tests/alert-rules/{node-memory-pressure,node-reservation,s3-mirror,youtrack-backup,backup-freshness}.yml",
+        "node-memory-pressure.yml:9,51,93,137,190 — the scenario names",
+        "`grep alertname:` over tests/alert-rules — all eight alert names, each with a non-empty and an empty expectation"
+      ]
     },
     {
       "id": "V11",
       "area": "R3 — PrometheusDeploy alert rules",
       "description": "Neither consequence holds any longer. \"A PromQL precedence or matching mistake in an alert rule passes the gate\": a unit test catches it. \"The prd Prometheus rejects the reloaded rules file\" on a syntax or template error: the check catches it. Both reds are witnessed.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Both reds witnessed this pass against the local tree, reverted with `git checkout` (tree clean afterwards). (1) The precedence/threshold mistake: editing `config/prd/values.yaml:198` from `> 52 * 3600` to `> 48 * 3600` made `cexec iac tests/alert-rules.sh` print `FAILED` for `S3MirrorStale` (`fires once the newest success is over 52h old…` and `a CronJob that never succeeded counts from its creation…`, `exp:[] got:[…S3MirrorStale…]` at 2d5h). (2) The reload-rejection case: editing `:285` from `> 6 * 3600` to `> 6 *` made `promtool check rules` exit 1 with `BackupWatcherBlind: could not parse expression … parse error`, before any unit test ran. No rule was edited in the slice.",
+      "evidence": [
+        "test phase r1: 52→48 mutation → `FAILED: … alertname: S3MirrorStale, time: 2d5h`",
+        "test phase r1: `> 6 *` mutation → `rc=1`, `FAILED: … group \"backup-freshness\", rule 2, \"BackupWatcherBlind\": could not parse expression`",
+        "`git status --short` in PrometheusDeploy after each revert — empty"
+      ]
     },
     {
       "id": "V12",
       "area": "R3 — PrometheusDeploy alert rules",
       "description": "The rule tests are self-contained. They feed synthetic series and assert the rules' own thresholds and windows, and none depends on another repo's CronJob schedule or deadline.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "The rule tests feed synthetic series only and assert each rule's own thresholds and windows. The two CronJob rules (S3MirrorStale, YouTrackBackupStale) are exercised on the rules' own 52 h threshold; their test files say in the header that the CronJob's schedule and deadline it was set from are not modelled. The backup-freshness rules (BackupOverdue, BackupWatcherBlind) run on synthetic backup-server series with the rules' own validity and 6 h windows. No series reads another app's schedule (no `kube_cronjob_next_schedule_time` or spec series; the only cronjob series are `kube_cronjob_status_last_successful_time` and `kube_cronjob_created`, which the rules themselves read), and the script needs no other repo's files.",
+      "evidence": [
+        "PrometheusDeploy/tests/alert-rules/s3-mirror.yml:1-2 and youtrack-backup.yml:1-2 — headers: own 52 h threshold, schedule and deadline not modelled",
+        "PrometheusDeploy/tests/alert-rules/backup-freshness.yml:1-2 — synthetic series on the test's own clock",
+        "`grep -n -i schedule tests/alert-rules/*.yml` — only those two header comments",
+        "PrometheusDeploy/tests/alert-rules.sh — inputs are architecture.yaml, config/prd/values.yaml, tests/alert-rules/"
+      ]
     },
     {
       "id": "V13",
       "area": "D2 ruling — argo-cd D61",
       "description": "argo-cd D61 (`argo-cd/decisions.md:759-773`) no longer gives \"deploy repos run no tests\" as a standing reason. It records that deploy repos run no tests in Jenkins and that PrometheusDeploy's local test verb checks and unit-tests its alert rules. The retirement of HelmCharts' alert tests and grafana's Keycloak login test is still justified.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "argo-cd D61 now says deploy repos run no tests in Jenkins and that a deploy repo's tests run from its local test verb; PrometheusDeploy's verb checks the rendered rules with promtool and unit-tests every alert on synthetic series (slice 027). The six retired tests each keep a reason: three timed a backup alert against another app's CronJob, the node-memory test's starvation and wedge episodes are carried by the PrometheusDeploy tests, the routing test's successor is slice 028's assertions, and the Keycloak login test restated the release's own values and read a dev-cluster copy GrafanaDeploy cannot see. `argo-cd/history.md` records the moved position in \"Tests in deploy repos: none → none in Jenkins (D61)\". The D61 reasons that are the record's own words, not the operator's, are close-out Q1's open question, not a gap in this item.",
+      "evidence": [
+        "AnsibleSpecs/argo-cd/decisions.md:759-783 — D61 as rewritten (4e91587, 7844b5c)",
+        "AnsibleSpecs/argo-cd/history.md:283 — the section"
+      ]
     },
     {
       "id": "V14",
       "area": "R4 — split to slice 030 (D1 ruling)",
       "description": "Retire modern-app-dev and modern-app-dev-playwright: carried by slice 030 per the D1 ruling. This slice leaves the `modern_app_dev` template (`vars/containerTemplates.groovy:74-76`) and both images in place, so no pipeline loses a template it resolves.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "This slice leaves both images and the template in place: `modern_app_dev` is still at `vars/containerTemplates.groovy:89-90` and both `modern-app-dev` and `modern-app-dev-playwright` directories are still in DockerImages. The retirement is slice 030's (D1 ruling).",
+      "evidence": [
+        "JenkinsPipelineUtils/vars/containerTemplates.groovy:89-90 — `modern_app_dev`",
+        "`ls -d /work/DockerImages/modern-app-dev /work/DockerImages/modern-app-dev-playwright` — both present"
+      ]
     }
   ]
 }
