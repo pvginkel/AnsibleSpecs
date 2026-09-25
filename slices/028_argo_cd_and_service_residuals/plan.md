@@ -179,6 +179,21 @@ own amendment form (dated and attributed, like D47's at `:547`). The amendment r
 
 Ruling D1's words are the source. No new decision id, and no other decision changes.
 
+**Done (P1).** AnsibleSpecs `e03a4d8` on `phase/028-P1`: argo-cd D7 carries a blockquote
+amendment directly under its text ("Amended 2026-09-25 (operator, slice 028 Ruling D1; ANS-47)"),
+recording every point of this phase's list.
+
+Later phases:
+- P3: cite D7 (as amended) for the routing and the standing rules. The amendment says the two
+  events' expiry sends no "resolved" and does not name the mechanism, so the receiver/route
+  shape is P3's choice.
+
+Record:
+- Beyond the list, the amendment states the cause: the notifications engine sets no end time,
+  so Alertmanager expires the event on its resolve timeout. It gives the standing rules' window
+  as "some minutes after the failure (past Argo CD's own sync retries)", with no number.
+- `argo-cd/history.md` is unchanged: an amendment of this size carries no arc.
+
 ### P2 — ArgoCDDeploy: the controller's application metrics reach Prometheus, and https://argocd is an allowed URL
 
 Target: ../ArgoCDDeploy
