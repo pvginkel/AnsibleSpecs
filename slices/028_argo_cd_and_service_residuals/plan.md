@@ -159,7 +159,7 @@ routes them) and amends a spec-repo decision (D7); R4 and R5 land in two further
 - ../KubeCoderDeploy — Ruling D3: a push to `main` is a deploy-repo push the operator presses; the promotion job change is live from then on.
 - ../GitSyncDeploy — Ruling D3: a push to `main` restarts gitblit in prd (search and the MCP server briefly down); the operator pushes after the run.
 
-### P1 — D7 amended: the notification is the event, the rule is the state
+### P1 — D7 amended: the notification is the event, the rule is the state ✅ DONE 2026-09-25
 
 Target: ../AnsibleSpecs
 
