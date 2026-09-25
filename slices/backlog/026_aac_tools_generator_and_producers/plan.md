@@ -58,12 +58,17 @@ cross-cutting — slice.md's asks span ArgoCDTools' generator and its annotation
 
 ## Ordering constraints
 
-- The generator changes (R1, R2, the complete `--help` contract for R4) land and ArgoCDTools is pushed before any judgment-layer edit that relies on them (KubeCoderDeploy's mapping, ArgoCDDeploy's per-container realizes) and before the R4 pointer sweep. The old-vs-new regeneration of all 48 deploy repos happens before that push.
-- 026 runs after slice 027 has delivered (Ruling F1).
-- The run stops right after aac-tools is published; the operator restarts this environment (bringing `modern-app` and the published aac-tools) and relaunches; the KubeCoderDeploy mapping and every later deploy-repo gate come after that stop (Rulings D3, F3).
-- R6's sweep: batches of a few repos, each batch green and rolled out before the next; the device repos (and KitchenDisplay) last, one at a time (Ruling D1).
-- P4 opens by pushing ArgoCDTools, so it publishes P1–P3 exactly as P3's comparison covered them. P4–P6 commit to their deploy repos locally. P8's batches push those commits along with the pointer edits.
-- P8–P11 are one push schedule in the order D1 sets: deploy repos first, then carriers that roll nothing out, then carriers that redeploy prd, then device repos one at a time ([attachments/push-sweep.md](attachments/push-sweep.md)). Every deploy repo is pushed before any carrier whose app build pins into it (P10). P7's Architecture push is the run's own, after P8.
+- 026 runs only after slice 027 has delivered (Ruling F1). P4 checks this before the run's first push.
+- P1–P3 land in ArgoCDTools before P4 publishes aac-tools, and so does P3's regeneration of all 48 deploy repos with the old and the new generator. Publication comes before any judgment-layer edit that relies on the new generator and before any pointer is switched to `--help`.
+- The run stops once, at the end of P4, for the operator to restart this environment (Rulings D3 and F3). P5 opens by checking that the restart brought the published generator. Every deploy-repo gate after the stop runs the published generator, and P8 gates through `modern-app`.
+- P5–P7 commit to their deploy repos locally. P9a–P9c push those commits along with the pointer edits.
+- P9a–P13b are one push schedule, in the order Ruling D1 sets ([attachments/push-sweep.md](attachments/push-sweep.md)):
+  - the deploy repos;
+  - then the carriers that roll nothing out;
+  - then the carriers that redeploy prd;
+  - then the device carriers, one at a time.
+
+  Every deploy repo is pushed before any carrier whose app build pins into it. P10 enumerates the carriers and assigns them to P11–P13b before any carrier is pushed.
 
 ### P1 — The generator takes a Service's in-house service from the container behind it
 
@@ -83,7 +88,7 @@ the Service reaches is named only by the Service's `nginx.webathome.org/target-p
 annotation: KubeCoderDeploy `chart/templates/controller-service.yaml`, and
 `controller-deployment.yaml` for the containers and ports. With `kube-coder-tunnel-reclaim` also
 mapped (its product realizes its own service in DockerImages), `kubecoder.home` must still
-reference `svc:kubecoder-controller-api` and mint nothing. The mapping itself is P4's. Prove the
+reference `svc:kubecoder-controller-api` and mint nothing. The mapping itself is P5's. Prove the
 fix here against a scratch copy of the judgment layer. The phase's tests go in aac-tools' suite.
 
 ### P2 — The judgment layer scopes an image entry to containers, and env values sourced from a ConfigMap resolve
@@ -151,31 +156,68 @@ the pod last started, not a commit this phase names, and it cannot see P1–P3. 
 predated even the published generator: for PrometheusDeploy it wrote an artifact with 0 elements
 and exited 0. Run each generator from its commit under the sidecar's `python3`
 (`cexec aac-tools python3 <script> --stage … --producer … --repo …`), never through the
-sidecar's own `gen-architecture`. The same holds in P4–P6.
+sidecar's own `gen-architecture`. The sidecar becomes the published generator only with the
+restart at the end of P4.
 
-### P4 — Publish aac-tools, then map kube-coder-tunnel-reclaim in KubeCoderDeploy
+### P4 — Publish aac-tools, point the how-to at its `--help`, and stop for the restart
+
+Target: root
+
+**Before the run's first push (Ruling F1).** No repo the run will push carries unpushed commits
+that are not this slice's. That means every clone under `/work` the run's pushes reach:
+
+- ArgoCDTools, Architecture and Ansible;
+- every `*Deploy` repo;
+- every clone that carries `arch-validate.py`. On 2026-09-25 those were DockerImages, HelmCharts
+  and KubeCoder.
+
+Scratch clones made later start clean. This slice's commits are its phases' merges, on the
+run's record, and Ansible's `9021a2b` (the `modern-app` line, Ruling D3). If a repo carries any
+other commit, push nothing and hand back `blocked`, naming the repo and the commit. Slice 027
+was the known case on 2026-09-25: DockerImages `1c1945a` and Ansible `9edef16`, plus its planned
+changes to ArgoCDTools and PrometheusDeploy. If slice 029 has archived HelmCharts, it is left
+alone like the other archived carriers.
+
+**Publish.** Push ArgoCDTools' `main`, which holds P1–P3, and wait for `IaC/ArgoCDTools` to
+build that head green. From then on, `registry:5000/aac-tools:latest` is the new generator for
+every Jenkins build. A red build stops the phase. If origin moved since P3 and changed the
+generator, redo P3's comparison before pushing.
+
+**The how-to and the migration tool (R4).** Ansible's `docs/runbooks/argocd.md` names
+`gen-architecture --help` from the aac-tools toolchain as the judgment layer's schema. It does so
+in its schema line (`:290-291`) and in its `.architecturerc` template. The templates in
+`support/argo-migrate/argo_migrate.py` (`ARCHITECTURERC` at `:205-216`) carry the same pointer,
+so a future app inherits it. This is the phase's diff.
+
+- `.architecturerc` carries exactly its three keys, since any other key fails the producer
+  (`docs/runbooks/argocd.md:335-340`).
+- The runbook's app-name warning (`:330-334`) stays (Ruling D2).
+
+**The planned stop (Rulings D3 and F3).** Once publication is green and the diff is committed,
+hand back a `question`. It names the published head and asks the operator to restart this
+environment and relaunch the run. The restart brings the published aac-tools sidecar and
+`modern-app` together. The round the relaunch dispatches finds the work done, appends the
+done-record and hands back `done`.
+
+### P5 — KubeCoderDeploy maps kube-coder-tunnel-reclaim
 
 Target: ../KubeCoderDeploy
 
-**First, publish the generator.** Push ArgoCDTools' `main`, which holds P1–P3, and wait for
-`IaC/ArgoCDTools` to build that head green. From then on, `registry:5000/aac-tools:latest` is the
-new generator for every Jenkins build. A red build stops the phase. Do not push if ArgoCDTools'
-`main` carries unpushed commits that are not this slice's; slice 027 changes ArgoCDTools'
-Jenkinsfile. If origin moved in the meantime and changed the generator, redo P3's comparison
-before pushing.
+**First, check the restart (Ruling F3).** The sidecar's `gen-architecture --help` must print
+the contract P3 put there, including `served_by` and P2's container scoping. If it does not,
+the environment was not restarted after P4's publication: hand back `blocked`. From this point
+the sidecar is the published generator, and every deploy repo's `kc project test` runs it.
 
 **Then map the image (R1).** KubeCoderDeploy's judgment layer maps `kube-coder-tunnel-reclaim`
 to `app:kube-coder-tunnel-reclaim`. The comment that explains the gap (`architecture.yaml:21-25`)
-goes. A prd generation with the published generator shows no gap line for the image, and
-`kubecoder.home` still references `svc:kubecoder-controller-api`.
+goes. A prd generation shows no gap line for the image, and `kubecoder.home` still references
+`svc:kubecoder-controller-api`.
 
 - The commit lands on `main`. KubeCoderDeploy publishes from `prd`, so the published model shows
   the mapping only after the next promotion, and this slice does not promote.
-- The push rides P8.
-- The repo's `kc project test` runs the sidecar's generator, which predates P1–P3. Its green
-  says nothing about this change.
+- The push rides P9b.
 
-### P5 — Argo CD's controllers realize configuration management, and its redis serves them
+### P6 — Argo CD's controllers realize configuration management, and its redis serves them
 
 Target: ../ArgoCDDeploy
 
@@ -189,15 +231,15 @@ things:
   upstream wire, declared only on those containers (Ruling D4).
 
 The in-file comment explaining why `argocd` carries no capability (`architecture.yaml:21-26`)
-states the new truth. Prove it with a prd generation run with the published generator, run as
-P3 runs it.
+states the new truth. The repo's own gate generates prd with the published generator, and its
+artifact shows both.
 
 The capability is in the schema's enum (Architecture `schema/v0.1/enums/capabilities.yaml:168`).
 Architecture's `views/delivery.yaml:10` selects on it, and nothing in the estate realizes it
-today. Once P8 pushes this repo, `AaC/ArgoCDDeploy` publishes the result and Argo CD enters the
+today. Once P9a pushes this repo, `AaC/ArgoCDDeploy` publishes the result and Argo CD enters the
 Delivery view.
 
-### P6 — Alertmanager is served by the Telegram Bot API
+### P7 — Alertmanager is served by the Telegram Bot API
 
 Target: ../PrometheusDeploy
 
@@ -210,10 +252,10 @@ generator work.
 - `served_by` is passed through unresolved (`gen_architecture.py:1017`), so it takes the
   composite id. That id is `svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48`, as
   Architecture's `docs/architecture/external-services.yaml:29` declares it.
-- Prove it with the published generator, run as P3 runs it.
-- The push rides P8. Slice 027 also changes this repo.
+- The repo's own gate proves it with the published generator.
+- The push rides P9c.
 
-### P7 — Architecture points producers at the toolchain and the central update at `--help`
+### P8 — Architecture points producers at the toolchain and the central update at `--help`
 
 Target: ../Architecture
 
@@ -236,103 +278,161 @@ Target: ../Architecture
 - the service image ships it (`Dockerfile:62-72`);
 - the central update runs it from the staged directory (`update-architecture.md:190`).
 
-Architecture's gates, every component's, run through `cexec modern-app`. This environment
-carries that tool from the operator's restart before the run (Ruling D3; Ansible
+All of Architecture's component gates run through `cexec modern-app`. This environment carries
+that tool from the operator's restart at P4's stop (Ruling D3; Ansible
 `.kubecoder/config.yaml:106-109`). Architecture is not a declared repo here, so pod start runs no
-setup for it: the phase runs Architecture's `kc project setup` before its gate. If
+setup for it, and the phase runs Architecture's `kc project setup` before its gate. If
 `cexec modern-app` reports the tool unavailable, the restart has not happened, and the phase is
 blocked rather than landed ungated.
 
-### P8 — Every deploy repo points at `gen-architecture --help`
+### P9a — Deploy repos A–F point at `gen-architecture --help`
 
 Target: root
 
-R4's pointer moves everywhere it lives:
+R4's pointer moves into the deploy repos. The `.architecturerc` instructions of every `*Deploy`
+repo under `/work` name `gen-architecture --help` from the aac-tools toolchain as the judgment
+layer's schema. All 48 carry the unlocated "generator's docstring" pointer today. So do the two
+`architecture.yaml` headers that repeat it (ArgoCDDeploy's and KubeCoderDeploy's, line 3).
+`.architecturerc` keeps exactly its three keys (`docs/runbooks/argocd.md:335-340`).
 
-- **The deploy repos.** The `.architecturerc` instructions of all 48 `*Deploy` repos under
-  `/work` name `gen-architecture --help` from the aac-tools toolchain as the judgment layer's
-  schema. All of them carry the unlocated "generator's docstring" pointer today. So do the two
-  `architecture.yaml` headers that repeat it (ArgoCDDeploy's and KubeCoderDeploy's, line 3).
-- **The how-to.** `docs/runbooks/argocd.md` gets the same pointer, both in its schema line
-  (`:290-291`) and in its `.architecturerc` template.
-- **The migration tool.** The templates in `support/argo-migrate/argo_migrate.py` get it too:
-  `ARCHITECTURERC` at `:205-216`. A future app then inherits it.
+Each edit is committed on its repo's `main` and pushed as the sweep describes
+([attachments/push-sweep.md](attachments/push-sweep.md)). The deploy repos are split by name so
+that each phase stays well within the session cap (Ruling F4):
 
-This phase's own diff is the Ansible half. Each deploy-repo edit is committed on that repo's
-`main` and pushed by this phase in batches ([attachments/push-sweep.md](attachments/push-sweep.md)).
-The pushes carry P4–P6's commits in KubeCoderDeploy, ArgoCDDeploy and PrometheusDeploy.
+- this phase: names starting A–F (13 repos);
+- P9b: G–M (17);
+- P9c: N–Z (18).
 
-- `.architecturerc` carries exactly its three keys, since any other key fails the producer
-  (`docs/runbooks/argocd.md:335-340`).
-- The runbook's app-name warning (`:330-334`) stays (Ruling D2).
+This phase opens the sweep ledger with all 48 rows and pushes the deploy class's canary alone
+first (Ruling F5). ArgoCDDeploy's push carries P6's commit.
 
-### P9 — Ansible and the carriers that roll nothing out validate with the toolchain
+### P9b — Deploy repos G–M point at `gen-architecture --help`
+
+Target: root
+
+As P9a, for the deploy repos whose names start G–M, resuming from the ledger. KubeCoderDeploy's
+push carries P5's mapping.
+
+### P9c — Deploy repos N–Z point at `gen-architecture --help`
+
+Target: root
+
+As P9a, for the deploy repos whose names start N–Z, resuming from the ledger. PrometheusDeploy's
+push carries P7's commit. WebathomeOrgDeploy races its own pin loop (see the attachment).
+
+### P10 — The carriers are enumerated and assigned, and Ansible validates with the toolchain
 
 Target: architecture
 
-**Enumerate the carriers.** Re-enumerate the carriers of `arch-validate.py` with the GitHub code
-search, cross-checked against Architecture's `pipeline-producers.yaml`. The Grounding's
-classification is the starting point. A carrier it does not list is classed by reading its
-Jenkinsfiles before it is pushed. Record the set and each carrier's class in the sweep ledger.
+**Enumerate (Ruling F2).** List the carriers of `arch-validate.py` with gitblit's `find_files`
+`**/arch-validate.py`. Confirm the list against GitHub's own tree of every non-archived pvginkel
+repo, which is authoritative.
 
-**Migrate this phase's class (R6).** This covers Ansible and every carrier whose push rolls
-nothing out to production. HelmCharts and DockerImages are excepted: they are P10's and P11's
-own diffs. Each one loses its `scripts/arch-validate.py` and runs the toolchain's
-`arch-validate` wherever it ran the copy:
+- Gitblit's MCP is not among a headless session's tools. It answers JSON-RPC over HTTP at
+  `http://git/api/mcp/mcp`, with no auth. Its daily sync is incomplete: on 2026-09-25 it missed
+  UnderfloorHeatingController's copy.
+- A GitHub tree that comes back `truncated` is not a complete answer for its repo.
+- Two copies are expected and are not carriers: Architecture's canonical
+  `.claude/architecture/arch-validate.py`, and ArgoCDTools' `aac-tools/image/arch-validate.py`,
+  which is the toolchain image's source.
+- Archived repos are left alone: DesignAssistant, SomfyRemote, and HelmCharts if slice 029 has
+  archived it (Ruling F1).
 
-- its architecture Jenkinsfile, in `containerTemplates.aac_tools`;
-- its local gate, as `cexec aac-tools arch-validate`;
-- any instruction that names the script.
+**Classify and assign.** The Grounding's classification is the starting point. A carrier it does
+not list is classed by reading its Jenkinsfiles. Each carrier goes to a phase of its class:
 
-This phase's own diff is Ansible's: `Jenkinsfile.architecture:13`, `.kubecoder/project.yaml:51`
-and the script itself. Ansible's `architecture` component is the gate that proves it. The other
-carriers are committed on their default branch and pushed in batches
-([attachments/push-sweep.md](attachments/push-sweep.md)).
+- P11: rolls nothing out;
+- P12a–P12c: redeploys prd;
+- P13a–P13b: devices.
 
-- The 7 drifted copies differ in lint only, so nothing is carried back (Settled).
-- A carrier whose local gate moves onto the toolchain needs its KubeCoder environment to declare
-  `aac-tools`. Ansible's does (`.kubecoder/config.yaml:102-103`). An environment that doesn't
-  gets the declaration. That is config only; its restart is the operator's, so enter it in the
-  close-out report.
-- Carriers not cloned under `/work` are cloned to scratch. `GH_TOKEN` has repo scope.
+Within a class, spread the carriers so that each phase's expected wait stays around an hour
+(Ruling F4). The expected wait comes from the recent durations of everything a push starts,
+including the rollout or flash. Each class's first phase takes its canary. A class that
+outgrows its planned phases gets another phase inserted after them. Write the assignment into
+those phases' sections and into the ledger.
 
-### P10 — HelmCharts and the carriers whose push redeploys production
+**Ansible on the toolchain (R6).** Ansible migrates as every carrier does (the attachment's
+§ Migrating a carrier). Its `Jenkinsfile.architecture:13` and its `architecture` gate
+(`.kubecoder/project.yaml:51`) run the toolchain's `arch-validate`, and `scripts/arch-validate.py`
+goes. That is this phase's diff, and its gate proves it. The test phase pushes it with the rest
+of the slice's Ansible diff.
 
-Target: ../HelmCharts
+This phase pushes nothing.
 
-HelmCharts' copy goes the same way (R6). Its `Jenkinsfile.architecture:35` runs it, and this is
-the phase's own diff. HelmCharts' own generator and `.architecturerc` stay as they are.
+### P11 — The carriers whose push rolls nothing out validate with the toolchain
 
-Then the carriers the ledger classes as redeploying prd are migrated the same way and pushed in
-small batches. These are the twelve whose app build pins an image into an auto-synced deploy
-repo. Each batch's builds must be green, and every Application they pin into must be Healthy at
-the new pin, before the next batch starts ([attachments/push-sweep.md](attachments/push-sweep.md)).
-D1 accepts that each of these apps restarts once on unchanged code.
+Target: root
 
-### P11 — DockerImages and the device carriers, one at a time
+The carriers P10 assigns here move onto the toolchain (R6) as the attachment's § Migrating a
+carrier describes. The class canary is pushed alone first, then the rest in small batches.
 
-Target: ../DockerImages
+- HelmCharts' copy goes: its `Jenkinsfile.architecture:35` runs it. Its own generator and
+  `.architecturerc` stay, because its sources include its generator. An archived HelmCharts is
+  left alone (Ruling F1).
+- DockerImages' `Jenkinsfile.architecture:36` runs the copy, and its `.architecturerc`
+  instructions (`:11`) tell the central update to run it.
+- KubeCoder's push rebuilds and pins dev only; prd moves only by promotion.
 
-DockerImages' copy goes the same way (R6), and this is the phase's own diff:
+P10 names this phase's carriers here.
 
-- its `Jenkinsfile.architecture:36` runs the copy;
-- its `.architecturerc` instructions (`:11`) tell the central update to run the copy.
+### P12a — Carriers whose push redeploys production, first part
 
-The device carriers come last and one at a time: the seven firmware repos that flash over the
-air, and KitchenDisplay, which restarts a service on a Raspberry Pi. Each is migrated, pushed,
-and waited on until its flash upload (or KitchenDisplay's deploy) succeeds before the next
-starts ([attachments/push-sweep.md](attachments/push-sweep.md)). After the last one, the code
-search finds `arch-validate.py` in no active producer repo. Architecture's canonical copy and
-the archived DesignAssistant and SomfyRemote are the exceptions.
+Target: root
+
+The carriers P10 classes as redeploying prd move onto the toolchain (R6), as the attachment's
+§ Migrating a carrier describes. Their app build pins an image into an auto-synced deploy repo;
+the Grounding lists twelve of them. Pushes go in small batches. Before the next batch starts,
+each batch's builds must be green, including each carrier's own architecture build, and every
+Application they pin into must be Healthy at the new pin. D1 accepts that each of these apps
+restarts once on unchanged code. The class spans P12a–P12c (Ruling F4), and this phase pushes
+its canary alone first (Ruling F5).
+
+P10 names this phase's carriers here.
+
+### P12b — Carriers whose push redeploys production, second part
+
+Target: root
+
+As P12a, for the carriers P10 assigns here, resuming from the ledger.
+
+P10 names this phase's carriers here.
+
+### P12c — Carriers whose push redeploys production, third part
+
+Target: root
+
+As P12a, for the carriers P10 assigns here, resuming from the ledger.
+
+P10 names this phase's carriers here.
+
+### P13a — Device carriers, one at a time, first part
+
+Target: root
+
+The device carriers come last, one at a time (R6, Ruling D1). They are the firmware repos that
+flash over the air, and KitchenDisplay, which restarts a service on a Raspberry Pi. Each is
+migrated as the attachment's § Migrating a carrier describes, then pushed. The next starts only
+once its flash upload (for KitchenDisplay, its deploy) and its own architecture build have
+succeeded. The first is the class canary (Ruling F5). The class spans P13a–P13b (Ruling F4).
+
+P10 names this phase's carriers here.
+
+### P13b — Device carriers, one at a time, second part
+
+Target: root
+
+As P13a, for the carriers P10 assigns here, resuming from the ledger.
+
+P10 names this phase's carriers here.
 
 ## Not in scope
 
 - R3's app-name equality check (Ruling D2): no check is built; the runbook's warning stays.
 - Teaching the app builds to skip unchanged code (the reason an architecture-only push redeploys them) — a close-out observation.
-- Promoting KubeCoderDeploy to `prd`; restarting the Architecture environment; releasing central update runs (ARCH-14).
-- DesignAssistant and SomfyRemote (archived).
-- HelmCharts' own in-repo generator and its `.architecturerc` (its sources include its generator). HelmCharts' `arch-validate.py` copy **is** in R6's scope.
+- Promoting KubeCoderDeploy to `prd`; restarting the Architecture environment, or any carrier's environment whose config gains `aac-tools`; releasing central update runs (ARCH-14).
+- DesignAssistant and SomfyRemote (archived), and HelmCharts if slice 029 has archived it (Ruling F1).
+- HelmCharts' own in-repo generator and its `.architecturerc` (its sources include its generator). HelmCharts' `arch-validate.py` copy **is** in R6's scope while the repo is not archived.
 - ArgoCDTools' job publishing without running its suite (ANS-86, slice 027).
-- Restarting this environment during the run: a restart ends it. The one restart the slice needs is the operator's, before the run (Ruling D3).
+- Restarting this environment, except the one restart at P4's stop (Rulings D3 and F3). A restart ends the run, and the operator relaunches it.
 - Remedies after a stop: reverting a pin, reflashing a device. Those are the operator's.
 - The `AaC/Architecture` ↔ `AaC/WebathomeOrgDeploy` pin loop, a close-out observation. The sweep only works around it.

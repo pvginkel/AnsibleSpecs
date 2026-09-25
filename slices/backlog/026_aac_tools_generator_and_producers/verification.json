@@ -77,7 +77,7 @@
     {
       "id": "V10",
       "area": "R1/R2/R4 — the generator is published before its consumers",
-      "description": "Every deploy repo was regenerated before ArgoCDTools was pushed: 48 repos and 49 published stages, each with the published generator (origin/main, 8914c0f at planning) and with the new one. Every difference is accounted for as intended, and no repo that generated before fails with the new generator. ArgoCDTools was then pushed and IaC/ArgoCDTools built that head green, before any judgment-layer change that relies on the new generator was pushed and before any `.architecturerc` pointer switched to --help.",
+      "description": "Every deploy repo was regenerated before ArgoCDTools was pushed: 48 repos and 49 published stages, each with the published generator (origin/main, 8914c0f at planning) and with the new one. Every difference is accounted for as intended, and no repo that generated before fails with the new generator. Before that push, the run's first, no repo the run would push carried unpushed commits that were not this slice's (Ruling F1). ArgoCDTools was then pushed and IaC/ArgoCDTools built that head green, before any judgment-layer change that relies on the new generator was pushed and before any `.architecturerc` pointer switched to --help. The run then stopped for the operator's restart of this environment (Rulings D3, F3). Before any deploy-repo gate ran after the stop, the aac-tools sidecar's `gen-architecture --help` printed the new contract.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -93,7 +93,7 @@
     {
       "id": "V12",
       "area": "R6 — every copied arch-validate.py on the toolchain",
-      "description": "Cross-repo: migrate every copied arch-validate.py to the aac-tools toolchain. No active producer repo carries a copy of arch-validate.py. A GitHub code search finds only Architecture's canonical `.claude/architecture/arch-validate.py` and the archived DesignAssistant and SomfyRemote. Every former carrier runs `arch-validate` from the aac-tools toolchain wherever it ran the copy: its architecture Jenkinsfile, its local gate and any instruction naming the script. Each migrated carrier's architecture build is green on its migrated head. Where a carrier's local gate moved onto the toolchain, its KubeCoder environment declares aac-tools.",
+      "description": "Cross-repo: migrate every copied arch-validate.py to the aac-tools toolchain. No active producer repo carries a copy of arch-validate.py. GitHub's own tree of every non-archived pvginkel repo holds the file only at two paths. One is Architecture's canonical `.claude/architecture/arch-validate.py`. The other is ArgoCDTools' `aac-tools/image/arch-validate.py`, the toolchain image's source (aac-tools/Dockerfile:62 installs it as /usr/local/bin/arch-validate). The archived DesignAssistant and SomfyRemote keep theirs, and so does HelmCharts if slice 029 archived it first (Ruling F1). The carrier set was listed with gitblit's `find_files` `**/arch-validate.py` and confirmed against those GitHub trees (Ruling F2). Every former carrier runs `arch-validate` from the aac-tools toolchain wherever it ran the copy: its architecture Jenkinsfile, its local gate and any instruction naming the script. Each migrated carrier's architecture build is green on its migrated head. Where a carrier's local gate moved onto the toolchain, its KubeCoder environment declares aac-tools.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -101,7 +101,7 @@
     {
       "id": "V13",
       "area": "R6 — pushed under Ruling D1's stop rules",
-      "description": "The run pushed every carrier and deploy repo the sweeps touched, under Ruling D1:\n- small batches, each batch's builds green and its rollouts healthy before the next;\n- the device repos last, one at a time, each waiting for its flash upload (KitchenDisplay's deploy) to succeed;\n- a stop on the first red build, failed rollout or failed flash, reported to the operator.\nThe sweep ledger records every repo touched, its push class, the pushed sha and the outcome. No commit that is not this slice's was pushed.",
+      "description": "The run pushed every carrier and deploy repo the sweeps touched, under Ruling D1:\n- small batches, each batch's builds green and its rollouts healthy before the next;\n- each class's first repo pushed alone as a canary, and each carrier's own architecture build, which runs the migrated `arch-validate`, green before the sweep continued (Ruling F5);\n- the device repos last, one at a time, each waiting for its flash upload (KitchenDisplay's deploy) to succeed;\n- a stop on the first red build, failed rollout or failed flash, reported to the operator.\nThe sweep ledger records every repo touched, its push class, the pushed sha and the outcome. No commit that is not this slice's was pushed (Ruling F1).",
       "verdict": null,
       "rationale": "",
       "evidence": []

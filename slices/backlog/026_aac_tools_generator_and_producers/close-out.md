@@ -84,3 +84,12 @@ Twelve app repos build and pin into an auto-synced deploy repo on every push (pl
 
 **Provenance:** read | plan-writer, planning, r1 — plan.md Grounding (R6) and refinement.md D1
 **Disposition:**
+
+### S2 — The aac-tools catalog entry still tells agents to keep a repo's scripts/arch-validate.py copy
+
+KubeCoderDeploy chart/values.yaml:594-596, the KubeCoder catalog description of the aac-tools toolchain, says: "A repo that also carries scripts/arch-validate.py needs that copy for its own Jenkins pipeline, which runs outside this image — leave it where it is." Once R6 has run, no active producer carries the copy and Jenkins runs arch-validate from containerTemplates.aac_tools, so the sentence describes a setup that no longer exists. The plan leaves it alone. The file is under chart/, so a push there rolls KubeCoder dev, and the catalog text reaches prd only through a promotion. Both are outside the deploy-repo sweep's no-rollout pushes.
+
+**Consequence:** An agent that reads the environment's tool description is told to keep a copied validator, which the slice has just removed estate-wide, until someone edits the catalog entry and promotes KubeCoder.
+
+**Provenance:** read | plan-writer, r3, KubeCoderDeploy chart/values.yaml:594-596 (also shown by kc env describe)
+**Disposition:**
