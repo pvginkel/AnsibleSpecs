@@ -90,6 +90,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — GitSyncDeploy: the init container's lock cleanup now uses `find … -exec rm {} +` instead of `-delete`, which the plan said would stay unchanged · nit
+
+The plan's P5 constraint said "the existing lock cleanup is unchanged". The lock cleanup moved into chart/files/clean-lucene.sh so tests/clean-lucene.sh could run the exact script. The iac sidecar's /usr/bin/busybox (Ubuntu 1:1.37.0-4ubuntu1) is built without FEATURE_FIND_DELETE, so `find -delete` fails there with "find: unrecognized: -delete". The line now reads `\( -name 'write.lock' -o -name 'gb_lucene.conf.lock*' \) -exec rm {} +`. It matches the same files, and a failed rm still fails the init container. Upstream busybox 1.37 defaults both FEATURE_FIND_DELETE and FEATURE_FIND_EXEC_PLUS to y, so the official image runs either spelling.
+
+**Consequence:** none
+
+**Provenance:** witnessed, code-writer, P5 r1, GitSyncDeploy 22b6967
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -165,4 +174,13 @@ Build-Main commits image pins to KubeCoderDeploy main several times a day (#534-
 **Consequence:** A re-run started from defaults after a Build-Main landed promotes whatever main holds at that moment, and the earlier release loses its D48 record unless it is tagged by hand.
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
+**Disposition:**
+
+### S5 — GitSyncDeploy: pruning a branch's alias before Gitblit has deleted its documents leaves them in the search index · nit
+
+Gitblit deletes a branch's documents on the first index cycle after the branch leaves gitblit.indexBranch (web.luceneFrequency, default 2 mins). The alias is how it remembers to do that. If the pod restarts inside that window, for example right after git-sync's nightly run unsets a deleted branch, the init container drops the alias before the deletion ran. That branch's documents then stay in the index until a full reindex. Closing the window would take either no prune for an alias whose documents may still exist, which busybox cannot see, or a cycle-aware prune inside Gitblit. Both are outside Ruling R5's init-container scope.
+
+**Consequence:** Rarely, search keeps returning hits from a branch deleted on GitHub within about 2 minutes before a gitblit restart, until the index is rebuilt.
+
+**Provenance:** read, code-writer, P5 r1, Gitblit v1.10.0 LuceneService.updateIndex
 **Disposition:**

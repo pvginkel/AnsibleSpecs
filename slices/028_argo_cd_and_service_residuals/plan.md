@@ -433,6 +433,33 @@ Per Ruling T1 there is no Jenkins stage:
 
 The restart that proves it live is owed after the operator's push (Ruling D3).
 
+**Done (P5).** GitSyncDeploy `22b6967` on `phase/028-P5`: the `clean-lucene-locks` init
+container runs `chart/files/clean-lucene.sh` (`.Files.Get`; `sh -c <script> clean-lucene /git`):
+the lock cleanup, then the prune, logging `<conf>: dropped <ref>` per pair dropped. The test verb
+gains `cexec iac busybox sh tests/clean-lucene.sh`, which runs that same file.
+
+Later phases:
+- Test phase: live check after the push is `kubectl -n git-sync-prd logs deploy/gitblit -c
+  clean-lucene-locks`. On 2026-09-25 the volume held 490 aliases in 376 confs, none stale, so
+  expect no `dropped` lines unless a branch leaves `indexBranch` before the restart.
+- Doc phase: the GitSyncDeploy README names neither the prune nor `tests/`.
+
+Record:
+- Pinned image is Gitblit 1.10.0 (jar manifest; class constants match the v1.10.0 source). Live:
+  `<repo>.git/lucene/6_54/gb_lucene.conf`, alias key = SHA-1(ref).
+- An alias stays if its decoded value (quotes, `\` escapes, trailing comment) is listed. Under
+  `default` it also stays if it is a local branch at HEAD's commit (loose ref before packed-refs,
+  symrefs followed), or any existing local branch when HEAD does not resolve. Tags in
+  `indexBranch` never get aliases: Gitblit indexes only `refs/heads`.
+- A conf is rewritten only when an entry goes: new copy as `gb_lucene.conf.lock` (the lock cleanup
+  removes it after an interrupted run), owner and mode copied (Gitblit runs as uid 8117), `mv`.
+  Any failure fails the init container, as the lone `find` did.
+- Deviation from "lock cleanup unchanged": `-delete` became `-exec rm {} +`, same files. The
+  sidecar's Ubuntu busybox lacks `-delete`; upstream defaults both on, so the official image has both.
+- Test: PATH holds only busybox applet links; fixture repos listed, `default` + listed, dangling
+  HEAD, nothing stale. It failed on each of two hand-made breaks (no dangling-HEAD rule; no loose
+  refs).
+
 ## Not in scope
 
 - R3's fix in any form (Ruling D2): no hook-level `terraform init` retry, no provider pinning or
