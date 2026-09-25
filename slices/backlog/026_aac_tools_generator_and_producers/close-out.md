@@ -32,6 +32,28 @@ Ruling D2 rules the app-name equality check out of this slice and closes its car
 **Provenance:** read | plan-writer, planning, r1 — plan.md Ruling D2
 **Disposition:**
 
+### A2 — Settle V02 after the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; …
+
+V02 — The published architecture shows kube-coder-tunnel-reclaim mapped, with no gap line and no duplicate kubecoder.home service. KubeCoderDeploy's AaC build publishes from its `prd` branch, and this slice lands the mapping on `main` only.
+
+`verification.json` marks V02 owed after: the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; not done by this slice). The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V02 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:**
+
+### A3 — Settle V09 after the operator's restart of the Architecture KubeCoder environment and …
+
+V09 — A central architecture update session on a deploy repo runs `gen-architecture --help` from the Architecture environment's aac-tools toolchain as the judgment layer's schema.
+
+`verification.json` marks V09 owed after: the operator's restart of the Architecture KubeCoder environment and the release of central update runs (ARCH-14). The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V09 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
