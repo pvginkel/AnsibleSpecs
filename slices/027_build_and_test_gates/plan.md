@@ -366,6 +366,29 @@ The same clause also supports retiring grafana's Keycloak login test. This slice
 that retirement, and the record must still justify it. If the set records the moved position's
 narrative, it goes in `argo-cd/history.md`.
 
+**Done (P5).** AnsibleSpecs `4e91587` on `phase/027-P5`. argo-cd D61's test clause is rewritten in
+place. It now says: deploy repos run no tests in Jenkins, and a deploy repo's tests run from its
+local test verb. PrometheusDeploy's verb checks the rendered rules with promtool and unit-tests
+every alert on synthetic series (slice 027). Each of the six retired HelmCharts tests keeps a reason
+of its own. `argo-cd/history.md` gains the section "Tests in deploy repos: none → none in Jenkins
+(D61)".
+
+Later phases:
+- Doc phase: D61 and history.md are done. Don't touch them again unless the slice's diff
+  contradicts them.
+
+Record.
+- The plan's premise holds for only three of the five prometheus tests (HelmCharts `4d02286`). The
+  backup-freshness, s3-mirror and youtrack-backup tests checked CronJob timings, and D61 says so.
+  The node-memory threshold test is covered by P4's starvation and wedged-counter scenarios. The
+  Alertmanager→Telegram routing test's successor is slice 028 P3's routing assertions (028 Ruling
+  T1), which have not run yet.
+- Grafana's login test is justified by the test itself: it restated the release's own values, and
+  its last case read HelmCharts' `configs/dev/grafana` copy, which GrafanaDeploy cannot see.
+- The operator withdrew "deploy repos run no tests" in slice 028's Ruling T1 ("My remark was from
+  memory"). That is why the grafana and routing reasons are the record's own words, not an
+  operator ruling. Close-out Q1 asks the operator to confirm them.
+
 ## Not in scope
 
 - R4, the modern-app-dev retirement: slice 030.

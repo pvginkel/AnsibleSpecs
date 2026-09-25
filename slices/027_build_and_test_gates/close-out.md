@@ -95,6 +95,15 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
+### Q1 — D61's standing reasons for two retired tests are P5's, not ruled: the Alertmanager routing test and grafana's Keycloak login test
+
+P5's text assumed the retired prometheus tests all checked other apps' CronJob timings. HelmCharts 4d02286 retired five: three timing tests (backup-freshness, s3-mirror, youtrack-backup), the node-memory threshold test and the Alertmanager-to-Telegram routing test. D61 now gives each group its own reason. Node-memory: P4's promtool scenarios cover its starvation and wedged-counter episodes. Routing: its successor is slice 028 P3's routing assertions against the rendered Alertmanager config (028 Ruling T1), which has not run. Grafana's login test: it restated the release's own values (OIDC settings, ExternalSecret mapping), and its last case read HelmCharts' dev-cluster copy, which GrafanaDeploy cannot see. The 2026-09-24 ruling's stated reason, 'deploy repos run no tests', was withdrawn by 028 T1 ('My remark was from memory'), so the grafana and routing reasons are the record's own wording, and the operator has not ruled on them.
+
+**Consequence:** If the operator's reason differs, D61 carries a justification nobody decided. Until 028's P3 lands, nothing tests PrometheusDeploy's Alertmanager routing, which the retired test covered.
+
+**Provenance:** read — code-writer, P5, r1; argo-cd/decisions.md D61, HelmCharts 4d02286
+**Disposition:**
+
 ## Suggestions
 
 Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
@@ -105,6 +114,8 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 ### S1 — Slice 028's P3 plans its own promtool proof for PrometheusDeploy rules that this slice's P4 turns into a standing gate
 
 Slice 028's P3 (Target ../PrometheusDeploy) adds standing Argo CD alert rules and a blind-metrics warning to `config/prd/values.yaml`. It says "The iac sidecar has neither `promtool` nor `amtool` today, so this phase decides how the proof runs" (028 plan.md, P3). This slice's A1 puts promtool 3.14.0 in the iac toolchain before its run. Its P4 then adds a render-and-check step and rule unit tests to PrometheusDeploy's `kc project test`, covering every alert in the rendered file. The run order decides which way the two meet. If 027 runs first, 028's P3 text about the sidecar is stale, and its new rules land under an existing gate and test layout. If 028 runs first, it builds its own proof mechanism, and 027's P4 must then cover 028's alerts as well as the eight counted at planning, next to whatever 028 left behind. A2 covers only the push hazard between the two.
+
+code-writer, P4, r1, 2026-09-25 — P4 landed the harness 028's P3 is told to extend: PrometheusDeploy `tests/alert-rules.sh` (from `kc project test`) renders the server ConfigMap, runs `promtool check rules`, then `promtool test rules` over every `tests/alert-rules/*.yml` (one file per rule group, `rule_files: [../alerting_rules.yml]`). 028's rule cases are one more file there, picked up by the glob. Its Alertmanager routing assertions are outside this harness.
 
 **Consequence:** If 028 runs first, PrometheusDeploy may end up with two promtool test mechanisms for its rules, and 027's P4 does more work than planned.
 
@@ -118,4 +129,22 @@ The gate compiles vars/ with SerializableScript as the script base class (tests/
 **Consequence:** Only if a future vars/ file declares invokeMethod: the gate stays green while every job in the estate fails to load the library.
 
 **Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### S3 — ArgoCDTools Jenkinsfile: the iac container's comment names helm as a suite dependency; neither suite runs helm · nit
+
+Jenkinsfile:18-20 says the suites run 'with the git, helm and openssl they shell out to'. No test calls gen_architecture's helm paths (gen_architecture.py:194-195); the tests only build helm argument lists (test_deploy_repo.py:117-190). The suites' real subprocess dependencies are git and openssl.
+
+**Consequence:** none — a reader may take helm for a test dependency; the choice of image does not rest on it
+
+**Provenance:** read, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
+**Disposition:**
+
+### S4 — PrometheusDeploy rule tests: a matching mistake in NodeMemoryStalled's or the wedge warning's major-fault path passes the gate · minor
+
+No test makes NodeMemoryStalled fire on major faults alone. The only faults-only node (tests/alert-rules/node-memory-pressure.yml:51-62) stalls 3%, which is under that rule's 0.05. No wedge case puts a node with memory to spare at a fault rate between 50/s and the edge, and none has a fault burst end within the hour. Mutations of the rendered rules that stay green: NodeMemoryStalled's fault leg (config/prd/values.yaml:88) aggregated by instance instead of node, or with its > 500 disabled; the wedge's inner and on (node) (:142) as on (instance); its [1h] window (:143) as [5m], and its < 50 as < 400. Precedence mistakes and template or syntax errors do go red. Full record: phases/P4/code_review_r1.md F1.
+
+**Consequence:** For those two major-fault paths, a PromQL matching mistake still passes kc project test and first shows in prd, which is the ANS-74 consequence V11 retires for the rest of the rules.
+
+**Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
 **Disposition:**
