@@ -394,7 +394,7 @@ Record:
   harness is not committed.
 - Jenkins' linter, a Groovy parse only, accepts the file.
 
-### P5 — GitSyncDeploy: gitblit's init container prunes stale branch entries from gb_lucene.conf
+### P5 — GitSyncDeploy: gitblit's init container prunes stale branch entries from gb_lucene.conf ✅ DONE 2026-09-25
 
 Target: ../GitSyncDeploy
 
