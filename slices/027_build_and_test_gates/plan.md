@@ -276,6 +276,30 @@ kaniko runs, so nothing reaches `registry:5000`.
 - JenkinsPipelineUtils `main` must carry P2's template before this repo's push, which triggers the
   job (close-out A3).
 
+**Done (P3).** ArgoCDTools `8bf2d0f` on `phase/027-P3`: the `Jenkinsfile` pod adds
+`containerTemplates.iac_toolchain('iac')`, and a `Test` stage (10-minute timeout) sits between
+`Cloning repo` and `Build argocd-hook image`. In `container('iac')` it runs `python3 -m unittest
+discover -b -s tests -t .` in `dir('argocd-hook')`, then in `dir('aac-tools')`. A red `sh` ends the
+build there, before either kaniko stage. `kc project test` green.
+
+Later phases:
+- None of P4–P5 changes. For the test phase's V07 witness: the first `IaC/ArgoCDTools` run after the
+  push shows stage `Test` running both `python3 -m unittest` commands in container `iac` before the
+  builds. Its log carries git stderr from the failure-path tests (`upload-pack: not our ref`,
+  `Authentication failed for 'http://127.0.0.1:…'`). That is expected, and the suites still end `OK`.
+- README `:45` and `:263` still describe the job as one stage per image, with no test stage.
+
+- Transform check: the Jenkinsfile, copied into JenkinsPipelineUtils `vars/` as a probe, compiled
+  green through P1's harness, with 8 files loaded. The copy was then deleted. Script approvals are
+  unproven until the live run.
+- Pod check: a throwaway pod in prd `development`, since deleted, ran the image
+  `registry:5000/kube-coder-iac-toolchain:latest` as uid 1000, with `HOME=/home/ubuntu` as the image
+  ships it (no overlays) and the repo's `git archive` under
+  `/home/jenkins/agent/workspace/IaC_ArgoCDTools`. Both suites passed there: argocd-hook 58 tests,
+  aac-tools 63. A failing control test made `unittest` exit 1.
+- The test run leaves `__pycache__` in the image folders. Both `.dockerignore` files exclude
+  `**/__pycache__`, so none of it reaches a kaniko context.
+
 ### P4 — PrometheusDeploy: the test verb checks and unit-tests the prd alert rules
 
 Target: ../PrometheusDeploy
