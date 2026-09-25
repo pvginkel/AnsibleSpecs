@@ -39,7 +39,7 @@
   trade-off: the repo carries rule test files that must be edited with every rule change, and
   nothing forces a future alert to come with a test." Operator: "Agree". This goes the other way
   from the reason argo-cd D61 records for retiring HelmCharts' alert tests ("since deploy repos
-  run no tests"). The doc phase owes that record the correction.
+  run no tests"). Correcting that record is a doc task, so a phase of this slice makes it.
 - Ruling (2026-09-25, refinement settled items, operator "Agree" to all):
   - "Two toolchain changes land during planning, before the run — this environment gains the Java
     toolchain sidecar … and the iac toolchain image gains promtool — followed by one environment
@@ -58,6 +58,13 @@
     test verb, which every slice phase runs as its gate), not Jenkins stages: the library has no
     job of its own, and no deploy repo tests in Jenkins."
   - "promtool is pinned to prd's Prometheus version, 3.14.0."
+- Ruling (2026-09-25, plan review r1 Q1): the Groovy gate compiles against the transform at the
+  controller's own version, not slice 011's 2019 setup. That is `com.cloudbees:groovy-cps`
+  `4376.v30c8c00684a_3`, the controller's workflow-cps version, with the groovy-sandbox and guava
+  versions its pom declares, resolved from `https://repo.jenkins-ci.org/public/`. The pin is
+  bumped when the controller's workflow-cps is upgraded, as promtool follows prd's server. The
+  cost accepted: a second Maven repository besides Central, and a gate that lags the controller
+  until bumped. Operator: "Agree".
 
 #### Grounding (planning session, verified 2026-09-25 unless marked)
 
@@ -74,14 +81,17 @@
   It is loaded unpinned as a global library by every job, so a change is live everywhere once it
   reaches `main`. It has seven `vars/*.groovy` files: `cicd`, `containerTemplates`, `gitUtils`,
   `helmCharts`, `kubectl`, `notify` and `utils`. The Jenkins controller is 2.568.3 with
-  `workflow-cps` `4376.v30c8c00684a_3`, whose build pins `groovy.version=2.4.21`. It vendors
-  groovy-cps in-tree, and the last standalone `com.cloudbees:groovy-cps` on Maven Central is 1.31.
-  Slice 011's test agent (ANS-89's card text, in slice.md) compiled all seven files through
-  `CpsTransformer`, set up as workflow-cps sets it, on JRE 17 with `groovy-all-2.4.21`,
-  `groovy-cps-1.31`, `guava-11.0.1` and `groovy-sandbox-1.19`, with `jenkins.model.Jenkins`
-  stubbed so `utils.groovy` resolves. Its two controls showed the check can fail: a transformed
-  method throws `CpsCallableInvocation` outside the engine, and a `synchronized` block is rejected.
-  **Unverified:** that the same classpath runs on the toolchain's JDK 21 rather than 17.
+  `workflow-cps` `4376.v30c8c00684a_3`, whose build pins `groovy.version=2.4.21`. The transform at
+  that same version, `com.cloudbees:groovy-cps:4376.v30c8c00684a_3`, is published on
+  `https://repo.jenkins-ci.org/public/`, which answers from this pod. Its pom declares groovy
+  2.4.21 (provided), groovy-sandbox 1.34.1, guava 33.4.8-jre, `groovy-cps-dgm-builder` at the same
+  version and jenkins-core 2.528.3 (provided). Maven Central's `groovy-cps` stops at 1.31, from
+  2019. The controller runs this combination on JDK 21 (JenkinsDeploy `chart/values.yaml:24`,
+  `lts-jdk21`). Slice 011's test agent (ANS-89's card text, in slice.md) showed the method on the
+  old 1.31 classpath with JRE 17: it compiled all seven files through `CpsTransformer`, set up as
+  workflow-cps sets it, with `jenkins.model.Jenkins` stubbed so `utils.groovy` resolves. Its two
+  controls showed the check can fail: a transformed method throws `CpsCallableInvocation` outside
+  the engine, and a `synchronized` block is rejected.
 - **R2: ArgoCDTools today.** The `Jenkinsfile` has the stages Cloning repo, Build argocd-hook
   image and Build aac-tools image. Both builds run kaniko to `registry:5000/argocd-hook` and
   `registry:5000/aac-tools`, with a `githubPush()` trigger and `disableConcurrentBuilds()`. There is
