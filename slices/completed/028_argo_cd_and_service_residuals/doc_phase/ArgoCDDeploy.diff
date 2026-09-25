@@ -1,0 +1,249 @@
+/work/ArgoCDDeploy — P2: git diff bcedb866e5df..23ecda8d3292
+
+config/prd/values.yaml |  33 +++++++++++++---
+ tests/render-chart.py  | 142 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++----
+ 2 files changed, 161 insertions(+), 14 deletions(-)
+
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 140e7df..e12b801 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -2,13 +2,18 @@
+ # Application's `path: chart` (D19).
+ 
+ argo-cd:
+-  # Drives argocd-cm's `url`, which is what notification links and the OIDC
+-  # redirect URI are built from.
++  # Drives argocd-cm's `url`, which is what notification links are built from.
+   global:
+     domain: argocd.home
+ 
+   configs:
+     cm:
++      # The vhost also answers on the bare `argocd` (server.service below). A
++      # login's return_url must sit under `url` or one of these, and the OIDC
++      # redirect URI is built from whichever of them the request's host matches.
++      additionalUrls: |
++        - https://argocd
++
+       # D4. The default `label` method tracks app.kubernetes.io/instance, which
+       # Helm charts set themselves — a false-adoption trap.
+       application.resourceTrackingMethod: annotation
+@@ -77,10 +82,11 @@ argo-cd:
+     enabled: false
+ 
+   notifications:
+-    # D7. The engine's native alertmanager service against the live Service.
+-    # Alertmanager's own configuration is the stock null sink with no route tree
+-    # and no ingress, so an alert lands in its API and goes no further — which is
+-    # where R9 reads it.
++    # D7 as amended: the notification is the failure event, and Prometheus rules
++    # over the controller's application metrics (controller.metrics below) are the
++    # standing state. The engine's native alertmanager service sends to the live
++    # Service with no end time, so Alertmanager expires each event after its
++    # resolve timeout; PrometheusDeploy's route tree decides where it goes.
+     notifiers:
+       service.alertmanager: |
+         targets:
+@@ -134,6 +140,21 @@ argo-cd:
+           - on-sync-failed
+           - on-health-degraded
+ 
++  controller:
++    metrics:
++      enabled: true
++      service:
++        # PrometheusDeploy's kubernetes-service-endpoints job keeps every Service
++        # carrying this annotation and scrapes its endpoints' port on /metrics.
++        annotations:
++          prometheus.io/scrape: "true"
++    # argocd_app_condition carries only the condition types named here. The
++    # controller sets SyncError when it declines to auto-sync a revision whose
++    # last sync failed, which is what separates a failed sync Argo no longer
++    # retries from D5 drift or a retry in flight — argocd_app_info cannot.
++    extraArgs:
++      - --metrics-application-conditions=SyncError
++
+   server:
+     service:
+       # There are no Ingress objects in this estate: exposure is these
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 6ef3b11..00169b9 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -35,6 +35,14 @@ RELEASE = NAMESPACE
+ CA_KEY = "homelab-root.crt"
+ CA_MOUNT = f"/etc/ssl/certs/{CA_KEY}"
+ ALERTMANAGER = "prometheus-prd-alertmanager.prometheus-prd:9093"
++# argocd-cm's `url`: every notification link is built from it (D7).
++URL = "https://argocd.home"
++CONTROLLER = f"{RELEASE}-application-controller"
++# The condition types argocd_app_condition has to carry for the standing alerts
++# (D7 as amended). SyncError is set only when the controller declines to
++# auto-sync a revision whose last sync failed, which separates a failed sync Argo
++# no longer retries from D5 drift and from a retry in flight.
++APP_CONDITIONS = ("SyncError",)
+ # Every repository Argo reads: the registry it generates from, and the pilot
+ # deploy repo standing in for the ~10 Phase B adds. One credential covers both.
+ REPOS = (
+@@ -687,19 +695,27 @@ def undefined_fields(value, schema, path):
+             yield from undefined_fields(item, schema["items"], f"{path}[{index}]")
+ 
+ 
+-def check_server_exposure(docs):
++def server_names(docs):
++    """Every hostname argocd-server's vhost answers on.
++
++    The annotation is a comma-separated list, not one name — nginx-configurator
++    splits it and serves every entry (annotations.py parse_server_names).
++    """
+     annotations = find(docs, "Service", f"{RELEASE}-server")["metadata"].get("annotations", {})
+-    # is-public gates only the RFC1918 allow block; the step-ca leaf is a separate
+-    # branch of the configurator that fires on enable-ssl, so internal TLS is both.
+-    # The annotation is a comma-separated list, not one name — nginx-configurator
+-    # splits it and serves every entry (annotations.py parse_server_names). A
+-    # test against the whole string would therefore pass for an internal name
+-    # with a public one appended to it, so check each name on its own.
+-    names = [
++    return [
+         n.strip()
+         for n in annotations.get("nginx.webathome.org/server-name", "").split(",")
+         if n.strip()
+     ]
++
++
++def check_server_exposure(docs):
++    annotations = find(docs, "Service", f"{RELEASE}-server")["metadata"].get("annotations", {})
++    # is-public gates only the RFC1918 allow block; the step-ca leaf is a separate
++    # branch of the configurator that fires on enable-ssl, so internal TLS is both.
++    # A test against the whole server-name string would pass for an internal name
++    # with a public one appended to it, so check each name on its own.
++    names = server_names(docs)
+     check(
+         any(n.endswith(".home") for n in names),
+         f"argocd-server carries no .home server name: {annotations!r}",
+@@ -809,6 +825,114 @@ def check_notifications(docs):
+                 )
+ 
+ 
++def check_application_metrics(docs):
++    """Prometheus scrapes the controller's application metrics (D7 as amended)."""
++    template = find(docs, "StatefulSet", CONTROLLER)["spec"]["template"]
++    pod_labels = template["metadata"]["labels"]
++    container = next(c for c in template["spec"]["containers"] if c["name"] == "application-controller")
++    args = container.get("args", [])
++
++    conditions = set()
++    for index, arg in enumerate(args):
++        if arg.startswith("--metrics-application-conditions="):
++            conditions.update(arg.split("=", 1)[1].split(","))
++        elif arg == "--metrics-application-conditions" and index + 1 < len(args):
++            conditions.update(args[index + 1].split(","))
++    missing = sorted(set(APP_CONDITIONS) - conditions)
++    check(not missing, f"the controller exports no argocd_app_condition series for {missing}")
++
++    listen = next((a.split("=", 1)[1] for a in args if a.startswith("--metrics-port=")), None)
++    check(listen is not None, "the controller's args name no --metrics-port")
++    metrics_port = int(listen) if listen is not None else None
++    ports = {p["name"]: p["containerPort"] for p in container.get("ports", []) if "name" in p}
++
++    service = find(docs, "Service", f"{CONTROLLER}-metrics")
++    check(service is not None, "the controller has no metrics Service, so Prometheus discovers no target")
++    if service is None:
++        return
++    # PrometheusDeploy's kubernetes-service-endpoints job keeps a Service on the
++    # scrape annotation alone, and the port and path annotations, when present,
++    # replace the endpoint's own port and /metrics.
++    annotations = service["metadata"].get("annotations", {})
++    check(
++        annotations.get("prometheus.io/scrape") == "true",
++        f"{CONTROLLER}-metrics is not annotated for scraping: {annotations!r}",
++    )
++    check(
++        annotations.get("prometheus.io/port", str(metrics_port)) == str(metrics_port),
++        f"{CONTROLLER}-metrics redirects the scrape to port {annotations.get('prometheus.io/port')!r}",
++    )
++    check(
++        annotations.get("prometheus.io/path", "/metrics") == "/metrics",
++        f"{CONTROLLER}-metrics redirects the scrape to {annotations.get('prometheus.io/path')!r}",
++    )
++    selector = service["spec"].get("selector", {})
++    check(
++        bool(selector) and all(pod_labels.get(k) == v for k, v in selector.items()),
++        f"{CONTROLLER}-metrics selects no application-controller pod: {selector!r}",
++    )
++    for port in service["spec"].get("ports", []):
++        target = port.get("targetPort", port["port"])
++        check(
++            (ports.get(target) if isinstance(target, str) else target) == metrics_port,
++            f"{CONTROLLER}-metrics port {port.get('name')!r} reaches {target!r}, "
++            f"not the controller's --metrics-port {metrics_port}",
++        )
++
++    # Prometheus scrapes from its own namespace, so every NetworkPolicy on the
++    # controller has to admit the metrics port from outside argocd-prd.
++    for policy in docs:
++        if policy["kind"] != "NetworkPolicy" or policy["metadata"].get("namespace") != NAMESPACE:
++            continue
++        spec = policy["spec"]
++        match = spec.get("podSelector", {}).get("matchLabels", {})
++        if not all(pod_labels.get(k) == v for k, v in match.items()):
++            continue
++        if "Ingress" not in spec.get("policyTypes", ["Ingress"]):
++            continue
++        admitted = any(
++            (not rule.get("ports") or any(p.get("port") in ("metrics", metrics_port) for p in rule["ports"]))
++            and (
++                not rule.get("from")
++                or any(peer.get("namespaceSelector") == {} and "podSelector" not in peer for peer in rule["from"])
++            )
++            for rule in spec.get("ingress", [])
++        )
++        check(
++            admitted,
++            f"NetworkPolicy/{policy['metadata']['name']} refuses the controller's metrics port to Prometheus",
++        )
++
++
++def check_login_urls(docs):
++    """A login completes on every name the vhost answers on (ANS-46)."""
++    cm = find(docs, "ConfigMap", "argocd-cm")["data"]
++    check(cm.get("url") == URL, f"argocd-cm url is {cm.get('url')!r}, and every notification link moves with it")
++    # Argo only warns when additionalUrls does not decode, and carries on with none.
++    additional = yaml.safe_load(cm.get("additionalUrls") or "[]")
++    check(
++        isinstance(additional, list) and all(isinstance(u, str) for u in additional),
++        f"argocd-cm additionalUrls is not a list of URLs: {cm.get('additionalUrls')!r}",
++    )
++    if not isinstance(additional, list):
++        return
++    allowed = [urlsplit(u) for u in (cm.get("url", ""), *additional) if isinstance(u, str)]
++    # A return_url is accepted only when its scheme and host match an allowed
++    # URL's and its path lies under that URL's path (v3.5.1 util/oidc/oidc.go
++    # isValidRedirectURL); nginx serves every name over TLS.
++    for u in allowed:
++        check(
++            u.scheme == "https" and u.path in ("", "/"),
++            f"argocd-cm allows {u.geturl()!r}, which covers no login on the https vhost's root",
++        )
++    hosts = {u.netloc for u in allowed}
++    for name in server_names(docs):
++        check(
++            name in hosts,
++            f"a login started at https://{name}/ is refused: argocd-cm allows no URL on that host",
++        )
++
++
+ def check_sso(docs, materialised):
+     """Keycloak logs the operator in; the local account is still the way back (D9)."""
+     cm = find(docs, "ConfigMap", "argocd-cm")["data"]
+@@ -1268,7 +1392,9 @@ def main():
+     check_server_exposure(docs)
+     check_repo_server_trust(docs)
+     check_notifications(docs)
++    check_application_metrics(docs)
+     check_sso(docs, materialised)
++    check_login_urls(docs)
+     check_webhook_secret(docs, materialised)
+     check_repo_credentials(materialised)
+     check_relay(docs, materialised)

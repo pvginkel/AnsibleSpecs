@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Both round-1 blockers are resolved. During a gap in every app's metrics, each standing alert now holds its own ALERTS state (pending or firing) for up to 20 m, so an app last seen recovered stays quiet and a deleted app's alert resolves (round-1 repro quiet on HEAD, red on 8b6e866). The degraded rule's gap bound and pending clock are now pinned: every mutation of the hold goes red. No new findings.",
+ "details": "code_review_r2.md",
+ "findings": []}

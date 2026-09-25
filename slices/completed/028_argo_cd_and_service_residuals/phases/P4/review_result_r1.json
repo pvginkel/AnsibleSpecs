@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "Jenkinsfile.promote records a tagless prd tip as release-<this build> without moving prd or retagging. A tagged tip still refuses, and every other path is unchanged. Jenkins' linter parses the new ternary. One advisory: the recovery re-run must name the stuck commit, because main moves several times a day.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor",
+               "impact": "advisory",
+               "category": "other",
+               "anchor": "none",
+               "summary": "A recovery re-run with an empty commit, after Build-Main moves main, promotes the new tip and leaves the stuck release unrecordable by the job; the doc phase must state commit=<sha>"}]}

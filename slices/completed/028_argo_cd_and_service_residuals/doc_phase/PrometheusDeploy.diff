@@ -1,0 +1,649 @@
+/work/PrometheusDeploy — P3: git diff 16dffd1b189e..185b64f7bd03
+
+.kubecoder/project.yaml      |   1 +
+ config/prd/values.yaml       | 129 +++++++++++++++++++++++-
+ tests/alert-routing.py       | 117 ++++++++++++++++++++++
+ tests/alert-rules/argocd.yml | 339 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 584 insertions(+), 2 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index d8d9a0e..385b7de 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -18,6 +18,7 @@ projects:
+         cexec iac helm template prometheus-prd prometheus --repo https://prometheus-community.github.io/helm-charts --version 29.33.0
+         --namespace prometheus-prd --values config/prd/values.yaml
+       - cexec iac tests/alert-rules.sh
++      - cexec iac tests/alert-routing.py
+       - cexec iac helm template prometheus-prd chart --namespace prometheus-prd --set hook.repo=https://github.com/pvginkel/PrometheusDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=prometheus-prd
+       - cexec iac tests/terraform.sh
+       - cexec aac-tools gen-architecture --stage prd --producer prometheus-deploy
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 15eb944..fae005c 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -303,6 +303,104 @@ serverFiles:
+                 Prometheus) or its hourly read fails (its pod logs "freshness
+                 refresh:" errors).
+ 
++      # Argo CD's own notifications are D7's failure events, ArgoCDSyncFailed
++      # and ArgoCDHealthDegraded (ArgoCDDeploy). Each arrives once with no end
++      # time, and Alertmanager expires it without a "resolved" (the routes
++      # below). These rules are the standing state (D7 as amended), over the
++      # application controller's argocd_app_info, one series per Application,
++      # and argocd_app_condition, which exists only while its condition is set.
++      #
++      # An alert's identity is the app, by name and dest_namespace: a controller
++      # restart moves instance, node and the version labels. A failed scrape or
++      # a restarting controller leaves no current argocd_app_info series. While
++      # there is none, each alert holds its own ALERTS state, pending or firing,
++      # for up to 20 m after its app's last scrape, so a gap neither resolves
++      # nor re-fires an alert. An app missing while others are scraped has no
++      # such hold, so deleting an app resolves its alert.
++      # ArgoCDAlertsBlind fires 15 m into a gap, before those 20 m run out.
++      #
++      # Both standing `for:` windows are at least the rule manager's 10 m
++      # for-grace-period. Below it, a restarted Prometheus does not restore a
++      # firing alert; it holds it pending for its whole `for:` again.
++      # tests/alert-rules/argocd.yml walks these edges on synthetic series.
++      - name: argocd
++        rules:
++          # The controller sets SyncError only on its automated-sync path, and
++          # clears it while any operation runs. Its prune guard sets it, and a
++          # failed sync sets it once the operation has ended, after the retries
++          # ArgoCDDeploy's ApplicationSets give every auto-synced app
++          # (chart/templates/applicationsets.yaml: 3, from 30 s doubling; nothing
++          # here reads them). So `for:` starts after them, and an app Argo CD
++          # does not sync on its own never fires. A firing alert holds on its own
++          # ALERTS series through a new sync and 5 m past it, until SyncError is
++          # back or the sync has succeeded.
++          - alert: ArgoCDSyncStillFailed
++            expr: |
++              max by (name, dest_namespace) (max_over_time(argocd_app_info[20m]))
++              and on (name) (
++                  argocd_app_condition{condition="SyncError"}
++                or
++                  (
++                    ALERTS{alertname="ArgoCDSyncStillFailed"}
++                    unless on () argocd_app_info
++                  )
++                or
++                  (
++                    max_over_time(argocd_app_info{operation="sync"}[5m])
++                    and on (name) ALERTS{alertname="ArgoCDSyncStillFailed", alertstate="firing"}
++                  )
++              )
++            for: 10m
++            labels:
++              severity: critical
++            annotations:
++              summary: 'Argo CD has stopped syncing {{ $labels.name }} ({{ $labels.dest_namespace }}) on its own'
++              description: >-
++                The SyncError condition on
++                https://argocd.home/applications/{{ $labels.name }} says why.
++                Argo CD does not try a revision whose sync failed again on its
++                own (ArgoCDSyncFailed carried that error), and its prune guard
++                refuses a sync that would delete every resource. A new commit
++                or a manual sync that succeeds resolves this alert.
++          # The window lets a Degraded that a rollout clears on its own, such as
++          # a slow rollout past its progress deadline, pass without firing.
++          - alert: ArgoCDHealthStillDegraded
++            expr: |
++              max by (name, dest_namespace) (argocd_app_info{health_status="Degraded"})
++              or
++              (
++                max by (name, dest_namespace) (ALERTS{alertname="ArgoCDHealthStillDegraded"})
++                and on (name) max_over_time(argocd_app_info[20m])
++                unless on () argocd_app_info
++              )
++            for: 15m
++            labels:
++              severity: warning
++            annotations:
++              summary: 'Argo CD has reported {{ $labels.name }} ({{ $labels.dest_namespace }}) degraded for over 15m'
++              description: >-
++                A resource of {{ $labels.name }} is Degraded;
++                https://argocd.home/applications/{{ $labels.name }} shows which.
++                This alert resolves when the app's health leaves Degraded.
++          # The `for:` keeps a Prometheus that has just started, after an outage
++          # of over 10 m, from firing before its first scrape of the controller.
++          - alert: ArgoCDAlertsBlind
++            expr: |
++              absent_over_time(argocd_app_info[10m])
++            for: 5m
++            labels:
++              severity: warning
++            annotations:
++              summary: "Argo CD's standing alerts are blind: no application metrics for 15m"
++              description: >-
++                No scrape in the last 15 m returned argocd_app_info, so
++                ArgoCDSyncStillFailed and ArgoCDHealthStillDegraded cannot fire.
++                Either Prometheus cannot scrape Argo CD's application controller
++                (its pod is down or crash-looping, or the
++                argocd-prd-application-controller-metrics Service lost its
++                prometheus.io/scrape annotation; check the target in Prometheus)
++                or the controller lists no Applications.
++
+ alertmanager:
+   # See https://github.com/prometheus-community/helm-charts/blob/main/charts/alertmanager/values.yaml
+   persistence:
+@@ -341,6 +439,15 @@ alertmanager:
+       group_interval: 5m
+       repeat_interval: 12h
+       routes:
++        # D7's two events (ArgoCDDeploy) carry no end time, so each expires at
++        # resolve_timeout whether or not its app has recovered: their receivers
++        # send no "resolved". The argocd rule group's standing alerts carry the
++        # state, and a real "resolved".
++        - matchers: ['alertname=~"ArgoCDSyncFailed|ArgoCDHealthDegraded"']
++          receiver: telegram-warning-no-resolve
++          routes:
++            - matchers: ['severity="critical"']
++              receiver: telegram-critical-no-resolve
+         - matchers: ['severity="critical"']
+           receiver: telegram-critical
+ 
+@@ -351,8 +458,10 @@ alertmanager:
+         target_matchers: ['alertname=~"NodeMemoryStalled|NodeMemoryStallElevated"']
+         equal: [node]
+ 
+-    # disable_notifications is a static flag, not a template, so loud and
+-    # silent need a receiver each. parse_mode "" is plain text: expressions and
++    # disable_notifications and send_resolved are static flags, not templates,
++    # so loud and silent need a receiver each, and so do D7's events, which send
++    # no "resolved". tests/alert-routing.py asserts that the receivers differ
++    # only in those two flags. parse_mode "" is plain text: expressions and
+     # annotations carry raw `<`, which Telegram's HTML mode rejects.
+     receivers:
+       - name: telegram-critical
+@@ -371,6 +480,22 @@ alertmanager:
+             message: '{{ template "telegram.message" . }}'
+             disable_notifications: true
+             send_resolved: true
++      - name: telegram-critical-no-resolve
++        telegram_configs:
++          - bot_token_file: /etc/secrets/telegram/bot_token
++            chat_id_file: /etc/secrets/telegram/chat_id
++            parse_mode: ""
++            message: '{{ template "telegram.message" . }}'
++            disable_notifications: false
++            send_resolved: false
++      - name: telegram-warning-no-resolve
++        telegram_configs:
++          - bot_token_file: /etc/secrets/telegram/bot_token
++            chat_id_file: /etc/secrets/telegram/chat_id
++            parse_mode: ""
++            message: '{{ template "telegram.message" . }}'
++            disable_notifications: true
++            send_resolved: false
+ 
+   # Mounted beside alertmanager.yml, which loads /etc/alertmanager/*.tmpl.
+   templates:
+diff --git a/tests/alert-routing.py b/tests/alert-routing.py
+new file mode 100755
+index 0000000..175ce30
+--- /dev/null
++++ b/tests/alert-routing.py
+@@ -0,0 +1,117 @@
++#!/usr/bin/env python3
++"""Alertmanager's route tree as the upstream chart renders config/prd/values.yaml, at the pin
++architecture.yaml's `upstream:` gives.
++
++Every alert prd's rules raise reaches the Telegram receiver its severity picks, loud for
++critical and silent otherwise, and gets a "resolved" when it clears. D7's two Argo CD events,
++which Alertmanager expires at resolve_timeout whether or not the app recovered, reach receivers
++that send no "resolved" and are otherwise the same. The tree is walked the way Alertmanager's
++dispatcher walks it, for the route keys and matcher forms below; anything else fails the test.
++"""
++
++import pathlib
++import re
++import subprocess
++import sys
++
++import yaml
++
++REPO = pathlib.Path(__file__).resolve().parent.parent
++# D7's events, labelled as ArgoCDDeploy's notification templates label them.
++EVENTS = [
++    {"alertname": "ArgoCDSyncFailed", "severity": "critical", "application": "kubecoder-prd", "namespace": "kubecoder-prd"},
++    {"alertname": "ArgoCDHealthDegraded", "severity": "warning", "application": "kubecoder-prd", "namespace": "kubecoder-prd"},
++]
++ROUTE_KEYS = {"receiver", "matchers", "routes", "continue", "group_by", "group_wait", "group_interval", "repeat_interval"}
++MATCHER = re.compile(r'\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(=~|!~|!=|=)\s*"([^"\\]*)"\s*')
++# The flags a receiver may differ in; everything else in its telegram config is shared.
++FLAGS = ("disable_notifications", "send_resolved")
++
++
++def render():
++    upstream = yaml.safe_load((REPO / "architecture.yaml").read_text())["upstream"]
++    out = subprocess.run(
++        ["helm", "template", "prometheus-prd", upstream["chart"], "--repo", upstream["repo"],
++         "--version", str(upstream["version"]), "--namespace", "prometheus-prd",
++         "--values", "config/prd/values.yaml",
++         "--show-only", "charts/alertmanager/templates/configmap.yaml",
++         "--show-only", "templates/cm.yaml"],
++        cwd=REPO, check=True, capture_output=True, text=True).stdout
++    data = {}
++    for doc in yaml.safe_load_all(out):
++        data.update(doc["data"])
++    return yaml.safe_load(data["alertmanager.yml"]), yaml.safe_load(data["alerting_rules.yml"])
++
++
++def check_tree(route):
++    unknown = set(route) - ROUTE_KEYS
++    if unknown:
++        sys.exit(f"route keys this test does not model: {sorted(unknown)}")
++    for child in route.get("routes", []):
++        check_tree(child)
++
++
++def matches(matcher, labels):
++    parsed = MATCHER.fullmatch(matcher)
++    if not parsed:
++        sys.exit(f"matcher this test does not model: {matcher}")
++    name, op, value = parsed.groups()
++    actual = labels.get(name, "")
++    if op == "=":
++        return actual == value
++    if op == "!=":
++        return actual != value
++    hit = re.fullmatch(value, actual) is not None
++    return hit if op == "=~" else not hit
++
++
++def receivers(route, labels, inherited=None):
++    receiver = route.get("receiver", inherited)
++    found = []
++    for child in route.get("routes", []):
++        if all(matches(m, labels) for m in child.get("matchers", [])):
++            found += receivers(child, labels, receiver)
++            if not child.get("continue", False):
++                break
++    return found or [receiver]
++
++
++def main():
++    config, rules = render()
++    check_tree(config["route"])
++    telegram = {}
++    for receiver in config["receivers"]:
++        (telegram[receiver["name"]],) = receiver["telegram_configs"]
++    alerts = [{"alertname": rule["alert"], **rule.get("labels", {})}
++              for group in rules["groups"] for rule in group["rules"] if "alert" in rule]
++    event_names = {event["alertname"] for event in EVENTS}
++    failures = []
++
++    shared = {name: {k: v for k, v in cfg.items() if k not in FLAGS} for name, cfg in telegram.items()}
++    first = next(iter(shared.values()))
++    for name, cfg in shared.items():
++        if cfg != first:
++            failures.append(f"receiver {name} differs from the others beyond {FLAGS}: {cfg}")
++
++    for labels in alerts + EVENTS:
++        reached = receivers(config["route"], labels)
++        if len(reached) != 1:
++            failures.append(f"{labels['alertname']} reaches {reached}, not one receiver")
++            continue
++        (name,) = reached
++        cfg = telegram[name]
++        loud = labels.get("severity") == "critical"
++        resolved = labels["alertname"] not in event_names
++        print(f"{labels['alertname']} ({labels.get('severity')}) -> {name}")
++        if cfg["disable_notifications"] is loud:
++            failures.append(f"{labels['alertname']}: {name} is {'silent' if loud else 'loud'}")
++        if cfg["send_resolved"] is not resolved:
++            failures.append(f"{labels['alertname']}: {name} has send_resolved {cfg['send_resolved']}")
++
++    if failures:
++        print("\n".join(["FAILED:", *failures]), file=sys.stderr)
++        sys.exit(1)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/alert-rules/argocd.yml b/tests/alert-rules/argocd.yml
+new file mode 100644
+index 0000000..640d7a0
+--- /dev/null
++++ b/tests/alert-rules/argocd.yml
+@@ -0,0 +1,339 @@
++# The argocd group, over synthetic application-controller series. A sample is 1: what a series
++# says is in its labels. When an app's status changes, its argocd_app_info series changes labels,
++# so the old one ends `stale` in the scrape where the new one starts. A series of a controller
++# pod that is gone, or of a failed scrape, ends `stale` too. The tests assert the rules' own
++# windows and model no retry policy.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: a failed automated sync stands 10m after it ends, holds through a sync that fails again, and resolves 5m after the last sync's final scrape; drift, a hand-synced app and a long retry stay quiet
++    interval: 1m
++    input_series:
++      # kubecoder-prd: its sync runs until 4 m and ends failed, SyncError from 5 m. A new commit
++      # syncs 30-37 m and fails, with SyncError back at 39 m, one scrape later. A manual sync runs
++      # 50-52 m and succeeds.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy", operation="sync"}
++        values: 1x4 stale _x24 1x7 stale _x11 1x2 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: _x5 1x24 stale _x7 1x11 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x53 1x10
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", condition="SyncError"}
++        values: _x5 1x24 stale _x8 1x10 stale
++      # gitsync-prd: D5's debug edit, out of sync with self-heal off.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="gitsync-prd", dest_namespace="gitsync-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x63
++      # storage-prd: a sync that succeeded and left a resource differing.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="storage-prd", dest_namespace="storage-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy", operation="sync"}
++        values: 1x2 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="storage-prd", dest_namespace="storage-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: _x3 1x60
++      # argocd-prd, synced by hand: its manual sync fails at 3 m, and no SyncError follows.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="argocd-prd", dest_namespace="argocd-prd", autosync_enabled="false", sync_status="OutOfSync", health_status="Healthy", operation="sync"}
++        values: 1x2 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="argocd-prd", dest_namespace="argocd-prd", autosync_enabled="false", sync_status="OutOfSync", health_status="Healthy"}
++        values: _x3 1x60
++      # cloudnative-pg-prd: syncing and retrying for 25 m, then synced.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="cloudnative-pg-prd", dest_namespace="cloudnative-pg-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Progressing", operation="sync"}
++        values: 1x24 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="cloudnative-pg-prd", dest_namespace="cloudnative-pg-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x25 1x38
++    alert_rule_test:
++      - {alertname: ArgoCDSyncStillFailed, eval_time: 14m}
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 15m
++        exp_alerts:
++          - &kubecoder_failed
++            exp_labels: {name: kubecoder-prd, dest_namespace: kubecoder-prd, severity: critical}
++            exp_annotations:
++              summary: Argo CD has stopped syncing kubecoder-prd (kubecoder-prd) on its own
++              description: >-
++                The SyncError condition on https://argocd.home/applications/kubecoder-prd says why.
++                Argo CD does not try a revision whose sync failed again on its own
++                (ArgoCDSyncFailed carried that error), and its prune guard refuses a sync that
++                would delete every resource. A new commit or a manual sync that succeeds resolves
++                this alert.
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 24m
++        exp_alerts: [*kubecoder_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 30m
++        exp_alerts: [*kubecoder_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 38m
++        exp_alerts: [*kubecoder_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 52m
++        exp_alerts: [*kubecoder_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 56m
++        exp_alerts: [*kubecoder_failed]
++      - {alertname: ArgoCDSyncStillFailed, eval_time: 57m}
++      - {alertname: ArgoCDHealthStillDegraded, eval_time: 57m}
++
++  - name: a controller restart keeps a pending standing alert's clock; a gap past 15m fires the blind warning before the standing alerts lapse at 20m
++    interval: 1m
++    input_series:
++      # The controller restarts at 20 m, and its new pod is scraped from 23 m. Scraping stops for
++      # good at 40 m. kubecoder-prd: SyncError from 12 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x19 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", condition="SyncError"}
++        values: _x12 1x7 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: _x23 1x16 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="kubecoder-prd", condition="SyncError"}
++        values: _x23 1x16 stale
++      # youtrack-prd: degraded from 10 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: 1x9 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: _x10 1x9 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: _x23 1x16 stale
++    alert_rule_test:
++      - {alertname: ArgoCDSyncStillFailed, eval_time: 21m}
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 22m
++        exp_alerts: [*kubecoder_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 23m
++        exp_alerts: [*kubecoder_failed]
++      - {alertname: ArgoCDAlertsBlind, eval_time: 22m}
++      - {alertname: ArgoCDAlertsBlind, eval_time: 53m}
++      - alertname: ArgoCDAlertsBlind
++        eval_time: 54m
++        exp_alerts:
++          - exp_labels: {severity: warning}
++            exp_annotations:
++              summary: "Argo CD's standing alerts are blind: no application metrics for 15m"
++              description: >-
++                No scrape in the last 15 m returned argocd_app_info, so ArgoCDSyncStillFailed and
++                ArgoCDHealthStillDegraded cannot fire. Either Prometheus cannot scrape Argo CD's
++                application controller (its pod is down or crash-looping, or the
++                argocd-prd-application-controller-metrics Service lost its prometheus.io/scrape
++                annotation; check the target in Prometheus) or the controller lists no
++                Applications.
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 58m
++        exp_alerts: [*kubecoder_failed]
++      - {alertname: ArgoCDSyncStillFailed, eval_time: 59m}
++      - {alertname: ArgoCDHealthStillDegraded, eval_time: 24m}
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 25m
++        exp_alerts:
++          - &youtrack_degraded
++            exp_labels: {name: youtrack-prd, dest_namespace: youtrack-prd, severity: warning}
++            exp_annotations:
++              summary: Argo CD has reported youtrack-prd (youtrack-prd) degraded for over 15m
++              description: >-
++                A resource of youtrack-prd is Degraded;
++                https://argocd.home/applications/youtrack-prd shows which. This alert resolves
++                when the app's health leaves Degraded.
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 58m
++        exp_alerts: [*youtrack_degraded]
++      - {alertname: ArgoCDHealthStillDegraded, eval_time: 59m}
++
++  - name: an app degraded for 15m fires, holds through a sync, a controller restart and a gap, and resolves when healthy; a shorter dip stays quiet, and a hand-synced app fires too
++    interval: 1m
++    input_series:
++      # youtrack-prd: degraded from 10 m. A sync runs 25-29 m. The controller restarts at 30 m,
++      # and its new pod is scraped from 32 m. Healthy again at 45 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: 1x9 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: _x10 1x14 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Degraded", operation="sync"}
++        values: _x25 1x4 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: _x32 1x12 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x45 1x10
++      # kubecoder-prd: degraded 5-18 m, one minute short of its window.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: 1x4 stale _x13 1x10 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: _x5 1x13 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x32 1x23
++      # argocd-prd, synced by hand: degraded throughout.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="argocd-prd", dest_namespace="argocd-prd", autosync_enabled="false", sync_status="Synced", health_status="Degraded"}
++        values: 1x29 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="argocd-prd", dest_namespace="argocd-prd", autosync_enabled="false", sync_status="Synced", health_status="Degraded"}
++        values: _x32 1x23
++    alert_rule_test:
++      - {alertname: ArgoCDHealthStillDegraded, eval_time: 14m}
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 15m
++        exp_alerts:
++          - &argocd_degraded
++            exp_labels: {name: argocd-prd, dest_namespace: argocd-prd, severity: warning}
++            exp_annotations:
++              summary: Argo CD has reported argocd-prd (argocd-prd) degraded for over 15m
++              description: >-
++                A resource of argocd-prd is Degraded; https://argocd.home/applications/argocd-prd
++                shows which. This alert resolves when the app's health leaves Degraded.
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 24m
++        exp_alerts: [*argocd_degraded]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 25m
++        exp_alerts:
++          - *argocd_degraded
++          - *youtrack_degraded
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 31m
++        exp_alerts: [*argocd_degraded, *youtrack_degraded]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 44m
++        exp_alerts: [*argocd_degraded, *youtrack_degraded]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 45m
++        exp_alerts: [*argocd_degraded]
++      - {alertname: ArgoCDAlertsBlind, eval_time: 31m}
++      - {alertname: ArgoCDSyncStillFailed, eval_time: 44m}
++
++  - name: a gap in every app's metrics freezes each standing alert where it stands, and raises none for an app last seen recovered; the next scrape of any app ends the freeze
++    interval: 1m
++    input_series:
++      # The controller's pod is scraped until 26 m. Its new pod is scraped from 45 m.
++      # kubecoder-prd: standing failed throughout.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x26 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", condition="SyncError"}
++        values: 1x26 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: _x45 1x15
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="kubecoder-prd", condition="SyncError"}
++        values: _x45 1x15
++      # storage-prd: SyncError 17-21 m, short of its window. A new commit syncs 22-23 m and
++      # succeeds.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="storage-prd", dest_namespace="storage-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x21 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="storage-prd", condition="SyncError"}
++        values: _x17 1x4 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="storage-prd", dest_namespace="storage-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy", operation="sync"}
++        values: _x22 1x1 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="storage-prd", dest_namespace="storage-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x24 1x2 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="storage-prd", dest_namespace="storage-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x45 1x15
++      # gitsync-prd: standing failed until a new commit syncs from 23 m, still running when
++      # scraping stops. It has failed when scraping resumes.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="gitsync-prd", dest_namespace="gitsync-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x22 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="gitsync-prd", condition="SyncError"}
++        values: 1x22 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="gitsync-prd", dest_namespace="gitsync-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy", operation="sync"}
++        values: _x23 1x3 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="gitsync-prd", dest_namespace="gitsync-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: _x45 1x15
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="gitsync-prd", condition="SyncError"}
++        values: _x45 1x15
++      # cloudnative-pg-prd: standing failed until a new commit syncs 23-24 m and succeeds.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="cloudnative-pg-prd", dest_namespace="cloudnative-pg-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x22 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="cloudnative-pg-prd", condition="SyncError"}
++        values: 1x22 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="cloudnative-pg-prd", dest_namespace="cloudnative-pg-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy", operation="sync"}
++        values: _x23 1x1 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="cloudnative-pg-prd", dest_namespace="cloudnative-pg-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x25 1x1 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="cloudnative-pg-prd", dest_namespace="cloudnative-pg-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x45 1x15
++      # argocd-prd, synced by hand: degraded throughout.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="argocd-prd", dest_namespace="argocd-prd", autosync_enabled="false", sync_status="Synced", health_status="Degraded"}
++        values: 1x26 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="argocd-prd", dest_namespace="argocd-prd", autosync_enabled="false", sync_status="Synced", health_status="Degraded"}
++        values: _x45 1x15
++      # youtrack-prd: degraded 5-24 m, healthy from 25 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: 1x4 stale _x19 1x1 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: _x5 1x19 stale
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.77:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: _x45 1x15
++    alert_rule_test:
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 26m
++        exp_alerts:
++          - *kubecoder_failed
++          - &gitsync_failed
++            exp_labels: {name: gitsync-prd, dest_namespace: gitsync-prd, severity: critical}
++            exp_annotations:
++              summary: Argo CD has stopped syncing gitsync-prd (gitsync-prd) on its own
++              description: >-
++                The SyncError condition on https://argocd.home/applications/gitsync-prd says why.
++                Argo CD does not try a revision whose sync failed again on its own
++                (ArgoCDSyncFailed carried that error), and its prune guard refuses a sync that
++                would delete every resource. A new commit or a manual sync that succeeds resolves
++                this alert.
++          - &cloudnative_failed
++            exp_labels: {name: cloudnative-pg-prd, dest_namespace: cloudnative-pg-prd, severity: critical}
++            exp_annotations:
++              summary: Argo CD has stopped syncing cloudnative-pg-prd (cloudnative-pg-prd) on its own
++              description: >-
++                The SyncError condition on https://argocd.home/applications/cloudnative-pg-prd says
++                why. Argo CD does not try a revision whose sync failed again on its own
++                (ArgoCDSyncFailed carried that error), and its prune guard refuses a sync that
++                would delete every resource. A new commit or a manual sync that succeeds resolves
++                this alert.
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 37m
++        exp_alerts: [*kubecoder_failed, *gitsync_failed, *cloudnative_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 44m
++        exp_alerts: [*kubecoder_failed, *gitsync_failed, *cloudnative_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 45m
++        exp_alerts: [*kubecoder_failed, *gitsync_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 50m
++        exp_alerts: [*kubecoder_failed, *gitsync_failed]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 20m
++        exp_alerts: [*argocd_degraded, *youtrack_degraded]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 25m
++        exp_alerts: [*argocd_degraded]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 42m
++        exp_alerts: [*argocd_degraded]
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 45m
++        exp_alerts: [*argocd_degraded]
++
++  - name: an app deleted while its standing alert is pending raises nothing, and one deleted while it fires resolves at once
++    interval: 1m
++    input_series:
++      # gitsync-prd: synced throughout.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="gitsync-prd", dest_namespace="gitsync-prd", autosync_enabled="true", sync_status="Synced", health_status="Healthy"}
++        values: 1x40
++      # old-prd: SyncError until it is deleted at 5 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="old-prd", dest_namespace="old-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x4 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="old-prd", condition="SyncError"}
++        values: 1x4 stale
++      # kubecoder-prd: SyncError until it is deleted at 30 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", dest_namespace="kubecoder-prd", autosync_enabled="true", sync_status="OutOfSync", health_status="Healthy"}
++        values: 1x29 stale
++      - series: argocd_app_condition{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="kubecoder-prd", condition="SyncError"}
++        values: 1x29 stale
++      # youtrack-prd: degraded until it is deleted at 20 m.
++      - series: argocd_app_info{job="kubernetes-service-endpoints", instance="10.1.40.12:8082", namespace="argocd-prd", name="youtrack-prd", dest_namespace="youtrack-prd", autosync_enabled="true", sync_status="Synced", health_status="Degraded"}
++        values: 1x19 stale
++    alert_rule_test:
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 10m
++        exp_alerts: [*kubecoder_failed]
++      - alertname: ArgoCDSyncStillFailed
++        eval_time: 29m
++        exp_alerts: [*kubecoder_failed]
++      - {alertname: ArgoCDSyncStillFailed, eval_time: 30m}
++      - alertname: ArgoCDHealthStillDegraded
++        eval_time: 19m
++        exp_alerts: [*youtrack_degraded]
++      - {alertname: ArgoCDHealthStillDegraded, eval_time: 20m}

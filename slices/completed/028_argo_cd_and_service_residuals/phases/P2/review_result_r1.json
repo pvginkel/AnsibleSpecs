@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "The controller's application metrics Service is scrapeable by PrometheusDeploy's existing kubernetes-service-endpoints job. The controller exports SyncError conditions, and https://argocd is an allowed login URL while url stays argocd.home. Upstream v3.5.1 and 22 gate mutations support all of it. Only two advisory inaccuracies in the done-record remain.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Done-record says SyncError is set only after retries are spent; v3.5.1 also sets it from the prune guard and on a failed SetAppOperation"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Done-record says the architecture artifact is unchanged; the generated artifact gains the metrics Service's interface and relation"}
+ ]}

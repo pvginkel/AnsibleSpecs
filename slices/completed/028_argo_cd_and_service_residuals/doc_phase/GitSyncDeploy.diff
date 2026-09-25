@@ -1,0 +1,298 @@
+/work/GitSyncDeploy — P5: git diff 4b0578b7cd34..22b69677bd04
+
+.kubecoder/project.yaml                 |   1 +
+ chart/files/clean-lucene.sh             |  97 +++++++++++++++++++++++++++++++++
+ chart/templates/gitblit-deployment.yaml |   5 +-
+ tests/clean-lucene.sh                   | 154 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 255 insertions(+), 2 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 9211f1a..6ee9686 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -19,5 +19,6 @@ projects:
+         cexec iac helm template git-sync-prd chart --namespace git-sync-prd --values config/prd/values.yaml
+         --set hook.repo=https://github.com/pvginkel/GitSyncDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=git-sync-prd
+       - cexec iac tests/terraform.sh
++      - cexec iac busybox sh tests/clean-lucene.sh
+       - cexec aac-tools gen-architecture --stage prd --producer git-sync-deploy
+       - cexec aac-tools arch-validate docs/architecture/git-sync-deploy.yaml
+diff --git a/chart/files/clean-lucene.sh b/chart/files/clean-lucene.sh
+new file mode 100755
+index 0000000..9078387
+--- /dev/null
++++ b/chart/files/clean-lucene.sh
+@@ -0,0 +1,97 @@
++#!/bin/sh
++# Readies Gitblit's Lucene state on the git volume ($1) before Gitblit starts. The gitblit pod's
++# clean-lucene-locks init container runs it on busybox, which has no git; tests/clean-lucene.sh
++# runs it over a fixture.
++set -eu -o pipefail
++root=$1
++
++find "$root" -type f -path '*/lucene/*' \
++  \( -name 'write.lock' -o -name 'gb_lucene.conf.lock*' \) -exec rm {} +
++
++# <repo>.git/lucene/<index version>/gb_lucene.conf holds, for each branch Gitblit has indexed, an
++# [aliases] entry (SHA-1 of the ref name = the ref name) and a [branches] entry under the same key
++# (the last commit indexed). Gitblit never removes them. On every index cycle it deletes the
++# documents of each aliased branch it no longer indexes, and reopens the repository's index
++# writer to do so. Both entries go for each such branch.
++#
++# Gitblit 1.10 indexes the local branches that the repository config's gitblit.indexBranch lists.
++# When that list holds "default", it also indexes the first local branch whose tip is HEAD's
++# commit, or any local branch when HEAD does not resolve. Every branch that could be that one
++# stays: a dropped [branches] entry makes Gitblit index the branch's whole history again.
++find "$root" -type f -path '*/lucene/*/gb_lucene.conf' | while IFS= read -r conf; do
++  # The pruned copy carries the lock name the find above deletes, so an interrupted run leaves
++  # nothing behind.
++  awk -v repo="${conf%/lucene/*/gb_lucene.conf}" -v out="$conf.lock" '
++    # A git config value, as a ref name can spell it: ref names hold no blanks or control
++    # characters, so only quotes, backslash escapes and a trailing comment need undoing.
++    function decode(s,    v, q, c, i) {
++      v = ""; q = 0
++      for (i = 1; i <= length(s); i++) {
++        c = substr(s, i, 1)
++        if (c == "\\") v = v substr(s, ++i, 1)
++        else if (c == "\"") q = !q
++        else if (!q && (c == "#" || c == ";")) break
++        else if (c != " " && c != "\t") v = v c
++      }
++      return v
++    }
++    function section(line) {
++      sub(/^[ \t]*\[/, "", line); sub(/\].*/, "", line); gsub(/[ \t]/, "", line)
++      return tolower(line)
++    }
++    function key(line) {
++      if (line ~ /^[ \t]*([#;]|$)/) return ""
++      sub(/=.*/, "", line); gsub(/[ \t]/, "", line)
++      return tolower(line)
++    }
++    function value(line) {
++      return decode(substr(line, index(line, "=") + 1))
++    }
++    # The object a ref resolves to, the loose ref before packed-refs; "" when there is none.
++    function tip(ref,    f, line) {
++      f = repo "/" ref
++      if ((getline line < f) > 0) {
++        close(f)
++        return line ~ /^ref: / ? tip(substr(line, 6)) : line
++      }
++      close(f)
++      return ref in packed ? packed[ref] : ""
++    }
++    function indexed(ref,    t) {
++      if (ref in listed) return 1
++      if (!("default" in listed)) return 0
++      t = tip(ref)
++      return t != "" && (head == "" || t == head)
++    }
++    BEGIN {
++      f = repo "/config"
++      while ((getline line < f) > 0) {
++        if (line ~ /^[ \t]*\[/) s = section(line)
++        else if (s == "gitblit" && key(line) == "indexbranch") listed[value(line)] = 1
++      }
++      close(f)
++      if ("default" in listed) {
++        f = repo "/packed-refs"
++        while ((getline line < f) > 0)
++          if (split(line, p, " ") == 2 && p[1] ~ /^[0-9a-f]+$/) packed[p[2]] = p[1]
++        close(f)
++        head = tip("HEAD")
++      }
++    }
++    FNR == 1 {
++      s = ""
++      if (++pass == 2) {
++        for (k in alias)
++          if (!indexed(alias[k])) { stale[k] = 1; n++; print FILENAME ": dropped " alias[k] }
++        if (!n) exit
++      }
++    }
++    /^[ \t]*\[/ { s = section($0); if (pass == 2) print > out; next }
++    pass == 1 { if (s == "aliases" && (k = key($0)) != "") alias[k] = value($0); next }
++    !((s == "aliases" || s == "branches") && (key($0) in stale)) { print > out }
++  ' "$conf" "$conf"
++  [ -e "$conf.lock" ] || continue
++  chown "$(stat -c %u:%g "$conf")" "$conf.lock"
++  chmod "$(stat -c %a "$conf")" "$conf.lock"
++  mv "$conf.lock" "$conf"
++done
+diff --git a/chart/templates/gitblit-deployment.yaml b/chart/templates/gitblit-deployment.yaml
+index 12493a8..2e8c6da 100644
+--- a/chart/templates/gitblit-deployment.yaml
++++ b/chart/templates/gitblit-deployment.yaml
+@@ -33,8 +33,9 @@ spec:
+             - sh
+             - -c
+             - |
+-              find /git -type f -path '*/lucene/*' \
+-                \( -name 'write.lock' -o -name 'gb_lucene.conf.lock*' \) -delete
++              {{- .Files.Get "files/clean-lucene.sh" | nindent 14 }}
++            - clean-lucene
++            - /git
+           volumeMounts:
+             - name: git-sync-pvc
+               mountPath: /git
+diff --git a/tests/clean-lucene.sh b/tests/clean-lucene.sh
+new file mode 100755
+index 0000000..956d724
+--- /dev/null
++++ b/tests/clean-lucene.sh
+@@ -0,0 +1,154 @@
++#!/bin/sh
++# chart/files/clean-lucene.sh, the script the gitblit pod's clean-lucene-locks init container runs,
++# over a fixture laid out like the git volume, with busybox's applets as the only commands.
++# Run it under busybox: `busybox sh tests/clean-lucene.sh`.
++set -eu
++cd "$(dirname "$0")/.."
++script=$PWD/chart/files/clean-lucene.sh
++busybox=$(command -v busybox)
++tmp=$("$busybox" mktemp -d)
++trap 'rm -rf "$tmp"' EXIT
++mkdir "$tmp/bin"
++for applet in $("$busybox" --list); do ln -s "$busybox" "$tmp/bin/$applet"; done
++PATH=$tmp/bin
++
++git=$tmp/git
++failed=0
++fail() { echo "FAIL: $*"; failed=1; }
++
++key() { printf %s "$1" | sha1sum | cut -c1-40; }
++
++# A config value as git and JGit write it.
++quote() {
++  case $1 in
++    *[#\;]*) printf '"%s"' "$1" ;;
++    *) printf %s "$1" ;;
++  esac
++}
++
++# gb_lucene.conf as Gitblit writes it, for the given refs, each indexed up to a made-up commit.
++lucene_conf() {
++  printf '[aliases]\n'
++  for ref; do printf '\t%s = %s\n' "$(key "$ref")" "$(quote "$ref")"; done
++  printf '[branches]\n'
++  for ref; do printf '\t%s = %s\n' "$(key "$ref")" "$(key "commit $ref")"; done
++}
++
++# A bare mirror as git-sync leaves it: repo <path> <HEAD's branch>, its gitblit.indexBranch values
++# on stdin.
++repo() {
++  mkdir -p "$git/$1/refs/heads" "$git/$1/lucene/6_54"
++  printf 'ref: refs/heads/%s\n' "$2" > "$git/$1/HEAD"
++  {
++    printf '[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = true\n'
++    printf '[remote "origin"]\n\turl = https://github.com/%s\n' "$1"
++    printf '\tfetch = +refs/*:refs/*\n\tmirror = true\n'
++    printf '[gitblit]\n'
++    while IFS= read -r ref; do printf '\tindexBranch = %s\n' "$(quote "$ref")"; done
++    printf '[fetch]\n\tunpackLimit = 1\n'
++  } > "$git/$1/config"
++}
++
++conf() { echo "$git/$1/lucene/6_54/gb_lucene.conf"; }
++
++main=1111111111111111111111111111111111111111
++older=2222222222222222222222222222222222222222
++
++# Branches listed by full ref name, as git-sync writes them (tags included, which Gitblit never
++# indexes). Two branches are gone from the list.
++repo owner/listed.git main <<EOF
++refs/heads/main
++refs/tags/v1.0
++refs/heads/fix#12
++refs/heads/feature/search
++EOF
++lucene_conf refs/heads/main refs/heads/gone 'refs/heads/fix#12' refs/heads/feature/search \
++  'refs/heads/old;wip' > "$(conf owner/listed.git)"
++chmod 640 "$(conf owner/listed.git)"
++
++# "default" beside a listed branch. HEAD's branch is loose at $main over a packed $older; twin shares
++# HEAD's commit, so Gitblit can take it for the default branch; diverged does not; deleted is gone.
++repo owner/default.git main <<EOF
++default
++refs/heads/release
++EOF
++printf '%s\n' '# pack-refs with: peeled fully-peeled sorted ' \
++  "$older refs/heads/diverged" "$older refs/heads/main" "$older refs/heads/release" \
++  "$main refs/heads/twin" > "$git/owner/default.git/packed-refs"
++echo "$main" > "$git/owner/default.git/refs/heads/main"
++lucene_conf refs/heads/main refs/heads/twin refs/heads/diverged refs/heads/deleted \
++  refs/heads/release > "$(conf owner/default.git)"
++
++# "default" with HEAD naming a branch that is gone: Gitblit then takes its most recently updated
++# branch, which can be any of them.
++repo owner/dangling.git gone <<EOF
++default
++EOF
++echo "$main" > "$git/owner/dangling.git/refs/heads/kept"
++lucene_conf refs/heads/kept refs/heads/deleted > "$(conf owner/dangling.git)"
++
++# Nothing stale.
++repo other/clean.git main <<EOF
++refs/heads/main
++refs/heads/dev
++EOF
++lucene_conf refs/heads/main refs/heads/dev > "$(conf other/clean.git)"
++
++touch "$git/owner/listed.git/lucene/6_54/write.lock" "$git/other/clean.git/lucene/6_54/gb_lucene.conf.lock"
++listed_attrs=$(stat -c '%u:%g %a' "$(conf owner/listed.git)")
++clean_before=$(stat -c '%i %Y' "$(conf other/clean.git)")
++
++sh "$script" "$git" > "$tmp/run1"
++
++expect() {
++  if ! cmp -s "$2" "$tmp/expected"; then
++    fail "$1"
++    diff -u "$tmp/expected" "$2" || true
++  fi
++}
++
++lucene_conf refs/heads/main 'refs/heads/fix#12' refs/heads/feature/search > "$tmp/expected"
++expect 'owner/listed.git: stale entries dropped, listed ones kept' "$(conf owner/listed.git)"
++[ "$(stat -c '%u:%g %a' "$(conf owner/listed.git)")" = "$listed_attrs" ] ||
++  fail 'owner/listed.git: owner or mode changed'
++
++lucene_conf refs/heads/main refs/heads/twin refs/heads/release > "$tmp/expected"
++expect 'owner/default.git: branches at HEAD'"'"'s commit and listed ones kept' "$(conf owner/default.git)"
++
++lucene_conf refs/heads/kept > "$tmp/expected"
++expect 'owner/dangling.git: existing branches kept' "$(conf owner/dangling.git)"
++
++lucene_conf refs/heads/main refs/heads/dev > "$tmp/expected"
++expect 'other/clean.git: content unchanged' "$(conf other/clean.git)"
++[ "$(stat -c '%i %Y' "$(conf other/clean.git)")" = "$clean_before" ] ||
++  fail 'other/clean.git: rewritten'
++
++for lock in owner/listed.git/lucene/6_54/write.lock other/clean.git/lucene/6_54/gb_lucene.conf.lock; do
++  [ ! -e "$git/$lock" ] || fail "$lock: not deleted"
++done
++[ -z "$(find "$git" -name 'gb_lucene.conf.lock*')" ] || fail 'a pruned copy was left behind'
++
++{
++  echo "$(conf owner/listed.git): dropped refs/heads/gone"
++  echo "$(conf owner/listed.git): dropped refs/heads/old;wip"
++  echo "$(conf owner/default.git): dropped refs/heads/diverged"
++  echo "$(conf owner/default.git): dropped refs/heads/deleted"
++  echo "$(conf owner/dangling.git): dropped refs/heads/deleted"
++} | sort > "$tmp/expected"
++sort "$tmp/run1" > "$tmp/run1.sorted"
++expect 'first run: one line per dropped branch' "$tmp/run1.sorted"
++
++snapshot() {
++  find "$git" | sort | while IFS= read -r f; do
++    stat -c '%n %i %Y %a' "$f"
++    [ ! -f "$f" ] || sha1sum "$f"
++  done
++}
++snapshot > "$tmp/expected"
++sh "$script" "$git" > "$tmp/run2"
++[ ! -s "$tmp/run2" ] || fail "second run dropped: $(cat "$tmp/run2")"
++snapshot > "$tmp/after"
++expect 'second run: nothing changed' "$tmp/after"
++
++[ "$failed" = 0 ] && echo 'clean-lucene: all checks passed'
++exit "$failed"

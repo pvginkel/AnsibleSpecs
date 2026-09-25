@@ -29,7 +29,6 @@ slice's own documents hold the detail.
 Triaged 2026-09-24 from the ANS intake queue (the record: `handovers/triage_2026-09-24.md` at `1b6cd36`):
 
 - **[026](slices/backlog/026_aac_tools_generator_and_producers/slice.md)** — aac-tools and the producers: generator fixes (in-house service per container, Argo CD's capability and redis edges, the app-name equality), the annotation contract in `gen-architecture --help`, Alertmanager's Telegram edge, and every copied `arch-validate.py` onto the toolchain (minor).
-- **[028](slices/backlog/028_argo_cd_and_service_residuals/slice.md)** — Argo CD and service residuals: a standing sync-failed alert, login through `https://argocd/`, the PreSync hook's `terraform init`, the promote re-run after a failed tag push, and gitblit's stalled index (minor).
 - **[029](slices/backlog/029_helmcharts_decommission/slice.md)** — HelmCharts decommission: the D61 cleanup, the version-poller and helm-charts producer, `collect-versions` deleted and a home for `recommend-resources`, the Argo CD registry move, and the docs (improvement).
 - **[030](slices/backlog/030_retire_modern_app_dev_images/slice.md)** — Retire modern-app-dev and modern-app-dev-playwright: their build and validation pipelines move to other images, then both images go (improvement).
 
@@ -81,6 +80,7 @@ Triaged 2026-09-24 from the ANS intake queue (the record: `handovers/triage_2026
 | [012 kubecoder-argo-cutover](slices/completed/012_kubecoder_argo_cutover/plan.md) | — | — | KubeCoder cutover: Terraform state surgery and the per-stage cutover runbook, dev then prd — operator executes (phases.md B.4+B.5; #124). |
 | [025 architecture-cross-app-resolution](slices/completed/025_architecture_cross_app_resolution/plan.md) | — | — | Architecture cross-app resolution: app-to-app edges resolve through the published set once apps publish from separate repos (feature; split out of 014; needs 024; the 16 apps the bulk migration held on it are released). |
 | [027 build-and-test-gates](slices/completed/027_build_and_test_gates/plan.md) | — | — | Build and test gates: a Groovy parse gate for JenkinsPipelineUtils, a test stage before ArgoCDTools publishes, and promtool over PrometheusDeploy's alert rules (test gap). |
+| [028 argo-cd-and-service-residuals](slices/completed/028_argo_cd_and_service_residuals/plan.md) | — | — | Argo CD and service residuals: a standing sync-failed alert, login through `https://argocd/`, the PreSync hook's `terraform init`, the promote re-run after a failed tag push, and gitblit's stalled index (minor). |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

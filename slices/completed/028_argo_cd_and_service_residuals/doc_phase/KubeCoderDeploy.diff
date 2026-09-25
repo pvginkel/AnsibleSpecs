@@ -1,0 +1,116 @@
+/work/KubeCoderDeploy — P4: git diff 03532b9a373d..4dda8ce1b51e
+
+Jenkinsfile.promote | 68 +++++++++++++++++++++++++++++++++++++++++++-------------------------
+ 1 file changed, 43 insertions(+), 25 deletions(-)
+
+diff --git a/Jenkinsfile.promote b/Jenkinsfile.promote
+index 8fd7376..e422047 100644
+--- a/Jenkinsfile.promote
++++ b/Jenkinsfile.promote
+@@ -9,6 +9,10 @@
+ //   2. `prd` fast-forwards to the commit, and the first run creates it (D35);
+ //   3. D48's annotated `release-<m>` tag goes on the commit, `<m>` this job's build number.
+ //
++// A re-run for the commit `prd` already names finishes a promotion whose step 3 failed: when no
++// `release-*` tag points at the commit, the job runs step 3 alone. A commit a release tag records
++// has nothing left to promote.
++//
+ // No rollback parameter and no force-move (D47): a rollback is a revert on main, promoted like
+ // any other commit (D36). The job holds the estate's GitHub credential and reaches the registry
+ // over plain HTTP; it holds no cluster credential and deploys nothing itself.
+@@ -33,6 +37,7 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+             String release = "release-${currentBuild.number}"
+             String sha
+             List<Map<String, String>> pins
++            boolean recordOnly = false
+ 
+             stage('Resolving the commit') {
+                 String requested = params.commit ?: ''
+@@ -70,7 +75,11 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+ 
+                 String current = sh(script: "git -C '${checkout}' rev-parse --quiet --verify refs/remotes/origin/prd || true", returnStdout: true).trim()
+                 if (current == sha) {
+-                    error("prd is already at ${sha}: nothing to promote")
++                    String recorded = sh(script: "git -C '${checkout}' tag --list 'release-*' --points-at '${sha}'", returnStdout: true).trim()
++                    if (recorded) {
++                        error("prd is already at ${sha}, released as ${recorded.replace('\n', ', ')}: nothing to promote")
++                    }
++                    recordOnly = true
+                 }
+                 if (current && sh(script: "git -C '${checkout}' merge-base --is-ancestor '${current}' '${sha}'", returnStatus: true) != 0) {
+                     error("prd is at ${current}, which ${sha} does not descend from: a promotion only " +
+@@ -85,34 +94,40 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+                     script: "git -C '${checkout}' show '${sha}:config/prd/values.yaml'",
+                     returnStdout: true)))
+ 
+-                echo "Promoting ${sha} to prd as ${release}" + (current ? ", from ${current}" : '; this creates prd')
++                if (recordOnly) {
++                    echo "prd is already at ${sha}, and no release tag records it: recording it as ${release}"
++                } else {
++                    echo "Promoting ${sha} to prd as ${release}" + (current ? ", from ${current}" : '; this creates prd')
++                }
+                 currentBuild.description = "${release}: ${sha.substring(0, 12)}"
+             }
+ 
+-            stage('Retagging the images') {
+-                for (int i = 0; i < pins.size(); i++) {
+-                    Map<String, String> pin = pins[i]
+-
+-                    // An existing `prd-<n>` was retagged from `dev-<n>` by an earlier promotion and
+-                    // is left as it is. D47 caps the `dev-` family apart from the `prd-` one, so a
+-                    // rollback promoting an older commit (D36) can pin a `prd-<n>` whose `dev-<n>`
+-                    // is already reaped.
+-                    sh """
+-                        set -eu
+-
+-                        if crane --insecure digest '${pin.image}:${pin.tag}' >/dev/null 2>&1; then
+-                            echo '${pin.image}:${pin.tag} exists; left as it is'
+-                        else
+-                            crane --insecure tag '${pin.image}:dev-${pin.build}' '${pin.tag}'
+-                        fi
+-                    """
++            if (!recordOnly) {
++                stage('Retagging the images') {
++                    for (int i = 0; i < pins.size(); i++) {
++                        Map<String, String> pin = pins[i]
++
++                        // An existing `prd-<n>` was retagged from `dev-<n>` by an earlier
++                        // promotion and is left as it is. D47 caps the `dev-` family apart from the
++                        // `prd-` one, so a rollback promoting an older commit (D36) can pin a
++                        // `prd-<n>` whose `dev-<n>` is already reaped.
++                        sh """
++                            set -eu
++
++                            if crane --insecure digest '${pin.image}:${pin.tag}' >/dev/null 2>&1; then
++                                echo '${pin.image}:${pin.tag} exists; left as it is'
++                            else
++                                crane --insecure tag '${pin.image}:dev-${pin.build}' '${pin.tag}'
++                            fi
++                        """
++                    }
+                 }
+-            }
+ 
+-            stage('Advancing prd') {
+-                // No `+` and no --force: GitHub refuses the push unless it fast-forwards prd,
+-                // whatever moved prd since the check above.
+-                sh "git -C '${checkout}' push origin '${sha}:refs/heads/prd'"
++                stage('Advancing prd') {
++                    // No `+` and no --force: GitHub refuses the push unless it fast-forwards prd,
++                    // whatever moved prd since the check above.
++                    sh "git -C '${checkout}' push origin '${sha}:refs/heads/prd'"
++                }
+             }
+ 
+             stage('Recording the release') {
+@@ -121,7 +136,10 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+                     references += "${pins[i].image}:${pins[i].tag}\n"
+                 }
+ 
+-                withEnv(["RELEASE_MESSAGE=${release}: ${sha} promoted to prd by ${env.JOB_NAME} #${currentBuild.number}\n\n${references}"]) {
++                String event = recordOnly
++                    ? "${sha} was already on prd; recorded by ${env.JOB_NAME} #${currentBuild.number}"
++                    : "${sha} promoted to prd by ${env.JOB_NAME} #${currentBuild.number}"
++                withEnv(["RELEASE_MESSAGE=${release}: ${event}\n\n${references}"]) {
+                     sh """
+                         set -eu

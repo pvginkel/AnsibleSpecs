@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "Routing, the blind warning, and the standing rules' fire/hold/resolve edges are correct and tested. The gap stand-in revives SyncError/Degraded samples from before an app recovered, so a gap of 10 m or more (or deleting the app) fires a critical standing alert for a healthy app (promtool repro fails). The degraded rule's 20 m gap look-back is also unpinned: a 3 m mutation passes.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "failing-test",
+   "summary": "Gap stand-in max_over_time(SyncError|Degraded[20m]) revives cleared state: a 10-15 m controller gap after recovery, or app deletion, fires ArgoCDSyncStillFailed (critical) before ArgoCDAlertsBlind"},
+  {"id": "F2", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "coverage-gap",
+   "summary": "ArgoCDHealthStillDegraded's gap look-back is untested beyond 2 m; mutating [20m] to [3m] passes argocd.yml"}
+ ]}

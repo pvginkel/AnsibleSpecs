@@ -1,7 +1,8 @@
 # Close-out — slice 028 argo_cd_and_service_residuals
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-25 21:47 → 23:42 · 5 phases · 0 bail-outs · 1 test round · doc phase done · $42.56
+(planner 27 %, research 7 %, rework 10 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,12 +14,21 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 028 closes four Argo CD and service residuals. Argo CD's application controller now
+exports its metrics with the SyncError condition. PrometheusDeploy's new `argocd` rule group
+raises standing alerts that stay up until the app recovers: `ArgoCDSyncStillFailed`,
+`ArgoCDHealthStillDegraded` and `ArgoCDAlertsBlind`. D7's two events reach receivers that send no
+false "resolved" (D7 amended). `https://argocd` is an allowed login URL. A promote re-run records
+a release whose tag push failed. Gitblit's init container prunes stale `gb_lucene.conf` entries at
+pod start. The terraform-init retry was ruled not needed (D2). All four deploy repos are held
+unpushed, so none of this is live yet. The runbooks and READMEs describe the committed design.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: every live criterion waits on these four pushes. Push ArgoCDDeploy and sync `argocd-prd`
+by hand before pushing PrometheusDeploy, or `ArgoCDAlertsBlind` fires. ArgoCDDeploy and
+KubeCoderDeploy need a `git pull --rebase` first, and their rebased trees have not been
+gate-run.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -33,6 +43,10 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 - V08 — Login through https://argocd/ works. A login started at https://argocd/ completes instead of …
 
 test-agent, r1, 2026-09-25 — ArgoCDDeploy's origin/main is one commit ahead of the local main (2326bf4, architecture.yaml's Redis logo only; no overlap with values.yaml or tests/render-chart.py), so the push is refused until `git pull --rebase`. The rebased tree has not been gate-run. Order: push, then sync argocd-prd by hand (Argo CD syncs itself by hand, D3) before A2.
+
+driver, push check, 2026-09-25 — held as planned. The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual.
+
+doc-writer, doc phase, 2026-09-25 — Ansible docs/runbooks/argocd.md (branch phase/028-docs, landed with the slice) now gives the UI as https://argocd.home or the bare https://argocd, and lists https://argocd/auth/callback among the Keycloak client's redirect URIs for a bootstrap. The bare URL works live only once this push lands and argocd-prd is synced.
 
 **Consequence:** until you push it, nothing ArgoCDDeploy deploys carries the slice, and V06, V08 stay unproven.
 
@@ -51,6 +65,10 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 
 test-agent, r1, 2026-09-25 — Push after A1 is synced. PrometheusDeploy is not behind origin. Once pushed, the argocd rule group loads and ArgoCDAlertsBlind fires 15 m later if the controller Service is not being scraped yet.
 
+driver, push check, 2026-09-25 — held as planned. The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual.
+
+doc-writer, doc phase, 2026-09-25 — Ansible docs/runbooks/argocd.md now describes the events without a "resolved" and PrometheusDeploy's standing alerts (Facts table, Known behaviours). Until this push lands, Telegram still gets the [RESOLVED] notice after 5 minutes and no standing alert fires.
+
 **Consequence:** until you push it, nothing PrometheusDeploy deploys carries the slice, and V01, V02, V03 stay unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
@@ -66,6 +84,10 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 
 test-agent, r1, 2026-09-25 — KubeCoderDeploy's origin/main is two Build-Main pin commits ahead (10b6c7b, 56705db: config/dev and config/prd values.yaml only; no overlap with Jenkinsfile.promote), so the push is refused until `git pull --rebase`. The rebased tree has not been gate-run.
 
+driver, push check, 2026-09-25 — held as planned. The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual.
+
+doc-writer, doc phase, 2026-09-25 — Ansible docs/runbooks/kubecoder-cutover.md (P2, its red builds) now gives a re-run with commit=<sha> as the recovery for a failed Recording the release. Promote-PRD loads Jenkinsfile.promote from origin/main, so until this push lands that re-run still refuses with 'nothing to promote' and the hand recipe is the way.
+
 **Consequence:** until you push it, nothing KubeCoderDeploy deploys carries the slice, and V10 stays unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
@@ -79,6 +101,8 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 
 - V12 — gitblit prunes stale branch entries from gb_lucene.conf so indexing does not stall. At pod start, …
 
+driver, push check, 2026-09-25 — held as planned. The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual.
+
 **Consequence:** until you push it, nothing GitSyncDeploy deploys carries the slice, and V12 stays unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
@@ -86,7 +110,8 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: no bail-outs and no appended phases. P3 took a review-fix round on metrics gaps (see Q2).
+N1 is a harmless deviation. N2 records the live baselines the pushes will be measured against.
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -116,28 +141,19 @@ Baselines the pushes will be measured against, and three assumptions checked aga
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: none recorded.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Q2 is the only open question. It asks whether a standing alert's resolve that falls due
+during an Argo CD metrics gap may wait for the next scrape, as it does now. The alternative is a
+subquery rule. It matters only when a controller gap follows a successful sync.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
-
-### ~~Q1 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor~~ — superseded by Q2: the body misstated what the alternative gives up; struck by code-writer, P3 r2
-
-Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay of cleared failures, and no delayed resolve. They conflict for an alert held through a sync. For its first scrapes after a sync, an app whose sync failed looks the same as one whose sync succeeded, until SyncError comes back one scrape later. Resolving on the hold's own schedule during a gap would therefore resolve, and later fire again, an app whose sync failed. That breaks V04 ("a metrics gap neither resolves nor re-fires them"). The fix follows V04: while no app is scraped, each alert keeps its own ALERTS state. The cost is a resolve that is due during the gap, which waits for the next scrape. ArgoCDAlertsBlind has fired by 15 m into any such gap. To resolve on schedule instead, the rule would need the app's last-scraped sync status (a subquery) and would give up the V04 guarantee for a sync that fails right before a gap.
-
-**Consequence:** An alert held through a successful sync still reads firing when a controller gap starts, and its "resolved" comes when scraping resumes rather than 5 m after the sync.
-
-**Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
-**Disposition:**
 
 ### Q2 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor
 
@@ -148,21 +164,26 @@ Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay o
 **Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
 **Disposition:**
 
+### ~~Q1 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor~~ — superseded by Q2: the body misstated what the alternative gives up; struck by code-writer, P3 r2
+
+<details><summary>struck — body kept for the record</summary>
+
+Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay of cleared failures, and no delayed resolve. They conflict for an alert held through a sync. For its first scrapes after a sync, an app whose sync failed looks the same as one whose sync succeeded, until SyncError comes back one scrape later. Resolving on the hold's own schedule during a gap would therefore resolve, and later fire again, an app whose sync failed. That breaks V04 ("a metrics gap neither resolves nor re-fires them"). The fix follows V04: while no app is scraped, each alert keeps its own ALERTS state. The cost is a resolve that is due during the gap, which waits for the next scrape. ArgoCDAlertsBlind has fired by 15 m into any such gap. To resolve on schedule instead, the rule would need the app's last-scraped sync status (a subquery) and would give up the V04 guarantee for a sync that fails right before a gap.
+
+**Consequence:** An alert held through a successful sync still reads firing when a controller gap starts, and its "resolved" comes when scraping resumes rather than 5 m after the sync.
+
+**Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
+**Disposition:**
+
+</details>
+
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S4 is the one that asks for code: a guard so a bare promote re-run cannot pass over a
+stuck release (the docs now carry the workaround). S3 affects every alert in the estate. S3, S4
+and S5 were read from source. The only witnessed one is S2, which just corrects the record.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### ~~S1 — ArgoCDDeploy P2 done-record: SyncError is set in two more cases than it says · minor~~ — resolved by P3 (8b6e866, 185b64f): ArgoCDSyncStillFailed's description names the prune guard beside the failed sync and its summary claims no failed sync; P3's gate and review r2 re-ran against it; struck by consult 1
-
-The record tells P3 the controller sets SyncError only once a failed sync's retries are spent. Upstream v3.5.1 also sets it from the auto-sync prune guard (controller/appcontroller.go:2431-2441; every generated app has prune: true and no allowEmpty) and on a failed SetAppOperation (:2458-2460). The fact is now recorded under P2's Record for P3.
-
-**Consequence:** The standing failed-sync alert also fires for an app blocked by the prune guard or by an API error, and alert text written from the record would call that a failed sync.
-
-**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
-**Disposition:**
 
 ### S2 — ArgoCDDeploy P2 done-record says the architecture artifact is unchanged; it gains the metrics Service's interface · nit
 
@@ -188,6 +209,8 @@ Build-Main commits image pins to KubeCoderDeploy main several times a day (#534-
 
 consult 1, 2026-09-25 — P4's done-record hands this to the doc phase: KubeCoderDeploy README 'Promotion' (its refusal list still names a prd already at the commit) and Ansible docs/runbooks/kubecoder-cutover.md :176 and :775-783 are to name the re-run as the recovery, with commit set to the stuck sha. The code side is complete; what remains is that instruction reaching the operator's docs.
 
+doc-writer, doc phase, 2026-09-25 — Done: KubeCoderDeploy README 'Promotion' and Ansible docs/runbooks/kubecoder-cutover.md (the do-not-stop list and P2's red builds) name the re-run with commit set to the stuck commit as the recovery, say that a re-run from defaults promotes main's new tip, and keep the hand recipe as the fallback. The suggested code guard is still open.
+
 **Consequence:** A re-run started from defaults after a Build-Main landed promotes whatever main holds at that moment, and the earlier release loses its D48 record unless it is tagged by hand.
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
@@ -201,3 +224,16 @@ Gitblit deletes a branch's documents on the first index cycle after the branch l
 
 **Provenance:** read, code-writer, P5 r1, Gitblit v1.10.0 LuceneService.updateIndex
 **Disposition:**
+
+### ~~S1 — ArgoCDDeploy P2 done-record: SyncError is set in two more cases than it says · minor~~ — resolved by P3 (8b6e866, 185b64f): ArgoCDSyncStillFailed's description names the prune guard beside the failed sync and its summary claims no failed sync; P3's gate and review r2 re-ran against it; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+The record tells P3 the controller sets SyncError only once a failed sync's retries are spent. Upstream v3.5.1 also sets it from the auto-sync prune guard (controller/appcontroller.go:2431-2441; every generated app has prune: true and no allowEmpty) and on a failed SetAppOperation (:2458-2460). The fact is now recorded under P2's Record for P3.
+
+**Consequence:** The standing failed-sync alert also fires for an app blocked by the prune guard or by an API error, and alert text written from the record would call that a failed sync.
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+</details>
