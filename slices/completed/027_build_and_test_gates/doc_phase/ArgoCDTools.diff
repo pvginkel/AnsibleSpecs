@@ -1,0 +1,58 @@
+/work/ArgoCDTools — P3: git diff 8914c0f8ace1..8bf2d0f94c2a
+
+Jenkinsfile | 28 ++++++++++++++++++++++++----
+ 1 file changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 2853c98..868151f 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -3,9 +3,10 @@ library identifier: 'JenkinsPipelineUtils', changelog: false
+ // Publishes this repo's images, one stage per image folder: registry:5000/argocd-hook,
+ // the image the Terraform PreSync hook Job runs, and registry:5000/aac-tools, the
+ // architecture-as-code commands Jenkins pipelines and the KubeCoder toolchain catalog
+-// both run. There is no deploy stage: each image is pulled by whoever runs it — the
+-// hook Job pins a build number, aac-tools is referenced by its floating tag — so
+-// nothing here deploys.
++// both run. Both images' suites run first, and a red suite ends the build before
++// either image is built, so nothing reaches the registry from it. There is no deploy
++// stage: each image is pulled by whoever runs it — the hook Job pins a build number,
++// aac-tools is referenced by its floating tag — so nothing here deploys.
+ properties([
+     // Two builds racing would leave `latest` on whichever finished last rather
+     // than on the newest commit.
+@@ -13,7 +14,12 @@ properties([
+     pipelineTriggers([githubPush()]),
+ ])
+ 
+-podTemplate(inheritFrom: 'jenkins-agent kaniko') {
++podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
++    // The image `cexec iac` runs locally: the suites run in the toolchain their local
++    // test verbs (.kubecoder/project.yaml) run in, with the git, helm and openssl they
++    // shell out to.
++    containerTemplates.iac_toolchain('iac'),
++]) {
+     node(POD_LABEL) {
+         stage('Cloning repo') {
+             git branch: 'main',
+@@ -21,6 +27,20 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko') {
+                 url: 'https://github.com/pvginkel/ArgoCDTools.git'
+         }
+ 
++        stage('Test') {
++            timeout(time: 10, unit: 'MINUTES') {
++                container('iac') {
++                    // Each component's test verb (.kubecoder/project.yaml) without its
++                    // cexec prefix, run from the component's own folder as the verb is.
++                    for (image in ['argocd-hook', 'aac-tools']) {
++                        dir(image) {
++                            sh 'python3 -m unittest discover -b -s tests -t .'
++                        }
++                    }
++                }
++            }
++        }
++
+         stage('Build argocd-hook image') {
+             timeout(time: 15, unit: 'MINUTES') {
+                 container('kaniko') {

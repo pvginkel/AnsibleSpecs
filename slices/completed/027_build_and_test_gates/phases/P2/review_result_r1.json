@@ -1,0 +1,3 @@
+{"outcome": "signoff", "summary": "containerTemplates.iac_toolchain offers registry:5000/kube-coder-iac-toolchain as a general-purpose sleep-infinity sidecar at uid 1000 with the terraform plugin cache emptied; modern_app_dev is untouched. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

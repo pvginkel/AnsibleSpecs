@@ -1,0 +1,1 @@
+root: cexec java mvn -B -q -f tests/pom.xml test    [  OK  ]

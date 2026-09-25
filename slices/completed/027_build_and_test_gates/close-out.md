@@ -1,7 +1,8 @@
 # Close-out — slice 027 build_and_test_gates
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-25 13:16 → 21:36 · 5 phases · 1 bail-out · 1 test round · doc phase done · $39.98
+(planner 29 %, research 12 %, rework 0 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,17 +14,25 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 027 added three gates. JenkinsPipelineUtils' `kc project test` compiles every `vars/*.groovy`
+through the controller's own CPS transform (groovy-cps `4376.v30c8c00684a_3`, Groovy 2.4.21), and
+the library gained `containerTemplates.iac_toolchain`. In that toolchain, `IaC/ArgoCDTools` now runs
+both images' suites before either image build, so a red suite publishes nothing (green in #15).
+PrometheusDeploy's test verb runs promtool 3.14.0 over the rendered alert rules and unit-tests all
+eight alerts. argo-cd D61 now says deploy repos test from their local verb, not in Jenkins. The doc
+phase updated the push-pipeline doctrine, the ArgoCDTools and PrometheusDeploy READMEs, the rule
+comments and the backup-freshness runbook to match.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: Nothing here is open: A1–A3 are struck. The operator still has to push AnsibleSpecs, which carries D61's rewrite and the new doctrine lines (N2).
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
 ### ~~A1 — Before /dev:run-slice: push the two toolchain commits, let kube-coder-iac-toolchain publish, then kc env restart~~ — resolved before P1 r2 (run-slice session note): both pushes, the kube-coder-iac-toolchain publish and kc env restart done; P1's gate ran on cexec java and P4's on cexec iac promtool, and sweep r1 is green on both; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 The rulings land both tools during planning, and a run cannot restart the pod it runs in. When this plan was written, both commits were still local only: Ansible `9edef16` (`- use: java` in `.kubecoder/config.yaml`) and DockerImages `1c1945a` (promtool 3.14.0 in `kube-coder-iac-toolchain`), and each repo was 1 ahead of origin. Push both, wait for DockerImages' job to publish `kube-coder-iac-toolchain:latest`, then run `kc env restart`. After the restart, `cexec java mvn -v` and `cexec iac promtool --version` should both answer.
 
@@ -36,7 +45,11 @@ run-slice session, after P1 r1 bail, 2026-09-25 — Done on the operator's instr
 **Provenance:** read; plan-writer, planning, r1; Ansible and DockerImages `git status -sb` (ahead 1)
 **Disposition:**
 
+</details>
+
 ### ~~A2 — If slice 028 runs first, push its held PrometheusDeploy commits before this run's test phase pushes PrometheusDeploy~~ — moot: slice 028 has not run and PrometheusDeploy held no 028 commits, so test phase r1 pushed 5a680b4, the only commit ahead of origin, with nothing to push before it; struck by test-agent r1
+
+<details><summary>struck — body kept for the record</summary>
 
 Slice 028 holds its PrometheusDeploy push: its new scrape, rules and routing reach prd from `main`, and the operator pushes them only after ../ArgoCDDeploy is pushed and `argocd-prd` has synced (028 plan.md, Push holds). P4 of this slice commits to the same repo, and its own change is inert for Argo: tests and the manifest, not the chart or the values. If 028 has run and its commits are still held when this run's test phase pushes PrometheusDeploy `main`, that push carries 028's held changes to prd too. If this slice runs first, the hazard does not arise.
 
@@ -47,7 +60,11 @@ consult 1, 2026-09-25 — At the completion consult 028 has not run (its folder 
 **Provenance:** read; plan-writer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md Push holds
 **Disposition:**
 
+</details>
+
 ### ~~A3 — Push JenkinsPipelineUtils (P2's containerTemplates.iac_toolchain) to main before ArgoCDTools (P3)~~ — resolved by test phase r1: JenkinsPipelineUtils a43f45e (P2's iac_toolchain) was pushed to main before ArgoCDTools c32a27c; IaC/ArgoCDTools #15, triggered by the ArgoCDTools push, loaded the library at a43f45e and ran green (SUCCESS, both images published); struck by test-agent r1
+
+<details><summary>struck — body kept for the record</summary>
 
 Every job loads JenkinsPipelineUtils unpinned from main. P3's ArgoCDTools Jenkinsfile calls containerTemplates.iac_toolchain, which exists only once P2's commit reaches JenkinsPipelineUtils main. A push to ArgoCDTools main triggers IaC/ArgoCDTools at once, so the library push has to land first.
 
@@ -56,9 +73,11 @@ Every job loads JenkinsPipelineUtils unpinned from main. P3's ArgoCDTools Jenkin
 **Provenance:** read, code-writer, P2, r1, plan.md P2 done-record
 **Disposition:**
 
+</details>
+
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: One stop. P1 was blocked because the java sidecar was missing, until the toolchain pushes and restart from planning were done (N1). The test phase's pushes ran green, and prd took no sync (N2).
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -92,15 +111,13 @@ Pushed in the order A3 asks for: JenkinsPipelineUtils a43f45e, then ArgoCDTools 
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: None. The run recorded no defect it leaves unfixed.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Q1 alone: are D61's reasons for retiring the Alertmanager routing test and the Keycloak login test the operator's own? Until slice 028's P3 lands, nothing tests Alertmanager routing.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -119,8 +136,7 @@ code-reviewer, P5, r1, 2026-09-25 — 028 P3 would succeed only part of the rout
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S1 bears on slice 028: its P3 would build a second promtool mechanism beside this slice's gate. S4 is the one witnessed gap: a matching mistake in two major-fault memory paths still passes. S2 and S7 are limits of the library gate. S6 and S8 are doc debt the doc phase left in repos outside this slice.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -144,15 +160,6 @@ The gate compiles vars/ with SerializableScript as the script base class (tests/
 **Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
 **Disposition:**
 
-### ~~S3 — ArgoCDTools Jenkinsfile: the iac container's comment names helm as a suite dependency; neither suite runs helm · nit~~ — resolved by consult 1 (ArgoCDTools c32a27c): the comment now names git, openssl and terraform (argocd-hook/tests/test_terraform.py:142 runs terraform unconditionally); comment-only, re-gated by the driver's sweep; struck by consult 1
-
-Jenkinsfile:18-20 says the suites run 'with the git, helm and openssl they shell out to'. No test calls gen_architecture's helm paths (gen_architecture.py:194-195); the tests only build helm argument lists (test_deploy_repo.py:117-190). The suites' real subprocess dependencies are git and openssl.
-
-**Consequence:** none — a reader may take helm for a test dependency; the choice of image does not rest on it
-
-**Provenance:** read, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
-**Disposition:**
-
 ### S4 — PrometheusDeploy rule tests: a matching mistake in NodeMemoryStalled's or the wedge warning's major-fault path passes the gate · minor
 
 No test makes NodeMemoryStalled fire on major faults alone. The only faults-only node (tests/alert-rules/node-memory-pressure.yml:51-62) stalls 3%, which is under that rule's 0.05. No wedge case puts a node with memory to spare at a fault rate between 50/s and the edge, and none has a fault burst end within the hour. Mutations of the rendered rules that stay green: NodeMemoryStalled's fault leg (config/prd/values.yaml:88) aggregated by instance instead of node, or with its > 500 disabled; the wedge's inner and on (node) (:142) as on (instance); its [1h] window (:143) as [5m], and its < 50 as < 400. Precedence mistakes and template or syntax errors do go red. Full record: phases/P4/code_review_r1.md F1.
@@ -164,7 +171,49 @@ consult 1, 2026-09-25 — Not appended as a phase. The D2 ruling asks for every 
 **Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
 **Disposition:**
 
+### S6 — DockerImages kube-coder-iac-toolchain: the image's comments describe a KubeCoder sidecar only, though IaC/ArgoCDTools now runs its tests in it · minor
+
+JenkinsPipelineUtils' containerTemplates.iac_toolchain (P2) puts registry:5000/kube-coder-iac-toolchain, untagged and always pulled, into Jenkins agent pods, and IaC/ArgoCDTools' Test stage (P3) runs both images' unittest suites in it, which shell out to git, openssl and terraform under python3. The Dockerfile's header still presents the image as the KubeCoder IaC toolchain, and its TF_PLUGIN_CACHE_DIR comment assumes a KubeCoder home overlay, which the template works around by emptying the variable. DockerImages is not a repo this slice's phases touched, so the doc phase left it alone. Slice 030 reuses the same template, which adds a second Jenkins consumer.
+
+**Consequence:** Someone editing the image gets no warning that dropping or moving a tool the suites use turns IaC/ArgoCDTools red on its next push, and slice 030's job later.
+
+**Provenance:** read; doc-writer, doc phase, r1; DockerImages kube-coder-iac-toolchain/Dockerfile:1-34, JenkinsPipelineUtils vars/containerTemplates.groovy iac_toolchain
+**Disposition:**
+
+### S7 — JenkinsPipelineUtils gate: nothing points a workflow-cps upgrade on the Jenkins controller at the groovy-cps pin in tests/pom.xml · minor
+
+The pin is groovy-cps.version 4376.v30c8c00684a_3, the controller's workflow-cps version, and tests/pom.xml's comment says to bump it with the plugin (plan-review ruling Q1 accepted the lag). The controller floats on the lts-jdk21 image (JenkinsDeploy chart/values.yaml:24), and its plugins carry no pin or upgrade procedure in any repo, so the pom comment is the only place the coupling is written down. There is no controller-upgrade runbook to add it to.
+
+**Consequence:** After a controller plugin upgrade, the gate keeps compiling against the older transform until someone remembers the pin, so a construct only the newer transform refuses passes kc project test and first fails in every job that loads the library.
+
+**Provenance:** read; doc-writer, doc phase, r1; JenkinsPipelineUtils tests/pom.xml properties, JenkinsDeploy chart/values.yaml:24
+**Disposition:**
+
+### S8 — Ansible runbooks s3-mirror.md and youtrack-restore.md still cite HelmCharts chart paths for releases Argo CD now deploys from StorageDeploy and YoutrackDeploy · minor
+
+The doc phase repointed backup-freshness.md, which named HelmCharts configs/prd/prometheus/prd/values.yaml for the rules this slice tests (that file is gone; the folder holds only release.yaml) and HelmCharts charts/storage for backup-server. s3-mirror.md (lines 9, 47-48, 72) and youtrack-restore.md (lines 8, 40) cite HelmCharts charts/storage, charts/youtrack and configs/prd/storage paths. HelmCharts' registry entries configs/prd/storage/prd/release.yaml and configs/prd/youtrack/prd/release.yaml name StorageDeploy and YoutrackDeploy under reconciler argo-cd. The staleness predates this slice: the Argo CD migration caused it, and this slice's diff does not touch those runbooks, so they were left open. Each cited path needs checking against its deploy repo.
+
+**Consequence:** An operator following those runbooks during a backup failure opens HelmCharts files that no longer decide what runs in prd.
+
+**Provenance:** read; doc-writer, doc phase, r1; Ansible docs/runbooks/s3-mirror.md, youtrack-restore.md; HelmCharts configs/prd/{storage,youtrack}/prd/release.yaml
+**Disposition:**
+
+### ~~S3 — ArgoCDTools Jenkinsfile: the iac container's comment names helm as a suite dependency; neither suite runs helm · nit~~ — resolved by consult 1 (ArgoCDTools c32a27c): the comment now names git, openssl and terraform (argocd-hook/tests/test_terraform.py:142 runs terraform unconditionally); comment-only, re-gated by the driver's sweep; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+Jenkinsfile:18-20 says the suites run 'with the git, helm and openssl they shell out to'. No test calls gen_architecture's helm paths (gen_architecture.py:194-195); the tests only build helm argument lists (test_deploy_repo.py:117-190). The suites' real subprocess dependencies are git and openssl.
+
+**Consequence:** none — a reader may take helm for a test dependency; the choice of image does not rest on it
+
+**Provenance:** read, code-reviewer, P3, r1, phases/P3/code_review_r1.md F1
+**Disposition:**
+
+</details>
+
 ### ~~S5 — argo-cd D61: the new sentence 'PrometheusDeploy's checks its rules …' is missing its subject noun · nit~~ — resolved by consult 1 (AnsibleSpecs 7844b5c): D61 reads 'PrometheusDeploy's test verb checks its rules'; prose-only; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 argo-cd/decisions.md:773 reads 'PrometheusDeploy's checks its rules as the chart renders them with promtool …'. The possessive has no noun after it (the test verb). The doc phase is told to leave D61 alone (plan.md:377-378), so nothing later in the run corrects it.
 
@@ -172,3 +221,5 @@ argo-cd/decisions.md:773 reads 'PrometheusDeploy's checks its rules as the chart
 
 **Provenance:** read, code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
 **Disposition:**
+
+</details>

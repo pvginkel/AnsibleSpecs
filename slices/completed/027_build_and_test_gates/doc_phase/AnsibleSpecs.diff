@@ -1,0 +1,64 @@
+/work/AnsibleSpecs — P5: git diff 0324f17fe46a..c51c1131728c
+
+argo-cd/decisions.md | 20 +++++++++++++++-----
+ argo-cd/history.md   | 16 ++++++++++++++++
+ 2 files changed, 31 insertions(+), 5 deletions(-)
+
+diff --git a/argo-cd/decisions.md b/argo-cd/decisions.md
+index ca9d922..bdd8a53 100644
+--- a/argo-cd/decisions.md
++++ b/argo-cd/decisions.md
+@@ -766,11 +766,21 @@ settled before that pass: it stays (operator, 2026-09-24), and so does every `ch
+ dev entry renders. For those apps (21 of the migrated ones) the pass removes only
+ `configs/prd/<app>/_shared/` and the Helm leftovers. The stage's
+ `release.yaml` is the registry entry and stays: removing it deletes the Application, and the
+-cascade deletes the namespace (D24, D27). HelmCharts tests that read
+-the app's files are rehomed first, or retired: the five prometheus alert tests and grafana's
+-Keycloak login test were (operator, 2026-09-24), since deploy repos run no tests and the alert
+-timings checked other apps' CronJobs, which a copy in PrometheusDeploy could not follow. DockerImages' `helmDeploy()` stage and HelmCharts'
+-`gitToken` injection go last, once no Helm-deployed app needs them.
++cascade deletes the namespace (D24, D27). HelmCharts tests that read the app's files are rehomed
++first, or retired. Six were retired (operator, 2026-09-24; HelmCharts `4d02286`) and stay
++retired: five over the prometheus release and grafana's Keycloak login test. How their reason
++moved is in [`history.md`](history.md). Deploy repos run no tests in Jenkins; the tests a deploy
++repo carries run from its local test verb, the gate slice phases run. PrometheusDeploy's checks
++its rules as the chart renders them with promtool and unit-tests every alert on synthetic series
++(slice 027), among them the starvation and wedged-counter episodes the retired node-memory test
++walked. Three retired tests timed a backup alert against another app's CronJob, which a test in
++PrometheusDeploy cannot follow; PrometheusDeploy's tests assert each rule's own thresholds and
++windows and model no schedule. The retired Alertmanager routing test's successor is slice 028's
++routing assertions against the rendered Alertmanager config, in the same test verb (its Ruling
++T1). The Keycloak login test restated the release's own values (its OIDC settings and
++ExternalSecret mapping), and its last case read HelmCharts' dev-cluster copy, which GrafanaDeploy
++cannot see. DockerImages' `helmDeploy()` stage and HelmCharts' `gitToken`
++injection go last, once no Helm-deployed app needs them.
+ 
+ **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
+ Proposed 2026-09-24 (Claude, within the D54 run; ANS-103); decided 2026-09-24 (operator: follow
+diff --git a/argo-cd/history.md b/argo-cd/history.md
+index 34df135..2bb0ca5 100644
+--- a/argo-cd/history.md
++++ b/argo-cd/history.md
+@@ -280,6 +280,22 @@ its narrowing is Triage #991, owed before the first migration whose Terraform ma
+ - **D44's "plugin" wording** was interpreted broadly — the namespace TF module and whatever
+   tooling still handles it go when the last app migrates.
+ 
++## Tests in deploy repos: none → none in Jenkins (D61)
++
++When the prometheus and grafana releases moved to their deploy repos, the operator retired
++HelmCharts' six tests over them rather than moving them (2026-09-24, HelmCharts `4d02286`), for
++two reasons: deploy repos run no tests, and three of the prometheus tests timed a backup alert
++against another app's CronJob, which a copy in PrometheusDeploy could not follow. The next day
++the first reason met two slices that wanted tests in deploy repos. Slice 027's D2 ruling gave
++PrometheusDeploy's local test verb a promtool check of the rules as the chart renders them and a
++unit test for every alert on synthetic series, with no Jenkins stage; that answered ANS-74, the
++card the operator had called "Good one" at triage. Slice 028's Ruling T1 did the same for its
++tests in PrometheusDeploy and GitSyncDeploy: "Add the tests if that's the right thing to do. My
++remark was from memory." What stands is narrower: no deploy repo has a Jenkins test stage, and a
++deploy repo's tests run from its local test verb. The second reason did not move. The rule tests
++assert each rule's own thresholds and windows and model no other repo's schedule, so the timing
++tests stay retired.
++
+ ## The restructure itself
+ 
+ `plan.md` grew as one document interleaving decision, rationale and phase work per topic; when

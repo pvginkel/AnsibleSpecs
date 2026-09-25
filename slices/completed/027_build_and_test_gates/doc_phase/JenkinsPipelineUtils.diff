@@ -1,0 +1,286 @@
+/work/JenkinsPipelineUtils — P1: git diff 062b1061e078..e7f51bc37635
+
+.gitignore                                                      |   1 +
+ .kubecoder/project.yaml                                         |  14 ++++
+ tests/pom.xml                                                   |  84 ++++++++++++++++++++++
+ tests/src/test/java/jenkins/model/Jenkins.java                  |   8 +++
+ .../org/webathome/jenkinspipelineutils/LibraryCompileTest.java  | 108 ++++++++++++++++++++++++++++
+ 5 files changed, 215 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..bc55b2c
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1 @@
++/tests/target/
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+new file mode 100644
+index 0000000..0a92c1f
+--- /dev/null
++++ b/.kubecoder/project.yaml
+@@ -0,0 +1,14 @@
++# Curated entry points for JenkinsPipelineUtils, the shared library every Jenkins job loads
++# unpinned from main. Java and Maven live in the `java` toolchain sidecar, so the verb carries
++# its `cexec` prefix here and only here. No Jenkins job builds this repo.
++
++projects:
++  root:
++    description: >-
++      The estate's shared Jenkins pipeline library — the global variables in vars/
++      that every Jenkinsfile calls, from container templates and git helpers to
++      Helm and kubectl steps and Telegram notifications.
++    # Compiles every vars/*.groovy through the CPS transform at the controller's
++    # workflow-cps version, as the controller loads a trusted library — see
++    # tests/pom.xml for the pin. -q keeps a passing run's Maven output out of the gate.
++    test: cexec java mvn -B -q -f tests/pom.xml test
+diff --git a/tests/pom.xml b/tests/pom.xml
+new file mode 100644
+index 0000000..d917036
+--- /dev/null
++++ b/tests/pom.xml
+@@ -0,0 +1,84 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++
++  <!-- The library's test gate: compiles every vars/*.groovy through the CPS transform the
++       Jenkins controller loads it with. It lives here, not at the repository root, because
++       Jenkins loads the root's src/, vars/ and resources/ as the library itself. -->
++  <groupId>org.webathome</groupId>
++  <artifactId>jenkins-pipeline-utils-tests</artifactId>
++  <version>0</version>
++
++  <properties>
++    <!-- The transform the controller runs. groovy-cps.version is the controller's workflow-cps
++         plugin version, bumped when the controller's workflow-cps is upgraded. groovy.version
++         and groovy-sandbox.version are that groovy-cps pom's: it declares them provided and
++         optional, so they do not arrive transitively. guava does, at that pom's version. -->
++    <groovy-cps.version>4376.v30c8c00684a_3</groovy-cps.version>
++    <groovy.version>2.4.21</groovy.version>
++    <groovy-sandbox.version>1.34.1</groovy-sandbox.version>
++
++    <junit.version>5.11.4</junit.version>
++    <maven.compiler.release>21</maven.compiler.release>
++    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
++  </properties>
++
++  <repositories>
++    <!-- groovy-cps releases after 1.31 are published only here. -->
++    <repository>
++      <id>repo.jenkins-ci.org</id>
++      <url>https://repo.jenkins-ci.org/public/</url>
++    </repository>
++  </repositories>
++
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudbees</groupId>
++      <artifactId>groovy-cps</artifactId>
++      <version>${groovy-cps.version}</version>
++      <scope>test</scope>
++    </dependency>
++    <!-- groovy-all is the flavour jenkins-core ships: vars/ imports groovy.json, which the
++         plain groovy jar lacks. -->
++    <dependency>
++      <groupId>org.codehaus.groovy</groupId>
++      <artifactId>groovy-all</artifactId>
++      <version>${groovy.version}</version>
++      <scope>test</scope>
++    </dependency>
++    <dependency>
++      <groupId>org.kohsuke</groupId>
++      <artifactId>groovy-sandbox</artifactId>
++      <version>${groovy-sandbox.version}</version>
++      <scope>test</scope>
++      <!-- groovy-all carries the same classes. -->
++      <exclusions>
++        <exclusion>
++          <groupId>org.codehaus.groovy</groupId>
++          <artifactId>groovy</artifactId>
++        </exclusion>
++      </exclusions>
++    </dependency>
++    <dependency>
++      <groupId>org.junit.jupiter</groupId>
++      <artifactId>junit-jupiter</artifactId>
++      <version>${junit.version}</version>
++      <scope>test</scope>
++    </dependency>
++  </dependencies>
++
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-surefire-plugin</artifactId>
++        <version>3.5.2</version>
++        <configuration>
++          <systemPropertyVariables>
++            <library.root>${project.basedir}/..</library.root>
++          </systemPropertyVariables>
++        </configuration>
++      </plugin>
++    </plugins>
++  </build>
++</project>
+diff --git a/tests/src/test/java/jenkins/model/Jenkins.java b/tests/src/test/java/jenkins/model/Jenkins.java
+new file mode 100644
+index 0000000..1573367
+--- /dev/null
++++ b/tests/src/test/java/jenkins/model/Jenkins.java
+@@ -0,0 +1,8 @@
++package jenkins.model;
++
++/**
++ * Stands in for jenkins-core's class, which is not on the gate's classpath, so that
++ * {@code import jenkins.model.Jenkins} in vars/utils.groovy resolves. Groovy dispatches the
++ * library's calls on it at run time, so the compile needs the class to exist and nothing more.
++ */
++public class Jenkins {}
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java
+new file mode 100644
+index 0000000..59fdad4
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java
+@@ -0,0 +1,108 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertInstanceOf;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++import com.cloudbees.groovy.cps.CpsTransformer;
++import com.cloudbees.groovy.cps.SerializableScript;
++import com.cloudbees.groovy.cps.TransformerConfiguration;
++import com.cloudbees.groovy.cps.impl.CpsCallableInvocation;
++import groovy.lang.GroovyClassLoader;
++import java.io.IOException;
++import java.lang.reflect.InvocationTargetException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++import java.util.stream.Stream;
++import org.codehaus.groovy.control.CompilationFailedException;
++import org.codehaus.groovy.control.CompilerConfiguration;
++import org.codehaus.groovy.control.customizers.ImportCustomizer;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.MethodSource;
++
++class LibraryCompileTest {
++
++    private static final Path LIBRARY = Paths.get(System.getProperty("library.root")).normalize();
++
++    /**
++     * The class loader the controller compiles this library with: it loads it as a Global
++     * Trusted Pipeline Library, so workflow-cps compiles it in the shell
++     * CpsGroovyShellFactory.forTrusted() builds, outside the script-security sandbox, with
++     * the library's src/ and vars/ on the class path. CpsScript, CpsClosure2 and Safepoint are
++     * workflow-cps plugin classes, not groovy-cps ones, so their groovy-cps superclasses and a
++     * no-op safepoint take their place.
++     */
++    private static GroovyClassLoader trustedLoader() throws IOException {
++        ImportCustomizer imports = new ImportCustomizer();
++        imports.addStarImports("com.cloudbees.groovy.cps", "hudson.model", "jenkins.model");
++
++        CpsTransformer transformer = new CpsTransformer();
++        transformer.setConfiguration(
++                new TransformerConfiguration().withSafepoint(LibraryCompileTest.class, "safepoint"));
++
++        CompilerConfiguration config = new CompilerConfiguration();
++        config.addCompilationCustomizers(imports);
++        config.addCompilationCustomizers(transformer);
++        config.setScriptBaseClass(SerializableScript.class.getName());
++
++        GroovyClassLoader loader = new GroovyClassLoader(LibraryCompileTest.class.getClassLoader(), config);
++        loader.addURL(LIBRARY.resolve("src").toUri().toURL());
++        loader.addURL(LIBRARY.resolve("vars").toUri().toURL());
++        return loader;
++    }
++
++    public static void safepoint() {}
++
++    static Stream<String> libraryVariables() throws IOException {
++        try (Stream<Path> files = Files.list(LIBRARY.resolve("vars"))) {
++            return files.map(f -> f.getFileName().toString())
++                    .filter(n -> n.endsWith(".groovy"))
++                    .map(n -> n.substring(0, n.length() - ".groovy".length()))
++                    .sorted()
++                    .toList()
++                    .stream();
++        }
++    }
++
++    // The controller loads a global variable by name from vars/, as this does.
++    @ParameterizedTest(name = "vars/{0}.groovy")
++    @MethodSource("libraryVariables")
++    void libraryVariableCompiles(String name) throws Exception {
++        try (GroovyClassLoader loader = trustedLoader()) {
++            loader.loadClass(name);
++        }
++    }
++
++    @Test
++    void syntaxErrorIsRefused() throws IOException {
++        try (GroovyClassLoader loader = trustedLoader()) {
++            assertThrows(CompilationFailedException.class, () -> loader.parseClass("def broken( {", "control.groovy"));
++        }
++    }
++
++    @Test
++    void synchronizedBlockIsRefused() throws IOException {
++        try (GroovyClassLoader loader = trustedLoader()) {
++            CompilationFailedException refused = assertThrows(
++                    CompilationFailedException.class,
++                    () -> loader.parseClass("def f() { synchronized (this) { 1 } }", "control.groovy"));
++            assertTrue(
++                    refused.getMessage().contains("synchronized is unsupported for CPS transformation"),
++                    refused.getMessage());
++        }
++    }
++
++    // A method the transform rewrote hands its body to the CPS engine instead of running it.
++    @Test
++    void methodBodiesAreCpsTransformed() throws Exception {
++        try (GroovyClassLoader loader = trustedLoader()) {
++            Class<?> control = loader.parseClass("def f() { 1 }", "control.groovy");
++            Object script = control.getDeclaredConstructor().newInstance();
++            InvocationTargetException call =
++                    assertThrows(InvocationTargetException.class, () -> control.getMethod("f").invoke(script));
++            assertInstanceOf(CpsCallableInvocation.class, call.getCause());
++        }
++    }
++}
+
+/work/JenkinsPipelineUtils — P2: git diff e7f51bc37635..a43f45e0fc5c
+
+vars/containerTemplates.groovy | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/vars/containerTemplates.groovy b/vars/containerTemplates.groovy
+index 3e9c513..57b83b4 100644
+--- a/vars/containerTemplates.groovy
++++ b/vars/containerTemplates.groovy
+@@ -34,6 +34,21 @@ def aac_tools(String name) {
+     return containerTemplate(name: name, image: 'registry:5000/aac-tools', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+ }
+ 
++/**
++ * KubeCoder IaC toolchain container: the image `cexec iac` runs in a KubeCoder environment
++ * (terraform, helm, kubectl, bao, step, promtool, python3 with poetry and uv, git).
++ * Runs as uid 1000, the agent's own user, so the checkout and whatever the container writes
++ * into the workspace share an owner (git refuses a repository another uid owns).
++ * The image points TF_PLUGIN_CACHE_DIR at a KubeCoder home overlay an agent pod lacks, and
++ * terraform reports a missing cache dir as a CLI configuration error on every run; an empty
++ * value leaves the cache off.
++ */
++def iac_toolchain(String name) {
++    return containerTemplate(name: name, image: 'registry:5000/kube-coder-iac-toolchain', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000', envVars: [
++        containerEnvVar(key: 'TF_PLUGIN_CACHE_DIR', value: ''),
++    ])
++}
++
+ /**
+  * Debian Bookworm slim container.
+  */

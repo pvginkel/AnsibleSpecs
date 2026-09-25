@@ -1,0 +1,600 @@
+/work/PrometheusDeploy — P4: git diff 1b274c7e8299..5a680b411775
+
+.kubecoder/project.yaml                    |   1 +
+ tests/alert-rules.sh                       |  17 ++++
+ tests/alert-rules/backup-freshness.yml     | 127 +++++++++++++++++++++++++
+ tests/alert-rules/node-memory-pressure.yml | 254 +++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/alert-rules/node-reservation.yml     |  35 +++++++
+ tests/alert-rules/s3-mirror.yml            |  54 +++++++++++
+ tests/alert-rules/youtrack-backup.yml      |  54 +++++++++++
+ 7 files changed, 542 insertions(+)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 6eed742..d8d9a0e 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -17,6 +17,7 @@ projects:
+       - >-
+         cexec iac helm template prometheus-prd prometheus --repo https://prometheus-community.github.io/helm-charts --version 29.33.0
+         --namespace prometheus-prd --values config/prd/values.yaml
++      - cexec iac tests/alert-rules.sh
+       - cexec iac helm template prometheus-prd chart --namespace prometheus-prd --set hook.repo=https://github.com/pvginkel/PrometheusDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=prometheus-prd
+       - cexec iac tests/terraform.sh
+       - cexec aac-tools gen-architecture --stage prd --producer prometheus-deploy
+diff --git a/tests/alert-rules.sh b/tests/alert-rules.sh
+new file mode 100755
+index 0000000..2a42b79
+--- /dev/null
++++ b/tests/alert-rules.sh
+@@ -0,0 +1,17 @@
++#!/bin/sh
++# prd's alerting rules as the upstream chart renders them into the server ConfigMap, at the pin
++# architecture.yaml's `upstream` gives: `promtool check rules`, then the unit tests under
++# tests/alert-rules/. promtool is the iac toolchain's, pinned to prd's Prometheus. The tests run
++# from copies in ./tests beside the render, which their `rule_files` names.
++set -eu
++cd "$(dirname "$0")/.."
++work=$(mktemp -d)
++trap 'rm -rf "$work"' EXIT
++helm template prometheus-prd "$(yq -er .upstream.chart architecture.yaml)" \
++  --repo "$(yq -er .upstream.repo architecture.yaml)" --version "$(yq -er .upstream.version architecture.yaml)" \
++  --namespace prometheus-prd --values config/prd/values.yaml --show-only templates/cm.yaml >"$work/cm.yaml"
++yq -er '.data["alerting_rules.yml"]' "$work/cm.yaml" >"$work/alerting_rules.yml"
++promtool check rules "$work/alerting_rules.yml"
++mkdir "$work/tests"
++cp tests/alert-rules/*.yml "$work/tests/"
++promtool test rules "$work"/tests/*.yml
+diff --git a/tests/alert-rules/backup-freshness.yml b/tests/alert-rules/backup-freshness.yml
+new file mode 100644
+index 0000000..cbee9b0
+--- /dev/null
++++ b/tests/alert-rules/backup-freshness.yml
+@@ -0,0 +1,127 @@
++# The backup-freshness group, over synthetic backup-server series. A value is a Unix time in
++# seconds, on the same clock as the test's: 21600 is 6 h in.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: an overdue stream fires once its validity passes and clears when a backup lands; the others stay quiet
++    interval: 1m
++    input_series:
++      # Valid until 6 h; a backup landing at 10 h makes it valid until 62 h.
++      - series: backup_server_stream_valid_until_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081", scope="postgres-pas", filename="design_assistant_prd_db.dump"}
++        values: 21600x599 223200x60
++      - series: backup_server_stream_valid_until_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081", scope="openbao", filename="openbao.snap"}
++        values: 223200x660
++      # Another namespace's backup-server, long overdue.
++      - series: backup_server_stream_valid_until_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-dev", service="backup-server", instance="172.16.128.200:8081", scope="postgres-pas", filename="design_assistant_dev_db.dump"}
++        values: 0x660
++    alert_rule_test:
++      - {alertname: BackupOverdue, eval_time: 6h}
++      - alertname: BackupOverdue
++        eval_time: 6h1m
++        exp_alerts:
++          - exp_labels: {scope: postgres-pas, filename: design_assistant_prd_db.dump, severity: critical}
++            exp_annotations:
++              summary: Backup postgres-pas/design_assistant_prd_db.dump is 1m 0s past its validity
++              description: &prd_db_description >-
++                No backup of design_assistant_prd_db.dump has reached backup-server's
++                postgres-pas scope within the validity its uploads declared. Read the uploader's
++                logs. For openbao: the openbao-backup unit's journal on the srvvaultN nodes; only
++                the Raft leader uploads, and the others log "not the Raft leader". For
++                postgres-pas: the latest postgres-backup Job in postgres-pas-prd.
++      - {alertname: BackupOverdue, eval_time: 10h}
++
++  - name: an overdue stream that leaves clears 6h after its last scrape; one a redeploy's new pod republishes fires once
++    interval: 1m
++    input_series:
++      # The old pod publishes both streams until 8 h. The Deployment is Recreate: the new pod
++      # scrapes from 8 h 30 m and publishes only the prd stream, after its first read at 8 h 40 m.
++      - series: backup_server_stream_valid_until_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081", scope="postgres-pas", filename="design_assistant_tst_db.dump"}
++        values: 21600x479 stale
++      - series: backup_server_stream_valid_until_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081", scope="postgres-pas", filename="design_assistant_prd_db.dump"}
++        values: 21600x479 stale
++      - series: backup_server_stream_valid_until_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.240:8081", scope="postgres-pas", filename="design_assistant_prd_db.dump"}
++        values: _x520 21600x400
++    alert_rule_test:
++      - alertname: BackupOverdue
++        eval_time: 8h20m
++        exp_alerts:
++          - exp_labels: &prd_db {scope: postgres-pas, filename: design_assistant_prd_db.dump, severity: critical}
++            exp_annotations:
++              summary: Backup postgres-pas/design_assistant_prd_db.dump is 2h 20m 0s past its validity
++              description: *prd_db_description
++          - exp_labels: &tst_db {scope: postgres-pas, filename: design_assistant_tst_db.dump, severity: critical}
++            exp_annotations:
++              summary: Backup postgres-pas/design_assistant_tst_db.dump is 2h 20m 0s past its validity
++              description: &tst_db_description >-
++                No backup of design_assistant_tst_db.dump has reached backup-server's
++                postgres-pas scope within the validity its uploads declared. Read the uploader's
++                logs. For openbao: the openbao-backup unit's journal on the srvvaultN nodes; only
++                the Raft leader uploads, and the others log "not the Raft leader". For
++                postgres-pas: the latest postgres-backup Job in postgres-pas-prd.
++      - alertname: BackupOverdue
++        eval_time: 13h58m
++        exp_alerts:
++          - exp_labels: *prd_db
++            exp_annotations:
++              summary: Backup postgres-pas/design_assistant_prd_db.dump is 7h 58m 0s past its validity
++              description: *prd_db_description
++          - exp_labels: *tst_db
++            exp_annotations:
++              summary: Backup postgres-pas/design_assistant_tst_db.dump is 7h 58m 0s past its validity
++              description: *tst_db_description
++      - alertname: BackupOverdue
++        eval_time: 13h59m
++        exp_alerts:
++          - exp_labels: *prd_db
++            exp_annotations:
++              summary: Backup postgres-pas/design_assistant_prd_db.dump is 7h 59m 0s past its validity
++              description: *prd_db_description
++
++  - name: a watcher whose reads keep failing is blind 6h after its newest read
++    interval: 1m
++    input_series:
++      # A fresh process publishes 0 until its first read, at 10 m; every read after fails.
++      - series: backup_server_refresh_last_success_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081"}
++        values: 0x9 600x410
++    alert_rule_test:
++      - {alertname: BackupWatcherBlind, eval_time: 6h10m}
++      - alertname: BackupWatcherBlind
++        eval_time: 6h11m
++        exp_alerts:
++          - &blind
++            exp_labels: {namespace: storage-prd, service: backup-server, severity: critical}
++            exp_annotations:
++              summary: 'Backup freshness is unwatched: backup-server has not read its cloud storage for over 6h'
++              description: >-
++                No scrape of backup-server in storage-prd in the last 6 h reported a successful
++                read of its cloud storage, so BackupOverdue cannot fire. Either Prometheus cannot
++                scrape it (its pod is down, crash-looping or gone; check the target in
++                Prometheus) or its hourly read fails (its pod logs "freshness refresh:" errors).
++
++  - name: a target that is gone is blind 6h after its newest read, and still once that sample leaves the look-back
++    interval: 1m
++    input_series:
++      # Read at 10 m; the target goes at 1 h.
++      - series: backup_server_refresh_last_success_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081"}
++        values: 0x9 600x50 stale
++    alert_rule_test:
++      - {alertname: BackupWatcherBlind, eval_time: 6h10m}
++      - {alertname: BackupWatcherBlind, eval_time: 6h11m, exp_alerts: [*blind]}
++      - {alertname: BackupWatcherBlind, eval_time: 7h1m, exp_alerts: [*blind]}
++
++  - name: a redeploy's new pod publishing 0 before its first read does not make the watcher blind
++    interval: 1m
++    input_series:
++      # The old pod reads at 10 m and hourly after, and goes at 6 h 40 m. The new pod is scraped
++      # from 7 h 11 m; its reads at 7 h 10 m, 8 h 10 m and 9 h 10 m fail, and the one at
++      # 10 h 10 m completes at 10 h 20 m.
++      - series: backup_server_refresh_last_success_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.234:8081"}
++        values: 0x9 600x59 4200x59 7800x59 11400x59 15000x59 18600x59 22200x29 stale
++      - series: backup_server_refresh_last_success_timestamp_seconds{job="kubernetes-service-endpoints", namespace="storage-prd", service="backup-server", instance="172.16.128.240:8081"}
++        values: _x431 0x188 37200x60
++    alert_rule_test:
++      - {alertname: BackupWatcherBlind, eval_time: 7h20m}
++      - {alertname: BackupWatcherBlind, eval_time: 10h19m}
++      - {alertname: BackupWatcherBlind, eval_time: 11h20m}
+diff --git a/tests/alert-rules/node-memory-pressure.yml b/tests/alert-rules/node-memory-pressure.yml
+new file mode 100644
+index 0000000..60248b6
+--- /dev/null
++++ b/tests/alert-rules/node-memory-pressure.yml
+@@ -0,0 +1,254 @@
++# The node-memory-pressure group, over synthetic node-exporter series: the scenarios slice 018
++# witnessed when it set the thresholds. Memory is 16 GB; a stall counter rising 6 s/min is a
++# stall of 10% of wall-time, 42000 major faults/min is 700/s.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: the 2026-08-02 starvation fires both stall alerts after their for, and not the wedge warning
++    interval: 1m
++    input_series:
++      # A 10% stall throughout. 20% of memory available and 100 major faults/s, and from 20 m the
++      # starvation: 4% available, 700 faults/s.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 0+6x40
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 3200000000x19 640000000x20
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 16000000000x40
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 0+6000x19 156000+42000x20
++    alert_rule_test:
++      - {alertname: NodeMemoryStalled, eval_time: 29m}
++      - alertname: NodeMemoryStalled
++        eval_time: 30m
++        exp_alerts:
++          - &srvk8s1_stalled
++            exp_labels: {node: srvk8s1, severity: critical}
++            exp_annotations:
++              summary: srvk8s1 stalled on memory 10% of wall-time
++              description: &stalled_description >-
++                Sustained full memory-pressure stall while the node is short of memory or
++                thrashing. The node is in direct reclaim and will start losing pods to
++                liveness-probe timeouts long before kubelet's eviction threshold is reached.
++                Compare per-node memory requests against actual usage and look for requestless
++                workloads.
++      - {alertname: NodeMemoryStallElevated, eval_time: 34m}
++      - alertname: NodeMemoryStallElevated
++        eval_time: 35m
++        exp_alerts:
++          - &srvk8s1_elevated
++            exp_labels: {node: srvk8s1, severity: warning}
++            exp_annotations:
++              summary: srvk8s1 under elevated memory pressure (10% of wall-time stalled)
++              description: &elevated_description >-
++                Above the 0.02 s/s ceiling the cluster is sized for, while the node is short of
++                memory or thrashing. Not yet service-affecting, but the node has no absorption
++                capacity left for a drain or a load spike.
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 40m}
++
++  - name: each memory signal alone corroborates a stall, and 0.02 to 0.05 is elevated only
++    interval: 1m
++    input_series:
++      # srvk8s2: a 3% stall while thrashing with half its memory available.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0+1.8x30
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 8000000000x30
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 16000000000x30
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0+42000x30
++      # srvk8s3: a 10% stall, short of memory and not faulting.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 0+6x30
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 640000000x30
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 16000000000x30
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 0x30
++    alert_rule_test:
++      - alertname: NodeMemoryStalled
++        eval_time: 20m
++        exp_alerts:
++          - exp_labels: {node: srvk8s3, severity: critical}
++            exp_annotations:
++              summary: srvk8s3 stalled on memory 10% of wall-time
++              description: *stalled_description
++      - alertname: NodeMemoryStallElevated
++        eval_time: 20m
++        exp_alerts:
++          - exp_labels: {node: srvk8s2, severity: warning}
++            exp_annotations:
++              summary: srvk8s2 under elevated memory pressure (3% of wall-time stalled)
++              description: *elevated_description
++          - exp_labels: {node: srvk8s3, severity: warning}
++            exp_annotations:
++              summary: srvk8s3 under elevated memory pressure (10% of wall-time stalled)
++              description: *elevated_description
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 20m}
++
++  - name: a healthy memory-tight node, a stall and a memory shortage on different nodes, and a host outside the cluster stay quiet
++    interval: 1m
++    input_series:
++      # srvk8s1: 3% available and 842 major faults/s, stalled 1% of wall-time.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 0+0.6x90
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 480000000x90
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 16000000000x90
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s1"}
++        values: 0+50520x90
++      # srvk8s2 stalls 10% with 20% available and 100 major faults/s; srvk8s3 is short of memory
++      # and thrashing without stalling.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0+6x90
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 3200000000x90
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 16000000000x90
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0+6000x90
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 0x90
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 640000000x90
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 16000000000x90
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s3"}
++        values: 0+42000x90
++      # A Proxmox host scraped by the homelab-nodes job, starving.
++      - series: node_pressure_memory_stalled_seconds_total{job="homelab-nodes", instance="pve1.home:9100", role="proxmox"}
++        values: 0+6x90
++      - series: node_memory_MemAvailable_bytes{job="homelab-nodes", instance="pve1.home:9100", role="proxmox"}
++        values: 640000000x90
++      - series: node_memory_MemTotal_bytes{job="homelab-nodes", instance="pve1.home:9100", role="proxmox"}
++        values: 16000000000x90
++      - series: node_vmstat_pgmajfault{job="homelab-nodes", instance="pve1.home:9100", role="proxmox"}
++        values: 0+42000x90
++    alert_rule_test:
++      - {alertname: NodeMemoryStalled, eval_time: 80m}
++      - {alertname: NodeMemoryStallElevated, eval_time: 80m}
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 80m}
++
++  - name: a wedged counter (srvk8s2 2026-09-07..13) fires only the wedge warning, which holds through a memory dip until a reboot resets the counter
++    interval: 1m
++    input_series:
++      # A 10% stall with no major faults. 20% of memory available, and from 10 m 37%, but for a
++      # 60 m dip to 3% at 700 faults/s from 120 m. The node reboots at 240 m: 10 m unscraped,
++      # then counters from 0 and a 0.1% stall.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0+6x239 _x10 0+0.06x30
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 3200000000x9 5920000000x109 480000000x59 5920000000x59 _x10 5920000000x30
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 16000000000x239 _x10 16000000000x30
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0x119 42000+42000x59 2520000x59 _x10 0+132x30
++    alert_rule_test:
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 69m}
++      - alertname: NodeMemoryStallCounterWedged
++        eval_time: 70m
++        exp_alerts:
++          - &srvk8s2_wedged
++            exp_labels: {node: srvk8s2, severity: warning}
++            exp_annotations:
++              summary: srvk8s2 memory-stall counter looks wedged; its stall alerts are blind until it is rebooted
++              description: >-
++                The node reports 10% of wall-time stalled on memory while it has memory to spare
++                and no major faults: the kernel's PSI counter is stuck, not the node.
++                NodeMemoryStalled and NodeMemoryStallElevated cannot tell a real stall on this
++                node from the stuck counter until it is rebooted, which resets the counter and
++                resolves this alert.
++      - {alertname: NodeMemoryStalled, eval_time: 110m}
++      - {alertname: NodeMemoryStallElevated, eval_time: 110m}
++      # 30 m into the dip the stall alerts fire on the memory signals, and the warning holds.
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 150m, exp_alerts: [*srvk8s2_wedged]}
++      - alertname: NodeMemoryStalled
++        eval_time: 150m
++        exp_alerts:
++          - exp_labels: {node: srvk8s2, severity: critical}
++            exp_annotations:
++              summary: srvk8s2 stalled on memory 10% of wall-time
++              description: *stalled_description
++      - alertname: NodeMemoryStallElevated
++        eval_time: 150m
++        exp_alerts:
++          - exp_labels: {node: srvk8s2, severity: warning}
++            exp_annotations:
++              summary: srvk8s2 under elevated memory pressure (10% of wall-time stalled)
++              description: *elevated_description
++      # After the dip, the hour's major faults still disqualify the node; the warning holds.
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 200m, exp_alerts: [*srvk8s2_wedged]}
++      - {alertname: NodeMemoryStalled, eval_time: 200m}
++      - {alertname: NodeMemoryStallElevated, eval_time: 200m}
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 260m}
++
++  - name: after a reboot a wedge warning does not carry over into a real stall, which has to qualify afresh
++    interval: 1m
++    input_series:
++      # Wedged until the reboot at 90 m, 10 m unscraped, then starving: 4% available, 700 faults/s.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0+6x89 _x10 0+6x120
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 5920000000x89 _x10 640000000x120
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 16000000000x89 _x10 16000000000x120
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s2"}
++        values: 0x89 _x10 0+42000x120
++    alert_rule_test:
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 80m, exp_alerts: [*srvk8s2_wedged]}
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 125m}
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 170m}
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 220m}
++      - alertname: NodeMemoryStalled
++        eval_time: 170m
++        exp_alerts:
++          - exp_labels: {node: srvk8s2, severity: critical}
++            exp_annotations:
++              summary: srvk8s2 stalled on memory 10% of wall-time
++              description: *stalled_description
++
++  - name: a node-exporter chart upgrade's overlapping series, differing only in helm_sh_chart, give one alert per node
++    interval: 1m
++    input_series:
++      # srvk8s1 starving, srvk8s2 wedged, each scraped twice.
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 0+6x70
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 0+6x70
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 640000000x70
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 640000000x70
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 16000000000x70
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 16000000000x70
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 0+42000x70
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s1", instance="10.1.0.27:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 0+42000x70
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 0+6x70
++      - series: node_pressure_memory_stalled_seconds_total{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 0+6x70
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 5920000000x70
++      - series: node_memory_MemAvailable_bytes{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 5920000000x70
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 16000000000x70
++      - series: node_memory_MemTotal_bytes{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 16000000000x70
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.56.3"}
++        values: 0x70
++      - series: node_vmstat_pgmajfault{job="kubernetes-service-endpoints", node="srvk8s2", instance="10.1.0.28:9100", helm_sh_chart="prometheus-node-exporter-4.57.0"}
++        values: 0x70
++    alert_rule_test:
++      - {alertname: NodeMemoryStalled, eval_time: 65m, exp_alerts: [*srvk8s1_stalled]}
++      - {alertname: NodeMemoryStallElevated, eval_time: 65m, exp_alerts: [*srvk8s1_elevated]}
++      - {alertname: NodeMemoryStallCounterWedged, eval_time: 65m, exp_alerts: [*srvk8s2_wedged]}
+diff --git a/tests/alert-rules/node-reservation.yml b/tests/alert-rules/node-reservation.yml
+new file mode 100644
+index 0000000..3d02749
+--- /dev/null
++++ b/tests/alert-rules/node-reservation.yml
+@@ -0,0 +1,35 @@
++# The node-reservation group, over synthetic kube-state-metrics series.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: a node left with microk8s' 100Mi default fires after 30m; a node with its reservation, and CPU, stay quiet
++    interval: 1m
++    input_series:
++      # srvk8s1: capacity - allocatable is exactly 100Mi.
++      - series: kube_node_status_capacity{job="kubernetes-service-endpoints", instance="172.16.129.159:8080", node="srvk8s1", resource="memory", unit="byte"}
++        values: 16746078208x40
++      - series: kube_node_status_allocatable{job="kubernetes-service-endpoints", instance="172.16.129.159:8080", node="srvk8s1", resource="memory", unit="byte"}
++        values: 16641220608x40
++      # srvk8s2: 1Gi of kube-reserved on top of the 100Mi; its CPU has nothing reserved.
++      - series: kube_node_status_capacity{job="kubernetes-service-endpoints", instance="172.16.129.159:8080", node="srvk8s2", resource="memory", unit="byte"}
++        values: 16747880448x40
++      - series: kube_node_status_allocatable{job="kubernetes-service-endpoints", instance="172.16.129.159:8080", node="srvk8s2", resource="memory", unit="byte"}
++        values: 15569281024x40
++      - series: kube_node_status_capacity{job="kubernetes-service-endpoints", instance="172.16.129.159:8080", node="srvk8s2", resource="cpu", unit="core"}
++        values: 4x40
++      - series: kube_node_status_allocatable{job="kubernetes-service-endpoints", instance="172.16.129.159:8080", node="srvk8s2", resource="cpu", unit="core"}
++        values: 4x40
++    alert_rule_test:
++      - {alertname: NodeKubeReservedMissing, eval_time: 29m}
++      - alertname: NodeKubeReservedMissing
++        eval_time: 30m
++        exp_alerts:
++          - exp_labels: {node: srvk8s1, severity: warning}
++            exp_annotations:
++              summary: srvk8s1 has no kube-reserved
++              description: >-
++                Nothing is set aside for the OS, kubelet, containerd or (on a control-plane node)
++                kubelite. Re-run site-k8s.yml against the node; check whether a snap refresh
++                rewrote args/kubelet.
+diff --git a/tests/alert-rules/s3-mirror.yml b/tests/alert-rules/s3-mirror.yml
+new file mode 100644
+index 0000000..11d45ea
+--- /dev/null
++++ b/tests/alert-rules/s3-mirror.yml
+@@ -0,0 +1,54 @@
++# The s3-mirror group, over synthetic kube-state-metrics series. Its threshold is its own 52 h;
++# the CronJob's schedule and deadline it was set from are not modelled.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: fires once the newest success is over 52h old, and clears when a run succeeds
++    interval: 1m
++    input_series:
++      # Succeeded at 1 h, and next at 56 h.
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="s3-mirror"}
++        values: 3600x3359 201600x60
++      - series: kube_cronjob_created{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="s3-mirror"}
++        values: 0x3420
++    alert_rule_test:
++      - {alertname: S3MirrorStale, eval_time: 53h}
++      - alertname: S3MirrorStale
++        eval_time: 53h1m
++        exp_alerts:
++          - &stale
++            exp_labels: {namespace: storage-prd, cronjob: s3-mirror, severity: critical}
++            exp_annotations:
++              summary: S3 bucket mirror has not succeeded for 2d 4h 1m 0s
++              description: >-
++                Two nightly runs of the s3-mirror CronJob in storage-prd have failed, so the
++                Google Drive copy of the prd buckets is no longer refreshed. Read the latest
++                s3-mirror Job's logs: a bucket it cannot list or read, an rclone error, or the
++                2 h deadline each fail the run.
++      - {alertname: S3MirrorStale, eval_time: 56h}
++
++  - name: a CronJob that never succeeded counts from its creation
++    interval: 1m
++    input_series:
++      - series: kube_cronjob_created{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="s3-mirror"}
++        values: 3600x3181
++    alert_rule_test:
++      - {alertname: S3MirrorStale, eval_time: 53h}
++      - {alertname: S3MirrorStale, eval_time: 53h1m, exp_alerts: [*stale]}
++
++  - name: the newest success counts over the creation, and other CronJobs are not watched
++    interval: 1m
++    input_series:
++      # Created at 0 and succeeded at 50 h; the others last succeeded at 0.
++      - series: kube_cronjob_created{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="s3-mirror"}
++        values: 0x3600
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="s3-mirror"}
++        values: 180000x3600
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="storage-dev", cronjob="s3-mirror"}
++        values: 0x3600
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="another-cronjob"}
++        values: 0x3600
++    alert_rule_test:
++      - {alertname: S3MirrorStale, eval_time: 60h}
+diff --git a/tests/alert-rules/youtrack-backup.yml b/tests/alert-rules/youtrack-backup.yml
+new file mode 100644
+index 0000000..d7973e3
+--- /dev/null
++++ b/tests/alert-rules/youtrack-backup.yml
+@@ -0,0 +1,54 @@
++# The youtrack-backup group, over synthetic kube-state-metrics series. Its threshold is its own
++# 52 h; the CronJob's schedule and deadline it was set from are not modelled.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: fires once the newest success is over 52h old, and clears when a run succeeds
++    interval: 1m
++    input_series:
++      # Succeeded at 1 h, and next at 56 h.
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="youtrack-prd", cronjob="youtrack-backup"}
++        values: 3600x3359 201600x60
++      - series: kube_cronjob_created{job="kubernetes-service-endpoints", namespace="youtrack-prd", cronjob="youtrack-backup"}
++        values: 0x3420
++    alert_rule_test:
++      - {alertname: YouTrackBackupStale, eval_time: 53h}
++      - alertname: YouTrackBackupStale
++        eval_time: 53h1m
++        exp_alerts:
++          - &stale
++            exp_labels: {namespace: youtrack-prd, cronjob: youtrack-backup, severity: critical}
++            exp_annotations:
++              summary: YouTrack backup has not succeeded for 2d 4h 1m 0s
++              description: >-
++                Two nightly runs of the youtrack-backup CronJob in youtrack-prd have failed, so
++                no fresh copy of the tracker has reached the backup-server. Read the latest
++                youtrack-backup Job's logs: a rejected token, a backup error YouTrack reported, a
++                failed download or upload, or the 1 h deadline each fail the run.
++      - {alertname: YouTrackBackupStale, eval_time: 56h}
++
++  - name: a CronJob that never succeeded counts from its creation
++    interval: 1m
++    input_series:
++      - series: kube_cronjob_created{job="kubernetes-service-endpoints", namespace="youtrack-prd", cronjob="youtrack-backup"}
++        values: 3600x3181
++    alert_rule_test:
++      - {alertname: YouTrackBackupStale, eval_time: 53h}
++      - {alertname: YouTrackBackupStale, eval_time: 53h1m, exp_alerts: [*stale]}
++
++  - name: the newest success counts over the creation, and other CronJobs are not watched
++    interval: 1m
++    input_series:
++      # Created at 0 and succeeded at 50 h; the others last succeeded at 0.
++      - series: kube_cronjob_created{job="kubernetes-service-endpoints", namespace="youtrack-prd", cronjob="youtrack-backup"}
++        values: 0x3600
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="youtrack-prd", cronjob="youtrack-backup"}
++        values: 180000x3600
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="youtrack-dev", cronjob="youtrack-backup"}
++        values: 0x3600
++      - series: kube_cronjob_status_last_successful_time{job="kubernetes-service-endpoints", namespace="storage-prd", cronjob="s3-mirror"}
++        values: 0x3600
++    alert_rule_test:
++      - {alertname: YouTrackBackupStale, eval_time: 60h}

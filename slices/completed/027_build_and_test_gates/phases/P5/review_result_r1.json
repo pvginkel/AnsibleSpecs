@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "D61 now records the position that stands: no tests in Jenkins, PrometheusDeploy's test verb checks and unit-tests its rules, and each retired test keeps its own reason, which meets V13. The cited facts check out against HelmCharts 4a36b54/4d02286, slice 028's Ruling T1 and the deploy repos' Jenkinsfiles. Two advisory findings.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "D61 and Q1 call 028 P3's routing assertions the retired Alertmanager test's successor; the grouping, secret-file and wedge-inhibition cases have no successor"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "style", "anchor": "none",
+   "summary": "decisions.md:773 'PrometheusDeploy's checks its rules' has no noun after the possessive, and the doc phase is told not to touch D61"}
+ ]}

@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The gate compiles every vars/*.groovy through groovy-cps 4376.v30c8c00684a_3 on groovy-all 2.4.21 in a trusted shell that matches CpsGroovyShellFactory at the tag. The pin is in one commented block, and nothing lands under src/, vars/ or resources/. A reviewer probe run confirmed that the ten real cases are green, that two new unregistered vars files are picked up, and that each goes red on a syntax error or a synchronized block. One advisory finding remains.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "The stand-in base class SerializableScript does not make invokeMethod final as CpsScript does, so a vars/ override passes the gate but fails on the controller"}]}

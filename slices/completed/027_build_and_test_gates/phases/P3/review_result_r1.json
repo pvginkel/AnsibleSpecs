@@ -1,0 +1,6 @@
+{"outcome": "signoff",
+ "summary": "The Test stage runs both components' local test verbs in containerTemplates.iac_toolchain after the clone and before either kaniko stage, so a red suite publishes nothing (V05, V06, V08). One advisory: the container comment names helm as a suite dependency, and neither suite runs it.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose",
+               "anchor": "none",
+               "summary": "Jenkinsfile:18-20 says the suites shell out to helm; no test in either suite invokes helm"}]}

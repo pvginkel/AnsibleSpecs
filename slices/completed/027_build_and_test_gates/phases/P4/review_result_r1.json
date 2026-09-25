@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "tests/alert-rules.sh runs promtool 3.14.0 check rules and unit tests over the chart-rendered prd alerting rules. All 8 alerts have firing and quiet cases, and slice 018's scenarios are carried. Precedence, template and syntax mistakes go red. One advisory gap: two major-fault paths in the memory-pressure group are never exercised.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "No test exercises NodeMemoryStalled's or NodeMemoryStallCounterWedged's major-fault path, so a matching mistake there passes the gate (mutations stay green)"}]}
