@@ -136,7 +136,7 @@ pipeline consumes (ArgoCDTools now, the retirement slice later), which sets a pa
   push triggers resolves whatever the library's `main` holds, and without the template that first
   run fails.
 
-### P1 — JenkinsPipelineUtils: `kc project test` compiles every library file the way the pipeline engine loads it
+### P1 — JenkinsPipelineUtils: `kc project test` compiles every library file the way the pipeline engine loads it ✅ DONE 2026-09-25
 
 Target: ../JenkinsPipelineUtils
 
