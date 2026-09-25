@@ -27,6 +27,8 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 The rulings land both tools during planning, and a run cannot restart the pod it runs in. When this plan was written, both commits were still local only: Ansible `9edef16` (`- use: java` in `.kubecoder/config.yaml`) and DockerImages `1c1945a` (promtool 3.14.0 in `kube-coder-iac-toolchain`), and each repo was 1 ahead of origin. Push both, wait for DockerImages' job to publish `kube-coder-iac-toolchain:latest`, then run `kc env restart`. After the restart, `cexec java mvn -v` and `cexec iac promtool --version` should both answer.
 
+code-writer, P1 r1, 2026-09-25 — Still outstanding when P1 was dispatched: Ansible main is ahead of origin by 2 (9edef16 unpushed), DockerImages main is ahead by 1 (1c1945a unpushed), and the pod was not restarted — `cexec java` answers 'tool "java" is not available in this environment; the tools it has are: aac-tools, go, iac', and `cexec iac` has no promtool. P1 handed back blocked with no code written; it needs the two pushes, the kube-coder-iac-toolchain publish and `kc env restart`, then a re-dispatch.
+
 **Consequence:** P1's gate has no `cexec java` and P4's has no `cexec iac promtool`, so both phases go red on a missing tool rather than on their work.
 
 **Provenance:** read; plan-writer, planning, r1; Ansible and DockerImages `git status -sb` (ahead 1)
