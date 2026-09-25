@@ -64,7 +64,7 @@
 - **Toolchains are landed before the run, not by it.** Ansible `9edef16` adds `- use: java` to
   `.kubecoder/config.yaml`. That is the catalog's `java` toolchain: `registry:5000/kube-coder-java-toolchain:jdk-21`,
   OpenJDK 21 + Maven, a `.m2` home overlay, a 1Gi limit, reached as `cexec java …`. DockerImages
-  commit ``1c1945a`` adds promtool 3.14.0 at `/usr/local/bin/promtool` to
+  commit `1c1945a` adds promtool 3.14.0 at `/usr/local/bin/promtool` to
   `kube-coder-iac-toolchain`, from the checksummed Prometheus release tarball, reached as
   `cexec iac promtool …`. The operator pushes both, DockerImages' job publishes
   `kube-coder-iac-toolchain:latest`, and the operator runs `kc env restart` before
