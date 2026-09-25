@@ -104,13 +104,26 @@ One sitting with you. Straightforward changes along existing patterns; no slice 
   - srviac's `iac` container reads `/run/systemd/resolve/resolv.conf`, which lists the
     dnsmasq pair first and `search home`: checked on srvk8s1, which has the same setup. So
     `dns` and `srvk8s1` keep resolving inside it.
-  - baseline: `99-homelab-network.cfg` (`network: {config: disabled}`, tag `cloud_init`). A
-    Terraform `ipconfig0` change churns the cloud-init instance-id, and Proxmox's
-    network-data carries net0 only (`qm cloudinit dump`). The netplan handler takes
-    `-e baseline_netplan_apply=false` for a render-only pass.
-  - Ansible pushed (`IaC/Build-Main` #208 green). The operator runs the switch per Ansible
-    `docs/runbooks/static-address.md`: drop-in and render, reboot, `terraform apply`, then
-    `qm cloudinit update 920`.
+  - **Done 2026-09-25 21:40Z** (operator's go; run from KubeCoder). srviac is on
+    10.1.0.45 with `eth0` intact and the backplane NIC up, and link DNS is 8.8.8.8/8.8.4.4
+    with the global `home` scope on dnsmasq. Inside the `iac` container, `dns`, `srvk8s1`,
+    `pve.home` and `github.com` resolve. The Jenkins agent is online, and `srviac.home`
+    answers only .45. `site.yml --check` shows `changed=0` apart from the `iac_agent` rsync,
+    which is unrelated.
+  - How it went:
+    - The render-only pass landed, and with it a cloud-init drop-in
+      (`network: {config: disabled}`). That drop-in turned out to stop cloud-init renaming
+      the primary NIC to `eth0` every boot, and keepalived and Calico on the k8s nodes are
+      bound to `eth0`. It was reverted (Ansible `104574e`) and removed from srviac, its only
+      host, before any reboot.
+    - `terraform apply` from KubeCoder then failed halfway: the reservation and the old
+      snippet were deleted, but the new snippet upload was refused (pod `known_hosts` lacked
+      the homelab CA). After adding the CA, a re-apply went through; `kubecoder-keys.sh` now
+      installs it.
+    - `qm cloudinit update 920 && qm reboot 920` then brought eth0 up on .45 as a new
+      instance, and a `--tags netplan` run restored the rest.
+    - Slip: srviac was rebooted while `IaC/Build-Main` #210 ran on it. #211 re-ran it green.
+  - Runbook: Ansible `docs/runbooks/static-address.md`, now written for the order that worked.
 - **S2, deployed** (DnsmasqDeploy `9d0d0f0`, synced with `7052693` at 19:28Z):
   `service.dhcp.loadBalancerIP: 10.2.1.10` renders `metallb.io/loadBalancerIPs`, and
   `dhcp-dnsmasq` is Ready once UDP 67 is bound. After the roll MetalLB announces `dhcp` from
