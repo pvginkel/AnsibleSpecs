@@ -770,17 +770,17 @@ cascade deletes the namespace (D24, D27). HelmCharts tests that read the app's f
 first, or retired. Six were retired (operator, 2026-09-24; HelmCharts `4d02286`) and stay
 retired: five over the prometheus release and grafana's Keycloak login test. How their reason
 moved is in [`history.md`](history.md). Deploy repos run no tests in Jenkins; the tests a deploy
-repo carries run from its local test verb, the gate slice phases run. PrometheusDeploy's checks
-its rules as the chart renders them with promtool and unit-tests every alert on synthetic series
-(slice 027), among them the starvation and wedged-counter episodes the retired node-memory test
-walked. Three retired tests timed a backup alert against another app's CronJob, which a test in
-PrometheusDeploy cannot follow; PrometheusDeploy's tests assert each rule's own thresholds and
-windows and model no schedule. The retired Alertmanager routing test's successor is slice 028's
-routing assertions against the rendered Alertmanager config, in the same test verb (its Ruling
-T1). The Keycloak login test restated the release's own values (its OIDC settings and
+repo carries run from its local test verb, the gate slice phases run. PrometheusDeploy's test
+verb checks its rules as the chart renders them with promtool and unit-tests every alert on
+synthetic series (slice 027), among them the starvation and wedged-counter episodes the retired
+node-memory test walked. Three retired tests timed a backup alert against another app's CronJob,
+which a test in PrometheusDeploy cannot follow; PrometheusDeploy's tests assert each rule's own
+thresholds and windows and model no schedule. The retired Alertmanager routing test's successor
+is slice 028's routing assertions against the rendered Alertmanager config, in the same test verb
+(its Ruling T1). The Keycloak login test restated the release's own values (its OIDC settings and
 ExternalSecret mapping), and its last case read HelmCharts' dev-cluster copy, which GrafanaDeploy
-cannot see. DockerImages' `helmDeploy()` stage and HelmCharts' `gitToken`
-injection go last, once no Helm-deployed app needs them.
+cannot see. DockerImages' `helmDeploy()` stage and HelmCharts' `gitToken` injection go last, once
+no Helm-deployed app needs them.
 
 **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
 Proposed 2026-09-24 (Claude, within the D54 run; ANS-103); decided 2026-09-24 (operator: follow
