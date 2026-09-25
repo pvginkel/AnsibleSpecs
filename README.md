@@ -29,7 +29,7 @@ slice's own documents hold the detail.
 Triaged 2026-09-24 from the ANS intake queue (the record: `handovers/triage_2026-09-24.md` at `1b6cd36`):
 
 - **[026](slices/backlog/026_aac_tools_generator_and_producers/slice.md)** — aac-tools and the producers: generator fixes (in-house service per container, Argo CD's capability and redis edges, the app-name equality), the annotation contract in `gen-architecture --help`, Alertmanager's Telegram edge, and every copied `arch-validate.py` onto the toolchain (minor).
-- **[027](slices/backlog/027_build_and_test_gates/slice.md)** — Build and test gates: a Groovy parse gate for JenkinsPipelineUtils, a test stage before ArgoCDTools publishes, and promtool over PrometheusDeploy's alert rules (test gap).
+- **[027](slices/027_build_and_test_gates/slice.md)** — Build and test gates: a Groovy parse gate for JenkinsPipelineUtils, a test stage before ArgoCDTools publishes, and promtool over PrometheusDeploy's alert rules (test gap).
 - **[028](slices/backlog/028_argo_cd_and_service_residuals/slice.md)** — Argo CD and service residuals: a standing sync-failed alert, login through `https://argocd/`, the PreSync hook's `terraform init`, the promote re-run after a failed tag push, and gitblit's stalled index (minor).
 - **[029](slices/backlog/029_helmcharts_decommission/slice.md)** — HelmCharts decommission: the D61 cleanup, the version-poller and helm-charts producer, `collect-versions` deleted and a home for `recommend-resources`, the Argo CD registry move, and the docs (improvement).
 - **[030](slices/backlog/030_retire_modern_app_dev_images/slice.md)** — Retire modern-app-dev and modern-app-dev-playwright: their build and validation pipelines move to other images, then both images go (improvement).
