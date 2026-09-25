@@ -324,6 +324,31 @@ slice 018 witnessed; ANS-74's card text in slice.md lists them. There is no Jenk
   shows a rule is wrong, raise it as a question for the operator. Generated renders stay out of
   git.
 
+**Done (P4).** PrometheusDeploy `5a680b4` on `phase/027-P4`: `kc project test` runs `cexec iac
+tests/alert-rules.sh`. The script renders the upstream chart's `templates/cm.yaml` alone, at
+`architecture.yaml`'s `upstream` pin, into a temp dir. It takes the `alerting_rules.yml` key,
+runs `promtool check rules`, then `promtool test rules` over copies of `tests/alert-rules/*.yml`
+placed beside the render. There is one test file per rule group: 5 files, 8 alerts, each with a
+firing and a quiet case. No rule edited, gate green.
+
+Later phases:
+- P5: the rule tests live at PrometheusDeploy `tests/alert-rules/` and run from the local test
+  verb only. They use synthetic series and assert each rule's own thresholds and windows. The
+  CronJob rules assert their 52 h and model no schedule.
+- Doc phase: `config/prd/values.yaml`'s s3-mirror, youtrack-backup and backup-freshness comments
+  still name HelmCharts' retired tests as the ones that walked the edges.
+
+Record.
+- `--show-only templates/cm.yaml` keeps the alertmanager subchart's tab-ended line out of the
+  parse. promtool parses test files strictly, so anchors are defined at first use and merge keys
+  are not overridden. `exp_annotations` must match whole, so an annotation text edit is a test edit.
+- The test clock starts at Unix 0. `for:` edges are asserted exactly, from a memory-signal onset
+  inside the series: a counter starting at 0 under-reads in `rate(…[5m])` for its first minutes.
+- Witnessed on a scratch harness, not committed: 32 mutations of the rendered rules. All go red
+  except `max by`→`min by` on the two CronJob rules, which is equivalent because the `or` leaves
+  one series. `check rules` goes red on template and PromQL syntax errors. A `48 * 3600` edit in
+  `config/prd/values.yaml` turns the script red end to end.
+
 ### P5 — AnsibleSpecs: argo-cd D61 records the rule-test position as it now stands
 
 Target: ../AnsibleSpecs
