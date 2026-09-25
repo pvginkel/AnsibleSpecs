@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Close ANS-85 as won't-do (Ruling D2)
+
+Ruling D2 rules the app-name equality check out of this slice and closes its card as won't-do; the Argo CD runbook's warning stays (docs/runbooks/argocd.md:330-334). No role in the run touches the tracker.
+
+**Consequence:** ANS-85 stays open in the backlog as an unscheduled ask the operator has already decided against.
+
+**Provenance:** read | plan-writer, planning, r1 — plan.md Ruling D2
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -43,6 +52,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — Jenkins AaC/Architecture and AaC/WebathomeOrgDeploy trigger each other in an endless loop, redeploying the architecture site every ~6 minutes · major
+
+AaC/Architecture pins the new site image into WebathomeOrgDeploy. The push of that pin starts AaC/WebathomeOrgDeploy ("Started by GitHub push"), and that job starts AaC/Architecture downstream, which pins again. Nothing else is needed to keep it going. On 2026-09-25, every one of the last 12 AaC/Architecture builds (#1861-#1872, 08:31-09:35) was "Started by upstream project AaC/WebathomeOrgDeploy". AaC/WebathomeOrgDeploy #354-#358 built exactly the pin commits (`ci: image pins from AaC/Architecture #1868`…`#1872`). WebathomeOrgDeploy's origin/main gained 161 commits since 2026-09-24. The triage-2026-09-24 handover (ANS-111) attributes the 5-9-minute rollouts to the 79 producers publishing. The self-trigger means they would continue with no producer activity at all, and ANS-111's RollingUpdate fix removes the outage but not the loop. The plan works around it: the push sweep rebases WebathomeOrgDeploy immediately before pushing (attachments/push-sweep.md).
+
+**Consequence:** Jenkins runs two builds every ~6 minutes forever, the architecture site's pod is replaced each time (35-45 s with no pod until ANS-111's fix lands), and WebathomeOrgDeploy gains ~200 pin commits a day.
+
+**Provenance:** witnessed | plan-writer, planning, r1 — Jenkins API build causes for AaC/Architecture and AaC/WebathomeOrgDeploy, and WebathomeOrgDeploy git log, 2026-09-25
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -57,3 +75,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — App builds could skip rebuilding and pinning when a push changes no build input
+
+Twelve app repos build and pin into an auto-synced deploy repo on every push (plan Grounding, R6). Only DockerImages, HelmCharts and KubeCoder carry a changeset guard, and no skip-ci convention exists. So a commit touching only Jenkinsfile.architecture, a README or scripts/ rebuilds the image and restarts the production app. This slice accepts that once per app (Ruling D1). A changeset guard in the shared build (or a skip rule for architecture-only paths) would let the next estate-wide sweep, or any doc commit, leave production alone. Out of this slice (plan: Not in scope).
+
+**Consequence:** Every docs-only or architecture-only commit to one of these twelve app repos restarts its production app on a rebuilt image, and each device repo re-flashes its hardware.
+
+**Provenance:** read | plan-writer, planning, r1 — plan.md Grounding (R6) and refinement.md D1
+**Disposition:**

@@ -45,10 +45,273 @@ Cited lines are where things stood at that commit; re-read before editing.
 - **Push consequences elsewhere.** A `*Deploy` push that changes neither `chart/` nor `config/` starts only `AaC/<Repo>` plus a no-op Argo sync. An ArgoCDTools push rebuilds and republishes `argocd-hook` and `aac-tools` (`:<N>` and `:latest`) and writes no pin. An Architecture push runs the collector, rebuilds the site image and pins it into WebathomeOrgDeploy (the site redeploys). Jenkins' Kubernetes cloud has a container cap; on 2026-09-23 a slot leak under it stalled builds ("nodes offline"; reset via Script Console). Batch so the sweep never queues dozens of builds at once.
 - **Where the repos are.** All 48 deploy repos are cloned under `/work/<Name>Deploy`, along with ArgoCDTools, ArgoCDDeploy, Architecture, HelmCharts, DockerImages, KubeCoder and JenkinsPipelineUtils. Most app and firmware carriers are not cloned. `GH_TOKEN` in the pod has repo scope.
 
+## Task shape
+
+cross-cutting — slice.md's asks span ArgoCDTools' generator and its annotation contract (R1, R2, R4), the judgment layers of several deploy repos (KubeCoderDeploy, ArgoCDDeploy, PrometheusDeploy), every deploy repo's `.architecturerc` (R4), Architecture's producer manual, and every repo carrying a copied `arch-validate.py` (R6).
+
 ## Ordering constraints
 
 - The generator changes (R1, R2, the complete `--help` contract for R4) land and ArgoCDTools is pushed before any judgment-layer edit that relies on them (KubeCoderDeploy's mapping, ArgoCDDeploy's per-container realizes) and before the R4 pointer sweep. The old-vs-new regeneration of all 48 deploy repos happens before that push.
 - R6's sweep: batches of a few repos, each batch green and rolled out before the next; the device repos (and KitchenDisplay) last, one at a time (Ruling D1).
+- P4 opens by pushing ArgoCDTools, so it publishes P1–P3 exactly as P3's comparison covered them. P4–P6 commit to their deploy repos locally. P8's batches push those commits along with the pointer edits.
+- P8–P11 are one push schedule in the order D1 sets: deploy repos first, then carriers that roll nothing out, then carriers that redeploy prd, then device repos one at a time ([attachments/push-sweep.md](attachments/push-sweep.md)). Every deploy repo is pushed before any carrier whose app build pins into it (P10). P7's Architecture push is the run's own, after P8.
+
+### P1 — The generator takes a Service's in-house service from the container behind it
+
+Target: aac-tools
+
+When an exposed Service's pod runs several containers, the in-house service it references is the
+one belonging to the product of the container the Service routes to. Today it is drawn from
+every container in the pod (R1). `_inhouse_service_for` unions the products of all matched
+workloads' containers (`aac-tools/image/gen_architecture.py:1388-1397`, called at `:1282`). A
+second in-house image in the pod therefore makes it mint a duplicate service. The container-scoped
+resolution, the `exposures:` override and `resolve_exposed_realizers` (`:1348-1385`), runs only on
+the minting path.
+
+The case that has to come out right is KubeCoder's controller pod. It has four containers behind
+one Service whose port lands on an nginx sidecar (`ingress`, mapped `ss:nginx`). The container
+the Service reaches is named only by the Service's `nginx.webathome.org/target-port: "8080"`
+annotation: KubeCoderDeploy `chart/templates/controller-service.yaml`, and
+`controller-deployment.yaml` for the containers and ports. With `kube-coder-tunnel-reclaim` also
+mapped (its product realizes its own service in DockerImages), `kubecoder.home` must still
+reference `svc:kubecoder-controller-api` and mint nothing. The mapping itself is P4's. Prove the
+fix here against a scratch copy of the judgment layer. The phase's tests go in aac-tools' suite.
+
+### P2 — The judgment layer scopes an image entry to containers, and env values sourced from a ConfigMap resolve
+
+Target: aac-tools
+
+This is R2's generator half, built on the mechanism in the Settled list:
+
+- **Container scoping.** A judgment layer can scope an image entry's `realizes` to named
+  containers of that image. Today an image's realizes is looked up once per image name and
+  applies to every container of it (`gen_architecture.py:934-935`, applied at `:965` and
+  `:1008-1014`).
+- **ConfigMap-sourced env values.** An env value sourced from a ConfigMap
+  (`valueFrom.configMapKeyRef`) resolves against that ConfigMap in the same render. Every
+  resolver that reads a container's env, boundBy and upstream included, then sees it. Today env
+  capture keeps literal values only (`:977`), and it runs before the render's ConfigMaps are
+  collected (`:1077-1078`).
+
+Constraints the code imposes:
+
+- **The redis edge has to come from the existing upstream wire, so the scoping covers the wire
+  as well as `realizes`.** An image-level `upstream` hard-fails on any container of the image
+  that does not set its var (`:1609-1614`). The `argocd` image also runs containers that do not
+  read `REDIS_SERVER`: ANS-90 names only the server, repo-server and application-controller as
+  readers. The scoping therefore covers the wire too. That is how the ruling's "the redis edge
+  falls out of the existing wiring" holds.
+- **Secret-sourced values stay out, as today.** They are unpublished runtime state (`:629-633`).
+  A ConfigMap the render does not carry leaves its var unresolved, as today.
+
+The phase's tests go in aac-tools' suite.
+
+### P3 — `gen-architecture --help` prints the complete annotation contract, and the new generator is proven on every deploy repo
+
+Target: aac-tools
+
+**`--help` carries the contract.** `gen-architecture --help` prints the whole judgment-layer
+contract, so an agent holding only the image can edit a judgment layer correctly (R4, and the
+Settled "complete before any pointer is switched"). That means every key the generator reads
+from `architecture.yaml`, including:
+
+- `served_by`, which is read at `:1017`, and for CNPG kinds at `:1224`. It is passed through
+  unresolved, so it takes a composite id, as YoutrackDeploy's and CephCsiRbdDeploy's
+  `architecture.yaml` show.
+- P2's container scoping.
+
+Today `--help` prints usage and a one-line description (`parse_args`, `:789-812`), and the
+contract lives in the module docstring (`:2-107`). The contract `--help` prints and the one the
+module documents must be one source, so they cannot drift apart.
+
+**The comparison, before the phase hands back.** Regenerate every deploy repo's published stage
+twice:
+
+- with the published generator, ArgoCDTools `origin/main` (`8914c0f` at planning);
+- with this branch's head.
+
+That is 48 repos. One of them publishes two stages, which makes 49 `*-deploy` entries in
+Architecture's `pipeline-producers.yaml`. Account for every difference as intended, meaning P1's
+in-house pick or a ConfigMap-sourced value P2 now resolves. No repo that generates today may
+fail with the new generator. A value that now resolves but places nowhere is a hard fail, and
+counts as a failure. Record the comparison and its accounting in the done-record. An unintended
+difference is fixed here or stops the phase.
+
+**Run both generators as scripts.** The pod's aac-tools sidecar is older than the published
+generator. Its image was pulled when the pod started on 2026-09-23, and its `gen-architecture`
+differs from `origin/main`'s. For PrometheusDeploy it writes an artifact with 0 elements and
+exits 0. Run each generator from its commit under the sidecar's `python3`
+(`cexec aac-tools python3 <script> --stage … --producer … --repo …`), never through the
+sidecar's own `gen-architecture`. The same holds in P4–P6.
+
+### P4 — Publish aac-tools, then map kube-coder-tunnel-reclaim in KubeCoderDeploy
+
+Target: ../KubeCoderDeploy
+
+**First, publish the generator.** Push ArgoCDTools' `main`, which holds P1–P3, and wait for
+`IaC/ArgoCDTools` to build that head green. From then on, `registry:5000/aac-tools:latest` is the
+new generator for every Jenkins build. A red build stops the phase. Do not push if ArgoCDTools'
+`main` carries unpushed commits that are not this slice's; slice 027 changes ArgoCDTools'
+Jenkinsfile. If origin moved in the meantime and changed the generator, redo P3's comparison
+before pushing.
+
+**Then map the image (R1).** KubeCoderDeploy's judgment layer maps `kube-coder-tunnel-reclaim`
+to `app:kube-coder-tunnel-reclaim`. The comment that explains the gap (`architecture.yaml:21-25`)
+goes. A prd generation with the published generator shows no gap line for the image, and
+`kubecoder.home` still references `svc:kubecoder-controller-api`.
+
+- The commit lands on `main`. KubeCoderDeploy publishes from `prd`, so the published model shows
+  the mapping only after the next promotion, and this slice does not promote.
+- The push rides P8.
+- The repo's `kc project test` runs the stale sidecar. Its green says nothing about this change.
+
+### P5 — Argo CD's controllers realize configuration management, and its redis serves them
+
+Target: ../ArgoCDDeploy
+
+This phase removes R2's consequence. Using P2's scoping, ArgoCDDeploy's judgment layer does two
+things:
+
+- **The capability.** Argo CD's controllers realize `cap:configuration-management`. The
+  one-shots realize nothing: the copyutil init container and the redis-secret-init Job.
+- **The edge.** The redis instance serves each Argo CD container that reads `REDIS_SERVER`, the
+  `configMapKeyRef` on `argocd-cmd-params-cm`'s `redis.server`. It does so through the existing
+  upstream wire.
+
+The in-file comment explaining why `argocd` carries no capability (`architecture.yaml:21-26`)
+states the new truth. Prove it with a prd generation run with the published generator, run as
+P3 runs it.
+
+The capability is in the schema's enum (Architecture `schema/v0.1/enums/capabilities.yaml:168`).
+Architecture's `views/delivery.yaml:10` selects on it, and nothing in the estate realizes it
+today. Once P8 pushes this repo, `AaC/ArgoCDDeploy` publishes the result and Argo CD enters the
+Delivery view.
+
+### P6 — Alertmanager is served by the Telegram Bot API
+
+Target: ../PrometheusDeploy
+
+PrometheusDeploy's judgment layer declares `svc:telegram-bot-api` serving the `alertmanager`
+image (R5). The generated model then has a Serving edge from the Telegram Bot API to
+Alertmanager. Today the image is bare `alertmanager: ss:alertmanager` (`architecture.yaml:19`).
+Its receivers send through `telegram_configs` (`config/prd/values.yaml:353,361`). There is no
+generator work.
+
+- `served_by` is passed through unresolved (`gen_architecture.py:1017`), so it takes the
+  composite id. That id is `svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48`, as
+  Architecture's `docs/architecture/external-services.yaml:29` declares it.
+- Prove it with the published generator, run as P3 runs it. For this upstream-chart app, the
+  sidecar's own generator writes an empty artifact.
+- The push rides P8. Slice 027 also changes this repo.
+
+### P7 — Architecture points producers at the toolchain and the central update at `--help`
+
+Target: ../Architecture
+
+- **Guidance.** Architecture's producer-facing guidance stops telling producers to copy
+  `arch-validate.py`. It points them at the aac-tools toolchain instead: `arch-validate` in
+  `containerTemplates.aac_tools` in Jenkins, and `cexec aac-tools arch-validate` in KubeCoder
+  (Settled; R6). This covers the producer manual (`.claude/architecture/producer-manual.md:6-11`,
+  `:652-724`, `:903`) and every other place that tells a producer to copy the script. The
+  seed-architecture skill is one (`.claude/skills/seed-architecture/SKILL.md:149-150`).
+- **The central update.** For a generated producer whose sources lack the generator, the
+  update-architecture agent (`.claude/agents/update-architecture.md:47-48`) takes the annotation
+  contract from `gen-architecture --help` in the aac-tools toolchain (Settled; R4).
+- **The environment.** Architecture's KubeCoder environment declares the aac-tools toolchain.
+  Today `.kubecoder/config.yaml:15-16` declares only `modern-app`. This is config only; the
+  restart is the operator's.
+
+`.claude/architecture/arch-validate.py` is the canonical script, not a copy, and it stays:
+
+- the aac-tools image ships it byte for byte;
+- the service image ships it (`Dockerfile:62-72`);
+- the central update runs it from the staged directory (`update-architecture.md:190`).
+
+Architecture's gates, every component's, run through `cexec modern-app`. This environment does
+not carry that tool (Ansible `ec4fbc3`), so `kc project test` there fails before it tests
+anything. How P7 lands is `plan_questions_r1.md` Q1.
+
+### P8 — Every deploy repo points at `gen-architecture --help`
+
+Target: root
+
+R4's pointer moves everywhere it lives:
+
+- **The deploy repos.** The `.architecturerc` instructions of all 48 `*Deploy` repos under
+  `/work` name `gen-architecture --help` from the aac-tools toolchain as the judgment layer's
+  schema. All of them carry the unlocated "generator's docstring" pointer today. So do the two
+  `architecture.yaml` headers that repeat it (ArgoCDDeploy's and KubeCoderDeploy's, line 3).
+- **The how-to.** `docs/runbooks/argocd.md` gets the same pointer, both in its schema line
+  (`:290-291`) and in its `.architecturerc` template.
+- **The migration tool.** The templates in `support/argo-migrate/argo_migrate.py` get it too:
+  `ARCHITECTURERC` at `:205-216`. A future app then inherits it.
+
+This phase's own diff is the Ansible half. Each deploy-repo edit is committed on that repo's
+`main` and pushed by this phase in batches ([attachments/push-sweep.md](attachments/push-sweep.md)).
+The pushes carry P4–P6's commits in KubeCoderDeploy, ArgoCDDeploy and PrometheusDeploy.
+
+- `.architecturerc` carries exactly its three keys, since any other key fails the producer
+  (`docs/runbooks/argocd.md:335-340`).
+- The runbook's app-name warning (`:330-334`) stays (Ruling D2).
+
+### P9 — Ansible and the carriers that roll nothing out validate with the toolchain
+
+Target: architecture
+
+**Enumerate the carriers.** Re-enumerate the carriers of `arch-validate.py` with the GitHub code
+search, cross-checked against Architecture's `pipeline-producers.yaml`. The Grounding's
+classification is the starting point. A carrier it does not list is classed by reading its
+Jenkinsfiles before it is pushed. Record the set and each carrier's class in the sweep ledger.
+
+**Migrate this phase's class (R6).** This covers Ansible and every carrier whose push rolls
+nothing out to production. HelmCharts and DockerImages are excepted: they are P10's and P11's
+own diffs. Each one loses its `scripts/arch-validate.py` and runs the toolchain's
+`arch-validate` wherever it ran the copy:
+
+- its architecture Jenkinsfile, in `containerTemplates.aac_tools`;
+- its local gate, as `cexec aac-tools arch-validate`;
+- any instruction that names the script.
+
+This phase's own diff is Ansible's: `Jenkinsfile.architecture:13`, `.kubecoder/project.yaml:51`
+and the script itself. Ansible's `architecture` component is the gate that proves it. The other
+carriers are committed on their default branch and pushed in batches
+([attachments/push-sweep.md](attachments/push-sweep.md)).
+
+- The 7 drifted copies differ in lint only, so nothing is carried back (Settled).
+- A carrier whose local gate moves onto the toolchain needs its KubeCoder environment to declare
+  `aac-tools`. Ansible's does (`.kubecoder/config.yaml:102-103`). An environment that doesn't
+  gets the declaration. That is config only; its restart is the operator's, so enter it in the
+  close-out report.
+- Carriers not cloned under `/work` are cloned to scratch. `GH_TOKEN` has repo scope.
+
+### P10 — HelmCharts and the carriers whose push redeploys production
+
+Target: ../HelmCharts
+
+HelmCharts' copy goes the same way (R6). Its `Jenkinsfile.architecture:35` runs it, and this is
+the phase's own diff. HelmCharts' own generator and `.architecturerc` stay as they are.
+
+Then the carriers the ledger classes as redeploying prd are migrated the same way and pushed in
+small batches. These are the twelve whose app build pins an image into an auto-synced deploy
+repo. Each batch's builds must be green, and every Application they pin into must be Healthy at
+the new pin, before the next batch starts ([attachments/push-sweep.md](attachments/push-sweep.md)).
+D1 accepts that each of these apps restarts once on unchanged code.
+
+### P11 — DockerImages and the device carriers, one at a time
+
+Target: ../DockerImages
+
+DockerImages' copy goes the same way (R6), and this is the phase's own diff:
+
+- its `Jenkinsfile.architecture:36` runs the copy;
+- its `.architecturerc` instructions (`:11`) tell the central update to run the copy.
+
+The device carriers come last and one at a time: the seven firmware repos that flash over the
+air, and KitchenDisplay, which restarts a service on a Raspberry Pi. Each is migrated, pushed,
+and waited on until its flash upload (or KitchenDisplay's deploy) succeeds before the next
+starts ([attachments/push-sweep.md](attachments/push-sweep.md)). After the last one, the code
+search finds `arch-validate.py` in no active producer repo. Architecture's canonical copy and
+the archived DesignAssistant and SomfyRemote are the exceptions.
 
 ## Not in scope
 
@@ -58,3 +321,6 @@ Cited lines are where things stood at that commit; re-read before editing.
 - DesignAssistant and SomfyRemote (archived).
 - HelmCharts' own in-repo generator and its `.architecturerc` (its sources include its generator). HelmCharts' `arch-validate.py` copy **is** in R6's scope.
 - ArgoCDTools' job publishing without running its suite (ANS-86, slice 027).
+- Restarting this environment so its aac-tools sidecar carries the published generator. That is the operator's to pick, and a restart would end the run.
+- Remedies after a stop: reverting a pin, reflashing a device. Those are the operator's.
+- The `AaC/Architecture` ↔ `AaC/WebathomeOrgDeploy` pin loop, a close-out observation. The sweep only works around it.

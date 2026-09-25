@@ -1,0 +1,126 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — in-house service from the Service's own container",
+      "description": "aac-tools generator: resolve a Service's in-house product from its own container, so kube-coder-tunnel-reclaim can be mapped. The generator takes an exposed Service's in-house service from the container the Service routes to, not from every container of the pod. Today that is the union in `_inhouse_service_for`, ArgoCDTools aac-tools/image/gen_architecture.py:1388-1397, called at :1282. KubeCoderDeploy's judgment layer maps `kube-coder-tunnel-reclaim: app:kube-coder-tunnel-reclaim`, replacing the comment at architecture.yaml:21-25. A prd generation with the published generator then prints no `gap:` line for the image, and kubecoder.home still references svc:kubecoder-controller-api with no duplicate service minted. The controller Service lands on the nginx `ingress` sidecar and names the controller through `nginx.webathome.org/target-port: \"8080\"` (chart/templates/controller-service.yaml).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — in-house service from the Service's own container",
+      "description": "The published architecture shows kube-coder-tunnel-reclaim mapped, with no gap line and no duplicate kubecoder.home service. KubeCoderDeploy's AaC build publishes from its `prd` branch, and this slice lands the mapping on `main` only.",
+      "owed_after": "the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; not done by this slice)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R2 — Argo CD's capability and redis edges (generator)",
+      "description": "aac-tools: Argo CD's model gets no capability and no edges to its redis, because the generator's hooks cannot reach them. The generator now reaches them in two ways. First, a judgment layer can scope an image entry's `realizes`, and its `upstream` wire, to named containers of that image. Today realizes is looked up per image name, gen_architecture.py:934-935, applied at :965 and :1008-1014, and an image-level upstream hard-fails on a container that lacks the var, :1609-1614. Second, an env value sourced through `valueFrom.configMapKeyRef` resolves against the ConfigMap the same render carries. Today env capture keeps literal values only, :977, and ConfigMaps are collected at :1077-1078. Values sourced from a Secret stay unresolved, as today (:629-633).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R2 — Argo CD's capability and redis edges (published model)",
+      "description": "The consequence is gone: \"The published model shows Argo CD and its redis side by side with no edge between them, and Argo CD is missing from the Delivery pipeline view.\" In the published dataset, Argo CD's controllers realize cap:configuration-management, and the copyutil init container and the redis-secret-init Job realize nothing. The redis instance has a Serving edge to each Argo CD container that reads REDIS_SERVER. The Delivery view selects that capability (Architecture views/delivery.yaml:10), which nothing realizes today, and it now shows Argo CD. ArgoCDDeploy's judgment layer maps `argocd: ss:argo-cd` with no realizes today (architecture.yaml:21-26).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R3 — app name from Chart.yaml vs the registry path (ruled out)",
+      "description": "aac-tools: the generator takes the app name from Chart.yaml, Argo takes it from the registry path. Ruled out of this slice by Ruling D2. No equality check is built, and the Argo CD runbook's warning that the two names must be equal and nothing checks it still stands (Ansible docs/runbooks/argocd.md:330-334).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R4 — the annotation contract in `gen-architecture --help`",
+      "description": "`gen-architecture --help` prints the complete annotation contract: every key the generator reads from a deploy repo's architecture.yaml. That includes `served_by`, which is read at gen_architecture.py:1017 and :1224 and takes a composite id, and the container scoping this slice adds. The contract --help prints and the one the module documents are one source. Today --help prints usage and a one-line description (`parse_args`, :789-812), and the contract is the module docstring (:2-107), which omits served_by.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R4 — deploy repos point at `gen-architecture --help`",
+      "description": "Deploy repos' .architecturerc points at an annotation contract their clone doesn't carry — fixed \"in both deploy repos and in the how-to\", per the operator's ruling \"I want: gen-architecture --help\". Every *Deploy repo's `.architecturerc` instructions, all 48 of them, now name `gen-architecture --help` as the judgment layer's schema. So do ArgoCDDeploy's and KubeCoderDeploy's architecture.yaml headers, which say \"gen-architecture's docstring\" at line 3 today. Each file still carries only its three keys, and every change is pushed. The how-to follows: Ansible docs/runbooks/argocd.md, which points at the docstring at :290-291 today, and its `.architecturerc` template. So do the argo-migrate templates, whose ARCHITECTURERC is at support/argo-migrate/argo_migrate.py:205-216, so a future app inherits the pointer.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R4 — the central update reads the contract from --help",
+      "description": "Architecture's update-architecture agent takes the annotation contract from `gen-architecture --help` in the aac-tools toolchain for a generated producer whose sources lack the generator. Today it reads a generator docstring only when the sources include the generator (.claude/agents/update-architecture.md:47-48). Architecture's KubeCoder environment config declares the aac-tools toolchain; today .kubecoder/config.yaml declares only modern-app.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "R4 — the central update reads the contract from --help",
+      "description": "A central architecture update session on a deploy repo runs `gen-architecture --help` from the Architecture environment's aac-tools toolchain as the judgment layer's schema.",
+      "owed_after": "the operator's restart of the Architecture KubeCoder environment and the release of central update runs (ARCH-14)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R1/R2/R4 — the generator is published before its consumers",
+      "description": "Every deploy repo was regenerated before ArgoCDTools was pushed: 48 repos and 49 published stages, each with the published generator (origin/main, 8914c0f at planning) and with the new one. Every difference is accounted for as intended, and no repo that generated before fails with the new generator. ArgoCDTools was then pushed and IaC/ArgoCDTools built that head green, before any judgment-layer change that relies on the new generator was pushed and before any `.architecturerc` pointer switched to --help.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "R5 — Alertmanager's dependency on the Telegram Bot API",
+      "description": "Before: \"The generated architecture has a svc:telegram-bot-api serving edge for jenkins-telegram-bot … but nothing declares one for Alertmanager, so the model does not show that alert delivery depends on Telegram.\" PrometheusDeploy's judgment layer now declares svc:telegram-bot-api serving the alertmanager image; today it is bare `alertmanager: ss:alertmanager` (architecture.yaml:19). The id is the composite `svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48` (Architecture docs/architecture/external-services.yaml:29), because served_by is passed through unresolved (gen_architecture.py:1017). The published model shows a Serving edge from the Telegram Bot API service to Alertmanager. Alertmanager sends through `telegram_configs` (config/prd/values.yaml:353,361).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "R6 — every copied arch-validate.py on the toolchain",
+      "description": "Cross-repo: migrate every copied arch-validate.py to the aac-tools toolchain. No active producer repo carries a copy of arch-validate.py. A GitHub code search finds only Architecture's canonical `.claude/architecture/arch-validate.py` and the archived DesignAssistant and SomfyRemote. Every former carrier runs `arch-validate` from the aac-tools toolchain wherever it ran the copy: its architecture Jenkinsfile, its local gate and any instruction naming the script. Each migrated carrier's architecture build is green on its migrated head. Where a carrier's local gate moved onto the toolchain, its KubeCoder environment declares aac-tools.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "R6 — pushed under Ruling D1's stop rules",
+      "description": "The run pushed every carrier and deploy repo the sweeps touched, under Ruling D1:\n- small batches, each batch's builds green and its rollouts healthy before the next;\n- the device repos last, one at a time, each waiting for its flash upload (KitchenDisplay's deploy) to succeed;\n- a stop on the first red build, failed rollout or failed flash, reported to the operator.\nThe sweep ledger records every repo touched, its push class, the pushed sha and the outcome. No commit that is not this slice's was pushed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "R6 — the producer manual points at the toolchain",
+      "description": "Architecture's producer manual stops telling producers to copy the script and points them at the aac-tools toolchain instead. Today the copy instruction is at .claude/architecture/producer-manual.md:6-11 and :652-724. No other producer-facing instruction in Architecture tells a producer to copy it; the seed-architecture skill does today, at SKILL.md:149-150. Architecture's canonical `.claude/architecture/arch-validate.py` stays, because the aac-tools image, the service image and the central update all use it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "aac-tools suite",
+      "description": "The aac-tools suite is green, and every behaviour this slice adds to the generator has tests: the in-house pick from the routed container, container scoping, ConfigMap-sourced env values, and the --help contract. No coverage is lost: every deleted test has a named successor.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
