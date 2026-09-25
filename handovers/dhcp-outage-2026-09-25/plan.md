@@ -75,10 +75,10 @@ One sitting with you. Straightforward changes along existing patterns; no slice 
     it is whatever MetalLB allocated, so a recreated Service could move it and the router's DHCP
     target would silently break.
   - Give `dhcp-dnsmasq` a readiness probe of its own.
-- [ ] **S3. Read and record how the UDM forwards DHCP to 10.2.1.10.** `homelab-handover.md` says
+- [x] **S3. Read and record how the UDM forwards DHCP to 10.2.1.10.** `homelab-handover.md` says
   its DHCP is "disabled" everywhere, yet the LAN reaches the Service, so there is presumably a
   relay. This feeds ANS-128.
-- [ ] **S4. Docs.**
+- [x] **S4. Docs.**
   - `docs/homelab-handover.md` §3 and §6: add DHCP on 10.2.1.10 and the relay. Correct "k8s
     nodes carry static netplan" (srvk8s4 didn't). Note that srvceph1–3 are static but hand-set in
     the guest (host_vars carry no addresses).
@@ -90,6 +90,50 @@ One sitting with you. Straightforward changes along existing patterns; no slice 
     had 255.0.0.0) and SSH by IP with `HostKeyAlias`.
 - [ ] **S5. Tidy.** Decide whether the report stays in this handover. (The working clones and
   `tmp/` copies are already gone.)
+
+### Session record (2026-09-25, from KubeCoder)
+
+Everything is committed; nothing is pushed or run yet.
+
+- **S1, prepared; you run it.** In Ansible: host_vars give srvk8s4 `10.1.0.44/16` and srviac
+  `10.1.0.45/16` (IPv6 `2a10:3781:16a9:1::44`/`::45`, as srvk8s1–3), gateway, `accept_ra: false`
+  and 8.8.8.8/8.8.4.4; `vms.tf` sets `static_ip = true`. .44 and .45 were silent, with ARP
+  INCOMPLETE on the router. DnsmasqDeploy has the static-hosts entries in their own commit. Two
+  things turned up, and the run is no longer "drain and reboot":
+  - **srvk8s4 has to re-join the cluster.** The prd apiserver verifies kubelet serving certs
+    (`--kubelet-certificate-authority`, InternalIP first). srvk8s4's `kubelet.crt` names
+    10.1.3.5 and nothing re-issues it on a joined node: the kicker exits on clustered nodes,
+    and `no-cert-reissue` is set. After the IP change, `kubectl logs/exec` (and so `cexec`) on
+    srvk8s4 would fail on x509. Instead: evict, `microk8s leave`, `remove-node`, render
+    netplan, reboot, then `rebuild-k8s.yml`, whose join issues a cert for 10.1.0.44.
+  - **The cloud-init instance-id churns.** Terraform's `ipconfig0` change makes the next cold
+    start a new instance. Proxmox's network-data carries net0 only (checked with
+    `qm cloudinit dump`), so cloud-init would bring srvk8s4 up without its VLAN-2 and vmbr1
+    NICs. baseline now drops `99-homelab-network.cfg` (`network: {config: disabled}`, tag
+    `cloud_init`), and the netplan handler takes `-e baseline_netplan_apply=false` for a
+    render-only pass.
+  - srviac's `iac` container reads `/run/systemd/resolve/resolv.conf`, which lists the dnsmasq
+    pair first and `search home`: checked on srvk8s1, which has the same setup. So public
+    resolvers plus the home-routing drop-in keep `dns` and `srvk8s1` resolving inside it.
+
+  Order: land the drop-in; push Ansible, then the DnsmasqDeploy static-hosts commit (each name
+  answers with both addresses until Terraform drops the reservation); srviac (render, reboot,
+  from KubeCoder); srvk8s4 (from the desktop through srviac); `terraform apply`;
+  `qm cloudinit update`. Generic procedure: Ansible `docs/runbooks/static-address.md`.
+- **S2, committed** (DnsmasqDeploy `9d0d0f0`): `service.dhcp.loadBalancerIP: 10.2.1.10` renders
+  `metallb.io/loadBalancerIPs`; `dhcp-dnsmasq` is Ready once UDP 67 is bound (the probe was run
+  in the live container). Independent of S1.
+- **S3, read live from the UDM** (`root@10.1.0.1`, `id_ed25519_pve`):
+  `/run/dnsmasq.dhcp.conf.d/` has `dhcp-relay=<gw>,10.2.1.10` on br0 (Intranet), br3 (IoT)
+  and br4 (Guest), and no IPv4 `dhcp-range`. Kubernetes (br2) has no relay. IPv6 is RA-only
+  on Intranet, IoT and Kubernetes. The dhcp lease file holds 41 leases, all 10.1.x: IoT and
+  Guest are relayed but have no DHCP clients. Recorded in `homelab-handover.md` §3 and on ANS-128.
+- **S4, done.** `homelab-handover.md` §3/§6 (relay, 10.2.1.10, static hosts, Ceph set by hand,
+  one §7 item resolved); `decisions.md` (tier test, srviac, static-hosts in DnsmasqDeploy,
+  both sets served side by side, cloud-init network stage); new runbooks `cold-boot.md` and
+  `static-address.md`.
+- **S5: your call.** The report is the only record of the incident timeline, so I'd keep it
+  here.
 
 ## Cards
 
