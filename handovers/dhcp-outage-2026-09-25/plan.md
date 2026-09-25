@@ -108,11 +108,15 @@ One sitting with you. Straightforward changes along existing patterns; no slice 
     Terraform `ipconfig0` change churns the cloud-init instance-id, and Proxmox's
     network-data carries net0 only (`qm cloudinit dump`). The netplan handler takes
     `-e baseline_netplan_apply=false` for a render-only pass.
-  - The operator runs it per Ansible `docs/runbooks/static-address.md`: drop-in and render,
-    reboot, `terraform apply`, then `qm cloudinit update 920`.
-- **S2, committed** (DnsmasqDeploy `9d0d0f0`): `service.dhcp.loadBalancerIP: 10.2.1.10` renders
-  `metallb.io/loadBalancerIPs`; `dhcp-dnsmasq` is Ready once UDP 67 is bound (the probe was run
-  in the live container). Independent of S1.
+  - Ansible pushed (`IaC/Build-Main` #208 green). The operator runs the switch per Ansible
+    `docs/runbooks/static-address.md`: drop-in and render, reboot, `terraform apply`, then
+    `qm cloudinit update 920`.
+- **S2, deployed** (DnsmasqDeploy `9d0d0f0`, synced with `7052693` at 19:28Z):
+  `service.dhcp.loadBalancerIP: 10.2.1.10` renders `metallb.io/loadBalancerIPs`, and
+  `dhcp-dnsmasq` is Ready once UDP 67 is bound. After the roll MetalLB announces `dhcp` from
+  srvk8s3. A relay-style DISCOVER to 10.2.1.10 (giaddr 10.1.0.1) got an Intranet OFFER.
+  srviac's static-hosts entry went out in the same sync: `srviac.home` answers 10.1.3.4 and
+  10.1.0.45 until `terraform apply` drops the reservation.
 - **S3, read live from the UDM** (`root@10.1.0.1`, `id_ed25519_pve`):
   `/run/dnsmasq.dhcp.conf.d/` has `dhcp-relay=<gw>,10.2.1.10` on br0 (Intranet), br3 (IoT)
   and br4 (Guest), and no IPv4 `dhcp-range`. Kubernetes (br2) has no relay. IPv6 is RA-only
