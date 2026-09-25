@@ -32,6 +32,8 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 - V06 — Argo CD's application controller exposes the application metrics the standing rules read, and …
 - V08 — Login through https://argocd/ works. A login started at https://argocd/ completes instead of …
 
+test-agent, r1, 2026-09-25 — ArgoCDDeploy's origin/main is one commit ahead of the local main (2326bf4, architecture.yaml's Redis logo only; no overlap with values.yaml or tests/render-chart.py), so the push is refused until `git pull --rebase`. The rebased tree has not been gate-run. Order: push, then sync argocd-prd by hand (Argo CD syncs itself by hand, D3) before A2.
+
 **Consequence:** until you push it, nothing ArgoCDDeploy deploys carries the slice, and V06, V08 stay unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
@@ -47,6 +49,8 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 - V02 — `on-health-degraded` has the same shape and is fixed the same way. An app that Argo CD reports …
 - V03 — D7's immediate events still arrive as today: ArgoCDSyncFailed is critical and carries Argo CD's …
 
+test-agent, r1, 2026-09-25 — Push after A1 is synced. PrometheusDeploy is not behind origin. Once pushed, the argocd rule group loads and ArgoCDAlertsBlind fires 15 m later if the controller Service is not being scraped yet.
+
 **Consequence:** until you push it, nothing PrometheusDeploy deploys carries the slice, and V01, V02, V03 stay unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
@@ -59,6 +63,8 @@ Criteria owed after that push — the run cannot prove them, so they stay open u
 Criteria owed after that push — the run cannot prove them, so they stay open until the push lands and are settled after it:
 
 - V10 — KubeCoderDeploy Jenkinsfile.promote: a re-run can finish a release whose tag push failed. When prd …
+
+test-agent, r1, 2026-09-25 — KubeCoderDeploy's origin/main is two Build-Main pin commits ahead (10b6c7b, 56705db: config/dev and config/prd values.yaml only; no overlap with Jenkinsfile.promote), so the push is refused until `git pull --rebase`. The rebased tree has not been gate-run.
 
 **Consequence:** until you push it, nothing KubeCoderDeploy deploys carries the slice, and V10 stays unproven.
 
@@ -97,6 +103,15 @@ The plan's P5 constraint said "the existing lock cleanup is unchanged". The lock
 **Consequence:** none
 
 **Provenance:** witnessed, code-writer, P5 r1, GitSyncDeploy 22b6967
+**Disposition:**
+
+### N2 — Test phase: read-only live checks before the pushes bear out the offline assumptions of V06, V08, V12 and V13 · nit
+
+Baselines the pushes will be measured against, and three assumptions checked against the live estate rather than the source: (1) Prometheus 3.14.0 has no argocd_app_info, argocd_app_condition or ArgoCD alert yet, and its kubernetes-service-endpoints job keeps any Service annotated prometheus.io/scrape=true; (2) the running controller already serves :8082/metrics (its NetworkPolicy admits the metrics port from every namespace): 50 argocd_app_info series, 49 with autosync_enabled true, label names as the rules select them (operation is an empty-valued label when idle, which Prometheus drops), and the v3.5.1 image accepts --metrics-application-conditions and carries the metric name argocd_app_condition; (3) https://argocd/auth/login?return_url=... answers 400 with the card's message today, https://argocd.home/... 303 to Keycloak. GitSyncDeploy's prune test also passed twice under BusyBox v1.38.0, the image gitblit's init container really pulls (docker.io/library/busybox@sha256:cac8f90b...), in the file form and in the rendered `sh -c <script> clean-lucene /git` form; the test verb itself only runs Ubuntu's 1.37.0.
+
+**Consequence:** none
+
+**Provenance:** witnessed, test-agent, r1; read-only requests, and scratch pods in the development namespace (deleted afterwards)
 **Disposition:**
 
 ## Bugs
@@ -140,7 +155,7 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — ArgoCDDeploy P2 done-record: SyncError is set in two more cases than it says · minor
+### ~~S1 — ArgoCDDeploy P2 done-record: SyncError is set in two more cases than it says · minor~~ — resolved by P3 (8b6e866, 185b64f): ArgoCDSyncStillFailed's description names the prune guard beside the failed sync and its summary claims no failed sync; P3's gate and review r2 re-ran against it; struck by consult 1
 
 The record tells P3 the controller sets SyncError only once a failed sync's retries are spent. Upstream v3.5.1 also sets it from the auto-sync prune guard (controller/appcontroller.go:2431-2441; every generated app has prune: true and no allowEmpty) and on a failed SetAppOperation (:2458-2460). The fact is now recorded under P2's Record for P3.
 
@@ -170,6 +185,8 @@ Prometheus sends each firing alert with an end time 4 minutes ahead (4 × the 1 
 ### S4 — KubeCoderDeploy promote: a recovery re-run records the stuck release only if its commit parameter names it · minor
 
 Build-Main commits image pins to KubeCoderDeploy main several times a day (#534-#539 over 2026-09-23..25). If a promotion fails at Recording the release and is re-run with commit empty (the default) after main moved, the re-run promotes main's new tip, not the stuck commit. It retags, advances prd and tags the new tip, and the stuck commit can no longer be recorded by the job: a run naming it hits the non-fast-forward refusal. Only the runbook's hand recipe can record it then (Jenkinsfile.promote:69, :77, :84-87). The code meets the plan; the doc phase is told to state commit=<sha> (plan P4 Later phases). One possible fix: when commit is empty and prd's tip carries no release-* tag, refuse and name that tip, so a bare re-run cannot pass over a stuck release.
+
+consult 1, 2026-09-25 — P4's done-record hands this to the doc phase: KubeCoderDeploy README 'Promotion' (its refusal list still names a prd already at the commit) and Ansible docs/runbooks/kubecoder-cutover.md :176 and :775-783 are to name the re-run as the recovery, with commit set to the stuck sha. The code side is complete; what remains is that instruction reaching the operator's docs.
 
 **Consequence:** A re-run started from defaults after a Build-Main landed promotes whatever main holds at that moment, and the earlier release loses its D48 record unless it is tagged by hand.
 
