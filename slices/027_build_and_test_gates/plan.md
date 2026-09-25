@@ -211,7 +211,7 @@ Record:
   `[FAILED]`. A new `vars/gateProbe.groovy` ran as an 11th case with no gate edit and went red with
   a `synchronized` block. The clean tree gives `[  OK  ]` over 10 cases.
 
-### P2 — JenkinsPipelineUtils: a container template for the iac toolchain image
+### P2 — JenkinsPipelineUtils: a container template for the iac toolchain image ✅ DONE 2026-09-25
 
 Target: ../JenkinsPipelineUtils
 
