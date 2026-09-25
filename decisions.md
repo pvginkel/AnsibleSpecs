@@ -598,6 +598,9 @@ Each push-triggered pipeline below runs its checks ahead of the step that change
 - **Ansible (`iac-on-push`)**: yamllint, ansible-lint in strict mode and `terraform fmt -check` — the dev loop's `kc project lint`, kept identical — then `terraform validate` on both roots, ahead of the plan. `iac-apply` does not re-run them.
 - **HelmCharts**: every release the build is about to deploy is rendered with the values and `--set` args its deploy uses, and linted where its chart source is in the repo; kubeconform validates each render in strict mode against prd's Kubernetes version (a pin in the `Jenkinsfile` that moves with prd's channel — `docs/runbooks/k8s-upgrade.md`), before the first release deploys or uninstalls.
 - **HomelabTerraformProvider**: `go vet` and the unit tests, before the registry publish. The acceptance tests need live backends and stay a manual run.
+- **ArgoCDTools**: both images' unit tests, in the `iac` toolchain image their local test verbs run in, before either image build.
+
+**JenkinsPipelineUtils has no pipeline to check it.** It has no job, and Jenkins jobs load it unpinned from `main`, so a push is live in every job that loads it. Its check is its `kc project test`, the gate slice phases run: every `vars/*.groovy` compiled through the controller's CPS transform. A deploy repo's tests likewise run only from its test verb (argo-cd D61); PrometheusDeploy's check and unit-test its alert rules with promtool.
 
 **DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert, and so does a scan that could not complete. The scan never changes the build result.
 
