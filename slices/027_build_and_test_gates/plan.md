@@ -251,7 +251,7 @@ Later phases:
   openssl, promtool 3.14.0, python3 3.13, poetry and uv all ran. `terraform version` was clean;
   with the image's default cache path it printed the error above.
 
-### P3 — ArgoCDTools: the job runs the repo's suites before it publishes either image
+### P3 — ArgoCDTools: the job runs the repo's suites before it publishes either image ✅ DONE 2026-09-25
 
 Target: ../ArgoCDTools
 
