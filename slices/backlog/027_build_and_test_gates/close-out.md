@@ -75,3 +75,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — Slice 028's P3 plans its own promtool proof for PrometheusDeploy rules that this slice's P4 turns into a standing gate
+
+Slice 028's P3 (Target ../PrometheusDeploy) adds standing Argo CD alert rules and a blind-metrics warning to `config/prd/values.yaml`. It says "The iac sidecar has neither `promtool` nor `amtool` today, so this phase decides how the proof runs" (028 plan.md, P3). This slice's A1 puts promtool 3.14.0 in the iac toolchain before its run. Its P4 then adds a render-and-check step and rule unit tests to PrometheusDeploy's `kc project test`, covering every alert in the rendered file. The run order decides which way the two meet. If 027 runs first, 028's P3 text about the sidecar is stale, and its new rules land under an existing gate and test layout. If 028 runs first, it builds its own proof mechanism, and 027's P4 must then cover 028's alerts as well as the eight counted at planning, next to whatever 028 left behind. A2 covers only the push hazard between the two.
+
+**Consequence:** If 028 runs first, PrometheusDeploy may end up with two promtool test mechanisms for its rules, and 027's P4 does more work than planned.
+
+**Provenance:** read; plan-reviewer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md P3 and slices/backlog/027_build_and_test_gates/plan.md P4
+**Disposition:**
