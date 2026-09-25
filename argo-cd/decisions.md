@@ -62,6 +62,19 @@ The plan assumes Alertmanager is available as a target — operator decision —
 notifications engine supports it natively. Today's `deploy wait` swallows rollout failures;
 this is the replacement signal.
 
+> **Amended 2026-09-25 (operator, slice 028 Ruling D1; ANS-47): the notification is the event,
+> the Prometheus rule is the state.** D7 stands. What Argo CD sends to Alertmanager is the
+> failure *event*. The notifications engine sets no end time on it, so Alertmanager expires it
+> after its resolve timeout while the app may still be failed, and that expiry sends no
+> "resolved". The standing *state*, an app still out of sync or still degraded some minutes
+> after the failure (past Argo CD's own sync retries), comes from Prometheus rules over Argo CD's
+> application metrics. Those alerts stay up until the app recovers, then resolve. Limit: the
+> standing failed-sync alert covers auto-synced apps only. An app synced by hand (today only
+> Argo CD's own, D3) keeps the immediate event alone, because Argo CD's metrics cannot tell its
+> failed sync from one not yet run. The standing degraded alert covers every app. Accepted
+> trade-off: two messages per failure, the immediate one with Argo CD's error text, then the
+> standing one some minutes later.
+
 **D8 — `controller.operation.processors` set to 2.** Decided (qa Q7; value pinned 2026-08-12,
 gate-1 review). A change touching many apps drains a few at a time instead of stampeding the
 cluster. Review caveat R3 carried: an operation completes at apply/hook time, not when rollouts
