@@ -376,7 +376,9 @@ Later phases:
 - Doc phase: three places still say a re-run after a failed *Recording the release* refuses:
   KubeCoderDeploy README "Promotion" (its refusal list names "a `prd` already at the commit"), and
   Ansible `docs/runbooks/kubecoder-cutover.md` :176 and :775-783. The re-run is now the recovery,
-  and the hand recipe is the fallback.
+  and the hand recipe is the fallback. Review r1 F1: the recovery re-run must set `commit` to the
+  stuck commit. Build-Main moves `main` several times a day, and an empty `commit` then promotes
+  main's new tip instead, after which the job refuses the stuck commit as a non-fast-forward.
 
 Record:
 - The tag lookup is `git tag --list 'release-*' --points-at <sha>` in the job's fresh clone,

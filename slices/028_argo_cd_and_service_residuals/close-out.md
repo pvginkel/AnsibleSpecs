@@ -157,3 +157,12 @@ Prometheus sends each firing alert with an end time 4 minutes ahead (4 × the 1 
 
 **Provenance:** read, code-writer, P3, r1, Prometheus v3.14.0 rules/group.go:768-835 and plan.md P3 done-record
 **Disposition:**
+
+### S4 — KubeCoderDeploy promote: a recovery re-run records the stuck release only if its commit parameter names it · minor
+
+Build-Main commits image pins to KubeCoderDeploy main several times a day (#534-#539 over 2026-09-23..25). If a promotion fails at Recording the release and is re-run with commit empty (the default) after main moved, the re-run promotes main's new tip, not the stuck commit. It retags, advances prd and tags the new tip, and the stuck commit can no longer be recorded by the job: a run naming it hits the non-fast-forward refusal. Only the runbook's hand recipe can record it then (Jenkinsfile.promote:69, :77, :84-87). The code meets the plan; the doc phase is told to state commit=<sha> (plan P4 Later phases). One possible fix: when commit is empty and prd's tip carries no release-* tag, refuse and name that tip, so a bare re-run cannot pass over a stuck release.
+
+**Consequence:** A re-run started from defaults after a Build-Main landed promotes whatever main holds at that moment, and the earlier release loses its D48 record unless it is tagged by hand.
+
+**Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
+**Disposition:**
