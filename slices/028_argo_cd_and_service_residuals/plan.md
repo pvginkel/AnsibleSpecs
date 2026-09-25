@@ -268,7 +268,7 @@ Record:
   (`:2458-2460`). Both leave the app OutOfSync with no operation running, so P3's standing
   failed-sync alert covers them too, and its text should not claim the retries were spent.
 
-### P3 — PrometheusDeploy: standing Argo CD alerts, and D7's events without a false "resolved"
+### P3 — PrometheusDeploy: standing Argo CD alerts, and D7's events without a false "resolved" ✅ DONE 2026-09-25
 
 Target: ../PrometheusDeploy
 
