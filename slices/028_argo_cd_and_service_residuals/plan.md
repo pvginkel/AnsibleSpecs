@@ -222,6 +222,47 @@ gate and checks the decision register against the rendered objects.
 The live checks (series in Prometheus, the short-hostname login) are owed after the operator's
 push and manual sync of `argocd-prd` (Ruling D3; Argo CD syncs itself by hand, argo-cd D3).
 
+**Done (P2).** ArgoCDDeploy `23ecda8` on `phase/028-P2`: Service
+`argocd-prd-application-controller-metrics` (port 8082) annotated `prometheus.io/scrape: "true"`;
+controller arg `--metrics-application-conditions=SyncError`; argocd-cm `additionalUrls:
+[https://argocd]` with `url` still `https://argocd.home`; the D7 comment rewritten. The render gate
+asserts each (`check_application_metrics`, `check_login_urls`).
+
+Later phases:
+- P3: **no scrape owed** — the existing `kubernetes-service-endpoints` job (endpointslice SD,
+  `honor_labels: true`, 1m interval) keeps the Service on its annotation. Series as Prometheus
+  sees them:
+  - `argocd_app_info` = 1 per Application. Labels: `name` (the app, e.g. `kubecoder-prd`),
+    `namespace` (always `argocd-prd`, where the Application lives — the events' `namespace` is
+    `dest_namespace` here), `project`, `autosync_enabled` (`"true"`/`"false"`), `repo`,
+    `dest_server`, `dest_namespace`, `sync_status` (`Synced`/`OutOfSync`/`Unknown`),
+    `health_status` (`Healthy`/`Progressing`/`Degraded`/`Suspended`/`Missing`/`Unknown`),
+    `operation` (`sync` while an operation runs, retries included; `delete`; else absent).
+  - `argocd_app_condition{condition="SyncError"}` = 1, labels `namespace`, `name`, `project`,
+    `condition`. The series exists only while the condition is set — never a 0 sample. The
+    controller sets it only on the auto-sync path, once the operation has completed failed
+    (retries spent) and it declines to re-sync that revision; it clears while any operation runs
+    and once the app is no longer OutOfSync. The condition lives in the Application's status, so
+    it survives a controller restart.
+  - Target labels on both: `job`, `instance` (pod IP:8082), `service`, `node`, and the Service's
+    labels labelmapped (`app_kubernetes_io_{name,component,instance,part_of,managed_by,version}`,
+    `helm_sh_chart`). `instance`, `node`, `app_kubernetes_io_version` and `helm_sh_chart` move on a
+    restart or an Argo CD upgrade: aggregate to the app (`name`, `dest_namespace`).
+
+Record:
+- Route: the estate's annotated-Service pattern (kube-state-metrics, node-exporter, app
+  Services). No `prometheus.io/port`: the endpoint already carries 8082.
+- The conditions flag has no env or `argocd-cmd-params-cm` key in v3.5.1 and no chart value,
+  hence `controller.extraArgs`. Only SyncError is exported.
+- The chart's controller NetworkPolicy (created by default in 10.3.3) admits `metrics` from any
+  namespace; the gate asserts it, since Prometheus scrapes from `prometheus-prd`.
+- Argo only warns when `additionalUrls` fails to decode, so the gate decodes it and requires every
+  `nginx.webathome.org/server-name` entry to be the host of an allowed https URL at root: a new
+  vhost alias fails the gate until it is allowed. `check_server_exposure`'s name parsing moved
+  into a shared `server_names()`.
+- Each new assertion was witnessed red against a mutated values file or render. 69 → 70 objects;
+  the architecture artifact is unchanged.
+
 ### P3 — PrometheusDeploy: standing Argo CD alerts, and D7's events without a false "resolved"
 
 Target: ../PrometheusDeploy
@@ -230,7 +271,7 @@ Target: ../PrometheusDeploy
 [attachments/standing-alerts.md](attachments/standing-alerts.md):
 
 - standing rules for the failed sync and for the degraded app, over the series P2's done-record
-  names, plus the scrape if P2 says one is owed;
+  names (no scrape to add: the existing `kubernetes-service-endpoints` job picks them up);
 - the blind-metrics warning;
 - Alertmanager routing that still delivers D7's two events loud or silent by severity but sends
   no "resolved" when they expire. Every other alert keeps its resolved message (`:327-367`).
