@@ -3,14 +3,15 @@
     {
       "id": "V01",
       "area": "R1 — ANS-47 standing sync-failed alert",
-      "description": "The Argo CD sync-failed alert no longer expires after 5 minutes while the app stays failed. An auto-synced app whose sync failed, and that Argo CD no longer retries, raises a standing alert. The alert stays up until the app next syncs successfully, then resolves (Ruling D1).",
+      "description": "The Argo CD sync-failed alert no longer expires after 5 minutes while the app stays failed. An auto-synced app whose sync failed, and that Argo CD no longer retries, raises a standing alert. The alert stays up until the app next syncs successfully, then resolves (Ruling D1). An app synced by hand keeps the immediate event only (Ruling D1's limit).",
       "owed_after": "../PrometheusDeploy",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "ArgoCDDeploy/config/prd/values.yaml:92-102: app-sync-failed carries labels, annotations and generatorURL only",
         "argoproj/notifications-engine pkg/services/alertmanager.go:29-34,77: AlertmanagerNotification has StartsAt (set to time.Now()) and no EndsAt",
-        "argoproj/argo-cd v3.5.1 controller/appcontroller.go:2396-2399: SyncError condition when auto-sync declines to retry a failed revision"
+        "argoproj/argo-cd v3.5.1 controller/appcontroller.go:2396-2399: SyncError condition when auto-sync declines to retry a failed revision",
+        "argoproj/argo-cd v3.5.1 controller/appcontroller.go:2332-2334: auto-sync returns before the SyncError check for an app without automated sync"
       ]
     },
     {
@@ -38,13 +39,14 @@
     },
     {
       "id": "V04",
-      "area": "R1 — standing alert edges, proven offline",
-      "description": "PrometheusDeploy's own gate proves the rule edges offline. The standing alerts arrive only after Argo CD's own retries, never while it is syncing or retrying. They do not fire on D5 drift, or on an app waiting for a manual sync. Their identity is the app, not the scrape target. A metrics gap neither resolves nor re-fires them. The gate also proves which receiver each alert reaches, and with or without a resolve.",
+      "area": "R1 — standing alert edges and routing, proven by the test verb",
+      "description": "PrometheusDeploy's test verb (`kc project test`, no Jenkins stage) proves the standing alerts offline with promtool unit tests over synthetic series, with a firing and a quiet case for each edge (Ruling T1). The standing alerts arrive only after Argo CD's own retries, never while it is syncing or retrying. They do not fire on D5 drift, and the failed-sync alert does not fire on an app waiting for a manual sync. Their identity is the app, not the scrape target. A metrics gap neither resolves nor re-fires them. The same verb asserts, against the rendered Alertmanager config and without amtool, which receiver each alert reaches, that D7's two events send no resolve, and that every other alert still does.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "ArgoCDDeploy/chart/templates/applicationsets.yaml:53-57: auto-synced entries retry 3 times, 30s doubling",
-        "live 2026-09-25 (kubectl get applications -n argocd-prd): 49 of 50 Applications auto-sync; argocd-prd does not"
+        "live 2026-09-25 (kubectl get applications -n argocd-prd): 49 of 50 Applications auto-sync; argocd-prd does not",
+        "PrometheusDeploy/.kubecoder/project.yaml:15-23: the test verb today renders the charts, plans the Terraform and runs the architecture checks; nothing reads the rules"
       ]
     },
     {
@@ -72,7 +74,7 @@
     {
       "id": "V07",
       "area": "R1 — D7 amended (Ruling D1)",
-      "description": "argo-cd D7 stands and carries Ruling D1 as an amendment. The notification is the event, and its expiry sends no resolve. The Prometheus rule is the standing state.",
+      "description": "argo-cd D7 stands and carries Ruling D1 as an amendment. The notification is the event, and its expiry sends no resolve. The Prometheus rule is the standing state. The standing failed-sync alert covers auto-synced apps only, and the standing degraded alert covers every app.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -107,7 +109,7 @@
     {
       "id": "V10",
       "area": "R4 — ANS-96 promote re-run finishes a tagless release",
-      "description": "KubeCoderDeploy Jenkinsfile.promote: a re-run can finish a release whose tag push failed. When prd is already at the commit and no release tag points at it, the job writes D48's annotated release tag instead of refusing, and nothing else changes.",
+      "description": "KubeCoderDeploy Jenkinsfile.promote: a re-run can finish a release whose tag push failed. When prd is already at the commit and no release tag points at it, the job writes D48's annotated release tag instead of refusing, numbered after the build that writes it, and nothing else changes.",
       "owed_after": "../KubeCoderDeploy",
       "verdict": null,
       "rationale": "",
@@ -120,11 +122,12 @@
     {
       "id": "V11",
       "area": "R4 — finished promotions and other paths unchanged",
-      "description": "A re-run of a finished promotion (prd at the commit, with a release tag on it) still refuses. New promotions and the non-fast-forward and existing-tag refusals behave as before. Promotion, record-only and refusal have each been run against a scratch repository.",
+      "description": "A re-run of a finished promotion (prd at the commit, with a release tag on it) still refuses. That includes a release recorded by the cutover runbook's manual recipe. New promotions and the non-fast-forward and existing-tag refusals behave as before. Promotion, record-only and refusal have each been run by hand against a scratch repository.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "KubeCoderDeploy/Jenkinsfile.promote:75-82: non-fast-forward and existing-release-tag refusals"
+        "KubeCoderDeploy/Jenkinsfile.promote:75-82: non-fast-forward and existing-release-tag refusals",
+        "Ansible/docs/runbooks/kubecoder-cutover.md:775-783: the manual recovery tags release-<m>, <m> the failed build"
       ]
     },
     {
@@ -143,10 +146,14 @@
     {
       "id": "V13",
       "area": "R5 — prune proven offline, no git",
-      "description": "GitSyncDeploy's gate proves the prune offline against a fixture laid out like the volume: stale entries go, live entries stay, and a second run changes nothing. The prune uses nothing the busybox image lacks, so no git.",
+      "description": "GitSyncDeploy's test verb (`kc project test`, no Jenkins stage) proves the prune offline (Ruling T1). A script under `tests/` runs, under busybox in the iac toolchain, the prune the init container runs. Its fixture is laid out like the volume. Stale entries go, live entries stay, a default branch spelled `default` included, and a second run changes nothing. The prune uses nothing the busybox image lacks, so no git.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "GitSyncDeploy/.kubecoder/project.yaml:16-23: the test verb today renders the chart, plans the Terraform and runs the architecture checks",
+        "GitSyncDeploy/chart/templates/gitblit-deployment.yaml:31: the init container image is unpinned busybox",
+        "iac sidecar 2026-09-25: /usr/bin/busybox is BusyBox v1.37.0"
+      ]
     },
     {
       "id": "V14",

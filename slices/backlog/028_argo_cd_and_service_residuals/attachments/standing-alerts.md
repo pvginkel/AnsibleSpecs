@@ -32,11 +32,12 @@ while the app is still broken.
 - An app that is out of sync without a failed sync behind it does not fire. One case is D5's
   debug edit: self-heal is off precisely so the edit survives. Another is a sync that succeeded
   and still left a resource differing.
-- An app Argo CD does not sync automatically does not fire either. That is Argo CD's own app
-  (D3: manual sync, permanently) and any app in D5's cutover with `autoSync` off. For these,
-  out of sync means a sync the operator has not run yet, not a failure. D1's "past Argo CD's own
-  sync retries" presumes auto-sync. Such an app's failed sync still raises the immediate event,
-  and the operator runs those syncs at the keyboard. Live on 2026-09-25, 49 of the 50
+- An app Argo CD does not sync automatically does not fire either (Ruling D1's limit). That is
+  Argo CD's own app (D3: manual sync, permanently) and any app in D5's cutover with `autoSync`
+  off. Argo CD's metrics cannot tell such an app's failed sync from a sync the operator has not
+  run yet: the controller sets `SyncError` only on its automated-sync path, which returns early
+  for these apps (upstream v3.5.1 `controller/appcontroller.go:2332-2334`). Such an app's failed
+  sync still raises the immediate event, and the operator runs those syncs at the keyboard. Live on 2026-09-25, 49 of the 50
   Applications in `argocd-prd` auto-sync, and `argocd-prd` is the one that does not.
 - Severity: critical, like its event.
 

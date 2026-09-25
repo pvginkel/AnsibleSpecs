@@ -144,8 +144,10 @@ routes them) and amends a spec-repo decision (D7); R4 and R5 land in two further
 
 ## Ordering constraints
 
-- Precondition for the run (Ruling T1): the iac toolchain image carries promtool — slice 027's
-  toolchain change, live after an environment restart. P3's gate cannot go green without it.
+- Precondition for the run (Ruling T1): the iac toolchain image carries promtool 3.14.0. That is
+  slice 027's toolchain change, DockerImages `1c1945a`: committed, not yet pushed (checked
+  2026-09-25). It is live once the image is published and the operator restarts the
+  environment. P3's gate cannot go green without it.
 - P3 after P2: the standing rules read the Argo CD series P2 exposes. P2's done-record names those
   series and their labels as Prometheus sees them, and says whether P3 owes a scrape.
 - P1 amends D7 in place. No later phase cites a new decision id.
@@ -169,6 +171,10 @@ own amendment form (dated and attributed, like D47's at `:547`). The amendment r
   "resolved".
 - The standing state (an app still failed or still degraded) comes from Prometheus rules over
   Argo CD's application metrics. Those rules resolve when the app recovers.
+- The limit: the standing failed-sync alert covers auto-synced apps only. An app synced by hand
+  (today only Argo CD's own, argo-cd D3) keeps the immediate event alone, because Argo CD's
+  metrics cannot tell its failed sync from one not yet run. The standing degraded alert covers
+  every app.
 - The accepted trade-off is two messages per failure.
 
 Ruling D1's words are the source. No new decision id, and no other decision changes.
@@ -214,17 +220,29 @@ Target: ../PrometheusDeploy
 - Alertmanager routing that still delivers D7's two events loud or silent by severity but sends
   no "resolved" when they expire. Every other alert keeps its resolved message (`:327-367`).
 
-Comment each window with its reason, as the file's existing rule groups do.
+Comment each window with its reason, as the file's existing rule groups do. The failed-sync
+rule's window has to clear Argo CD's sync retry
+(`ArgoCDDeploy/chart/templates/applicationsets.yaml:53-57`).
+Nothing in this repo reads that value, so the comment beside the window names the dependence.
 
-Prove the rules and the routing offline, in the repo's own gate:
+The repo's test verb (`.kubecoder/project.yaml` `test:`, `:15-23`) proves the change offline.
+Per Ruling T1 there is no Jenkins stage:
 
-- every rule edge the attachment names: the alert arrives after the retry window and not during
-  it, stands until recovery, ignores D5 drift and an app awaiting a manual sync, survives a
-  metrics gap, and the blind warning fires;
-- which receiver each alert reaches, and whether it sends a resolve.
+- **The rules.** promtool unit tests over the standing-alert rules as the chart renders them.
+  They use synthetic series only, with a firing and a quiet case for each edge the attachment
+  names. That covers the standing failed sync, the standing degraded app, what holds for both
+  (identity, gaps) and the blind warning. The tests assert the rules' own windows and never read
+  ArgoCDDeploy.
+- **The routing.** Asserted against the rendered Alertmanager config, without amtool: which
+  receiver each alert reaches, that D7's two events send no resolve, and that every other alert
+  still does.
 
-The iac sidecar has neither `promtool` nor `amtool` today, so this phase decides how the proof
-runs. The live alert path is owed after the operator's push (Ruling D3).
+promtool is 3.14.0 from the iac toolchain (`cexec iac promtool`), a precondition of the run (see
+`## Ordering constraints`). Slice 027's P4 puts promtool rule tests for the estate's other alerts
+into this same test verb. The repo keeps one rule-test harness: if 027's is already there, add
+these cases to it.
+
+The live alert path is owed after the operator's push (Ruling D3).
 
 ### P4 — KubeCoderDeploy: a promote re-run records a tagless release
 
@@ -241,11 +259,17 @@ instead:
 
 A re-run of a finished promotion (`prd` at the commit and a release tag on it) still refuses as
 today. Every other path is unchanged: a new promotion, and the non-fast-forward and
-existing-tag refusals (`:75-82`). The manual recovery in
-`Ansible/docs/runbooks/kubecoder-cutover.md:775-783` stays valid.
+existing-tag refusals (`:75-82`).
+
+A re-run is now the recovery when *Recording the release* fails. The cutover runbook's manual
+recipe remains a fallback (`Ansible/docs/runbooks/kubecoder-cutover.md:775-783`). That recipe
+numbers the tag after the failed build, so a release it recorded counts as finished: a later
+re-run refuses.
 
 Before handing over, run all three outcomes (promotion, record-only, refusal) against a scratch
-repository. The Jenkins run is owed after the operator's push (Ruling D3).
+repository. This is a hand run: the repo's test verb renders the chart and plans the Terraform,
+and nothing in it executes the pipeline script. The Jenkins run is owed after the operator's
+push (Ruling D3).
 
 ### P5 — GitSyncDeploy: gitblit's init container prunes stale branch entries from gb_lucene.conf
 
@@ -274,18 +298,27 @@ Constraints:
   Gitblit treat the branch as never indexed and re-index its whole history.
 - A conf with nothing stale is left as it is. The existing lock cleanup is unchanged.
 
-Prove the prune offline in the repo's gate: run it against a fixture laid out like the volume,
-with multi-valued `indexBranch`, live and stale entries, and a second run that changes nothing.
-Use busybox semantics; the iac sidecar has `/usr/bin/busybox`. The restart that proves it live is
-owed after the operator's push (Ruling D3).
+The repo's test verb (`.kubecoder/project.yaml` `test:`, `:16-23`) proves the prune offline.
+Per Ruling T1 there is no Jenkins stage:
+
+- A script under `tests/` runs under busybox in the iac toolchain. The sidecar has
+  `/usr/bin/busybox`, BusyBox 1.37.0; the init container runs the unpinned `busybox` image
+  (`gitblit-deployment.yaml:31`).
+- It exercises the prune the init container runs, not a copy of it, so the two cannot drift.
+- Its fixture is laid out like the volume, with multi-valued `indexBranch`, live and stale
+  entries, and a default branch spelled `default`. A second run over it changes nothing.
+
+The restart that proves it live is owed after the operator's push (Ruling D3).
 
 ## Not in scope
 
 - R3's fix in any form (Ruling D2): no hook-level `terraform init` retry, no provider pinning or
   committed lock files in the deploy repos, no provider cache, no routing of public providers
   through tfmirror.
-- A standing out-of-sync alert for apps Argo CD does not auto-sync (today only Argo CD's own).
-  Their failed sync keeps the immediate event; see the attachment.
+- A standing out-of-sync alert for apps Argo CD does not auto-sync (Ruling D1's limit; today only
+  Argo CD's own). Their failed sync keeps the immediate event.
+- promtool tests for PrometheusDeploy's other alerts (slice 027's P4), and a Jenkins stage for
+  either deploy repo's tests (Ruling T1).
 - Any change to D7's event templates or triggers beyond the stale comment.
 - Pruning `gb_lucene.conf` anywhere but the init container (e.g. in git-sync when it unsets an
   `indexBranch`).
