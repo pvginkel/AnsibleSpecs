@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — JenkinsPipelineUtils Groovy gate",
-      "description": "JenkinsPipelineUtils: a real Groovy parse gate — \"a `.kubecoder/project.yaml` for JenkinsPipelineUtils whose test entry point parses every `vars/*.groovy`, which turns the estate-wide failure mode into a pre-push gate\". `kc project test` in the repo is green and compiles every `vars/*.groovy` through the pipeline engine's CPS transform on Groovy 2.4.21, its libraries resolved by Maven on the Java toolchain (today the repo has no `.kubecoder/` and seven `vars/*.groovy` files).",
+      "description": "JenkinsPipelineUtils: a real Groovy parse gate — \"a `.kubecoder/project.yaml` for JenkinsPipelineUtils whose test entry point parses every `vars/*.groovy`, which turns the estate-wide failure mode into a pre-push gate\". `kc project test` in the repo is green and compiles every `vars/*.groovy` through the CPS transform at the controller's own version, `com.cloudbees:groovy-cps` `4376.v30c8c00684a_3` (the controller's workflow-cps, per the plan review r1 Q1 ruling), with groovy-sandbox 1.34.1 and guava 33.4.8-jre as that artifact's pom declares, on Groovy 2.4.21. It compiles them as the controller's trusted-library shell does, outside the script-security sandbox. Its libraries are resolved by Maven on the Java toolchain from `https://repo.jenkins-ci.org/public/`, and neither Maven Central's groovy-cps 1.31 nor a hand-downloaded runtime is on the classpath (today the repo has no `.kubecoder/` and seven `vars/*.groovy` files).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -28,6 +28,14 @@
       "id": "V04",
       "area": "R1 — JenkinsPipelineUtils Groovy gate",
       "description": "The gate changes nothing Jenkins loads: none of its files sit under `src/`, `vars/` or `resources/`, and its build output is not tracked by git.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "R1 / plan review r1 Q1 ruling — transform pin",
+      "description": "The gate's transform pin can be kept in step with the controller: the groovy-cps version and the versions taken from its pom sit in one place, which says they track the controller's workflow-cps and are bumped when it is upgraded, the way the iac toolchain's promtool pin names prd's server (DockerImages `1c1945a`, `kube-coder-iac-toolchain/Dockerfile`, the comment above the promtool `RUN`).",
       "verdict": null,
       "rationale": "",
       "evidence": []

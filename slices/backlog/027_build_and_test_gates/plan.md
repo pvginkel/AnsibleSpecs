@@ -141,18 +141,34 @@ pipeline consumes (ArgoCDTools now, the retirement slice later), which sets a pa
 Target: ../JenkinsPipelineUtils
 
 JenkinsPipelineUtils gains a `.kubecoder/project.yaml`. Its test verb compiles every
-`vars/*.groovy` through the CPS transform, set up the way workflow-cps sets it up, on Groovy
-2.4.21, with its libraries resolved by Maven in the `java` sidecar (`cexec java …`). A file added
-to `vars/` later is covered without editing the gate. The gate fails on a syntax error and on a
-construct the transform refuses at load time. Witness both failures before handing back.
+`vars/*.groovy` through the CPS transform at the controller's own version. That is
+`com.cloudbees:groovy-cps` `4376.v30c8c00684a_3` on Groovy 2.4.21 (the plan review r1 Q1
+ruling), set up the way workflow-cps at that version sets it up, with its libraries resolved by
+Maven in the `java` sidecar (`cexec java …`). A file added to `vars/` later is covered without
+editing the gate. The gate fails on a syntax error and on a construct the transform refuses at
+load time. Witness both failures before handing back.
 
-- Slice 011 proved a setup that works; ANS-89's card text in slice.md describes it: the
-  classpath, the `jenkins.model.Jenkins` stub that `utils.groovy` needs (`vars/utils.groovy:1`),
-  how the transformer is wired, and the two controls. That run used JRE 17. The toolchain has JDK
-  21, and so does the controller that runs Groovy 2.4.21 in production (JenkinsDeploy
-  `chart/values.yaml:24`, image `lts-jdk21`; prd pins that image by digest). If the classpath
-  cannot be made to run on JDK 21, raise a question. Do not fall back to a hand-downloaded
-  runtime.
+- The artifacts come from `https://repo.jenkins-ci.org/public/`. The `java` sidecar configures
+  no mirror that would stand in the way; its catalog entry adds only a `.m2` cache overlay
+  (KubeCoderDeploy `chart/values.yaml:441-453`). Every library the gate takes from the
+  transform's pom is at the version that pom declares. Two of them do not arrive transitively:
+  Groovy is `provided`, and groovy-sandbox is `optional` even though the transformer links
+  against it (the 4376 jar's `CpsTransformer.class` references
+  `org.kohsuke.groovy.sandbox.SandboxTransformer`).
+- The version pin sits in one place that says it tracks the controller's workflow-cps and is
+  bumped with it. The iac toolchain's promtool pin does the same for prd's server (DockerImages
+  `1c1945a`, the comment above the promtool `RUN` in `kube-coder-iac-toolchain/Dockerfile`).
+- The controller loads the library as a Global Trusted Pipeline Library, with default version
+  `main` (Jenkins global configuration, read 2026-09-25). workflow-cps therefore compiles it in
+  its trusted shell, outside the script-security sandbox, and the gate compiles it the same way.
+  workflow-cps's source at the `4376.v30c8c00684a_3` tag shows how that shell is built.
+- ANS-89's card text in slice.md describes slice 011's run of the method on the old 1.31
+  classpath: the transformer wiring, the `jenkins.model.Jenkins` stub that `utils.groovy` needs
+  (`vars/utils.groovy:1`), and the two controls. That classpath is not this gate's. The
+  controller runs the 4376 transform on Groovy 2.4.21 under JDK 21, the sidecar's JDK
+  (JenkinsDeploy `chart/values.yaml:24`, `lts-jdk21`). If the controller-matched classpath does
+  not resolve or compile in the sidecar, raise a question. Do not fall back to Maven Central's
+  1.31 or to a hand-downloaded runtime.
 - Jenkins loads the repo's `src/`, `vars/` and `resources/` as the library. The library is not
   pinned, so every job in the estate picks up a change as soon as `main` moves. Nothing the gate
   adds (sources, stubs, fixtures) may live under those three directories, and its build output
@@ -232,9 +248,7 @@ true. The record has to state the position as it stands after P4:
 
 The same clause also supports retiring grafana's Keycloak login test. This slice does not revisit
 that retirement, and the record must still justify it. If the set records the moved position's
-narrative, it goes in `argo-cd/history.md`. The correction is a phase rather than a task for the
-loop's doc phase because the doc plan requires it (Ansible `docs/slice-doc-plan.md`, "What does
-not belong here").
+narrative, it goes in `argo-cd/history.md`.
 
 ## Not in scope
 
