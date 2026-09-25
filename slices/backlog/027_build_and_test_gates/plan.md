@@ -112,11 +112,119 @@
   needs the operator's OK. A push to ArgoCDTools `main` triggers `IaC/ArgoCDTools`, which publishes
   both images.
 
+## Task shape
+
+cross-cutting — the gates land in three sibling repos (JenkinsPipelineUtils, ArgoCDTools,
+PrometheusDeploy), and the shared library's `containerTemplates` gains an entry another repo's
+pipeline consumes (ArgoCDTools now, the retirement slice later), which sets a pattern.
+
 ## Ordering constraints
 
-- The shared-library container template for the iac toolchain image merges before the ArgoCDTools
-  `Jenkinsfile` uses it: JenkinsPipelineUtils is loaded unpinned, so the Jenkinsfile's first run
-  after its push resolves whatever `main` holds.
+- The shared-library container template for the iac toolchain image (P2) merges before the
+  ArgoCDTools `Jenkinsfile` uses it (P3), and JenkinsPipelineUtils reaches origin `main` before
+  ArgoCDTools is pushed. JenkinsPipelineUtils is loaded unpinned, so the job that the ArgoCDTools
+  push triggers resolves whatever the library's `main` holds, and without the template that first
+  run fails.
+
+### P1 — JenkinsPipelineUtils: `kc project test` compiles every library file the way the pipeline engine loads it
+
+Target: ../JenkinsPipelineUtils
+
+JenkinsPipelineUtils gains a `.kubecoder/project.yaml`. Its test verb compiles every
+`vars/*.groovy` through the CPS transform, set up the way workflow-cps sets it up, on Groovy
+2.4.21, with its libraries resolved by Maven in the `java` sidecar (`cexec java …`). A file added
+to `vars/` later is covered without editing the gate. The gate fails on a syntax error and on a
+construct the transform refuses at load time. Witness both failures before handing back.
+
+- Slice 011 proved a setup that works; ANS-89's card text in slice.md describes it: the
+  classpath, the `jenkins.model.Jenkins` stub that `utils.groovy` needs (`vars/utils.groovy:1`),
+  how the transformer is wired, and the two controls. That run used JRE 17. The toolchain has JDK
+  21, and so does the controller that runs Groovy 2.4.21 in production (JenkinsDeploy
+  `chart/values.yaml:24`, image `lts-jdk21`; prd pins that image by digest). If the classpath
+  cannot be made to run on JDK 21, raise a question. Do not fall back to a hand-downloaded
+  runtime.
+- Jenkins loads the repo's `src/`, `vars/` and `resources/` as the library. The library is not
+  pinned, so every job in the estate picks up a change as soon as `main` moves. Nothing the gate
+  adds (sources, stubs, fixtures) may live under those three directories, and its build output
+  stays out of git.
+- The repo has no Jenkins job, so the manifest names none.
+
+### P2 — JenkinsPipelineUtils: a container template for the iac toolchain image
+
+Target: ../JenkinsPipelineUtils
+
+`containerTemplates` offers the KubeCoder iac toolchain image
+(`registry:5000/kube-coder-iac-toolchain`, the image `cexec iac` runs locally) as a pipeline
+sidecar, next to the existing entries (`vars/containerTemplates.groovy:12-76`). The template is
+general-purpose rather than shaped for ArgoCDTools: P3 runs ArgoCDTools' suites in it, and slice
+030 will move HomelabTerraformProvider's build onto it.
+
+- The image was built for a KubeCoder sidecar, not a Jenkins agent pod. It has no ENTRYPOINT or
+  CMD, because the KubeCoder catalog supplies the keep-alive
+  (DockerImages `kube-coder-iac-toolchain/Dockerfile:11-12`). The template has to make it usable
+  in the agent's workspace.
+- `modern_app_dev` stays. Three pipelines still resolve it until slice 030 moves them.
+
+### P3 — ArgoCDTools: the job runs the repo's suites before it publishes either image
+
+Target: ../ArgoCDTools
+
+`IaC/ArgoCDTools` runs both images' suites in the iac toolchain container from P2. It runs the
+same commands as the components' local test verbs (`.kubecoder/project.yaml:24,36`), after the
+clone and before either image build (`Jenkinsfile:16-56`). A red suite ends the build before
+kaniko runs, so nothing reaches `registry:5000`.
+
+- The only full check of a Jenkinsfile change is the job itself. The pipeline is scripted, so the
+  declarative validator named in the grounding above does not apply. A replay runs the real job
+  and needs the operator's OK. The push to `main` at the end of the run triggers the job, which
+  publishes both images when it is green. Prove what can be proven offline (P1's harness can
+  compile a Jenkinsfile as a one-off check). The first run after the push is the live witness.
+- The suites shell out to `git`, `helm` and `openssl`. The agent pod is not the KubeCoder sidecar:
+  user, `HOME` and working directory all differ. Whatever the suites assume about their
+  environment has to hold in the pod as well.
+
+### P4 — PrometheusDeploy: the test verb checks and unit-tests the prd alert rules
+
+Target: ../PrometheusDeploy
+
+The repo's `kc project test` (`.kubecoder/project.yaml:15-23`) also runs promtool 3.14.0 from the
+iac sidecar (`cexec iac promtool`) over prd's alerting rules as the upstream chart renders them
+from `config/prd/values.yaml` (`serverFiles.alerting_rules.yml`, `:58-298`). First `promtool
+check rules`, then promtool rule unit tests that cover every alert in the rendered file, each with
+at least one firing case and one quiet case. The `node-memory-pressure` tests carry the scenarios
+slice 018 witnessed; ANS-74's card text in slice.md lists them. There is no Jenkins stage.
+
+- The tests are self-contained and use synthetic series only. HelmCharts' alert tests were retired
+  because they depended on other apps' CronJob timings (argo-cd D61). A test here asserts the
+  rule's own thresholds and windows and never another repo's schedule. The retired tests
+  (HelmCharts `4a36b54`, `tests/test_prometheus_*_alert*.py`) walked the backup rules' edges and
+  are worth reading for scenarios.
+- During planning, the rendered rules passed `promtool check rules` 3.14.0 ("SUCCESS: 8 rules
+  found"). They sit under the `alerting_rules.yml` key of the `prometheus-prd-server` ConfigMap.
+  The full render contains a line from the alertmanager subchart that ends in a tab, which strict
+  YAML parsers reject. ArgoCDTools `8914c0f` handled the same line.
+- This phase edits no rule: Argo CD deploys `config/prd/values.yaml` to prd from `main`. If a test
+  shows a rule is wrong, raise it as a question for the operator. Generated renders stay out of
+  git.
+
+### P5 — AnsibleSpecs: argo-cd D61 records the rule-test position as it now stands
+
+Target: ../AnsibleSpecs
+
+This phase makes the correction to argo-cd D61 that the D2 ruling calls for
+(`argo-cd/decisions.md:759-773`). D61 gives "deploy repos run no tests" as a reason for retiring
+HelmCharts' prometheus alert tests instead of moving them, and after P4 that reason is no longer
+true. The record has to state the position as it stands after P4:
+
+- deploy repos run no tests in Jenkins;
+- PrometheusDeploy's local test verb checks and unit-tests its alert rules on synthetic series;
+- the retired tests stay retired because they checked other apps' CronJob timings.
+
+The same clause also supports retiring grafana's Keycloak login test. This slice does not revisit
+that retirement, and the record must still justify it. If the set records the moved position's
+narrative, it goes in `argo-cd/history.md`. The correction is a phase rather than a task for the
+loop's doc phase because the doc plan requires it (Ansible `docs/slice-doc-plan.md`, "What does
+not belong here").
 
 ## Not in scope
 
@@ -124,3 +232,4 @@
 - Jenkins stages for JenkinsPipelineUtils or PrometheusDeploy. Their gates are the local test verb.
 - Catching CPS serialization hazards that only show when a build resumes.
 - Forcing every future alert to come with a unit test.
+- Compiling other repos' Jenkinsfiles with the library's gate.

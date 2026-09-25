@@ -1,0 +1,116 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — JenkinsPipelineUtils Groovy gate",
+      "description": "JenkinsPipelineUtils: a real Groovy parse gate — \"a `.kubecoder/project.yaml` for JenkinsPipelineUtils whose test entry point parses every `vars/*.groovy`, which turns the estate-wide failure mode into a pre-push gate\". `kc project test` in the repo is green and compiles every `vars/*.groovy` through the pipeline engine's CPS transform on Groovy 2.4.21, its libraries resolved by Maven on the Java toolchain (today the repo has no `.kubecoder/` and seven `vars/*.groovy` files).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — JenkinsPipelineUtils Groovy gate",
+      "description": "The gate can fail: a syntax error in any `vars/*.groovy` turns it red, and so does a construct the CPS transform refuses at load time (e.g. a `synchronized` block). Both reds are witnessed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R1 — JenkinsPipelineUtils Groovy gate",
+      "description": "\"Every\" holds going forward: a file added to `vars/` is compiled by the gate without the gate being edited.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R1 — JenkinsPipelineUtils Groovy gate",
+      "description": "The gate changes nothing Jenkins loads: none of its files sit under `src/`, `vars/` or `resources/`, and its build output is not tracked by git.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R2 — ArgoCDTools test stage",
+      "description": "The IaC/ArgoCDTools job no longer publishes images without running the suite: it runs both images' suites — the same commands as the repo's local test verb — in the iac toolchain image, before either image build (today `Jenkinsfile:16-56` has only the clone and the two kaniko stages).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R2 — ArgoCDTools test stage",
+      "description": "The consequence \"A commit that reds the repo's tests still publishes to registry:5000 on a push to main\" no longer holds: a red suite ends the build before either kaniko stage, so neither `argocd-hook` nor `aac-tools` is published from it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R2 — ArgoCDTools test stage",
+      "description": "The first IaC/ArgoCDTools run after the push is green, and its log shows both suites running in the iac toolchain container before the image builds.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R2 / D1 — shared container template",
+      "description": "JenkinsPipelineUtils' `containerTemplates` offers the iac toolchain image (`registry:5000/kube-coder-iac-toolchain`) as a sidecar template, and the ArgoCDTools job takes its test container from it (today `vars/containerTemplates.groovy:12-76` has no kube-coder-* toolchain entry).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "R3 — PrometheusDeploy alert rules",
+      "description": "promtool in the iac toolchain so alert rules are unit-tested: PrometheusDeploy's local test verb runs `promtool check rules` with the iac toolchain's promtool, pinned to prd's Prometheus 3.14.0 (DockerImages `kube-coder-iac-toolchain/Dockerfile:19,116-122`), over the alerting rules as the chart renders them from `config/prd/values.yaml` (`:58-298`). There is no Jenkins stage.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R3 — PrometheusDeploy alert rules",
+      "description": "promtool unit tests cover every alert in the rendered rules file, each with a firing case and a quiet case, and the memory-pressure group carries the scenarios slice 018 witnessed. The test verb runs them.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "R3 — PrometheusDeploy alert rules",
+      "description": "Neither consequence holds any longer. \"A PromQL precedence or matching mistake in an alert rule passes the gate\": a unit test catches it. \"The prd Prometheus rejects the reloaded rules file\" on a syntax or template error: the check catches it. Both reds are witnessed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "R3 — PrometheusDeploy alert rules",
+      "description": "The rule tests are self-contained. They feed synthetic series and assert the rules' own thresholds and windows, and none depends on another repo's CronJob schedule or deadline.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "D2 ruling — argo-cd D61",
+      "description": "argo-cd D61 (`argo-cd/decisions.md:759-773`) no longer gives \"deploy repos run no tests\" as a standing reason. It records that deploy repos run no tests in Jenkins and that PrometheusDeploy's local test verb checks and unit-tests its alert rules. The retirement of HelmCharts' alert tests and grafana's Keycloak login test is still justified.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "R4 — split to slice 030 (D1 ruling)",
+      "description": "Retire modern-app-dev and modern-app-dev-playwright: carried by slice 030 per the D1 ruling. This slice leaves the `modern_app_dev` template (`vars/containerTemplates.groovy:74-76`) and both images in place, so no pipeline loses a template it resolves.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}

@@ -23,6 +23,24 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Before /dev:run-slice: push the two toolchain commits, let kube-coder-iac-toolchain publish, then kc env restart
+
+The rulings land both tools during planning, and a run cannot restart the pod it runs in. When this plan was written, both commits were still local only: Ansible `9edef16` (`- use: java` in `.kubecoder/config.yaml`) and DockerImages `1c1945a` (promtool 3.14.0 in `kube-coder-iac-toolchain`), and each repo was 1 ahead of origin. Push both, wait for DockerImages' job to publish `kube-coder-iac-toolchain:latest`, then run `kc env restart`. After the restart, `cexec java mvn -v` and `cexec iac promtool --version` should both answer.
+
+**Consequence:** P1's gate has no `cexec java` and P4's has no `cexec iac promtool`, so both phases go red on a missing tool rather than on their work.
+
+**Provenance:** read; plan-writer, planning, r1; Ansible and DockerImages `git status -sb` (ahead 1)
+**Disposition:**
+
+### A2 — If slice 028 runs first, push its held PrometheusDeploy commits before this run's test phase pushes PrometheusDeploy
+
+Slice 028 holds its PrometheusDeploy push: its new scrape, rules and routing reach prd from `main`, and the operator pushes them only after ../ArgoCDDeploy is pushed and `argocd-prd` has synced (028 plan.md, Push holds). P4 of this slice commits to the same repo, and its own change is inert for Argo: tests and the manifest, not the chart or the values. If 028 has run and its commits are still held when this run's test phase pushes PrometheusDeploy `main`, that push carries 028's held changes to prd too. If this slice runs first, the hazard does not arise.
+
+**Consequence:** 028's alerting changes reach prd ahead of the ArgoCDDeploy sync they wait on, and the blind-metrics warning fires until that sync lands.
+
+**Provenance:** read; plan-writer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md Push holds
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
