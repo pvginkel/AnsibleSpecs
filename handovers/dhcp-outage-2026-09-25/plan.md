@@ -70,7 +70,7 @@ One sitting with you. Straightforward changes along existing patterns; no slice 
   srvk8s4's node IP changes, so drain it and reboot. **Run this session from your desktop, not
   from KubeCoder: this environment runs on srvk8s4.** Check kubelet node-ip and Calico
   autodetection after the reboot.
-- [ ] **S2. DnsmasqDeploy follow-ups, one push (it auto-deploys).**
+- [x] **S2. DnsmasqDeploy follow-ups, one push (it auto-deploys).**
   - Pin the DHCP IP with `metallb.io/loadBalancerIPs: 10.2.1.10`, as the DNS Services do. Today
     it is whatever MetalLB allocated, so a recreated Service could move it and the router's DHCP
     target would silently break.
@@ -88,38 +88,28 @@ One sitting with you. Straightforward changes along existing patterns; no slice 
     apps), what to check at each step (endpoint `ready`, `servicel2statuses`), and the
     break-glass list under "Good to know". Add a static desktop config with the **/16** mask (you
     had 255.0.0.0) and SSH by IP with `HostKeyAlias`.
-- [ ] **S5. Tidy.** Decide whether the report stays in this handover. (The working clones and
+- [x] **S5. Tidy.** Decide whether the report stays in this handover. (The working clones and
   `tmp/` copies are already gone.)
 
 ### Session record (2026-09-25, from KubeCoder)
 
-Everything is committed; nothing is pushed or run yet.
-
-- **S1, prepared; you run it.** In Ansible: host_vars give srvk8s4 `10.1.0.44/16` and srviac
-  `10.1.0.45/16` (IPv6 `2a10:3781:16a9:1::44`/`::45`, as srvk8s1–3), gateway, `accept_ra: false`
-  and 8.8.8.8/8.8.4.4; `vms.tf` sets `static_ip = true`. .44 and .45 were silent, with ARP
-  INCOMPLETE on the router. DnsmasqDeploy has the static-hosts entries in their own commit. Two
-  things turned up, and the run is no longer "drain and reboot":
-  - **srvk8s4 has to re-join the cluster.** The prd apiserver verifies kubelet serving certs
-    (`--kubelet-certificate-authority`, InternalIP first). srvk8s4's `kubelet.crt` names
-    10.1.3.5 and nothing re-issues it on a joined node: the kicker exits on clustered nodes,
-    and `no-cert-reissue` is set. After the IP change, `kubectl logs/exec` (and so `cexec`) on
-    srvk8s4 would fail on x509. Instead: evict, `microk8s leave`, `remove-node`, render
-    netplan, reboot, then `rebuild-k8s.yml`, whose join issues a cert for 10.1.0.44.
-  - **The cloud-init instance-id churns.** Terraform's `ipconfig0` change makes the next cold
-    start a new instance. Proxmox's network-data carries net0 only (checked with
-    `qm cloudinit dump`), so cloud-init would bring srvk8s4 up without its VLAN-2 and vmbr1
-    NICs. baseline now drops `99-homelab-network.cfg` (`network: {config: disabled}`, tag
-    `cloud_init`), and the netplan handler takes `-e baseline_netplan_apply=false` for a
-    render-only pass.
-  - srviac's `iac` container reads `/run/systemd/resolve/resolv.conf`, which lists the dnsmasq
-    pair first and `search home`: checked on srvk8s1, which has the same setup. So public
-    resolvers plus the home-routing drop-in keep `dns` and `srvk8s1` resolving inside it.
-
-  Order: land the drop-in; push Ansible, then the DnsmasqDeploy static-hosts commit (each name
-  answers with both addresses until Terraform drops the reservation); srviac (render, reboot,
-  from KubeCoder); srvk8s4 (from the desktop through srviac); `terraform apply`;
-  `qm cloudinit update`. Generic procedure: Ansible `docs/runbooks/static-address.md`.
+- **S1: srviac only; srvk8s4 deferred** (operator, 2026-09-25). srvk8s4 would need a worker
+  leave/re-join. The prd apiserver verifies kubelet serving certs
+  (`--kubelet-certificate-authority`, InternalIP first), srvk8s4's `kubelet.crt` names
+  10.1.3.5, and nothing re-issues it on a joined node: the kicker exits on clustered nodes,
+  and `no-cert-reissue` is set. The operator filed that as its own card, in Later.
+  - srviac: host_vars `10.1.0.45/16` (IPv6 `2a10:3781:16a9:1::45`, as srvk8s1–3), gateway,
+    `accept_ra: false`, 8.8.8.8/8.8.4.4; `vms.tf` `static_ip = true`; DnsmasqDeploy
+    static-hosts. .45 was silent, with ARP INCOMPLETE on the router.
+  - srviac's `iac` container reads `/run/systemd/resolve/resolv.conf`, which lists the
+    dnsmasq pair first and `search home`: checked on srvk8s1, which has the same setup. So
+    `dns` and `srvk8s1` keep resolving inside it.
+  - baseline: `99-homelab-network.cfg` (`network: {config: disabled}`, tag `cloud_init`). A
+    Terraform `ipconfig0` change churns the cloud-init instance-id, and Proxmox's
+    network-data carries net0 only (`qm cloudinit dump`). The netplan handler takes
+    `-e baseline_netplan_apply=false` for a render-only pass.
+  - The operator runs it per Ansible `docs/runbooks/static-address.md`: drop-in and render,
+    reboot, `terraform apply`, then `qm cloudinit update 920`.
 - **S2, committed** (DnsmasqDeploy `9d0d0f0`): `service.dhcp.loadBalancerIP: 10.2.1.10` renders
   `metallb.io/loadBalancerIPs`; `dhcp-dnsmasq` is Ready once UDP 67 is bound (the probe was run
   in the live container). Independent of S1.
@@ -132,8 +122,7 @@ Everything is committed; nothing is pushed or run yet.
   one §7 item resolved); `decisions.md` (tier test, srviac, static-hosts in DnsmasqDeploy,
   both sets served side by side, cloud-init network stage); new runbooks `cold-boot.md` and
   `static-address.md`.
-- **S5: your call.** The report is the only record of the incident timeline, so I'd keep it
-  here.
+- **S5: the report stays** in this handover (operator, 2026-09-25).
 
 ## Cards
 
