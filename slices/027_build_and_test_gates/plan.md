@@ -227,6 +227,30 @@ general-purpose rather than shaped for ArgoCDTools: P3 runs ArgoCDTools' suites 
   in the agent's workspace.
 - `modern_app_dev` stays. Three pipelines still resolve it until slice 030 moves them.
 
+**Done (P2).** JenkinsPipelineUtils `a43f45e` on `phase/027-P2`: `containerTemplates.iac_toolchain(String
+name)` — `registry:5000/kube-coder-iac-toolchain` (untagged, i.e. `latest`, `alwaysPullImage`),
+`sleep infinity`, `runAsUser: '1000'`, and `TF_PLUGIN_CACHE_DIR` set to empty. `modern_app_dev` is
+untouched. `kc project test` green.
+
+Later phases:
+- P3: `containerTemplates.iac_toolchain('<name>')` is the test container. In it the user is uid 1000
+  `ubuntu` (the agent's uid, so the checkout is its own), `HOME=/home/ubuntu` with no KubeCoder
+  home overlays, and the working directory is the job workspace.
+- P3 / the run's pushes: JenkinsPipelineUtils `main` must carry P2 before ArgoCDTools is pushed —
+  the library loads unpinned from `main` and the ArgoCDTools push triggers the job (close-out A3).
+
+- Why uid 1000: the image has no `USER`, so without it the sidecar runs as root and its workspace
+  writes are root-owned to the agent's file steps (JenkinsPipelineUtils `062b106`), and git refuses
+  a checkout another uid owns.
+- Why the empty `TF_PLUGIN_CACHE_DIR`: the image points it at `/home/ubuntu/.terraform-plugin-cache`,
+  a KubeCoder home overlay. Where it is missing, every terraform run prints "Error: The specified
+  plugin cache dir … cannot be opened" and carries on. terraform ignores an empty value.
+- Witnessed in a throwaway pod in prd `development`, since deleted. It had the template's spec, an
+  emptyDir at `/home/jenkins/agent` and a uid-1000 busybox standing in for jnlp. Results: `id` 1000,
+  `HOME=/home/ubuntu` writable, and `git init/add/commit` in a directory busybox made. helm 4.3.0,
+  openssl, promtool 3.14.0, python3 3.13, poetry and uv all ran. `terraform version` was clean;
+  with the image's default cache path it printed the error above.
+
 ### P3 — ArgoCDTools: the job runs the repo's suites before it publishes either image
 
 Target: ../ArgoCDTools
@@ -244,9 +268,13 @@ kaniko runs, so nothing reaches `registry:5000`.
   project test` there, and delete the copy. The harness uses the trusted shell, while the controller
   runs a Jenkinsfile from SCM sandboxed, so this proves the transform accepts the file and says
   nothing about script approvals. The first run after the push is the live witness.
-- The suites shell out to `git`, `helm` and `openssl`. The agent pod is not the KubeCoder sidecar:
-  user, `HOME` and working directory all differ. Whatever the suites assume about their
-  environment has to hold in the pod as well.
+- The suites shell out to `git`, `helm` and `openssl`. The agent pod is not the KubeCoder sidecar.
+  `containerTemplates.iac_toolchain` keeps the same uid 1000 `ubuntu` and `HOME=/home/ubuntu`, but
+  without the KubeCoder home overlays, and the working directory is the job workspace rather than
+  `/work/ArgoCDTools`. Whatever the suites assume about their environment has to hold in the pod as
+  well.
+- JenkinsPipelineUtils `main` must carry P2's template before this repo's push, which triggers the
+  job (close-out A3).
 
 ### P4 — PrometheusDeploy: the test verb checks and unit-tests the prd alert rules
 

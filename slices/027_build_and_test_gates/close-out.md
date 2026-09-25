@@ -45,6 +45,15 @@ Slice 028 holds its PrometheusDeploy push: its new scrape, rules and routing rea
 **Provenance:** read; plan-writer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md Push holds
 **Disposition:**
 
+### A3 — Push JenkinsPipelineUtils (P2's containerTemplates.iac_toolchain) to main before ArgoCDTools (P3)
+
+Every job loads JenkinsPipelineUtils unpinned from main. P3's ArgoCDTools Jenkinsfile calls containerTemplates.iac_toolchain, which exists only once P2's commit reaches JenkinsPipelineUtils main. A push to ArgoCDTools main triggers IaC/ArgoCDTools at once, so the library push has to land first.
+
+**Consequence:** If ArgoCDTools is pushed first, its triggered build fails at the podTemplate on an unknown containerTemplates method: nothing is published, but V07's first-run-green witness is lost and the job needs a rebuild.
+
+**Provenance:** read, code-writer, P2, r1, plan.md P2 done-record
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -56,6 +65,19 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      refused — is not an event of the run and does not go here: post it to Fieldnotes, as the
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
+
+### N1 — Run stopped (blocked) in P1
+
+The driver's bail (`blocked`), as it recorded it:
+
+> The java sidecar P1's gate runs on is not in the pod: `cexec java` fails with 'tool "java" is not available in this environment; the tools it has are: aac-tools, go, iac'. Close-out A1 is still open: Ansible 9edef16 and DockerImages 1c1945a are unpushed (main ahead of origin by 2 and by 1), and there has been no `kc env restart`. The plan rules out every fallback (a hand-downloaded runtime or Central's 1.31), so no code was written. Re-dispatch P1 after the pushes, the iac-toolchain publish and the restart.
+
+Stopped 2026-09-25 13:17; resumed 2026-09-25 20:00.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
 
 ## Bugs
 
@@ -87,4 +109,13 @@ Slice 028's P3 (Target ../PrometheusDeploy) adds standing Argo CD alert rules an
 **Consequence:** If 028 runs first, PrometheusDeploy may end up with two promtool test mechanisms for its rules, and 027's P4 does more work than planned.
 
 **Provenance:** read; plan-reviewer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md P3 and slices/backlog/027_build_and_test_gates/plan.md P4
+**Disposition:**
+
+### S2 — JenkinsPipelineUtils gate: the stand-in script base class lets a vars/ override of CpsScript's final invokeMethod pass · minor
+
+The gate compiles vars/ with SerializableScript as the script base class (tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:48). The controller uses CpsScript, whose invokeMethod(String, Object) is final (workflow-cps 4376.v30c8c00684a_3 CpsScript.java:92). A vars/*.groovy that declares invokeMethod therefore passes the gate and fails to compile on the controller. No file does so today. This is the one false-green of the plugin-class stand-ins that I found. A fix idea: a test-side base class that extends SerializableScript and declares invokeMethod final would close it.
+
+**Consequence:** Only if a future vars/ file declares invokeMethod: the gate stays green while every job in the estate fails to load the library.
+
+**Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
 **Disposition:**
