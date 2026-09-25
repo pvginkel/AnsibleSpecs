@@ -1,0 +1,135 @@
+# Slice 026 — refinement
+
+## D1 — The validator migration: the run pushes every carrier repo itself, including the twelve whose push redeploys an app to production and the eight that re-flash or restart a physical device
+
+**Context.** You ruled at triage that moving every copied validator script onto the aac-tools
+toolchain is done automated, in this slice, not by hand. The copies are not where the card put
+them: the 48 deploy repos already call the validator from the image (the migration tooling wrote
+them that way); the copies sit in about 30 application and infrastructure repos, 26 identical to
+the canonical script and 7 drifted in lint-only ways. The card's precondition holds — the
+KubeCoder catalog lists the toolchain, and the image's validator is byte-identical to the
+canonical script.
+
+**The ask.** In each carrier repo, switch the architecture Jenkinsfile to the aac-tools container,
+delete the script, and push — about 28 pushes, alongside the 48 one-line pointer edits in the
+deploy repos.
+
+**Background.** A push that touches only the architecture Jenkinsfile still starts each repo's
+main build; the estate has no skip-ci convention and only three pipelines skip unchanged work.
+Twelve app repos build and pin unconditionally — every push rebuilds the image, commits a pin to
+the deploy repo, and Argo CD auto-syncs it to production — so each redeploys its unchanged code
+once (SSEGateway pins into four deploy repos in one run). Seven firmware repos flash real hardware
+over the air on every push, and KitchenDisplay restarts a service on a Raspberry Pi. This is what
+any docs-only commit to those repos already does; the sweep adds no mechanism, just about twenty
+of them at once. Pushing all ~80 repos together would queue ~80 Jenkins pod builds against the
+Kubernetes cloud's container cap, which stalled builds two days ago under a slot leak. Not
+verified: whether a rebuild pulls newer base images — that is, whether "unchanged code" comes out
+byte-identical.
+
+**Why yours.** It is an outage and risk procedure you carry — production rollouts and unattended
+device flashes — and your "done automated" ruling came before these consequences were known.
+
+**Recommendation.** The run pushes every carrier repo itself, under stop rules: small batches of a
+few concurrent builds, each batch's builds green and its rollouts healthy before the next; the
+device repos last, one at a time, each waiting for its flash upload to succeed; stop and report on
+the first red build, failed rollout or failed flash. The deploy-repo pointer edits ride the same
+batches (they start only an architecture build and a no-op sync). Trade-off: twelve production
+apps restart once on unchanged code and seven devices re-flash with no operator present — the
+same a README commit does to them today — and a failed flash (the heating controller among them)
+could leave a device down until you reflash it by hand.
+
+**The other way.** The run pushes everything except the eight device repos and prepares their
+commits; you push each at a moment you pick, and the run's acceptance for them is owed after that
+push. Costs eight manual pushes, and the migration stays unfinished until you do them.
+
+**If this is wrong.** An app restarts on a rebuilt image that does not start — caught by the stop
+rule, rolled back by reverting the pin — or a device fails to flash and stays down until reflashed
+by hand.
+
+**Operator.** "Agreed" (chat, 2026-09-25)
+
+## D2 — The app-name equality check: drop it and close the card as won't-do, on the measured exposure
+
+**Context.** The generator keys every element id on the chart's name; Argo CD keys the app on its
+registry directory. Nothing records, checks or fails on their equality, and you agreed at triage
+that something should. Two of the card's premises have moved: the registry lives in HelmCharts,
+not ArgoCDDeploy, and all 50 enabled entries across the 48 deploy repos were compared with each
+repo's chart name — zero mismatches, because the migration tooling wrote both sides from one name.
+
+**The ask.** Add something that checks the equality, so a deploy repo whose chart name differs from
+its registry directory cannot publish a full architecture keyed to a namespace the app is not
+deployed in — green, no gap line, every cross-producer edge into the real ids dangling.
+
+**Background.** A mismatch arises only by a deliberate hand edit: registering a new app under a
+directory name that differs from its chart name, or renaming a deploy repo's chart. The damage is a
+silently wrong model, not an outage; it survives until someone notices. The two names meet in no
+place a build can see: the registry is in HelmCharts, the chart name in each deploy repo, and a
+deploy repo tracks main, so a chart rename reaches Argo with no registry change. HelmCharts is to
+be archived with its pipelines removed at the end of the Argo CD move (a recorded decision), so a
+check built into its build dies with it; the records name no future home for the registry (not
+exhaustively searched). The Argo CD runbook already states the two must be equal and that nothing
+checks it.
+
+**Why yours.** You agreed to this card at triage; dropping it reverses that on new evidence.
+
+**Recommendation.** Rule the check out of this slice and close the card as won't-do; the runbook's
+warning stays. Trade-off: a hand-made registry entry with a mismatched name goes unnoticed until
+someone looks at the model.
+
+**The other way.** Build the check where the registry lives: HelmCharts' build reads each Argo
+entry's deploy-repo chart name and fails on a mismatch. It catches a mismatched entry when it
+lands, misses a later chart rename inside a deploy repo until that entry next changes, and lives
+only until HelmCharts' pipelines go — about one phase, plus network reads of every deploy repo on
+each HelmCharts build.
+
+**If this is wrong.** One future app publishes a wrong-keyed model until someone notices; no outage.
+
+**Operator.** "Agreed" (chat, 2026-09-25)
+
+## Open facts — questions only you can answer
+
+None — nothing in this slice rests on something only you know.
+
+## Settled
+
+- Two of the validator copies sit in DesignAssistant and SomfyRemote, which are not registered
+  producers and are archived on GitHub; they cannot be pushed and are left alone. Architecture's
+  producer manual, which still tells producers to copy the script, is changed to point them at the
+  toolchain.
+- Alertmanager's dependency on the Telegram Bot API needs no generator work: the generator already
+  lets a judgment layer declare that an image is served by a named service (four deploy repos use
+  it in production), the Telegram service element is already declared in Architecture's shared
+  external-services file, and Alertmanager still sends to api.telegram.org — so the fix is one line
+  in PrometheusDeploy's judgment layer.
+- The stale "generator's docstring" pointer is in all 48 deploy repos' instructions files (the
+  cards said two) and in two of their architecture-file headers; `gen-architecture --help` today
+  prints only usage and a one-line description, and the docstring behind it omits a key the
+  generator already supports, so the help text is completed to the full contract before the
+  pointers are switched to it.
+- The Argo CD gap is wider than its card said: nothing in the estate realizes the
+  configuration-management capability, so the Delivery pipeline view is empty on that predicate;
+  the judgment layer gains a per-container realizes and the generator resolves an env value
+  sourced from a ConfigMap against the same render, so Argo CD takes the view and the redis edge
+  falls out of the existing wiring.
+- The central architecture update runs its sessions in the Architecture repo's KubeCoder
+  environment, which does not carry the aac-tools toolchain; to honour the `--help` ruling the
+  slice adds the toolchain to that environment's config, effective at the environment's next
+  restart — yours to pick, and central update runs are held anyway until the promotion-branch card
+  lands.
+- The central update agent's instructions in Architecture learn that a generated producer whose
+  sources lack the generator takes its contract from `gen-architecture --help`.
+- In-house service resolution looks only at the container behind the Service, and KubeCoder's
+  deploy repo then maps the tunnel-reclaim image; that repo publishes from its prd branch, so the
+  mapping lands on main and reaches the published model at the next KubeCoder promotion, which is
+  yours and not this slice's.
+- A generator change goes live estate-wide the moment ArgoCDTools is pushed, because every
+  architecture build pulls the image's floating latest tag; before that push the run regenerates
+  all 48 deploy repos' models with the old and the new generator and accepts only the intended
+  differences.
+- Out of scope: teaching the twelve app builds to skip unchanged code, the reason an
+  architecture-only push redeploys them — a close-out observation, not this slice.
+- Size: about 9 phases. Repos: ArgoCDTools (the generator); Architecture (the producer manual, the
+  central update agent's instructions, its KubeCoder environment config); Ansible (the Argo CD
+  runbook's template and the migration tool's template); all 48 deploy repos (a one-line pointer,
+  plus judgment-layer edits in KubeCoderDeploy, ArgoCDDeploy and PrometheusDeploy); and about 28
+  application and infrastructure repos (the validator migration).
