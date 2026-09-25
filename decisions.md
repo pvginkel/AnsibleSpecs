@@ -600,7 +600,7 @@ Each push-triggered pipeline below runs its checks ahead of the step that change
 - **HomelabTerraformProvider**: `go vet` and the unit tests, before the registry publish. The acceptance tests need live backends and stay a manual run.
 - **ArgoCDTools**: both images' unit tests, in the `iac` toolchain image their local test verbs run in, before either image build.
 
-**JenkinsPipelineUtils has no pipeline to check it.** It has no job, and Jenkins jobs load it unpinned from `main`, so a push is live in every job that loads it. Its check is its `kc project test`, the gate slice phases run: every `vars/*.groovy` compiled through the controller's CPS transform. A deploy repo's tests likewise run only from its test verb (argo-cd D61); PrometheusDeploy's check and unit-test its alert rules with promtool.
+**JenkinsPipelineUtils has no pipeline to check it.** It has no job, and Jenkins jobs load it unpinned from `main`, so a push is live in every job that loads it. Its check is its `kc project test`, the gate slice phases run: every `vars/*.groovy` compiled through the controller's CPS transform. A deploy repo's tests likewise run only from its test verb (argo-cd D61); PrometheusDeploy's test verb checks and unit-tests its alert rules with promtool.
 
 **DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert, and so does a scan that could not complete. The scan never changes the build result.
 
