@@ -155,7 +155,7 @@ for.
 | ANS-131 | DHCPApp back as its own workload | The coupling to undo: lease file on RWX CephFS, static-generated emptyDir, lease hook to a Service with `--max-time`. |
 | DI-8 | registry-cleanup must never delete a pinned image | GC `--delete-untagged` and the keep-newest cap. Resume the CronJob (N1) only after this. Relates DI-5. |
 | ANS-127 | Alerting for this outage's failure modes, plus an out-of-cluster dead-man's switch | Nothing alerted for 2h45m. Relates ANS-15, ANS-118. |
-| ANS-128 | Cold-start floor for DHCP, and house devices that depend on it | Fallback DHCP outside the cluster; Zigbee coordinators and similar. Needs S3 first. |
+| ANS-128 | Cold-start floor for DHCP, and house devices that depend on it | **Closed, Won't Do** (you, 2026-09-25): no fallback DHCP outside the cluster. The cold-boot runbook's break-glass steps are what's in place. |
 | ANS-129 | UPS and graceful shutdown for the PVE hosts? | A decision. |
 | ANS-130 | Break-glass SSH when DNS and DHCP are down | IP principals in host certs, your key on the k8s nodes, the UDM host key. |
 
