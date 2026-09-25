@@ -43,20 +43,39 @@
   recovers, then resolves for real. The decision that turned notifications on (D7) stands,
   amended to say the notification is the event and the rule is the state. Accepted trade-off:
   two messages per failure — the immediate one with the error text, then the standing one some
-  minutes later.
+  minutes later. Limit (review r1 Q2, operator 2026-09-25: "Agreed"): the standing failed-sync
+  alert covers auto-synced apps only — for an app synced by hand (today only Argo CD's own),
+  Argo's metrics cannot tell a failed sync from one not yet run, so it keeps the immediate event
+  only; the operator runs those syncs at the keyboard. The standing degraded alert covers every
+  app.
 - **Ruling D2 — R3 closed as not needed; no hook change.** Accepted trade-off: a download outage
   longer than the retry window (about four minutes) still leaves that app's sync failed until
   the next commit or a manual sync — with Ruling D1 in place, that is a standing alert.
 - **Ruling D3 — hold all four deploy repos.** The run builds, renders and checks everything it
   can offline; the live checks are owed until the operator pushes. Accepted trade-off: the slice
   closes with live checks outstanding on the operator's list. See `## Push holds`.
+- **Ruling T1 — tests in the deploy repos (review r1 Q1).** Operator, 2026-09-25: "Add the tests
+  if that's the right thing to do. My remark was from memory." — then "Agree" to the grounded
+  proposal: P3 and P5 commit their tests into the repo's local test verb (`.kubecoder/project.yaml`
+  `test:`, the gate every phase runs; no Jenkins stage). GitSyncDeploy: the prune test is a script
+  under `tests/`, run under busybox in the iac toolchain. PrometheusDeploy: promtool unit tests
+  (synthetic series, a firing and a quiet case for each edge the attachment names) over the
+  standing-alert rules, and the routing — the two events send no resolve, every other alert keeps
+  it — asserted against the rendered Alertmanager config, no amtool. promtool comes from the iac
+  toolchain, which slice 027 extends (pinned to prd's Prometheus 3.14.0) before its own run; 028
+  runs only after that change is live. The tests use synthetic series only: the `for:` window's
+  dependence on ArgoCDDeploy's retry policy is stated in a comment beside it, not read from that
+  repo.
 - **Settled (session, shown to the operator in refinement.md, not objected to):**
   - R2: Argo CD's allowed-URL list gains the short hostname (https://argocd) beside
     argocd.home. No Keycloak change: the operator's card lists `https://argocd/*` as a redirect
     URI on the client (hand-made, outside any repo — not checked in Keycloak itself).
   - R4: the job treats "prd already at this commit and no release tag on it" as record-only and
     writes the missing tag instead of refusing; a re-run of a finished promotion (prd at the sha
-    *and* a release tag on it) still refuses as today. The runbook's manual recovery stays valid.
+    *and* a release tag on it) still refuses as today. The record-only tag carries the number of
+    the build that writes it (D48: "`<n>` is the promote job's build number"); the re-run becomes
+    the recovery, and the cutover runbook's manual recipe (which numbers the tag after the failed
+    build) remains a fallback (review r1 A1, operator 2026-09-25: "Agreed").
   - R5: the prune runs in the init container, i.e. at pod start; a branch that drops out of
     indexing between restarts is pruned at the next restart (the health probe drops a writer
     that dies in the meantime). The branch list is read from each bare repo's plain-text
@@ -125,6 +144,8 @@ routes them) and amends a spec-repo decision (D7); R4 and R5 land in two further
 
 ## Ordering constraints
 
+- Precondition for the run (Ruling T1): the iac toolchain image carries promtool — slice 027's
+  toolchain change, live after an environment restart. P3's gate cannot go green without it.
 - P3 after P2: the standing rules read the Argo CD series P2 exposes. P2's done-record names those
   series and their labels as Prometheus sees them, and says whether P3 owes a scrape.
 - P1 amends D7 in place. No later phase cites a new decision id.
@@ -132,7 +153,7 @@ routes them) and amends a spec-repo decision (D7); R4 and R5 land in two further
 ## Push holds
 
 - ../ArgoCDDeploy — Ruling D3: a push to `main` is a prd deploy (Argo CD reconfigures itself; the controller restarts to expose metrics); the operator pushes after the run.
-- ../PrometheusDeploy — Ruling D3: a push to `main` deploys Prometheus/Alertmanager with the new scrape, rules and routing; the operator pushes after the run.
+- ../PrometheusDeploy — Ruling D3: a push to `main` deploys Prometheus/Alertmanager with the new scrape, rules and routing; the operator pushes it after ../ArgoCDDeploy is pushed and `argocd-prd` synced, else the blind-metrics warning fires until then (review r1 A2).
 - ../KubeCoderDeploy — Ruling D3: a push to `main` is a deploy-repo push the operator presses; the promotion job change is live from then on.
 - ../GitSyncDeploy — Ruling D3: a push to `main` restarts gitblit in prd (search and the MCP server briefly down); the operator pushes after the run.
 
