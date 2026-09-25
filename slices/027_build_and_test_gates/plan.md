@@ -300,7 +300,7 @@ Later phases:
 - The test run leaves `__pycache__` in the image folders. Both `.dockerignore` files exclude
   `**/__pycache__`, so none of it reaches a kaniko context.
 
-### P4 — PrometheusDeploy: the test verb checks and unit-tests the prd alert rules
+### P4 — PrometheusDeploy: the test verb checks and unit-tests the prd alert rules ✅ DONE 2026-09-25
 
 Target: ../PrometheusDeploy
 
