@@ -29,6 +29,8 @@ The rulings land both tools during planning, and a run cannot restart the pod it
 
 code-writer, P1 r1, 2026-09-25 — Still outstanding when P1 was dispatched: Ansible main is ahead of origin by 2 (9edef16 unpushed), DockerImages main is ahead by 1 (1c1945a unpushed), and the pod was not restarted — `cexec java` answers 'tool "java" is not available in this environment; the tools it has are: aac-tools, go, iac', and `cexec iac` has no promtool. P1 handed back blocked with no code written; it needs the two pushes, the kube-coder-iac-toolchain publish and `kc env restart`, then a re-dispatch.
 
+run-slice session, after P1 r1 bail, 2026-09-25 — Done on the operator's instruction: Ansible main (9edef16, and slice 026's 9021a2b on top) and DockerImages 1c1945a pushed. DockerImages #2551 pushed kube-coder-iac-toolchain:latest (sha256:1982de3d…); its console ends 'Finished: SUCCESS' although the API reports the result as FAILURE. The environment then restarted. Afterwards `cexec java mvn -v` answered Maven 3.9.9 on JDK 21 and `cexec iac promtool --version` answered 3.14.0. Slice 026's modern-app sidecar came in with this restart, ahead of its planned P4 stop.
+
 **Consequence:** P1's gate has no `cexec java` and P4's has no `cexec iac promtool`, so both phases go red on a missing tool rather than on their work.
 
 **Provenance:** read; plan-writer, planning, r1; Ansible and DockerImages `git status -sb` (ahead 1)
