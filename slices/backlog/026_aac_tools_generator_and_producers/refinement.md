@@ -86,6 +86,93 @@ each HelmCharts build.
 
 **Operator.** "Agreed" (chat, 2026-09-25)
 
+## D3 — Architecture's edits: this environment gains the tool Architecture's gates run through, and you restart it before the run, rather than moving those edits out of the slice
+
+**Context.** You agreed D1 and D2 on 2026-09-25, and the plan now has eleven phases: three in the
+generator, three that publish it and make the judgment-layer edits in KubeCoder's, Argo CD's and
+Prometheus's deploy repos, one in the Architecture repo, and the push sweep in the order D1 set.
+The run merges a phase only on a green gate. Every one of Architecture's gates runs through a
+sidecar tool (modern-app) that this environment does not carry: the planner ran Architecture's
+test gate here and it failed before testing anything. This environment dropped Architecture as a
+declared repo on 2026-09-20 for that reason — pod start ran Architecture's setup through the
+missing tool and reported a permanently failed environment — and kept only the checkout, to read
+the contract from.
+
+**The ask.** Three settled items land in Architecture: the producer manual stops telling producers
+to copy the validator script and points at the toolchain; the central update agent's instructions
+learn to take the contract from `gen-architecture --help`; and Architecture's own environment
+config gains the aac-tools toolchain. The question is where that work runs so its gate can go
+green.
+
+**Background.** Slice 027's planning is running in this pod now, and a restart ends it. The pod
+has an 8 GiB memory limit shared with its sidecars; not verified: what the extra sidecar adds to
+that. A side benefit: this pod's aac-tools sidecar runs an image pulled at pod start on
+2026-09-23, older than the published generator (for PrometheusDeploy it writes an empty artifact
+and exits 0), and a restart refreshes it. The plan already works around that by running every
+generator from source, so the slice does not depend on the restart for it.
+
+**Why yours.** It is a procedure you run — a restart that ends every session in this pod, at a
+moment you pick — and it changes what this environment carries; the other way moves settled work
+out of the slice.
+
+**Recommendation.** Add the tool to this environment's config, and you restart the environment
+before the run starts, at a quiet moment — after slice 027's planning. The Architecture phase
+then gates like any other. Trade-off: one restart you time, and one more sidecar in the pod's
+memory budget.
+
+**The other way.** Take the Architecture edits out of this slice and do them as a change in the
+Architecture environment, where its gates run. The slice keeps its other ten phases, and the two
+criteria for the manual and the central update's contract pointer are owed after that work;
+meanwhile the deploy repos point at `--help` before the central update's instructions and
+environment can use it, and the manual keeps telling producers to copy a script the carriers have
+just deleted.
+
+**If this is wrong.** A restart at a bad moment interrupts running work, or the pod runs short of
+memory, visible at start; under the other way, the Architecture half sits undone until someone
+runs it there.
+
+**Operator.** "Agree" (chat, 2026-09-25)
+
+## D4 — Argo CD's redis edge: the per-container scoping covers the upstream wire as well as the capability, so the wire keeps its hard fail
+
+**Context.** A premise correction first. The settled list below told you that, with a
+per-container realizes and ConfigMap-sourced values, "the redis edge falls out of the existing
+wiring". Read against the code, it does not. The upstream wire is declared on an image entry and
+applies to every container of that image, and it fails the whole generation on any container that
+does not set the named variable — a deliberate, documented hard fail. The Argo CD image also runs
+containers that do not read the redis variable (only the server, repo-server and
+application-controller do), so declaring the wire on the image would fail generation. The other
+wire, boundBy, reads recipes that consumer producers publish against their own products; a
+judgment layer has no way to author one. The plan's generator phase and its Argo CD phase are
+written for the recommendation below, so agreeing needs no replanning.
+
+**The ask.** The published model shows Argo CD and its redis side by side with no edge between
+them; the card asks that the generator reach that edge, alongside the capability that puts Argo CD
+in the Delivery pipeline view. The question is which mechanism draws the edge.
+
+**Background.** The scoping this refinement already introduced lets a judgment layer name which
+containers of an image an entry applies to; it was settled for the capability only. The value
+that names redis is sourced from a ConfigMap, which the generator now resolves. What still keeps
+the existing upstream resolver from the edge is the wire's image-wide reach.
+
+**Why yours.** It corrects a settled item you were told, and the choice changes a guarantee every
+producer relies on.
+
+**Recommendation.** The container scoping covers the upstream wire too: Argo CD's deploy repo
+declares the redis wire only on the containers that read it, and the existing upstream resolver
+draws the edge from the value now resolved from the ConfigMap. The hard fail on a mistyped
+variable stays. Trade-off: the judgment layer's scoping applies to two keys, not one — one
+concept, documented in the help text.
+
+**The other way.** An image-level upstream wire silently skips containers that do not set the
+variable. No scoping of the wire is needed, but it softens the hard fail for every producer: a
+mistyped variable that fails loudly today would pass silently.
+
+**If this is wrong.** Nothing breaks; at worst the contract carries a scoping on one more key than
+strictly needed.
+
+**Operator.** "Agree" (chat, 2026-09-25)
+
 ## Open facts — questions only you can answer
 
 None — nothing in this slice rests on something only you know.
