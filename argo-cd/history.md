@@ -280,6 +280,22 @@ its narrowing is Triage #991, owed before the first migration whose Terraform ma
 - **D44's "plugin" wording** was interpreted broadly — the namespace TF module and whatever
   tooling still handles it go when the last app migrates.
 
+## Tests in deploy repos: none → none in Jenkins (D61)
+
+When the prometheus and grafana releases moved to their deploy repos, the operator retired
+HelmCharts' six tests over them rather than moving them (2026-09-24, HelmCharts `4d02286`), for
+two reasons: deploy repos run no tests, and three of the prometheus tests timed a backup alert
+against another app's CronJob, which a copy in PrometheusDeploy could not follow. The next day
+the first reason met two slices that wanted tests in deploy repos. Slice 027's D2 ruling gave
+PrometheusDeploy's local test verb a promtool check of the rules as the chart renders them and a
+unit test for every alert on synthetic series, with no Jenkins stage; that answered ANS-74, the
+card the operator had called "Good one" at triage. Slice 028's Ruling T1 did the same for its
+tests in PrometheusDeploy and GitSyncDeploy: "Add the tests if that's the right thing to do. My
+remark was from memory." What stands is narrower: no deploy repo has a Jenkins test stage, and a
+deploy repo's tests run from its local test verb. The second reason did not move. The rule tests
+assert each rule's own thresholds and windows and model no other repo's schedule, so the timing
+tests stay retired.
+
 ## The restructure itself
 
 `plan.md` grew as one document interleaving decision, rationale and phase work per topic; when
