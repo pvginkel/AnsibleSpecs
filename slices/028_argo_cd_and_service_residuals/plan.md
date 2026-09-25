@@ -305,13 +305,13 @@ these cases to it.
 
 The live alert path is owed after the operator's push (Ruling D3).
 
-**Done (P3).** PrometheusDeploy `8b6e866` on `phase/028-P3`: rule group `argocd` with
-`ArgoCDSyncStillFailed` (critical, `for: 10m`), `ArgoCDHealthStillDegraded` (warning, `for: 15m`)
-and `ArgoCDAlertsBlind` (warning, fires 15 m after the last `argocd_app_info` sample). Alert
-labels are `name`, `dest_namespace`, `severity`. D7's two events route to the new receivers
-`telegram-{critical,warning}-no-resolve`, which match their severity's receiver except for
-`send_resolved: false`. Tests: `tests/alert-rules/argocd.yml` in 027's harness, plus a new
-test-verb line `tests/alert-routing.py`.
+**Done (P3).** PrometheusDeploy `8b6e866`, review fix `185b64f`, on `phase/028-P3`: rule group
+`argocd` with `ArgoCDSyncStillFailed` (critical, `for: 10m`), `ArgoCDHealthStillDegraded`
+(warning, `for: 15m`) and `ArgoCDAlertsBlind` (warning, fires 15 m after the last
+`argocd_app_info` sample). Alert labels are `name`, `dest_namespace`, `severity`. D7's two events
+route to the new receivers `telegram-{critical,warning}-no-resolve`, which match their severity's
+receiver except for `send_resolved: false`. Tests: `tests/alert-rules/argocd.yml` in 027's
+harness, plus a new test-verb line `tests/alert-routing.py`.
 
 Later phases:
 - P4, P5: nothing from P3.
@@ -323,14 +323,19 @@ Record:
   comment names ArgoCDDeploy's policy). It clears during any operation, so a firing alert holds on
   its own `ALERTS` series through a new sync and resolves 5 m after that sync's last scrape. The
   text claims no failed sync, because the prune guard sets SyncError too (S1).
-- Gaps: while an app has no current `argocd_app_info` series, its last 20 m stand in. The blind
-  warning fires at 15 m. Both windows are ≥ the default 10 m `rules.alert.for-grace-period`,
-  which the chart leaves unset; a shorter window is not restored after a restart (v3.14.0
-  `rules/group.go:768`). promtool cannot simulate a Prometheus restart.
+- Gaps (r1 F1): while no app has a current `argocd_app_info` series, each standing alert holds its
+  own `ALERTS` state, pending or firing, for up to 20 m after its app's last scrape. It never
+  replays old samples, so an app last seen recovered stays quiet; an app missing while others are
+  scraped gets no hold, so a deleted app's alert resolves. A held alert whose sync hold would have
+  run out during the gap resolves at the next scrape instead. The blind warning fires at 15 m.
+  Both windows are ≥ the default 10 m `rules.alert.for-grace-period`, which the chart leaves
+  unset; a shorter window is not restored after a restart (v3.14.0 `rules/group.go:768`).
+  promtool cannot simulate a Prometheus restart.
 - `alert-routing.py` walks the rendered route tree as Alertmanager's dispatcher does; an unknown
   route key or matcher fails it. Every alert must reach one receiver, loud iff critical, with a
   "resolved" unless it is an event, and the receivers may differ only in those two flags.
-- Witnessed red: 8 rule mutations and 6 routing mutations.
+- Witnessed red: 8 rule mutations and 6 routing mutations; round 2, the r1 F1 cases on the old
+  stand-in, its `[3m]` mutation (F2), and 7 mutations of the new hold.
 
 ### P4 — KubeCoderDeploy: a promote re-run records a tagless release
 

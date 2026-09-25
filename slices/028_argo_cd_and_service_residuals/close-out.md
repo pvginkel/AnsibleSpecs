@@ -106,9 +106,54 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
+### ~~Q1 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor~~ — superseded by Q2: the body misstated what the alternative gives up; struck by code-writer, P3 r2
+
+Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay of cleared failures, and no delayed resolve. They conflict for an alert held through a sync. For its first scrapes after a sync, an app whose sync failed looks the same as one whose sync succeeded, until SyncError comes back one scrape later. Resolving on the hold's own schedule during a gap would therefore resolve, and later fire again, an app whose sync failed. That breaks V04 ("a metrics gap neither resolves nor re-fires them"). The fix follows V04: while no app is scraped, each alert keeps its own ALERTS state. The cost is a resolve that is due during the gap, which waits for the next scrape. ArgoCDAlertsBlind has fired by 15 m into any such gap. To resolve on schedule instead, the rule would need the app's last-scraped sync status (a subquery) and would give up the V04 guarantee for a sync that fails right before a gap.
+
+**Consequence:** An alert held through a successful sync still reads firing when a controller gap starts, and its "resolved" comes when scraping resumes rather than 5 m after the sync.
+
+**Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
+**Disposition:**
+
+### Q2 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor
+
+Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay of cleared failures, and no delayed resolve. They conflict for an alert held through a sync. Mid-sync, and for one scrape after a failed sync (until SyncError comes back), an app whose sync fails looks the same as one whose sync succeeds. A gap that starts there cannot tell them apart. The fix follows V04 ("a metrics gap neither resolves nor re-fires them"): while no app is scraped, each alert keeps its own ALERTS state. The cost is a resolve that is due during the gap, which waits for the next scrape. ArgoCDAlertsBlind has fired by 15 m into any such gap. To resolve on schedule where the last scrape already showed the app Synced, the failed-sync rule's hold could release apps last seen Synced. That needs a subquery over argocd_app_info for each app's last-scraped sync status.
+
+**Consequence:** An alert held through a successful sync still reads firing when a controller gap starts, and its "resolved" comes when scraping resumes rather than 5 m after the sync.
+
+**Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
+**Disposition:**
+
 ## Suggestions
 
 Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — ArgoCDDeploy P2 done-record: SyncError is set in two more cases than it says · minor
+
+The record tells P3 the controller sets SyncError only once a failed sync's retries are spent. Upstream v3.5.1 also sets it from the auto-sync prune guard (controller/appcontroller.go:2431-2441; every generated app has prune: true and no allowEmpty) and on a failed SetAppOperation (:2458-2460). The fact is now recorded under P2's Record for P3.
+
+**Consequence:** The standing failed-sync alert also fires for an app blocked by the prune guard or by an API error, and alert text written from the record would call that a failed sync.
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### S2 — ArgoCDDeploy P2 done-record says the architecture artifact is unchanged; it gains the metrics Service's interface · nit
+
+Regenerated at bcedb86 and at 23ecda8, the generated argocd-deploy artifact gains if:argocd-prd-application-controller-metrics-argocd-prd-svc and its behind relation. The artifact is gitignored build output, architecture.yaml needs no change, and arch-validate passes.
+
+**Consequence:** none
+
+**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:**
+
+### S3 — PrometheusDeploy: a standing Argo CD alert survives a Prometheus restart only if Prometheus is back within about 2 minutes · minor
+
+Prometheus sends each firing alert with an end time 4 minutes ahead (4 × the 1 m resend and evaluation interval). After a restart, the rule manager restores the alert's firing state, since both standing windows are at least the 10 m for-grace-period, and sends the alert again about two evaluations later. If Prometheus is down for longer than roughly 2 minutes, Alertmanager has already expired the alert. It then sends a "resolved", and the alert fires again at once. This applies to every alert in the estate, not just the new ones. promtool cannot simulate a restart, so V04 proves only the gap and identity edges offline.
+
+**Consequence:** An outage or slow WAL replay of more than about 2 minutes brings a "resolved" and a fresh "firing" for each alert that is up, the standing Argo CD alerts included.
+
+**Provenance:** read, code-writer, P3, r1, Prometheus v3.14.0 rules/group.go:768-835 and plan.md P3 done-record
+**Disposition:**
