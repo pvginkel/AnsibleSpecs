@@ -349,7 +349,7 @@ Record.
   one series. `check rules` goes red on template and PromQL syntax errors. A `48 * 3600` edit in
   `config/prd/values.yaml` turns the script red end to end.
 
-### P5 — AnsibleSpecs: argo-cd D61 records the rule-test position as it now stands
+### P5 — AnsibleSpecs: argo-cd D61 records the rule-test position as it now stands ✅ DONE 2026-09-25
 
 Target: ../AnsibleSpecs
 
