@@ -98,12 +98,12 @@ This is R2's generator half, built on the mechanism in the Settled list:
 
 Constraints the code imposes:
 
-- **The redis edge has to come from the existing upstream wire, so the scoping covers the wire
-  as well as `realizes`.** An image-level `upstream` hard-fails on any container of the image
-  that does not set its var (`:1609-1614`). The `argocd` image also runs containers that do not
+- **The scoping covers the `upstream` wire as well as `realizes` (Ruling D4).** The redis edge
+  comes from the existing upstream resolver, reading the value the ConfigMap now supplies. An
+  `upstream` wire hard-fails on any container it applies to that does not set its var
+  (`:1609-1614`), and that hard fail stays. The `argocd` image also runs containers that do not
   read `REDIS_SERVER`: ANS-90 names only the server, repo-server and application-controller as
-  readers. The scoping therefore covers the wire too. That is how the ruling's "the redis edge
-  falls out of the existing wiring" holds.
+  readers. So the wire is declared only on the containers that read it.
 - **Secret-sourced values stay out, as today.** They are unpublished runtime state (`:629-633`).
   A ConfigMap the render does not carry leaves its var unresolved, as today.
 
@@ -140,10 +140,10 @@ fail with the new generator. A value that now resolves but places nowhere is a h
 counts as a failure. Record the comparison and its accounting in the done-record. An unintended
 difference is fixed here or stops the phase.
 
-**Run both generators as scripts.** The pod's aac-tools sidecar is older than the published
-generator. Its image was pulled when the pod started on 2026-09-23, and its `gen-architecture`
-differs from `origin/main`'s. For PrometheusDeploy it writes an artifact with 0 elements and
-exits 0. Run each generator from its commit under the sidecar's `python3`
+**Run both generators as scripts.** The pod's aac-tools sidecar carries the image pulled when
+the pod last started, not a commit this phase names, and it cannot see P1–P3. On 2026-09-25 it
+predated even the published generator: for PrometheusDeploy it wrote an artifact with 0 elements
+and exited 0. Run each generator from its commit under the sidecar's `python3`
 (`cexec aac-tools python3 <script> --stage … --producer … --repo …`), never through the
 sidecar's own `gen-architecture`. The same holds in P4–P6.
 
@@ -166,7 +166,8 @@ goes. A prd generation with the published generator shows no gap line for the im
 - The commit lands on `main`. KubeCoderDeploy publishes from `prd`, so the published model shows
   the mapping only after the next promotion, and this slice does not promote.
 - The push rides P8.
-- The repo's `kc project test` runs the stale sidecar. Its green says nothing about this change.
+- The repo's `kc project test` runs the sidecar's generator, which predates P1–P3. Its green
+  says nothing about this change.
 
 ### P5 — Argo CD's controllers realize configuration management, and its redis serves them
 
@@ -179,7 +180,7 @@ things:
   one-shots realize nothing: the copyutil init container and the redis-secret-init Job.
 - **The edge.** The redis instance serves each Argo CD container that reads `REDIS_SERVER`, the
   `configMapKeyRef` on `argocd-cmd-params-cm`'s `redis.server`. It does so through the existing
-  upstream wire.
+  upstream wire, declared only on those containers (Ruling D4).
 
 The in-file comment explaining why `argocd` carries no capability (`architecture.yaml:21-26`)
 states the new truth. Prove it with a prd generation run with the published generator, run as
@@ -203,8 +204,7 @@ generator work.
 - `served_by` is passed through unresolved (`gen_architecture.py:1017`), so it takes the
   composite id. That id is `svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48`, as
   Architecture's `docs/architecture/external-services.yaml:29` declares it.
-- Prove it with the published generator, run as P3 runs it. For this upstream-chart app, the
-  sidecar's own generator writes an empty artifact.
+- Prove it with the published generator, run as P3 runs it.
 - The push rides P8. Slice 027 also changes this repo.
 
 ### P7 — Architecture points producers at the toolchain and the central update at `--help`
@@ -230,9 +230,12 @@ Target: ../Architecture
 - the service image ships it (`Dockerfile:62-72`);
 - the central update runs it from the staged directory (`update-architecture.md:190`).
 
-Architecture's gates, every component's, run through `cexec modern-app`. This environment does
-not carry that tool (Ansible `ec4fbc3`), so `kc project test` there fails before it tests
-anything. How P7 lands is `plan_questions_r1.md` Q1.
+Architecture's gates, every component's, run through `cexec modern-app`. This environment
+carries that tool from the operator's restart before the run (Ruling D3; Ansible
+`.kubecoder/config.yaml:106-109`). Architecture is not a declared repo here, so pod start runs no
+setup for it: the phase runs Architecture's `kc project setup` before its gate. If
+`cexec modern-app` reports the tool unavailable, the restart has not happened, and the phase is
+blocked rather than landed ungated.
 
 ### P8 — Every deploy repo points at `gen-architecture --help`
 
@@ -324,6 +327,6 @@ the archived DesignAssistant and SomfyRemote are the exceptions.
 - DesignAssistant and SomfyRemote (archived).
 - HelmCharts' own in-repo generator and its `.architecturerc` (its sources include its generator). HelmCharts' `arch-validate.py` copy **is** in R6's scope.
 - ArgoCDTools' job publishing without running its suite (ANS-86, slice 027).
-- Restarting this environment so its aac-tools sidecar carries the published generator. That is the operator's to pick, and a restart would end the run.
+- Restarting this environment during the run: a restart ends it. The one restart the slice needs is the operator's, before the run (Ruling D3).
 - Remedies after a stop: reverting a pin, reflashing a device. Those are the operator's.
 - The `AaC/Architecture` ↔ `AaC/WebathomeOrgDeploy` pin loop, a close-out observation. The sweep only works around it.
