@@ -116,12 +116,18 @@
   Lucene writers so the next search reopens them. It does not re-index commits missed while the
   writer was dead and does not touch `gb_lucene.conf`, so R5 still removes the trigger.
 
+## Task shape
+
+cross-cutting — slice.md leaves R1's mechanism to the planner, and its Prometheus-rule option
+spans two components (ArgoCDDeploy exposes the metrics, PrometheusDeploy scrapes, rules and
+routes them) and amends a spec-repo decision (D7); R4 and R5 land in two further repos
+(KubeCoderDeploy, GitSyncDeploy).
+
 ## Ordering constraints
 
-- The Prometheus scrape of Argo CD's metrics depends on the metrics Service the ArgoCDDeploy
-  change creates (its name and port come from that phase).
-- The D7 amendment (Ruling D1) is a spec-repo phase; no later phase needs to cite a new decision
-  id.
+- P3 after P2: the standing rules read the Argo CD series P2 exposes. P2's done-record names those
+  series and their labels as Prometheus sees them, and says whether P3 owes a scrape.
+- P1 amends D7 in place. No later phase cites a new decision id.
 
 ## Push holds
 
@@ -130,11 +136,136 @@
 - ../KubeCoderDeploy — Ruling D3: a push to `main` is a deploy-repo push the operator presses; the promotion job change is live from then on.
 - ../GitSyncDeploy — Ruling D3: a push to `main` restarts gitblit in prd (search and the MCP server briefly down); the operator pushes after the run.
 
+### P1 — D7 amended: the notification is the event, the rule is the state
+
+Target: ../AnsibleSpecs
+
+D7 in `argo-cd/decisions.md` (`:59-63`) carries Ruling D1 as an amendment, written in the file's
+own amendment form (dated and attributed, like D47's at `:547`). The amendment records:
+
+- D7 stands.
+- The notification Argo CD sends to Alertmanager is the failure event, and its expiry sends no
+  "resolved".
+- The standing state (an app still failed or still degraded) comes from Prometheus rules over
+  Argo CD's application metrics. Those rules resolve when the app recovers.
+- The accepted trade-off is two messages per failure.
+
+Ruling D1's words are the source. No new decision id, and no other decision changes.
+
+### P2 — ArgoCDDeploy: the controller's application metrics reach Prometheus, and https://argocd is an allowed URL
+
+Target: ../ArgoCDDeploy
+
+In `config/prd/values.yaml`. Assert what renders in `tests/render-chart.py`, which is the repo's
+gate and checks the decision register against the rendered objects.
+
+- **R1: the signals.** Argo CD's application controller exposes its application metrics to
+  Prometheus. They must cover every distinction the standing rules in
+  [attachments/standing-alerts.md](attachments/standing-alerts.md) draw: a failed sync that Argo
+  CD no longer retries, versus D5 drift, a retry in flight, and an app that does not auto-sync.
+  Today `argocd-prd` has no metrics Service (live, 2026-09-25). This phase chooses the route:
+  PrometheusDeploy's existing Service discovery, or a scrape that P3 adds. The done-record's
+  `Later phases:` list names the series, their labels as Prometheus will see them, and whether
+  P3 owes a scrape.
+- **R1: the stale comment.** The notifications block's comment (`:80-83`) calls Alertmanager "the
+  stock null sink with no route tree". Alertmanager routes to Telegram now
+  (`PrometheusDeploy/config/prd/values.yaml:327-367`). Rewrite the comment to say what D7 now is
+  (P1). The two event templates and their triggers stay unchanged.
+- **R2.** A login started at `https://argocd/` completes. Argo CD's allowed URLs name the short
+  hostname beside `argocd.home`: upstream v3.5.1 validates `return_url` against `url` plus
+  `additionalUrls` (`util/oidc/oidc.go:449-450`) and picks the OIDC redirect per request host
+  (`util/settings/settings.go:2314`). `url` stays `argocd.home` (`:7-8`), so notification links
+  do not move. No Keycloak change: the operator's card lists `https://argocd/*` on the client.
+
+The live checks (series in Prometheus, the short-hostname login) are owed after the operator's
+push and manual sync of `argocd-prd` (Ruling D3; Argo CD syncs itself by hand, argo-cd D3).
+
+### P3 — PrometheusDeploy: standing Argo CD alerts, and D7's events without a false "resolved"
+
+Target: ../PrometheusDeploy
+
+`config/prd/values.yaml` implements the behaviour in
+[attachments/standing-alerts.md](attachments/standing-alerts.md):
+
+- standing rules for the failed sync and for the degraded app, over the series P2's done-record
+  names, plus the scrape if P2 says one is owed;
+- the blind-metrics warning;
+- Alertmanager routing that still delivers D7's two events loud or silent by severity but sends
+  no "resolved" when they expire. Every other alert keeps its resolved message (`:327-367`).
+
+Comment each window with its reason, as the file's existing rule groups do.
+
+Prove the rules and the routing offline, in the repo's own gate:
+
+- every rule edge the attachment names: the alert arrives after the retry window and not during
+  it, stands until recovery, ignores D5 drift and an app awaiting a manual sync, survives a
+  metrics gap, and the blind warning fires;
+- which receiver each alert reaches, and whether it sends a resolve.
+
+The iac sidecar has neither `promtool` nor `amtool` today, so this phase decides how the proof
+runs. The live alert path is owed after the operator's push (Ruling D3).
+
+### P4 — KubeCoderDeploy: a promote re-run records a tagless release
+
+Target: ../KubeCoderDeploy
+
+`Jenkinsfile.promote` stops refusing in one case: the requested commit is already `prd`'s tip
+(the refusal at `:71-74`) and no `release-*` tag points at it. The job then records the release
+instead:
+
+- It writes D48's annotated tag on that commit, in the job's usual shape (`:118-131`). The tag
+  number is the build writing it: D48 says "`<n>` is the promote job's build number".
+- The message does not claim this build moved `prd`.
+- Nothing else changes. `prd` does not move, and the images already carry their `prd-<n>` tags.
+
+A re-run of a finished promotion (`prd` at the commit and a release tag on it) still refuses as
+today. Every other path is unchanged: a new promotion, and the non-fast-forward and
+existing-tag refusals (`:75-82`). The manual recovery in
+`Ansible/docs/runbooks/kubecoder-cutover.md:775-783` stays valid.
+
+Before handing over, run all three outcomes (promotion, record-only, refusal) against a scratch
+repository. The Jenkins run is owed after the operator's push (Ruling D3).
+
+### P5 — GitSyncDeploy: gitblit's init container prunes stale branch entries from gb_lucene.conf
+
+Target: ../GitSyncDeploy
+
+The `clean-lucene-locks` init container in `chart/templates/gitblit-deployment.yaml` (`:30-40`)
+also drops, from each repository's `gb_lucene.conf`, the `[aliases]` entry and its matching
+`[branches]` entry for every branch that is not among that repository's `gitblit.indexBranch`
+values. It runs busybox, which has no git.
+
+How Gitblit lays this out (upstream `LuceneRepoIndexStore` and `LuceneService.updateIndex`):
+
+- The conf lives at `<repo>.git/lucene/<index-version>/gb_lucene.conf`.
+- Each alias is keyed by a hash of the branch name, and its value is the full ref name.
+- On every cycle, Gitblit deletes the documents of each aliased branch it no longer indexes and
+  never removes the alias. That reopened writer is the trigger R5 removes.
+
+The branch list comes from the bare repository's plain-text `config`. git-sync keeps it current
+nightly as full ref names (`DockerImages/git-sync/git-sync.sh:42-75`). Confirm this layout
+against the pinned image rather than upstream's head.
+
+Constraints:
+
+- An entry Gitblit would still index is never dropped. That includes the default branch of a
+  repository whose `indexBranch` uses Gitblit's `default` spelling. A wrongly dropped entry makes
+  Gitblit treat the branch as never indexed and re-index its whole history.
+- A conf with nothing stale is left as it is. The existing lock cleanup is unchanged.
+
+Prove the prune offline in the repo's gate: run it against a fixture laid out like the volume,
+with multi-valued `indexBranch`, live and stale entries, and a second run that changes nothing.
+Use busybox semantics; the iac sidecar has `/usr/bin/busybox`. The restart that proves it live is
+owed after the operator's push (Ruling D3).
+
 ## Not in scope
 
 - R3's fix in any form (Ruling D2): no hook-level `terraform init` retry, no provider pinning or
   committed lock files in the deploy repos, no provider cache, no routing of public providers
   through tfmirror.
+- A standing out-of-sync alert for apps Argo CD does not auto-sync (today only Argo CD's own).
+  Their failed sync keeps the immediate event; see the attachment.
+- Any change to D7's event templates or triggers beyond the stale comment.
 - Pruning `gb_lucene.conf` anywhere but the init container (e.g. in git-sync when it unsets an
   `indexBranch`).
 - Re-indexing commits missed while a writer was dead; the log-based alert on gitblit indexing
