@@ -99,6 +99,8 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 P5's text assumed the retired prometheus tests all checked other apps' CronJob timings. HelmCharts 4d02286 retired five: three timing tests (backup-freshness, s3-mirror, youtrack-backup), the node-memory threshold test and the Alertmanager-to-Telegram routing test. D61 now gives each group its own reason. Node-memory: P4's promtool scenarios cover its starvation and wedged-counter episodes. Routing: its successor is slice 028 P3's routing assertions against the rendered Alertmanager config (028 Ruling T1), which has not run. Grafana's login test: it restated the release's own values (OIDC settings, ExternalSecret mapping), and its last case read HelmCharts' dev-cluster copy, which GrafanaDeploy cannot see. The 2026-09-24 ruling's stated reason, 'deploy repos run no tests', was withdrawn by 028 T1 ('My remark was from memory'), so the grafana and routing reasons are the record's own wording, and the operator has not ruled on them.
 
+code-reviewer, P5, r1, 2026-09-25 — 028 P3 would succeed only part of the routing test. Its assertions are 'which receiver each alert reaches, that D7's two events send no resolve, and that every other alert still does' (028 plan.md:233-235). The retired test (HelmCharts 4a36b54, tests/test_prometheus_alertmanager_telegram.py) also checked three things that nothing in 027 or 028 checks: that a node's fault is one group (:78), that the Telegram bot token and chat id are read as files from the OpenBao secret mount (:92), and that the wedge warning inhibits only its own node's two stall alerts (:110). The inhibition is live at PrometheusDeploy config/prd/values.yaml:343. After 028 P3 lands, those three stay untested, and D61:778-780 calls 028's assertions the successor without that limit. Full record: phases/P5/code_review_r1.md F1.
+
 **Consequence:** If the operator's reason differs, D61 carries a justification nobody decided. Until 028's P3 lands, nothing tests PrometheusDeploy's Alertmanager routing, which the retired test covered.
 
 **Provenance:** read — code-writer, P5, r1; argo-cd/decisions.md D61, HelmCharts 4d02286
@@ -147,4 +149,13 @@ No test makes NodeMemoryStalled fire on major faults alone. The only faults-only
 **Consequence:** For those two major-fault paths, a PromQL matching mistake still passes kc project test and first shows in prd, which is the ANS-74 consequence V11 retires for the rest of the rules.
 
 **Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
+**Disposition:**
+
+### S5 — argo-cd D61: the new sentence 'PrometheusDeploy's checks its rules …' is missing its subject noun · nit
+
+argo-cd/decisions.md:773 reads 'PrometheusDeploy's checks its rules as the chart renders them with promtool …'. The possessive has no noun after it (the test verb). The doc phase is told to leave D61 alone (plan.md:377-378), so nothing later in the run corrects it.
+
+**Consequence:** none — the sentence reads broken in the register; its meaning is recoverable
+
+**Provenance:** read, code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
 **Disposition:**
