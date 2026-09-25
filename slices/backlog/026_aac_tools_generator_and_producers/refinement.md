@@ -131,7 +131,7 @@ just deleted.
 memory, visible at start; under the other way, the Architecture half sits undone until someone
 runs it there.
 
-**Operator.** "Agree" (chat, 2026-09-25)
+**Operator.** "Agree" (chat, 2026-09-25). Timing moved by plan review F3 — operator: "Agree on the rest" (chat, 2026-09-25): the restart happens at the run's planned stop right after aac-tools is published, not before the run.
 
 ## D4 — Argo CD's redis edge: the per-container scoping covers the upstream wire as well as the capability, so the wire keeps its hard fail
 
