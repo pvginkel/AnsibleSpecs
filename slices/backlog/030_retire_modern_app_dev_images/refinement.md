@@ -42,7 +42,7 @@ matrix and its weekly rebuild, which is what the retirement set out to remove.
 **If this is wrong.** Slower or flaky validation runs from the download; recoverable by adding
 the purpose-built image later without changing the pipeline shape much.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agree
 
 ## D2 — DesignAssistant keeps its reference to the Playwright image: archived and disabled, it is exempt from "nothing references either image"
 
@@ -73,7 +73,7 @@ edit ships untested.
 
 **If this is wrong.** Nothing breaks now; a revival hits a missing image at its first build.
 
-**Operator.** _agree, or comment here_
+**Operator.** Design Assistant is archived. Do not include it in your work.
 
 ## D3 — The registry deletion is your final step: tags deleted through the API, the two repository entries removed from storage, and the space left to the next regular garbage collect
 
@@ -110,7 +110,7 @@ pass you have held off on.
 **If this is wrong.** A premature deletion breaks a consumer that was not moved; the green-build
 gate before the step is what prevents it.
 
-**Operator.** _agree, or comment here_
+**Operator.** Agreed
 
 ## Open facts — questions only you can answer
 
@@ -118,7 +118,7 @@ gate before the step is what prevents it.
 ZigbeeControl mid-slice in another environment right now? A pipeline edit from here would
 collide with that lane's branch; the answer settles whether those phases wait or go ahead.
 
-**Operator.** _answer here_
+**Operator.** Yes, but I'll just wait with implementing this slice into there's a quite moment.
 
 ## Settled
 
