@@ -376,7 +376,7 @@ Record:
   `docs/slice-test-plan.md:15` (close-out S12).
 - Gate: `kc project test` (it compiles every `vars/*.groovy` through the CPS transform) is green.
 
-### P4 — ArgoCDDeploy: the registry, Argo CD native
+### P4 — ArgoCDDeploy: the registry, Argo CD native ✅ DONE 2026-09-26
 
 Target: ../ArgoCDDeploy
 
