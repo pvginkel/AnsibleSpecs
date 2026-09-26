@@ -478,7 +478,7 @@ Later phases:
   here), before the frontend's `pnpm install`. Run `kc project setup --project frontend`, then
   `build` before `lint`: the frontend's typecheck needs the generated route tree.
 
-### P10 — JenkinsPipelineUtils: the `modern_app_dev` template is gone
+### P10 — JenkinsPipelineUtils: the `modern_app_dev` template is gone ✅ DONE 2026-09-26
 
 Target: ../JenkinsPipelineUtils
 
