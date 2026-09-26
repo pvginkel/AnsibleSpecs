@@ -709,7 +709,7 @@ Record:
   gets a "reaches it by promotion" preamble line. Unlike the old tool, `--reset` writes no empty
   `requests: {}` for a container with no recommendation at all.
 
-### P9 — Docs: HelmCharts is no longer the deploy path
+### P9 — Docs: HelmCharts is no longer the deploy path ✅ DONE 2026-09-26
 
 Target: root
 
