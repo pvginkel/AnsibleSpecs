@@ -45,6 +45,15 @@ V11 — "The registry repos are deleted": neither `modern-app-dev` nor `modern-a
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Disposition:**
 
+### A3 — Declare the python and frontend tools in Ansible's .kubecoder/config.yaml (or rule a substitute gate) so P3's and P4's gates can run · major
+
+The phase gate `kc project test` in /work/KubeCoder fails before any test runs: KubeCoder's .kubecoder/project.yaml calls `cexec python` (root, manual) and `cexec frontend` (vscode-extension, vscode-desktop), and this environment declares only iac, go, aac-tools, java and modern-app (`cexec: tool "python" is not available in this environment`). FieldnotesApp's project.yaml calls `cexec python` too. `kc env describe` also shows the pod-start `kc project setup` failing for KubeCoder, FieldnotesApp, ElectronicsInventory, IoTSupport and ModernAppTemplate (the last three use `cexec modern-app`, so their failure has another cause, not investigated). The fix is either `- use: python` and `- use: frontend` under `tools:` plus `kc env restart`, or a ruling that the same commands run through `cexec modern-app`, which is the image the moved stages run in. Evidence for the second option: at KubeCoder 2fea4ab2 (phase/030-P3), `uv sync --all-packages --frozen`, ruff check, ruff format --check and pytest, then `npm ci`/typecheck/test in vscode-extension (332 pass) and vscode-desktop (484 pass), and `mkdocs build --strict` for the manual, all exit 0 in `cexec modern-app`.
+
+**Consequence:** P3 (KubeCoder) and P4 (FieldnotesApp) cannot go green here, so neither can push under ruling A1 and the run stops at P3.
+
+**Provenance:** witnessed | code-writer, P3, r1, /work/AnsibleSpecs/slices/030_retire_modern_app_dev_images/phases/P3/executor_result_r1.json
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
