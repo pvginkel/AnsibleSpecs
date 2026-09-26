@@ -225,3 +225,12 @@ docs/change_workflow.md, "Tag the Release", says to create the next tag by bumpi
 
 **Provenance:** witnessed, executor, P5, r1, ModernAppTemplate docs/change_workflow.md:271-283
 **Disposition:**
+
+### S5 — AnsibleSpecs decisions.md: the step-ca root-rotation TODOs count nine out-of-repo root copies, but the file's own inventory and the runbook count ten · nit
+
+decisions.md:173 and :176 (the TODOs gating the next root rotation) say "nine out-of-repo copies". decisions.md:168 says "Ten out-of-repo copies of the same file are in use" and lists ten, and Ansible docs/runbooks/step-ca-root-rotation.md:64 counts ten too. The drift predates slice 030. P13 edited the :173 sentence for its terraform.rc count and left this count alone, and P13's done-record (plan.md:597-598) repeats "nine" as unchanged.
+
+**Consequence:** Someone reading the rotation TODOs is told about one copy fewer than a rotation has to update. The runbook's table is the list that actually drives a rotation, so the miscount only misleads a reader who stops at decisions.md.
+
+**Provenance:** read, code-reviewer, P13, r1, phases/P13/code_review_r1.md F1
+**Disposition:**

@@ -1,8 +1,0 @@
-{
-  "reason": "blocked",
-  "phase": "8",
-  "details": "The red `kc project test` comes from the environment, not from the change. Both suites stop on the missing S3 service at localhost:9000: the backend fails with 'S3 storage is not reachable', and the frontend's global setup cannot reach the endpoint URL. This environment declares no minio or postgres service (close-out A4). Ruling A1's exception already names ElectronicsInventory's Jenkins validation build as P8's test gate, and #255 on 4bbec200 (origin/main) is green. The loop needs to honour that ruling for P8 and P9, or the services have to be declared. Standing them up by hand would be a workaround.",
-  "consult": null,
-  "question": false,
-  "ts": "2026-09-26T20:43:20.522979+02:00"
-}
