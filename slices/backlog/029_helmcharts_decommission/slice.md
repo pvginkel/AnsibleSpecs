@@ -33,7 +33,30 @@ Subsumes ANS-109 (items a, b, c, d, f, g; e and h became ANS-121 and ANS-122) an
 triage record is AnsibleSpecs `handovers/triage_2026-09-24.md` and `…_raw.md` at `1b6cd36`;
 everything below is quoted from them.
 
-## Requirements
+## Done outside the slice (2026-09-26)
+
+The operator asked for what is quick to be actioned directly, and the rest planned here.
+
+- **Requirement 1, the D61 cleanup,** is done except `terraform-modules/namespace` (D44). That
+  module is still used by the `configs/dev` tree, which D61 keeps, so D44 needs a ruling first.
+  Done: HelmCharts `eeceac0`, `6e8a054` and `91ce931`, the prd Helm release Secrets, DockerImages
+  `6041476` (no `helmDeploy()`). storage's `_shared/` went with the retirement of
+  `test_s3_storage_backup_grant.py`'s reader test. The record is in ANS-103.
+- **Requirement 2, version-poller,** is done. The island is gone from the code (DockerImages
+  `cbf7771`, running as `:2553`), and VersionPollerDeploy `9846433` drops the config block,
+  `GIT_TOKEN` and the cluster-wide Secret-reading ClusterRole. OpenBao
+  `eso/prd/version-poller/prd/git` is now unread.
+- **Requirement 4, `collect-versions`,** is deleted (HelmCharts `91ce931`).
+- **Requirement 3, the `helm-charts` producer, is not a config edit.** Its dataset is now 40
+  product-catalog elements (38 `systemSoftware` entries such as `ss:jenkins`, `ss:keycloak`,
+  `ss:nginx` and `ss:postgresql`, plus `svc:cluster-ceph-cephfs`/`-rbd`). About 30 deploy-repo
+  producers target them through 91 Specialization/Realization relations, and no other producer
+  publishes them. Each needs a new owner first: 31 have exactly one consumer, 6 are shared
+  (nginx, samba, csi-sidecars, ceph-csi, code-server, gitblit, keycloak), and 3 are unreferenced
+  (opensearch, phpmyadmin, rabbitmq). `views/infrastructure.yaml`'s `excludeProducers` names
+  the producer and fails validation once it is gone. Until this is done, `AaC/HelmCharts` must
+  keep running. `IaC/HelmCharts` has no caller left.
+
 
 1. **[Improvement — ANS-109a] Decommission HelmCharts: the D61 cleanup**
    "D61 cleanup (ANS-103, due from 2026-09-25 19:45Z): the migrated apps' HelmCharts content, their Helm release Secrets, DockerImages' `cicd.helmDeploy()` stage and HelmCharts' `gitToken` injection. With it goes `terraform-modules/namespace` (D44)."
