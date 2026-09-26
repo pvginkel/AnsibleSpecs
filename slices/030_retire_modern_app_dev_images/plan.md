@@ -633,6 +633,15 @@ Target: ../ArgoCDTools
 The pin comment in `argocd-hook/Dockerfile:28-34` names modern-app-dev and says to bump "all
 four" together. It is corrected to the set as it stands once P11 has landed.
 
+**Done (P15).** ArgoCDTools `ce60dbc` (`phase/030-P15`, not pushed: ArgoCDTools is outside ruling
+A1): the Terraform-pin comment in `argocd-hook/Dockerfile:28-33` names three images, ArgoCDTools'
+argocd-hook, Ansible's `support/iac-image` and DockerImages' `kube-coder-iac-toolchain`, and says
+"Bump all three together". This is the same wording as P11 and P14, wrapped at the file's own
+width. `kc project test` is green. No `modern-app` string is left in the repo.
+
+Later phases:
+- None. All three pin comments and `decisions.md` now list the same three images.
+
 ## Not in scope
 
 - DesignAssistant (ruling D2).
