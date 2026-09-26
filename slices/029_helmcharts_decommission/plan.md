@@ -641,7 +641,7 @@ Settled beyond the plan's text:
 - AnsibleSpecs' handover keeps its dated copy of `stuck_fields.py`, which its findings name.
   Nothing runs it. Close-out S16 and S17 are this phase's.
 
-### P8 — recommend-resources across the deploy repos
+### P8 — recommend-resources across the deploy repos ✅ DONE 2026-09-26
 
 Target: root
 
