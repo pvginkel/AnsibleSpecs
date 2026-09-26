@@ -580,7 +580,7 @@ Record:
 - Dead-after: the attachment's list with close-out S4's specifics, plus the equivalence tool and
   the rehearsal fixtures.
 
-### P7 — argo-migrate: the new registry
+### P7 — argo-migrate: the new registry ✅ DONE 2026-09-26
 
 Target: root
 
