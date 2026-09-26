@@ -43,7 +43,10 @@ move clears the way for the archive."
   and its `views/infrastructure.yaml` `excludeProducers` mention go in the same change. Not
   chosen: moving single-consumer products into their deploy repos.
 - Ruling (D2, registry home and shape): **Agree** — ArgoCDDeploy holds the registry, its
-  validation and its tests, and `argo_migrate.py`'s register, flip and autosync steps point there.
+  validation and its tests, and `argo_migrate.py`'s registry-editing steps point there — flip
+  and autosync; `register` never touched the registry (it writes only Architecture's
+  `pipeline-producers.yaml`, `argo_migrate.py:1521-1533`) and stays as it is (premise correction
+  to R6's wording, accepted by the operator at review r1).
   Then, in chat: "I don't want a 1:1 migration of what is in HelmCharts. That shape was for a
   migration. Target state can be Argo CD native." On the session's app-of-apps sketch (below):
   "This means we're going to centrally manage stages. I think that's fine. Just... new."
@@ -68,7 +71,8 @@ move clears the way for the archive."
     `hook.namespace`), the `resources-finalizer.argocd.argoproj.io` finalizer, the autoSync
     patch's semantics (automated `prune: true`, `selfHeal: false`, the retry block; D5), the
     `syncOptions` pass-through (D62), push-only refresh (D6: a registry commit refreshes
-    `releases` through the webhook ArgoCDDeploy already receives — no polling anywhere), the
+    `releases` by webhook — no polling anywhere; ArgoCDDeploy has no webhook to the relay today,
+    only one to Jenkins, so adding it is the operator's step in the switch runbook), the
     upstream chart version pinned per stage in the registry (D22's upgrade path not taken).
   - Stages are managed centrally in the registry: disabling a stage is deleting its entry.
     The `releases` Application auto-syncs **without prune**, so a deleted entry shows as
@@ -82,7 +86,18 @@ move clears the way for the archive."
     them (`kubectl delete applicationset … --cascade=orphan`), sync `argocd-prd` (creates
     `releases`), sync `releases` — its diff must show tracking metadata only, no spec change.
     **Not verified:** that `releases` adopts the orphaned Applications that cleanly; the runbook
-    proves it first on a throwaway ApplicationSet + Application before the real switch.
+    proves it first on a throwaway ApplicationSet + Application before the real switch. The
+    runbook runs the registry equivalence check twice — first, and again right before the flip.
+- Ruling (review r1, the way back): "I do not have to prove rollback back to HelmCharts. Fix
+  forward please." — the switch has no rollback path to the ApplicationSets: no "way back"
+  procedure, and the rehearsal proves the forward path only. A failure past the orphan-delete is
+  fixed forward on `releases`.
+- Ruling (review r1, docs across the switch; operator: "The rest is fine."): the docs describe
+  the new registry. Each procedure that depends on which registry is live — registering an app,
+  the handover flip, the cold-boot bootstrap — carries a one-line note that it is owed until the
+  registry switch has run, and the switch runbook's last step removes those notes. The docs
+  criterion is worded to match: docs that call the new registry live before the switch would be
+  a claim the live system contradicts.
 - Ruling (D3, recommend-resources): **Agree** — a script under Ansible's `support/` beside
   `argo-migrate`, run from this environment: it enumerates the deploy repos from the registry,
   clones them to a scratch directory, reads Prometheus at `http://prometheus.home`, and rewrites
@@ -111,13 +126,11 @@ move clears the way for the archive."
   live registry until the operator's switch; changing or deleting them before it would
   cascade-delete Applications (D24: `preserveResourcesOnDeletion` off). After the archive they
   are inert. `recommend_resources.py` and the registry's old validation stay in the archive.
-- **The helm-charts producer publishes 41 elements, not 40** (premise correction): 38 `ss:*` in
-  HelmCharts `charts/upstream-products.yaml`, `ss:dnsmasq` from `charts/dnsmasq/architecture.yaml`'s
-  `products:` block, and two hardcoded `svc:cluster-ceph-cephfs`/`-rbd` in
-  `tools/chart_tools/gen_architecture.py`. Its per-release output is already empty: the generator
-  skips releases whose reconciler is not `jenkins`, and only the three parked apps are. The
-  counts to move are whatever the published dataset holds; the relation tally (~91) was not
-  re-counted.
+- **The helm-charts producer publishes 40 elements** in the published dataset (review r1,
+  re-derived): 37 are referenced, 91 relations touch them; the unreferenced three are opensearch,
+  phpmyadmin and rabbitmq. `ss:dnsmasq` belongs to `dnsmasq-deploy`, not to this producer. Its
+  per-release output is already empty: the generator skips releases whose reconciler is not
+  `jenkins`, and only the three parked apps are.
 - **Architecture was not cloned in this environment** although Ansible's CLAUDE.md says it is
   "checked out but deliberately not declared". The session cloned it to `/work/Architecture` on
   2026-09-26 (not in `.kubecoder/config.yaml`; per its comment, a phase that edits it runs
@@ -131,9 +144,10 @@ move clears the way for the archive."
   HelmCharts `tools/deploy/deploy_cli/release.py` (`_RELEASE_KEYS`, `_UPSTREAM_KEYS`), tests
   `tests/test_prd_tree.py`, `tests/test_release.py`. ArgoCDDeploy deploys only by manual sync
   (D3), so pushing it changes nothing live.
-- **`argo_migrate.py`'s register, flip and autosync** edit HelmCharts' `release.yaml`
-  (`cmd_register` also edits Architecture's `pipeline-producers.yaml`, which is unchanged by this
-  slice). They move to editing the registry values file, preserving its comments. The tool's
+- **`argo_migrate.py`'s flip and autosync** (with `registry_entry`, `:1536-1570`) are the only
+  writers of HelmCharts' `release.yaml`; they move to editing the registry values file,
+  preserving its comments. `cmd_register` writes only Architecture's `pipeline-producers.yaml`
+  and is unchanged. The tool's
   other steps keep reading the archived HelmCharts; they migrate from it by nature.
 - **recommend-resources today**: HelmCharts `tools/chart_tools/recommend_resources.py`, run by
   hand, queries Prometheus (7-day p75 CPU, p90 memory) and rewrites `resources:` in
