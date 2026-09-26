@@ -1,7 +1,8 @@
 # AnsibleSpecs
 
 Specs and design docs for the homelab Ansible + Terraform work in [/work/Ansible](../Ansible).
-Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmCharts) (workloads).
+Sister repos: [/work/Ansible](../Ansible) (code), [/work/ArgoCDDeploy](../ArgoCDDeploy) (Argo CD and
+its registry of the workloads, which deploy from per-app deploy repos).
 
 ## What's here
 

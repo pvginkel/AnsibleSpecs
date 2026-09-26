@@ -340,8 +340,8 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
   human decision until this phase is designed and built. Interlocks: Trello **#66**.
 - **Remaining apps** (O1): decided bulk, without the plugin first (D51); the run is [`bulk-migration.md`](bulk-migration.md). The post-render
   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
-- **`recommend-resources` reworked to span deploy repos** (D65; from slice 008's close-out, B5):
-  a script under Ansible's `support/`, beside `argo-migrate`, that slice 029 builds. The old
+- **`recommend-resources` reworked to span deploy repos** (D65; from slice 008's close-out, B5) —
+  done: Ansible's `support/recommend-resources/`, beside `argo-migrate`, built by slice 029. The old
   tool in HelmCharts keyed each release's chart on the *config directory* name
   (`tools/chart_tools/recommend_resources.py:168-176`, `:185`, `:210`), so a release with an
   overriding `chart:` was skipped or took a recommendation from the wrong chart's values, and it
@@ -356,7 +356,8 @@ Where the migration-era mechanisms were pointing, and where each stands. The reg
 the archive are the operator's steps; each item says what is owed.
 
 - **The registry moves to ArgoCDDeploy, Argo CD native** (D63), replacing the two-ApplicationSet
-  shape (D21); D22's upgrade path is not taken. Slice 029 builds it. **The registry switch (D64)
+  shape (D21); D22's upgrade path is not taken. Slice 029 built it: ArgoCDDeploy's `releases/`
+  chart, whose `values.yaml` is the registry. **The registry switch (D64)
   is the operator's step, owed until it has run**, from Ansible's registry-switch runbook
   (`/work/Ansible/docs/runbooks/registry-switch.md`): until then Argo reads HelmCharts'
   `release.yaml` tree. A follow-up then clears what the switch leaves

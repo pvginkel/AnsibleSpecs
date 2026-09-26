@@ -120,7 +120,7 @@ reading its siblings. The escape hatch, left open rather than taken: a GitHub Ap
 crosses owners and grants per repository and per permission, and both consumers accept an
 installation token (**O4**).
 
-## Application management: hand list → ApplicationSet → two of them (D20–D24)
+## Application management: hand list → ApplicationSet → two of them → a chart of plain Applications (D20–D24, D63–D64)
 
 Q1/Q10 answered the CR's open question with a hand-maintained `applications:` list in the
 argocd chart's values — ApplicationSet deliberately deferred. The external brief proposed an
@@ -132,6 +132,22 @@ versions with the matrix-generator upgrade path recorded, and settled the operat
 strings-vs-booleans question by reading the controller source: parameters flatten through
 `fmt.Sprintf("%v")`, so booleans work. The registry itself is migration-era only — HelmCharts
 is deleted at endgame.
+
+The registry left HelmCharts in slice 029 (2026-09-26). The request was to move it and repoint
+ArgoCDDeploy's ApplicationSets at the new home; the operator agreed on ArgoCDDeploy as the home
+but not on keeping the shape: "I don't want a 1:1 migration of what is in HelmCharts. That shape was for a migration. Target state can be Argo
+CD native." A small chart in ArgoCDDeploy that renders one plain Application per app-stage from
+one values file took its place (D63), and `reconciler`, `deployed`, the per-stage files, both
+ApplicationSets and the escaped Go templates went with the old shape. Two positions moved with
+it. Stages became the registry's call, managed centrally ("This means we're going to centrally
+manage stages. I think that's fine. Just... new."). And an undeploy now waits for the operator's
+prune: `releases` syncs without prune, so a deleted entry leaves its Application requiring
+pruning where a shorter generated list would have cascade-deleted it (D27 as amended). D22's
+matrix-generator upgrade path was not taken; the chart version stays pinned per stage. The
+hand-over adopts the live Applications rather than recreating them: the ApplicationSets are
+guarded and orphan-deleted and `releases` takes ownership, rehearsed first on throwaway objects.
+The operator ruled out a way back — "I do not have to prove rollback back to HelmCharts. Fix
+forward please." — so a failure past the orphan-delete is fixed forward (D64).
 
 ## Coexistence: four refusing verbs → eight, and an entry HelmCharts stops validating (D38)
 
@@ -295,6 +311,17 @@ remark was from memory." What stands is narrower: no deploy repo has a Jenkins t
 deploy repo's tests run from its local test verb. The second reason did not move. The rule tests
 assert each rule's own thresholds and windows and model no other repo's schedule, so the timing
 tests stay retired.
+
+## HelmCharts' residual roles: an open question → answers (O2 → D65)
+
+O2 asked where HelmCharts' roles other than deploying go once nothing deploys through it. Slice
+029 answered them. `collect-versions` was deleted ("Delete collect-versions."), after the
+version-poller had stopped reading HelmCharts. `recommend-resources` became a script in Ansible's
+`support/` that clones the deploy repos the registry names and writes one patch per repo, which
+the operator deletes or edits before anything is committed ("make it easy to mass delete
+stuff"). The registry became the inventory of what runs. The `configs/dev` chart-debugging
+workflow got no answer: the operator deferred it past the archive ("I will just archive the repo
+and figure this out later.").
 
 ## The restructure itself
 

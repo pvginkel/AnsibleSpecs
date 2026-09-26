@@ -145,29 +145,36 @@ outage — and it grows as apps migrate.
 
 ## The registry
 
-The registry is one values file in ArgoCDDeploy: the values of a small chart that renders one
-plain `Application` per app-stage (D63), and the inventory of what runs (D65). **It is live from
-the operator's registry switch (D64), and owed until that has run**; until then Argo reads
-HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files through two ApplicationSets (below).
+The registry is one values file in ArgoCDDeploy, `releases/values.yaml`: the values of the small
+`releases/` chart, which renders one plain `Application` per app-stage (D63), and the inventory of
+what runs (D65). **It is live from the operator's registry switch (D64), and owed until that has
+run**; until then Argo reads HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files through
+two ApplicationSets (below).
 
 ```yaml
-kubecoder:                           # local-chart app, two stages
-  repo: KubeCoderDeploy
-  stages:
-    dev: {}                          # targetRevision main, autoSync true
-    prd: {targetRevision: prd}       # D34
-grafana:                             # upstream-chart app
-  repo: GrafanaDeploy
-  upstream: {repo: …, chart: grafana}
-  stages:
-    prd: {version: 10.5.15}          # the chart version, pinned per stage (D22)
-argocd:
-  repo: ArgoCDDeploy
-  stages:
-    prd: {autoSync: false}           # permanently (D3)
+apps:
+  kubecoder:                                   # local-chart app, two stages
+    repo: https://github.com/pvginkel/KubeCoderDeploy.git
+    stages:
+      dev: {}                                  # targetRevision main, autoSync true
+      prd:
+        targetRevision: prd                    # D34
+  grafana:                                     # upstream-chart app
+    repo: https://github.com/pvginkel/GrafanaDeploy.git
+    upstream:
+      repo: https://grafana.github.io/helm-charts
+      chart: grafana
+    stages:
+      prd:
+        version: "10.5.15"                     # the chart version, pinned per stage (D22)
+  argocd:
+    repo: https://github.com/pvginkel/ArgoCDDeploy.git
+    stages:
+      prd:
+        autoSync: false                        # permanently (D3)
 ```
 
-That is the ruling's sketch; the chart fixes the exact spelling. Per app an entry holds `repo`,
+Every app is a key under `apps:`. Per app an entry holds `repo`, the deploy repo's full URL,
 an optional `upstream: {repo, chart}`, an optional `syncOptions` list passed through to its
 Applications (D62), and `stages:`. Per stage it may set `autoSync` (default `true`; D5),
 `targetRevision` (default `main`) and, for an upstream app, `version`. A stage runs by being in
@@ -281,7 +288,8 @@ two steps: a registry commit and a prune.
 generators over HelmCharts' `configs/prd/*/*/release.yaml` feed them, selected on
 `reconciler: argo-cd` and `deployed: true` and split on the `upstream` block (D20, D21, D23).
 They render the same Applications as above; D64's equivalence check compares the two, spec for
-spec. The switch removes them.
+spec. ArgoCDDeploy's `releases.owner` (`config/prd/values.yaml`) chooses the ApplicationSets or
+`releases`, never both; the switch flips it to `releases` and removes the ApplicationSets.
 
 ## Webhooks — push-only, through the relay
 

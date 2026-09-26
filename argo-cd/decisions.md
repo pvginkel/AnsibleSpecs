@@ -264,7 +264,8 @@ shape, not an intermediate one, and from the switch it is the inventory of what 
   and ArgoCDDeploy's `chart/` renders that Application (D64). Per app, an entry holds `repo`, an
   optional `upstream: {repo, chart}`, an optional `syncOptions` (D62) and `stages:`. Each stage
   may set `autoSync` (default true), `targetRevision` (default `main`) and, for an upstream app,
-  `version` (D22). The ruling's sketch; the exact spelling is the chart's:
+  `version` (D22). The ruling's sketch; the chart, ArgoCDDeploy's `releases/`, spells it with the
+  entries under `apps:` and each `repo` a full URL, and its `values.yaml` is the registry:
 
   ```yaml
   kubecoder: {repo: KubeCoderDeploy, stages: {dev: {}, prd: {targetRevision: prd}}}
@@ -311,8 +312,9 @@ operator's to run from Ansible's registry-switch runbook
   Applications, spec for spec. Guard the ApplicationSets so no sync can prune them
   (`Prune=false`), then orphan-delete them (`kubectl delete applicationset … --cascade=orphan`).
   Run the equivalence check again, right before the flip. Flip the one stage-level setting that
-  chooses the ApplicationSets or `releases`. Sync `argocd-prd`, which creates `releases`. Read
-  `releases`' diff, sync it, and turn on its automated sync. Last, remove the docs' notes that a
+  chooses the ApplicationSets or `releases` (`releases.owner` in ArgoCDDeploy's
+  `config/prd/values.yaml`). Sync `argocd-prd`, which creates `releases`. Read `releases`' diff,
+  sync it, and turn on its automated sync (`releases.autoSync`). Last, remove the docs' notes that a
   procedure is owed until the switch has run.
 - *What holds throughout.* No state of ArgoCDDeploy's `main`, synced with prune or without,
   deletes an Application or cascade-deletes an ApplicationSet. The ApplicationSets and
@@ -988,7 +990,8 @@ second reason appears besides oversized objects.
   The operator deletes a file to skip that app, or edits hunks to overrule them. Step two
   applies what is left to the clones, commits locally and shows the result; nothing is pushed
   unless the operator asks. The container-to-values-path maps (`charts/*/resources-entry-map.json`)
-  move with it, so it reads nothing from HelmCharts.
+  move with it, as `resources-entry-maps/<chart>.json` keyed on the resolved chart, so it reads
+  nothing from HelmCharts.
 - *gen-architecture* found its home earlier (D50).
 - *The `configs/dev` caveat* (qa Q3's) is deferred (operator, Ruling F1: "I will just archive
   the repo and figure this out later."). The chart-debugging tree, and hand-running a chart or
