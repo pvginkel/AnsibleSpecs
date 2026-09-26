@@ -1,0 +1,1 @@
+root: cexec modern-app poetry run ruff check scripts tools    [  OK  ]

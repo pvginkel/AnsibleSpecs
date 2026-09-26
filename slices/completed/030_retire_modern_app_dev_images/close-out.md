@@ -1,7 +1,8 @@
 # Close-out — slice 030 retire_modern_app_dev_images
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-26 18:38 → 22:05 · 15 phases · 3 bail-outs · 1 test round · doc phase done · $49.67
+(planner 26 %, research 5 %, rework 2 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,26 +14,14 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 030 retired `modern-app-dev` and `modern-app-dev-playwright`, and each live consumer's move was proven by a green Jenkins build. KubeCoder and FieldnotesApp now run on JenkinsPipelineUtils' new `containerTemplates.modern_app_toolchain` (`kube-coder-modern-app-toolchain:node-24`). HomelabTerraformProvider's publish stage runs on `iac_toolchain`. ModernAppTemplate's root v0.1.2 moved the four apps' validation Jobs to the same toolchain image, and each app took the release with `copier update`. Chromium is now downloaded at test time. Then `modern_app_dev` was removed from the library and both image directories from DockerImages. DockerImages gained a procedure for deleting a whole repository. The Terraform-pin and `terraform.rc` inventories now list three images, not four. DesignAssistant (archived) and the operator's new app are excepted. Deleting the two registry repositories is still owed to the operator.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: Run DockerImages' `docs/registry-management/delete-repository.md` once for `modern-app-dev` and once for `modern-app-dev-playwright` (A2). DockerImages' `main` already carries P11, so a rebuild cannot recreate them. V11 stays open until both are gone.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
-
-### ~~A1 — Before /dev:run-slice: restart the environment so the six consumer repos are checked out as siblings~~ — resolved before the run: the environment was restarted, and every Target of P1–P15 resolved as a ../<Repo> sibling and ran (ModernAppFrontendTemplate stopped being a Target at plan-writer r2 and was dropped from the config, Ansible 7263392); struck by consult 1
-
-FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppFrontendTemplate were added to Ansible's .kubecoder/config.yaml at planning (Ansible e957d13) but are not under /work until kc env restart. P4–P9 target them as ../<Repo>; run_loop.py --dry-run reports those six Targets as 'not an existing directory' until then. The operator also times the run for a quiet moment in those repos (ruling F1), since P1–P8 push their repos' main mid-run.
-
-plan-writer r2, 2026-09-26 — The repo set moved with review ruling Q1. ModernAppTemplate is now a Target (P5, the root-template release; checked out by Ansible 3ff6193), and ModernAppFrontendTemplate no longer is: its validation pipeline left it with Frontend v0.20.0 (032f366), so no phase touches it and its checkout (Ansible .kubecoder/config.yaml:24) is not needed for this run. After the fix pass, run_loop.py run --dry-run still reports P4–P9 (FieldnotesApp, ModernAppTemplate, ZigbeeControl, DHCPApp, ElectronicsInventory, IoTSupport) as 'not an existing directory' until the restart. The in-phase pushes are P1–P9, under ruling A1.
-
-**Consequence:** Until the restart, the run cannot start: six of the plan's phase Targets do not resolve.
-
-**Provenance:** witnessed — plan-writer r1, run_loop.py run --dry-run output
-**Disposition:**
 
 ### A2 — Settle V11 after the operator's registry deletion (ruling D3), after the run, following …
 
@@ -47,7 +36,24 @@ test phase r1, 2026-09-26 — V11 is marked owed-to-operator in verification.jso
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Disposition:**
 
+### ~~A1 — Before /dev:run-slice: restart the environment so the six consumer repos are checked out as siblings~~ — resolved before the run: the environment was restarted, and every Target of P1–P15 resolved as a ../<Repo> sibling and ran (ModernAppFrontendTemplate stopped being a Target at plan-writer r2 and was dropped from the config, Ansible 7263392); struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppFrontendTemplate were added to Ansible's .kubecoder/config.yaml at planning (Ansible e957d13) but are not under /work until kc env restart. P4–P9 target them as ../<Repo>; run_loop.py --dry-run reports those six Targets as 'not an existing directory' until then. The operator also times the run for a quiet moment in those repos (ruling F1), since P1–P8 push their repos' main mid-run.
+
+plan-writer r2, 2026-09-26 — The repo set moved with review ruling Q1. ModernAppTemplate is now a Target (P5, the root-template release; checked out by Ansible 3ff6193), and ModernAppFrontendTemplate no longer is: its validation pipeline left it with Frontend v0.20.0 (032f366), so no phase touches it and its checkout (Ansible .kubecoder/config.yaml:24) is not needed for this run. After the fix pass, run_loop.py run --dry-run still reports P4–P9 (FieldnotesApp, ModernAppTemplate, ZigbeeControl, DHCPApp, ElectronicsInventory, IoTSupport) as 'not an existing directory' until the restart. The in-phase pushes are P1–P9, under ruling A1.
+
+**Consequence:** Until the restart, the run cannot start: six of the plan's phase Targets do not resolve.
+
+**Provenance:** witnessed — plan-writer r1, run_loop.py run --dry-run output
+**Disposition:**
+
+</details>
+
 ### ~~A3 — Declare the python and frontend tools in Ansible's .kubecoder/config.yaml (or rule a substitute gate) so P3's and P4's gates can run · major~~ — resolved by Ansible 83b7fe5 (python and frontend tools declared): P3 round 2 ran KubeCoder's kc project test green before pushing, and P4 ran FieldnotesApp's green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 The phase gate `kc project test` in /work/KubeCoder fails before any test runs: KubeCoder's .kubecoder/project.yaml calls `cexec python` (root, manual) and `cexec frontend` (vscode-extension, vscode-desktop), and this environment declares only iac, go, aac-tools, java and modern-app (`cexec: tool "python" is not available in this environment`). FieldnotesApp's project.yaml calls `cexec python` too. `kc env describe` also shows the pod-start `kc project setup` failing for KubeCoder, FieldnotesApp, ElectronicsInventory, IoTSupport and ModernAppTemplate (the last three use `cexec modern-app`, so their failure has another cause, not investigated). The fix is either `- use: python` and `- use: frontend` under `tools:` plus `kc env restart`, or a ruling that the same commands run through `cexec modern-app`, which is the image the moved stages run in. Evidence for the second option: at KubeCoder 2fea4ab2 (phase/030-P3), `uv sync --all-packages --frozen`, ruff check, ruff format --check and pytest, then `npm ci`/typecheck/test in vscode-extension (332 pass) and vscode-desktop (484 pass), and `mkdocs build --strict` for the manual, all exit 0 in `cexec modern-app`.
 
@@ -56,7 +62,11 @@ The phase gate `kc project test` in /work/KubeCoder fails before any test runs: 
 **Provenance:** witnessed | code-writer, P3, r1, /work/AnsibleSpecs/slices/030_retire_modern_app_dev_images/phases/P3/executor_result_r1.json
 **Disposition:**
 
+</details>
+
 ### ~~A4 — Declare the minio and postgres services (and opensearch, for P9) in Ansible's .kubecoder/config.yaml, or rule a substitute gate, so P8's and P9's gates can run · major~~ — resolved by ruling S1 (plan.md), the operator's option (b): the Jenkins validation builds ElectronicsInventory #255 and IoTSupport #145 are the test gate, and the services stay undeclared. Loop-tail sweep r1's red ElectronicsInventory backend and frontend test rows are this same gap. Consult 1 re-ran the backend suite, which exits on 'S3 storage is not reachable at http://localhost:9000'. The frontend log fails on the endpoint URL http://localhost:9000/... . 4bbec200 is origin/main, so the test phase has nothing to push there; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 The ElectronicsInventory and IoTSupport gates need services that their own environments declare but this Ansible environment does not. This environment declares only `terraform-backend-git` (`.kubecoder/config.yaml`, `services:`). ElectronicsInventory's `.kubecoder/config.yaml` declares `minio` and `postgres`. IoTSupport's declares `postgres`, `minio` and `opensearch`. `kc env describe` already reports that the environment's setup failed for ElectronicsInventory, IoTSupport and ModernAppTemplate.
 
@@ -78,7 +88,11 @@ P8 executor, gate fix round 1, 2026-09-26 — The ruling that answered this (pla
 **Provenance:** witnessed — code-writer, P8, r1; /tmp/p8-gate.log, /tmp/p8-gate2.log, ElectronicsInventory test_results.md
 **Disposition:**
 
+</details>
+
 ### ~~A5 — Push DockerImages main with P11 and P12 before the registry deletion · major~~ — resolved: DockerImages main was pushed in the test phase (61d79df..a963dfd, carrying P11 11fcb16 and P12 fa83aec/a963dfd); DockerImages #2557 on a963dfd is SUCCESS and built nothing named modern-app-dev, so the registry deletion (A2) cannot be undone by a rebuild; struck by test phase r1
+
+<details><summary>struck — body kept for the record</summary>
 
 P11 (fa83aec's parent 11fcb16, the two image directories deleted) and P12 (fa83aec, docs/registry-management/delete-repository.md) are committed on DockerImages phase branches and not pushed: DockerImages is outside ruling A1. The deletion procedure's precondition is that the image directories are gone from DockerImages' main. While they are still there, the push pipeline and version-poller's rebuild find both images by directory and push them to registry:5000 again.
 
@@ -87,9 +101,11 @@ P11 (fa83aec's parent 11fcb16, the two image directories deleted) and P12 (fa83a
 **Provenance:** witnessed | code-writer, P12, r1, plan.md P12 done-record
 **Disposition:**
 
+</details>
+
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: The three blocked stops (N1, N3, N4) all came from this environment lacking the tools or services a consumer's gate needed. P8 and P9 were finished outside the loop, with the Jenkins build as the gate (ruling S1). No phase was appended. N2 was a Docker Hub flake, not the image switch.
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -158,9 +174,7 @@ Pushed to main: DockerImages 61d79df..a963dfd (P11, P12), ArgoCDTools 6f49577..c
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B2 first. It is witnessed, this slice's v0.1.2 release introduced it, and it shows in every app's validation log, though as noise that does not change the result. B1 is backed by reading, not a run. It predates this slice, and two close FieldnotesApp pushes can turn a build red. Both are in this slice's repos.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -188,7 +202,7 @@ consult 1, 2026-09-26 — Priced as a close-out entry, not a phase. The plan doe
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: None open.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -196,8 +210,7 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: None changes a decision. S7 (witnessed) feeds the registry deletion: the same procedure retires `modern-app-dev-base`. S6 (witnessed) is Ansible config to drop now the slice closes. S1's premise is gone (see its note). S2–S5 are doc nits in ModernAppTemplate and AnsibleSpecs.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 

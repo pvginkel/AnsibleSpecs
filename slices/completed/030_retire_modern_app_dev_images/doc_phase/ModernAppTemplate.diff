@@ -1,0 +1,101 @@
+/work/ModernAppTemplate — P5: git diff acfc588abc72..0e6cde21e0af
+
+changelog.md                                    |  9 +++++++++
+ docs/copier_approach.md                         |  2 +-
+ root/template/Jenkinsfile.jinja                 | 20 +++++++++++---------
+ root/template/tools/suite_runner/local.py.jinja |  5 +++--
+ 4 files changed, 24 insertions(+), 12 deletions(-)
+
+diff --git a/changelog.md b/changelog.md
+index 0edeb93..b927b8a 100644
+--- a/changelog.md
++++ b/changelog.md
+@@ -8,6 +8,15 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
+ 
+ <!-- Add new entries at the top, below this line -->
+ 
++## 2026-09-26 — Root v0.1.2
++
++### Validation Job runs in the KubeCoder modern-app toolchain image
++
++**What changed:** The `Jenkinsfile` validation Job runs in `registry:5000/kube-coder-modern-app-toolchain:node-24`, the image of the dev environment's `modern-app` sidecar, instead of `modern-app-dev-playwright:playwright-<version>`, which is retired; the lockfile lookup that picked that tag is gone. The image carries Chromium's OS dependencies but no browser, so the suite runner's `pnpm playwright install chromium` downloads Chromium on every run. It has no `/work`, so the Job mounts an emptyDir there.
++
++**Migration steps:**
++1. `copier update --trust --defaults` at the app root. App additions to the validation Job spec (extra env, sidecars) go through the three-way merge; check them in the diff.
++
+ ## 2026-09-26 — Frontend v0.20.2
+ 
+ ### Auth redirect test goes back to `/items`
+diff --git a/docs/copier_approach.md b/docs/copier_approach.md
+index 1c08089..caf1c26 100644
+--- a/docs/copier_approach.md
++++ b/docs/copier_approach.md
+@@ -71,7 +71,7 @@ The root template generates the monorepo layer that wraps the backend and fronte
+ Questions: `project_name`, `repo_name` (GitHub repo name, e.g. `ElectronicsInventory`; names the `<repo_name>.code-workspace` file and the `<repo_name>Specs` repo), `project_description`, `author_name`, `author_email`, `github_owner` (default `pvginkel`), `frontend_port` (default 3000), `backend_port` (default `frontend_port` + 1), `sse_gateway_port` (default `frontend_port` + 2), `use_database`, `database_name` (only when `use_database`), `use_s3`, `use_sse`, `backend_image` (default `project_name`), `frontend_image` (default `project_name-ui`), `deploy_repo` (default `<github_owner>/<repo_name>Deploy`), `backend_image_pin_key` (default camelCase of `project_name`), `frontend_image_pin_key` (default backend key + `"UI"`).
+ 
+ Template-owned (updated by `copier update`):
+-- `Jenkinsfile` — validation Job on the prebaked `registry:5000/modern-app-dev-playwright:playwright-<version>` image running `poetry run run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
++- `Jenkinsfile` — validation Job on `registry:5000/kube-coder-modern-app-toolchain:node-24` (the `modern-app` sidecar's image; no browser, `run-suite` downloads Chromium) running `poetry run run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
+ - `tools/suite_runner/` — the `run-suite` test orchestrator, same command locally and in CI
+ - `Procfile.dev`
+ - `scripts/dev.py` — honcho dev stack, runs itself inside the modern-app container
+diff --git a/root/template/Jenkinsfile.jinja b/root/template/Jenkinsfile.jinja
+index 48e9e94..11e084f 100644
+--- a/root/template/Jenkinsfile.jinja
++++ b/root/template/Jenkinsfile.jinja
+@@ -16,14 +16,10 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+ 
+         stage('Run validation') {
+             container('k8s') {
+-                // Resolve the Playwright version from the frontend lockfile to
+-                // select the matching base image (browsers pre-baked).
+-                def playwrightVersion = sh(
+-                    script: "grep -m1 '^  playwright@' frontend/pnpm-lock.yaml | sed 's/.*@//;s/://'",
+-                    returnStdout: true,
+-                ).trim()
+-                def validationImage = "registry:5000/modern-app-dev-playwright:playwright-${playwrightVersion}"
+-                echo "Validation image: ${validationImage}"
++                // The validation Job runs in the image of the dev environment's
++                // `modern-app` sidecar. It carries Chromium's OS dependencies but no
++                // browser (run-suite downloads it), and no /work: uid 1000 cannot
++                // create one at the filesystem root, so the pod mounts an emptyDir there.
+ 
+                 // Stream the whole monorepo working tree in instead of baking an image.
+                 sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store ."
+@@ -61,13 +57,19 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+                                           operator: Equal
+                                           value: large
+                                           effect: PreferNoSchedule
++                                    volumes:
++                                        - name: work
++                                          emptyDir: {}
+                                     containers:
+                                         - name: validation
+-                                          image: ${validationImage}
++                                          image: registry:5000/kube-coder-modern-app-toolchain:node-24
+                                           imagePullPolicy: Always
+                                           securityContext:
+                                               runAsUser: 1000
+                                               runAsGroup: 1000
++                                          volumeMounts:
++                                              - name: work
++                                                mountPath: /work
+                                           command: ["sh", "-c"]
+                                           args:
+                                               - |
+diff --git a/root/template/tools/suite_runner/local.py.jinja b/root/template/tools/suite_runner/local.py.jinja
+index d9a344b..7cba88e 100644
+--- a/root/template/tools/suite_runner/local.py.jinja
++++ b/root/template/tools/suite_runner/local.py.jinja
+@@ -232,8 +232,9 @@ def run_tests(args):
+                 progress_skip(col)
+                 results.append(("frontend playwright", False, "Skipped (build failed)", None))
+             else:
+-                # Ensure Chromium is present. The validation base image pre-bakes
+-                # the matching browser, so this is a fast no-op there.
++                # Download the Chromium build the installed Playwright pins; a no-op
++                # when it is already in the browser cache. The CI validation image
++                # carries no browser, so every CI run downloads it.
+                 col = progress_start("Installing Playwright browser")
+                 ok_pw, detail_pw = _install_cmd(
+                     ["pnpm", "playwright", "install", "chromium"], cwd=frontend, timeout=900

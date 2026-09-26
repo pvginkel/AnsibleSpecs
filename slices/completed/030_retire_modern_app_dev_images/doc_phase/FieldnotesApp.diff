@@ -1,0 +1,100 @@
+/work/FieldnotesApp — P4: git diff b6a5016ff3fa..5bcdf1b2f507
+
+CLAUDE.md                         |  6 ++++--
+ Jenkinsfile                       | 13 +++++++------
+ api/src/fieldnotes_api/metrics.py |  6 ++++--
+ api/tests/test_metrics.py         | 10 ++++++++++
+ 4 files changed, 25 insertions(+), 10 deletions(-)
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 349a439..05c5dcd 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -47,8 +47,10 @@ Other repos the work touches:
+ - **The store**, `pvginkel/Fieldnotes`, private: `observations/`, `triage/`, and the `install`,
+   `reconciler` and `actioner` skills. It is data plus skills, not application code, and nothing of it
+   lives here.
+-- **`pvginkel/HelmCharts`** holds both charts: `models` (the Text Embeddings Inference pod, which no
+-  application owns) and `fieldnotes`. **`pvginkel/DockerImages`** holds `webhook-relay`.
++- **`pvginkel/FieldnotesDeploy`** holds the `fieldnotes` chart and its prd values, which CI pins the
++  image into; Argo CD syncs it. **`pvginkel/ModelsDeploy`** holds `models` (the Text Embeddings
++  Inference pod, which no application owns). Both left `pvginkel/HelmCharts` on 2026-09-26.
++  **`pvginkel/DockerImages`** holds `webhook-relay`.
+ 
+ The environment is composed by AIWorkflow's `.kubecoder/config.yaml`, which checks this repo out as a
+ sibling. Python runs in the `python` tool container, so an ad-hoc command is `cexec python uv …`. The
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 773f019..7fd696e 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -3,13 +3,14 @@ library identifier: 'JenkinsPipelineUtils', changelog: false
+ // FieldnotesApp's pipeline: the uv workspace's own gates, then the one image both services ship in,
+ // then the HelmCharts target-state deploy that rolls it out.
+ //
+-// The validate stage runs in `modern-app-dev` for the same reasons KubeCoder's does: it is the
+-// agent image that carries uv, and it carries git — which is not incidental here, because the
+-// store's suites (api/tests, eval/tests) drive a real `git` against bare repos in tmp_path rather
+-// than a fake. `registry:5000/python` would run the unit tests and fail those.
++// The validate stage runs in the modern-app toolchain container, as KubeCoder's does: its image
++// (registry:5000/kube-coder-modern-app-toolchain) carries uv, and it carries git — which is not
++// incidental here, because the store's suites (api/tests, eval/tests) drive a real `git` against
++// bare repos in tmp_path rather than a fake. `registry:5000/python` would run the unit tests and
++// fail those.
+ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+     containerTemplates.k8s('k8s'),
+-    containerTemplates.modern_app_dev('modern-app-dev'),
++    containerTemplates.modern_app_toolchain('modern-app-toolchain'),
+ ]) {
+     node(POD_LABEL) {
+         stage('Cloning repo') {
+@@ -23,7 +24,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // where a re-sync would prune it back. pytest's testpaths covers every member, so one run
+         // is the whole suite.
+         stage('Validate (lint + tests)') {
+-            container('modern-app-dev') {
++            container('modern-app-toolchain') {
+                 sh 'uv sync --all-packages --frozen'
+                 sh 'uv run --no-sync ruff check .'
+                 sh 'uv run --no-sync ruff format --check .'
+diff --git a/api/src/fieldnotes_api/metrics.py b/api/src/fieldnotes_api/metrics.py
+index 1d813a9..60e7c8e 100644
+--- a/api/src/fieldnotes_api/metrics.py
++++ b/api/src/fieldnotes_api/metrics.py
+@@ -35,8 +35,10 @@ from .index import Index
+ 
+ FOLLOW_UP_WINDOW = timedelta(minutes=30)
+ 
+-# The thresholds sit between 0.25 and 0.7; a score is a cosine plus a weighted overlap.
+-SCORE_BUCKETS = (0.3, 0.4, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.5)
++# A matched post's best score lies between `DEFAULT_RELATED` and 1 + `DEFAULT_LEXICAL_WEIGHT` (a
++# cosine plus the weighted overlap), so the buckets span that alone: three for the related band,
++# then the likely band from `DEFAULT_LIKELY`. They belong to the scorer, like its thresholds.
++SCORE_BUCKETS = (0.88, 0.91, 0.94, 0.97, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25)
+ 
+ Reporter = tuple[str, str | None]
+ 
+diff --git a/api/tests/test_metrics.py b/api/tests/test_metrics.py
+index 582bc07..e230220 100644
+--- a/api/tests/test_metrics.py
++++ b/api/tests/test_metrics.py
+@@ -3,6 +3,9 @@ matched post and what the same reporter did next."""
+ 
+ from datetime import timedelta
+ 
++from fieldnotes_api.config import DEFAULT_LEXICAL_WEIGHT, DEFAULT_LIKELY, DEFAULT_RELATED
++from fieldnotes_api.metrics import SCORE_BUCKETS
++
+ DUPLICATE = "uv sync installs no workspace members"
+ REPO = "pvginkel/Example"
+ 
+@@ -103,3 +106,10 @@ def test_gets_and_requests_are_counted_by_route(start, auth, scrape):
+     assert value("fieldnotes_gets_total", client="mcp") == 1
+     labels = {"method": "GET", "route": "/observations/{id}", "status": "200"}
+     assert value("fieldnotes_http_request_duration_seconds_count", **labels) == 1
++
++
++def test_score_buckets_span_a_matched_post_under_the_default_scorer():
++    """A matched post scores from `related` to 1 + the weight; the buckets split at `likely`."""
++    assert DEFAULT_RELATED < SCORE_BUCKETS[0]
++    assert DEFAULT_LIKELY in SCORE_BUCKETS
++    assert SCORE_BUCKETS[-1] == 1 + DEFAULT_LEXICAL_WEIGHT

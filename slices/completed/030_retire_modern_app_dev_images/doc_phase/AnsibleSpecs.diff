@@ -1,0 +1,27 @@
+/work/AnsibleSpecs — P13: git diff a0808c1f5bf4..fb3a2700b88c
+
+decisions.md | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/decisions.md b/decisions.md
+index 2c17d03..7bd1e96 100644
+--- a/decisions.md
++++ b/decisions.md
+@@ -55,7 +55,7 @@ The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified b
+ 
+ ### Terraform version
+ 
+-**One pinned Terraform version, in every image that installs it** (ANS-98): ArgoCDTools' `argocd-hook`, Ansible's `support/iac-image` (srviac and the `IaC/*` pipelines), and DockerImages' `kube-coder-iac-toolchain` (the KubeCoder `iac` sidecar) and `modern-app-dev`. Each installs `terraform=${TERRAFORM_VERSION}-1` from HashiCorp's apt suite; today `1.16.3`. A state is stamped with the version that last wrote it, and the tools hand states to each other — the sidecar moves a state the Argo CD hook then applies — so an unpinned rebuild could leave one side older than the state it reads. Bump all four together, then move `homelab-shared`'s `hook.imageTag` to the rebuilt hook. Pinning the hook's image tag per deploy repo instead was rejected at slice 012's close-out: the version belongs in the image.
++**One pinned Terraform version, in every image that installs it** (ANS-98): ArgoCDTools' `argocd-hook`, Ansible's `support/iac-image` (srviac and the `IaC/*` pipelines), and DockerImages' `kube-coder-iac-toolchain` (the KubeCoder `iac` sidecar). Each installs `terraform=${TERRAFORM_VERSION}-1` from HashiCorp's apt suite; today `1.16.3`. A state is stamped with the version that last wrote it, and the tools hand states to each other — the sidecar moves a state the Argo CD hook then applies — so an unpinned rebuild could leave one side older than the state it reads. Bump all three together, then move `homelab-shared`'s `hook.imageTag` to the rebuilt hook. Pinning the hook's image tag per deploy repo instead was rejected at slice 012's close-out: the version belongs in the image.
+ 
+ ## Secrets — OpenBao
+ 
+@@ -170,7 +170,7 @@ The "year 9" rotation event needs both the outgoing and the incoming root truste
+ - **Runbook**: `docs/runbooks/step-ca-root-rotation.md`. Documents the cutover sequence — generate new root offline, install in step-ca alongside the old, add to the bundle in every copy the runbook inventories (and rebuild the images carrying one), confirm the drift pipeline goes green, fleet-wide `baseline` apply to land the second cert, soak, then remove the old root from step-ca + every copy + apply again to drop it from hosts. Parallels the existing "Intermediate rotation" section in `step-ca-bootstrap.md` but at a different scope and cadence.
+ 
+ TODOs gating the next rotation:
+-- Finish `docs/runbooks/step-ca-root-rotation.md`. It exists and carries the settled half — the full inventory of artefacts a root change moves (canonical copy, nine out-of-repo copies, the images that consume the cert without holding a copy, the parallel four-copy `terraform.rc` set) and the ordering constraint. The step-by-step cutover procedure is still owed, and is blocked on the two mechanism items below.
++- Finish `docs/runbooks/step-ca-root-rotation.md`. It exists and carries the settled half — the full inventory of artefacts a root change moves (canonical copy, nine out-of-repo copies, the images that consume the cert without holding a copy, the parallel three-copy `terraform.rc` set) and the ordering constraint. The step-by-step cutover procedure is still owed, and is blocked on the two mechanism items below.
+ - Update the `baseline` ca-trust task to read the bundle, split by cert, name by fingerprint, reconcile against `/usr/local/share/ca-certificates/homelab-root-*.crt`. Generalise the self-heal grep over the desired set.
+ - Update the `iac-scheduled-drift` "Homelab CA root drift" stage from byte diff to fingerprint-set comparison.
+ - Decide and implement the deduplication mechanism for the nine out-of-repo copies, or accept the maintenance burden by documenting every path in the runbook.

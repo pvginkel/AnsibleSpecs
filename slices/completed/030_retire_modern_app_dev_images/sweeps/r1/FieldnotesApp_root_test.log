@@ -1,0 +1,1 @@
+root: cexec python uv run --all-packages pytest    [  OK  ]

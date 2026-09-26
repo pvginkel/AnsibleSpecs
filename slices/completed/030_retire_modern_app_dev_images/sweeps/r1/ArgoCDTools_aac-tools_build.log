@@ -1,0 +1,1 @@
+aac-tools: kaniko --context . --destination registry:5000/aac-tools:local --no-push    [  OK  ]

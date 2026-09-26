@@ -1,0 +1,3 @@
+backend: cexec modern-app poetry run ruff check .    [  OK  ]
+backend: cexec modern-app poetry run mypy .    [  OK  ]
+backend: cexec modern-app poetry run vulture app/ vulture_whitelist.py --min-confidence 80    [  OK  ]

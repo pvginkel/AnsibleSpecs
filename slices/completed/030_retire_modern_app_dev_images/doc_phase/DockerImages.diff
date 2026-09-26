@@ -1,0 +1,389 @@
+/work/DockerImages — P11: git diff 61d79dfd9e4c..11fcb161f2b6
+
+kube-coder-iac-toolchain/Dockerfile           |   8 +--
+ modern-app-dev-playwright/Dockerfile          |   5 --
+ modern-app-dev-playwright/build-matrix.json   |  14 ----
+ modern-app-dev-playwright/version-poller.json |   3 -
+ modern-app-dev/Dockerfile                     | 160 ----------------------------------------------
+ modern-app-dev/path.sh                        |  10 ---
+ modern-app-dev/smallstep.sources              |   5 --
+ modern-app-dev/terraform.rc                   |   9 ---
+ modern-app-dev/version-poller.json            |   3 -
+ 9 files changed, 4 insertions(+), 213 deletions(-)
+
+diff --git a/kube-coder-iac-toolchain/Dockerfile b/kube-coder-iac-toolchain/Dockerfile
+index d525f2b..2edf67c 100644
+--- a/kube-coder-iac-toolchain/Dockerfile
++++ b/kube-coder-iac-toolchain/Dockerfile
+@@ -73,10 +73,10 @@ COPY smallstep.sources /etc/apt/sources.list.d/smallstep.sources
+ # questing one was — same 1.15.8-1 — and the pin survives the next base-image bump too.
+ #
+ # Terraform is pinned, the same version in every image that installs it: ArgoCDTools'
+-# argocd-hook, Ansible's support/iac-image, and DockerImages' kube-coder-iac-toolchain and
+-# modern-app-dev. A state is stamped with the version that last wrote it, and the Argo CD hook
+-# applies states the iac toolchain has written, so an unpinned rebuild could leave one side older
+-# than the state it reads. Bump all four together (AnsibleSpecs decisions.md, "Terraform version").
++# argocd-hook, Ansible's support/iac-image, and DockerImages' kube-coder-iac-toolchain. A state is
++# stamped with the version that last wrote it, and the Argo CD hook applies states the iac
++# toolchain has written, so an unpinned rebuild could leave one side older than the state it
++# reads. Bump all three together (AnsibleSpecs decisions.md, "Terraform version").
+ RUN set -o pipefail && \
+     \
+     curl -fsSL "https://pkgs.k8s.io/core:/stable:/$KUBE_VERSION/deb/Release.key" | gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg && \
+diff --git a/modern-app-dev-playwright/Dockerfile b/modern-app-dev-playwright/Dockerfile
+deleted file mode 100644
+index e1aa70c..0000000
+--- a/modern-app-dev-playwright/Dockerfile
++++ /dev/null
+@@ -1,5 +0,0 @@
+-FROM registry:5000/modern-app-dev:latest
+-
+-ARG PLAYWRIGHT_VERSION
+-
+-RUN su - ubuntu -c "npx -y playwright@${PLAYWRIGHT_VERSION} install chromium"
+diff --git a/modern-app-dev-playwright/build-matrix.json b/modern-app-dev-playwright/build-matrix.json
+deleted file mode 100644
+index d8f1f73..0000000
+--- a/modern-app-dev-playwright/build-matrix.json
++++ /dev/null
+@@ -1,14 +0,0 @@
+-[
+-  {
+-    "tag": "playwright-$PLAYWRIGHT_VERSION",
+-    "args": {
+-      "PLAYWRIGHT_VERSION": "1.60.0"
+-    }
+-  },
+-  {
+-    "tag": "playwright-$PLAYWRIGHT_VERSION",
+-    "args": {
+-      "PLAYWRIGHT_VERSION": "1.63.0"
+-    }
+-  }
+-]
+diff --git a/modern-app-dev-playwright/version-poller.json b/modern-app-dev-playwright/version-poller.json
+deleted file mode 100644
+index 5ffee73..0000000
+--- a/modern-app-dev-playwright/version-poller.json
++++ /dev/null
+@@ -1,3 +0,0 @@
+-{
+-  "schedule": "0 2 * * 1"
+-}
+diff --git a/modern-app-dev/Dockerfile b/modern-app-dev/Dockerfile
+deleted file mode 100644
+index 69e32fe..0000000
+--- a/modern-app-dev/Dockerfile
++++ /dev/null
+@@ -1,160 +0,0 @@
+-FROM ubuntu:questing
+-
+-ENV PATH="/home/ubuntu/.npm-global/bin:/home/ubuntu/.local/bin:${PATH}" \
+-    KUBE_VERSION=v1.32 \
+-    TERRAFORM_VERSION=1.16.3 \
+-    TF_CLI_CONFIG_FILE=/etc/terraform.rc
+-
+-# Install all required packages, NodeJS and kubectl.
+-
+-RUN apt-get update -yqq && \
+-    apt-get install -y --no-install-recommends \
+-        bat \
+-        bubblewrap \
+-        ca-certificates \
+-        curl \
+-        fd-find \
+-        ffmpeg \
+-        fzf \
+-        git \
+-        gnupg \
+-        httpie \
+-        inetutils-ping \
+-        iproute2 \
+-        jq \
+-        locales \
+-        lsof \
+-        ncurses-term \
+-        net-tools \
+-        netcat-openbsd \
+-        openssh-client \
+-        pipx \
+-        postgresql-client \
+-        python3 \
+-        python3-psutil \
+-        ripgrep \
+-        tini \
+-        tmux \
+-        traceroute \
+-        tree \
+-        unzip \
+-        vim \
+-        wget \
+-        yq \
+-    && \
+-    \
+-    apt-get clean && \
+-    rm -rf /var/lib/apt/lists/*
+-
+-# Additional install phase to split layers.
+-
+-RUN apt-get update -yqq && \
+-    apt-get install -y --no-install-recommends \
+-        build-essential \
+-        golang-go \
+-        libmagic1 \
+-        librados2 \
+-        librados-dev \
+-        librbd1 \
+-        librbd-dev \
+-    && \
+-    \
+-    apt-get clean && \
+-    rm -rf /var/lib/apt/lists/*
+-
+-RUN apt-get update -yqq && \
+-    apt-get install -y --no-install-recommends \
+-        maven \
+-        openjdk-21-jdk \
+-    && \
+-    \
+-    apt-get clean && \
+-    rm -rf /var/lib/apt/lists/*
+-
+-# Setup additional repos
+-
+-COPY smallstep.sources /etc/apt/sources.list.d/smallstep.sources
+-
+-# The HashiCorp suite below is pinned to `noble` — deliberately NOT this image's own Ubuntu
+-# codename. HashiCorp only keeps the LTS suites of apt.releases.hashicorp.com populated: on
+-# 2026-08-04 they deleted `questing` (25.10) outright — an S3 delete marker, hours after a
+-# build had still installed terraform 1.15.8-1 from it — and `plucky` (25.04) / `oracular`
+-# (24.10) survive only as empty 20-byte indices. Deriving the codename from /etc/os-release
+-# therefore breaks this image's build on every interim Ubuntu release, at `apt-get update`
+-# (exit 100 on the missing Release file), not merely at the terraform install. The debs are
+-# static Go binaries whose only dependency is `git`, so the noble package IS what the
+-# questing one was — same 1.15.8-1 — and the pin survives the next base-image bump too.
+-#
+-# Terraform is pinned, the same version in every image that installs it: ArgoCDTools'
+-# argocd-hook, Ansible's support/iac-image, and DockerImages' kube-coder-iac-toolchain and
+-# modern-app-dev. A state is stamped with the version that last wrote it, and the Argo CD hook
+-# applies states the iac toolchain has written, so an unpinned rebuild could leave one side older
+-# than the state it reads. Bump all four together (AnsibleSpecs decisions.md, "Terraform version").
+-RUN set -o pipefail && \
+-    \
+-    curl -fsSL "https://pkgs.k8s.io/core:/stable:/$KUBE_VERSION/deb/Release.key" | gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg && \
+-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://pkgs.k8s.io/core:/stable:/$KUBE_VERSION/deb/ /" > /etc/apt/sources.list.d/kubernetes.list && \
+-    \
+-    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /etc/apt/keyrings/hashicorp.gpg && \
+-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/hashicorp.gpg] https://apt.releases.hashicorp.com noble main" > /etc/apt/sources.list.d/hashicorp.list && \
+-    \
+-    curl -fsSL https://packages.smallstep.com/keys/apt/repo-signing-key.gpg -o /etc/apt/keyrings/smallstep.asc
+-
+-# Install from custom repos
+-
+-RUN set -o pipefail && \
+-    \
+-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash && \
+-    \
+-    curl -fsSL https://deb.nodesource.com/setup_24.x | bash && \
+-    \
+-    apt-get update -yqq && \
+-    apt-get install -y --no-install-recommends \
+-        kubectl \
+-        nodejs \
+-        step-cli \
+-        terraform=${TERRAFORM_VERSION}-1 \
+-    && \
+-    \
+-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npx -y playwright@latest install-deps chromium && \
+-    \
+-    localedef -i en_US -c -f UTF-8 en_US.UTF-8 && \
+-    localedef -i nl_NL -c -f UTF-8 nl_NL.UTF-8 && \
+-    \
+-    apt-get clean && \
+-    rm -rf /var/lib/apt/lists/*
+-
+-RUN OPENBAO_VERSION=2.5.4 && \
+-    OPENBAO_ARCH=amd64 && \
+-    OPENBAO_SHA256=dd807d5adeb72552472f8b886a46fd59ff8836b299cc21df88f134527df15110 && \
+-    \
+-    curl -fsSL -o /tmp/openbao.deb "https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/openbao_${OPENBAO_VERSION}_linux_${OPENBAO_ARCH}.deb" && \
+-    echo "${OPENBAO_SHA256}  /tmp/openbao.deb" | sha256sum -c - && \
+-    \
+-    dpkg -i /tmp/openbao.deb && \
+-    \
+-    rm /tmp/openbao.deb
+-
+-RUN mkdir /work && \
+-    chown ubuntu:ubuntu /work
+-
+-RUN su - ubuntu -c "npm config set prefix ~/.npm-global && \
+-                    npm update -g npm && \
+-                    npm install -g pnpm && \
+-                    npm cache clean --force"
+-
+-RUN pipx install --global \
+-        mypy \
+-        poetry \
+-        pytest \
+-        ruff \
+-    && \
+-    \
+-    rm -Rf /root/.cache
+-
+-RUN set -o pipefail && curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b /usr/local/bin
+-
+-RUN set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
+-
+-COPY path.sh /etc/profile.d/10-path.sh
+-COPY terraform.rc /etc/terraform.rc
+diff --git a/modern-app-dev/path.sh b/modern-app-dev/path.sh
+deleted file mode 100644
+index 3f46841..0000000
+--- a/modern-app-dev/path.sh
++++ /dev/null
+@@ -1,10 +0,0 @@
+-# Put the user-local bin dirs back on PATH for login shells.
+-# Docker's ENV PATH is clobbered by pam_env loading /etc/environment on login,
+-# so re-prepend here (sourced by /etc/profile after pam_env has run).
+-if [ -d "$HOME/.local/bin" ] && [ "${PATH#*$HOME/.local/bin}" = "$PATH" ]; then
+-    PATH="$HOME/.local/bin:$PATH"
+-fi
+-if [ -d "$HOME/.npm-global/bin" ] && [ "${PATH#*$HOME/.npm-global/bin}" = "$PATH" ]; then
+-    PATH="$HOME/.npm-global/bin:$PATH"
+-fi
+-export PATH
+diff --git a/modern-app-dev/smallstep.sources b/modern-app-dev/smallstep.sources
+deleted file mode 100644
+index e8dd1eb..0000000
+--- a/modern-app-dev/smallstep.sources
++++ /dev/null
+@@ -1,5 +0,0 @@
+-Types: deb
+-URIs: https://packages.smallstep.com/stable/debian
+-Suites: debs
+-Components: main
+-Signed-By: /etc/apt/keyrings/smallstep.asc
+diff --git a/modern-app-dev/terraform.rc b/modern-app-dev/terraform.rc
+deleted file mode 100644
+index 0d99c59..0000000
+--- a/modern-app-dev/terraform.rc
++++ /dev/null
+@@ -1,9 +0,0 @@
+-provider_installation {
+-  network_mirror {
+-    url     = "https://tfmirror.home/"
+-    include = ["registry.terraform.io/pvginkel/*"]
+-  }
+-  direct {
+-    exclude = ["registry.terraform.io/pvginkel/*"]
+-  }
+-}
+diff --git a/modern-app-dev/version-poller.json b/modern-app-dev/version-poller.json
+deleted file mode 100644
+index 5ffee73..0000000
+--- a/modern-app-dev/version-poller.json
++++ /dev/null
+@@ -1,3 +0,0 @@
+-{
+-  "schedule": "0 2 * * 1"
+-}
+
+/work/DockerImages — P12: git diff 11fcb161f2b6..a963dfd13c7d
+
+docs/registry-management/README.md            |  1 +
+ docs/registry-management/delete-repository.md | 75 +++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 76 insertions(+)
+
+diff --git a/docs/registry-management/README.md b/docs/registry-management/README.md
+index 413de6c..489cef4 100644
+--- a/docs/registry-management/README.md
++++ b/docs/registry-management/README.md
+@@ -8,6 +8,7 @@ reaped.
+ | [`version-poller-redesign.md`](version-poller-redesign.md) | The design: the `org.webathome.poller.*` label contract, `helmCharts.kaniko2`, the time-driven rebuild walk, and the `registry-cleanup` tag TTL. Shipped 2026-06-20 → 07-15. |
+ | [`audit-2026-08-16.md`](audit-2026-08-16.md) | First full audit of the live registry against that design. What shipped, what drifted, and why retention is now an open question. |
+ | [`audit-2026-08-16/`](audit-2026-08-16/) | The audit's raw data and the read-only scripts that produced it. |
++| [`delete-repository.md`](delete-repository.md) | Operator procedure: remove a retired image's whole repository from the registry and its catalog. |
+ 
+ The two moving parts both live in this repo: `version-poller/` (rebuild timer,
+ daily at 05:00) and `registry-cleanup/` (tag reaper, daily at 03:30). The build
+diff --git a/docs/registry-management/delete-repository.md b/docs/registry-management/delete-repository.md
+new file mode 100644
+index 0000000..9ac03d5
+--- /dev/null
++++ b/docs/registry-management/delete-repository.md
+@@ -0,0 +1,75 @@
++# Deleting a whole repository
++
++This procedure removes a retired image's repository from `registry:5000`, so that it drops out of
++`/v2/_catalog`. The operator runs it.
++
++The registry API cannot delete a repository. `DELETE /v2/<repo>/manifests/<digest>` removes one
++manifest, and with it every tag that points at that manifest. The repository's directory stays on
++disk, and the catalog is a walk of those directories. So there are two steps: delete the tags
++through the API, then remove the directory from storage.
++
++## The registry as deployed
++
++RegistryDeploy's chart (`chart/templates/registry-deployment.yaml`) deploys the registry:
++
++- The image is upstream `registry` (Distribution v3), and its config file is
++  `/etc/distribution/config.yml`.
++- Storage is the filesystem, on the `registry-pvc` PVC mounted at `/var/lib/registry`. A
++  repository's directory is `/var/lib/registry/docker/registry/v2/repositories/<repo>`.
++- The namespace is `registry-prd`, and the pod carries the label `app=registry`.
++- Manifest deletes are enabled. The chart sets no delete option, but registry-cleanup's
++  `DELETE`s return `202`.
++
++## Before you start
++
++Nothing may build, push or pull the repository any more:
++
++- Its image directory is gone from DockerImages' `main`. A push to the name recreates the
++  repository.
++- No pipeline, deploy repo or other image references it.
++
++## 1. Delete every tag through the API
++
++```sh
++REG=http://registry:5000
++REPO=<repo>
++ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
++
++curl -fsS "$REG/v2/$REPO/tags/list" | jq -r '.tags[]?' |
++  while read -r tag; do
++    curl -fsSI -H "Accept: $ACCEPT" "$REG/v2/$REPO/manifests/$tag" |
++      tr -d '\r' | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }'
++  done | sort -u |
++  while read -r digest; do
++    curl -sS -o /dev/null -w "%{http_code} $digest\n" -X DELETE "$REG/v2/$REPO/manifests/$digest"
++  done
++```
++
++Every line must start with `202`. Tags that share a digest, such as `latest` and the build it
++points at, all go with one `DELETE`, which is why the digests are passed through `sort -u`. When
++it is done, `curl -s "$REG/v2/$REPO/tags/list"` lists no tags.
++
++## 2. Remove the repository from storage
++
++This step needs `pods/exec` in `registry-prd`, which only the prd-write kubeconfig grants:
++
++```sh
++KC="kubectl --kubeconfig $HOME/.kube/config-prd-write --context prd -n registry-prd"
++POD=$($KC get pods -l app=registry -o jsonpath='{.items[0].metadata.name}')
++$KC exec "$POD" -- rm -rf "/var/lib/registry/docker/registry/v2/repositories/${REPO:?set REPO to the repository}"
++```
++
++## 3. Check the catalog
++
++```sh
++curl -fsS "$REG/v2/_catalog?n=1000" | jq -r '.repositories[]' | grep -x "${REPO:?set REPO to the repository}"
++```
++
++This must print nothing. Use `n=1000`, because the unpaged catalog stops at 100 entries.
++
++## No garbage collect
++
++Do not run a garbage collect for this. The repository's blobs stay on the PVC until the next
++`registry garbage-collect`, and registry-cleanup runs that after its tag pass. registry-cleanup's
++CronJob has been suspended since RegistryDeploy `5ccb234`, until it respects what the deploy repos
++pin.

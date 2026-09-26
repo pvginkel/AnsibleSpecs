@@ -1,0 +1,1 @@
+root: cexec go go vet ./...    [  OK  ]

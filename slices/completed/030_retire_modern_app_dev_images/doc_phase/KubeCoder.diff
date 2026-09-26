@@ -1,0 +1,74 @@
+/work/KubeCoder — P3: git diff 06d75a05a24b..2fea4ab29dc6
+
+Jenkinsfile                              | 6 +++---
+ docs/operations/ci-gates.md              | 3 ++-
+ docs/operations/pipeline-dependencies.md | 4 ++--
+ 3 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 7bd76c8a..ae020f42 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -8,7 +8,7 @@ properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([gith
+ 
+ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+     containerTemplates.k8s('k8s'),
+-    containerTemplates.modern_app_dev('modern-app-dev'),
++    containerTemplates.modern_app_toolchain('modern-app-toolchain'),
+     // The golang container runs `go test -race ./...` over the whole worker module, four of
+     // whose packages spawn real tmux servers concurrently (slice 175, #683). It runs the same
+     // image the local `go` sidecar runs (.kubecoder/config.yaml, `- use: go`), so the suite
+@@ -34,7 +34,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         }
+ 
+         stage('Validate (lint + tests)') {
+-            container('modern-app-dev') {
++            container('modern-app-toolchain') {
+                 // --all-packages: the workspace root is package=false, so a plain
+                 // `uv sync` installs only the root dev group (pytest/ruff) and NOT the
+                 // members or their deps. --no-sync on `uv run` keeps that full env
+@@ -67,7 +67,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         //
+         // Any drift fails the build before the images are built.
+         stage('Contracts drift gate') {
+-            container('modern-app-dev') {
++            container('modern-app-toolchain') {
+                 sh 'uv run --no-sync python -m tools.contracts_codegen'
+                 // The TypeScript half of the same gate (slice 186, slice 181): compile the
+                 // just-emitted declarations with `tsc --noEmit` in BOTH consumers, so regeneration
+diff --git a/docs/operations/ci-gates.md b/docs/operations/ci-gates.md
+index 0ee67c58..76033f23 100644
+--- a/docs/operations/ci-gates.md
++++ b/docs/operations/ci-gates.md
+@@ -52,7 +52,8 @@ transitive — the generator reads the freshly emitted schema, so a Python model
+ 
+ **This gate's `tsc` steps compile the just-emitted declarations**, not the committed copies, because
+ the re-emit ran first in the same container — so regeneration and compile-proof go red together,
+-before any image is built. That container (`modern-app-dev`) carries Node and npm, and this stage
++before any image is built. That container (`modern-app-toolchain`, the library's
++`kube-coder-modern-app-toolchain:node-24` image) carries Node and npm, and this stage
+ runs each extension's `npm ci` itself: the two subprojects share no `node_modules`. Those installs
+ are also what put `tsc` in the pod workspace for the two suite stages below, which every container
+ in the pod shares — so this stage has to keep running first. Each of those stages runs its own
+diff --git a/docs/operations/pipeline-dependencies.md b/docs/operations/pipeline-dependencies.md
+index 09db748d..406ef61d 100644
+--- a/docs/operations/pipeline-dependencies.md
++++ b/docs/operations/pipeline-dependencies.md
+@@ -13,7 +13,7 @@ a fork that swaps the whole CI system changes nothing the product does. What eac
+ | --- | --- | --- |
+ | Jenkins (`jenkins.webathome.org`) — `KubeCoder/Build-Main`, `KubeCoder/Promote-PRD`, `DockerImages`, `AaC/*` | Pluggable, seam: aspirational — homelab-bound | `Jenkinsfile`, KubeCoderDeploy's `Jenkinsfile.promote` |
+ | `JenkinsPipelineUtils` — a shared Groovy library defined outside every repo, so the pipeline is not readable from any checkout | Required by the Jenkins path — homelab-bound | `Jenkinsfile`'s `library identifier` directive |
+-| Agent pod templates `jenkins-agent kaniko`, plus the `k8s` and `modern-app-dev` container templates the library supplies | Required by the Jenkins path — homelab-bound | `Jenkinsfile`'s `podTemplate` (`containerTemplates.k8s`, `containerTemplates.modern_app_dev`) |
++| Agent pod templates `jenkins-agent kaniko`, plus the `k8s` and `modern-app-toolchain` container templates the library supplies | Required by the Jenkins path — homelab-bound | `Jenkinsfile`'s `podTemplate` (`containerTemplates.k8s`, `containerTemplates.modern_app_toolchain`) |
+ | `registry:5000/kube-coder-go-toolchain:latest` — the image the Go stage runs, the one the local `go` sidecar runs; it must carry tmux, `jq`, `curl` and a C compiler, and a `DockerImages` build of it reaches CI ungated | Required by the Jenkins path — built in `/work/DockerImages` | `Jenkinsfile`'s `golang` `containerTemplate` |
+ | kaniko — all eight image builds, daemonless, in-cluster | Pluggable, seam: aspirational | `Jenkinsfile`'s `helmCharts.kaniko` calls (the `stage('Build kubecoder-*')` blocks) |
+ | `crane` on the promotion agent — `Promote-PRD` retags each pinned `dev-<n>` as `prd-<n>` and rebuilds nothing | Required by the promotion path | KubeCoderDeploy's `Jenkinsfile.promote`, its `crane --insecure tag` call |
+@@ -37,7 +37,7 @@ re-checked against the new version.
+ | Python | `>=3.13`, driven by uv | every `pyproject.toml` `requires-python` |
+ | The Python images' base | `python:3.14-slim` — the interpreter those images actually run, above the workspace floor rather than equal to it | `controller/Dockerfile`'s `FROM`, `bot/Dockerfile`'s `FROM`, `mcp-server/Dockerfile`'s `FROM`, `manual/Dockerfile`'s `FROM` (build stage) |
+ | `uv` | `ghcr.io/astral-sh/uv:0.12.5`, copied in from its own image because that base carries none | the same four Dockerfiles, one `COPY --from` each |
+-| Node | `node:24-bookworm`, plus the library's `modern-app-dev` container | `Jenkinsfile`'s `node` `containerTemplate` |
++| Node | `node:24-bookworm`, plus the library's `modern-app-toolchain` container (`registry:5000/kube-coder-modern-app-toolchain:node-24`) | `Jenkinsfile`'s `node` `containerTemplate`, `containerTemplates.modern_app_toolchain` |
+ | `go-jsonschema` | `v0.22.0` — the contracts drift gate's generator | `Jenkinsfile`'s `go install github.com/atombender/go-jsonschema` step |
+ 
+ ## What each test suite needs

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The argocd-hook Terraform-pin comment now names the three images that install Terraform (all at 1.16.3) and says to bump all three, matching P11/P14 and decisions.md; no modern-app reference remains in ArgoCDTools. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

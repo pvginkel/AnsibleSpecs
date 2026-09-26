@@ -1,0 +1,2 @@
+root: cexec python uv run --all-packages ruff check .    [  OK  ]
+root: cexec python uv run --all-packages ruff format --check .    [  OK  ]

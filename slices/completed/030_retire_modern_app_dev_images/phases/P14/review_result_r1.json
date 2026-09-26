@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "All five modern-app-dev mentions P14 names are corrected, and so are their counts. The three terraform.rc copies and the three Terraform-pinning images match the sibling repos after P11, and kc project lint is green.",
+ "details": "code_review_r1.md",
+ "findings": []}

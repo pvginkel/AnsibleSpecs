@@ -1,0 +1,25 @@
+/work/ArgoCDTools — P15: git diff 6f495776264d..ce60dbcdbc04
+
+argocd-hook/Dockerfile | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/argocd-hook/Dockerfile b/argocd-hook/Dockerfile
+index 79a250e..7f86edf 100644
+--- a/argocd-hook/Dockerfile
++++ b/argocd-hook/Dockerfile
+@@ -27,11 +27,10 @@ ENV PYTHONPATH=/app \
+ #
+ # Terraform is pinned, the same version in every image that installs it:
+ # ArgoCDTools' argocd-hook, Ansible's support/iac-image, and DockerImages'
+-# kube-coder-iac-toolchain and modern-app-dev. A state is stamped with the
+-# version that last wrote it, and the Argo CD hook applies states the iac
+-# toolchain has written, so an unpinned rebuild could leave one side older than
+-# the state it reads. Bump all four together (AnsibleSpecs decisions.md,
+-# "Terraform version").
++# kube-coder-iac-toolchain. A state is stamped with the version that last wrote
++# it, and the Argo CD hook applies states the iac toolchain has written, so an
++# unpinned rebuild could leave one side older than the state it reads. Bump all
++# three together (AnsibleSpecs decisions.md, "Terraform version").
+ #
+ # librados2/librbd1 are the estate provider's runtime dependencies, not
+ # Terraform's. `pvginkel/homelab` is cgo: its released binary names

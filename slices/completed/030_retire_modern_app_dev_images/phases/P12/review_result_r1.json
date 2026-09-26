@@ -1,0 +1,8 @@
+{"outcome": "issues",
+ "summary": "The registry-deletion procedure is accurate against the registry as deployed and covers D3/V10, but step 2's rm -rf is scoped only by $REPO from step 1's shell. In a fresh shell, which this environment forces because kubectl lives only in the iac sidecar, it forms `rm -rf .../v2/repositories/` against the prd registry pod, and step 3's check passes vacuously.",
+ "details": "code_review_r1.md",
+ "findings": [
+   {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional",
+    "anchor": "repro-trace",
+    "summary": "delete-repository.md step 2's rm -rf deletes every registry repository when $REPO (set only in step 1's block) is unset; step 3 then passes vacuously"}
+ ]}

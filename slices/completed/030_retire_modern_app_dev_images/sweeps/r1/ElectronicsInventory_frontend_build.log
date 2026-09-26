@@ -1,0 +1,2 @@
+frontend: cexec modern-app pnpm install --frozen-lockfile --config.confirmModulesPurge=false    [  OK  ]
+frontend: cexec modern-app pnpm build    [  OK  ]

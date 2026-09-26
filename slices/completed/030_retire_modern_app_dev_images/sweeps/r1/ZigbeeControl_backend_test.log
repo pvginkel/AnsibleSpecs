@@ -1,0 +1,1 @@
+backend: cexec modern-app poetry run pytest    [  OK  ]

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round-1 F1 is resolved. Steps 2 and 3 of delete-repository.md now expand ${REPO:?…}, so with REPO unset or empty they stop before rm or grep runs. This was witnessed in fresh bash, sh and interactive shells in the iac sidecar. The fix commit adds no new problems.",
+ "details": "code_review_r2.md",
+ "findings": []}

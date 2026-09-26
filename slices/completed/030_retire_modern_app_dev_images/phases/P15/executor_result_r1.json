@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "ArgoCDTools ce60dbc (phase/030-P15, not pushed): argocd-hook/Dockerfile's Terraform-pin comment names argocd-hook, support/iac-image and kube-coder-iac-toolchain and says \"Bump all three together\", matching P11/P14 wording; kc project test green; done-record appended to plan.md.", "refuted": []}

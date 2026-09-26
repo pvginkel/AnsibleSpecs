@@ -1,0 +1,2 @@
+frontend: cexec modern-app pnpm check    [  OK  ]
+frontend: ../scripts/arch-validate.py docs/architecture/*.yaml    [  OK  ]

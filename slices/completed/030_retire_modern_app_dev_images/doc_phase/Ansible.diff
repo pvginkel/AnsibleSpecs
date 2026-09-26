@@ -1,0 +1,84 @@
+/work/Ansible — P14: git diff 83b7fe5c351b..b0ff37df1f26
+
+docs/runbooks/operator-workstation.md    | 5 ++---
+ docs/runbooks/step-ca-root-rotation.md   | 4 +---
+ support/iac-image/Dockerfile             | 8 ++++----
+ terraform/modules/managed-vm/versions.tf | 2 +-
+ 4 files changed, 8 insertions(+), 11 deletions(-)
+
+diff --git a/docs/runbooks/operator-workstation.md b/docs/runbooks/operator-workstation.md
+index 4764cc3..419fc4f 100644
+--- a/docs/runbooks/operator-workstation.md
++++ b/docs/runbooks/operator-workstation.md
+@@ -87,11 +87,10 @@ Terraform authenticates to the Proxmox API as `root@pam` with username + passwor
+ 
+ ## Terraform `pvginkel/homelab` provider
+ 
+-The `homelab` provider is served from the private network mirror at `https://tfmirror.home/`. Four images set `TF_CLI_CONFIG_FILE=/etc/terraform.rc` and carry a byte-identical copy of that file, and that file's `provider_installation` block routes `registry.terraform.io/pvginkel/*` to the mirror and excludes it from `direct` — so `terraform init` installs `pvginkel/homelab` from there, with a real lockfile hash and no per-workstation setup. No binary is baked into any of them. Readdressing `tfmirror.home` means editing all four copies:
++The `homelab` provider is served from the private network mirror at `https://tfmirror.home/`. Three images set `TF_CLI_CONFIG_FILE=/etc/terraform.rc` and carry a byte-identical copy of that file, and that file's `provider_installation` block routes `registry.terraform.io/pvginkel/*` to the mirror and excludes it from `direct` — so `terraform init` installs `pvginkel/homelab` from there, with a real lockfile hash and no per-workstation setup. No binary is baked into any of them. Readdressing `tfmirror.home` means editing all three copies:
+ 
+ - [`support/iac-image/terraform.rc`](../../support/iac-image/terraform.rc) — the `iac` image
+-- `/work/DockerImages/modern-app-dev/terraform.rc` — the dev container
+-- `/work/DockerImages/kube-coder-dev-base/terraform.rc` — the KubeCoder dev base image
++- `/work/DockerImages/kube-coder-dev-base/terraform.rc` — the KubeCoder dev base image, which the `iac` sidecar (`kube-coder-iac-toolchain`) inherits it from
+ - `/work/ArgoCDTools/argocd-hook/image/terraform.rc` — the Argo CD Terraform PreSync hook image
+ 
+ See [`/work/AnsibleSpecs/slices/completed/tf-provider-registry.md`](../../../AnsibleSpecs/slices/completed/tf-provider-registry.md) for the mirror and how each provider version is published to it.
+diff --git a/docs/runbooks/step-ca-root-rotation.md b/docs/runbooks/step-ca-root-rotation.md
+index 9fc572d..ed64a9b 100644
+--- a/docs/runbooks/step-ca-root-rotation.md
++++ b/docs/runbooks/step-ca-root-rotation.md
+@@ -109,12 +109,11 @@ verify the mirror at all — and every deploy repo's Terraform declares that
+ provider.
+ 
+ The routing lives in `/etc/terraform.rc`, at `TF_CLI_CONFIG_FILE`, and there are
+-**four byte-identical copies** of that file too. They matter here for the same
++**three byte-identical copies** of that file too. They matter here for the same
+ reason the cert copies do: the same images are on both lists, so a rotation and
+ a mirror readdressing touch the same rebuild set.
+ 
+ - `/work/Ansible/support/iac-image/terraform.rc` — the `iac` image
+-- `/work/DockerImages/modern-app-dev/terraform.rc` — the dev container
+ - `/work/DockerImages/kube-coder-dev-base/terraform.rc` — the KubeCoder dev base image
+ - `/work/ArgoCDTools/argocd-hook/image/terraform.rc` — the Argo CD PreSync hook image
+ 
+@@ -164,7 +163,6 @@ The same check for the provider mirror config:
+ 
+ ```sh
+ md5sum /work/Ansible/support/iac-image/terraform.rc \
+-       /work/DockerImages/modern-app-dev/terraform.rc \
+        /work/DockerImages/kube-coder-dev-base/terraform.rc \
+        /work/ArgoCDTools/argocd-hook/image/terraform.rc
+ ```
+diff --git a/support/iac-image/Dockerfile b/support/iac-image/Dockerfile
+index 8d63afb..0e22d50 100644
+--- a/support/iac-image/Dockerfile
++++ b/support/iac-image/Dockerfile
+@@ -98,10 +98,10 @@ COPY support/iac-image/smallstep.sources /etc/apt/sources.list.d/smallstep.sourc
+ # questing one was — same 1.15.8-1 — and the pin survives the next base-image bump too.
+ #
+ # Terraform is pinned, the same version in every image that installs it: ArgoCDTools'
+-# argocd-hook, Ansible's support/iac-image, and DockerImages' kube-coder-iac-toolchain and
+-# modern-app-dev. A state is stamped with the version that last wrote it, and the Argo CD hook
+-# applies states the iac toolchain has written, so an unpinned rebuild could leave one side older
+-# than the state it reads. Bump all four together (AnsibleSpecs decisions.md, "Terraform version").
++# argocd-hook, Ansible's support/iac-image, and DockerImages' kube-coder-iac-toolchain. A state is
++# stamped with the version that last wrote it, and the Argo CD hook applies states the iac
++# toolchain has written, so an unpinned rebuild could leave one side older than the state it
++# reads. Bump all three together (AnsibleSpecs decisions.md, "Terraform version").
+ RUN set -o pipefail && \
+     \
+     curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash && \
+diff --git a/terraform/modules/managed-vm/versions.tf b/terraform/modules/managed-vm/versions.tf
+index 347fde9..a7f6284 100644
+--- a/terraform/modules/managed-vm/versions.tf
++++ b/terraform/modules/managed-vm/versions.tf
+@@ -7,7 +7,7 @@ terraform {
+       version = "~> 0.66"
+     }
+     # No version pin: no image bakes this provider. Every image that runs
+-    # Terraform here (iac, modern-app-dev, the argocd-hook) points
++    # Terraform here (iac, kube-coder-iac-toolchain, the argocd-hook) points
+     # TF_CLI_CONFIG_FILE at an /etc/terraform.rc whose provider_installation
+     # block routes registry.terraform.io/pvginkel/* to the tfmirror.home
+     # network mirror, so what the mirror serves is the version source of

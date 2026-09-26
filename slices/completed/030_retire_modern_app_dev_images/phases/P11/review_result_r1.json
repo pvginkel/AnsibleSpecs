@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Both image directories are deleted (with the N1 matrix entry), and the kube-coder-iac-toolchain Terraform-pin comment correctly names the three images that pin 1.16.3. Both dependency collectors run clean over HEAD (49 images, no missing parent, no modern-app-dev). Only the kept records still name either image.",
+ "details": "code_review_r1.md",
+ "findings": []}

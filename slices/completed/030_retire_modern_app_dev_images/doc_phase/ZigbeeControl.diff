@@ -1,0 +1,78 @@
+/work/ZigbeeControl — P6: git diff 8043c1a9e2b2..0a2c4a90666c
+
+.copier-answers.yml         |  2 +-
+ Jenkinsfile                 | 20 +++++++++++---------
+ tools/suite_runner/local.py |  5 +++--
+ 3 files changed, 15 insertions(+), 12 deletions(-)
+
+diff --git a/.copier-answers.yml b/.copier-answers.yml
+index e406a83..12e7139 100644
+--- a/.copier-answers.yml
++++ b/.copier-answers.yml
+@@ -1,5 +1,5 @@
+ # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+-_commit: v0.1.1
++_commit: v0.1.2
+ _src_path: ../ModernAppTemplate
+ author_email: pvginkel@gmail.com
+ author_name: Pieter van Ginkel
+diff --git a/Jenkinsfile b/Jenkinsfile
+index eae39e3..aed50b3 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -16,14 +16,10 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+ 
+         stage('Run validation') {
+             container('k8s') {
+-                // Resolve the Playwright version from the frontend lockfile to
+-                // select the matching base image (browsers pre-baked).
+-                def playwrightVersion = sh(
+-                    script: "grep -m1 '^  playwright@' frontend/pnpm-lock.yaml | sed 's/.*@//;s/://'",
+-                    returnStdout: true,
+-                ).trim()
+-                def validationImage = "registry:5000/modern-app-dev-playwright:playwright-${playwrightVersion}"
+-                echo "Validation image: ${validationImage}"
++                // The validation Job runs in the image of the dev environment's
++                // `modern-app` sidecar. It carries Chromium's OS dependencies but no
++                // browser (run-suite downloads it), and no /work: uid 1000 cannot
++                // create one at the filesystem root, so the pod mounts an emptyDir there.
+ 
+                 // Stream the whole monorepo working tree in instead of baking an image.
+                 sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store ."
+@@ -57,13 +53,19 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+                                           operator: Equal
+                                           value: large
+                                           effect: PreferNoSchedule
++                                    volumes:
++                                        - name: work
++                                          emptyDir: {}
+                                     containers:
+                                         - name: validation
+-                                          image: ${validationImage}
++                                          image: registry:5000/kube-coder-modern-app-toolchain:node-24
+                                           imagePullPolicy: Always
+                                           securityContext:
+                                               runAsUser: 1000
+                                               runAsGroup: 1000
++                                          volumeMounts:
++                                              - name: work
++                                                mountPath: /work
+                                           command: ["sh", "-c"]
+                                           args:
+                                               - |
+diff --git a/tools/suite_runner/local.py b/tools/suite_runner/local.py
+index 421dd2d..d8aa78d 100644
+--- a/tools/suite_runner/local.py
++++ b/tools/suite_runner/local.py
+@@ -232,8 +232,9 @@ def run_tests(args):
+                 progress_skip(col)
+                 results.append(("frontend playwright", False, "Skipped (build failed)", None))
+             else:
+-                # Ensure Chromium is present. The validation base image pre-bakes
+-                # the matching browser, so this is a fast no-op there.
++                # Download the Chromium build the installed Playwright pins; a no-op
++                # when it is already in the browser cache. The CI validation image
++                # carries no browser, so every CI run downloads it.
+                 col = progress_start("Installing Playwright browser")
+                 ok_pw, detail_pw = _install_cmd(
+                     ["pnpm", "playwright", "install", "chromium"], cwd=frontend, timeout=900

@@ -1,0 +1,1 @@
+{"outcome": "signoff", "summary": "containerTemplates.modern_app_dev is deleted and modern_app_toolchain remains (V09). I checked sibling repos, the consumers' origin/main, GitHub code search and the root template v0.1.1 that the new app came from: none still calls the removed template.", "details": "code_review_r1.md", "findings": []}

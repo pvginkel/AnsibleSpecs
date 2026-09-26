@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "decisions.md's Terraform-version decision now names the three images that pin Terraform, which matches the Dockerfiles in DockerImages at a963dfd, ArgoCDTools and Ansible, and the root-rotation TODO counts the three terraform.rc copies that are left. One advisory finding: that TODO still counts nine root CA copies where the rest of the file counts ten, a drift from before this slice.",
+ "details": "code_review_r1.md",
+ "findings": [
+   {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+    "summary": "decisions.md:173,176 count nine out-of-repo root CA copies; :168 and the step-ca-root-rotation runbook count ten, and P13's done-record repeats nine as fact"}
+ ]}

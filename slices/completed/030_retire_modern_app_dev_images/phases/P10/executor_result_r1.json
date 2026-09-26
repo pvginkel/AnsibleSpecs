@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "containerTemplates.modern_app_dev is deleted from JenkinsPipelineUtils (46e6bc3, pushed to main under ruling A1). kc project test is green. No consumer's origin/main calls the template, and DesignAssistant never did.", "refuted": []}

@@ -1,0 +1,51 @@
+/work/JenkinsPipelineUtils — P1: git diff 6f87d0902fc3..f08b4dafb2bb
+
+vars/containerTemplates.groovy | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/vars/containerTemplates.groovy b/vars/containerTemplates.groovy
+index 57b83b4..55000d0 100644
+--- a/vars/containerTemplates.groovy
++++ b/vars/containerTemplates.groovy
+@@ -49,6 +49,20 @@ def iac_toolchain(String name) {
+     ])
+ }
+ 
++/**
++ * KubeCoder modern-app toolchain container: the image a full-stack KubeCoder environment runs
++ * as its tool sidecar (Node 24 with npm, corepack/pnpm and bun, the Playwright OS deps but no
++ * browser, poetry, ruff, uv, git).
++ * Runs as uid 1000, the agent's own user, so the checkout and whatever the container writes
++ * into the workspace share an owner (git refuses a repository another uid owns).
++ * The image points COREPACK_HOME and PNPM_HOME at KubeCoder home overlays an agent pod lacks;
++ * uid 1000 owns /home/ubuntu in the image, so corepack and pnpm create them there, empty on
++ * every build.
++ */
++def modern_app_toolchain(String name) {
++    return containerTemplate(name: name, image: 'registry:5000/kube-coder-modern-app-toolchain:node-24', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000')
++}
++
+ /**
+  * Debian Bookworm slim container.
+  */
+
+/work/JenkinsPipelineUtils — P10: git diff f08b4dafb2bb..46e6bc30dfc7
+
+vars/containerTemplates.groovy | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/vars/containerTemplates.groovy b/vars/containerTemplates.groovy
+index 55000d0..bc2dbe2 100644
+--- a/vars/containerTemplates.groovy
++++ b/vars/containerTemplates.groovy
+@@ -96,10 +96,3 @@ def dockbuild(String name, String image) {
+         containerEnvVar(key: 'BUILDER_GROUP', value: 'jenkins'),
+     ])
+ }
+-
+-/**
+- * Container with development tools used in different modern apps.
+- */
+-def modern_app_dev(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/modern-app-dev', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000')
+-}

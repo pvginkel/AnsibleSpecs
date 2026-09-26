@@ -1,0 +1,1 @@
+manual: cexec python uv run --all-packages --group manual mkdocs build --strict -f manual/mkdocs.yml    [  OK  ]
