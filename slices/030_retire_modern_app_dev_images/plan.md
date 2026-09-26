@@ -178,7 +178,7 @@ Record:
   (`DockerImages/kube-coder-frontend-toolchain/build-matrix.json`), the tag in the registry.
 - Gate: `kc project test` green.
 
-### P2 — HomelabTerraformProvider: the registry publish runs in the iac toolchain container
+### P2 — HomelabTerraformProvider: the registry publish runs in the iac toolchain container ✅ DONE 2026-09-26
 
 Target: ../HomelabTerraformProvider
 
