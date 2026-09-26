@@ -88,6 +88,24 @@ Stopped 2026-09-26 12:07; resumed 2026-09-26 12:10.
 **Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
+### N3 — P9 dropped argocd.md's producer handover steps (the handover proof and the flip) instead of giving the flip an owed note · nit
+
+The docs-across-the-switch ruling, the plan's P9 text and V18 name three procedures that carry an owed note: registering an app, the handover flip (argocd.md, 'Giving an app its own architecture producer', step 6) and the cold-boot bootstrap. The handover flip was the step where a migrating app's stage left HelmCharts' helm-charts producer and its own producer took the ids over. No handover remains: every live app is migrated, the three parked apps' release.yaml files say disabled: true, and P2 retires the helm-charts producer. So P9 removed the handover steps (the handover_equality proof and the flip) and the flip's ordering rules, and stated the handover in the past tense. Registering an app and the cold-boot bootstrap carry their notes, and so do the Facts table's registry rows, 'Diagnosing a failed sync' item 4 and 'Upgrading Argo CD' step 2. argo_migrate.py's flip keeps P7's own owed note.
+
+**Consequence:** V18's check for a note on 'the handover flip' finds no such step in argocd.md; the procedure it named is gone, not left un-noted.
+
+**Provenance:** witnessed, code-writer, P9, r1, docs/runbooks/argocd.md
+**Disposition:**
+
+### N4 — P9's read of StepCaDeploy's stage-manifests.yaml printed two step-ca passphrases (base64) into the session transcript · minor
+
+To rewrite step-ca-bootstrap.md's Secret layout, P9 grepped StepCaDeploy's chart/templates/stage-manifests.yaml for kind, name and key lines. The pattern also matched the data lines, so the base64 values of step-ca-ca-password's and step-ca-ssh-host-ca-password's password keys (and the encrypted intermediate and SSH host CA keys) reached the transcript. Nothing decoded or used them. The values are committed in that private repo, a known state that AnsibleSpecs decisions.md ('Intermediate key + passphrase') tracks moving into ansible-vault.
+
+**Consequence:** The step-ca intermediate key passphrase and the SSH host CA key passphrase are transcript-exposed. Under the estate's rotated_at convention, that is a reason to rotate them when the Secrets move out of the chart.
+
+**Provenance:** witnessed, code-writer, P9, r1
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -130,6 +148,15 @@ infer_workload's suffix pattern, carried over unchanged from HelmCharts' recomme
 **Consequence:** Containers of a Deployment whose current ReplicaSet hash is short get no recommendation until a rollout happens to produce a longer hash.
 
 **Provenance:** witnessed, executor, P8 r1, /tmp/rr-proof/not-placed.txt
+**Disposition:**
+
+### B5 — Ansible recommend-resources: requests are raised without regard to the container's limit · minor
+
+revise() (support/recommend-resources/recommend_resources.py:496-515) reads and writes only `requests`, a policy carried verbatim from HelmCharts' tool. P8's proof patch for PrometheusDeploy already raises server.resources.requests.memory to 1536Mi, the same value as its limits.memory 1.5Gi. The next upward ratchet would put the request above the limit. The patch preamble does not show limits. Review F6.
+
+**Consequence:** A future run can produce a values file whose request exceeds its limit. After the push, Argo's sync of that app fails on the API server's validation until someone edits the limit or the request by hand.
+
+**Provenance:** witnessed, code-reviewer, P8, r1, phases/P8/code_review_r1.md F6
 **Disposition:**
 
 ## Open questions and rulings
@@ -311,4 +338,58 @@ support/argo-migrate/test_registry.py imports only registry_flip, registry_autos
 **Consequence:** A later edit that sends one of the tool's registry reads back to HelmCharts or the per-stage state, or that breaks the edit guard, passes root's test gate.
 
 **Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
+**Disposition:**
+
+### S19 — recommend-resources' unit suite: two paths pass under mutation, the local-chart name and apply's invalid-YAML rollback · nit
+
+Replacing the local chart's Chart.yaml name with the app name (recommend_resources.py:132) passes, because every fixture's chart name equals its app name (test_recommend_resources.py:96-99, :247, :255). Dropping apply's invalid-YAML refusal or its git reset rollback (:631, :633-634) also passes. No live chart name differs from its app today. Review F4, F5.
+
+**Consequence:** A later edit that keys local apps on the app name, or that drops apply's YAML guard, passes root's test gate.
+
+**Provenance:** witnessed, code-reviewer, P8, r1, phases/P8/code_review_r1.md F4 F5
+**Disposition:**
+
+### S20 — Ansible code comments, inventory and Terraform descriptions still point at HelmCharts for workloads, dnsmasq and credentials · nit
+
+P9's doc list covers the docs, READMEs and one code comment (microk8s defaults). These comments were outside it and still name HelmCharts as where something lives: ansible/inventories/prd/group_vars/k8s_prd.yml:57,122, all/vips.yml:8, openbao.yml:68,122,125, ceph_dev.yml:3,46,89, k8s_dev.yml:2,25,38,60,63, hosts.yml:32,46, host_vars/srvk8s4.yml:22; ansible/roles/microk8s/tasks/taints.yml:17; ansible/playbooks/rebuild-k8s.yml:156 and playbooks/tasks/pre-drain-handoff.yml:22; support/iac-image/Dockerfile:55-63; Ansible.code-workspace:10; terraform/prd/variables.tf:41 (backupServer.managementToken's source) and terraform/prd/vms.tf:107 (srvk8sdev's VM description, 'HelmCharts iteration target'). Editing vms.tf's description is a Proxmox-side change a terraform plan shows. The iac agent's copies are S2's.
+
+**Consequence:** A reader following those comments is sent to HelmCharts paths that are gone or archived; no behaviour depends on them.
+
+**Provenance:** read, code-writer, P9, r1, git grep -i helmcharts in Ansible
+**Disposition:**
+
+### S21 — Planning a deploy repo's Terraform by hand loads its credentials with HelmCharts' scripts/setup-env.sh · minor
+
+live-infra-access.md now says a deploy repo's Terraform is applied by the PreSync hook, which has no plan step, and that planning it from here takes HelmCharts' scripts/setup-env.sh prd for the OpenBao-held provider credentials (kubecoder-cutover.md's no-destroy plan, argo_migrate.py plan). argo_migrate.py's plan also reads HelmCharts' _providers/clusters.yaml for the non-secret tf_vars. Neither has another home. .kubecoder/config.yaml keeps cloning HelmCharts until the archive (ANS-122) drops it.
+
+**Consequence:** Once the HelmCharts clone leaves this environment, there is no documented way to plan a deploy repo's Terraform before a sync applies it.
+
+**Provenance:** read, code-writer, P9, r1, docs/live-infra-access.md
+**Disposition:**
+
+### S22 — Ansible docs: slice-testing-strategy.md says the repo has no runnable test suite, and CLAUDE.md lists KubeCoderDeploy under /work · nit
+
+Found by P9 while editing nearby text; neither concerns HelmCharts. docs/slice-testing-strategy.md:6 and :13 say there is no runnable test suite and that kc project test is yamllint, ansible-lint, terraform fmt and the architecture validator; root's test now runs support/argo-migrate's and support/recommend-resources' unit tests (P7, P8). P9 corrected the same claim in design-philosophy.md. CLAUDE.md's 'Related repos on this machine' lists KubeCoderDeploy as under /work, but .kubecoder/config.yaml does not declare it and /work holds no clone. Also docs/runbooks/kubecoder-cutover.md:15 links slice 012's plan at slices/012_kubecoder_argo_cutover/, which moved to slices/completed/.
+
+**Consequence:** The test phase's strategy doc understates what root's gate runs, a session that reaches for /work/KubeCoderDeploy finds nothing, and one link in the KubeCoder cutover record is dead.
+
+**Provenance:** read, code-writer, P9, r1
+**Disposition:**
+
+### S23 — No deploy repo validates its render against prd's Kubernetes minor: HelmCharts' kubeconform gate has no successor · minor
+
+k8s-upgrade.md's 'Move the HelmCharts chart gate to prd's new minor' set KUBE_VERSION in HelmCharts' Jenkinsfile, whose 'Gate releases' stage rendered every prd release and ran kubeconform against that minor's schemas. HelmCharts deploys nothing now, so P9 deleted the section. A read-only search on 2026-09-26 found no successor: no KUBE_VERSION, kubeconform or --kube-version in Charts, ArgoCDTools, JenkinsPipelineUtils or ArgoCDDeploy, and the deploy repos checked (StorageDeploy, IotDeploy, StepCaDeploy) carry only Jenkinsfile.architecture.
+
+**Consequence:** A channel bump that removes an API version a deploy repo's chart still uses is caught only when Argo's sync of that app fails.
+
+**Provenance:** read, code-writer, P9, r1, research subagent report (repo trees via gh api)
+**Disposition:**
+
+### S24 — DockerImages' certbot args.sh bind-mounts HelmCharts' nginx copy of the homelab root; StepCaDeploy's values still credit charts/step-ca/args.sh · nit
+
+DockerImages certbot/scripts/args.sh:18 mounts $(pwd)/../../HelmCharts/charts/nginx/files/ca/homelab-root.crt for a hand-run certbot. The nginx copy that is deployed is now NginxDeploy's chart/files/ca/homelab-root.crt, and P9's step-ca-root-rotation.md inventory drops HelmCharts' copies, so a root rotation leaves the one args.sh reads stale. Separately, StepCaDeploy's config/prd/values.yaml keeps a comment saying charts/step-ca/args.sh pulls smallstep/step-certificates; the registry's apps.step-ca.stages.prd.version pins it.
+
+**Consequence:** After ANS-122 drops the HelmCharts clone, a hand-run certbot from DockerImages fails its bind mount. After a root rotation, a run before that serves the old root. The StepCaDeploy comment points a reader at a file in the archive.
+
+**Provenance:** read, code-writer, P9, r1
 **Disposition:**

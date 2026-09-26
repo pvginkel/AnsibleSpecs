@@ -749,6 +749,34 @@ credits the addon requests' derivation to "HelmCharts' recommend-resources", and
 is now `support/recommend-resources/recommend_resources.py` (P8). If you edit that file, the `architecture` component's test must still
 pass.
 
+**Done (P9).** Ansible `phase/029-P9` `5cfdb0c`. Every doc the phase lists now names the deploy
+repos and ArgoCDDeploy's registry. The argocd runbook describes `releases/values.yaml` and
+`releases`, and five blockquote notes carry "owed until the registry switch has run": the Facts
+registry rows, "Diagnosing a failed sync" item 4, "Upgrading Argo CD" step 2, "Registering…" and
+bootstrap steps 4–6. With argo_migrate.py's note, step 11's grep has six hits. Deleting them
+leaves text that reads correctly (simulated).
+
+Later phases:
+- Test phase, V18: the handover flip has no note because the producer section no longer has the
+  step. No handover remains: every live app is migrated, the parked three are `disabled: true`,
+  and P2 retires `helm-charts`. The section now covers a new producer (close-out N3).
+- Doc phase: S9 (Architecture's prose), S20 (Ansible comments and inventory outside P9's list)
+  and S22 (slice-testing-strategy.md's "no runnable test suite") are still open.
+
+Record:
+- argocd.md: "Restarting the applicationset-controller" stays for the ApplicationSets and is on
+  registry-switch.md's dead-after list. "What a cutover does not change" states the 2026-09-20
+  probe and counts (52/55) and keeps its title, which stuck_fields.py cites.
+- kubecoder-cutover.md is a run record (both stages registered 2026-09-23); WB-2 cannot run.
+- k8s-upgrade.md's HelmCharts kubeconform gate section is deleted; it has no successor (S23).
+- step-ca-bootstrap.md describes StepCaDeploy's four `step-ca-*` Secrets in `stage-manifests.yaml`,
+  and rotations are commits there. step-ca-root-rotation.md counts ten out-of-repo copies, with
+  HelmCharts' three off the list and the md5 check reading uncloned repos through `gh api`.
+- CLAUDE.md: Architecture is cloned by hand and then set up with `kc project setup` there.
+  design-philosophy.md: only `support/`'s Python tools have unit tests (P7's note).
+- live-infra-access.md: planning a deploy repo's Terraform still loads credentials through
+  HelmCharts' setup-env.sh (S21).
+
 ## Not in scope
 
 - Deleting the `IaC/HelmCharts` and `AaC/HelmCharts` jobs (ANS-121) and archiving HelmCharts
