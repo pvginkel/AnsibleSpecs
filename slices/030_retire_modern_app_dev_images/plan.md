@@ -47,13 +47,17 @@
   FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppTemplate.
   Each push comes after the phase's own gate is green. This is the operator's explicit override
   of the confirm-every-push rule, for this slice and these repos only.
-- Ruling run-time S1 (2026-09-26, during the run, "Stop the slice here"): the run stops at P8.
-  ElectronicsInventory and IoTSupport test against Postgres, MinIO and OpenSearch, which this
-  environment does not declare, and the run loop cannot take a Jenkins build as a phase's gate: it
-  runs `kc project test` itself in any sibling repo that has a manifest. P8's work is on
-  ElectronicsInventory `main` (`4bbec200`, Jenkins #255 green), but the loop has not stamped or
-  merged it. P9 and everything after it are left to be finished by hand or in an environment of
-  their own. The run loop is not resumed on this plan as it stands.
+- Ruling run-time S1 (2026-09-26, during the run): "So, you fix and push IoT support, wait for
+  the build to go green and proceed the slice from there". ElectronicsInventory and IoTSupport
+  test against Postgres, MinIO and OpenSearch, which this environment does not declare, and the
+  run loop cannot take a Jenkins build as a phase's gate: it runs `kc project test` itself in
+  any sibling repo that has a manifest. So P8 and P9 were finished outside the loop by the
+  orchestrating session: `kc project lint` and `build` green here, pushed to `main`, and the
+  app's Jenkins validation build is the test gate. Their `✅ DONE` stamps were set by that session
+  on the operator's direction, not by the driver. The loop resumes at P10. The loop-tail sweep's
+  red `kc project test` rows for ElectronicsInventory and IoTSupport are this environment's
+  missing services, not a regression: the Jenkins builds named in P8's and P9's done-records are
+  the evidence those suites pass. Do not append a phase to fix them or declare the services.
 - Ruling run-time N1 (2026-09-26, during the run): the operator created a new app off the
   template just before the run started, and added Playwright 1.63.0 to
   `modern-app-dev-playwright/build-matrix.json` for it (DockerImages `61d79df`). "Assuming the
@@ -420,7 +424,7 @@ Record:
   git commit` trace as P6's build. The local gate (`kc project setup`, `build`, `test`, then
   `lint`) is green.
 
-### P8 — ElectronicsInventory: takes the root-template release
+### P8 — ElectronicsInventory: takes the root-template release ✅ DONE 2026-09-26
 
 Target: ../ElectronicsInventory
 
@@ -448,7 +452,7 @@ Record:
   (`auth.spec.ts`, "preserves full path including query params in redirect") and #253 lost three,
   both on `819a6475`. A lone red frontend test here is not the image switch.
 
-### P9 — IoTSupport: takes the root-template release
+### P9 — IoTSupport: takes the root-template release ✅ DONE 2026-09-26
 
 Target: ../IoTSupport
 
@@ -457,6 +461,22 @@ stage when the app adopted the root template (`c778c89`; last changed at `96c7bb
 `withVault` for the Keycloak env (`:31`), with an OpenSearch sidecar besides RustFS (`:108,116`).
 The update's merge may not apply cleanly there; the app's additions stay. Pushed; the build is
 green.
+
+**Done (P9).** IoTSupport `4884bc2` (pushed to `main`, by the orchestrating session under ruling
+S1): `copier update` took root `v0.1.2` using P6's recipe. The merge conflicted in `Jenkinsfile`,
+so it was resolved by taking the app's own file and applying P5's three hunks to it: the stage
+comment replacing the lockfile lookup, the `work` emptyDir, and the image with its `/work` mount.
+The `withVault` Keycloak wrapper and the RustFS and OpenSearch sidecars are unchanged.
+`.copier-answers.yml` and `tools/suite_runner/local.py` came from the update. `kc project lint`
+and `kc project build` were green here. `IoTSupport/IoTSupport` #145 is green: 835 passed, 0
+failed, 0 skipped, the same count as #144 on modern-app-dev-playwright. The Job downloaded Chrome
+for Testing 148.0.7778.96 (chromium v1223) from `cdn.playwright.dev`. No `modern-app-dev` string
+is left in the repo.
+
+Later phases:
+- On a fresh checkout, `kc project setup` stops at the backend's database step (no Postgres
+  here), before the frontend's `pnpm install`. Run `kc project setup --project frontend`, then
+  `build` before `lint`: the frontend's typecheck needs the generated route tree.
 
 ### P10 — JenkinsPipelineUtils: the `modern_app_dev` template is gone
 
