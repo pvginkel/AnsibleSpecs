@@ -154,6 +154,30 @@ pnpm at home-overlay paths an agent pod does not mount
 (`DockerImages/kube-coder-frontend-toolchain/Dockerfile:29,46-47`). `modern_app_dev` stays until
 P10. `kc project test` green, then pushed (Ordering constraints).
 
+**Done (P1).** JenkinsPipelineUtils `f08b4da` (`phase/030-P1`, pushed to `main`):
+`containerTemplates.modern_app_toolchain(name)` in `vars/containerTemplates.groovy`, directly after
+`iac_toolchain` — `registry:5000/kube-coder-modern-app-toolchain:node-24`, `sleep infinity`,
+`alwaysPullImage`, `runAsUser: '1000'`, no env overrides. `modern_app_dev` is untouched.
+
+Later phases:
+- P3, P4: the call is `containerTemplates.modern_app_toolchain('<container name>')`; the library
+  loads it from `main` now.
+- P5: as uid 1000 in a pod with no home overlays and no `HOME` set, `HOME` is `/home/ubuntu`
+  (uid 1000 owns it in the image), so corepack creates `COREPACK_HOME` and downloads the repo's
+  pinned pnpm on first use, and pnpm runs; the overlay paths need nothing. pnpm 10 ignores
+  `pnpm_config_store_dir` and put its store at the project volume's root
+  (`/home/jenkins/agent/.pnpm-store/v10`).
+
+Record:
+- Proven by a throwaway pod in prd's `development` namespace shaped like the agent container
+  (uid 1000, emptyDir workspace at `/home/jenkins/agent` as working dir, no `HOME`; deleted after):
+  Node v24.21.0, npm 11.19.0, uv 0.12.17, ruff 0.16.8, poetry 2.5.1, git 2.51.0; corepack
+  pnpm@10.18.0 `pnpm install`, `npm install` and `npm ci` all succeeded. The live FieldnotesApp
+  agent pod showed the plugin sets no `HOME` on the `modern-app-dev` container either.
+- Not parameterised by Node version: the image's matrix builds `node-24` only
+  (`DockerImages/kube-coder-frontend-toolchain/build-matrix.json`), the tag in the registry.
+- Gate: `kc project test` green.
+
 ### P2 — HomelabTerraformProvider: the registry publish runs in the iac toolchain container
 
 Target: ../HomelabTerraformProvider
@@ -170,7 +194,8 @@ as every build does.
 
 Target: ../KubeCoder
 
-The two stages on `modern-app-dev` (`Jenkinsfile:11,37,70` at `8e71ae1a`) run in P1's container,
+The two stages on `modern-app-dev` (`Jenkinsfile:11,37,70` at `8e71ae1a`) run in P1's container
+(`containerTemplates.modern_app_toolchain`),
 with the same commands in the same order: the drift gate's `npm ci` runs still put `tsc` in the
 workspace for the extension stages after it (`Jenkinsfile:84-87`, and the stage's comment above
 them). No mention of either image remains in the repo, the operations docs that describe the
@@ -182,7 +207,8 @@ pipeline's containers included (`docs/operations/ci-gates.md:55`,
 
 Target: ../FieldnotesApp
 
-The Validate stage (`Jenkinsfile:12,26` at `b6a5016`) runs in P1's container. Its suites drive a
+The Validate stage (`Jenkinsfile:12,26` at `b6a5016`) runs in P1's container
+(`containerTemplates.modern_app_toolchain`). Its suites drive a
 real `git` against bare repos (the stage's comment, `Jenkinsfile:6-9`), which the image carries
 (`DockerImages/kube-coder-dev-base/Dockerfile:40`); that comment is rewritten for the new
 container. No mention of either image remains in the repo. Pushed; the build is green.
@@ -205,7 +231,8 @@ phase touches none of them.
   nothing in its chain creates the uid-1000-owned `/work` that the Job's script and `kubectl cp`
   use (`DockerImages/modern-app-dev/Dockerfile:138-139`; `Jenkinsfile.jinja:74-82,111`), and it
   points corepack and pnpm at home-overlay paths a Job pod does not mount
-  (`DockerImages/kube-coder-frontend-toolchain/Dockerfile:29,46-47`). Whatever the Job relied on
+  (`DockerImages/kube-coder-frontend-toolchain/Dockerfile:29,46-47`; as uid 1000 they need nothing,
+  P1's done-record). Whatever the Job relied on
   that only modern-app-dev provided now comes from the Job itself. modern-app-dev already ran
   Node 24 (`DockerImages/modern-app-dev/Dockerfile:109`).
 - Released the way this repo releases a root-template change (its `CLAUDE.md`, "Template Change
