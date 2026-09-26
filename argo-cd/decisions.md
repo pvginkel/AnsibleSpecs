@@ -299,7 +299,8 @@ shape, not an intermediate one, and from the switch it is the inventory of what 
 **D64 — The registry switch hands the live Applications to `releases` without recreating any;
 fix forward.** Decided 2026-09-26 (operator, slice 029 Ruling D2, and the review r1 ruling: "I do
 not have to prove rollback back to HelmCharts. Fix forward please."). The switch is the
-operator's to run from Ansible's registry-switch runbook, and it is owed until it has run.
+operator's to run from Ansible's registry-switch runbook
+(`/work/Ansible/docs/runbooks/registry-switch.md`), and it is owed until it has run.
 
 - *What changes hands.* The 50 Applications in `argocd-prd` pass from the two ApplicationSets to
   `releases`. On 2026-09-26, 41 were owned by `releases-local` and 9 by `releases-upstream`, and

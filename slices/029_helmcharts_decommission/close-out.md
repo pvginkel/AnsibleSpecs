@@ -249,3 +249,12 @@ P4 added releases/ (the registry: values.yaml, values.schema.json, one Applicati
 
 **Provenance:** read | code-writer, P4, r1, ArgoCDDeploy 19e40d3
 **Disposition:**
+
+### S14 — Ansible argocd runbook: its Conventions say the default kubeconfig cannot list argoproj.io kinds, and it can · nit
+
+docs/runbooks/argocd.md's Conventions: "the read-only default kubeconfig cannot list `argoproj.io` kinds". On 2026-09-26 the default kubeconfig (`--context prd`, no --kubeconfig) listed Applications, ApplicationSets and the AppProject in argocd-prd; ArgoCDDeploy's tools/registry-equivalence.py relies on it, and docs/live-infra-access.md says kubecoder-ro holds get/list/watch on those three kinds. P9's docs pass targets HelmCharts wording, so nothing in the slice corrects this line.
+
+**Consequence:** A reader of the argocd runbook reaches for the cluster-admin prd-write kubeconfig for reads that the read-only identity already covers.
+
+**Provenance:** witnessed — code-writer, P6, r1, kubectl reads while testing the registry-switch runbook's helpers
+**Disposition:**

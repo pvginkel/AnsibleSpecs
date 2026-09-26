@@ -357,8 +357,9 @@ the archive are the operator's steps; each item says what is owed.
 
 - **The registry moves to ArgoCDDeploy, Argo CD native** (D63), replacing the two-ApplicationSet
   shape (D21); D22's upgrade path is not taken. Slice 029 builds it. **The registry switch (D64)
-  is the operator's step, owed until it has run**, from Ansible's registry-switch runbook: until
-  then Argo reads HelmCharts' `release.yaml` tree. A follow-up then clears what the switch leaves
+  is the operator's step, owed until it has run**, from Ansible's registry-switch runbook
+  (`/work/Ansible/docs/runbooks/registry-switch.md`): until then Argo reads HelmCharts'
+  `release.yaml` tree. A follow-up then clears what the switch leaves
   dead (D64's list).
 - **HelmCharts is archived, not deleted** (D60), keeping the three parked apps. Owed to the
   operator, in this order: its Jenkins jobs `IaC/HelmCharts` and `AaC/HelmCharts` are deleted

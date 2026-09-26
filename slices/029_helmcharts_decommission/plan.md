@@ -553,6 +553,33 @@ It ends with the attachment's list of what is dead after the switch, so the foll
   (`grep -rn 'registry switch' /work/AnsibleSpecs/argo-cd /work/AnsibleSpecs/decisions.md`). The
   runbook's last step marks it done there too, beside removing the docs' notes.
 
+**Done (P6).** Ansible `phase/029-P6` `94a03e0`. `docs/runbooks/registry-switch.md` walks the
+eleven steps in the plan's order, each with the operator's command and what they must see. Its
+rehearsal runs on fixtures in `support/registry-switch-rehearsal/`, which Argo reads from Ansible's
+`main`: a throwaway ApplicationSet, an app-of-apps shaped like `releases` at the flip, the child
+Application it renders, and the child's Namespace and ConfigMap. AnsibleSpecs D64 and `phases.md`'s
+endgame now carry the runbook's path.
+
+Later phases:
+- P9: step 11 finds the owed notes with `git grep -n -i 'owed until the registry switch has run'
+  -- ':!docs/runbooks/registry-switch.md'` and deletes each hit's whole paragraph or blockquote.
+  Link notes to `docs/runbooks/registry-switch.md`.
+- P9: `argocd.md`'s "Upgrading Argo CD" step 2 ("ArgoCDDeploy has no webhook") stops holding at
+  the runbook's step 2.
+
+Record:
+- Syncs are a `kubectl patch` of `operation` (Argo's kubectl sync, prune off), which the
+  rehearsal exercises first. The read-only helpers and the `gh api` delivery read ran against prd
+  on 2026-09-26. The fixtures passed a server-side dry-run.
+- Beyond the attachment: step 6 also requires no ApplicationSet and owner `none` on every line;
+  steps 5 and 9 diff every Application's uid and creation time against step 3's snapshot; step
+  9's equivalence re-run expects `ONLY LIVE releases` (the tool counts `releases` itself); the
+  freeze covers steps 3–10; reverting the flip is forbidden.
+- Webhook proof: the ping's `200` at step 2, then the pushed SHA on `argocd-prd` (step 7) and on
+  `releases` (step 10), with no manual refresh.
+- Dead-after: the attachment's list with close-out S4's specifics, plus the equivalence tool and
+  the rehearsal fixtures.
+
 ### P7 — argo-migrate: the new registry
 
 Target: root
@@ -633,7 +660,11 @@ Argo reads HelmCharts' registry until the operator's switch, so no doc calls the
 carries a one-line note that it is owed until the registry switch has run. The ruling names
 three: registering an app (`docs/runbooks/argocd.md:218`), the handover flip (`:412`) and the
 cold-boot bootstrap (`:681-685`). Every note is one that the last step of P6's runbook finds as
-written.
+written. That step runs `git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md'`,
+so each note carries that phrase on one source line and no other Ansible text uses it. It deletes
+each hit's whole paragraph or blockquote, and what is left around it must still read correctly.
+The Argo CD upgrade's hand refresh (`argocd.md`, "Upgrading Argo CD" step 2, "ArgoCDDeploy has
+no webhook") is switch-dependent too: the runbook's step 2 adds that webhook.
 
 Two specific fixes:
 
