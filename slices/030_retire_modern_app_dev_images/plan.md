@@ -209,7 +209,7 @@ Record:
   Terraform v1.16.3, Python 3.13.7) against a local build.
 - Gate: `kc project test` and `kc project lint` green.
 
-### P3 — KubeCoder: Validate and the contracts drift gate run in the modern-app toolchain container
+### P3 — KubeCoder: Validate and the contracts drift gate run in the modern-app toolchain container ✅ DONE 2026-09-26
 
 Target: ../KubeCoder
 
