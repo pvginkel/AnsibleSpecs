@@ -3,8 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — cleanup never deletes a pinned image",
-      "description": "registry-cleanup must never delete an image a deploy repo pins (R1), as ruled without reading what is deployed: the nightly dry-run's would-delete list — tag deletions and garbage collection alike — holds no tag and no digest that any deploy repo pins for an image from the estate's registry.",
-      "owed_after": "the first nightly registry-cleanup run after P7's push has synced (03:30 cluster time)",
+      "description": "registry-cleanup must never delete an image a deploy repo pins (R1), as ruled without reading what is deployed: the would-delete list of the dry-run the test phase starts by hand from the unsuspended CronJob — tag deletions and garbage collection alike — holds no tag and no digest that any deploy repo pins for an image from the estate's registry.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -20,8 +19,7 @@
     {
       "id": "V03",
       "area": "R1 — the operator sees the list (Ruling D1)",
-      "description": "The slice's test phase shows the operator one night's would-delete list.",
-      "owed_after": "the first nightly registry-cleanup run after P7's push has synced (03:30 cluster time)",
+      "description": "The slice's test phase shows the operator the would-delete list: once the unsuspended dry-run CronJob is live, the test phase starts one run from it by hand (a Job created from the CronJob — dry-run, garbage collection included), reads that run's log and puts the list before the operator (Ruling D1).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -29,7 +27,7 @@
     {
       "id": "V04",
       "area": "R1 — the operator's switch (Ruling D1)",
-      "description": "Turning dry-run off is the operator's one-line change, filed as an Operator Action card in the ANS project; the slice itself never runs cleanup in deleting mode.",
+      "description": "Turning dry-run off is the operator's one-line change, filed as an Operator Action card in the ANS project by the test phase after the would-delete list exists — never before; the slice itself never runs cleanup in deleting mode.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -45,7 +43,7 @@
     {
       "id": "V06",
       "area": "R2 — the migration's comment",
-      "description": "The \"digest the release runs\" comment that the migration left in every deploy repo is corrected in each repo that carried it, RegistryDeploy's (`config/prd/values.yaml:26-27`) and KeycloakDeploy's two copies included, and the corrected text stays true in a file that still pins an upstream image by digest (ANS-139).",
+      "description": "The \"digest the release runs\" comment that the migration left in every deploy repo is corrected in each repo that carried it, RegistryDeploy's (`config/prd/values.yaml:26-27`) and KeycloakDeploy's two copies included. The corrected text is written once, in RegistryDeploy, and every other copy is replaced by that exact string (Ruling R1-Q3); it stays true in a file that still pins an upstream image by digest (ANS-139). The five repos with a different migration header change only where they claim digests, and each such change is listed in the close-out.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -133,7 +131,7 @@
     {
       "id": "V17",
       "area": "Rollouts",
-      "description": "Every Argo CD Application the slice's pushes fed — the pin commits of the DockerImages builds and the deploy-repo pushes — is Synced and Healthy on its new revision; argocd-prd, synced by hand (D3), is the one exception, left out of sync for the operator.",
+      "description": "No phase pushed; the test phase pushed in Ruling R1-Q2's order — the shared library, KubeCoderDeploy and ArgoCDDeploy, DockerImages, the keycloak build, RegistryDeploy, the deploy-repo comment batches — each step's live check green before the next. Every Argo CD Application those pushes fed — the pin commits of the DockerImages builds and the deploy-repo pushes — is Synced and Healthy on its new revision; argocd-prd, synced by hand (D3), is the one exception, left out of sync for the operator.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -149,7 +147,15 @@
     {
       "id": "V19",
       "area": "Test coverage",
-      "description": "registry-cleanup's and version-poller's test suites cover the label rule — Ruling D2's series, matrix per-build tags, promoted copies, unlabelled tags — and cleanup's dry-run garbage collection, and pass; no coverage is lost: every deleted test has a named successor.",
+      "description": "registry-cleanup's and version-poller's test suites cover the label rule — Ruling D2's series, matrix per-build tags, promoted copies, unlabelled tags — cleanup's per-series floor (Ruling R1-A1) and its dry-run garbage collection, and pass; no coverage is lost: every deleted test has a named successor.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V20",
+      "area": "Ruling R1-A1 — every label series keeps its newest build",
+      "description": "registry-cleanup's floor keeps the newest build of each label series whether or not the label's own tag exists in the repo, so an old self-labelled bare number (live example: `ssegateway-validation:56`, labelled `56`, built 2026-09-24) counting as a tracking tag cannot switch the floor off. Today the floor fires only in a repo with no tracking tag (`registry-cleanup/app/main.py:319`).",
       "verdict": null,
       "rationale": "",
       "evidence": []

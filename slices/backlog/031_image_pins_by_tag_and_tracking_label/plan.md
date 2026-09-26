@@ -205,88 +205,119 @@ build history).
 
 ## Ordering constraints
 
-- Cleanup never runs in deleting mode in this slice (Ruling D1). Before the dry-run CronJob is
-  unsuspended, the new cleanup image (label rule) is built and pinned in RegistryDeploy, and
-  KeycloakDeploy pins a per-build tag, so the dry-run list the operator reviews is the one the
-  live switch would delete.
-- The kaniko2 change (JenkinsPipelineUtils) lands before any DockerImages build that relies on
-  the two-tag matrix push or the explicit tracking tag.
-- **Before the run: RegistryDeploy is checked out.** P7 targets `../RegistryDeploy`, which this
-  environment does not clone today; it is added to Ansible's `.kubecoder/config.yaml` and the
-  environment restarted (close-out Outstanding actions). Until then read it through a throwaway
-  clone under `/tmp`, never a clone into `/work`. KeycloakDeploy and the other deploy repos stay
-  unchecked-out: P6 reads KeycloakDeploy, P10a–P10b edit the deploy repos, in scratch clones
-  (`GH_TOKEN` has repo scope).
-- **Pushes inside the run.** The loop pushes nothing before its test phase, but the live order
-  above needs P1, P2, P3, P6 and P7 each to push its repo's `main` inside the phase and end on
-  the proof the phase names, and P10a–P10b push the deploy repos as they go (Settled: batched
-  pushes). Each of these pushes comes before the phase's review, so a review finding is fixed
-  forward. P1 is live estate-wide the moment it lands: every job loads the library unpinned from
-  `main` (`DockerImages/Jenkinsfile:3`).
-- **P2 and P3 before P6.** P6's pin lists name the paths P2 and P3 put in place, and
-  `cicd.writeVersionPins` refuses a path the values file does not already hold
-  (`JenkinsPipelineUtils/vars/cicd.groovy:16-17`): a pin list pushed first fails the DockerImages
-  build's pin stage.
-- **Deploy repos move under the run.** Builds commit pins to the deploy repos' `main` at any
-  time — KubeCoder's to KubeCoderDeploy continuously, DockerImages' to RegistryDeploy,
-  KeycloakDeploy and (after P6) ArgoCDDeploy. Work from the current `origin/main`, rebase onto
-  pin commits that land meanwhile, never force-push.
-- **P7 as early as its preconditions allow.** The first nightly dry-run should fall as early in
-  the run as it can, so the spec and sweep phases (P8–P10b) come after it.
+- **No phase pushes; the test phase pushes, in this order (Ruling R1-Q2).** Every phase commits
+  only. The test phase's dispatch says prd stays operator-gated: for this slice, Ruling R1-Q2 is
+  the operator's authorisation for these pushes and the prd rollouts they cause, unattended, and
+  Ruling D1 for the dry-run Job it starts in prd. Each step's check is green before the next
+  step starts. At the first red — a build, an Application, a check — push nothing more and hand
+  back what is left unpushed.
+  1. **JenkinsPipelineUtils** (P1). Every job loads the library unpinned from `main`
+     (`DockerImages/Jenkinsfile:3`), so the push is live estate-wide. Its check is the builds
+     the next steps start. Step 3's DockerImages build is the first to call the new `kaniko2`.
+  2. **KubeCoderDeploy and ArgoCDDeploy** (P2, P3). They go before DockerImages: its pin lists
+     name the paths P2 and P3 add, and `cicd.writeVersionPins` refuses a path the values file
+     does not already hold (`JenkinsPipelineUtils/vars/cicd.groovy:16-17`). Check: kubecoder-dev
+     is Synced and Healthy on the pinned tunnel-reclaim tag. argocd-prd is still Synced, because
+     P3's move is render-neutral.
+  3. **DockerImages** (P4–P6, P8). The push builds each changed image folder: registry-cleanup,
+     version-poller, kube-coder-tunnel-reclaim and webhook-relay. It writes their pins to
+     RegistryDeploy (the CronJob is still suspended), VersionPollerDeploy (the new poller goes
+     live), KubeCoderDeploy's `main`, FieldnotesDeploy and ArgoCDDeploy. Check:
+     - the build is green (`Ansible/tools/ai_workflow/track_build.py`);
+     - every auto-synced Application it fed is Synced and Healthy on its new pin;
+     - argocd-prd is left out of sync for the operator (Ruling D3);
+     - the live poller's first polls trigger nothing that P5's dry run did not list.
+  4. **The keycloak build.** Start a DockerImages build with the job's `image` parameter
+     (`DockerImages/Jenkinsfile:60`) set to `keycloak`. It pushes
+     `26.7.3-postgres-health-ispn-<build>` and writes it into both KeycloakDeploy stages in place
+     of the digest. Check: both stages are Synced and Healthy on the per-build tag.
+     - Keycloak runs one replica with `Recreate` (ANS-126), so each stage has a short SSO outage.
+       It is the same rollout the 2026-10-01 rebuild would cause.
+     - A push that touched both stages once failed the second stage's sync on a hook-Job name
+       clash (AnsibleSpecs `handovers/dhcp-outage-2026-09-25/plan.md:45-48`). homelab-shared
+       0.3.1 has since given each app a fixed hook Job name (KeycloakDeploy `a5d978a`).
+     - If a keycloak build has already written the per-build pin since step 3, that build
+       counts. The poller's rebuild is due 2026-10-01T19:11Z.
+  5. **RegistryDeploy** (P7). Push only once its `origin/main` pins the P4 cleanup build (step
+     3's pin commit) and KeycloakDeploy pins a per-build tag in both stages (step 4). Check: the
+     live CronJob is not suspended, is in dry-run and runs the P4 build. Then, per Ruling D1:
+     - start one run from the CronJob by hand, as a Job created from it;
+     - put its would-delete list, tags and garbage collection both, before the operator: keep
+       the run's log in the slice folder and put a summary in the close-out report;
+     - check that the list holds no tag or digest that a deploy repo pins (V01);
+     - only then file the Operator Action card (ANS) to turn dry-run off.
+  6. **The comment sweep** (Ruling R1-Q3).
+     - Take RegistryDeploy's corrected comment as merged. Put that exact string in place of the
+       old one in every other deploy repo that carries it. The grounding counted 41
+       `config/prd/values.yaml` copies plus KeycloakDeploy's `config/dev`; measure rather than
+       trust that count.
+     - The five repos with a different migration header (Elasticsearch, Fieldnotes, Filebeat,
+       IacProvisioner, Zigbee2mqtt) change only where they claim digests. Each such change is
+       listed in the close-out. ArgoCDDeploy and KubeCoderDeploy carry neither comment.
+     - Push a few repos at a time, because every deploy-repo push starts its `AaC/<Repo>` build
+       and an Architecture rebuild. The next batch starts only when this batch's builds are
+       green and its Applications are still Synced and Healthy. A comment renders nothing new.
+     - A repo whose `origin/main` already carries the corrected comment is done, so a
+       re-entered test phase resumes where a stop left off.
+- **Deploy repos move under the run.** Builds commit pins to deploy repos' `main` at any time:
+  KubeCoder's to KubeCoderDeploy continuously, and DockerImages' to RegistryDeploy, KeycloakDeploy
+  and ArgoCDDeploy. Every push goes onto the current `origin/main`, rebased over the pin commits
+  that landed meanwhile. Never force-push.
+- **Deploy repos that are not under `/work` are read and edited in scratch clones.** This covers
+  KeycloakDeploy and the rest. Clone them under `/tmp` (`GH_TOKEN` has repo scope), never into
+  `/work`.
 
 ### P1 — kaniko2 takes the tracking tag explicitly, and every tag it pushes is the label or in its build series
 
 Target: ../JenkinsPipelineUtils
 
-`kaniko2` accepts an explicit tracking tag (R4: `trackingTag:`). Without one it derives the
-label from the destinations as it does today (`vars/helmCharts.groovy:144-165`), except that a
-build pushing a lone bare build number is labelled `latest`, so the number falls in `latest`'s
-series (Settled). The destination check that refuses a matrix build's `<tag>` + `<tag>-<build>`
-today (`:162-164`) changes with it: a build may push the tracking tag and tags in its build
-series as Ruling D2 defines the series, and nothing else. That invariant is what lets P4 trust
-the label.
+`kaniko2` accepts an explicit tracking tag (R4: `trackingTag:`). Without one, it derives the
+label from the destinations as it does today (`vars/helmCharts.groovy:144-165`). The exception
+is a build that pushes a lone bare build number: it is labelled `latest`, so the number falls in
+`latest`'s series (Settled). The destination check that refuses a matrix build's `<tag>` +
+`<tag>-<build>` today (`:162-164`) changes with it. A build may push the tracking tag and tags in
+its build series, as Ruling D2 defines the series, and nothing else. P4 relies on that invariant
+to trust the label.
 
-- **Every existing caller keeps building unchanged.** Not all callers are checked out here.
-  DockerImages, KubeCoder, ArgoCDTools, Charts, Architecture and Ansible's
-  `Jenkinsfile.iac-image` are; the app repos that call `helmCharts.kaniko` or `kaniko2` are on
-  GitHub. Some push a single build number only: `dhcpapp:35` is labelled `35` (read live this
-  pass).
+- **Every existing caller keeps building unchanged.** The library goes live estate-wide the
+  moment the test phase pushes it. Not all callers are checked out here:
+  - checked out: DockerImages, KubeCoder, ArgoCDTools, Charts, Architecture and Ansible's
+    `Jenkinsfile.iac-image`;
+  - on GitHub only: the app repos that call `helmCharts.kaniko` or `kaniko2`.
+
+  Some callers push a single build number only. Live example: `ssegateway-validation:56`,
+  labelled `56`, built 2026-09-24.
 - The doc comment on `kaniko2` states the new contract.
-- **Pushed inside the phase** (Ordering constraints), with `kc project test` green, and the first
-  builds that run on it followed to green (`track_build.py`).
 
 ### P2 — KubeCoderDeploy pins kube-coder-tunnel-reclaim to a build
 
 Target: ../KubeCoderDeploy
 
 KubeCoderDeploy stops running `kube-coder-tunnel-reclaim:latest` (R5). The controller pod's
-tunnel-reclaim container runs a build-number tag of the image, the newest build when the phase
+tunnel-reclaim container runs a build-number tag of the image: the newest build when the phase
 runs. The pin sits where the repo's pin convention puts image pins (argo-cd D47 and D53), at a
-path P6's pin list names so DockerImages' builds rewrite it. With the float go:
+path that P6's pin list names, so DockerImages' builds rewrite it. These go with the float:
 
 - the "deliberate float" comment (`chart/values.yaml:16-18`);
 - the render test's `:latest` assertions (`tests/render-chart.py:82-83`, `:226-230`,
   `:384-389`).
 
-The container's pull policy follows the other pinned images': `Always` today
-(`chart/templates/controller-deployment.yaml:229`), `IfNotPresent` for the controller (`:47`).
-
-**Pushed inside the phase**, onto the current `origin/main`. The push rolls kubecoder-dev, which
-tracks `main`. The phase ends with kubecoder-dev Synced and Healthy on the pinned tag. prd gets
-the pin through KubeCoder's normal promotion (Settled), never through a commit on `prd`.
+The container's pull policy follows the other pinned images'. It is `Always` today
+(`chart/templates/controller-deployment.yaml:229`); the controller uses `IfNotPresent` (`:47`).
+prd gets the pin through KubeCoder's normal promotion (Settled), never through a commit on
+`prd`.
 
 ### P3 — ArgoCDDeploy's relay pin moves into its production stage values
 
 Target: ../ArgoCDDeploy
 
 Ruling D3. The relay's image pin moves from the chart default (`chart/values.yaml:53-58`) into
-`config/prd/values.yaml`, at a path P6's pin list names, so every relay build writes it there as
-it writes FieldnotesDeploy's. The chart comment that argues for a chart-level pin goes with it.
-The render gate's relay assertions (`tests/render-chart.py:183-190`) keep holding.
+`config/prd/values.yaml`, at a path that P6's pin list names. Every relay build then writes it
+there, as it writes FieldnotesDeploy's. The chart comment that argues for a chart-level pin goes
+with it. The render gate's relay assertions (`tests/render-chart.py:183-190`) keep holding.
 
-The move is render-neutral. It keeps today's build (`2539`), so it gives argocd-prd nothing new
-to sync. **Pushed inside the phase**, before P6. The sync of Argo CD's own application stays the
-operator's (D3).
+The move is render-neutral: it keeps today's build (`2539`), so argocd-prd gets nothing new to
+sync. The sync of Argo CD's own application stays the operator's (D3).
 
 ### P4 — registry-cleanup: the label decides what is build history, and a dry run covers garbage collection
 
@@ -297,112 +328,113 @@ and the Settled list). The label replaces the tag-shape regex (`registry-cleanup
 
 - A tag is tracking only if its name equals the label on the image it points to.
 - A tag is deletable history only if it is in that label's build series.
-- Every other tag is kept and not counted toward the keep-newest cap: unlabelled tags, and
-  promoted copies such as `prd-<n>`.
+- Every other tag is kept and not counted toward the keep-newest cap. That covers unlabelled
+  tags and promoted copies such as `prd-<n>`.
 
 So `node-24` and `jdk-21` stop being read as builds 24 and 21.
 
-The protections that stand today stay: the shared-digest guard that fails closed (`:344-370`),
-load-bearing since argo-cd D47; the floor that never empties a repo (`:317-326`); and
-`--delete-untagged` (Settled).
+The protections that stand today stay:
+
+- the shared-digest guard that fails closed (`:344-370`), load-bearing since argo-cd D47;
+- `--delete-untagged` (Settled);
+- the floor that never empties a repo (`:317-326`), which now works per series (Ruling R1-A1).
+  Every label series keeps its newest build whether or not the label's own tag exists in the
+  repo. Today the floor fires only in a repo with no tracking tag (`:319`). An old
+  self-labelled bare number counts as a tracking tag under the label rule, so a floor keyed that
+  way would switch off. Live example: `ssegateway-validation:56`, labelled `56`, next to future
+  builds labelled `latest` with no `latest` tag.
+
+Further requirements:
 
 - **A dry run is complete, and the chart can switch it on.** A dry run logs what the tag pass
   would delete and what garbage collection would delete, and deletes nothing. Today it skips
   garbage collection entirely (`:467`). The job takes the switch in a form the RegistryDeploy
-  chart can set; the image's command passes only `REGISTRY_URL` today
+  chart can set; today the image's command passes only `REGISTRY_URL`
   (`registry-cleanup/Dockerfile`). P7 consumes it.
-- **Tests.** `registry-cleanup/tests/test_cleanup.py` covers the label rule: D2's three series
-  shapes, a matrix per-build tag, a promoted copy, unlabelled tags, and the dry-run garbage
-  collection. No CI runs these tests, so the phase runs them. No existing case is lost without
-  a successor.
+- **Tests.** `registry-cleanup/tests/test_cleanup.py` covers:
+  - the label rule: D2's three series shapes, a matrix per-build tag, a promoted copy and
+    unlabelled tags;
+  - the per-series floor, including a series whose label tag does not exist next to a
+    self-labelled bare number;
+  - the dry-run garbage collection.
+
+  No CI runs these tests, so the phase runs them. No existing case is lost without a
+  successor.
 - **Proof.** Run a dry run of the new code against the live registry from this pod
-  (`http://registry:5000`, reads only). Leave garbage collection out: it needs the registry
-  pod. The would-delete summary goes in the done-record.
-- Not pushed here. P6 pushes DockerImages.
+  (`http://registry:5000`, reads only). Leave garbage collection out, because it needs the
+  registry pod. The test phase's hand-started run is the first live run of it (Ordering
+  constraints, step 5). The would-delete summary goes in the done-record.
 
 ### P5 — version-poller: the same label rule
 
 Target: ../DockerImages
 
 The version-poller classifies tracking tags by P4's label rule (Settled). Reading the label as
-the rule itself (R4) replaces its copy of the tag-shape regex (`version-poller/app/tagging.py:18-24`)
-and the fallback that recovers `node-24`-shaped tracking tags from the label
-(`version-poller/app/poller.py:125-132`, `:220-238`).
+the rule itself (R4) replaces two things:
+
+- its copy of the tag-shape regex (`version-poller/app/tagging.py:18-24`);
+- the fallback that recovers `node-24`-shaped tracking tags from the label
+  (`version-poller/app/poller.py:125-132`, `:220-238`).
+
+Further requirements:
 
 - **It starts no rebuild it does not start today, apart from the tracking tags the name
-  heuristic misread.** The registry still holds legacy build-number tags whose label names the
-  tag itself. For example, `dhcpapp:35` carries `tracking-tag=35`, `pipeline=DHCP/DHCPApp` and
-  `rebuild-at=2026-07-18T21:41:16Z` (read live this pass). A literal reading of the rule makes
-  each of these a tracking tag that is due now, and rebuilding an app through one redeploys the
-  app. Today they are skipped (`poller.py:233-234`). After P1, kaniko2 never stamps a bare
-  number with itself, so these tags are only leftovers.
+  heuristic misread.**
+  - The registry still holds legacy build-number tags whose label names the tag itself. For
+    example, `dhcpapp:35` carries `tracking-tag=35`, `pipeline=DHCP/DHCPApp` and
+    `rebuild-at=2026-07-18T21:41:16Z`.
+  - A literal reading of the rule makes each of these a tracking tag that is due now, and
+    rebuilding an app through one redeploys the app.
+  - Today they are skipped (`poller.py:233-234`). After P1, kaniko2 never stamps a bare number
+    with itself, so these tags are only leftovers.
 - **Tests** in `version-poller/tests/` cover the rule, the matrix per-build tag and the
   leftovers. No existing case is lost without a successor.
-- **Proof.** Run a dry-run poll of the new code against the live registry. It only reads; the
-  poller has a dry-run mode (`poller.py:59-67`, `:103-106`). The done-record lists what it
-  would trigger, and explains anything the old code would not have triggered.
-- Not pushed here. P6 pushes DockerImages.
+- **Proof.** Run a dry-run poll of the new code against the live registry. It only reads: the
+  poller has a dry-run mode (`poller.py:59-67`, `:103-106`). The done-record lists what the poll
+  would trigger and explains anything the old code would not have triggered. The test phase
+  checks the live poller against that list (Ordering constraints, step 3).
 
-### P6 — Matrix builds push a per-build tag, the pin lists reach the unrefreshed pins, and Keycloak runs a per-build tag
+### P6 — Matrix builds push a per-build tag, and the pin lists reach the unrefreshed pins
 
 Target: ../DockerImages
 
-- **Matrix builds (R3).** Every matrix build pushes `<tag>-<build>` next to its named tag, and
-  passes the named tag to kaniko2 as the explicit tracking tag (P1). The pin stage writes the
-  per-build tag wherever a `deploy-pins.json` exists, matrix images included; today that is only
-  `keycloak/deploy-pins.json`. Today the pin stage skips matrix images (`Jenkinsfile:120-121`;
-  `collectPins` at `:39-54`; the stage at `:171-187`). The other seven matrix images keep
-  pulling their named tag.
-- **Pin lists.** `kube-coder-tunnel-reclaim` gets a pin list naming P2's path. `webhook-relay`'s
-  list gains P3's ArgoCDDeploy path next to FieldnotesDeploy's (Ruling D3).
-- **Going live.** DockerImages is pushed here, carrying P4–P6. The push builds every image
-  whose folder changed — registry-cleanup, version-poller, kube-coder-tunnel-reclaim and
-  webhook-relay — and writes each one's pins:
-  - RegistryDeploy, where the CronJob stays suspended until P7;
-  - VersionPollerDeploy, where the new poller goes live;
-  - KubeCoderDeploy's `main` (kubecoder-dev);
-  - FieldnotesDeploy;
-  - ArgoCDDeploy, whose sync is left to the operator (D3).
-
-  The phase ends when:
-  - the build is green (`track_build.py`);
-  - every auto-synced Application it fed is Synced and Healthy on its new pin;
-  - the live poller's first polls trigger nothing that P5's dry run did not list.
-- **Keycloak pins a per-build tag before cleanup deletes anything** (Settled). Run a DockerImages
-  build of `keycloak`, using the job's `image` parameter. It pushes
-  `26.7.3-postgres-health-ispn-<build>` and writes that tag into both KeycloakDeploy stages, in
-  place of the digest (`config/dev/values.yaml:21`, `config/prd/values.yaml:22`). The phase ends
-  with both Keycloak stages Synced and Healthy on the per-build tag.
-  - Keycloak runs one replica with `Recreate` (ANS-126), so the rollout is a short SSO outage in
-    each stage. It is the same rollout the 2026-10-01 rebuild would cause.
-  - A push that touches both stages once failed the second stage's sync on a hook-Job name
-    clash (AnsibleSpecs `handovers/dhcp-outage-2026-09-25/plan.md:45-48`). homelab-shared 0.3.1
-    has since given each app a fixed hook Job name (KeycloakDeploy `a5d978a`).
-  - If a keycloak build has already written the per-build pin since the push (the poller's
-    rebuild is due 2026-10-01T19:11Z), that build counts.
+- **Matrix builds (R3).**
+  - Every matrix build pushes `<tag>-<build>` next to its named tag, and passes the named tag to
+    kaniko2 as the explicit tracking tag (P1).
+  - The pin stage writes the per-build tag wherever a `deploy-pins.json` exists, matrix images
+    included. Today that is only `keycloak/deploy-pins.json`.
+  - Today the pin stage skips matrix images (`Jenkinsfile:120-121`; `collectPins` at `:39-54`;
+    the stage at `:171-187`).
+  - The other seven matrix images keep pulling their named tag.
+  - Keycloak's first per-build pin comes from the keycloak build the test phase starts
+    (Ordering constraints, step 4). This phase is what makes that build write the pin.
+- **Pin lists.**
+  - `kube-coder-tunnel-reclaim` gets a pin list naming P2's path.
+  - `webhook-relay`'s list gains P3's ArgoCDDeploy path next to FieldnotesDeploy's (Ruling D3).
+  - Every entry names a path its values file already holds with P2 and P3 merged. The pin stage
+    fails on any other path (`JenkinsPipelineUtils/vars/cicd.groovy:16-17`).
 
 ### P7 — RegistryDeploy: cleanup runs again, nightly, in dry-run
 
 Target: ../RegistryDeploy
 
 Ruling D1. The registry-cleanup chart gets a dry-run setting, turned on, which drives P4's
-switch. The CronJob's suspension and its comment go (`chart/templates/registry-cleanup-cronjob.yaml:7-10`).
-The nightly job then runs for real, in dry-run mode. This slice never runs cleanup in deleting
-mode.
+switch. The CronJob's suspension and its comment go
+(`chart/templates/registry-cleanup-cronjob.yaml:7-10`). The nightly job then runs for real, in
+dry-run mode. This slice never runs cleanup in deleting mode.
+
+The setting reaches a cleanup image that understands it. The test phase pushes this repo only
+after DockerImages' build has pinned the P4 cleanup build here (Ordering constraints, step 5).
+Until then the file pins `:2548` (`config/prd/values.yaml:32`).
 
 RegistryDeploy's copy of the migration's digest comment (`config/prd/values.yaml:26-27`) is
-corrected here, and its wording is the one P10a–P10b apply everywhere. The wording must stay
-true in a file that still pins an upstream image by digest: this file's `images.registry` does,
-and that stays until ANS-139.
+corrected here. It is the one copy that is written and reviewed. The test phase puts that exact
+string into every other deploy repo (Ruling R1-Q3), so the wording must stay true in any deploy
+repo's stage values:
 
-- **Only once the preconditions hold** (Ordering constraints):
-  - RegistryDeploy's `origin/main` pins the P4 cleanup build, which P6's build writes there;
-  - KeycloakDeploy pins a per-build tag in both stages.
-- **Pushed inside the phase**, onto the current `origin/main`; Argo CD auto-syncs it. The phase
-  ends with the live CronJob not suspended, in dry-run, with its next run scheduled.
-- **The operator's switch** is filed as an Operator Action card in ANS. It asks the operator to
-  turn dry-run off, the one-line change, once a nightly would-delete list has been reviewed
-  (Ruling D1). The card's id goes in the done-record.
+- some of those files still pin an upstream image by digest until ANS-139, as this file's
+  `images.registry` does;
+- others pin only per-build tags.
 
 ### P8 — DockerImages' design doc states the label rule
 
@@ -415,11 +447,8 @@ Triage overruled the standing tag scheme (R3, R4, Ruling D2). In
 - every other place the doc states them, such as §8's keep and delete rules (`:405-412`) and
   §14's classification.
 
-What shipped: the label decides; build history is the label's series; a matrix build pushes
-two tags; unlabelled tags are left alone.
-
-Pushed by the test phase. A docs-only push builds no image, because the job builds only image
-folders that changed (`Jenkinsfile:97-110`).
+What shipped: the label decides, build history is the label's series, each series keeps its
+newest build, a matrix build pushes two tags, and unlabelled tags are left alone.
 
 ### P9 — argo-cd D53: deploy repos pin tags, never digests
 
@@ -434,38 +463,6 @@ in the operator's words from R2. D53 gains:
 
 D53 never mentions digests today, so the amendment adds the rule; it corrects no sentence.
 Upstream images are ANS-139's.
-
-### P10a — The migration's digest comment: deploy repos A–I
-
-Target: root
-
-R2: "correct the 'digest the release runs' comment that the migration left in every deploy
-repo". Every copy gets P7's wording. The copies are measured, not listed. The grounding counted
-41 `config/prd/values.yaml` files plus KeycloakDeploy's `config/dev`. Five more repos carry a
-different migration header: Elasticsearch, Fieldnotes, Filebeat, IacProvisioner and
-Zigbee2mqtt. Those are corrected only where they claim digests. P7 owns RegistryDeploy's copy.
-ArgoCDDeploy and KubeCoderDeploy carry none.
-
-This phase covers the `*Deploy` repos whose names start A–I; P10b covers the rest. The repos are
-edited in scratch clones (Ordering constraints). This phase's diff in its `Target:` is empty. Its
-work is the pushed repos, and the done-record lists each repo with its pushed commit.
-
-- **Pushes in batches (Settled).** Every deploy-repo push starts its `AaC/<Repo>` build and an
-  Architecture rebuild:
-  - Push a few repos at a time.
-  - Start the next batch only when the current batch's builds are green (`track_build.py`) and
-    its Applications are still Synced and Healthy. A comment-only change renders nothing new.
-  - Stop at the first red build or unhealthy Application, and push nothing more. Hand back a
-    question naming the repo and what is left unpushed.
-- **Resumable.** A repo whose `origin/main` already carries the corrected comment is done, so a
-  re-run picks up where a stop left off.
-
-### P10b — The migration's digest comment: deploy repos J–Z
-
-Target: root
-
-As P10a, for the `*Deploy` repos whose names start J–Z, continuing from P10a's done-record.
-KeycloakDeploy's two copies sit above the per-build pins that P6's build wrote.
 
 ## Not in scope
 
