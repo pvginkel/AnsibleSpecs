@@ -23,6 +23,28 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Settle V15 after the operator's registry switch, run from P6's runbook (including …
+
+V15 — After the operator's switch, `releases` owns the 50 Applications. Each keeps its uid, creation timestamp and spec. No ApplicationSet remains. A registry push to ArgoCDDeploy refreshes `releases` through its webhook, and nothing polls.
+
+`verification.json` marks V15 owed after: the operator's registry switch, run from P6's runbook (including ArgoCDDeploy's relay webhook). The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V15 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:**
+
+### A2 — Settle V24 after the operator's registry switch, run from P6's runbook through its last …
+
+V24 — After the operator's registry switch, the last step of the switch runbook has run. No doc still says that a procedure is owed until the registry switch has run, and the procedures those notes carried now describe the registry Argo reads.
+
+`verification.json` marks V24 owed after: the operator's registry switch, run from P6's runbook through its last step. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V24 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
