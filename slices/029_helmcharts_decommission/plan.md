@@ -512,7 +512,7 @@ Record:
   self-heal on, automated always or never, both or neither rendered, each validation removed, an
   extra object in S3, among others). `gen-architecture`'s artifact is identical in S1 and S3.
 
-### P6 — The registry switch runbook
+### P6 — The registry switch runbook ✅ DONE 2026-09-26
 
 Target: root
 
