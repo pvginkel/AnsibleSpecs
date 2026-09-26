@@ -455,11 +455,11 @@ local chart includes it in one line, with the root context. Its skeleton:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  generateName: tf-presync-
+  name: tf-presync-{{ $hook.namespace }}   # fixed per app: the next sync replaces it (ANS-137)
   namespace: argocd-hooks
   annotations:
     argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation   # failed Jobs stay readable
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation   # the latest run stays readable
 spec:
   backoffLimit: 0                  # retries belong to syncPolicy.retry, not the Job
   activeDeadlineSeconds: 1800      # a hung apply must not wedge the sync forever
