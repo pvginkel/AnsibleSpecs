@@ -160,6 +160,13 @@ move clears the way for the archive."
 - `.kubecoder/config.yaml` keeps cloning HelmCharts until the archive; dropping it belongs to the
   archive, not this slice.
 
+## Task shape
+
+cross-cutting — the asks land in five repos (ArgoCDDeploy's registry, Architecture's producer
+catalog, Ansible's `support/` tools and docs, AnsibleSpecs' decision records,
+JenkinsPipelineUtils) and R6 sets a new pattern: an Argo CD-native registry chart replacing the
+two ApplicationSets, with a live ownership hand-over of 50 Applications.
+
 ## Ordering constraints
 
 - The decision-record phase comes first; later phases cite what it records.
@@ -167,10 +174,267 @@ move clears the way for the archive."
   and the ApplicationSets and `releases` must never both own the Applications. The switch
   sequence (guard → orphan-delete → create `releases` → adopt) is shaped so that syncing
   `argocd-prd` at any point of the run is safe; removing the ApplicationSet templates from the
-  chart comes only after the operator's switch, or is gated so that it does.
+  chart comes only after the operator's switch, or is gated so that it does. This plan gates it:
+  P5 merges with the ApplicationSets still selected, and the operator flips the selection in
+  P6's runbook ([attachments/registry-switch.md](attachments/registry-switch.md)).
 - The catalog move into Architecture and the removal of the `helm-charts` producer land in one
   change (the same element ids must never be published twice, nor go missing between two pushes).
 - `argo_migrate.py`'s steps and recommend-resources read the new registry, so they come after it.
+
+### P1 — Decision records: the native registry, D44 amended, O2 closed
+
+Target: ../AnsibleSpecs
+
+AnsibleSpecs' `argo-cd/` records (`decisions.md`, `design.md`, `phases.md`) state the design this
+slice ships. Where the design moves, they are rewritten in place:
+
+- **D44 amended.** `terraform-modules/namespace` stays in the archived HelmCharts. 49 kept config
+  files call it: 46 `configs/dev/<app>/_shared/infrastructure.tf`, plus the three parked apps'
+  `configs/prd/<app>/_shared/infrastructure.tf`. `argo_migrate.py` strips the module when it
+  scaffolds (`support/argo-migrate/argo_migrate.py:495-502`), and that stays with the tool.
+- **O2 closed.** It records four things:
+  - collect-versions is deleted (HelmCharts `91ce931`);
+  - version-poller's HelmCharts block is gone (VersionPollerDeploy `9846433`);
+  - recommend-resources has the home and shape the D3 ruling gives it;
+  - the inventory of what runs is ArgoCDDeploy's registry.
+
+  The `configs/dev` caveat is deferred by the F1 ruling.
+- **The native registry is recorded,** per the D2 ruling and its binding sketch. Every decision
+  it changes is amended or superseded:
+  - the ones the rulings name: D20, D21, D23, D27, and D22's upgrade path, which is not taken.
+    For D27, an entry deleted from the registry waits for the operator's prune, because
+    `releases` never prunes.
+  - the ones whose mechanism moves: D6's generator knob; D39's registration path, which becomes
+    a push to ArgoCDDeploy through a relay webhook that ArgoCDDeploy does not have yet (see P5);
+    D24's ApplicationSet wording; D38's `reconciler` key; and D62's templatePatch.
+- **`phases.md`'s endgame items** are brought in line.
+- **The estate register** (`/work/AnsibleSpecs/decisions.md`) no longer describes HelmCharts as
+  the place apps and their Terraform deploy from. This covers its tool split, `:35` and `:48`,
+  and the rest of that doctrine. This is R7's ask, applied to the doctrine every session reads
+  first. Historical mentions stay.
+
+Record any decision id this phase allocates in its done-record; later phases cite it from there.
+
+### P2 — Architecture: the product catalog moves in, the helm-charts producer goes
+
+Target: ../Architecture
+
+This phase carries out the D1 ruling in one commit, so no element id is ever published twice or
+goes missing between pushes:
+
+- **What moves.** The product-catalog elements that the `helm-charts` producer publishes and
+  that another producer references move into one hand-authored catalog file under this repo's
+  own producer (`docs/architecture/`). Their UUIDs and published fields stay intact.
+- **What is dropped.** The unreferenced elements go: `ss:opensearch`, `ss:phpmyadmin` and
+  `ss:rabbitmq`.
+- **What is removed.** The `helm-charts` entry in `pipeline-producers.yaml:26-28` goes, and so
+  does its mention in `views/infrastructure.yaml:12`'s `excludeProducers`.
+
+The counts come from the published dataset
+(`https://architecture.webathome.org/data/v0.1/architecture.yaml`) at the time of the change. On
+2026-09-26 it held 40 `helm-charts` elements: 38 `ss:*` plus `svc:cluster-ceph-cephfs` and
+`svc:cluster-ceph-rbd`. 91 relations from 33 producers referenced 37 of them. `ss:dnsmasq` is
+already `dnsmasq-deploy`'s, so the session's count of 41 no longer holds.
+
+- **Before the push,** show that the merged model validates with the change in place: every
+  reference resolves when the collector runs over the current producers' artifacts.
+- **Stale text.** Comments, schema examples and tooling text that name `helm-charts` as a live
+  producer are brought current.
+- **Setup first.** Ansible's `.kubecoder/config.yaml` does not declare this repo, so nothing has
+  set it up. Run `kc project setup` here first; the gate borrows `tooling`'s Poetry env.
+
+Once this phase lands, `AaC/HelmCharts` has no consumer. That is ANS-121's precondition.
+
+### P3 — JenkinsPipelineUtils: the dead HelmCharts helpers go
+
+Target: ../JenkinsPipelineUtils
+
+After this phase the library no longer names `IaC/HelmCharts` or HelmCharts' assets:
+
+- `cicd.helmDeploy()` (`vars/cicd.groovy:1-2`) goes;
+- the `helmCharts` var's `scp`, `rsync` and `ssh` (`vars/helmCharts.groovy:177-196`) go;
+- `kaniko`, `kaniko2` and the rest of the var stay.
+
+Every job loads this library unpinned from `main`. Re-check that there are zero callers across
+the owner's repositories (GitHub code search) immediately before removing anything. After this
+phase `IaC/HelmCharts` has no caller, which is ANS-121's other precondition.
+
+### P4 — ArgoCDDeploy: the registry, Argo CD native
+
+Target: ../ArgoCDDeploy
+
+ArgoCDDeploy holds the registry in the shape the D2 ruling fixes (the sketch in the rulings is
+binding):
+
+- a small chart that renders one plain Application per app-stage;
+- one values file, which is the registry;
+- a `values.schema.json`, which is the key validation;
+- the repo's render test, which is where the tests go.
+
+The values file carries the 50 live entries and nothing else. They come from HelmCharts'
+`configs/prd/*/*/release.yaml` files with `reconciler: argo-cd`, read at `origin/main`: the local
+clone was one commit behind on 2026-09-26. The six parked stages stay in HelmCharts. Comments in
+those files that explain a why come along with their entries.
+
+- **Nothing renders the new chart yet.** `chart/`'s render does not change in this phase; the
+  `releases` Application is P5's work. Syncing `argocd-prd` after this phase is therefore a
+  no-op.
+- **The render equals the live Applications, spec for spec.** Invariant 3 of
+  [attachments/registry-switch.md](attachments/registry-switch.md) rests on this. Leave behind a
+  read-only check that compares the registry's render with the live Applications (the default
+  kubeconfig can read them) and exits non-zero on any spec difference. Run it against prd before
+  handing back and record the result. Today's generating templates are
+  `chart/templates/applicationsets.yaml:64-204`.
+- **No registry check is lost.** HelmCharts checks an Argo entry today in
+  `tools/deploy/deploy_cli/release.py:16-31`'s allowlist and in `origin/main`'s
+  `tests/test_prd_tree.py:94-147`. The checks are:
+  - the booleans are booleans;
+  - `repo` has the pvginkel prefix;
+  - `targetRevision` is not empty;
+  - the upstream block is complete;
+  - Argo's own entry never auto-syncs.
+
+  Each needs a successor in the schema or the render test. The test proves that the schema
+  refuses a bad entry.
+- **The render test's per-Application assertions move to the rendered Applications.** These are
+  `tests/render-chart.py:504-652`: name and namespace `<app>-<stage>`, the finalizer, the four
+  hook parameters, the autoSync semantics, the `syncOptions` pass-through and the upstream
+  three-source shape. They currently check the ApplicationSet templates. The ApplicationSet
+  assertions stay, because `chart/` still renders the ApplicationSets.
+
+### P5 — ArgoCDDeploy: the ownership hand-over, one switch, safe at every sync
+
+Target: ../ArgoCDDeploy
+
+`chart/` renders either the two ApplicationSets or the `releases` Application that deploys P4's
+chart, never both. One stage-level setting chooses between them. When this phase merges, the
+setting still selects the ApplicationSets, so syncing `argocd-prd` changes nothing but their new
+prune guard. [attachments/registry-switch.md](attachments/registry-switch.md) gives the states
+the operator walks through and the invariants each state must hold. The render test proves that
+each state renders what the attachment says.
+
+- **`releases`' behaviour.**
+  - Steady state: automated sync, prune off, self-heal off (D5).
+  - At the switch it comes up without syncing on its own, so the operator's first sync is the
+    one whose diff they have read.
+  - Removing it from the render, or deleting it, never deletes an Application, so it carries no
+    cascading finalizer.
+  - Its project admits the Applications it creates in Argo's own namespace.
+- **Push-only stays true (D6).** Nothing polls. ArgoCDDeploy has no webhook to Argo today: its
+  one GitHub hook delivers to Jenkins (`gh api repos/pvginkel/ArgoCDDeploy/hooks`, 2026-09-26).
+  HelmCharts has a second hook to the relay; ArgoCDDeploy does not. So the rulings' "the webhook
+  ArgoCDDeploy already receives" does not hold. The hook is the operator's step in P6's runbook,
+  not chart content.
+- **Decision citations.** Comments cite the decision ids from P1's done-record.
+
+### P6 — The registry switch runbook
+
+Target: root
+
+Write an operator runbook under Ansible's `docs/runbooks/`; where it sits is the executor's
+choice. It walks [attachments/registry-switch.md](attachments/registry-switch.md) from the state
+the run pushes to steady state, in this order:
+
+1. the rehearsal;
+2. ArgoCDDeploy's relay webhook;
+3. the equivalence check;
+4. the guard;
+5. the orphan-delete of both ApplicationSets;
+6. the flip;
+7. reading `releases`' diff;
+8. the sync;
+9. turning on automated sync.
+
+Each step gives the command the operator runs (credentials per `docs/live-infra-access.md`),
+what they must see before going on, and the way back from that state. The runbook ends with the
+attachment's list of what is dead after the switch, so the follow-up has it.
+
+- **Written, not run.** Every mutation is the operator's (see Not in scope).
+- **The webhook secret.** The webhook is signed with the shared secret every hook uses (D49; the
+  leaf is named in ArgoCDDeploy `config/prd/values.yaml`'s `credentials`). Only the operator reads
+  that secret.
+
+### P7 — argo-migrate: the new registry
+
+Target: root
+
+- **`flip` and `autosync`** edit P4's registry file, as a local ArgoCDDeploy commit with comments
+  preserved, instead of HelmCharts' `release.yaml`.
+- **Registry reads.** Every question the tool asks about an app-stage's registry entry is
+  answered by the new registry:
+  - whether the stage is on Argo (`support/argo-migrate/argo_migrate.py:88-99`, `:935-937`);
+  - its upstream pin (`:444-450`);
+  - its `syncOptions`.
+- **`register` is unchanged.** It edits only Architecture's `pipeline-producers.yaml`
+  (`:1521-1533`), which this slice leaves alone.
+- **HelmCharts reads stay.** The tool keeps reading HelmCharts' charts and configs, because it
+  migrates from HelmCharts by nature.
+- **Docstring.** Its push line names the repos the tool now commits to.
+- **No live effect in the proof.** Show `flip` and `autosync` working on a scratch copy of the
+  registry, never on ArgoCDDeploy's `main`.
+
+The tool's preflight (`:1746`) and the argocd runbook (`docs/runbooks/argocd.md:585`) both run
+`stuck_fields.py` from AnsibleSpecs' transient `handovers/argo-adoption-blind-spot/`. The script
+moves into Ansible beside the tool, and both run it from there. That settles the executable half
+of R7's pointer; the runbook's prose is P9's.
+
+### P8 — recommend-resources across the deploy repos
+
+Target: root
+
+A tool under Ansible's `support/`, beside argo-migrate and run from this environment, in the D3
+ruling's shape:
+
+1. It enumerates the deploy repos from P4's registry and clones them into a scratch directory.
+2. It reads Prometheus at `http://prometheus.home`.
+3. It writes one plain unified-diff patch per deploy repo into a report directory.
+4. The operator deletes a file to skip that app, or edits hunks to overrule them.
+5. Its second step applies whatever patches remain to the clones, commits locally, and shows the
+   result.
+
+Nothing is pushed unless the operator asks.
+
+- **The recommendation policy carries over unchanged** from HelmCharts'
+  `tools/chart_tools/recommend_resources.py`: the 7-day window, p75 CPU, p90 working-set memory
+  (`:73-121`), and its rounding. Only where it reads and writes changes.
+- **It keys on the resolved chart,** never on a directory name. The resolved chart is the deploy
+  repo's own chart, or for an upstream app the registry's chart at the stage's pinned version.
+  This fixes the mis-keying described in `argo-cd/phases.md`'s recommend-resources follow-up and
+  in `recommend_resources.py:161-222`.
+- **Where it writes.** Each registry app-stage's values go in its deploy repo's
+  `config/<stage>/values.yaml`, which for every prd stage is `config/prd/values.yaml`. It commits
+  on the branch that changes enter by. A stage that tracks `prd`, such as KubeCoder's (D34),
+  gets its values through promotion, never through a direct commit.
+- **The container-to-values-path maps come with the tool.** HelmCharts keeps them for nine
+  charts (`charts/*/resources-entry-map.json`); the scaffold left them behind
+  (`argo_migrate.py:970`). With the maps beside the tool, it reads nothing from HelmCharts.
+- **Proof in the phase.** Run step one against the live estate, which only reads. Run step two
+  into the scratch clones. Push nothing.
+
+### P9 — Docs: HelmCharts is no longer the deploy path
+
+Target: root
+
+Some Ansible docs still describe HelmCharts as the deploy path. The rulings list them:
+
+- `CLAUDE.md`;
+- `docs/live-infra-access.md`;
+- the runbooks;
+- `docs/design-philosophy.md`;
+- the `baseline`, `microk8s` and `microceph` role READMEs;
+- the `root` component's description in `.kubecoder/project.yaml`.
+
+After this phase they describe the Argo CD deploy path instead: deploy repos, and ArgoCDDeploy's
+registry. Historical mentions stay historical. Two specific fixes:
+
+- **`CLAUDE.md`'s Architecture entry** says how that checkout comes to exist. The environment
+  does not clone an undeclared repo; this slice's session found it missing on 2026-09-26.
+- **The argocd runbook's "What a cutover does not change"** states the stuck-field finding in its
+  own words, and no longer points into AnsibleSpecs `handovers/` (`docs/runbooks/argocd.md:612-614`).
+
+The summaries in `docs/architecture/ansible-architecture.yaml` that name HelmCharts as current
+count as docs here too. If you edit that file, the `architecture` component's test must still
+pass.
 
 ## Not in scope
 
@@ -183,3 +447,7 @@ move clears the way for the archive."
 - Pushing deploy repos, and moving catalog products into deploy repos.
 - A home for the `configs/dev` chart-debugging workflow (deferred by the F1 ruling).
 - Reshaping how upstream chart versions promote (D22's matrix-generator path) or the hook.
+- The clean-up after the operator's switch: the ApplicationSet branch and its setting,
+  `releases.registry`'s HelmCharts pointer, HelmCharts' relay webhook and the relay's
+  applicationset leg. All of these are dead once the switch is done, and removing them changes
+  nothing in the render. P6's runbook lists them for the follow-up.

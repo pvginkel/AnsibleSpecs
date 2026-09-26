@@ -57,3 +57,39 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — ArgoCDDeploy's test gate reads HelmCharts' _providers/clusters.yaml, so it breaks once the HelmCharts clone is dropped
+
+ArgoCDDeploy's `tests/render-chart.py:76` binds the hook environment's literals in `config/prd/values.yaml` to `../HelmCharts/_providers/clusters.yaml`, which it treats as the source of truth. This slice does not change that. The plan keeps HelmCharts cloned until the archive, and dropping the clone from `.kubecoder/config.yaml` belongs to the archive (ANS-122). Once the clone is gone, `kc project test` in ArgoCDDeploy fails on the missing file. Before the clone goes, the binding needs a new source of truth, most likely ArgoCDDeploy's own values, since the archived file will never change again.
+
+**Consequence:** After ANS-122 drops the HelmCharts checkout, ArgoCDDeploy's gate fails on every run until the binding is changed.
+
+**Provenance:** read — plan-writer, planning r1, tests/render-chart.py:76 and .kubecoder/config.yaml
+**Disposition:**
+
+### S2 — srviac's iac agent still clones HelmCharts and holds the HelmCharts deploy credentials
+
+Ansible's `support/iac-agent/etc/iac/secrets.example.yaml` still describes things that only `IaC/HelmCharts` uses. Its `repos:` list clones HelmCharts on every iac run (:37-42), and its prd kubeconfig and homelab-provider storage credentials are marked for the HelmCharts deploy (:113, :158, :191). `support/iac-image/Dockerfile:55-63` and `support/iac-agent/bin/iac-impl:53` describe the HelmCharts deploy harness too. This slice's asks do not cover them. After ANS-121 deletes the job, they are dead weight on srviac. The credentials in particular are a standing grant that nothing uses. A follow-up could remove them from the agent's config and image, and the operator would converge srviac.
+
+**Consequence:** srviac keeps cloning an archived repo on every iac run and keeps credentials that no job uses.
+
+**Provenance:** read — plan-writer, planning r1, support/iac-agent/etc/iac/secrets.example.yaml
+**Disposition:**
+
+### S3 — One Helm release Secret remains on prd: argocd-prd's bootstrap install
+
+The D61 pass removed every migrated app's Helm release Secret. A read on 2026-09-26 (secrets of type `helm.sh/release.v1`, names only) finds exactly one left: `sh.helm.release.v1.argocd-prd.v1` in `argocd-prd`, created 2026-09-04 by Argo's own bootstrap `helm install` (D3). Argo has managed that release ever since, but Helm still lists it as deployed. If someone runs `helm upgrade` or `helm uninstall` against it, Helm would act on Argo CD itself. It is not a migrated app's Secret, so D61 did not cover it, and this slice leaves it. Deleting it is the operator's call.
+
+**Consequence:** `helm list -A` shows Argo CD as a Helm release, and a stray Helm command could act on it.
+
+**Provenance:** witnessed — plan-writer, planning r1, kubectl get secrets --field-selector type=helm.sh/release.v1 (prd)
+**Disposition:**
+
+### S4 — After the registry switch, a follow-up removes what the switch leaves dead
+
+The plan gates the hand-over behind one stage-level setting that the operator flips, so that every state of ArgoCDDeploy's `main` during the run is safe to sync. Once the switch is done, these are dead: the ApplicationSet branch and the setting in ArgoCDDeploy's chart; `releases.registry`, which points at HelmCharts; the render test's HelmCharts-registry assertions; HelmCharts' relay webhook; and the relay's applicationset-controller leg. Removing the chart parts changes nothing in the render. P6's runbook ends with this list (attachments/registry-switch.md, 'After the switch'). The slice cannot do the removal, because it has to wait for the operator's switch.
+
+**Consequence:** Until the follow-up lands, ArgoCDDeploy carries a disabled ApplicationSet path next to the live registry, and a reader could take it for a live option.
+
+**Provenance:** read — plan-writer, planning r1, plan.md P5/P6 and attachments/registry-switch.md
+**Disposition:**
