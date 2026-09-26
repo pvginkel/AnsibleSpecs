@@ -253,6 +253,26 @@ real `git` against bare repos (the stage's comment, `Jenkinsfile:6-9`), which th
 (`DockerImages/kube-coder-dev-base/Dockerfile:40`); that comment is rewritten for the new
 container. No mention of either image remains in the repo. Pushed; the build is green.
 
+**Done (P4).** FieldnotesApp `5bcdf1b` (`phase/030-P4`, rebased onto `origin/main` `1bce116`,
+pushed to `main`): the pod's container is
+`containerTemplates.modern_app_toolchain('modern-app-toolchain')`, and Validate uses
+`container('modern-app-toolchain')` with its commands unchanged. Jenkins `FieldnotesApp` #16 is
+green on it; its pod ran `registry:5000/kube-coder-modern-app-toolchain:node-24`. No
+`modern-app-dev` string is left in the repo.
+
+Later phases:
+- P10: FieldnotesApp no longer calls `modern_app_dev`; with P2 and P3, all three callers are moved
+  and green.
+
+Record:
+- #16 Validate: `uv sync --all-packages --frozen`, ruff check and format clean, 227 pytest passed —
+  the same count as #15 on modern-app-dev, the bare-repo `git` suites among them.
+- The header comment names the modern-app toolchain container and its image as carrying uv and
+  git; `kc project test` passed before the push.
+- The FieldnotesApp job is top-level in Jenkins (`FieldnotesApp`, not `<Team>/FieldnotesApp`).
+- Close-out B1 (no `disableConcurrentBuilds()` around `cicd.writeVersionPins`) and S3 (stale
+  HelmCharts deploy comments) are FieldnotesApp findings left out of scope.
+
 ### P5 — ModernAppTemplate: a root-template release whose validation Job runs in the modern-app toolchain image
 
 Target: ../ModernAppTemplate

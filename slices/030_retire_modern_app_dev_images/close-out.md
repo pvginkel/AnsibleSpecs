@@ -66,6 +66,19 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — Run stopped (blocked) in P3
+
+The driver's bail (`blocked`), as it recorded it:
+
+> The change is committed on KubeCoder phase/030-P3 (2fea4ab2: Validate and the drift gate on containerTemplates.modern_app_toolchain, ci-gates.md and pipeline-dependencies.md corrected) but not pushed. The phase gate cannot run here: KubeCoder's project.yaml calls `cexec python` and `cexec frontend`, which this environment does not declare (FieldnotesApp/P4 needs `python` too). So the gate cannot go green and ruling A1 does not allow the push. Every suite passes when the same commands run through `cexec modern-app`, the image the moved stages use. The operator's options are in close-out A3: de…
+
+Stopped 2026-09-26 18:56; resumed 2026-09-26 19:03.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -73,6 +86,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
      slice's repos, which elsewhere -->
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
+
+### B1 — FieldnotesApp: the pipeline pushes deploy-repo pins without disableConcurrentBuilds() · minor
+
+FieldnotesApp's Jenkinsfile calls `cicd.writeVersionPins` (stage 'Write image pins'), whose contract (JenkinsPipelineUtils `vars/cicd.groovy:21-22`) says two builds pushing pins at once lose the race on the second push, so a caller declares disableConcurrentBuilds(). The Jenkinsfile declares no `properties([...])`, and the `FieldnotesApp` job's API lists only PipelineTriggersJobProperty. KubeCoder's Jenkinsfile:7 shows the shape: `properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])` — a bare disableConcurrentBuilds() would drop the push trigger.
+
+**Consequence:** Two FieldnotesApp builds close together (two quick pushes to main) can race on the FieldnotesDeploy push, and the later one fails red after building its image.
+
+**Provenance:** read, code-writer, P4, r1, FieldnotesApp/Jenkinsfile and the job's /api/json
+**Disposition:**
 
 ## Open questions and rulings
 
@@ -107,4 +129,13 @@ ModernAppTemplate/.kubecoder/project.yaml:11-29 explains why the repo declares n
 **Consequence:** The template repo keeps running with no gate even if one of its two templates could now carry one, so a template change (like this slice's P5) is proven only by the apps that take it.
 
 **Provenance:** read — plan-writer r2, ModernAppTemplate .kubecoder/project.yaml at acfc588; ModernAppFrontendTemplate 032f366 commit message
+**Disposition:**
+
+### S3 — FieldnotesApp: the Jenkinsfile's comments still describe the HelmCharts deploy that argo-cd D53 replaced · nit
+
+FieldnotesApp/Jenkinsfile:3-4 ('then the HelmCharts target-state deploy that rolls it out') and the 'Write image pins' stage comment's first two lines ('Push-to-deploy: trigger the HelmCharts target-state pipeline … The `fieldnotes` release pins `:latest` and redeploys on the digest move') describe the pre-D53 deploy; the same comment's next lines say HelmCharts no longer deploys the app. Left as is: outside P4's container change.
+
+**Consequence:** A reader of FieldnotesApp's pipeline is told two contradictory stories about how the app deploys.
+
+**Provenance:** read, code-writer, P4, r1, FieldnotesApp/Jenkinsfile
 **Disposition:**
