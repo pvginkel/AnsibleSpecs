@@ -66,6 +66,19 @@ The plan said the library's scp, rsync and ssh helpers had zero callers in the o
 **Provenance:** witnessed | code-writer, P3, r1, gh search code 'helmCharts.rsync(' / 'helmCharts.ssh(' --owner pvginkel
 **Disposition:**
 
+### N2 — Run paused for an operator question in P3
+
+The question, as the driver recorded it:
+
+> The pre-removal code search found a live caller: KitchenDisplay's Jenkinsfile (main) clones HelmCharts and deploys with helmCharts.ssh (x2) and helmCharts.rsync, both using $WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key. So far only cicd.helmDeploy() and helmCharts.scp are removed, since neither has a caller (JenkinsPipelineUtils phase/029-P3 6f87d09, gate green); rsync and ssh are kept. Operator: (a) keep rsync/ssh as they are, amending V21 so the library still names HelmCharts' assets and KitchenDisplay keeps cloning the archived repo for its key; (b) move the key to a Jenkins SSH cre…
+
+Stopped 2026-09-26 12:07; resumed 2026-09-26 12:10.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -215,4 +228,13 @@ Intercom `tools/dev-upload/upload.bat` (last changed d3c3f3c, 2025-04-19) mounts
 **Consequence:** A dev OTA upload of Intercom needs a HelmCharts clone for as long as the signing key lives only there; the archive leaves it readable, so nothing breaks.
 
 **Provenance:** read | code-writer, P3, r1, gh search code 'HelmCharts/assets' --owner pvginkel
+**Disposition:**
+
+### S12 — ElectronicsInventory's docs/slice-test-plan.md still says its Jenkinsfile ends in cicd.helmDeploy() · nit
+
+P3 removed cicd.helmDeploy() from JenkinsPipelineUtils. A GitHub code search for helmDeploy right before the phase handed back found no caller in code. It did find one stale prose mention: ElectronicsInventory docs/slice-test-plan.md:15 ("...and ends in `cicd.helmDeploy()`. That is the repo's standing..."). That repo is not in this slice's scope, and P9 covers Ansible only.
+
+**Consequence:** A reader of ElectronicsInventory's test plan is told the build hands off through a helper that no longer exists.
+
+**Provenance:** witnessed, code-writer, P3, r2, gh search code --owner pvginkel helmDeploy
 **Disposition:**

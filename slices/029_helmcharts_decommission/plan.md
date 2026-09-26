@@ -357,6 +357,25 @@ Every job loads this library unpinned from `main`. Re-check that there are zero 
 the owner's repositories (GitHub code search) immediately before removing anything. After this
 phase `IaC/HelmCharts` has no caller, which is ANS-121's other precondition.
 
+**Done (P3).** JenkinsPipelineUtils `phase/029-P3` `6f87d09` removes `cicd.helmDeploy()` and
+`helmCharts.scp`. The library no longer names `IaC/HelmCharts`. Under the P3 mid-run ruling,
+`helmCharts.rsync` and `helmCharts.ssh` stay unchanged: KitchenDisplay's Jenkinsfile calls them
+with `$WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key`. They are the only place the
+library still names HelmCharts' assets (follow-up ANS-144). `kaniko`, `kaniko2` and the rest of
+the var stay. Not pushed; every job loads the library unpinned from `main`.
+
+Later phases:
+- None changes. P9 owns the stale `helmDeploy` mention in Ansible `docs/runbooks/kubecoder-cutover.md`.
+
+Record:
+- The caller searches ran twice, before the removal (r1) and again before hand-back (r2):
+  `gh search code --owner pvginkel` for `helmDeploy`, `helmCharts.scp` and `IaC/HelmCharts`.
+  None found a code caller. The remaining hits are prose or fixtures: Ansible
+  `kubecoder-cutover.md`, Architecture `docs/architecture-update.md` and
+  `tooling/tests/test_fleet.py` (Jenkins console fixtures), and ElectronicsInventory
+  `docs/slice-test-plan.md:15` (close-out S12).
+- Gate: `kc project test` (it compiles every `vars/*.groovy` through the CPS transform) is green.
+
 ### P4 — ArgoCDDeploy: the registry, Argo CD native
 
 Target: ../ArgoCDDeploy
