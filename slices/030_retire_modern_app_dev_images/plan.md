@@ -528,7 +528,7 @@ Later phases:
 `mcp-filter/tests/fixtures/jenkins/getJobs.json`, which are records. The version-poller test's
 `playwright-1.60.0` is a tag-classification case and names no image.
 
-### P12 — DockerImages: registry-management has a procedure for deleting a whole repository
+### P12 — DockerImages: registry-management has a procedure for deleting a whole repository ✅ DONE 2026-09-26
 
 Target: ../DockerImages
 
