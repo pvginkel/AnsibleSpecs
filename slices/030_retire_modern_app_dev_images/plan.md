@@ -273,7 +273,7 @@ Record:
 - Close-out B1 (no `disableConcurrentBuilds()` around `cicd.writeVersionPins`) and S3 (stale
   HelmCharts deploy comments) are FieldnotesApp findings left out of scope.
 
-### P5 — ModernAppTemplate: a root-template release whose validation Job runs in the modern-app toolchain image
+### P5 — ModernAppTemplate: a root-template release whose validation Job runs in the modern-app toolchain image ✅ DONE 2026-09-26
 
 Target: ../ModernAppTemplate
 
