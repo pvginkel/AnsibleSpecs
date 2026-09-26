@@ -13,12 +13,21 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 029 clears the way for deleting HelmCharts' Jenkins jobs and archiving the repo. It shipped
+an Argo CD native registry in ArgoCDDeploy (`releases/`: one values file rendered into one
+Application per app-stage and validated by its schema, a `releases.owner` switch, and a read-only
+equivalence check), the operator's registry-switch runbook with its rehearsal fixtures,
+argo-migrate's flip and autosync against the new registry, recommend-resources in Ansible's
+`support/` (one patch per deploy repo for the operator to delete or edit, then local commits),
+the product catalog moved into Architecture with the `helm-charts` producer retired, and
+JenkinsPipelineUtils without `helmDeploy()` or `scp`. The decision records (D63–D65) and the docs
+in all five repos now describe deploy repos and the new registry. The switch itself is the
+operator's step, and until it runs Argo still reads HelmCharts' `release.yaml` tree.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: run the registry switch from Ansible's `docs/runbooks/registry-switch.md` (A1, A2).
+Until it runs, the new registry deploys nothing, and V15 and V24 stay open. Push AnsibleSpecs (A4).
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -65,7 +74,8 @@ The test phase pushed Ansible (ca536a6), Architecture (d73109d), ArgoCDDeploy (4
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: one pause (N1, N2: KitchenDisplay still calls `helmCharts.rsync`/`ssh`, so they stay) and
+one red build after a push, fixed (N5). Act on N4: two step-ca passphrases reached a transcript.
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -139,9 +149,9 @@ Looked at while reading Jenkins after the pushes. The build ran the pre-slice `m
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B1 first (major, read, ChartsDeploy): charts.home cannot come back on its own after a
+rebuild. Then B5 and B4, witnessed, in this slice's recommend-resources. B2 and B3 are witnessed
+in Architecture and predate the slice. Four of the five are witnessed.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -192,7 +202,7 @@ revise() (support/recommend-resources/recommend_resources.py:496-515) reads and 
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: none are open. The one question the run needed, P3's (N1), was answered mid-run.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -200,8 +210,9 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: the archive turns on S1, S2, S21 and S23, and each needs a decision first. S4 is the
+follow-up after the switch. Witnessed: S3, S12, S14, S16, S19, S29. The doc phase settled S5, S7, S10,
+S13, S14, S15 and S25, and most of S9, S20 and S22; the notes say what is left.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -247,25 +258,18 @@ executor P5 r1, 2026-09-26 — P5 names the chart parts. The branch is chart/tem
 
 `/work/AnsibleSpecs/README.md` line 3: "Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmCharts) (workloads)." The workloads now deploy from per-app deploy repos, and ArgoCDDeploy holds the registry (argo-cd D63). P1's scope was the argo-cd records and the estate register, and P9's is Ansible's docs, so no phase touches this line.
 
+doc-writer, doc phase r1, 2026-09-26 — Addressed in AnsibleSpecs 91a4d96: the README's sister repos name Ansible and ArgoCDDeploy (Argo CD and its registry of the workloads, which deploy from per-app deploy repos).
+
 **Consequence:** A session that reads AnsibleSpecs' README first is pointed at HelmCharts for workloads.
 
 **Provenance:** read — code-writer, P1, r1
 **Disposition:**
 
-### ~~S6 — The estate register links to seven slice and spec paths that have moved · cosmetic~~ — resolved by consult 1 (AnsibleSpecs 150fb1a): the seven links in decisions.md point at slices/completed/, change_requests/microceph_prod/ and slices/completed/dns-reservation-provider/; a relative-link check over decisions.md finds none broken; struck by consult 1
-
-In `/work/AnsibleSpecs/decisions.md`, relative links to `slices/runtime-secrets-sweep.md`, `slices/microceph-prod.md` (three times), `slices/internal-ha-vips.md`, `specs/dns-reservation-api.md` and `specs/dns-reservation-terraform.md` resolve to nothing. The files were moved under `slices/completed/` and other paths. These links predate this slice, and P1 found them while checking its own links.
-
-code-writer P1 r1, 2026-09-26 — The targets now sit at `slices/completed/runtime-secrets-sweep.md`, `slices/completed/internal-ha-vips.md`, `change_requests/microceph_prod/microceph-prod.md` and `slices/completed/dns-reservation-provider/dns-reservation-{api,terraform}.md`.
-
-**Consequence:** Those links in the doctrine every session reads first lead nowhere.
-
-**Provenance:** witnessed — code-writer, P1, r1; a relative-link check over decisions.md
-**Disposition:**
-
 ### S7 — The estate register's k8s-upgrade pin list still names HelmCharts' deploy tooling as a consumer to bump and redeploy · minor
 
 AnsibleSpecs `decisions.md:279` lists "the Helm deploy tooling in `HelmCharts/tools/requirements.txt`" among the `kubernetes` Python client pins that a cluster upgrade must bump and redeploy first. After this slice HelmCharts deploys nothing (argo-cd `design.md:10`). P1 left the list as it is on purpose. ArgoCDTools does not use the client, so no live consumer is missing from the list.
+
+doc-writer, doc phase r1, 2026-09-26 — Addressed in AnsibleSpecs 91a4d96: decisions.md's pin list no longer names HelmCharts/tools/requirements.txt; the DockerImages images and ZigbeeControl remain.
 
 **Consequence:** The next k8s upgrade run from the doctrine tries to commit a pin bump to HelmCharts, which is archived after ANS-122 and not to be added to before it (D43).
 
@@ -287,6 +291,8 @@ consult 1, 2026-09-26 — The edits landed on AnsibleSpecs main as d05e22d (D64 
 
 P2 brought current the comments, schema examples, the producer kit (.claude/) and the tool texts. The prose docs it left for a docs pass: README.md:5 and USAGE.md:7 list HelmCharts among the producers; README.md:216-217 says the Helm chart lives in pvginkel/HelmCharts (the Jenkinsfile pins into WebathomeOrgDeploy); docs/architecture-update.md:50 cites HelmCharts' gen_architecture.py as the gap-line example, and :115 names IaC/HelmCharts as the usual downstream build; docs/iotsupport-iot-architecture-guidance.md:149-150, :164 and :192 describe HelmCharts' image mapping and instances as current. The published summary of if:home-assistant-api (docs/architecture/home-automation.yaml:98) points at HelmCharts/charts/nginx/files/nginxmanager/external-services.yaml. P9 targets Ansible only, so no planned phase covers these.
 
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Architecture 5b3e4f6 (not pushed): README.md (producers; the viewer's chart is in WebathomeOrgDeploy, which the pipeline pins and Argo CD syncs), USAGE.md, docs/architecture-update.md (gap lines come from aac-tools' gen-architecture; the IaC/HelmCharts downstream example is gone) and docs/iotsupport-iot-architecture-guidance.md. Still open: the published summary of if:home-assistant-api (docs/architecture/home-automation.yaml:98) is model data, which the doc phase does not edit.
+
 **Consequence:** A reader of Architecture's README, USAGE or update docs, or of that published element, is sent to HelmCharts, which is archived after ANS-122.
 
 **Provenance:** read | code-writer, P2, r1, grep of /work/Architecture at a4402f6
@@ -295,6 +301,8 @@ P2 brought current the comments, schema examples, the producer kit (.claude/) an
 ### S10 — Architecture's producer manual: the Ceph example no longer matches the 'service you own' rule it illustrates · nit
 
 In .claude/architecture/producer-manual.md:825-830, the 'Re-provide via your own service layer' bullet says to Realize 'a new cluster-local TechnologyService **you** own'. After P2 its Ceph example says svc:cluster-ceph-rbd is 'declared in the Architecture repo's shared catalog', so the deploying repo does not own the service in the example.
+
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Architecture 5b3e4f6 (not pushed): the Ceph example says svc:cluster-ceph-rbd sits in the shared catalog rather than with the driver, and that a service added this way is declared by its own producer.
 
 **Consequence:** A producer that copies the example instead of the rule references a catalog service rather than declaring its own.
 
@@ -323,6 +331,8 @@ P3 removed cicd.helmDeploy() from JenkinsPipelineUtils. A GitHub code search for
 
 P4 added releases/ (the registry: values.yaml, values.schema.json, one Application per app-stage) and tools/registry-equivalence.py to ArgoCDDeploy. README.md still describes the repo as the wrapper chart plus its stage configuration, and .kubecoder/project.yaml's root description says the same. P9 targets Ansible only, so no planned phase covers ArgoCDDeploy's own prose.
 
+doc-writer, doc phase r1, 2026-09-26 — Addressed in ArgoCDDeploy 83b6cf8 (not pushed): README.md describes releases/ (values.yaml is the registry, values.schema.json its validation), the releases Application, releases.owner and tools/registry-equivalence.py; the root description names the registry chart. registry-switch.md's dead-after list now includes that README paragraph.
+
 **Consequence:** A reader of ArgoCDDeploy's README is not told that the repo holds the registry, where it is, or how to check it against the live Applications.
 
 **Provenance:** read | code-writer, P4, r1, ArgoCDDeploy 19e40d3
@@ -332,6 +342,8 @@ P4 added releases/ (the registry: values.yaml, values.schema.json, one Applicati
 
 docs/runbooks/argocd.md's Conventions: "the read-only default kubeconfig cannot list `argoproj.io` kinds". On 2026-09-26 the default kubeconfig (`--context prd`, no --kubeconfig) listed Applications, ApplicationSets and the AppProject in argocd-prd; ArgoCDDeploy's tools/registry-equivalence.py relies on it, and docs/live-infra-access.md says kubecoder-ro holds get/list/watch on those three kinds. P9's docs pass targets HelmCharts wording, so nothing in the slice corrects this line.
 
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Ansible 43b88c5: argocd.md's Conventions say the default kubeconfig can list Applications, ApplicationSets and AppProjects but not patch or annotate them (kubectl auth can-i on 2026-09-26: list yes, patch no, for all three).
+
 **Consequence:** A reader of the argocd runbook reaches for the cluster-admin prd-write kubeconfig for reads that the read-only identity already covers.
 
 **Provenance:** witnessed — code-writer, P6, r1, kubectl reads while testing the registry-switch runbook's helpers
@@ -340,6 +352,8 @@ docs/runbooks/argocd.md's Conventions: "the read-only default kubeconfig cannot 
 ### S15 — Ansible registry-switch runbook: status reads run straight after an asynchronous sync or refresh, with no instruction to wait · nit
 
 docs/runbooks/registry-switch.md's argosync is a kubectl patch of operation and returns before the sync runs; step 4's hand refresh likewise. Steps 1d, 4, 9 and 10 read status in the same block and state the post-completion result as what the operator should see; only step 1a says to repeat until Synced. In step 1d the rehearsal diff ('no diff output', the proof that the child is unchanged after the app-of-apps' sync) is met vacuously by a read taken before the sync applies the child; the same block's tracking-id read fails in that case, so re-running the whole block recovers. In step 4, argostate right after argosync prints the previous operation (OutOfSync Succeeded), and outofsync right after the refresh prints nothing, a case the step has no branch for.
+
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Ansible 43b88c5: argosync now returns only once the controller has cleared .operation (the sync finished, successfully or not), and step 4 waits for the refresh annotation to go before outofsync. Grounded in Argo CD v3.5.1's controller/appcontroller.go (setOperationState clears operation on a completed phase; persistReconciliationStatus drops the refresh annotation); not run against the cluster.
 
 **Consequence:** An operator who pastes a step block whole sees pre-completion state and has to re-run; in the rehearsal's step 1d, re-running only the failing read would leave the adoption proof resting on a pre-sync diff.
 
@@ -386,6 +400,8 @@ Replacing the local chart's Chart.yaml name with the app name (recommend_resourc
 
 P9's doc list covers the docs, READMEs and one code comment (microk8s defaults). These comments were outside it and still name HelmCharts as where something lives: ansible/inventories/prd/group_vars/k8s_prd.yml:57,122, all/vips.yml:8, openbao.yml:68,122,125, ceph_dev.yml:3,46,89, k8s_dev.yml:2,25,38,60,63, hosts.yml:32,46, host_vars/srvk8s4.yml:22; ansible/roles/microk8s/tasks/taints.yml:17; ansible/playbooks/rebuild-k8s.yml:156 and playbooks/tasks/pre-drain-handoff.yml:22; support/iac-image/Dockerfile:55-63; Ansible.code-workspace:10; terraform/prd/variables.tf:41 (backupServer.managementToken's source) and terraform/prd/vms.tf:107 (srvk8sdev's VM description, 'HelmCharts iteration target'). Editing vms.tf's description is a Proxmox-side change a terraform plan shows. The iac agent's copies are S2's.
 
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Ansible 43b88c5: vips.yml and k8s_prd.yml:122 (DnsmasqDeploy's static-hosts-config in chart/templates/stage-manifests.yaml), srvk8s4.yml, taints.yml and rebuild-k8s.yml (tolerations live in the deploy repos), pre-drain-handoff.yml (KeycloakDeploy carries the label), terraform/prd/variables.tf (the token's server copy is OpenBao kv/eso/prd/storage/prd/backup-server via StorageDeploy's ExternalSecret). Left as they are: the srvk8sdev/configs/dev comments (F1, as P1 left the estate register's), k8s_prd.yml:57 (historical), openbao.yml's grant comments (they describe grants that still serve HelmCharts' deploy, S2's clean-up), support/iac-image/Dockerfile (a push rebuilds the iac image), terraform/prd/vms.tf:107 (a Proxmox-side change) and Ansible.code-workspace (HelmCharts stays cloned until the archive).
+
 **Consequence:** A reader following those comments is sent to HelmCharts paths that are gone or archived; no behaviour depends on them.
 
 **Provenance:** read, code-writer, P9, r1, git grep -i helmcharts in Ansible
@@ -405,6 +421,8 @@ live-infra-access.md now says a deploy repo's Terraform is applied by the PreSyn
 Found by P9 while editing nearby text; neither concerns HelmCharts. docs/slice-testing-strategy.md:6 and :13 say there is no runnable test suite and that kc project test is yamllint, ansible-lint, terraform fmt and the architecture validator; root's test now runs support/argo-migrate's and support/recommend-resources' unit tests (P7, P8). P9 corrected the same claim in design-philosophy.md. CLAUDE.md's 'Related repos on this machine' lists KubeCoderDeploy as under /work, but .kubecoder/config.yaml does not declare it and /work holds no clone. Also docs/runbooks/kubecoder-cutover.md:15 links slice 012's plan at slices/012_kubecoder_argo_cutover/, which moved to slices/completed/.
 
 consult 1, 2026-09-26 — The dead link in kubecoder-cutover.md:15 is fixed: it points at slices/completed/012_kubecoder_argo_cutover/plan.md (Ansible ca536a6). Still open: slice-testing-strategy.md's 'no runnable test suite' (a file this slice did not touch) and CLAUDE.md's KubeCoderDeploy line, which needs a choice between declaring the repo in .kubecoder/config.yaml and dropping it from the list.
+
+doc-writer, doc phase r1, 2026-09-26 — slice-testing-strategy.md addressed in Ansible 43b88c5: the roles and Terraform have no runnable suite, argo-migrate and recommend-resources carry unit tests, and root's gate runs them. design-philosophy.md narrowed the same way: iac-impl is a Python tool under support/ with no tests, so 'the Python tools under support/' was too wide. Still open: CLAUDE.md's KubeCoderDeploy line (declare the repo in .kubecoder/config.yaml, or drop it from the list).
 
 **Consequence:** The test phase's strategy doc understates what root's gate runs, a session that reaches for /work/KubeCoderDeploy finds nothing, and one link in the KubeCoder cutover record is dead.
 
@@ -435,36 +453,11 @@ P9 turned step 7 (docs/runbooks/step-ca-bootstrap.md:243-263) from a kubectl cre
 
 consult 1, 2026-09-26 — Not a mechanical fix, so it stays open. Two facts for whoever writes step 7's instruction, read from StepCaDeploy main's chart/templates/stage-manifests.yaml (Secret names, data keys and ca.json's path fields only; no values printed). (1) The manifest renders five Secrets, not four: step-ca-ssh-host-ca-password (key password) is missing from step 7's table. It belongs to 'Enabling the SSH host CA' step 2, not to this ceremony. (2) The chart's ca.json uses the pod's paths (root /home/step/certs/root_ca.crt, key /home/step/secrets/intermediate_ca_key, db /home/step/db) and carries an ssh.hostKey block. The ceremony's local .step/config/ca.json has neither, so it cannot be base64'd in as it is. The instruction has to say what carries over (the new certs, the key, the passphrase, and the provisioner the init minted) and what stays (the pod paths and the ssh block).
 
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Ansible 43b88c5: step 7 lists all five Secrets (step-ca-ssh-host-ca-password included, marked as the SSH host CA's), says which values the ceremony replaces in stage-manifests.yaml (the certs, the key, the passphrase, and in ca.json/defaults.json the authority block's provisioners and claims and the root fingerprint, keeping the chart's /home/step paths and ssh block), then restarts the StatefulSet and diffs step-ca-certs' root_ca.crt against .step/certs/root_ca.crt. Grounded in StepCaDeploy main's Secret names, data keys and ca.json/defaults.json paths (values not read); the procedure has not been run.
+
 **Consequence:** An operator re-running the ceremony after a CA loss can pass step 7's check on the old material Argo keeps serving. Step 9 then shreds the new intermediate key, and it has to be re-issued from the root key in Roboform.
 
 **Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F1
-**Disposition:**
-
-### ~~S26 — Ansible design-philosophy.md: 'only the Python tools under support/ carry unit tests' misses tools/ai_workflow/test_track_build.py · nit~~ — resolved by consult 1 (Ansible ca536a6): design-philosophy.md says the support/ tools' unit tests are root's, and that tools/ai_workflow/test_track_build.py is a unit test no gate runs (checked against .kubecoder/project.yaml's test: keys); kc project lint green; struck by consult 1
-
-P9's rewrite of 'What tested means here' (docs/design-philosophy.md:61-62) says root's gate runs every unit test and all of them are under support/. tools/ai_workflow/test_track_build.py is a tracked unit test, and root's test: (.kubecoder/project.yaml:18-20) does not run it.
-
-**Consequence:** A reader of the binding change doc takes root's green as covering track_build.py, and it does not.
-
-**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F2
-**Disposition:**
-
-### ~~S27 — Ansible kubecoder-cutover.md: the P3 record cites argocd.md producer steps 2, 4 and 5, which P9 renumbered and removed · nit~~ — resolved by consult 1 (Ansible ca536a6): kubecoder-cutover.md's P3 record now says its step numbers are the argocd.md section's at the time of the run, and that slice 029 removed the handover proof and flip and renumbered the rest; the record's own steps are unchanged; struck by consult 1
-
-argocd.md's 'Giving an app its own architecture producer' lost its handover proof and flip in P9, and its steps are now 1-4 (docs/runbooks/argocd.md:381-405). kubecoder-cutover.md:803-815 still follows 'steps 2, 4 and 5' and calls step 2 the handover equality check, whose command is gone from argocd.md. The file is marked as a finished run's record (:8-12).
-
-**Consequence:** A reader of the cutover record who follows its step numbers into argocd.md lands on the wrong steps. Nothing is re-run from it.
-
-**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F3
-**Disposition:**
-
-### ~~S28 — Ansible k8s-rebuild.md says HelmCharts' configs/dev tree already went into its archive · nit~~ — resolved by consult 1 (Ansible ca536a6): k8s-rebuild.md says HelmCharts' configs/dev tree goes into its archive with the repo (D65), no longer that it went; struck by consult 1
-
-docs/runbooks/k8s-rebuild.md:258 says 'since HelmCharts' configs/dev tree went into its archive (argo-cd D65)'. The archive is ANS-122, after this slice. D65 says the tree goes into it, and /work/HelmCharts/configs/dev/ is live today.
-
-**Consequence:** The runbook states a future event as done. Per the F1 ruling nothing waits on it.
-
-**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F4
 **Disposition:**
 
 ### S29 — Architecture's kc project test does not reproduce the Docker image build's file layout, so a test can pass locally and fail the CI build · minor
@@ -475,3 +468,57 @@ The viewer's `kc project test` runs `npm test` inside the repo tree, where `../.
 
 **Provenance:** witnessed, test-agent, phase test, round 1, AaC/Architecture #2068
 **Disposition:**
+
+### ~~S6 — The estate register links to seven slice and spec paths that have moved · cosmetic~~ — resolved by consult 1 (AnsibleSpecs 150fb1a): the seven links in decisions.md point at slices/completed/, change_requests/microceph_prod/ and slices/completed/dns-reservation-provider/; a relative-link check over decisions.md finds none broken; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+In `/work/AnsibleSpecs/decisions.md`, relative links to `slices/runtime-secrets-sweep.md`, `slices/microceph-prod.md` (three times), `slices/internal-ha-vips.md`, `specs/dns-reservation-api.md` and `specs/dns-reservation-terraform.md` resolve to nothing. The files were moved under `slices/completed/` and other paths. These links predate this slice, and P1 found them while checking its own links.
+
+code-writer P1 r1, 2026-09-26 — The targets now sit at `slices/completed/runtime-secrets-sweep.md`, `slices/completed/internal-ha-vips.md`, `change_requests/microceph_prod/microceph-prod.md` and `slices/completed/dns-reservation-provider/dns-reservation-{api,terraform}.md`.
+
+**Consequence:** Those links in the doctrine every session reads first lead nowhere.
+
+**Provenance:** witnessed — code-writer, P1, r1; a relative-link check over decisions.md
+**Disposition:**
+
+</details>
+
+### ~~S26 — Ansible design-philosophy.md: 'only the Python tools under support/ carry unit tests' misses tools/ai_workflow/test_track_build.py · nit~~ — resolved by consult 1 (Ansible ca536a6): design-philosophy.md says the support/ tools' unit tests are root's, and that tools/ai_workflow/test_track_build.py is a unit test no gate runs (checked against .kubecoder/project.yaml's test: keys); kc project lint green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+P9's rewrite of 'What tested means here' (docs/design-philosophy.md:61-62) says root's gate runs every unit test and all of them are under support/. tools/ai_workflow/test_track_build.py is a tracked unit test, and root's test: (.kubecoder/project.yaml:18-20) does not run it.
+
+**Consequence:** A reader of the binding change doc takes root's green as covering track_build.py, and it does not.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F2
+**Disposition:**
+
+</details>
+
+### ~~S27 — Ansible kubecoder-cutover.md: the P3 record cites argocd.md producer steps 2, 4 and 5, which P9 renumbered and removed · nit~~ — resolved by consult 1 (Ansible ca536a6): kubecoder-cutover.md's P3 record now says its step numbers are the argocd.md section's at the time of the run, and that slice 029 removed the handover proof and flip and renumbered the rest; the record's own steps are unchanged; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+argocd.md's 'Giving an app its own architecture producer' lost its handover proof and flip in P9, and its steps are now 1-4 (docs/runbooks/argocd.md:381-405). kubecoder-cutover.md:803-815 still follows 'steps 2, 4 and 5' and calls step 2 the handover equality check, whose command is gone from argocd.md. The file is marked as a finished run's record (:8-12).
+
+**Consequence:** A reader of the cutover record who follows its step numbers into argocd.md lands on the wrong steps. Nothing is re-run from it.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F3
+**Disposition:**
+
+</details>
+
+### ~~S28 — Ansible k8s-rebuild.md says HelmCharts' configs/dev tree already went into its archive · nit~~ — resolved by consult 1 (Ansible ca536a6): k8s-rebuild.md says HelmCharts' configs/dev tree goes into its archive with the repo (D65), no longer that it went; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+docs/runbooks/k8s-rebuild.md:258 says 'since HelmCharts' configs/dev tree went into its archive (argo-cd D65)'. The archive is ANS-122, after this slice. D65 says the tree goes into it, and /work/HelmCharts/configs/dev/ is live today.
+
+**Consequence:** The runbook states a future event as done. Per the F1 ruling nothing waits on it.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F4
+**Disposition:**
+
+</details>
