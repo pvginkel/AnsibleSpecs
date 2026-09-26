@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — retirement",
-      "description": "R1 [Improvement — ANS-101]: \"Retire modern-app-dev and modern-app-dev-playwright: move their pipelines to the kube-coder toolchain images or purpose-built ones … Done when nothing outside DockerImages references either image, the two directories are removed, the `modern_app_dev` template is gone from JenkinsPipelineUtils, and the registry repos are deleted.\" Holds when V02–V12 hold, with rulings D1–D3 and the settled list as recorded in plan.md.",
+      "description": "R1 [Improvement — ANS-101]: \"Retire modern-app-dev and modern-app-dev-playwright: move their pipelines to the kube-coder toolchain images or purpose-built ones … Done when nothing outside DockerImages references either image, the two directories are removed, the `modern_app_dev` template is gone from JenkinsPipelineUtils, and the registry repos are deleted.\" Holds when V02–V13 hold, with rulings D1–D3, Q1 and the settled list as recorded in plan.md.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R1 / D1 — validation pipelines",
-      "description": "\"Move their pipelines to the kube-coder toolchain images\" (ruling D1): the DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl validation Jobs (today `DHCPApp/Jenkinsfile:25`, `ElectronicsInventory/Jenkinsfile:31`, `IoTSupport/Jenkinsfile:25`, `ZigbeeControl/Jenkinsfile:25`) and the ModernAppFrontendTemplate scaffold's (today `template/Jenkinsfile.validation.jinja:73`) run in `kube-coder-modern-app-toolchain:node-24`; the lockfile-derived `playwright-<version>` image tag is gone, and Chromium is downloaded at test time by the suite runner (the scaffold: by its `validation-entrypoint.sh`, `template/scripts/validation-entrypoint.sh:24`). No purpose-built Playwright image exists.",
+      "description": "\"Move their pipelines to the kube-coder toolchain images\" (ruling D1): the DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl validation Jobs (today `DHCPApp/Jenkinsfile:25` at 3f32870, `ElectronicsInventory/Jenkinsfile:30` at 819a6475, `IoTSupport/Jenkinsfile:25` at bfe20c4, `ZigbeeControl/Jenkinsfile:25` at 8043c1a, all generated from ModernAppTemplate's `root/template/Jenkinsfile.jinja:25` at acfc588) run in `kube-coder-modern-app-toolchain:node-24`; the lockfile-derived `playwright-<version>` image tag is gone, and Chromium is downloaded at test time by the suite runner (`tools/suite_runner/local.py:239` in each app, from `root/template/tools/suite_runner/local.py.jinja:239`). No purpose-built Playwright image exists.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -51,7 +51,7 @@
     {
       "id": "V07",
       "area": "R1 — references",
-      "description": "\"Nothing outside DockerImages references either image\", read over live pipelines, scaffolds, and current docs, runbooks and code comments (the settled reading), with DesignAssistant excepted (ruling D2). Historical records keep their mentions: completed slices, archived triage documents, dated reviews and audits, and records that cite this slice by name. At planning the live references outside DockerImages were the three `modern_app_dev` callers and five hardcoded Playwright images above, plus `HomelabTerraformProvider/README.md:16`, `scripts/fetch-install.sh:3`, `scripts/install-local.sh:3`, `Jenkinsfile:76`; `KubeCoder/docs/operations/ci-gates.md:55`, `pipeline-dependencies.md:16,40`; `FieldnotesApp/Jenkinsfile:6`; `AnsibleSpecs/decisions.md:58`; `Ansible/docs/runbooks/step-ca-root-rotation.md:116,164`, `docs/runbooks/operator-workstation.md:93`, `support/iac-image/Dockerfile:102`, `terraform/modules/managed-vm/versions.tf:10`; `ArgoCDTools/argocd-hook/Dockerfile:30`.",
+      "description": "\"Nothing outside DockerImages references either image\", read over live pipelines, scaffolds, and current docs, runbooks and code comments (the settled reading), with DesignAssistant excepted (ruling D2). Historical records keep their mentions: completed slices, archived triage documents, dated reviews and audits, ModernAppTemplate's changelog entries (ruling Q1), and records that cite this slice by name. At re-grounding (2026-09-26, each repo's pushed `main`) the live references outside DockerImages were the three `modern_app_dev` callers of V02, the four apps' and the root template's hardcoded Playwright images of V03, the pre-baked-browser comments the root template generates into the apps (`root/template/Jenkinsfile.jinja:19-20`, `root/template/tools/suite_runner/local.py.jinja:235-236`) and `ModernAppTemplate/docs/copier_approach.md:74`, plus `HomelabTerraformProvider/README.md:16`, `scripts/fetch-install.sh:3`, `scripts/install-local.sh:3`, `Jenkinsfile:76`; `KubeCoder/docs/operations/ci-gates.md:55`, `pipeline-dependencies.md:16,40`; `FieldnotesApp/Jenkinsfile:6`; `AnsibleSpecs/decisions.md:58`; `Ansible/docs/runbooks/step-ca-root-rotation.md:116,164`, `docs/runbooks/operator-workstation.md:93`, `support/iac-image/Dockerfile:102`, `terraform/modules/managed-vm/versions.tf:10`; `ArgoCDTools/argocd-hook/Dockerfile:30`. ModernAppFrontendTemplate and ModernAppBackendTemplate carry none: their per-repo CI left them with Frontend v0.20.0 and Backend v0.13.0 (ModernAppFrontendTemplate `032f366`).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -93,6 +93,14 @@
       "id": "V12",
       "area": "D2 — DesignAssistant",
       "description": "DesignAssistant is not part of the work (ruling D2): the slice changes nothing in it, and its references (its `Jenkinsfile` on `main` and `develop`, `tools/suite_runner/remote.py`) stay.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Q1 — the root template",
+      "description": "The image change lands in ModernAppTemplate's root template as a new release, and each app takes it with `copier update` at its root, so a later update never puts the old image back (ruling Q1): the root template (`root/template/Jenkinsfile.jinja`, `root/template/tools/suite_runner/local.py.jinja`, at acfc588 still on modern-app-dev-playwright and a pre-baked browser) references neither image; the release is tagged and on ModernAppTemplate's origin; each of the four apps' root `.copier-answers.yml` names it (today `_commit: v0.1.1`) and its `Jenkinsfile` and suite runner match what it generates. ModernAppTemplate's current docs that describe the validation image are corrected (`docs/copier_approach.md:74` today); its historical changelog entries stay.",
       "verdict": null,
       "rationale": "",
       "evidence": []

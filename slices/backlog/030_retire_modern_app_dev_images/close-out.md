@@ -27,6 +27,8 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 
 FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppFrontendTemplate were added to Ansible's .kubecoder/config.yaml at planning (Ansible e957d13) but are not under /work until kc env restart. P4–P9 target them as ../<Repo>; run_loop.py --dry-run reports those six Targets as 'not an existing directory' until then. The operator also times the run for a quiet moment in those repos (ruling F1), since P1–P8 push their repos' main mid-run.
 
+plan-writer r2, 2026-09-26 — The repo set moved with review ruling Q1. ModernAppTemplate is now a Target (P5, the root-template release; checked out by Ansible 3ff6193), and ModernAppFrontendTemplate no longer is: its validation pipeline left it with Frontend v0.20.0 (032f366), so no phase touches it and its checkout (Ansible .kubecoder/config.yaml:24) is not needed for this run. After the fix pass, run_loop.py run --dry-run still reports P4–P9 (FieldnotesApp, ModernAppTemplate, ZigbeeControl, DHCPApp, ElectronicsInventory, IoTSupport) as 'not an existing directory' until the restart. The in-phase pushes are P1–P9, under ruling A1.
+
 **Consequence:** Until the restart, the run cannot start: six of the plan's phase Targets do not resolve.
 
 **Provenance:** witnessed — plan-writer r1, run_loop.py run --dry-run output
@@ -71,7 +73,18 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 
 The scaffold's template/Jenkinsfile.validation.jinja still runs the older scripts/validation-entrypoint.sh pattern, not the 'poetry install && poetry run run-suite' shape DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl use. This slice changes its image only (settled at planning); refreshing the rest is a follow-up.
 
+plan-writer r2, 2026-09-26 — Premise gone: ModernAppFrontendTemplate no longer carries a validation pipeline. Frontend v0.20.0 (032f366, 2026-09-26) removed template/Jenkinsfile.validation.jinja and scripts/validation-entrypoint.sh, since the root template now owns each app's CI, so there is nothing left to bring up to the suite-runner shape. The plan drops the scaffold phase (ruling Q1).
+
 **Consequence:** An app generated from the scaffold starts with a validation pipeline unlike the live apps', and has to be reworked by hand to match them.
 
 **Provenance:** read — plan-writer r1, plan.md settled list; ModernAppFrontendTemplate template/Jenkinsfile.validation.jinja at 861a9f1
+**Disposition:**
+
+### S2 — ModernAppTemplate: project.yaml's reason for having no frontend gate may be stale · nit
+
+ModernAppTemplate/.kubecoder/project.yaml:11-29 explains why the repo declares no build/test/lint verbs. For frontend/ it cites one eslint error, react-hooks/set-state-in-effect in template-owned debounced-search-input.tsx. Frontend v0.20.0 (ModernAppFrontendTemplate 032f366) says DebouncedSearchInput now syncs the URL term during render because that rule made the template's own check fail, so that half of the reason looks fixed. Whether the frontend gate is green now was not run. The backend half (a revoked S3 key in backend/.env.test) was not checked.
+
+**Consequence:** The template repo keeps running with no gate even if one of its two templates could now carry one, so a template change (like this slice's P5) is proven only by the apps that take it.
+
+**Provenance:** read — plan-writer r2, ModernAppTemplate .kubecoder/project.yaml at acfc588; ModernAppFrontendTemplate 032f366 commit message
 **Disposition:**

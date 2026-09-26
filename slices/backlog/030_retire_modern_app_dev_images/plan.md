@@ -94,7 +94,7 @@
 - The four live apps' validation stage: the tag comes from `grep '^  playwright@'
   frontend/pnpm-lock.yaml`; `kubectl.startJob()` runs a Job in the agent's namespace with `poetry
   install … && poetry run run-suite …`. The suite runner (`tools/suite_runner/local.py`, e.g.
-  DHCPApp :187-225) runs pytest, then `pnpm install`, `pnpm build`, and `pnpm playwright install
+  DHCPApp :180-260 at `3f32870`) runs pytest, then `pnpm install`, `pnpm build`, and `pnpm playwright install
   chromium` (no `--with-deps`; its comment: "The validation base image pre-bakes the matching
   browser, so this is a fast no-op there"), then the Node `@playwright/test` suite. Per-repo
   sidecars differ.
@@ -103,8 +103,8 @@
   (`DockerImages/registry-cleanup/app/main.py`) deletes per-tag manifests through the Distribution
   API and relies on a later `registry garbage-collect --delete-untagged`. registry-cleanup is
   suspended (RegistryDeploy `5ccb234`, 2026-09-25). The registry's storage backend and delete
-  setting live in RegistryDeploy (not checked out; readable through gitblit) and were not
-  verified.
+  setting live in RegistryDeploy (checked out at `../RegistryDeploy` since Ansible `7154030`, for
+  slice 031); the delete setting was not verified.
 - DockerImages discovers images by scanning directories (`tools/collect-internal-dependencies.py`
   `iter_image_dirs()`, and the same pattern in `version-poller`); removing the two directories
   stops the weekly rebuild with no other edit. `kube-coder-iac-toolchain/Dockerfile:77` and
@@ -117,61 +117,66 @@
 ## Task shape
 
 pre-settled — the rulings fix every design choice (D1: each validation pipeline's image and
-browser source; the settled list: the new container template and each base-image consumer's
-target; D3: the deletion route and where its procedure lives), so planning is transcribing them
-into per-repo phases.
+browser source; Q1: that change lands once, as a ModernAppTemplate root-template release the apps
+take with `copier update`; the settled list: the new container template and each base-image
+consumer's target; D3: the deletion route and where its procedure lives), so planning is
+transcribing them into per-repo phases.
 
 ## Ordering constraints
 
-- The new JenkinsPipelineUtils container template lands before any consumer phase that uses it.
+- The new JenkinsPipelineUtils container template lands before any consumer phase that uses it,
+  and the root template's release before any app takes it.
 - Removing `modern_app_dev` from JenkinsPipelineUtils and the two directories from DockerImages
   comes after every consumer phase, and their pushes, have a green Jenkins build.
 - The registry deletion is the operator's step, after all of the above.
-- The consumer pushes happen inside their phases. The loop itself pushes nothing before its test
-  phase, but the order above needs each consumer "pushed and proven by a green Jenkins build"
-  before the removals, and D1 needs the first app proven "before the other apps follow". So P1–P8
-  each push their repo's `main`, and each consumer phase ends on the Jenkins build that push
+- The pushes of P1–P9 happen inside their phases (ruling A1). The loop itself pushes nothing
+  before its test phase, but the order above needs each consumer "pushed and proven by a green
+  Jenkins build" before the removals, and D1 needs the first app proven "before the other apps
+  follow". So each of P1–P9 pushes its phase branch's head to its repo's `main` on origin once
+  the phase's own gate is green, and each consumer phase ends on the Jenkins build that push
   triggers going green (`track_build.py <job> --hash <sha>` waits one out, downstream included).
   P1's push is what P3's and P4's builds load: the library loads unpinned from its `main`
-  (`library identifier: 'JenkinsPipelineUtils'`, `KubeCoder/Jenkinsfile:1`). The push comes
-  before the phase's review, so a review finding is fixed forward and proven the same way. No
-  later phase waits on a build of P9–P15, and the test phase pushes them as usual.
-- P5 is D1's "first app"; P6–P8 follow only once its build has proven both D1 premises.
+  (`library identifier: 'JenkinsPipelineUtils'`, `KubeCoder/Jenkinsfile:1`). A review finding is
+  fixed forward, pushed and proven the same way. No later phase waits on a build of P10–P15, and
+  the test phase pushes them as usual.
+- P6 is D1's "first app"; P7–P9 follow only once its build has proven both D1 premises.
 
 ### P1 — JenkinsPipelineUtils: a container template for the modern-app toolchain image
 
 Target: ../JenkinsPipelineUtils
 
 `containerTemplates` gains an entry for `registry:5000/kube-coder-modern-app-toolchain:node-24`,
-beside `iac_toolchain` (`vars/containerTemplates.groovy:46`), for the KubeCoder and FieldnotesApp
-stages that run on `modern_app_dev` today (`:89-90`). It runs as uid 1000, like the entry it
-replaces. The image is built as a KubeCoder sidecar, not an agent image: `iac_toolchain`'s
+beside `iac_toolchain` (`vars/containerTemplates.groovy:46` at `a43f45e`), for the KubeCoder and
+FieldnotesApp stages that run on `modern_app_dev` today (`:89-90`). It runs as uid 1000, like the
+entry it replaces. The image is built as a KubeCoder sidecar, not an agent image: `iac_toolchain`'s
 comment records what that difference cost there (`:40-44`), and this image points corepack and
 pnpm at home-overlay paths an agent pod does not mount
 (`DockerImages/kube-coder-frontend-toolchain/Dockerfile:29,46-47`). `modern_app_dev` stays until
-P10. Pushed (Ordering constraints); `kc project test` green.
+P10. `kc project test` green, then pushed (Ordering constraints).
 
 ### P2 — HomelabTerraformProvider: the registry publish runs in the iac toolchain container
 
 Target: ../HomelabTerraformProvider
 
-The `tf` container, which only "Publish to provider registry" uses (`Jenkinsfile:5,81`), comes from
-`containerTemplates.iac_toolchain` instead of `modern_app_dev`; the `go` container is untouched.
-No mention of either image remains in the repo: the pipeline's comment (`Jenkinsfile:76`), the
-README (`README.md:16`) and the two install scripts' headers (`scripts/fetch-install.sh:3`,
-`scripts/install-local.sh:3`) describe the images as they now stand. Pushed; the build is green
-through the publish stage, which publishes a provider version as every build does.
+The `tf` container, which only "Publish to provider registry" uses (`Jenkinsfile:5,81` at
+`8a524d9`), comes from `containerTemplates.iac_toolchain` instead of `modern_app_dev`; the `go`
+container is untouched. No mention of either image remains in the repo: the pipeline's comment
+(`Jenkinsfile:76`), the README (`README.md:16`) and the two install scripts' headers
+(`scripts/fetch-install.sh:3`, `scripts/install-local.sh:3`) describe the images as they now
+stand. Pushed; the build is green through the publish stage, which publishes a provider version
+as every build does.
 
 ### P3 — KubeCoder: Validate and the contracts drift gate run in the modern-app toolchain container
 
 Target: ../KubeCoder
 
-The two stages on `modern-app-dev` (`Jenkinsfile:11,37,70`) run in P1's container, with the same
-commands in the same order: the drift gate's `npm ci` runs still put `tsc` in the workspace for
-the extension stages after it (`Jenkinsfile:75-80`). No mention of either image remains in the
-repo, the operations docs that describe the pipeline's containers included
-(`docs/operations/ci-gates.md:55`, `docs/operations/pipeline-dependencies.md:16,40`). Pushed;
-`KubeCoder/Build-Main` is green on it (a `main` push also rolls KubeCoder's dev stage).
+The two stages on `modern-app-dev` (`Jenkinsfile:11,37,70` at `8e71ae1a`) run in P1's container,
+with the same commands in the same order: the drift gate's `npm ci` runs still put `tsc` in the
+workspace for the extension stages after it (`Jenkinsfile:84-87`, and the stage's comment above
+them). No mention of either image remains in the repo, the operations docs that describe the
+pipeline's containers included (`docs/operations/ci-gates.md:55`,
+`docs/operations/pipeline-dependencies.md:16,40`). Pushed; `KubeCoder/Build-Main` is green on it
+(a `main` push also rolls KubeCoder's dev stage).
 
 ### P4 — FieldnotesApp: Validate runs in the modern-app toolchain container
 
@@ -182,68 +187,82 @@ real `git` against bare repos (the stage's comment, `Jenkinsfile:6-9`), which th
 (`DockerImages/kube-coder-dev-base/Dockerfile:40`); that comment is rewritten for the new
 container. No mention of either image remains in the repo. Pushed; the build is green.
 
-### P5 — ZigbeeControl: the validation Job runs in the modern-app toolchain image and downloads Chromium at test time
+### P5 — ModernAppTemplate: a root-template release whose validation Job runs in the modern-app toolchain image
+
+Target: ../ModernAppTemplate
+
+The root template generates the four apps' `Jenkinsfile` and `tools/suite_runner/` (ruling Q1),
+so D1's change is made here once and released; the apps take the release in P6–P9, and this
+phase touches none of them.
+
+- An app generated or updated from the release runs its "Run validation" Job in
+  `registry:5000/kube-coder-modern-app-toolchain:node-24`; the lockfile lookup and the
+  `playwright-<version>` tag go (`root/template/Jenkinsfile.jinja:19-26,66` at `acfc588`). The
+  suite runner's own browser install (`root/template/tools/suite_runner/local.py.jinja:235-242`)
+  now does the download, and its comment saying the base image pre-bakes the browser is
+  corrected. The suites that run, Playwright included, are unchanged.
+- The image is not modern-app-dev-playwright minus a browser. It is built as a KubeCoder sidecar:
+  nothing in its chain creates the uid-1000-owned `/work` that the Job's script and `kubectl cp`
+  use (`DockerImages/modern-app-dev/Dockerfile:138-139`; `Jenkinsfile.jinja:74-82,111`), and it
+  points corepack and pnpm at home-overlay paths a Job pod does not mount
+  (`DockerImages/kube-coder-frontend-toolchain/Dockerfile:29,46-47`). Whatever the Job relied on
+  that only modern-app-dev provided now comes from the Job itself. modern-app-dev already ran
+  Node 24 (`DockerImages/modern-app-dev/Dockerfile:109`).
+- Released the way this repo releases a root-template change (its `CLAUDE.md`, "Template Change
+  Workflow"; `docs/change_workflow.md`, "Tag the Release"). Its current docs that describe the
+  validation image say what the release does (`docs/copier_approach.md:74`); the changelog's
+  earlier entries are history and stay (ruling Q1).
+- The repo declares no gate verbs, and says why (`.kubecoder/project.yaml:11-29`), and
+  `root/regen.sh` needs the backend and frontend template checkouts inside the repo, which this
+  environment does not make; P6's `copier update` and build are the release's proof. Tagged, then
+  pushed with its tag (ruling A1). A review finding is fixed forward as a further release; a
+  pushed tag never moves.
+
+### P6 — ZigbeeControl: takes the root-template release, and its build proves D1
 
 Target: ../ZigbeeControl
 
-The first app of D1, because its Job has no data sidecars (`Jenkinsfile:35` at `f667194`), so a
-red build points at the image switch rather than at the app.
+D1's first app, because its validation Job runs no sidecars (`use_s3: false` in
+`.copier-answers.yml`), so a red build points at the image switch rather than at the app.
 
-- The "Run validation" Job (`Jenkinsfile:17`) runs in
-  `registry:5000/kube-coder-modern-app-toolchain:node-24`; the lockfile lookup and the
-  `playwright-<version>` tag go (`:21-26`). The suite runner's own browser install
-  (`tools/suite_runner/local.py:222-229`) now does the download, and its comment saying the base
-  image pre-bakes the browser is corrected. The suites that run, Playwright included, are
-  unchanged.
-- The image is not modern-app-dev-playwright minus a browser. It is built as a KubeCoder
-  sidecar, and nothing in its chain creates the uid-1000-owned `/work` that the Job's script and
-  `kubectl cp` use (`DockerImages/modern-app-dev/Dockerfile:138-139`; the Job,
-  `Jenkinsfile:70`). Whatever the Job relied on that only modern-app-dev provided now comes from
-  the Job itself.
+- `copier update` at the repo root takes P5's release (`.copier-answers.yml` `_commit: v0.1.1`
+  at `8043c1a`). The Job's image (`Jenkinsfile:25`) and the runner's browser comment
+  (`tools/suite_runner/local.py:235`) come from the update, never from a hand edit
+  (ModernAppTemplate's `CLAUDE.md`, "Template Change Workflow"). That file's recipe takes
+  `copier` from the backend template's Poetry env, which this environment does not check out.
 - Pushed; the build is green, and its log shows Chromium downloaded inside the Job and the
   frontend built and tested on Node 24: D1's two premises. The done-record states both, with the
-  build number and whatever the Job needed, for P6–P9. modern-app-dev already ran Node 24
-  (`DockerImages/modern-app-dev/Dockerfile:109`).
-- A disproven premise is the operator's to rule on (D1's fallback, a purpose-built image, is not
-  in scope): hand back a question carrying the build's evidence, and leave ZigbeeControl's `main`
-  building green, not red, meanwhile.
+  build number.
+- A disproven premise, or a gap the build shows in what the Job needs, is the operator's to rule
+  on: the fix belongs in the root template, not the app, and D1's fallback, a purpose-built
+  image, is not in scope. Hand back a question carrying the build's evidence, and leave
+  ZigbeeControl's `main` building green, not red, meanwhile.
 
-### P6 — DHCPApp: the validation Job moves the way P5 moved ZigbeeControl's
+### P7 — DHCPApp: takes the root-template release
 
 Target: ../DHCPApp
 
-P5's change, carried to DHCPApp's "Run validation" Job (`Jenkinsfile:17`, image `:25` at
-`33b41f9`) and its suite runner's browser comment (`tools/suite_runner/local.py:220`), with
-whatever P5's done-record says the Job needs. Suites unchanged. Pushed; the build is green. A
-failure specific to this app on the new image is a question, as in P5.
+As P6, for DHCPApp (`Jenkinsfile:25`, `tools/suite_runner/local.py:235` at `3f32870`), taking the
+release P6's build proved. Its Job runs no sidecars either. Pushed; the build is green. A failure
+specific to this app on the new image is a question, as in P6.
 
-### P7 — ElectronicsInventory: the validation Job moves the way P5 moved ZigbeeControl's
+### P8 — ElectronicsInventory: takes the root-template release
 
 Target: ../ElectronicsInventory
 
-As P6, for ElectronicsInventory (`Jenkinsfile:23`, image `:31` at `b8a1fa7`). Its Job also runs a
-RustFS sidecar (`:102`), and its runner's browser install has its own shape and comment
-(`tools/suite_runner/local.py:8,234`). Pushed; the build is green.
+As P7, for ElectronicsInventory (`Jenkinsfile:30` at `819a6475`). Its Job also runs a RustFS
+sidecar (`:100`), and its Jenkinsfile carries a stage of its own on top of the template's (the
+contributor documentation build, `:210`), which the update keeps. Pushed; the build is green.
 
-### P8 — IoTSupport: the validation Job moves the way P5 moved ZigbeeControl's
+### P9 — IoTSupport: takes the root-template release
 
 Target: ../IoTSupport
 
-As P6, for IoTSupport (`Jenkinsfile:17`, image `:25` at `96c7bb1`). Its Job also runs RustFS and
-OpenSearch sidecars (`:109,117`); the runner's browser comment is at
-`tools/suite_runner/local.py:235`. Pushed; the build is green.
-
-### P9 — ModernAppFrontendTemplate: the scaffold's validation Job uses the modern-app toolchain image
-
-Target: ../ModernAppFrontendTemplate
-
-An app generated from the scaffold runs its validation Job in
-`kube-coder-modern-app-toolchain:node-24`, with no lockfile-derived tag
-(`template/Jenkinsfile.validation.jinja:66-74,105` at `861a9f1`). Image change only (settled):
-the pipeline keeps its older `validation-entrypoint.sh` shape, which already installs Chromium at
-test time (`template/scripts/validation-entrypoint.sh:24`). The scaffold's Job has the same shape
-as the apps' (`:113`), so what P5's done-record says the Job needs on this image carries over.
-The repo has no Jenkins job or gate; nothing here is pushed before the test phase.
+As P7, for IoTSupport (`Jenkinsfile:25` at `bfe20c4`). Its Jenkinsfile kept its own validation
+stage when the app adopted the root template (`c778c89`; last changed at `96c7bb1`): wrapped in
+`withVault` for the Keycloak env (`:31`), with an OpenSearch sidecar besides RustFS (`:108,116`).
+The update's merge may not apply cleanly there; the app's additions stay. Pushed; the build is
+green.
 
 ### P10 — JenkinsPipelineUtils: the `modern_app_dev` template is gone
 
@@ -272,10 +291,12 @@ Target: ../DockerImages
 as the slice's last step: a repository's tags deleted through the registry API and its entry
 removed from registry storage, so it leaves the catalog. It runs no garbage collect: the space
 comes back with the first regular one once slice 031 lifts registry-cleanup's pause (RegistryDeploy
-`5ccb234`). The procedure rests on the registry as deployed: its storage backend, its delete
-setting and where its storage lives are RegistryDeploy's, none of them verified at planning, and
-that repo is not checked out here (read it through a throwaway clone under `/tmp`). If the
-registry as deployed cannot do this without a RegistryDeploy change, that is a question.
+`5ccb234`). The procedure rests on the registry as deployed, which RegistryDeploy owns
+(`../RegistryDeploy`, read-only here): the upstream `registry` image with filesystem storage on a
+PVC mounted at `/var/lib/registry` (`chart/templates/registry-deployment.yaml:19,29-31,46-49` at
+`689dff0`). The chart sets no delete option, so whether manifest deletes are enabled comes from
+the image's own configuration and was not verified at planning. If the registry as deployed
+cannot do this without a RegistryDeploy change, that is a question.
 
 ### P13 — AnsibleSpecs: the Terraform-version decision lists the images that install Terraform now
 
@@ -306,9 +327,12 @@ four" together. It is corrected to the set as it stands once P11 has landed.
 ## Not in scope
 
 - DesignAssistant (ruling D2).
-- Refreshing ModernAppFrontendTemplate's stale validation pipeline beyond the image reference.
+- ModernAppFrontendTemplate: its validation pipeline left it with Frontend v0.20.0 (`032f366`,
+  "drop per-repo CI"; nothing at `d44e4da` names either image), so the slice changes nothing
+  there (ruling Q1). ModernAppBackendTemplate carries none either.
 - A purpose-built Playwright image (ruling D1).
 - Changing the kube-coder toolchain images (D1 and the settled list take them as they are); a gap
   a build shows in one is a question.
 - Running a registry garbage collect, or lifting registry-cleanup's pause (slice 031).
-- Rewording historical records that mention the images.
+- Rewording historical records that mention the images, ModernAppTemplate's changelog entries
+  among them (ruling Q1).
