@@ -543,13 +543,14 @@ PVC mounted at `/var/lib/registry` (`chart/templates/registry-deployment.yaml:19
 the image's own configuration and was not verified at planning. If the registry as deployed
 cannot do this without a RegistryDeploy change, that is a question.
 
-**Done (P12).** DockerImages `fa83aec` (`phase/030-P12`, not pushed: DockerImages is outside ruling
-A1) adds `docs/registry-management/delete-repository.md` and a row for it in the folder's
+**Done (P12).** DockerImages `fa83aec`, `a963dfd` (`phase/030-P12`, not pushed: DockerImages is outside
+ruling A1) add `docs/registry-management/delete-repository.md` and a row for it in the folder's
 `README.md`. The procedure has three steps. First, HEAD every tag and `DELETE` each distinct digest
 through `http://registry:5000`; every response must be `202`. Second, `kubectl exec` into the
 `app=registry` pod in `registry-prd` using the prd-write kubeconfig, and run
 `rm -rf /var/lib/registry/docker/registry/v2/repositories/<repo>`. Third, check that
-`/v2/_catalog?n=1000` no longer lists the repo. It runs no garbage collect. The registry as
+`/v2/_catalog?n=1000` no longer lists the repo. Steps 2 and 3 read step 1's `REPO` as
+`${REPO:?…}`, so in a shell without it they stop before running. It runs no garbage collect. The registry as
 deployed does all of this, and RegistryDeploy needs no change.
 
 Later phases:
@@ -567,6 +568,10 @@ Record:
   resolves `modern-app-dev`'s 11 tags to 10 digests (`latest` and `2537` share one) and
   `modern-app-dev-playwright`'s 2 tags to 2 digests. The catalog read `?n=1000` returns all 131
   repos, both of these among them. DockerImages has no doc gate.
+- Review r1 F1: in a fresh `cexec iac bash`, step 2 as first written formed
+  `rm -rf …/repositories/` with the live pod, and step 3 printed nothing. With the guard, both
+  exit on `REPO: set REPO to the repository` for `REPO` unset or empty; an interactive bash skips
+  the command and keeps the shell.
 
 ### P13 — AnsibleSpecs: the Terraform-version decision lists the images that install Terraform now
 
