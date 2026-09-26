@@ -141,7 +141,7 @@ transcribing them into per-repo phases.
   the test phase pushes them as usual.
 - P6 is D1's "first app"; P7–P9 follow only once its build has proven both D1 premises.
 
-### P1 — JenkinsPipelineUtils: a container template for the modern-app toolchain image
+### P1 — JenkinsPipelineUtils: a container template for the modern-app toolchain image ✅ DONE 2026-09-26
 
 Target: ../JenkinsPipelineUtils
 
