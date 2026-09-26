@@ -387,6 +387,24 @@ As P6, for DHCPApp (`Jenkinsfile:25`, `tools/suite_runner/local.py:235` at `3f32
 release P6's build proved. Its Job runs no sidecars either. Pushed; the build is green. A failure
 specific to this app on the new image is a question, as in P6.
 
+**Done (P7).** DHCPApp `12947ae` (`phase/030-P7`, pushed to `main`): `copier update` took root
+`v0.1.2` using P6's recipe. The diff has exactly P5's hunks: `_commit`, the validation stage comment,
+the image, the `work` emptyDir and its mount, and the suite runner's browser comment. No hand
+edits. `DHCP/DHCPApp` #49 (same commit) is green: 62 passed and 4 skipped (backend 23; frontend
+39 passed, 4 skipped), the same count as #47 on modern-app-dev-playwright. Its Job downloaded
+Chromium from `cdn.playwright.dev`. #48, the push build, passed validation with that count and then
+went red in kaniko on a Docker Hub connection reset (close-out N2).
+
+Later phases:
+- P8, P9: if a build fails after validation in kaniko's base-image pull, that is not the image
+  switch. Re-run it with `POST .../job/<Team>/job/<Repo>/build`. `track_build.py --buildnr N`
+  404s while N is still queued, so wait until the job lists N before tracking it.
+
+Record:
+- #48's `validation.log` has the same tar errors (close-out B2) and the same Vite `Failed to get
+  git commit` trace as P6's build. The local gate (`kc project setup`, `build`, `test`, then
+  `lint`) is green.
+
 ### P8 — ElectronicsInventory: takes the root-template release
 
 Target: ../ElectronicsInventory

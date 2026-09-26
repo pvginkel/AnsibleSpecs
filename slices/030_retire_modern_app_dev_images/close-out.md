@@ -79,6 +79,15 @@ Stopped 2026-09-26 18:56; resumed 2026-09-26 19:03.
 **Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
+### N2 — P7: DHCPApp #48 went red on a Docker Hub connection reset in kaniko; the executor re-ran it as #49, which is green
+
+The push of DHCPApp 12947ae built as DHCP/DHCPApp #48. Its validation passed on the new image (62 passed, 4 skipped, the same as #47), then the "Building dhcpapp" kaniko stage failed pulling python:3.13-slim: `error building image: error building stage: failed to get filesystem from image: read tcp 172.16.129.132:43360->18.65.39.59:443: read: connection reset by peer`. Nothing was deployed. The executor triggered a rebuild of the same job (POST .../job/DHCP/job/DHCPApp/build). #49 built the same commit and is green.
+
+**Consequence:** none — the red #48 stays in DHCPApp's build history; #49 is the build P7 is proven by.
+
+**Provenance:** witnessed, code-writer, P7, r1, DHCP/DHCPApp #48 console log
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
