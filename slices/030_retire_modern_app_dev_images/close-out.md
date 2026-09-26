@@ -23,7 +23,7 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Before /dev:run-slice: restart the environment so the six consumer repos are checked out as siblings
+### ~~A1 — Before /dev:run-slice: restart the environment so the six consumer repos are checked out as siblings~~ — resolved before the run: the environment was restarted, and every Target of P1–P15 resolved as a ../<Repo> sibling and ran (ModernAppFrontendTemplate stopped being a Target at plan-writer r2 and was dropped from the config, Ansible 7263392); struck by consult 1
 
 FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppFrontendTemplate were added to Ansible's .kubecoder/config.yaml at planning (Ansible e957d13) but are not under /work until kc env restart. P4–P9 target them as ../<Repo>; run_loop.py --dry-run reports those six Targets as 'not an existing directory' until then. The operator also times the run for a quiet moment in those repos (ruling F1), since P1–P8 push their repos' main mid-run.
 
@@ -40,12 +40,14 @@ V11 — "The registry repos are deleted": neither `modern-app-dev` nor `modern-a
 
 `verification.json` marks V11 owed after: the operator's registry deletion (ruling D3), after the run, following the procedure P12 adds. The run cannot take that action; settle the criterion once it has happened.
 
+test phase r1, 2026-09-26 — V11 is marked owed-to-operator in verification.json with the exact commands (DockerImages docs/registry-management/delete-repository.md, steps 1-3, once for modern-app-dev and once for modern-app-dev-playwright). State read from this pod on 2026-09-26: both repositories are still in the catalog (11 tags and 2 tags). Every precondition is met: all seven consumer builds are green (V05), both directories are gone from DockerImages' pushed main (V08), and nothing references either image bar the D2 and N1 exceptions (V07). One thing to know before running it: DesignAssistant's archived Jenkinsfile (ruling D2) hardcodes registry:5000/modern-app-dev-playwright:playwright-<version>, so once the repository is deleted it can no longer run a validation build; its jobs are archived and disabled, so nothing runs today.
+
 **Consequence:** V11 stays unproven until then; the test phase does not settle it.
 
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Disposition:**
 
-### A3 — Declare the python and frontend tools in Ansible's .kubecoder/config.yaml (or rule a substitute gate) so P3's and P4's gates can run · major
+### ~~A3 — Declare the python and frontend tools in Ansible's .kubecoder/config.yaml (or rule a substitute gate) so P3's and P4's gates can run · major~~ — resolved by Ansible 83b7fe5 (python and frontend tools declared): P3 round 2 ran KubeCoder's kc project test green before pushing, and P4 ran FieldnotesApp's green; struck by consult 1
 
 The phase gate `kc project test` in /work/KubeCoder fails before any test runs: KubeCoder's .kubecoder/project.yaml calls `cexec python` (root, manual) and `cexec frontend` (vscode-extension, vscode-desktop), and this environment declares only iac, go, aac-tools, java and modern-app (`cexec: tool "python" is not available in this environment`). FieldnotesApp's project.yaml calls `cexec python` too. `kc env describe` also shows the pod-start `kc project setup` failing for KubeCoder, FieldnotesApp, ElectronicsInventory, IoTSupport and ModernAppTemplate (the last three use `cexec modern-app`, so their failure has another cause, not investigated). The fix is either `- use: python` and `- use: frontend` under `tools:` plus `kc env restart`, or a ruling that the same commands run through `cexec modern-app`, which is the image the moved stages run in. Evidence for the second option: at KubeCoder 2fea4ab2 (phase/030-P3), `uv sync --all-packages --frozen`, ruff check, ruff format --check and pytest, then `npm ci`/typecheck/test in vscode-extension (332 pass) and vscode-desktop (484 pass), and `mkdocs build --strict` for the manual, all exit 0 in `cexec modern-app`.
 
@@ -54,7 +56,7 @@ The phase gate `kc project test` in /work/KubeCoder fails before any test runs: 
 **Provenance:** witnessed | code-writer, P3, r1, /work/AnsibleSpecs/slices/030_retire_modern_app_dev_images/phases/P3/executor_result_r1.json
 **Disposition:**
 
-### A4 — Declare the minio and postgres services (and opensearch, for P9) in Ansible's .kubecoder/config.yaml, or rule a substitute gate, so P8's and P9's gates can run · major
+### ~~A4 — Declare the minio and postgres services (and opensearch, for P9) in Ansible's .kubecoder/config.yaml, or rule a substitute gate, so P8's and P9's gates can run · major~~ — resolved by ruling S1 (plan.md), the operator's option (b): the Jenkins validation builds ElectronicsInventory #255 and IoTSupport #145 are the test gate, and the services stay undeclared. Loop-tail sweep r1's red ElectronicsInventory backend and frontend test rows are this same gap. Consult 1 re-ran the backend suite, which exits on 'S3 storage is not reachable at http://localhost:9000'. The frontend log fails on the endpoint URL http://localhost:9000/... . 4bbec200 is origin/main, so the test phase has nothing to push there; struck by consult 1
 
 The ElectronicsInventory and IoTSupport gates need services that their own environments declare but this Ansible environment does not. This environment declares only `terraform-backend-git` (`.kubecoder/config.yaml`, `services:`). ElectronicsInventory's `.kubecoder/config.yaml` declares `minio` and `postgres`. IoTSupport's declares `postgres`, `minio` and `opensearch`. `kc env describe` already reports that the environment's setup failed for ElectronicsInventory, IoTSupport and ModernAppTemplate.
 
@@ -76,7 +78,7 @@ P8 executor, gate fix round 1, 2026-09-26 — The ruling that answered this (pla
 **Provenance:** witnessed — code-writer, P8, r1; /tmp/p8-gate.log, /tmp/p8-gate2.log, ElectronicsInventory test_results.md
 **Disposition:**
 
-### A5 — Push DockerImages main with P11 and P12 before the registry deletion · major
+### ~~A5 — Push DockerImages main with P11 and P12 before the registry deletion · major~~ — resolved: DockerImages main was pushed in the test phase (61d79df..a963dfd, carrying P11 11fcb16 and P12 fa83aec/a963dfd); DockerImages #2557 on a963dfd is SUCCESS and built nothing named modern-app-dev, so the registry deletion (A2) cannot be undone by a rebuild; struck by test phase r1
 
 P11 (fa83aec's parent 11fcb16, the two image directories deleted) and P12 (fa83aec, docs/registry-management/delete-repository.md) are committed on DockerImages phase branches and not pushed: DockerImages is outside ruling A1. The deletion procedure's precondition is that the image directories are gone from DockerImages' main. While they are still there, the push pipeline and version-poller's rebuild find both images by directory and push them to registry:5000 again.
 
@@ -145,6 +147,15 @@ Stopped 2026-09-26 20:43; resumed 2026-09-26 21:11.
 **Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
+### N5 — Test phase r1: DockerImages, ArgoCDTools and Ansible pushed; every push build green · nit
+
+Pushed to main: DockerImages 61d79df..a963dfd (P11, P12), ArgoCDTools 6f49577..ce60dbc (P15), and Ansible e95b889..bbe662e. Ansible needed a rebase first: its origin/main had moved one commit (e95b889, slice 230 P4) past the six local slice-030 commits; the dev:rebase-agent rebased with no conflicts and `kc project lint` and `test` were green afterwards. Builds: DockerImages #2557 SUCCESS; IaC/ArgoCDTools #18 SUCCESS; IaC/Build-Main #221 SUCCESS (Lint, Terraform validate, Plan + destroy check, 'No changes'); AaC/Ansible #175 SUCCESS. Side effects of the comment-only edits, which the pipelines do on every Dockerfile change: DockerImages #2557 rebuilt kube-coder-iac-toolchain and moved its :latest (trivy raised a warning, 1 CRITICAL with a fixed version); ArgoCDTools #18 rebuilt argocd-hook:latest; IaC Docker Image #218 rebuilt Ansible's iac image, SUCCESS. Not pushed, deliberately: AnsibleSpecs (the driver leaves the spec repo out of the push check; its commits land at close-out and carry other lanes' unpublished work) and KubeCoder (origin is one commit ahead of local, nothing of the slice's is unpushed). The loop-tail sweep's red ElectronicsInventory backend and frontend test rows were re-run and are still the missing S3 service (backend: 'S3 storage is not reachable at http://localhost:9000'; frontend: Playwright global setup 'Could not connect to the endpoint URL http://localhost:9000/...'), which ruling S1 covers; ElectronicsInventory's HEAD is origin/main (4bbec200) and Jenkins #255 is green, so no push was withheld for them. IoTSupport is not in the sweep (P9 ran outside the loop, ruling S1); its HEAD is origin/main and #145 is green.
+
+**Consequence:** none — the pushes had to happen for A5 and P14/P15 to land; recorded so the operator knows the images they rebuilt.
+
+**Provenance:** witnessed — test-agent, test phase r1; Jenkins DockerImages #2557, IaC/ArgoCDTools #18, IaC/Build-Main #221, IaC/IaC Docker Image #218
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -167,6 +178,8 @@ FieldnotesApp's Jenkinsfile calls `cicd.writeVersionPins` (stage 'Write image pi
 Root template v0.1.2 mounts an emptyDir at /work (root:root, 0777) for a Job that runs as uid 1000. `tar xzf /work/staging/context.tar.gz -C /work` (root/template/Jenkinsfile.jinja:80) then cannot set the mode or mtime of the archive`s `./` entry. It prints "Cannot utime" and "Cannot change mode", then "Exiting with failure status due to previous errors", and exits 2. The files are extracted, and the script has no `set -e`, so the suites run and the build result is unaffected. I witnessed this on the image in a throwaway development pod.
 
 code-writer, P6, r1, 2026-09-26 — Seen on a real build: ZigbeeControl/ZigbeeControl #60 (v0.1.2) validation.log lines 3-5 carry the three tar lines, and the build is green.
+
+consult 1, 2026-09-26 — Priced as a close-out entry, not a phase. The plan does not owe this fix: the Job gets its /work from the Job itself, as P5 required, and V03, V05 and V13 hold. #60, #49, #255 and #145 are green, with the same test counts as on modern-app-dev-playwright. A fix is a further root-template release (v0.1.3), taken by all four apps with copier update and proven by four Jenkins builds. A candidate the consult did not try: extract with tar --no-overwrite-dir, which leaves the metadata of the existing /work directory alone.
 
 **Consequence:** Every validation.log from an app on v0.1.2 shows a tar failure right after "Code received, extracting...". Someone diagnosing a red validation build meets a spurious error first.
 
@@ -233,4 +246,22 @@ decisions.md:173 and :176 (the TODOs gating the next root rotation) say "nine ou
 **Consequence:** Someone reading the rotation TODOs is told about one copy fewer than a rotation has to update. The runbook's table is the list that actually drives a rotation, so the miscount only misleads a reader who stops at decisions.md.
 
 **Provenance:** read, code-reviewer, P13, r1, phases/P13/code_review_r1.md F1
+**Disposition:**
+
+### S6 — Ansible .kubecoder/config.yaml: drop the slice-030 checkouts and tools once the slice closes · minor
+
+Slice 030 added seven sibling checkouts to Ansible's .kubecoder/config.yaml, under the comment 'Slice 030 (modern-app-dev retirement): the image's consumer pipelines' (Ansible 8b4e44e, b0d85d8, 7263392): KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppTemplate. It also added the python and frontend tools, for P3's and P4's gates (83b7fe5). Once the slice is closed, no Ansible work needs them. Pod start runs every checkout's project.yaml setup. For ElectronicsInventory, IoTSupport and ModernAppTemplate that setup fails, because this environment has no Postgres (A4). So every start of the environment reports 'The environment's setup failed' in kc env describe. Removing them is a config edit plus kc env restart. Keeping them is also a valid choice if the operator wants the consumer repos at hand.
+
+**Consequence:** Until the entries go, every start of the Ansible environment reports a failed setup for three repos this environment no longer works in, and it clones seven repos it does not need. A real setup failure then hides behind a known one.
+
+**Provenance:** witnessed | consult 1, kc env describe on 2026-09-26 and git log -- .kubecoder/config.yaml
+**Disposition:**
+
+### S7 — Registry: modern-app-dev-base is a third stale repository from the same family, outside R1 · nit
+
+R1 names two repositories and the slice deletes those. `modern-app-dev-base` (tags 2085 and latest) is in the catalog as well; DockerImages dropped its directory on 2026-06-17 and only the dated 2026-08-16 registry audit still names it. The same delete-repository.md procedure removes it if the operator wants it gone in the same sitting.
+
+**Consequence:** A repository with two tags (2085, latest) stays in the catalog after A2, though no image directory has built it since DockerImages c43008c (2026-06-17).
+
+**Provenance:** witnessed — test-agent, test phase r1; curl http://registry:5000/v2/modern-app-dev-base/tags/list
 **Disposition:**
