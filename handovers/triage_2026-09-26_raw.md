@@ -135,6 +135,26 @@ None.
 
 > Go
 
+### Session (Claude), after the triage check found two collisions with version-poller-redesign.md §4
+
+> (Asked three questions: who lifts the pause; overrule "one tag per matrix build"; overrule the `^.+-\d+$` classifier.)
+
+### Operator
+
+> As for what counts as a build number. I feel the now obvious answer is that we just make this explicit using a label. That solves a whole slew of problems. It does need an alternate Kaniko invocation and a cross repo migration. Can you give me your opinion on this approach?
+
+### Session (Claude)
+
+> Agreed, with one refinement: the label already exists. `kaniko2` stamps `org.webathome.poller.tracking-tag` on every image it builds; a tag is tracking only if its name equals that label on the image it points to, every other tag is build history. `kaniko2` takes an explicit `trackingTag:` (derivation from tag shapes stays the default), so a matrix build may push two tags. Images without the label are never cleaned, so the migration can be gradual. The version-poller already falls back to the label for `node-24`/`jdk-21` (`poller.py:127`). The label does not say what is deployed; DI-8's in-use read would still be needed for that.
+
+### Operator
+
+> I decided earlier that knowing what's deployed is out of scope. If our continuous rebuilds work, there will always be a fresh image. And I haven't yet enabled auto cleanup, so it's not yet a problem.
+>
+> As for the gradual migration: I assume at some point I need to do a full analysis of what's in the registry and decide what to delete by what rules. Make sure there's an operator actions card for that, if there isn't one already.
+>
+> Let's go with this then. Proceed with the triage.
+
 ## Session evidence behind the chat (read live 2026-09-25, for the record)
 
 - `kubectl get applications -A` `status.summary.images`: in-registry digest references were
