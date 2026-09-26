@@ -238,3 +238,12 @@ P3 removed cicd.helmDeploy() from JenkinsPipelineUtils. A GitHub code search for
 
 **Provenance:** witnessed, code-writer, P3, r2, gh search code --owner pvginkel helmDeploy
 **Disposition:**
+
+### S13 — ArgoCDDeploy's README and root project description do not mention the registry chart or the equivalence check · nit
+
+P4 added releases/ (the registry: values.yaml, values.schema.json, one Application per app-stage) and tools/registry-equivalence.py to ArgoCDDeploy. README.md still describes the repo as the wrapper chart plus its stage configuration, and .kubecoder/project.yaml's root description says the same. P9 targets Ansible only, so no planned phase covers ArgoCDDeploy's own prose.
+
+**Consequence:** A reader of ArgoCDDeploy's README is not told that the repo holds the registry, where it is, or how to check it against the live Applications.
+
+**Provenance:** read | code-writer, P4, r1, ArgoCDDeploy 19e40d3
+**Disposition:**

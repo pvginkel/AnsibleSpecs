@@ -419,14 +419,53 @@ those files that explain a why come along with their entries.
   three-source shape. They currently check the ApplicationSet templates. The ApplicationSet
   assertions stay, because `chart/` still renders the ApplicationSets.
 
+**Done (P4).** ArgoCDDeploy `phase/029-P4` `19e40d3`, not pushed. The registry chart is
+`releases/`. Its `values.yaml` is the registry: `apps.<app>: {repo, upstream: {repo, chart},
+syncOptions, stages.<stage>: {autoSync, targetRevision, version}}`, with full
+`https://github.com/pvginkel/<Name>.git` repo URLs and quoted versions. `values.schema.json` is the
+key validation, and `templates/applications.yaml` renders one Application per app-stage into
+`.Release.Namespace`. It holds the 50 live app-stages (48 apps) from HelmCharts `origin/main`
+`6bd5857`. `tests/render-chart.py` renders it beside `chart/`, whose render is unchanged. Read-only
+`tools/registry-equivalence.py` passed against prd: `50 rendered, 50 live in argocd-prd, 0 differing`.
+
+Later phases:
+- P5: `releases` sources ArgoCDDeploy `path: releases` with no value files, named `releases`,
+  destination namespace `argocd-prd` (each Application's namespace is the release namespace).
+  The render test's `REGISTRY_CHART`, `REGISTRY_RELEASE` and `helm_template()` are reusable.
+- P6: the check is `cexec iac tools/registry-equivalence.py` from the ArgoCDDeploy commit to be
+  switched; pass is exit 0 and `… 0 differing`. Each line names the Application's owner
+  (`ApplicationSet/releases-*` before the orphan-delete, `none` after); owners do not fail it.
+  `kubecoder-prd` carries a stray live-only `argocd.argoproj.io/hydrate` annotation no render sets.
+- P7: on Argo = the stage has an entry; the pin is `stages.<stage>.version`; `syncOptions` is
+  app-level; absent `autoSync` is true, and `argocd` must keep `false`. Entries are alphabetical;
+  `helm lint releases` validates an edit against the schema.
+- P8: enumerate `apps`; the resolved chart is `upstream.chart` at the stage's `version`, else the
+  deploy repo's `chart/`; `targetRevision` (default `main`) is the stage's branch.
+
+Record:
+- Successors: booleans → `autoSync: boolean`; pvginkel prefix → `repo` pattern
+  `^https://github\.com/pvginkel/[A-Za-z0-9._-]+\.git$`; non-empty targetRevision → `minLength: 1`;
+  complete upstream → `upstream` requires `repo` and `chart`, every stage of an upstream app a
+  non-empty `version`, no other stage one; Argo never auto-syncs → `apps.argocd` required, repo
+  const ArgoCDDeploy, `prd` required, each stage `autoSync` const false, plus the render test's
+  no-`automated` check on `argocd-prd`; `release.py`'s allowlist and `"chart" not in entry` →
+  `additionalProperties: false` at every level. The test proves 20 refusals and 2 acceptances.
+- Beyond the plan: DNS-label app and stage keys; no two app-stages render one name; every
+  Application passes `chart/`'s AppProject (stage and source repos) and the Application CRD
+  schema; no labels or annotations are rendered, so the first diff is tracking metadata only.
+- Proofs: mutating the template, each schema constraint, or the registry (an unpermitted stage or
+  Helm repo) in a scratch copy turned the gate red; the equivalence check went red on a changed
+  version and a renamed app. The schema also passes under Helm 4.2.1, Argo CD v3.5.1's bundled
+  Helm (the gate runs 4.3.0). `kc project lint` gains `helm lint releases`.
+
 ### P5 — ArgoCDDeploy: the ownership hand-over, one switch, safe at every sync
 
 Target: ../ArgoCDDeploy
 
 `chart/` renders either the two ApplicationSets or the `releases` Application that deploys P4's
-chart, never both. One stage-level setting chooses between them. When this phase merges, the
-setting still selects the ApplicationSets, so syncing `argocd-prd` changes nothing but their new
-prune guard. [attachments/registry-switch.md](attachments/registry-switch.md) gives the states
+chart (`releases/`), never both. One stage-level setting chooses between them. When this phase
+merges, the setting still selects the ApplicationSets, so syncing `argocd-prd` changes nothing but
+their new prune guard. [attachments/registry-switch.md](attachments/registry-switch.md) gives the states
 the operator walks through and the invariants each state must hold. The render test proves that
 each state renders what the attachment says.
 
@@ -451,7 +490,7 @@ the run pushes to steady state, in this order:
 
 1. the rehearsal;
 2. ArgoCDDeploy's relay webhook;
-3. the equivalence check;
+3. the equivalence check (ArgoCDDeploy `tools/registry-equivalence.py`, P4);
 4. the guard;
 5. the orphan-delete of both ApplicationSets;
 6. the equivalence check again, right before the flip;
@@ -483,8 +522,8 @@ It ends with the attachment's list of what is dead after the switch, so the foll
 
 Target: root
 
-- **`flip` and `autosync`** edit P4's registry file, as a local ArgoCDDeploy commit with comments
-  preserved, instead of HelmCharts' `release.yaml`.
+- **`flip` and `autosync`** edit P4's registry file (ArgoCDDeploy `releases/values.yaml`), as a
+  local ArgoCDDeploy commit with comments preserved, instead of HelmCharts' `release.yaml`.
 - **Registry reads.** Every question the tool asks about an app-stage's registry entry is
   answered by the new registry:
   - whether the stage is on Argo (`support/argo-migrate/argo_migrate.py:88-99`, `:935-937`);
@@ -511,7 +550,8 @@ Target: root
 A tool under Ansible's `support/`, beside argo-migrate and run from this environment, in the D3
 ruling's shape:
 
-1. It enumerates the deploy repos from P4's registry and clones them into a scratch directory.
+1. It enumerates the deploy repos from P4's registry (ArgoCDDeploy `releases/values.yaml`) and
+   clones them into a scratch directory.
 2. It reads Prometheus at `http://prometheus.home`.
 3. It writes one plain unified-diff patch per deploy repo into a report directory.
 4. The operator deletes a file to skip that app, or edits hunks to overrule them.
