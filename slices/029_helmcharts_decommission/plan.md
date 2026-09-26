@@ -458,7 +458,7 @@ Record:
   version and a renamed app. The schema also passes under Helm 4.2.1, Argo CD v3.5.1's bundled
   Helm (the gate runs 4.3.0). `kc project lint` gains `helm lint releases`.
 
-### P5 — ArgoCDDeploy: the ownership hand-over, one switch, safe at every sync
+### P5 — ArgoCDDeploy: the ownership hand-over, one switch, safe at every sync ✅ DONE 2026-09-26
 
 Target: ../ArgoCDDeploy
 
