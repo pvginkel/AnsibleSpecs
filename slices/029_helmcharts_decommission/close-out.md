@@ -54,6 +54,15 @@ Step two of the proof ran against real clones: 30 deploy repos carry one local c
 **Provenance:** witnessed, executor, P8 r1
 **Disposition:**
 
+### A4 — AnsibleSpecs is not pushed: it is 37 commits ahead of origin, including slices 030 and 031's planning commits
+
+The test phase pushed Ansible (ca536a6), Architecture (d73109d), ArgoCDDeploy (4afb8fb) and JenkinsPipelineUtils (6f87d09), the repos in `state.json`'s `bases` that the driver's push check covers. It did not push AnsibleSpecs: the driver excludes the spec repo from that check, the working tree is shared, and the 37 unpushed commits include other slices' planning work (030, 031) that this slice does not own. Push it when the operator wants those records on origin: `cd /work/AnsibleSpecs && git push origin main`. The operator's call, not this slice's.
+
+**Consequence:** The slice's records (decisions, runbook path, close-out, verification) exist only in this pod's /work/AnsibleSpecs until someone pushes; nothing else reads them from origin.
+
+**Provenance:** witnessed, test-agent, phase test, round 1, git -C /work/AnsibleSpecs log origin/main..HEAD
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -69,6 +78,8 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
 ### N1 — P3's pre-removal caller check found a live caller the plan's search missed: KitchenDisplay deploys with helmCharts.rsync and helmCharts.ssh
 
 The plan said the library's scp, rsync and ssh helpers had zero callers in the org (GitHub code search, 2026-09-26). P3 re-ran the search before removing anything. KitchenDisplay's Jenkinsfile (main, last touched 69bd690, 2026-06-04; the repo was pushed 2026-09-13) clones HelmCharts into `HelmCharts/`, and its 'Deploy kitchendisplay' stage calls `helmCharts.ssh` twice (stop and start the systemd unit on 192.168.178.11) and `helmCharts.rsync` once (`bin/.` to `/var/local/kitchendisplay/bin`). Both helpers use `$WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key`. P3 removed only what has no caller: `cicd.helmDeploy()` and `helmCharts.scp` (JenkinsPipelineUtils phase/029-P3 6f87d09). It kept rsync and ssh, and returned a question to the operator.
+
+consult 1, 2026-09-26 — Ruled before the run resumed (N2): keep rsync and ssh as they are, with follow-up ANS-144 to move KitchenDisplay's key to a Jenkins SSH credential. V21 was amended to match and P3 merged. The Consequence line above describes the state before the ruling.
 
 **Consequence:** V21 as written (the library names no HelmCharts asset) cannot hold without breaking KitchenDisplay's deploy stage or widening the slice; P3 waits on the operator's ruling.
 
@@ -101,9 +112,29 @@ The docs-across-the-switch ruling, the plan's P9 text and V18 name three procedu
 
 To rewrite step-ca-bootstrap.md's Secret layout, P9 grepped StepCaDeploy's chart/templates/stage-manifests.yaml for kind, name and key lines. The pattern also matched the data lines, so the base64 values of step-ca-ca-password's and step-ca-ssh-host-ca-password's password keys (and the encrypted intermediate and SSH host CA keys) reached the transcript. Nothing decoded or used them. The values are committed in that private repo, a known state that AnsibleSpecs decisions.md ('Intermediate key + passphrase') tracks moving into ansible-vault.
 
+code-reviewer P9 r1, 2026-09-26 — The review repeated it: a grep of StepCaDeploy's stage-manifests.yaml for Secret names and keys matched the data lines, and the same base64 values reached the reviewer's transcript. They are the same values N4 already names, so the consequence does not change.
+
 **Consequence:** The step-ca intermediate key passphrase and the SSH host CA key passphrase are transcript-exposed. Under the estate's rotated_at convention, that is a reason to rotate them when the Secrets move out of the chart.
 
 **Provenance:** witnessed, code-writer, P9, r1
+**Disposition:**
+
+### N5 — The push to Architecture's main turned its CI build red: P2's Infrastructure-view test reads repo files the Docker build-viewer stage did not carry; fixed and redeployed · minor
+
+The test phase pushed Architecture d7c4878 (P2). Jenkins AaC/Architecture #2068 failed in the Dockerfile's `build-viewer` stage: `viewer/src/views/infrastructure-view.test.ts` (added in P2's review r1) reads `docs/architecture/catalog.yaml`, `docs/architecture/infrastructure.yaml` and `views/infrastructure.yaml` through `../../../` from `src/views/`. Locally that is the repo root, so `kc project test` (and the driver's sweep) passed. In the image build the stage copied only `viewer/` to `/app`, so the path resolved to `/` and the suite died with `ENOENT: /docs/architecture/catalog.yaml`. Mechanical repair by the test-fixer: stage 2 now lays out `/work/viewer` with `/work/docs/architecture/` and `/work/views/` beside it (the precedent stage 3 sets), and the final stage copies `/work/viewer/dist`. Reproduced and cleared with `kaniko --context /work/Architecture --no-push --target build-viewer`; pushed as d73109d; #2069 built d73109d, pushed the image and pinned WebathomeOrgDeploy c179e5a. The live dataset then dropped the helm-charts producer (825 unique elements, the 37 moved ids under `architecture`, the 3 unreferenced ones gone).
+
+**Consequence:** none now; had it not been caught, no Architecture build would have produced an image or deployed the dataset without helm-charts
+
+**Provenance:** witnessed, test-agent, phase test, round 1, Jenkins AaC/Architecture #2068 (log /tmp/track_build/AaC_Architecture_2068.log), #2069; Architecture d73109d
+**Disposition:**
+
+### N6 — IaC/Scheduled Drift #117 failed at 11:24Z on srvk8sdev (changed=2), before any of this slice's pushes · nit
+
+Looked at while reading Jenkins after the pushes. The build ran the pre-slice `main` (Ansible ca536a6 was pushed at 13:22Z, the build ran at 11:24Z), and the slice changes no role, playbook, inventory or Terraform (its only edits under `ansible/` are a comment and role READMEs). Terraform drift (prd), pve/wrkdev, and k8s prd ended `changed=0 failed=0`; `k8s dev` (srvk8sdev) ended `changed=2`, and the build finished FAILURE. Recorded so the operator sees it beside the pushes; the cause was not investigated further.
+
+**Consequence:** The next scheduled drift run will show srvk8sdev's two changed tasks again until an operator converges it; this slice reaches no host.
+
+**Provenance:** read, test-agent, phase test, round 1, Jenkins IaC/Scheduled Drift #117 console
 **Disposition:**
 
 ## Bugs
@@ -221,7 +252,7 @@ executor P5 r1, 2026-09-26 — P5 names the chart parts. The branch is chart/tem
 **Provenance:** read — code-writer, P1, r1
 **Disposition:**
 
-### S6 — The estate register links to seven slice and spec paths that have moved · cosmetic
+### ~~S6 — The estate register links to seven slice and spec paths that have moved · cosmetic~~ — resolved by consult 1 (AnsibleSpecs 150fb1a): the seven links in decisions.md point at slices/completed/, change_requests/microceph_prod/ and slices/completed/dns-reservation-provider/; a relative-link check over decisions.md finds none broken; struck by consult 1
 
 In `/work/AnsibleSpecs/decisions.md`, relative links to `slices/runtime-secrets-sweep.md`, `slices/microceph-prod.md` (three times), `slices/internal-ha-vips.md`, `specs/dns-reservation-api.md` and `specs/dns-reservation-terraform.md` resolve to nothing. The files were moved under `slices/completed/` and other paths. These links predate this slice, and P1 found them while checking its own links.
 
@@ -244,6 +275,8 @@ AnsibleSpecs `decisions.md:279` lists "the Helm deploy tooling in `HelmCharts/to
 ### S8 — P6 carries AnsibleSpecs edits (the runbook path in D64 and phases.md) under Target: root · nit
 
 P1 added `plan.md:406-411` to P6. It asks P6 to put the switch runbook's path into argo-cd `decisions.md` D64 and `phases.md`, both in AnsibleSpecs, but P6's `Target:` is `root`. The phase branch and its review cover one repo, so these edits sit outside both.
+
+consult 1, 2026-09-26 — The edits landed on AnsibleSpecs main as d05e22d (D64 and phases.md's endgame name /work/Ansible/docs/runbooks/registry-switch.md). What stays true is that no phase review covered them.
 
 **Consequence:** P6's AnsibleSpecs edits can land on whatever AnsibleSpecs branch is checked out, unreviewed.
 
@@ -371,6 +404,8 @@ live-infra-access.md now says a deploy repo's Terraform is applied by the PreSyn
 
 Found by P9 while editing nearby text; neither concerns HelmCharts. docs/slice-testing-strategy.md:6 and :13 say there is no runnable test suite and that kc project test is yamllint, ansible-lint, terraform fmt and the architecture validator; root's test now runs support/argo-migrate's and support/recommend-resources' unit tests (P7, P8). P9 corrected the same claim in design-philosophy.md. CLAUDE.md's 'Related repos on this machine' lists KubeCoderDeploy as under /work, but .kubecoder/config.yaml does not declare it and /work holds no clone. Also docs/runbooks/kubecoder-cutover.md:15 links slice 012's plan at slices/012_kubecoder_argo_cutover/, which moved to slices/completed/.
 
+consult 1, 2026-09-26 — The dead link in kubecoder-cutover.md:15 is fixed: it points at slices/completed/012_kubecoder_argo_cutover/plan.md (Ansible ca536a6). Still open: slice-testing-strategy.md's 'no runnable test suite' (a file this slice did not touch) and CLAUDE.md's KubeCoderDeploy line, which needs a choice between declaring the repo in .kubecoder/config.yaml and dropping it from the list.
+
 **Consequence:** The test phase's strategy doc understates what root's gate runs, a session that reaches for /work/KubeCoderDeploy finds nothing, and one link in the KubeCoder cutover record is dead.
 
 **Provenance:** read, code-writer, P9, r1
@@ -392,4 +427,51 @@ DockerImages certbot/scripts/args.sh:18 mounts $(pwd)/../../HelmCharts/charts/ng
 **Consequence:** After ANS-122 drops the HelmCharts clone, a hand-run certbot from DockerImages fails its bind mount. After a root rotation, a run before that serves the old root. The StepCaDeploy comment points a reader at a file in the archive.
 
 **Provenance:** read, code-writer, P9, r1
+**Disposition:**
+
+### S25 — Ansible step-ca-bootstrap.md: day-zero step 7 no longer says to write the ceremony's new material into StepCaDeploy · minor
+
+P9 turned step 7 (docs/runbooks/step-ca-bootstrap.md:243-263) from a kubectl create secret command into a description: which Secrets the chart reads, that StepCaDeploy's chart/templates/stage-manifests.yaml renders them today, and a check once Argo has synced. It never says to base64 this ceremony's root, intermediate, key, passphrase and ca.json/defaults.json into stage-manifests.yaml and push. The intermediate rotation's step 3 (:540-549) says exactly that for its three values.
+
+consult 1, 2026-09-26 — Not a mechanical fix, so it stays open. Two facts for whoever writes step 7's instruction, read from StepCaDeploy main's chart/templates/stage-manifests.yaml (Secret names, data keys and ca.json's path fields only; no values printed). (1) The manifest renders five Secrets, not four: step-ca-ssh-host-ca-password (key password) is missing from step 7's table. It belongs to 'Enabling the SSH host CA' step 2, not to this ceremony. (2) The chart's ca.json uses the pod's paths (root /home/step/certs/root_ca.crt, key /home/step/secrets/intermediate_ca_key, db /home/step/db) and carries an ssh.hostKey block. The ceremony's local .step/config/ca.json has neither, so it cannot be base64'd in as it is. The instruction has to say what carries over (the new certs, the key, the passphrase, and the provisioner the init minted) and what stays (the pod paths and the ssh block).
+
+**Consequence:** An operator re-running the ceremony after a CA loss can pass step 7's check on the old material Argo keeps serving. Step 9 then shreds the new intermediate key, and it has to be re-issued from the root key in Roboform.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F1
+**Disposition:**
+
+### ~~S26 — Ansible design-philosophy.md: 'only the Python tools under support/ carry unit tests' misses tools/ai_workflow/test_track_build.py · nit~~ — resolved by consult 1 (Ansible ca536a6): design-philosophy.md says the support/ tools' unit tests are root's, and that tools/ai_workflow/test_track_build.py is a unit test no gate runs (checked against .kubecoder/project.yaml's test: keys); kc project lint green; struck by consult 1
+
+P9's rewrite of 'What tested means here' (docs/design-philosophy.md:61-62) says root's gate runs every unit test and all of them are under support/. tools/ai_workflow/test_track_build.py is a tracked unit test, and root's test: (.kubecoder/project.yaml:18-20) does not run it.
+
+**Consequence:** A reader of the binding change doc takes root's green as covering track_build.py, and it does not.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F2
+**Disposition:**
+
+### ~~S27 — Ansible kubecoder-cutover.md: the P3 record cites argocd.md producer steps 2, 4 and 5, which P9 renumbered and removed · nit~~ — resolved by consult 1 (Ansible ca536a6): kubecoder-cutover.md's P3 record now says its step numbers are the argocd.md section's at the time of the run, and that slice 029 removed the handover proof and flip and renumbered the rest; the record's own steps are unchanged; struck by consult 1
+
+argocd.md's 'Giving an app its own architecture producer' lost its handover proof and flip in P9, and its steps are now 1-4 (docs/runbooks/argocd.md:381-405). kubecoder-cutover.md:803-815 still follows 'steps 2, 4 and 5' and calls step 2 the handover equality check, whose command is gone from argocd.md. The file is marked as a finished run's record (:8-12).
+
+**Consequence:** A reader of the cutover record who follows its step numbers into argocd.md lands on the wrong steps. Nothing is re-run from it.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F3
+**Disposition:**
+
+### ~~S28 — Ansible k8s-rebuild.md says HelmCharts' configs/dev tree already went into its archive · nit~~ — resolved by consult 1 (Ansible ca536a6): k8s-rebuild.md says HelmCharts' configs/dev tree goes into its archive with the repo (D65), no longer that it went; struck by consult 1
+
+docs/runbooks/k8s-rebuild.md:258 says 'since HelmCharts' configs/dev tree went into its archive (argo-cd D65)'. The archive is ANS-122, after this slice. D65 says the tree goes into it, and /work/HelmCharts/configs/dev/ is live today.
+
+**Consequence:** The runbook states a future event as done. Per the F1 ruling nothing waits on it.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F4
+**Disposition:**
+
+### S29 — Architecture's kc project test does not reproduce the Docker image build's file layout, so a test can pass locally and fail the CI build · minor
+
+The viewer's `kc project test` runs `npm test` inside the repo tree, where `../../../` from `viewer/src/` is the repo root. The Dockerfile's `build-viewer` stage runs the same suite in a tree with only what it COPYs. The two layouts diverged for P2's test, and only the push showed it. A gate step `kaniko --context . --no-push --target build-viewer` (about 90 seconds) in Architecture's root component would catch that class before a push; `--target build-service` does the same for the service stage.
+
+**Consequence:** The next test that reads a repo file from viewer/ or service/ repeats the P2 failure: green gate, red CI build after the push.
+
+**Provenance:** witnessed, test-agent, phase test, round 1, AaC/Architecture #2068
 **Disposition:**

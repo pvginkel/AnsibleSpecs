@@ -784,7 +784,8 @@ go; tracked in phases.md so it cannot be forgotten.
 > the 46 `configs/dev/<app>/_shared/infrastructure.tf` of the chart-development tree, and the
 > three parked apps' `configs/prd/<app>/_shared/infrastructure.tf` (D60, kept by D61). No
 > migrated app calls it. The migration tooling's handling stays with that tool:
-> `argo_migrate.py`'s scaffold strips the module (`support/argo-migrate/argo_migrate.py:495-502`).
+> `argo_migrate.py`'s scaffold strips the module (`rewrite_tf` in
+> `support/argo-migrate/argo_migrate.py`).
 
 **D50 — Each deploy repo publishes its own architecture.** Decided 2026-09-21 (slice 014). A
 deploy repo carries a generated producer of its own: a `Jenkinsfile.architecture` running the

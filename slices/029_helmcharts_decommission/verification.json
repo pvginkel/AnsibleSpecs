@@ -4,195 +4,285 @@
       "id": "V01",
       "area": "R1 — D61 cleanup (done before planning)",
       "description": "\"D61 cleanup (ANS-103, due from 2026-09-25 19:45Z): the migrated apps' HelmCharts content, their Helm release Secrets, DockerImages' `cicd.helmDeploy()` stage and HelmCharts' `gitToken` injection.\" Done before planning; this criterion re-checks it. (1) Every migrated app's HelmCharts `configs/prd/<app>/<stage>/` holds only its `release.yaml`. Only the three parked apps (design-assistant, open-webui, shell) keep `_shared/` and values. (2) HelmCharts' `Jenkinsfile` injects no `gitToken`. (3) DockerImages has no `helmDeploy`. (4) No migrated app has a `sh.helm.release.v1.*` Secret left on prd. The one Helm release Secret on prd is `sh.helm.release.v1.argocd-prd.v1`, from Argo's own bootstrap install on 2026-09-04, and it is not a migrated app's. All four were verified 2026-09-26.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Re-checked all four parts live on 2026-09-26. (1) `find configs/prd -type f ! -name release.yaml` in /work/HelmCharts lists only the parked apps' files (design-assistant x4 stages + _shared, open-webui, shell); 56 release.yaml, the 6 without `reconciler: argo-cd` are exactly those parked stages. (2) `grep -i gitToken Jenkinsfile` finds nothing. (3) `grep -rn helmDeploy` over /work/DockerImages finds nothing. (4) `kubectl get secrets -A --field-selector type=helm.sh/release.v1` (names only, no values) returns one Secret, argocd-prd/sh.helm.release.v1.argocd-prd.v1, Argo's own bootstrap install. The default read-only identity is forbidden from listing Secrets, so this one read used ~/.kube/config-prd-write with custom-columns NAME only.",
+      "evidence": [
+        "/work/HelmCharts: git log (eeceac0 09:21, 6e8a054 09:24, 91ce931 09:36 on 2026-09-26)",
+        "find configs/prd -type f | grep -v '/release.yaml$' -> only design-assistant, open-webui, shell",
+        "grep -i gitToken /work/HelmCharts/Jenkinsfile -> no match",
+        "grep -rn helmDeploy /work/DockerImages -> no match",
+        "cexec iac kubectl --kubeconfig ~/.kube/config-prd-write --context prd get secrets -A --field-selector type=helm.sh/release.v1 -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name -> argocd-prd sh.helm.release.v1.argocd-prd.v1"
+      ]
     },
     {
       "id": "V02",
       "area": "R1 — terraform-modules/namespace (D44)",
       "description": "\"With it goes `terraform-modules/namespace` (D44).\" Per the settled ruling, `terraform-modules/namespace` stays in the archived HelmCharts. 49 kept config files call it (46 `configs/dev/<app>/_shared/infrastructure.tf` plus the three parked apps' `configs/prd/<app>/_shared/infrastructure.tf`). AnsibleSpecs `argo-cd/decisions.md`'s D44 is amended to say so. `argo_migrate.py`'s stripping of the module (`support/argo-migrate/argo_migrate.py:495-502`) stays with the tool.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`terraform-modules/namespace` is still in /work/HelmCharts (ls terraform-modules). `grep -rl terraform-modules/namespace configs` finds 49 files: 46 under configs/dev and 3 under configs/prd (shell, design-assistant, open-webui `_shared/infrastructure.tf`). D44 in AnsibleSpecs argo-cd/decisions.md carries the amendment (dated 2026-09-26, 49 files, the tool's handling stays with it). The tool's stripping is `rewrite_tf` in argo_migrate.py (it was :495-502 when P1 wrote the citation; P7's edits moved it to :527-534, so the record now names the function instead — mechanical fix, AnsibleSpecs).",
+      "evidence": [
+        "/work/HelmCharts: grep -rl 'terraform-modules/namespace' configs | wc -l -> 49 (46 dev, 3 prd)",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:778-788 (D44 amended)",
+        "/work/Ansible/support/argo-migrate/argo_migrate.py:527-534 (rewrite_tf strips module \"namespace\")"
+      ]
     },
     {
       "id": "V03",
       "area": "R2 — version-poller (done before planning)",
       "description": "\"version-poller: drop the `helm_charts` block from VersionPollerDeploy's `chart/files/config.yaml`. It runs HelmCharts' `tools/collect-version-dependencies.py` and triggers `IaC/HelmCharts`.\" Done before planning; this criterion re-checks it. VersionPollerDeploy's `chart/files/config.yaml` on `main` holds only `jenkins.endpoint` and `registry.url` (read with `gh api` on 2026-09-26). Nothing references `collect-version-dependencies`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "`gh api repos/pvginkel/VersionPollerDeploy/contents/chart/files/config.yaml` on main returns only `jenkins.endpoint` and `registry.url`. Repo-wide grep over all /work clones for collect-version-dependencies finds it only in stale /work/scratch clones (scratch/VersionPollerDeploy at 2026-09-23) and in historical prose (AnsibleSpecs, DockerImages docs), not in any live config.",
+      "evidence": [
+        "gh api repos/pvginkel/VersionPollerDeploy/contents/chart/files/config.yaml (raw) -> jenkins.endpoint, registry.url only",
+        "grep -rIl collect-version-dependencies /work/* -> stale scratch clone + historical docs only"
+      ]
     },
     {
       "id": "V04",
       "area": "R3 — the helm-charts producer retired",
       "description": "\"Retire the `helm-charts` producer from Architecture's `pipeline-producers.yaml`; it still publishes 40 elements.\" Per the D1 ruling, all of the following land in one Architecture commit: (1) the `helm-charts` entry (`pipeline-producers.yaml:26-28`) goes; (2) its mention in `views/infrastructure.yaml:12`'s `excludeProducers` goes; (3) the elements that another producer references move, UUIDs kept, into one hand-authored catalog file under the Architecture repo's own producer (`docs/architecture/`); (4) the unreferenced `ss:opensearch`, `ss:phpmyadmin` and `ss:rabbitmq` are dropped. The published dataset on 2026-09-26 held 40 `helm-charts` elements (38 `ss:*` plus `svc:cluster-ceph-cephfs` and `svc:cluster-ceph-rbd`), 37 of them referenced.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Diff 0f616f2..d73109d of Architecture: pipeline-producers.yaml loses the helm-charts entry; views/infrastructure.yaml's excludeProducers is `[home-automation-fleet, iotsupport-app]`. Compared the published dataset as of before the push (40 helm-charts elements: 38 systemSoftware + 2 technologyServices, 37 referenced by 91 relations, 3 unreferenced: opensearch, phpmyadmin, rabbitmq) with docs/architecture/catalog.yaml (producer: architecture): exactly the 37 referenced ids, UUIDs kept, every published field equal (only YAML date typing differs). The 3 unreferenced are absent. After the push, Jenkins AaC/Architecture #2069 (d73109d) deployed, and the live dataset lists no helm-charts producer, has the 37 elements under `architecture`, and lacks the 3.",
+      "evidence": [
+        "/work/Architecture/pipeline-producers.yaml, views/infrastructure.yaml:12, docs/architecture/catalog.yaml (37 elements)",
+        "https://architecture.webathome.org/data/v0.1/architecture.yaml before push: 40 helm-charts elements; after #2069: producers list has no helm-charts; the 37 moved ids present with producer=architecture; opensearch/phpmyadmin/rabbitmq absent",
+        "views/infrastructure.yaml `exclude` = the 35 catalog ss ids (set-equal to catalog systemSoftware)",
+        "AaC/Architecture #2069 SUCCESS, checked out d73109d"
+      ]
     },
     {
       "id": "V05",
       "area": "R3 — the model stays whole",
       "description": "With the `helm-charts` producer gone, the merged architecture model validates. Every reference another producer makes to a moved element still resolves. No element id is published twice, and none goes missing. Before this slice, 91 relations from 33 producers pointed at those elements (published dataset, 2026-09-26).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Simulated the merge over the pre-push published dataset (remove helm-charts elements, add the catalog under `architecture`): 825 elements, 825 unique ids, no duplicate; 1401 relations, the dangling set is the same 69 relations as before the change (HA fleet's stale Z2M ids, fieldnotes, iotsupport: close-out B2), none against a catalog id. Then the live dataset after build #2069 shows the same numbers: 825 unique, no duplicates, 1401 relations, 69 dangling, no element lost apart from the 3 dropped. The Jenkins collector stage printed 'all references resolved (69 dangling tolerated under --relaxed)'.",
+      "evidence": [
+        "python simulation over /tmp/pub.yaml (pre-push published dataset) + catalog.yaml -> 825/825, 0 duplicates, dangling before == after (69)",
+        "live dataset after AaC/Architecture #2069: 825 unique ids, 1401 relations, 69 dangling, helm-charts absent",
+        "AaC/Architecture #2069 console: 'Cross-reference resolution: all references resolved (69 dangling tolerated under --relaxed)'"
+      ]
     },
     {
       "id": "V06",
       "area": "R4 — O2: collect-versions deleted, the question closed",
       "description": "\"O2: `recommend-resources` and `collect-versions` get homes that enumerate the deploy repos, or are dropped.\" Operator ruling: \"Delete collect-versions.\" `collect-versions` is gone from HelmCharts (`91ce931`; a repo-wide grep on 2026-09-26 finds nothing). AnsibleSpecs `argo-cd/decisions.md`'s O2 is closed and records four things: collect-versions deleted; version-poller's HelmCharts block gone; recommend-resources' home; and ArgoCDDeploy's registry as the inventory of what runs. The O2 record also notes that the F1 ruling defers the `configs/dev` caveat.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "collect-versions and collect-version-dependencies do not appear anywhere in /work/HelmCharts (grep -rIn, exit with no match). AnsibleSpecs argo-cd/decisions.md: O2 reads `decided: HelmCharts' residual roles have their answers (D65)`, and D65 records the four things (collect-versions deleted at 91ce931 and the version-poller block gone at VersionPollerDeploy 9846433; recommend-resources' home and shape; the registry as the inventory of what runs, from the switch) and the F1 deferral of the configs/dev caveat.",
+      "evidence": [
+        "grep -rIn 'collect-versions\\|collect_versions\\|collect-version-dependencies' /work/HelmCharts -> none",
+        "/work/AnsibleSpecs/argo-cd/decisions.md:973-999 (D65), :1001 (O2 closed)"
+      ]
     },
     {
       "id": "V07",
       "area": "R5 — recommend-resources has a home and a way to run",
       "description": "\"We need to figure out how to run recommend resources. I'm guessing the answer will be to just clone all deploy repos and do this using a script. I'm also guessing that we don't yet have a home for this tool.\" Per the D3 ruling, recommend-resources is a script under Ansible's `support/`, beside argo-migrate, run from this environment. It enumerates the deploy repos from ArgoCDDeploy's registry, clones them to a scratch directory, reads Prometheus at `http://prometheus.home`, and rewrites the resources in each registry app-stage's values file (`config/prd/values.yaml` for every prd stage). It reads nothing from HelmCharts; the nine container-to-values-path maps HelmCharts kept (`charts/*/resources-entry-map.json`) come with it.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Ran the tool end to end from this environment against the live estate on 2026-09-26: `recommend_resources.py report <scratch>` cloned 48 deploy repos from the registry (/work/ArgoCDDeploy/releases/values.yaml), read Prometheus at prometheus.home, wrote 31 patches (`31 of 48 deploy repos would change`) into <dir>/report, and listed 4451 not-placed containers (4425 are jenkins-prd build pods). The script names HelmCharts only in its docstring; the nine maps are in support/recommend-resources/resources-entry-maps/ (entry counts equal HelmCharts' charts/*/resources-entry-map.json; step-ca's is step-certificates.json). Values files written are config/<stage>/values.yaml (grafana: config/prd/values.yaml).",
+      "evidence": [
+        "python3 support/recommend-resources/recommend_resources.py report /work/scratch/029-t1/rr -> '48 deploy repos', '31 of 48 deploy repos would change'",
+        "grep HelmCharts support/recommend-resources/recommend_resources.py -> docstring only",
+        "ls support/recommend-resources/resources-entry-maps -> 9 maps, entry counts match HelmCharts'"
+      ]
     },
     {
       "id": "V08",
       "area": "R5 — the report the operator reads and overrules",
       "description": "\"I need a report to make it clear what's going to be pushed. I need to see what changed, and I need to be able to overrule stuff. It'd be good if reading and writing of this report is scripted.\" / \"make it easy to mass delete stuff.\" How the report works: (1) step one writes one plain unified-diff patch file per deploy repo into a report directory; (2) the operator deletes a file to skip that app, or edits hunks to overrule them; (3) step two applies what is left to the clones, commits locally, and shows the result. Nothing is pushed by default. The phase proved step one against the live estate and step two into scratch clones.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Ran both steps against scratch clones. Step one wrote one unified-diff patch per deploy repo (# preamble listing each change, then git diff). I deleted NewsfilterDeploy.patch and edited GrafanaDeploy.patch's memory hunk from 160Mi to 192Mi, then ran `apply <dir>`: 30 local commits (one repo skipped because its patch was deleted), NewsfilterDeploy left at its origin commit with a clean tree, GrafanaDeploy's config/prd/values.yaml reads `memory: 192Mi`, and `apply` printed `git -C <clone> push origin main` commands without pushing (origin/main..HEAD is the one local commit; no remote changed).",
+      "evidence": [
+        "report -> DIR/report/GrafanaDeploy.patch (preamble + diff)",
+        "apply after deleting NewsfilterDeploy.patch and editing Grafana's hunk -> 30 commits; Grafana 192Mi; Newsfilter unchanged; push commands printed, nothing pushed"
+      ]
     },
     {
       "id": "V09",
       "area": "R5 — recommendations keyed on the resolved chart",
       "description": "recommend-resources takes each app's chart from the resolved chart, never from a directory name. The resolved chart is the deploy repo's own chart, or the registry's upstream chart at the stage's pinned version. The old tool keyed on the config directory name, the mis-keying at HelmCharts `tools/chart_tools/recommend_resources.py:161-222`. Its recommendation policy is unchanged from the old tool: a 7-day window, p75 CPU and p90 working-set memory (`recommend_resources.py:73-121`), and the same rounding.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Policy: the two rounding functions (`round_cpu_recommendation`, `round_mem_recommendation`) compared with HelmCharts' by exec of both over 0..19999: 0 differences; `percentile()` returns numpy's linear-method values on test inputs (p90 [1..5]=4.6, p75 [1..4]=3.25); NUM_DAYS=7, p75 CPU, p90 max working-set memory (same PromQL). Keying: the not-placed list and patches name the resolved chart, e.g. `argocd-prd ... (chart argocd)`; grafana's memory 157Mi measured -> 160Mi (next quarter power of two); upstream apps take `upstream.chart` at the stage's pinned version, local apps the deploy repo's chart/Chart.yaml name (code: `resolve_chart`, recommend_resources.py:127-131). Not proven by a mutation of my own: the local-chart name keying is one of the two paths close-out S19 says the unit suite does not pin.",
+      "evidence": [
+        "ast-extracted round_cpu_recommendation/round_mem_recommendation, old vs new over range(20000): 0 diffs",
+        "recommend_resources.percentile([1,2,3,4,5],90)=4.6; ([1,2,3,4],75)=3.25",
+        "report output: 'grafana-prd grafana/grafana: memory 128Mi -> 160Mi (measured 4m, 157Mi)'"
+      ]
     },
     {
       "id": "V10",
       "area": "R6 — the registry lives in ArgoCDDeploy, Argo CD native",
       "description": "\"Move the Argo CD registry out of HelmCharts (a slice; revisits D21/D22).\" Per the D2 ruling (\"Target state can be Argo CD native\"), ArgoCDDeploy holds the registry as one values file, and a small chart renders one plain Application per app-stage from it. The file carries the 50 live entries and nothing else. Each entry is `repo`, an optional `upstream: {repo, chart}`, an optional `syncOptions`, and `stages:`, where each stage may set `autoSync` (default true), `targetRevision` (default `main`) and, for upstream apps, `version`. None of these carry over: `reconciler`, `deployed`, the per-stage file tree, the ApplicationSet templating, `templatePatch`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "ArgoCDDeploy `releases/` renders 50 Applications (`helm template releases releases -n argocd-prd | grep -c '^kind: Application$'` = 50), one per app-stage, from values.yaml alone: top key `apps`, 48 apps / 50 app-stages, 9 upstream, syncOptions on cloudnative-pg and external-secrets, autoSync false only on argocd/prd, kubecoder dev {} + prd {targetRevision: prd}; entry keys are only repo/upstream/syncOptions/stages, stage keys only autoSync/targetRevision/version; no reconciler, deployed, per-stage tree or ApplicationSet-side templating in the registry. releases/templates/applications.yaml is one plain Application per app-stage (finalizer, hook parameters, `hasKey` autoSync default true, upstream if/else).",
+      "evidence": [
+        "/work/ArgoCDDeploy/releases/values.yaml (apps: 48, stages: 50)",
+        "/work/ArgoCDDeploy/releases/templates/applications.yaml",
+        "cexec iac helm template releases releases -n argocd-prd -> 50 Applications"
+      ]
     },
     {
       "id": "V11",
       "area": "R6 — key validation and tests moved, no check lost",
       "description": "\"...and move the registry's key validation, its tests...\" A `values.schema.json` makes Helm refuse to render a bad registry entry, and ArgoCDDeploy's render test proves it. No coverage is lost. Every check HelmCharts makes on an Argo entry today has a named successor in the schema or the render test: the allowlist in `tools/deploy/deploy_cli/release.py:16-31`, and `origin/main` `tests/test_prd_tree.py:94-147` (booleans, the pvginkel repo prefix, a non-empty targetRevision, a complete upstream block, Argo's own entry never auto-syncing). The per-Application assertions in `tests/render-chart.py:504-652` hold for the rendered Applications.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Fed the chart bad registries with `helm template --set`: non-boolean autoSync, a repo outside github.com/pvginkel, an empty targetRevision, an empty upstream chart, argocd autoSync true, an upstream stage without version, a `reconciler` key, a `deployed` key, an empty version: all nine exit 1 with `values don't meet the specifications of the schema`; a valid new app is accepted. Each named old check has its successor in releases/values.schema.json (booleans -> autoSync boolean; pvginkel prefix -> repo pattern; non-empty targetRevision -> minLength; complete upstream -> required repo+chart and version per stage; Argo never auto-syncs -> apps.argocd const false; release.py's allowlist -> additionalProperties false). The per-Application assertions run over the rendered registry in tests/render-chart.py (green in the driver's sweep; ok: 'the registry renders 50 Applications into argocd-prd'). Mutation of my own: see V13.",
+      "evidence": [
+        "helm template releases releases -n argocd-prd --set <bad> x9 -> rc=1 schema refusal; valid entry -> rc=0",
+        "/work/ArgoCDDeploy/releases/values.schema.json",
+        "tests/render-chart.py control run: 'ok: the registry renders 50 Applications into argocd-prd'"
+      ]
     },
     {
       "id": "V12",
       "area": "R6 — without recreating the 50 Applications (proven before the switch)",
       "description": "\"...without recreating the 50 Applications.\" A read-only check compares the registry's render with the live Applications in `argocd-prd`, spec for spec. It passes against prd: the only differences are tracking metadata. On 2026-09-26 there were 50 live Applications, 41 owned by `releases-local` and 9 by `releases-upstream`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Ran /work/ArgoCDDeploy `cexec iac tools/registry-equivalence.py` (read-only, default kubeconfig) against prd twice on 2026-09-26, before and after the pushes: `50 rendered, 50 live in argocd-prd, 0 differing`, every line `equal` with owner ApplicationSet/releases-local or releases-upstream. Ownership read separately: 41 releases-local + 9 releases-upstream Applications.",
+      "evidence": [
+        "cexec iac tools/registry-equivalence.py -> '50 rendered, 50 live in argocd-prd, 0 differing' (before and after the ArgoCDDeploy push)",
+        "kubectl get applications.argoproj.io -n argocd-prd -o custom-columns owner -> 41 releases-local, 9 releases-upstream"
+      ]
     },
     {
       "id": "V13",
       "area": "R6 — every state of ArgoCDDeploy is safe to sync",
       "description": "No commit on ArgoCDDeploy's `main` deletes an Application or cascade-deletes an ApplicationSet when synced, at any moment, with prune or without. The ApplicationSets and `releases` never both own the Applications. The ApplicationSets carry a prune guard, and one stage-level setting chooses them or `releases`; at the end of the run it chooses the ApplicationSets. `releases` behaves as follows. In steady state it auto-syncs without prune and without self-heal, so a deleted entry waits for the operator's prune (D27 amended). It comes up at the switch without syncing on its own. Deleting or pruning it never deletes an Application. The render test proves each state renders what `attachments/registry-switch.md` says.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Rendered `chart/` with config/prd/values.yaml at the pre-slice base (307d94f) and at HEAD (S1): the diff is exactly the two `argocd.argoproj.io/sync-options: Prune=false` annotations on the ApplicationSets. With `--set releases.owner=releases` (S3) the object set differs from base by two ApplicationSets gone and Application/releases added; that Application has source path releases on ArgoCDDeploy main, destination in-cluster/argocd-prd, project releases, no finalizer, no syncPolicy (autoSync false). Mutations of a scratch copy, each turning tests/render-chart.py red with a named FAIL: (a) removing the Prune=false annotation ('releases-local carries annotations None, not the prune guard alone ... (D64)'); (b) adding a finalizer and prune: true to releases ('S3: releases carries finalizers ...', 'S4: releases renders syncPolicy ... it prunes and self-heals'). The unmutated copy passes and prints `renders registry-switch position S1`. Live: argocd-prd is still Synced at 307d94f, the ApplicationSets carry no annotation, and 50 Applications remain after the push (nothing polls).",
+      "evidence": [
+        "diff of helm template argocd-prd chart (base 307d94f vs HEAD): only the 2 Prune=false annotations",
+        "helm template ... --set releases.owner=releases: ApplicationSets removed, Application/releases added",
+        "scratch mutations: guard dropped -> 2 FAIL; finalizer+prune -> 3 FAIL; control -> ok",
+        "kubectl get application argocd-prd -> Synced rev=307d94f after the push; ApplicationSets ann empty"
+      ]
     },
     {
       "id": "V14",
       "area": "R6 — the switch runbook",
       "description": "An operator runbook in Ansible's `docs/runbooks/` walks the hand-over in this order: a rehearsal on a throwaway ApplicationSet plus Application; ArgoCDDeploy's relay webhook; the equivalence check; guarding the ApplicationSets (`Prune=false`); orphan-deleting them (`kubectl delete applicationset … --cascade=orphan`); the equivalence check again, right before the flip; flipping the setting; syncing `argocd-prd`, which creates `releases`; reading `releases`' diff, which must show tracking metadata only; syncing `releases`; turning on its automated sync; and, last, removing the docs' notes that a procedure is owed until the registry switch has run. Each step gives the operator's command and what they must see before going on. Per the fix-forward ruling, the runbook has no way back to the ApplicationSets and says that a failure past the orphan-delete is fixed forward on `releases`; the rehearsal proves the forward path only. The runbook ends with the list of what is dead after the switch. The webhook step is needed because ArgoCDDeploy's only GitHub hook delivers to Jenkins (`gh api repos/pvginkel/ArgoCDDeploy/hooks`, 2026-09-26), so without it a registry push would reach no Argo component (D6).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Read /work/Ansible/docs/runbooks/registry-switch.md (442 lines): the eleven steps are in the required order (1 rehearsal a-f, 2 webhook, 3 equivalence, 4 guard, 5 orphan-delete, 6 check again, 7 flip, 8 read the diff, 9 sync, 10 automated sync, 11 remove the owed notes and mark the records), each with its command and 'You should see'; 'No way back' states fix forward and forbids reverting the flip; the list of what is dead after the switch closes it. Spot checks against the live estate: the steps' `sed` patterns match single lines in config/prd/values.yaml (`  owner: applicationsets` :196, `  autoSync: false` :198, no other autoSync line); the webhook leaf `credentials.leaves.webhook` is eso/prd/argocd/prd/webhook; scripts/bao-login.sh exists; `gh api repos/pvginkel/ArgoCDDeploy/hooks` returns one hook, Jenkins' (id 683106027); step 3's command form runs and prints 0 differing; argocd-prd has no syncPolicy (manual) so `argosync` is the only way it syncs; the live AppProject releases admits the rehearsal's destinations (*-tst, *-prd), source (github.com/pvginkel/*) and Namespace. Step 11's grep finds six notes (five in argocd.md, one in argo_migrate.py). The rehearsal and the switch themselves are the operator's (V15).",
+      "evidence": [
+        "/work/Ansible/docs/runbooks/registry-switch.md:1-443",
+        "gh api repos/pvginkel/ArgoCDDeploy/hooks -> only https://jenkins.webathome.org/github-webhook/ (push)",
+        "git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md' -> 6 hits",
+        "kubectl get appproject releases -o jsonpath={.spec} (destinations, sourceRepos, clusterResourceWhitelist)"
+      ]
     },
     {
       "id": "V15",
       "area": "R6 — the switch done, no Application recreated",
       "description": "After the operator's switch, `releases` owns the 50 Applications. Each keeps its uid, creation timestamp and spec. No ApplicationSet remains. A registry push to ArgoCDDeploy refreshes `releases` through its webhook, and nothing polls.",
       "owed_after": "the operator's registry switch, run from P6's runbook (including ArgoCDDeploy's relay webhook)",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed-to-operator",
+      "rationale": "The operator's registry switch has not run: `releases` does not exist, both ApplicationSets are live and own the 50 Applications (41/9), argocd-prd is Synced at 307d94f with its owner setting still `applicationsets`. This item is settled by the operator running docs/runbooks/registry-switch.md from step 1 through step 10; steps 5, 9 and 10 give the proofs (uid and creation time unchanged, tracking count equals rendered count, a registry push refreshes releases by webhook). Close-out A1.",
+      "evidence": [
+        "cd /work/Ansible && the runbook, step 1 (rehearsal) then steps 2-10, in docs/runbooks/registry-switch.md",
+        "state today: cexec iac kubectl get applicationsets.argoproj.io -n argocd-prd -> releases-local, releases-upstream"
+      ]
     },
     {
       "id": "V16",
       "area": "R6 — argo_migrate.py's register, flip and autosync",
       "description": "\"...and `argo_migrate.py`'s register, flip and autosync steps.\" `flip` and `autosync` edit ArgoCDDeploy's registry file (a local commit, comments preserved) instead of HelmCharts' `release.yaml`. Every read the tool makes of an app-stage's registry entry uses the new registry: whether it is on Argo (`support/argo-migrate/argo_migrate.py:88-99`, `:935-937`), its upstream pin (`:444-450`) and its `syncOptions`. Per the D2 ruling (a premise correction to R6's wording, accepted by the operator at review r1), `register` never touched the registry: it edits only Architecture's `pipeline-producers.yaml` (`:1521-1533`), so it is unchanged. The tool's reads of HelmCharts' charts and configs stay.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "argo_migrate.py: REGISTRY = releases/values.yaml (:58); `App.entry` reads the registry (:126), `on_argo` is `stage in entry.stages` (:130); registry_apps() reads ARGOCD_DEPLOY/REGISTRY (:1572); flip/autosync call registry_commit -> registry_flip/registry_autosync -> a local ArgoCDDeploy commit of REGISTRY only (:1712-1731); register is unchanged (edits only Architecture's pipeline-producers.yaml, and P2's removal of helm-charts does not touch it). The text edits are covered by test_registry.py (green in the driver's sweep, python3 -m unittest discover -s support/argo-migrate). Not run live by me: flip/autosync against a scratch ArgoCDDeploy (the tool hard-codes /work/ArgoCDDeploy), relying on P7's recorded scratch proof plus the unit tests; close-out S18 records the untested reads.",
+      "evidence": [
+        "support/argo-migrate/argo_migrate.py:58,126-131,1572,1712-1736",
+        "support/argo-migrate/test_registry.py (driver sweep: root test GREEN)"
+      ]
     },
     {
       "id": "V17",
       "area": "R6 — the decision records match the native registry",
       "description": "AnsibleSpecs `argo-cd/` (`decisions.md`, `design.md`, `phases.md`) records the Argo CD native registry. Every decision it changes is amended or superseded in place. The rulings name D20, D21, D23 and D27 (the prune-less `releases`), and D22's upgrade path, which is recorded as not taken. The decisions whose mechanism moves are also amended or superseded: D6, D24, D38, D39 (registration is a push to ArgoCDDeploy) and D62. `phases.md`'s endgame items are brought in line.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "AnsibleSpecs argo-cd/decisions.md carries dated 2026-09-26 amendment or supersession notes in place for D6 (:59), D20 (superseded, after :199-205), D21 (:217), D22 (:228, upgrade path not taken), D23 (:240), D24 (:250), D27 (:362), D38 (:564), D39 (:581), D44 (:782), D62 (:968), plus D63/D64/D65 as new records and O2 closed (:1001). design.md and phases.md describe the native registry with the ApplicationSets as the until-the-switch state; phases.md's endgame item states the switch as the operator's step, owed, from the runbook path. The estate register's tool split (decisions.md:35, :48) names deploy repos and Argo CD.",
+      "evidence": [
+        "/work/AnsibleSpecs/argo-cd/decisions.md:59,199-262,299-352,362,564,581,782,968,973-1001",
+        "/work/AnsibleSpecs/argo-cd/phases.md:354-372 (endgame)",
+        "/work/AnsibleSpecs/decisions.md:35,48"
+      ]
     },
     {
       "id": "V18",
       "area": "R7 — docs describe the Argo CD deploy path",
       "description": "\"Docs that still describe HelmCharts as the deploy path: Ansible's CLAUDE.md, `docs/live-infra-access.md` and about a dozen runbooks.\" These docs describe the Argo CD deploy path (deploy repos, ArgoCDDeploy's registry) instead: Ansible's `CLAUDE.md`, `docs/live-infra-access.md`, the runbooks the rulings list, `docs/design-philosophy.md`, the `baseline`, `microk8s` and `microceph` role READMEs, and the `root` description in `.kubecoder/project.yaml`. In AnsibleSpecs, the estate register's tool split (`decisions.md:35`, `:48`) is covered too. Historical mentions stay historical. Per the docs-across-the-switch ruling, no doc calls the new registry live before the operator's switch. Each procedure that depends on which registry is live carries a one-line note that it is owed until the registry switch has run: registering an app (`docs/runbooks/argocd.md:218`), the handover flip (`:412`) and the cold-boot bootstrap (`:681-685`). The switch runbook's last step finds and removes those notes.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "The listed docs describe deploy repos and ArgoCDDeploy's registry: HelmCharts appears in the listed files only as history, the archive, or S21's `setup-env.sh` (CLAUDE.md:72, live-infra-access.md:46, argocd.md, step-ca-root-rotation.md:66, openbao.md:311, k8s-rebuild.md:258, microk8s README:134). No doc calls the new registry live before the switch: argocd.md carries the owed note on the Facts registry rows (:53), Diagnosing item 4 (:120), Upgrading Argo CD step 2 (:201), the Registering section (:232) and bootstrap steps 4-6 (:620); argo_migrate.py's docstring carries one (:29); the AnsibleSpecs records state the switch as owed. The handover flip: argocd.md has no such step (only historical mentions at :283, :292, :309): P9 removed the producer section's handover proof and flip because no handover remains (helm-charts retired, every live app migrated, the parked three disabled) — close-out N3 records it. I judge the ruling met in substance: no procedure that depends on which registry is live goes without its note.",
+      "evidence": [
+        "git grep -n -i 'owed until the registry switch has run' -> 6 hits (argocd.md x5, argo_migrate.py x1)",
+        "grep -n -i 'flip\\|handover' docs/runbooks/argocd.md -> 3 historical mentions",
+        "git diff 3433846..HEAD -- CLAUDE.md docs/live-infra-access.md docs/design-philosophy.md .kubecoder/project.yaml ansible/roles/*/README.md"
+      ]
     },
     {
       "id": "V19",
       "area": "R7 — the stuck-field pointer settled",
       "description": "\"...the argocd runbook's 'What a cutover does not change' points at the stuck-field working copy in AnsibleSpecs `handovers/argo-adoption-blind-spot/`, a pointer the docs pass should settle.\" The section now states the stuck-field finding in its own words and no longer links into `handovers/` (`docs/runbooks/argocd.md:612-614`). `stuck_fields.py` has a home in Ansible beside argo-migrate, and neither the runbook (`docs/runbooks/argocd.md:585`) nor the tool's preflight (`argo_migrate.py:1746`) runs it from `handovers/` any more.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "argocd.md's 'What a cutover does not change' (:537-) states the stuck-field finding in its own words (client-side apply, last-applied-configuration, field-manager `helm`) and carries no link into handovers/ (`grep 'handovers/' docs/runbooks/argocd.md support/` finds nothing). stuck_fields.py lives at support/argo-migrate/stuck_fields.py; the runbook runs it from there (:572) and the tool's preflight reads STUCK_FIELDS = its own directory's copy (argo_migrate.py:59).",
+      "evidence": [
+        "docs/runbooks/argocd.md:537-,572",
+        "support/argo-migrate/argo_migrate.py:59",
+        "grep -rn 'handovers/' docs/runbooks/argocd.md support/ -> none"
+      ]
     },
     {
       "id": "V20",
       "area": "R7 — CLAUDE.md on the Architecture checkout",
       "description": "Ansible's `CLAUDE.md` says how the `/work/Architecture` checkout comes to exist. Its old line called Architecture \"checked out but deliberately not declared\", but the environment does not clone an undeclared repo: it was missing until the session cloned it on 2026-09-26.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "CLAUDE.md's Architecture entry now says the environment does not clone it: 'deliberately not declared, see the note in .kubecoder/config.yaml, so the environment does not clone it: clone it by hand (git clone https://github.com/pvginkel/Architecture /work/Architecture) and run kc project setup there before working in it'.",
+      "evidence": [
+        "/work/Ansible/CLAUDE.md (Related repos on this machine)",
+        "git diff 3433846..HEAD -- CLAUDE.md"
+      ]
     },
     {
       "id": "V21",
       "area": "JenkinsPipelineUtils — the dead HelmCharts helpers",
       "description": "JenkinsPipelineUtils no longer names `IaC/HelmCharts`. `cicd.helmDeploy()` (`vars/cicd.groovy:1-2`) and the `helmCharts` var's `scp` are gone, and a GitHub code search right before the removal found zero callers. Per the P3 mid-run ruling, `rsync` and `ssh` stay unchanged (KitchenDisplay calls them with HelmCharts' `assets/kubernetes-pipeline-key`); they are the only place the library still names HelmCharts' assets (follow-up ANS-144). `kaniko` and `kaniko2` remain, and the library's test gate compiles every `vars/*.groovy`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "git diff a43f45e..6f87d09 in JenkinsPipelineUtils removes `cicd.helmDeploy()` and `helmCharts.scp` and rewords the writeVersionPins comment; `grep -i helmcharts vars` leaves only rsync/ssh's `$WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key` (helmCharts.groovy:178-187), which the P3 ruling keeps (follow-up ANS-144); kaniko/kaniko2 remain. `gh search code --owner pvginkel` for helmDeploy, helmCharts.scp and IaC/HelmCharts: no code caller (remaining hits are Ansible kubecoder-cutover.md, Architecture docs/tests fixtures and ElectronicsInventory slice-test-plan.md prose; DHCPApp and TerraformRegistry Jenkinsfiles on GitHub main no longer call helmDeploy — only stale local scratch clones do). After the push, live Jenkins loaded the library at 6f87d09 ('Drop cicd.helmDeploy() and helmCharts.scp: no caller left' in AaC/Architecture #2069's library checkout) and IaC/Build-Main #218, AaC/ArgoCDDeploy #9, AaC/Ansible #172 all ran green. The test gate that compiles every vars/*.groovy is green in the driver's sweep.",
+      "evidence": [
+        "git diff a43f45e..6f87d09 (vars/cicd.groovy, vars/helmCharts.groovy)",
+        "gh search code helmDeploy / helmCharts.scp / IaC/HelmCharts --owner pvginkel",
+        "AaC/Architecture #2069 console line 23: library commit message"
+      ]
     },
     {
       "id": "V22",
       "area": "The jobs can go (ANS-121's precondition)",
       "description": "Nothing in the estate calls `IaC/HelmCharts`: `helmDeploy()` was its last caller. Nothing consumes `AaC/HelmCharts`: Architecture's producers no longer include `helm-charts`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "No code calls IaC/HelmCharts (V21's searches; helmDeploy was the last caller and is gone from origin/main as of my push). Nothing consumes AaC/HelmCharts: Architecture's pipeline-producers.yaml no longer lists helm-charts, and the pushed build (AaC/Architecture #2069, d73109d) collected without it; the live dataset carries no helm-charts producer. Remaining AaC/HelmCharts strings in Architecture are a test fixture (tooling/tests/test_fleet.py, golden/report.md) and docs/architecture-update.md prose.",
+      "evidence": [
+        "grep -rIl 'IaC/HelmCharts\\|AaC/HelmCharts' /work/*/ -> prose, fixtures, stale scratch clones only",
+        "live dataset (after #2069): producers list has no helm-charts"
+      ]
     },
     {
       "id": "V23",
       "area": "HelmCharts untouched",
       "description": "This slice makes no commit to HelmCharts. Its `configs/prd/*/*/release.yaml` files are the live registry until the operator's switch, and inert afterwards. `recommend_resources.py`, the old registry validation and `terraform-modules/namespace` stay there.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "HelmCharts has no commit from this slice: `git log --since=2026-09-26T11:18` (the slice run's start) is empty; its last commits are 6bd5857 (10:08), 91ce931 (09:36), 6e8a054 (09:24) and eeceac0 (09:21), the pre-planning cleanup and another session's test change, all before the phases ran. Its 56 release.yaml files are unchanged and still the live registry (equivalence check reads the two ApplicationSets' 50); recommend_resources.py, the old validation and terraform-modules/namespace are still there.",
+      "evidence": [
+        "cd /work/HelmCharts && git log --since='2026-09-26 11:18' -> empty; git status -> clean, main == origin/main",
+        "ls configs/prd/*/*/release.yaml | wc -l -> 56"
+      ]
     },
     {
       "id": "V24",
       "area": "R7 — the docs' owed notes gone after the switch",
       "description": "After the operator's registry switch, the last step of the switch runbook has run. No doc still says that a procedure is owed until the registry switch has run, and the procedures those notes carried now describe the registry Argo reads.",
       "owed_after": "the operator's registry switch, run from P6's runbook through its last step",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed-to-operator",
+      "rationale": "Step 11 of the registry-switch runbook has not run, so the six owed notes are still in place (git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md' -> 5 in docs/runbooks/argocd.md, 1 in support/argo-migrate/argo_migrate.py), which is right until the switch. Settled after the operator runs the switch through step 11 and the grep prints nothing. Close-out A2.",
+      "evidence": [
+        "cd /work/Ansible && git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md'  (must print nothing after step 11)"
+      ]
     }
   ]
 }
