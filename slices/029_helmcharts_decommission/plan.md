@@ -264,7 +264,7 @@ Record:
 - Gate: AnsibleSpecs has no gate tooling. Relative links in the four edited files resolve, apart
   from seven broken links in the estate register that predate this phase (close-out).
 
-### P2 — Architecture: the product catalog moves in, the helm-charts producer goes
+### P2 — Architecture: the product catalog moves in, the helm-charts producer goes ✅ DONE 2026-09-26
 
 Target: ../Architecture
 
