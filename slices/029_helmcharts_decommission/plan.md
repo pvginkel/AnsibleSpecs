@@ -343,7 +343,7 @@ Record:
   this phase.
 - Gate: `kc project test` and `kc project lint` in `/work/Architecture` are green.
 
-### P3 — JenkinsPipelineUtils: the dead HelmCharts helpers go
+### P3 — JenkinsPipelineUtils: the dead HelmCharts helpers go ✅ DONE 2026-09-26
 
 Target: ../JenkinsPipelineUtils
 
