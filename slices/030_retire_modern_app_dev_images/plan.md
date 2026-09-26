@@ -626,7 +626,7 @@ Terraform runs in. `cexec iac` shows `TF_CLI_CONFIG_FILE=/etc/terraform.rc` with
 the three copies. `.kubecoder/config.yaml:17` still names modern-app-dev, in a comment that cites
 this slice by name. V07 keeps records like that.
 
-### P15 — ArgoCDTools: the argocd-hook's Terraform-pin comment
+### P15 — ArgoCDTools: the argocd-hook's Terraform-pin comment ✅ DONE 2026-09-26
 
 Target: ../ArgoCDTools
 
