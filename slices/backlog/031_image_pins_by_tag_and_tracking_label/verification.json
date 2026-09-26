@@ -1,0 +1,158 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — cleanup never deletes a pinned image",
+      "description": "registry-cleanup must never delete an image a deploy repo pins (R1), as ruled without reading what is deployed: the nightly dry-run's would-delete list — tag deletions and garbage collection alike — holds no tag and no digest that any deploy repo pins for an image from the estate's registry.",
+      "owed_after": "the first nightly registry-cleanup run after P7's push has synced (03:30 cluster time)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — the pause is lifted (Ruling D1)",
+      "description": "The registry-cleanup CronJob is no longer suspended and runs nightly in dry-run: the RegistryDeploy chart carries a dry-run setting, turned on, and a run logs what it would delete — garbage collection with `--delete-untagged` included — and deletes nothing. Today the CronJob carries `suspend: true` (RegistryDeploy `chart/templates/registry-cleanup-cronjob.yaml:7-10`) and a dry run skips garbage collection (DockerImages `registry-cleanup/app/main.py:467`; GC at `:143-148`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R1 — the operator sees the list (Ruling D1)",
+      "description": "The slice's test phase shows the operator one night's would-delete list.",
+      "owed_after": "the first nightly registry-cleanup run after P7's push has synced (03:30 cluster time)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R1 — the operator's switch (Ruling D1)",
+      "description": "Turning dry-run off is the operator's one-line change, filed as an Operator Action card in the ANS project; the slice itself never runs cleanup in deleting mode.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R2 — tags, never digests",
+      "description": "Deploy repos pin tags, never digests, for images from the estate's registry: every such pin is a per-build tag, which is never rebuilt, so it always points at the same image. KeycloakDeploy's two stages — the only deploy-repo digest pins of an in-registry image (`config/dev/values.yaml:21`, `config/prd/values.yaml:22`, `@sha256:45ae4959…`) — pin a per-build tag.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R2 — the migration's comment",
+      "description": "The \"digest the release runs\" comment that the migration left in every deploy repo is corrected in each repo that carried it, RegistryDeploy's (`config/prd/values.yaml:26-27`) and KeycloakDeploy's two copies included, and the corrected text stays true in a file that still pins an upstream image by digest (ANS-139).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R2 — D53",
+      "description": "argo-cd D53 is amended: deploy repos pin tags only, never digests, for images from the estate's registry (`AnsibleSpecs/argo-cd/decisions.md:836-848` never mentions digests today).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R3 — matrix per-build tags",
+      "description": "Every matrix build pushes `<tag>-<build>` next to the named tag, and the pin stage writes the per-build tag wherever a `deploy-pins.json` exists, which today is only Keycloak; the other seven keep pulling their named tag. Today a matrix build pushes its named tag only and is left out of the pin stage (DockerImages `Jenkinsfile:120-121`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "R3 — Keycloak runs a per-build tag",
+      "description": "Keycloak's dev and prd stages run the per-build tag (`26.7.3-postgres-health-ispn-<build>`) a keycloak build wrote into KeycloakDeploy, Synced and Healthy, before the dry-run CronJob was unsuspended.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R4 — the label decides (registry-cleanup)",
+      "description": "The image's label, not the tag's name, decides what is build history: registry-cleanup treats a tag as tracking only if its name equals the `org.webathome.poller.tracking-tag` label on the image it points to, deletes only tags in that label's build series (Ruling D2: `latest` owns the bare build numbers, `dev-latest` owns `dev-<n>`, a matrix label such as `26.7.3-postgres-health-ispn` owns `26.7.3-postgres-health-ispn-<n>`), and keeps every other tag without counting it toward the keep-newest cap — unlabelled tags and promoted `prd-<n>` copies included. `node-24` and `jdk-21` are no longer treated as build 24 and build 21 (today's regex: `registry-cleanup/app/main.py:29`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "R4 — kaniko2",
+      "description": "`kaniko2` takes an explicit `trackingTag:` with the current derivation from tag shapes as the default; a build that pushes only a build number is labelled so that number falls in the label's series; a matrix build's named tag plus its per-build tag is accepted, where today the check refuses it (JenkinsPipelineUtils `vars/helmCharts.groovy:144-165`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "R4 — version-poller",
+      "description": "The version-poller classifies tags by the same label rule, so its fallback to the label (`version-poller/app/poller.py:125-132`, `:220-238`) stops being a fallback, and neither the poller nor registry-cleanup carries the tag-shape regex any more (`version-poller/app/tagging.py:20`, `registry-cleanup/app/main.py:29`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "R4 — no rebuilds through leftover labels",
+      "description": "Moving the poller to the label rule starts no rebuild through a legacy build-number tag whose label names the tag itself (live example: `dhcpapp:35`, labelled `35`, pipeline `DHCP/DHCPApp`, rebuild-at 2026-07-18); the only new rebuild targets are tracking tags the name heuristic misread, such as `node-24`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "R4 — the design doc",
+      "description": "DockerImages' `docs/registry-management/version-poller-redesign.md` §4 (\"Tag scheme (enforced by `kaniko2`)\" and the mirror classifier, `:142-165`) and §8's keep/delete rules state the label rule, per the triage ruling that overruled the one-tag scheme.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "R5 — kube-coder-tunnel-reclaim",
+      "description": "KubeCoderDeploy no longer runs `kube-coder-tunnel-reclaim:latest`, a moving tag that nothing pins: it pins a build-number tag that every tunnel-reclaim build rewrites through the pin stage; the chart's \"deliberate float\" comment and the render test's `:latest` assertion are gone (`chart/values.yaml:16-18`, `tests/render-chart.py:82-83`); kubecoder-dev runs the pinned tag, and prd follows by KubeCoder's normal promotion.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "Ruling D3 — Argo CD's relay pin",
+      "description": "ArgoCDDeploy's webhook-relay pin lives in its production stage values and every relay build writes it there, as it does FieldnotesDeploy's. Today the pin is a hand-bumped chart default (`ArgoCDDeploy/chart/values.yaml:58`) and `DockerImages/webhook-relay/deploy-pins.json` names only FieldnotesDeploy.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "Rollouts",
+      "description": "Every Argo CD Application the slice's pushes fed — the pin commits of the DockerImages builds and the deploy-repo pushes — is Synced and Healthy on its new revision; argocd-prd, synced by hand (D3), is the one exception, left out of sync for the operator.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "Callers of kaniko2",
+      "description": "Every existing `helmCharts.kaniko` / `kaniko2` caller in the estate still builds after the kaniko2 change: no caller's destination set is refused and no caller had to change.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "Test coverage",
+      "description": "registry-cleanup's and version-poller's test suites cover the label rule — Ruling D2's series, matrix per-build tags, promoted copies, unlabelled tags — and cleanup's dry-run garbage collection, and pass; no coverage is lost: every deleted test has a named successor.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
