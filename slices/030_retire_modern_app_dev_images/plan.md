@@ -379,7 +379,7 @@ Record:
 - The Job spec is not in the console, and the pod's pull events had aged out. The image is the
   pushed `Jenkinsfile`'s literal `registry:5000/kube-coder-modern-app-toolchain:node-24`.
 
-### P7 — DHCPApp: takes the root-template release
+### P7 — DHCPApp: takes the root-template release ✅ DONE 2026-09-26
 
 Target: ../DHCPApp
 
