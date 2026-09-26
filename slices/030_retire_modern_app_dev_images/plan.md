@@ -509,6 +509,25 @@ the dated registry audit under `docs/registry-management/` and the mcp-filter te
 records and stay. The registry's images are not touched: deleting them is the operator's step
 after the run.
 
+**Done (P11).** DockerImages `11fcb16` (`phase/030-P11`, not pushed: DockerImages is outside ruling
+A1): `modern-app-dev/` and `modern-app-dev-playwright/` are deleted, the Playwright 1.63.0 matrix
+entry with them (ruling N1). The Terraform-pin comment in `kube-coder-iac-toolchain/Dockerfile:75-79`
+now names three images, ArgoCDTools' argocd-hook, Ansible's `support/iac-image` and DockerImages'
+`kube-coder-iac-toolchain`, and says "Bump all three together". Gate: the push pipeline's
+`tools/collect-internal-dependencies.py` and `tools/collect-version-dependencies.py` run clean over
+the tree. The graph has 49 images, no parent is missing, and neither output names modern-app-dev.
+
+Later phases:
+- P13, P14, P15: three images pin Terraform: argocd-hook, `support/iac-image` and
+  `kube-coder-iac-toolchain`. "All four" becomes "all three".
+- P14: DockerImages' remaining Terraform CLI config copy is `kube-coder-dev-base/terraform.rc`,
+  installed at `/etc/terraform.rc` with `TF_CLI_CONFIG_FILE`. `kube-coder-iac-toolchain` inherits it
+  and has no copy of its own.
+
+`modern-app-dev` is left only in `docs/registry-management/audit-2026-08-16*` and
+`mcp-filter/tests/fixtures/jenkins/getJobs.json`, which are records. The version-poller test's
+`playwright-1.60.0` is a tag-classification case and names no image.
+
 ### P12 — DockerImages: registry-management has a procedure for deleting a whole repository
 
 Target: ../DockerImages
