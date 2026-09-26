@@ -222,6 +222,27 @@ pipeline's containers included (`docs/operations/ci-gates.md:55`,
 `docs/operations/pipeline-dependencies.md:16,40`). Pushed; `KubeCoder/Build-Main` is green on it
 (a `main` push also rolls KubeCoder's dev stage).
 
+**Done (P3).** KubeCoder `2fea4ab2` (`phase/030-P3`, pushed to `main`): the pod's container is
+`containerTemplates.modern_app_toolchain('modern-app-toolchain')`, and both stages use
+`container('modern-app-toolchain')` with their commands unchanged. `KubeCoder/Build-Main` #546
+is green on it; its pod ran `registry:5000/kube-coder-modern-app-toolchain:node-24`. No
+`modern-app-dev` string is left in the repo.
+
+Later phases:
+- P4: this environment declares the `python` and `frontend` tools now (Ansible `83b7fe5`, close-out
+  A3), so a consumer repo's `kc project test` that calls `cexec python` runs here.
+- P10: KubeCoder no longer calls `modern_app_dev`.
+
+Record:
+- #546 Validate: `uv sync --all-packages --frozen`, ruff clean, 4227 pytest passed. Drift gate:
+  both `npm --prefix … ci` installs and `typecheck` (`tsc --noEmit`) ran in the new container.
+  The two extension stages after it tested on the `tsc` those installs left in the workspace.
+- `docs/operations/ci-gates.md:55` and `pipeline-dependencies.md:16,40` name the
+  `modern-app-toolchain` container and `containerTemplates.modern_app_toolchain`, and give its
+  image. The Jenkinsfile's stage comments named no image and are unchanged.
+- Round 1 stopped blocked, before the push, because the gate needed tools this environment lacked.
+  Round 2: `kc project test` passed, then push, then #546.
+
 ### P4 — FieldnotesApp: Validate runs in the modern-app toolchain container
 
 Target: ../FieldnotesApp
