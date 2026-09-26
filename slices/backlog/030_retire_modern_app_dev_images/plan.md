@@ -28,6 +28,25 @@
 - Ruling F1 (2026-09-26): other lanes are mid-slice in some of the consumer repos — "Yes, but
   I'll just wait with implementing this slice into there's a quite moment." The operator times
   the run; the plan needs no hold for it.
+- Ruling review Q1 (2026-09-26, "Agree", after: "The apps and template repos have been pushed.
+  This is now stable. Don't park it, reassess please."): the four apps' `Jenkinsfile` and
+  `tools/suite_runner/` are generated from ModernAppTemplate's root template (the apps adopted it
+  on 2026-09-26; `.copier-answers.yml` `_commit: v0.1.1`), so ModernAppTemplate joins the slice.
+  The image change lands in the root template as a new release; each app takes it with `copier
+  update` at its root, so a later update never puts the old image back. ModernAppTemplate's
+  current docs that describe the validation image are corrected with it; its historical changelog
+  entries stay. ModernAppFrontendTemplate's phase is re-grounded against its pushed state, and
+  dropped if it no longer carries a validation pipeline. Re-ground every app, template and commit
+  citation against today's pushed `origin/main`: the first plan pass cited pre-adoption commits.
+- Ruling review Q2 (2026-09-26): "Overrule please. It wasn't the agent's focus." ModernAppTemplate's
+  2026-06-05 changelog entry on validation Jobs hanging after `playwright install` on the plain
+  modern-app-dev base does not change D1 or its proof: the first app's green Jenkins build, as
+  planned.
+- Ruling review A1 (2026-09-26, "Agree"): the slice's executors may push `main` inside a phase,
+  without asking each time, in JenkinsPipelineUtils, HomelabTerraformProvider, KubeCoder,
+  FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppTemplate.
+  Each push comes after the phase's own gate is green. This is the operator's explicit override
+  of the confirm-every-push rule, for this slice and these repos only.
 
 #### Settled by the planning session (the operator read these in refinement.md and did not object)
 
@@ -39,21 +58,20 @@
   and current docs and runbooks. Historical records (completed slices, archived triage documents,
   about a hundred files across AnsibleSpecs, KubeCoderSpecs and DesignAssistantSpecs) keep their
   mentions.
-- ModernAppFrontendTemplate gets the image change only. Its validation pipeline is stale beyond
-  the image (it still uses the older `validation-entrypoint.sh` pattern, not the `poetry run
-  run-suite` shape the live apps use); bringing it up to date is out of scope and goes into the
+- ModernAppFrontendTemplate, if it still carries a validation pipeline (ruling Q1), gets the
+  image change only; bringing a stale pipeline up to date is out of scope and goes into the
   close-out as a follow-up.
 - Order: the new container template first; then each consumer, pushed and proven by a green
   Jenkins build (each app's main push also deploys to that app's dev stage, as any main push
   does); removing `modern_app_dev` from JenkinsPipelineUtils and the two image directories from
   DockerImages only after every consumer is green; the registry deletion last.
 - The consumer repos were added to this environment's `.kubecoder/config.yaml` at planning
-  (Ansible `e957d13`: KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport,
-  ZigbeeControl, ModernAppFrontendTemplate). The operator restarts the environment before the
-  run, so they are checked out as `../<Repo>` siblings. DesignAssistant is deliberately not added.
-  Until that restart they are not under `/work` (KubeCoder already is): read them through the
-  gitblit MCP (`pvginkel/<Repo>.git`, a daily sync) or a throwaway clone under `/tmp`, never a
-  clone into `/work`.
+  (Ansible `e957d13`, `3ff6193`: KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory,
+  IoTSupport, ZigbeeControl, ModernAppFrontendTemplate, ModernAppTemplate). The operator restarts
+  the environment before the run, so they are checked out as `../<Repo>` siblings. DesignAssistant
+  is deliberately not added. Until that restart they are not under `/work` (KubeCoder already
+  is): read them from a throwaway clone under `/tmp` of `https://github.com/pvginkel/<Repo>`,
+  never a clone into `/work`. Gitblit is a daily sync and lags today's pushes.
 
 #### Grounding (verified 2026-09-26)
 
