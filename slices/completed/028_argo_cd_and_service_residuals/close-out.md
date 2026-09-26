@@ -33,7 +33,9 @@ gate-run.
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Push ArgoCDDeploy by hand when its hold lifts
+### ~~A1 — Push ArgoCDDeploy by hand when its hold lifts~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `../ArgoCDDeploy`: Ruling D3: a push to `main` is a prd deploy (Argo CD reconfigures itself; the controller restarts to expose metrics); the operator pushes after the run.
 
@@ -51,9 +53,13 @@ doc-writer, doc phase, 2026-09-25 — Ansible docs/runbooks/argocd.md (branch ph
 **Consequence:** until you push it, nothing ArgoCDDeploy deploys carries the slice, and V06, V08 stay unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested close — pushed; argocd-prd synced by hand to 307d94f (2026-09-26 08:47Z), struck
 
-### A2 — Push PrometheusDeploy by hand when its hold lifts
+</details>
+
+### ~~A2 — Push PrometheusDeploy by hand when its hold lifts~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `../PrometheusDeploy`: Ruling D3: a push to `main` deploys Prometheus/Alertmanager with the new scrape, rules and routing; the operator pushes it after ../ArgoCDDeploy is pushed and `argocd-prd` synced, else the blind-metrics warning fires until then (review r1 A2).
 
@@ -72,9 +78,13 @@ doc-writer, doc phase, 2026-09-25 — Ansible docs/runbooks/argocd.md now descri
 **Consequence:** until you push it, nothing PrometheusDeploy deploys carries the slice, and V01, V02, V03 stay unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested close — pushed; prometheus-prd synced 80f4e28, struck
 
-### A3 — Push KubeCoderDeploy by hand when its hold lifts
+</details>
+
+### ~~A3 — Push KubeCoderDeploy by hand when its hold lifts~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `../KubeCoderDeploy`: Ruling D3: a push to `main` is a deploy-repo push the operator presses; the promotion job change is live from then on.
 
@@ -91,9 +101,13 @@ doc-writer, doc phase, 2026-09-25 — Ansible docs/runbooks/kubecoder-cutover.md
 **Consequence:** until you push it, nothing KubeCoderDeploy deploys carries the slice, and V10 stays unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested close — pushed (f876641 on origin/main), struck
 
-### A4 — Push GitSyncDeploy by hand when its hold lifts
+</details>
+
+### ~~A4 — Push GitSyncDeploy by hand when its hold lifts~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `../GitSyncDeploy`: Ruling D3: a push to `main` restarts gitblit in prd (search and the MCP server briefly down); the operator pushes after the run.
 
@@ -106,7 +120,9 @@ driver, push check, 2026-09-25 — held as planned. The slice's commits sit on `
 **Consequence:** until you push it, nothing GitSyncDeploy deploys carries the slice, and V12 stays unproven.
 
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested close — pushed; git-sync-prd synced 67c8f23, struck
+
+</details>
 
 ## Notable events
 
@@ -121,23 +137,31 @@ N1 is a harmless deviation. N2 records the live baselines the pushes will be mea
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — GitSyncDeploy: the init container's lock cleanup now uses `find … -exec rm {} +` instead of `-delete`, which the plan said would stay unchanged · nit
+### ~~N1 — GitSyncDeploy: the init container's lock cleanup now uses `find … -exec rm {} +` instead of `-delete`, which the plan said would stay unchanged · nit~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
 
 The plan's P5 constraint said "the existing lock cleanup is unchanged". The lock cleanup moved into chart/files/clean-lucene.sh so tests/clean-lucene.sh could run the exact script. The iac sidecar's /usr/bin/busybox (Ubuntu 1:1.37.0-4ubuntu1) is built without FEATURE_FIND_DELETE, so `find -delete` fails there with "find: unrecognized: -delete". The line now reads `\( -name 'write.lock' -o -name 'gb_lucene.conf.lock*' \) -exec rm {} +`. It matches the same files, and a failed rm still fails the init container. Upstream busybox 1.37 defaults both FEATURE_FIND_DELETE and FEATURE_FIND_EXEC_PLUS to y, so the official image runs either spelling.
 
 **Consequence:** none
 
 **Provenance:** witnessed, code-writer, P5 r1, GitSyncDeploy 22b6967
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested close — struck
 
-### N2 — Test phase: read-only live checks before the pushes bear out the offline assumptions of V06, V08, V12 and V13 · nit
+</details>
+
+### ~~N2 — Test phase: read-only live checks before the pushes bear out the offline assumptions of V06, V08, V12 and V13 · nit~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
 
 Baselines the pushes will be measured against, and three assumptions checked against the live estate rather than the source: (1) Prometheus 3.14.0 has no argocd_app_info, argocd_app_condition or ArgoCD alert yet, and its kubernetes-service-endpoints job keeps any Service annotated prometheus.io/scrape=true; (2) the running controller already serves :8082/metrics (its NetworkPolicy admits the metrics port from every namespace): 50 argocd_app_info series, 49 with autosync_enabled true, label names as the rules select them (operation is an empty-valued label when idle, which Prometheus drops), and the v3.5.1 image accepts --metrics-application-conditions and carries the metric name argocd_app_condition; (3) https://argocd/auth/login?return_url=... answers 400 with the card's message today, https://argocd.home/... 303 to Keycloak. GitSyncDeploy's prune test also passed twice under BusyBox v1.38.0, the image gitblit's init container really pulls (docker.io/library/busybox@sha256:cac8f90b...), in the file form and in the rendered `sh -c <script> clean-lucene /git` form; the test verb itself only runs Ubuntu's 1.37.0.
 
 **Consequence:** none
 
 **Provenance:** witnessed, test-agent, r1; read-only requests, and scratch pods in the development namespace (deleted afterwards)
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested close — struck
+
+</details>
 
 ## Bugs
 
@@ -155,15 +179,6 @@ subquery rule. It matters only when a controller gap follows a successful sync.
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
-### Q2 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor
-
-Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay of cleared failures, and no delayed resolve. They conflict for an alert held through a sync. Mid-sync, and for one scrape after a failed sync (until SyncError comes back), an app whose sync fails looks the same as one whose sync succeeds. A gap that starts there cannot tell them apart. The fix follows V04 ("a metrics gap neither resolves nor re-fires them"): while no app is scraped, each alert keeps its own ALERTS state. The cost is a resolve that is due during the gap, which waits for the next scrape. ArgoCDAlertsBlind has fired by 15 m into any such gap. To resolve on schedule where the last scrape already showed the app Synced, the failed-sync rule's hold could release apps last seen Synced. That needs a subquery over argocd_app_info for each app's last-scraped sync status.
-
-**Consequence:** An alert held through a successful sync still reads firing when a controller gap starts, and its "resolved" comes when scraping resumes rather than 5 m after the sync.
-
-**Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
-**Disposition:**
-
 ### ~~Q1 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor~~ — superseded by Q2: the body misstated what the alternative gives up; struck by code-writer, P3 r2
 
 <details><summary>struck — body kept for the record</summary>
@@ -177,6 +192,19 @@ Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay o
 
 </details>
 
+### ~~Q2 — PrometheusDeploy: a metrics gap holds each standing Argo CD alert as it stands, so a resolve due during the gap waits for the next scrape · minor~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
+
+Review r1 F1 asked for two things during a gap in Argo CD's metrics: no replay of cleared failures, and no delayed resolve. They conflict for an alert held through a sync. Mid-sync, and for one scrape after a failed sync (until SyncError comes back), an app whose sync fails looks the same as one whose sync succeeds. A gap that starts there cannot tell them apart. The fix follows V04 ("a metrics gap neither resolves nor re-fires them"): while no app is scraped, each alert keeps its own ALERTS state. The cost is a resolve that is due during the gap, which waits for the next scrape. ArgoCDAlertsBlind has fired by 15 m into any such gap. To resolve on schedule where the last scrape already showed the app Synced, the failed-sync rule's hold could release apps last seen Synced. That needs a subquery over argocd_app_info for each app's last-scraped sync status.
+
+**Consequence:** An alert held through a successful sync still reads firing when a controller gap starts, and its "resolved" comes when scraping resumes rather than 5 m after the sync.
+
+**Provenance:** witnessed, code-writer, P3, review-fix r2, tests/alert-rules/argocd.yml (cloudnative-pg-prd in the gap test)
+**Disposition:** Rulings as suggested please. — suggested close (keep the resolve waiting for the next scrape) — struck
+
+</details>
+
 ## Suggestions
 
 Focus: S4 is the one that asks for code: a guard so a bare promote re-run cannot pass over a
@@ -184,24 +212,6 @@ stuck release (the docs now carry the workaround). S3 affects every alert in the
 and S5 were read from source. The only witnessed one is S2, which just corrects the record.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### S2 — ArgoCDDeploy P2 done-record says the architecture artifact is unchanged; it gains the metrics Service's interface · nit
-
-Regenerated at bcedb86 and at 23ecda8, the generated argocd-deploy artifact gains if:argocd-prd-application-controller-metrics-argocd-prd-svc and its behind relation. The artifact is gitignored build output, architecture.yaml needs no change, and arch-validate passes.
-
-**Consequence:** none
-
-**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
-**Disposition:**
-
-### S3 — PrometheusDeploy: a standing Argo CD alert survives a Prometheus restart only if Prometheus is back within about 2 minutes · minor
-
-Prometheus sends each firing alert with an end time 4 minutes ahead (4 × the 1 m resend and evaluation interval). After a restart, the rule manager restores the alert's firing state, since both standing windows are at least the 10 m for-grace-period, and sends the alert again about two evaluations later. If Prometheus is down for longer than roughly 2 minutes, Alertmanager has already expired the alert. It then sends a "resolved", and the alert fires again at once. This applies to every alert in the estate, not just the new ones. promtool cannot simulate a restart, so V04 proves only the gap and identity edges offline.
-
-**Consequence:** An outage or slow WAL replay of more than about 2 minutes brings a "resolved" and a fresh "firing" for each alert that is up, the standing Argo CD alerts included.
-
-**Provenance:** read, code-writer, P3, r1, Prometheus v3.14.0 rules/group.go:768-835 and plan.md P3 done-record
-**Disposition:**
 
 ### S4 — KubeCoderDeploy promote: a recovery re-run records the stuck release only if its commit parameter names it · minor
 
@@ -214,16 +224,7 @@ doc-writer, doc phase, 2026-09-25 — Done: KubeCoderDeploy README 'Promotion' a
 **Consequence:** A re-run started from defaults after a Build-Main landed promotes whatever main holds at that moment, and the earlier release loses its D48 record unless it is tagged by hand.
 
 **Provenance:** read, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
-**Disposition:**
-
-### S5 — GitSyncDeploy: pruning a branch's alias before Gitblit has deleted its documents leaves them in the search index · nit
-
-Gitblit deletes a branch's documents on the first index cycle after the branch leaves gitblit.indexBranch (web.luceneFrequency, default 2 mins). The alias is how it remembers to do that. If the pod restarts inside that window, for example right after git-sync's nightly run unsets a deleted branch, the init container drops the alias before the deletion ran. That branch's documents then stay in the index until a full reindex. Closing the window would take either no prune for an alias whose documents may still exist, which busybox cannot see, or a cycle-aware prune inside Gitblit. Both are outside Ruling R5's init-container scope.
-
-**Consequence:** Rarely, search keeps returning hits from a branch deleted on GitHub within about 2 minutes before a gitblit restart, until the index is rebuilt.
-
-**Provenance:** read, code-writer, P5 r1, Gitblit v1.10.0 LuceneService.updateIndex
-**Disposition:**
+**Disposition:** Rulings as suggested please. — suggested card — ANS-142
 
 ### ~~S1 — ArgoCDDeploy P2 done-record: SyncError is set in two more cases than it says · minor~~ — resolved by P3 (8b6e866, 185b64f): ArgoCDSyncStillFailed's description names the prune guard beside the failed sync and its summary claims no failed sync; P3's gate and review r2 re-ran against it; struck by consult 1
 
@@ -235,5 +236,44 @@ The record tells P3 the controller sets SyncError only once a failed sync's retr
 
 **Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
 **Disposition:**
+
+</details>
+
+### ~~S2 — ArgoCDDeploy P2 done-record says the architecture artifact is unchanged; it gains the metrics Service's interface · nit~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
+
+Regenerated at bcedb86 and at 23ecda8, the generated argocd-deploy artifact gains if:argocd-prd-application-controller-metrics-argocd-prd-svc and its behind relation. The artifact is gitignored build output, architecture.yaml needs no change, and arch-validate passes.
+
+**Consequence:** none
+
+**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:** Rulings as suggested please. — suggested close — struck
+
+</details>
+
+### ~~S3 — PrometheusDeploy: a standing Argo CD alert survives a Prometheus restart only if Prometheus is back within about 2 minutes · minor~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
+
+Prometheus sends each firing alert with an end time 4 minutes ahead (4 × the 1 m resend and evaluation interval). After a restart, the rule manager restores the alert's firing state, since both standing windows are at least the 10 m for-grace-period, and sends the alert again about two evaluations later. If Prometheus is down for longer than roughly 2 minutes, Alertmanager has already expired the alert. It then sends a "resolved", and the alert fires again at once. This applies to every alert in the estate, not just the new ones. promtool cannot simulate a restart, so V04 proves only the gap and identity edges offline.
+
+**Consequence:** An outage or slow WAL replay of more than about 2 minutes brings a "resolved" and a fresh "firing" for each alert that is up, the standing Argo CD alerts included.
+
+**Provenance:** read, code-writer, P3, r1, Prometheus v3.14.0 rules/group.go:768-835 and plan.md P3 done-record
+**Disposition:** Rulings as suggested please. — suggested close — struck
+
+</details>
+
+### ~~S5 — GitSyncDeploy: pruning a branch's alias before Gitblit has deleted its documents leaves them in the search index · nit~~ — closed by the operator, 2026-09-26; struck by operator
+
+<details><summary>struck — body kept for the record</summary>
+
+Gitblit deletes a branch's documents on the first index cycle after the branch leaves gitblit.indexBranch (web.luceneFrequency, default 2 mins). The alias is how it remembers to do that. If the pod restarts inside that window, for example right after git-sync's nightly run unsets a deleted branch, the init container drops the alias before the deletion ran. That branch's documents then stay in the index until a full reindex. Closing the window would take either no prune for an alias whose documents may still exist, which busybox cannot see, or a cycle-aware prune inside Gitblit. Both are outside Ruling R5's init-container scope.
+
+**Consequence:** Rarely, search keeps returning hits from a branch deleted on GitHub within about 2 minutes before a gitblit restart, until the index is rebuilt.
+
+**Provenance:** read, code-writer, P5 r1, Gitblit v1.10.0 LuceneService.updateIndex
+**Disposition:** Rulings as suggested please. — suggested close — struck
 
 </details>
