@@ -675,6 +675,39 @@ Nothing is pushed unless the operator asks.
 - **Proof in the phase.** Run step one against the live estate, which only reads. Run step two
   into the scratch clones. Push nothing.
 
+**Done (P8).** Ansible `phase/029-P8` `8b8fdff`. The tool is
+`support/recommend-resources/recommend_resources.py`. `report DIR` clones the registry's deploy
+repos on `main` into `DIR/repos`. It writes `DIR/report/<Repo>.patch`: a `# ` preamble listing
+each change, then `git diff`. The containers it cannot place go in `DIR/not-placed.txt`. `apply
+DIR` checks every remaining patch first, and commits nothing if any fails the check or leaves
+invalid YAML. It then commits each on `main`, shows the commits and prints the push commands.
+The maps are `resources-entry-maps/<resolved chart>.json`. Root's `test:` is now a list that
+includes `python3 -m unittest discover -s support/recommend-resources`.
+
+Later phases:
+- P9: the tool's docstring is its usage. `ansible/roles/microk8s/defaults/main.yml:79` credits
+  the addon requests' derivation to "HelmCharts' recommend-resources"; it is now this tool's.
+
+Record:
+- Proof, 2026-09-26: `report /tmp/rr-proof` against the live estate gave 48 clones, 31 patches
+  and 4393 not-placed containers, almost all ephemeral `jenkins-prd` build pods. Then NewsfilterDeploy's
+  patch was deleted and Grafana's memory hunk edited from 160Mi to 192Mi. `apply` made 30 local
+  commits and left Newsfilter untouched; Grafana reads 192Mi. Nothing was pushed (close-out A3).
+- The policy code is verbatim, except that numpy and ruamel.yaml are gone: the dev container has
+  neither. `percentile()` is numpy's default linear method. Edits to a values file are text
+  splices at PyYAML node marks, so untouched lines, comments and quotes stay byte-for-byte.
+- The registry is read from the local `/work/ArgoCDDeploy/releases/values.yaml`
+  (`--registry` overrides it), because origin lacks P4 until the push.
+- Resolved chart: for a local app, `chart/Chart.yaml`'s name and `chart/values.yaml`; for an
+  upstream app, `upstream.chart` and `cexec iac helm show values … --version <pin>`. The maps
+  keep HelmCharts' contents, whose keys match live workload names (2026-09-26); step-ca's map is
+  now `step-certificates.json`.
+- Settled edits: an explicit `null` or `{}` on the path becomes a block. A request dropped under
+  `--reset` that empties its mapping leaves `requests: {}`, since null would delete the chart
+  default. A non-empty flow mapping stays flow. A stage that tracks another branch (kubecoder-prd)
+  gets a "reaches it by promotion" preamble line. Unlike the old tool, `--reset` writes no empty
+  `requests: {}` for a container with no recommendation at all.
+
 ### P9 — Docs: HelmCharts is no longer the deploy path
 
 Target: root
@@ -710,7 +743,9 @@ Two specific fixes:
   own words, and no longer points into AnsibleSpecs `handovers/` (`docs/runbooks/argocd.md:612-614`).
 
 The summaries in `docs/architecture/ansible-architecture.yaml` that name HelmCharts as current
-count as docs here too. If you edit that file, the `architecture` component's test must still
+count as docs here too. So does the comment at `ansible/roles/microk8s/defaults/main.yml:79`: it
+credits the addon requests' derivation to "HelmCharts' recommend-resources", and that derivation
+is now `support/recommend-resources/recommend_resources.py` (P8). If you edit that file, the `architecture` component's test must still
 pass.
 
 ## Not in scope

@@ -45,6 +45,15 @@ V24 — After the operator's registry switch, the last step of the switch runboo
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Disposition:**
 
+### A3 — P8's proof run left 30 unpushed resource-request commits in /tmp/rr-proof on the dev container · nit
+
+Step two of the proof ran against real clones: 30 deploy repos carry one local commit each on main, from the 2026-09-19..26 Prometheus window. NewsfilterDeploy's patch was deleted and GrafanaDeploy's memory hunk overruled (160Mi -> 192Mi) as a demonstration, so the commits are not a clean recommendation. /tmp is not durable. The operator can discard them and run 'python3 support/recommend-resources/recommend_resources.py report <dir>' fresh when they want the requests applied.
+
+**Consequence:** None if discarded; the resource requests the live estate needs wait for the operator's own run of the tool.
+
+**Provenance:** witnessed, executor, P8 r1
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -112,6 +121,15 @@ views/infrastructure.yaml's excludeProducers is meant to keep release instances 
 **Consequence:** The Infrastructure view shows every deployed container next to the servers and network gear it was meant to show alone.
 
 **Provenance:** witnessed | code-writer, P2, r1, merged dataset from the collector run
+**Disposition:**
+
+### B4 — Ansible recommend-resources: a Deployment pod whose ReplicaSet hash is under 8 characters is not matched to its workload · minor
+
+infer_workload's suffix pattern, carried over unchanged from HelmCharts' recommend_resources.py under the 'policy unchanged' rule, strips a Deployment pod's '-<hash>-<id>' only when the pod-template-hash is 8-10 characters. The hash is a variable-length encoding, and live pods carry shorter ones. In P8's live run on 2026-09-26, 'architecture-viewer-8cb446d-…' (webathome-org-prd) and 'keycloak-d8cb679-…' (keycloak-prd) resolved to workloads 'architecture-viewer-8cb446d' and 'keycloak-d8cb679', and landed in not-placed.txt instead of their chart's resources.<workload>.<container>. The pattern also makes an 8-10 character last word of a DaemonSet name read as a hash (prometheus-node-exporter -> prometheus-prd-prometheus-node); the maps' keys already rely on that, so a fix has to re-key them.
+
+**Consequence:** Containers of a Deployment whose current ReplicaSet hash is short get no recommendation until a rollout happens to produce a longer hash.
+
+**Provenance:** witnessed, executor, P8 r1, /tmp/rr-proof/not-placed.txt
 **Disposition:**
 
 ## Open questions and rulings
@@ -284,4 +302,13 @@ cmd_arch's second half (`helm_charts_without`, `hc_releases_without`) renders ev
 **Consequence:** Each remaining migration's arch step needs a working poetry environment in the archived HelmCharts checkout, and fails if it has none, for a check with nothing left to protect.
 
 **Provenance:** read, code-writer, P7 r1, support/argo-migrate/argo_migrate.py cmd_arch
+**Disposition:**
+
+### S18 — argo-migrate's unit suite covers the registry text edits only; its registry reads and parse-equality guard have no test · nit
+
+support/argo-migrate/test_registry.py imports only registry_flip, registry_autosync and Stop. Nothing tests App.on_argo, registry_upstream/check_upstream_pin, preflight's choice of server-side apply from the registry's syncOptions, or hc_releases_without's flipped. checked(), the guard that an edit changes nothing but the intended entry, survives being made a no-op: all 10 tests stay green. Today's reads match HelmCharts' (50/50 stages, syncOptions and upstream pins agree), and a flip/autosync round trip over all 49 real app-stages is clean. The gap is only that nothing will catch a regression. A suggestion: point the tests at a fixture registry (ARGOCD_DEPLOY is a module constant) and add one read test per question and one refusal test for checked().
+
+**Consequence:** A later edit that sends one of the tool's registry reads back to HelmCharts or the per-stage state, or that breaks the edit guard, passes root's test gate.
+
+**Provenance:** read, code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
 **Disposition:**
