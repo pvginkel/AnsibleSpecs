@@ -61,9 +61,13 @@
 - **Ruling D1 — how the pause comes off.** The slice adds a dry-run setting to the
   registry-cleanup chart (RegistryDeploy), removes the suspension with dry-run on, and lets the
   nightly job run for real in that mode: it logs what it would delete — garbage collection
-  included — and deletes nothing. The slice's test phase shows the operator one night's
-  would-delete list. Turning dry-run off is the operator's one-line change, filed as an
-  Operator Action card (ANS project) once the test phase has shown that list. Accepted
+  included — and deletes nothing. The slice's test phase shows the operator the would-delete
+  list: once the unsuspended dry-run CronJob is live, the test phase starts one run from it by
+  hand (a Job created from the CronJob — dry-run, garbage collection included), reads that
+  run's log and puts the list before the operator; the nightly runs follow on their own
+  (review r1 Q1, operator 2026-09-26: "Agree"). Turning dry-run off is the operator's one-line
+  change, filed as an Operator Action card (ANS project) by the test phase, after that list
+  exists — never before. Accepted
   trade-off: the registry keeps growing until the operator flips it; "the pause is lifted" is
   met as "the job runs again", not "the job deletes again". The slice itself never runs cleanup
   in deleting mode.
@@ -84,7 +88,8 @@
   - Builds that push only a build number are labelled so that number falls in the label's
     series; otherwise each such build would be its own tracking tag and never be cleaned.
   - The migration's digest comment is corrected in batched deploy-repo pushes (every
-    deploy-repo push starts a Jenkins build and an Architecture rebuild).
+    deploy-repo push starts a Jenkins build and an Architecture rebuild) — by the test phase,
+    per Ruling R1-Q3 below.
   - KubeCoderDeploy's "deliberate float" chart comment and its render test's assertion of
     `:latest` change with the tunnel-reclaim pin; the pin reaches prd through KubeCoder's normal
     promotion like its other images.
@@ -96,6 +101,33 @@
     regex goes with cleanup's.
   - `registry garbage-collect --delete-untagged` stays: with tag-only pins it can no longer
     delete a pinned image.
+
+#### Rulings from plan review r1 (2026-09-26, operator: "Agree with the rest")
+
+- **Ruling R1-Q2 — no phase pushes; the test phase pushes everything, in dependency order,
+  and is authorised to roll prd.** Every phase commits only and is reviewed before anything it
+  wrote goes live. The test phase then pushes in the order the live chain needs — the shared
+  library (JenkinsPipelineUtils) → KubeCoderDeploy and ArgoCDDeploy → DockerImages (its build
+  writes the pins: RegistryDeploy, VersionPollerDeploy, KubeCoderDeploy, FieldnotesDeploy,
+  ArgoCDDeploy) → the keycloak build (both KeycloakDeploy stages onto the per-build tag) →
+  RegistryDeploy (the dry-run CronJob) → the deploy-repo comment batches — each step's live
+  check green before the next, stopping at the first red. The operator authorises this run's
+  test phase to make these pushes and the prd rollouts they cause unattended, including
+  Keycloak prd's short SSO outage (the same rollout the poller's 2026-10-01 rebuild would
+  cause). Argo CD's own application (argocd-prd) stays synced by the operator (Ruling D3).
+- **Ruling R1-Q3 — the comment sweep is not a phase.** The corrected wording is written and
+  reviewed once, in RegistryDeploy's copy (the RegistryDeploy phase). The test phase applies
+  that exact string in place of the old one in every other deploy repo and pushes them in
+  batches (Settled). The five repos with a different migration header change only where they
+  claim digests, and each such change is listed in the close-out.
+- **Ruling R1-A1 — every label series keeps its newest build.** registry-cleanup's floor keeps
+  the newest build of each label series whether or not the label's own tag exists in the repo,
+  so an old self-labelled bare number (live example: `ssegateway-validation:56`, labelled `56`,
+  built 2026-09-24) counting as a tracking tag cannot switch the floor off. Tested with the
+  label rule.
+- **RegistryDeploy is checked out** at `/work/RegistryDeploy` (cloned at planning; declared in
+  Ansible's `.kubecoder/config.yaml`, Ansible `7154030`). Operator: "You dont have to restart to
+  get the repo. Just clone it."
 
 #### Grounding (session, verified 2026-09-26 — binds the plan)
 
@@ -118,8 +150,9 @@
   accepts one destination, or two only as `latest`/`<n>` or `<p>-latest`/`<p>-<n>`, and throws
   otherwise — so `<tag>` + `<tag>-<build>` is refused today and the check must change. Called
   from `DockerImages/Jenkinsfile` (:147, :154) and from app repos' Jenkinsfiles (count not
-  measured). Some app images push a single build-number tag only (e.g. `dhcpapp:35`, whose label
-  is `35`).
+  measured). Some images push a single build-number tag only (live: `ssegateway-validation:56`,
+  labelled `56`, built 2026-09-24). `dhcpapp:35` (labelled `35`) is a leftover: dhcpapp has
+  pushed `latest` + `<n>` since build 36 (review r1 A1).
 - **DockerImages pin stage**: `Jenkinsfile:120` `if (!isMatrix) builtImages << image`;
   `collectPins()` (:33-54) reads `<image>/deploy-pins.json` only for images in `builtImages`;
   the stage (:171-187) calls `cicd.writeVersionPins(repo:, pins:, message:)`

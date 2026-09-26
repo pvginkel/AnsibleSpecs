@@ -16,7 +16,7 @@
 
 **If this is wrong.** A delay at worst — nothing is deleted until you flip the switch.
 
-**Operator.** Agree
+**Operator.** Agree. Plan review, 2026-09-26 — "Agree": the list shown is from one dry-run started by hand from the unsuspended CronJob during the test phase, not a night's run; the Operator Action card is filed after that list exists.
 
 ## D2 — A promoted tag keeps its source's label, so cleanup deletes only tags in the label's own build series
 
