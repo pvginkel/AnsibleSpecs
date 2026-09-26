@@ -419,7 +419,7 @@ those files that explain a why come along with their entries.
   three-source shape. They currently check the ApplicationSet templates. The ApplicationSet
   assertions stay, because `chart/` still renders the ApplicationSets.
 
-**Done (P4).** ArgoCDDeploy `phase/029-P4` `19e40d3`, not pushed. The registry chart is
+**Done (P4).** ArgoCDDeploy `phase/029-P4` `50fd69a`, not pushed. The registry chart is
 `releases/`. Its `values.yaml` is the registry: `apps.<app>: {repo, upstream: {repo, chart},
 syncOptions, stages.<stage>: {autoSync, targetRevision, version}}`, with full
 `https://github.com/pvginkel/<Name>.git` repo URLs and quoted versions. `values.schema.json` is the
@@ -445,11 +445,11 @@ Later phases:
 Record:
 - Successors: booleans → `autoSync: boolean`; pvginkel prefix → `repo` pattern
   `^https://github\.com/pvginkel/[A-Za-z0-9._-]+\.git$`; non-empty targetRevision → `minLength: 1`;
-  complete upstream → `upstream` requires `repo` and `chart`, every stage of an upstream app a
+  complete upstream → `upstream` requires a non-empty `repo` and `chart`, every stage of an upstream app a
   non-empty `version`, no other stage one; Argo never auto-syncs → `apps.argocd` required, repo
   const ArgoCDDeploy, `prd` required, each stage `autoSync` const false, plus the render test's
   no-`automated` check on `argocd-prd`; `release.py`'s allowlist and `"chart" not in entry` →
-  `additionalProperties: false` at every level. The test proves 20 refusals and 2 acceptances.
+  `additionalProperties: false` at every level. The test proves 22 refusals and 2 acceptances.
 - Beyond the plan: DNS-label app and stage keys; no two app-stages render one name; every
   Application passes `chart/`'s AppProject (stage and source repos) and the Application CRD
   schema; no labels or annotations are rendered, so the first diff is tracking metadata only.
