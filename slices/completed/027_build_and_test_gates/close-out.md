@@ -87,7 +87,9 @@ Focus: One stop. P1 was blocked because the java sidecar was missing, until the 
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — Run stopped (blocked) in P1
+### ~~N1 — Run stopped (blocked) in P1~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
 
 The driver's bail (`blocked`), as it recorded it:
 
@@ -98,16 +100,22 @@ Stopped 2026-09-25 13:17; resumed 2026-09-25 20:00.
 **Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
 
 **Provenance:** witnessed — the driver's bail record in state.json
-**Disposition:**
+**Disposition:** Go — suggested close — struck
 
-### N2 — Test phase pushed JenkinsPipelineUtils, ArgoCDTools and PrometheusDeploy; the three builds it triggered are green and prd's prometheus-prd took no sync
+</details>
+
+### ~~N2 — Test phase pushed JenkinsPipelineUtils, ArgoCDTools and PrometheusDeploy; the three builds it triggered are green and prd's prometheus-prd took no sync~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
 
 Pushed in the order A3 asks for: JenkinsPipelineUtils a43f45e, then ArgoCDTools c32a27c, then PrometheusDeploy 5a680b4. IaC/ArgoCDTools #15 (SUCCESS, 150 s) loaded the library at a43f45e and ran stage Test (argocd-hook 58 tests, aac-tools 63, both OK) before either kaniko stage; argocd-hook:15 and aac-tools:15 are in the registry. AaC/PrometheusDeploy #5 is SUCCESS; #4 was superseded by #5, both triggered by the same push. PrometheusDeploy main is what Argo CD deploys prd's Prometheus from (prometheus-prd is autoSync), so that push was a prd deploy-repo push: the Application saw 5a680b4 (status.sync.revisions) and stayed Synced and Healthy, and its last sync operation is still 2026-09-24T19:45Z. The diff touched only tests/ and .kubecoder/, so no manifest changed. IaC/Build-Main #207 is SUCCESS on Ansible 9021a2b, which carries this slice's 9edef16 (the java sidecar). Two things this pass did not do: AnsibleSpecs is not pushed (main is 59 commits ahead of origin, P5's D61 rewrite 4e91587 and 7844b5c among them), and no failing Test-stage build was run on Jenkins, since forcing one needs a replay of the real job, which is the operator's call; V06 rests on the stage order and the absence of any catch construct in the Jenkinsfile.
 
 **Consequence:** none — the pushed commits change nothing prd runs; D61's rewrite is visible only from this pod's AnsibleSpecs checkout until the operator pushes it
 
 **Provenance:** witnessed — test-agent, test phase, r1; IaC/ArgoCDTools #15, AaC/PrometheusDeploy #4-#5, IaC/Build-Main #207, prd Application argocd-prd/prometheus-prd
-**Disposition:**
+**Disposition:** Go — suggested close — AnsibleSpecs 7844b5c (D61) is on origin; struck
+
+</details>
 
 ## Bugs
 
@@ -123,7 +131,9 @@ Focus: Q1 alone: are D61's reasons for retiring the Alertmanager routing test an
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
      `question` verdict, not an entry here. -->
 
-### Q1 — D61's standing reasons for two retired tests are P5's, not ruled: the Alertmanager routing test and grafana's Keycloak login test
+### ~~Q1 — D61's standing reasons for two retired tests are P5's, not ruled: the Alertmanager routing test and grafana's Keycloak login test~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
 
 P5's text assumed the retired prometheus tests all checked other apps' CronJob timings. HelmCharts 4d02286 retired five: three timing tests (backup-freshness, s3-mirror, youtrack-backup), the node-memory threshold test and the Alertmanager-to-Telegram routing test. D61 now gives each group its own reason. Node-memory: P4's promtool scenarios cover its starvation and wedged-counter episodes. Routing: its successor is slice 028 P3's routing assertions against the rendered Alertmanager config (028 Ruling T1), which has not run. Grafana's login test: it restated the release's own values (OIDC settings, ExternalSecret mapping), and its last case read HelmCharts' dev-cluster copy, which GrafanaDeploy cannot see. The 2026-09-24 ruling's stated reason, 'deploy repos run no tests', was withdrawn by 028 T1 ('My remark was from memory'), so the grafana and routing reasons are the record's own wording, and the operator has not ruled on them.
 
@@ -132,33 +142,15 @@ code-reviewer, P5, r1, 2026-09-25 — 028 P3 would succeed only part of the rout
 **Consequence:** If the operator's reason differs, D61 carries a justification nobody decided. Until 028's P3 lands, nothing tests PrometheusDeploy's Alertmanager routing, which the retired test covered.
 
 **Provenance:** read — code-writer, P5, r1; argo-cd/decisions.md D61, HelmCharts 4d02286
-**Disposition:**
+**Disposition:** Go — suggested close — struck
+
+</details>
 
 ## Suggestions
 
 Focus: S1 bears on slice 028: its P3 would build a second promtool mechanism beside this slice's gate. S4 is the one witnessed gap: a matching mistake in two major-fault memory paths still passes. S2 and S7 are limits of the library gate. S6 and S8 are doc debt the doc phase left in repos outside this slice.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### S1 — Slice 028's P3 plans its own promtool proof for PrometheusDeploy rules that this slice's P4 turns into a standing gate
-
-Slice 028's P3 (Target ../PrometheusDeploy) adds standing Argo CD alert rules and a blind-metrics warning to `config/prd/values.yaml`. It says "The iac sidecar has neither `promtool` nor `amtool` today, so this phase decides how the proof runs" (028 plan.md, P3). This slice's A1 puts promtool 3.14.0 in the iac toolchain before its run. Its P4 then adds a render-and-check step and rule unit tests to PrometheusDeploy's `kc project test`, covering every alert in the rendered file. The run order decides which way the two meet. If 027 runs first, 028's P3 text about the sidecar is stale, and its new rules land under an existing gate and test layout. If 028 runs first, it builds its own proof mechanism, and 027's P4 must then cover 028's alerts as well as the eight counted at planning, next to whatever 028 left behind. A2 covers only the push hazard between the two.
-
-code-writer, P4, r1, 2026-09-25 — P4 landed the harness 028's P3 is told to extend: PrometheusDeploy `tests/alert-rules.sh` (from `kc project test`) renders the server ConfigMap, runs `promtool check rules`, then `promtool test rules` over every `tests/alert-rules/*.yml` (one file per rule group, `rule_files: [../alerting_rules.yml]`). 028's rule cases are one more file there, picked up by the glob. Its Alertmanager routing assertions are outside this harness.
-
-**Consequence:** If 028 runs first, PrometheusDeploy may end up with two promtool test mechanisms for its rules, and 027's P4 does more work than planned.
-
-**Provenance:** read; plan-reviewer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md P3 and slices/backlog/027_build_and_test_gates/plan.md P4
-**Disposition:**
-
-### S2 — JenkinsPipelineUtils gate: the stand-in script base class lets a vars/ override of CpsScript's final invokeMethod pass · minor
-
-The gate compiles vars/ with SerializableScript as the script base class (tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:48). The controller uses CpsScript, whose invokeMethod(String, Object) is final (workflow-cps 4376.v30c8c00684a_3 CpsScript.java:92). A vars/*.groovy that declares invokeMethod therefore passes the gate and fails to compile on the controller. No file does so today. This is the one false-green of the plugin-class stand-ins that I found. A fix idea: a test-side base class that extends SerializableScript and declares invokeMethod final would close it.
-
-**Consequence:** Only if a future vars/ file declares invokeMethod: the gate stays green while every job in the estate fails to load the library.
-
-**Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
-**Disposition:**
 
 ### S4 — PrometheusDeploy rule tests: a matching mistake in NodeMemoryStalled's or the wedge warning's major-fault path passes the gate · minor
 
@@ -169,25 +161,7 @@ consult 1, 2026-09-25 — Not appended as a phase. The D2 ruling asks for every 
 **Consequence:** For those two major-fault paths, a PromQL matching mistake still passes kc project test and first shows in prd, which is the ANS-74 consequence V11 retires for the rest of the rules.
 
 **Provenance:** witnessed | code-reviewer, P4, round 1, phases/P4/code_review_r1.md F1
-**Disposition:**
-
-### S6 — DockerImages kube-coder-iac-toolchain: the image's comments describe a KubeCoder sidecar only, though IaC/ArgoCDTools now runs its tests in it · minor
-
-JenkinsPipelineUtils' containerTemplates.iac_toolchain (P2) puts registry:5000/kube-coder-iac-toolchain, untagged and always pulled, into Jenkins agent pods, and IaC/ArgoCDTools' Test stage (P3) runs both images' unittest suites in it, which shell out to git, openssl and terraform under python3. The Dockerfile's header still presents the image as the KubeCoder IaC toolchain, and its TF_PLUGIN_CACHE_DIR comment assumes a KubeCoder home overlay, which the template works around by emptying the variable. DockerImages is not a repo this slice's phases touched, so the doc phase left it alone. Slice 030 reuses the same template, which adds a second Jenkins consumer.
-
-**Consequence:** Someone editing the image gets no warning that dropping or moving a tool the suites use turns IaC/ArgoCDTools red on its next push, and slice 030's job later.
-
-**Provenance:** read; doc-writer, doc phase, r1; DockerImages kube-coder-iac-toolchain/Dockerfile:1-34, JenkinsPipelineUtils vars/containerTemplates.groovy iac_toolchain
-**Disposition:**
-
-### S7 — JenkinsPipelineUtils gate: nothing points a workflow-cps upgrade on the Jenkins controller at the groovy-cps pin in tests/pom.xml · minor
-
-The pin is groovy-cps.version 4376.v30c8c00684a_3, the controller's workflow-cps version, and tests/pom.xml's comment says to bump it with the plugin (plan-review ruling Q1 accepted the lag). The controller floats on the lts-jdk21 image (JenkinsDeploy chart/values.yaml:24), and its plugins carry no pin or upgrade procedure in any repo, so the pom comment is the only place the coupling is written down. There is no controller-upgrade runbook to add it to.
-
-**Consequence:** After a controller plugin upgrade, the gate keeps compiling against the older transform until someone remembers the pin, so a construct only the newer transform refuses passes kc project test and first fails in every job that loads the library.
-
-**Provenance:** read; doc-writer, doc phase, r1; JenkinsPipelineUtils tests/pom.xml properties, JenkinsDeploy chart/values.yaml:24
-**Disposition:**
+**Disposition:** Go — suggested card — ANS-141
 
 ### S8 — Ansible runbooks s3-mirror.md and youtrack-restore.md still cite HelmCharts chart paths for releases Argo CD now deploys from StorageDeploy and YoutrackDeploy · minor
 
@@ -196,7 +170,35 @@ The doc phase repointed backup-freshness.md, which named HelmCharts configs/prd/
 **Consequence:** An operator following those runbooks during a backup failure opens HelmCharts files that no longer decide what runs in prd.
 
 **Provenance:** read; doc-writer, doc phase, r1; Ansible docs/runbooks/s3-mirror.md, youtrack-restore.md; HelmCharts configs/prd/{storage,youtrack}/prd/release.yaml
-**Disposition:**
+**Disposition:** Go — suggested card — ANS-140
+
+### ~~S1 — Slice 028's P3 plans its own promtool proof for PrometheusDeploy rules that this slice's P4 turns into a standing gate~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
+
+Slice 028's P3 (Target ../PrometheusDeploy) adds standing Argo CD alert rules and a blind-metrics warning to `config/prd/values.yaml`. It says "The iac sidecar has neither `promtool` nor `amtool` today, so this phase decides how the proof runs" (028 plan.md, P3). This slice's A1 puts promtool 3.14.0 in the iac toolchain before its run. Its P4 then adds a render-and-check step and rule unit tests to PrometheusDeploy's `kc project test`, covering every alert in the rendered file. The run order decides which way the two meet. If 027 runs first, 028's P3 text about the sidecar is stale, and its new rules land under an existing gate and test layout. If 028 runs first, it builds its own proof mechanism, and 027's P4 must then cover 028's alerts as well as the eight counted at planning, next to whatever 028 left behind. A2 covers only the push hazard between the two.
+
+code-writer, P4, r1, 2026-09-25 — P4 landed the harness 028's P3 is told to extend: PrometheusDeploy `tests/alert-rules.sh` (from `kc project test`) renders the server ConfigMap, runs `promtool check rules`, then `promtool test rules` over every `tests/alert-rules/*.yml` (one file per rule group, `rule_files: [../alerting_rules.yml]`). 028's rule cases are one more file there, picked up by the glob. Its Alertmanager routing assertions are outside this harness.
+
+**Consequence:** If 028 runs first, PrometheusDeploy may end up with two promtool test mechanisms for its rules, and 027's P4 does more work than planned.
+
+**Provenance:** read; plan-reviewer, planning, r1; slices/backlog/028_argo_cd_and_service_residuals/plan.md P3 and slices/backlog/027_build_and_test_gates/plan.md P4
+**Disposition:** Go — suggested close — moot: 028 landed its rules as tests/alert-rules/argocd.yml in this slice's harness; struck
+
+</details>
+
+### ~~S2 — JenkinsPipelineUtils gate: the stand-in script base class lets a vars/ override of CpsScript's final invokeMethod pass · minor~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
+
+The gate compiles vars/ with SerializableScript as the script base class (tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:48). The controller uses CpsScript, whose invokeMethod(String, Object) is final (workflow-cps 4376.v30c8c00684a_3 CpsScript.java:92). A vars/*.groovy that declares invokeMethod therefore passes the gate and fails to compile on the controller. No file does so today. This is the one false-green of the plugin-class stand-ins that I found. A fix idea: a test-side base class that extends SerializableScript and declares invokeMethod final would close it.
+
+**Consequence:** Only if a future vars/ file declares invokeMethod: the gate stays green while every job in the estate fails to load the library.
+
+**Provenance:** read, code-reviewer, P1, r1, phases/P1/code_review_r1.md F1
+**Disposition:** Go — suggested close — struck
+
+</details>
 
 ### ~~S3 — ArgoCDTools Jenkinsfile: the iac container's comment names helm as a suite dependency; neither suite runs helm · nit~~ — resolved by consult 1 (ArgoCDTools c32a27c): the comment now names git, openssl and terraform (argocd-hook/tests/test_terraform.py:142 runs terraform unconditionally); comment-only, re-gated by the driver's sweep; struck by consult 1
 
@@ -221,5 +223,31 @@ argo-cd/decisions.md:773 reads 'PrometheusDeploy's checks its rules as the chart
 
 **Provenance:** read, code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
 **Disposition:**
+
+</details>
+
+### ~~S6 — DockerImages kube-coder-iac-toolchain: the image's comments describe a KubeCoder sidecar only, though IaC/ArgoCDTools now runs its tests in it · minor~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
+
+JenkinsPipelineUtils' containerTemplates.iac_toolchain (P2) puts registry:5000/kube-coder-iac-toolchain, untagged and always pulled, into Jenkins agent pods, and IaC/ArgoCDTools' Test stage (P3) runs both images' unittest suites in it, which shell out to git, openssl and terraform under python3. The Dockerfile's header still presents the image as the KubeCoder IaC toolchain, and its TF_PLUGIN_CACHE_DIR comment assumes a KubeCoder home overlay, which the template works around by emptying the variable. DockerImages is not a repo this slice's phases touched, so the doc phase left it alone. Slice 030 reuses the same template, which adds a second Jenkins consumer.
+
+**Consequence:** Someone editing the image gets no warning that dropping or moving a tool the suites use turns IaC/ArgoCDTools red on its next push, and slice 030's job later.
+
+**Provenance:** read; doc-writer, doc phase, r1; DockerImages kube-coder-iac-toolchain/Dockerfile:1-34, JenkinsPipelineUtils vars/containerTemplates.groovy iac_toolchain
+**Disposition:** Go — suggested close — struck
+
+</details>
+
+### ~~S7 — JenkinsPipelineUtils gate: nothing points a workflow-cps upgrade on the Jenkins controller at the groovy-cps pin in tests/pom.xml · minor~~ — closed by the operator, 2026-09-26
+
+<details><summary>struck — body kept for the record</summary>
+
+The pin is groovy-cps.version 4376.v30c8c00684a_3, the controller's workflow-cps version, and tests/pom.xml's comment says to bump it with the plugin (plan-review ruling Q1 accepted the lag). The controller floats on the lts-jdk21 image (JenkinsDeploy chart/values.yaml:24), and its plugins carry no pin or upgrade procedure in any repo, so the pom comment is the only place the coupling is written down. There is no controller-upgrade runbook to add it to.
+
+**Consequence:** After a controller plugin upgrade, the gate keeps compiling against the older transform until someone remembers the pin, so a construct only the newer transform refuses passes kc project test and first fails in every job that loads the library.
+
+**Provenance:** read; doc-writer, doc phase, r1; JenkinsPipelineUtils tests/pom.xml properties, JenkinsDeploy chart/values.yaml:24
+**Disposition:** Go — suggested close — struck
 
 </details>
