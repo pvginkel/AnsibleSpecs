@@ -597,7 +597,7 @@ ArgoCDTools and Ansible that set `TERRAFORM_VERSION`. The remaining `terraform.r
 `support/iac-image`, `argocd-hook/image` and `kube-coder-dev-base`. The "nine out-of-repo copies"
 of the root CA are unchanged, since P11 deleted no CA file.
 
-### P14 — Ansible: the runbooks and comments that name modern-app-dev
+### P14 — Ansible: the runbooks and comments that name modern-app-dev ✅ DONE 2026-09-26
 
 Target: root
 
