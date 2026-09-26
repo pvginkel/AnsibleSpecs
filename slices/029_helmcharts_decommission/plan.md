@@ -195,7 +195,7 @@ two ApplicationSets, with a live ownership hand-over of 50 Applications.
   change (the same element ids must never be published twice, nor go missing between two pushes).
 - `argo_migrate.py`'s steps and recommend-resources read the new registry, so they come after it.
 
-### P1 — Decision records: the native registry, D44 amended, O2 closed
+### P1 — Decision records: the native registry, D44 amended, O2 closed ✅ DONE 2026-09-26
 
 Target: ../AnsibleSpecs
 
