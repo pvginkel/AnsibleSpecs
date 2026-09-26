@@ -293,6 +293,44 @@ The counts come from the published dataset
 
 Once this phase lands, `AaC/HelmCharts` has no consumer. That is ANS-121's precondition.
 
+**Done (P2).** Architecture `a4402f6` on `phase/029-P2`, one commit. The 37 referenced elements
+(35 `ss:*` products and the two `svc:cluster-ceph-*`) now live in
+`docs/architecture/catalog.yaml` under `producer: architecture`, UUIDs and every published field
+unchanged. `ss:opensearch`, `ss:phpmyadmin` and `ss:rabbitmq` are gone. The `helm-charts`
+registry entry and the Infrastructure view's `excludeProducers` mention are removed. Comments,
+schema examples and the producer kit no longer name `helm-charts` as a live producer. Not
+pushed: a push to Architecture's `main` rebuilds and redeploys the published dataset. Until it
+lands, the dataset still carries `helm-charts` and `AaC/HelmCharts` still has a consumer (V22).
+
+Later phases:
+- P7: once the push lands, the published dataset has no `helm-charts` relations, so
+  `cmd_arch`'s `drawn.pop("helm-charts", [])` yields nothing. `cmd_register` appends at the end
+  of `pipeline-producers.yaml` and does not depend on the removed entry.
+- P9 and the doc phase: Architecture's prose docs (README, USAGE, `docs/*.md`) and one published
+  element summary still name HelmCharts. P9 targets Ansible only, so they are listed as close-out
+  S9. `kc project setup` has run in `/work/Architecture`.
+
+Record:
+- Model check (V05): the collector ran over the producer-artifacts that AaC/Architecture #2048
+  archived (build of 2026-09-26 09:03Z; Jenkins `admin` with `$JENKINS_TOKEN`). With the base
+  registry and views, those inputs reproduce the published dataset exactly. With the change:
+  `helm-charts` is out of the inputs, the branch's `docs/architecture/` is in, and the collector
+  runs `--relaxed`. The result is 78 producers and 825 elements, with no duplicate id. The 37
+  moved elements differ only in `producer`. The 91 relations from 33 producers (80
+  Specialization, 10 Realization, 1 Serving) all resolve. `relations` and `derived` are
+  identical, and only the `infrastructure` view differs.
+- Warnings are the same 69 as before, none of them against a catalog id: 66 from the HA fleet,
+  whose Zigbee bridge map holds stale instance ids (close-out B2), 2 from `fieldnotes-deploy` and
+  1 from `iotsupport-app`. For that reason a strict run fails at base and branch alike.
+- Stale text fixed in: `pipeline-producers.schema.yaml`, `views.schema.yaml`, `views/intercom.yaml`,
+  the viewer's `scope.ts` and `ArchitectureMap.tsx` comments, `tooling/fleet.py`'s docstring, the
+  `tools/ha-fleet/` README, annotations and docstring, `.claude/` (the manual's ownership table,
+  the repackaged-upstream and Ceph examples, the job example; the seed skill). The five schema
+  examples now say `producer: example`. Test fixtures that use HelmCharts as a sample name stay.
+- Found: the Infrastructure view admits the deploy repos' 94 release instances (close-out B3).
+  That predates this phase; the view's contents are unchanged by it.
+- Gate: `kc project test` and `kc project lint` in `/work/Architecture` are green.
+
 ### P3 — JenkinsPipelineUtils: the dead HelmCharts helpers go
 
 Target: ../JenkinsPipelineUtils
@@ -422,7 +460,8 @@ Target: root
   - its upstream pin (`:444-450`);
   - its `syncOptions`.
 - **`register` is unchanged.** It edits only Architecture's `pipeline-producers.yaml`
-  (`:1521-1533`), which this slice leaves alone.
+  (`:1521-1533`) and appends at the end, so P2's removal of the `helm-charts` entry does not
+  touch it.
 - **HelmCharts reads stay.** The tool keeps reading HelmCharts' charts and configs, because it
   migrates from HelmCharts by nature.
 - **Docstring.** Its push line names the repos the tool now commits to.

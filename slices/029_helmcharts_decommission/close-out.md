@@ -74,6 +74,24 @@ ChartsDeploy `chart/Chart.yaml` names `homelab-shared` 0.3.1 from `https://chart
 **Provenance:** read — code-writer, P1, r1; gh api repos/pvginkel/ChartsDeploy (chart/Chart.yaml, tree)
 **Disposition:**
 
+### B2 — Architecture: the HA fleet's Zigbee bridge map still targets the pre-migration Z2M instance ids · minor
+
+tools/ha-fleet/annotations.yaml's zigbee_bridges maps both bridges to ss:zigbee2mqtt-zigbee2mqtt1-zigbee2mqtt,30978e51-… and ss:zigbee2mqtt-zigbee2mqtt2-zigbee2mqtt,43ac1818-…, the ids HelmCharts' generator minted. zigbee2mqtt-deploy now publishes ss:zigbee2mqtt-prd-zigbee2mqtt1-zigbee2mqtt,3b3dcf7a-9bbc-5a29-9120-5e7d552e2d39 and ss:zigbee2mqtt-prd-zigbee2mqtt2-zigbee2mqtt,a2c8ea0b-84f7-5a8d-adc9-3c1f169df12e. The collector reports 66 dangling-reference warnings from home-automation-fleet, all of them these two ids, tolerated only by --relaxed. The fix is replacing the two ids. P2 left it alone: it is data, not the producer text P2 brought current.
+
+**Consequence:** In the Home Assistant view, every Zigbee leaf's Serving edge to its Z2M instance dangles, and the collector cannot drop --relaxed while they remain.
+
+**Provenance:** witnessed | code-writer, P2, r1, collector over AaC/Architecture #2048 producer-artifacts
+**Disposition:**
+
+### B3 — Architecture: the Infrastructure view lets in the deploy repos' 94 release instances · minor
+
+views/infrastructure.yaml's excludeProducers is meant to keep release instances out (its comment until P2 named 'the helm-charts release instances'). Since the Argo migration, those instances are published by the *-deploy producers: 94 release-tagged SystemSoftware elements from 36 of them. The view's kinds predicate includes SystemSoftware, and nothing excludes these producers. P2 only dropped helm-charts, whose per-release output was already empty, so the view's contents did not change. Excluding them needs a rule that fits the view: 36 producer ids, or an instance gate that spares the env-tagged prd server Nodes.
+
+**Consequence:** The Infrastructure view shows every deployed container next to the servers and network gear it was meant to show alone.
+
+**Provenance:** witnessed | code-writer, P2, r1, merged dataset from the collector run
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -161,4 +179,13 @@ P1 added `plan.md:406-411` to P6. It asks P6 to put the switch runbook's path in
 **Consequence:** P6's AnsibleSpecs edits can land on whatever AnsibleSpecs branch is checked out, unreviewed.
 
 **Provenance:** read — code-reviewer, P1, r1; phases/P1/code_review_r1.md F2
+**Disposition:**
+
+### S9 — Architecture's prose docs still name HelmCharts as a producer or deploy path · nit
+
+P2 brought current the comments, schema examples, the producer kit (.claude/) and the tool texts. The prose docs it left for a docs pass: README.md:5 and USAGE.md:7 list HelmCharts among the producers; README.md:216-217 says the Helm chart lives in pvginkel/HelmCharts (the Jenkinsfile pins into WebathomeOrgDeploy); docs/architecture-update.md:50 cites HelmCharts' gen_architecture.py as the gap-line example, and :115 names IaC/HelmCharts as the usual downstream build; docs/iotsupport-iot-architecture-guidance.md:149-150, :164 and :192 describe HelmCharts' image mapping and instances as current. The published summary of if:home-assistant-api (docs/architecture/home-automation.yaml:98) points at HelmCharts/charts/nginx/files/nginxmanager/external-services.yaml. P9 targets Ansible only, so no planned phase covers these.
+
+**Consequence:** A reader of Architecture's README, USAGE or update docs, or of that published element, is sent to HelmCharts, which is archived after ANS-122.
+
+**Provenance:** read | code-writer, P2, r1, grep of /work/Architecture at a4402f6
 **Disposition:**
