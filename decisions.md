@@ -55,7 +55,7 @@ The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified b
 
 ### Terraform version
 
-**One pinned Terraform version, in every image that installs it** (ANS-98): ArgoCDTools' `argocd-hook`, Ansible's `support/iac-image` (srviac and the `IaC/*` pipelines), and DockerImages' `kube-coder-iac-toolchain` (the KubeCoder `iac` sidecar). Each installs `terraform=${TERRAFORM_VERSION}-1` from HashiCorp's apt suite; today `1.16.3`. A state is stamped with the version that last wrote it, and the tools hand states to each other — the sidecar moves a state the Argo CD hook then applies — so an unpinned rebuild could leave one side older than the state it reads. Bump all three together, then move `homelab-shared`'s `hook.imageTag` to the rebuilt hook. Pinning the hook's image tag per deploy repo instead was rejected at slice 012's close-out: the version belongs in the image.
+**One pinned Terraform version, in every image that installs it**: ArgoCDTools' `argocd-hook`, Ansible's `support/iac-image` (srviac and the `IaC/*` pipelines), and DockerImages' `kube-coder-iac-toolchain` (the KubeCoder `iac` sidecar). Each installs `terraform=${TERRAFORM_VERSION}-1` from HashiCorp's apt suite; today `1.16.3`. A state is stamped with the version that last wrote it, and the tools hand states to each other — the sidecar moves a state the Argo CD hook then applies — so an unpinned rebuild could leave one side older than the state it reads. Bump all three together, then move `homelab-shared`'s `hook.imageTag` to the rebuilt hook. Pinning the hook's image tag per deploy repo instead was rejected at slice 012's close-out: the version belongs in the image.
 
 ## Secrets — OpenBao
 
