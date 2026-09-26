@@ -497,7 +497,7 @@ Before deleting, `git grep modern_app_dev origin/main` found no caller in KubeCo
 HomelabTerraformProvider, the four apps or ModernAppTemplate. DesignAssistant's `main` and
 `develop` have no call either.
 
-### P11 — DockerImages: the two image directories are gone
+### P11 — DockerImages: the two image directories are gone ✅ DONE 2026-09-26
 
 Target: ../DockerImages
 
