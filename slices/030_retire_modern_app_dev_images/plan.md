@@ -330,7 +330,7 @@ Record:
   `s3storage`. `kc project test` skips all three projects (no test verbs), as planned.
 - Close-out S4 (nit): `docs/change_workflow.md` says bump by 0.1; the repos tag patch releases.
 
-### P6 — ZigbeeControl: takes the root-template release, and its build proves D1
+### P6 — ZigbeeControl: takes the root-template release, and its build proves D1 ✅ DONE 2026-09-26
 
 Target: ../ZigbeeControl
 
