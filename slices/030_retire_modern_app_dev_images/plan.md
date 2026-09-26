@@ -608,6 +608,24 @@ that pin or run Terraform (`support/iac-image/Dockerfile:102`,
 `terraform/modules/managed-vm/versions.tf:10`). Each is corrected to the set as it stands once
 P11 has landed, counts included. `kc project lint` green.
 
+**Done (P14).** Ansible `b0ff37d` (`phase/030-P14`): both runbooks list three `terraform.rc`
+copies, `support/iac-image`, `kube-coder-dev-base` and `argocd-hook`. The step-ca rotation
+runbook's "four byte-identical copies" and its `md5sum` check, and the operator-workstation
+runbook's "Four images" and "all four copies", now say three. The `support/iac-image/Dockerfile`
+Terraform-pin comment uses P11's `kube-coder-iac-toolchain` wording and says "Bump all three
+together". The `managed-vm/versions.tf` provider comment reads "(iac, kube-coder-iac-toolchain,
+the argocd-hook)". `kc project lint` and `kc project test --project root` are green.
+
+Later phases:
+- P15: the pin comments in `support/iac-image/Dockerfile:100-104` and
+  `kube-coder-iac-toolchain/Dockerfile:75-79` use the same wording. Match it.
+
+Beyond the plan's text: the operator-workstation entry for `kube-coder-dev-base` says the `iac`
+sidecar (`kube-coder-iac-toolchain`) inherits its copy. It is the container the operator's
+Terraform runs in. `cexec iac` shows `TF_CLI_CONFIG_FILE=/etc/terraform.rc` with the same md5 as
+the three copies. `.kubecoder/config.yaml:17` still names modern-app-dev, in a comment that cites
+this slice by name. V07 keeps records like that.
+
 ### P15 — ArgoCDTools: the argocd-hook's Terraform-pin comment
 
 Target: ../ArgoCDTools
