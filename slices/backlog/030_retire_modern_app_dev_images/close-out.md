@@ -23,6 +23,15 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Before /dev:run-slice: restart the environment so the six consumer repos are checked out as siblings
+
+FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppFrontendTemplate were added to Ansible's .kubecoder/config.yaml at planning (Ansible e957d13) but are not under /work until kc env restart. P4–P9 target them as ../<Repo>; run_loop.py --dry-run reports those six Targets as 'not an existing directory' until then. The operator also times the run for a quiet moment in those repos (ruling F1), since P1–P8 push their repos' main mid-run.
+
+**Consequence:** Until the restart, the run cannot start: six of the plan's phase Targets do not resolve.
+
+**Provenance:** witnessed — plan-writer r1, run_loop.py run --dry-run output
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -57,3 +66,12 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
      which are witnessed -->
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
+
+### S1 — ModernAppFrontendTemplate: bring the scaffold's validation pipeline up to the live apps' suite-runner shape · minor
+
+The scaffold's template/Jenkinsfile.validation.jinja still runs the older scripts/validation-entrypoint.sh pattern, not the 'poetry install && poetry run run-suite' shape DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl use. This slice changes its image only (settled at planning); refreshing the rest is a follow-up.
+
+**Consequence:** An app generated from the scaffold starts with a validation pipeline unlike the live apps', and has to be reworked by hand to match them.
+
+**Provenance:** read — plan-writer r1, plan.md settled list; ModernAppFrontendTemplate template/Jenkinsfile.validation.jinja at 861a9f1
+**Disposition:**

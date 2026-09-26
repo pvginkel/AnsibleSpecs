@@ -1,0 +1,101 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — retirement",
+      "description": "R1 [Improvement — ANS-101]: \"Retire modern-app-dev and modern-app-dev-playwright: move their pipelines to the kube-coder toolchain images or purpose-built ones … Done when nothing outside DockerImages references either image, the two directories are removed, the `modern_app_dev` template is gone from JenkinsPipelineUtils, and the registry repos are deleted.\" Holds when V02–V12 hold, with rulings D1–D3 and the settled list as recorded in plan.md.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — base-image consumers",
+      "description": "\"Move their pipelines to the kube-coder toolchain images\": KubeCoder's Validate and contracts drift gate stages (today `KubeCoder/Jenkinsfile:11,37,70`) and FieldnotesApp's Validate stage (today `FieldnotesApp/Jenkinsfile:12,26` at b6a5016) run in `registry:5000/kube-coder-modern-app-toolchain:node-24` through a new `containerTemplates` entry beside `iac_toolchain` (`JenkinsPipelineUtils/vars/containerTemplates.groovy:46`); HomelabTerraformProvider's publish container (today `HomelabTerraformProvider/Jenkinsfile:5`) comes from `containerTemplates.iac_toolchain`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R1 / D1 — validation pipelines",
+      "description": "\"Move their pipelines to the kube-coder toolchain images\" (ruling D1): the DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl validation Jobs (today `DHCPApp/Jenkinsfile:25`, `ElectronicsInventory/Jenkinsfile:31`, `IoTSupport/Jenkinsfile:25`, `ZigbeeControl/Jenkinsfile:25`) and the ModernAppFrontendTemplate scaffold's (today `template/Jenkinsfile.validation.jinja:73`) run in `kube-coder-modern-app-toolchain:node-24`; the lockfile-derived `playwright-<version>` image tag is gone, and Chromium is downloaded at test time by the suite runner (the scaffold: by its `validation-entrypoint.sh`, `template/scripts/validation-entrypoint.sh:24`). No purpose-built Playwright image exists.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "D1 — premises proven first",
+      "description": "Ruling D1's two premises are proven by the first app's phase on a real Jenkins build before the other apps follow: that build's validation Job pod reached Playwright's browser download host and downloaded Chromium, and the app's frontend built and tested on Node 24. The first app's done-record names the build.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R1 — consumers green",
+      "description": "Every moved consumer has a green Jenkins build on its moved pipeline — KubeCoder (`KubeCoder/Build-Main`), FieldnotesApp, HomelabTerraformProvider, DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl — each pushed and proven before `modern_app_dev` leaves JenkinsPipelineUtils and the two directories leave DockerImages.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R1 — no coverage lost",
+      "description": "No coverage is lost: every moved stage runs the same checks it ran on modern-app-dev or modern-app-dev-playwright — KubeCoder's lint, tests and contracts drift gate (the `npm ci` runs still feeding the later extension stages), FieldnotesApp's lint and tests against a real `git`, and each app's backend and frontend validation suites, Playwright included.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R1 — references",
+      "description": "\"Nothing outside DockerImages references either image\", read over live pipelines, scaffolds, and current docs, runbooks and code comments (the settled reading), with DesignAssistant excepted (ruling D2). Historical records keep their mentions: completed slices, archived triage documents, dated reviews and audits, and records that cite this slice by name. At planning the live references outside DockerImages were the three `modern_app_dev` callers and five hardcoded Playwright images above, plus `HomelabTerraformProvider/README.md:16`, `scripts/fetch-install.sh:3`, `scripts/install-local.sh:3`, `Jenkinsfile:76`; `KubeCoder/docs/operations/ci-gates.md:55`, `pipeline-dependencies.md:16,40`; `FieldnotesApp/Jenkinsfile:6`; `AnsibleSpecs/decisions.md:58`; `Ansible/docs/runbooks/step-ca-root-rotation.md:116,164`, `docs/runbooks/operator-workstation.md:93`, `support/iac-image/Dockerfile:102`, `terraform/modules/managed-vm/versions.tf:10`; `ArgoCDTools/argocd-hook/Dockerfile:30`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R1 — directories",
+      "description": "\"The two directories are removed\": DockerImages has no `modern-app-dev/` or `modern-app-dev-playwright/`, so neither image is built any more, on push or on the weekly poll (images are found by directory, `DockerImages/tools/dockerfile_deps.py:21`). DockerImages' own current text no longer names either as a live image (`kube-coder-iac-toolchain/Dockerfile:77` at planning).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "R1 — template",
+      "description": "\"The `modern_app_dev` template is gone from JenkinsPipelineUtils\" (`vars/containerTemplates.groovy:89-90` at planning), and the library's modern-app toolchain template that replaces it is present.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R1 / D3 — registry deletion procedure",
+      "description": "DockerImages' `docs/registry-management/` carries the short procedure ruling D3 names: a repository's tags deleted through the registry API and its entry removed from registry storage, with no manual garbage collect. The procedure matches the registry as RegistryDeploy deploys it (storage backend, delete setting).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "R1 / D3 — registry repos deleted",
+      "description": "\"The registry repos are deleted\": neither `modern-app-dev` nor `modern-app-dev-playwright` is in `registry:5000`'s catalog, both removed by the operator through the V10 procedure only after every moved consumer had a green build (V05); no garbage collect was run for it.",
+      "owed_after": "the operator's registry deletion (ruling D3), after the run, following the procedure P12 adds",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "D2 — DesignAssistant",
+      "description": "DesignAssistant is not part of the work (ruling D2): the slice changes nothing in it, and its references (its `Jenkinsfile` on `main` and `develop`, `tools/suite_runner/remote.py`) stay.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
