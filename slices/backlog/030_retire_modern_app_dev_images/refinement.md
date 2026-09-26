@@ -133,7 +133,7 @@ collide with that lane's branch; the answer settles whether those phases wait or
 - The frontend scaffold template gets the image change only; its validation pipeline is stale
   beyond the image name (an older validation entrypoint, not the suite-runner shape the live
   apps use), and bringing it up to date goes into the close-out as a follow-up.
-- The repos not in this environment — KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory,
+- The repos not in this environment — FieldnotesApp, DHCPApp, ElectronicsInventory,
   IoTSupport, ZigbeeControl, the frontend scaffold template, and DesignAssistant only if D2 goes
   the other way — are added to the environment's configuration during planning; you restart the
   environment before the run.
@@ -141,7 +141,7 @@ collide with that lane's branch; the answer settles whether those phases wait or
   Jenkins build — about seven app builds, each also deploying to the app's dev stage as any main
   push does; the old template and the two image directories go only after all consumers are
   green; the registry deletion last.
-- Size: about thirteen phases across eleven repos — the shared Jenkins library twice (a template
+- Size: about twelve phases across ten repos plus the registry — the shared Jenkins library twice (a template
   for the modern-app toolchain image first, removing the modern-app-dev template last),
   KubeCoder, FieldnotesApp, the Terraform provider, DHCPApp, ElectronicsInventory, IoTSupport,
   ZigbeeControl, the frontend scaffold template, DockerImages (the two directories plus a
