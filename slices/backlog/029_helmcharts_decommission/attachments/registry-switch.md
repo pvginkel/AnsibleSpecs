@@ -40,8 +40,9 @@ and the runbook's steps match.
   sync can prune them. Syncing `argocd-prd` in S1 adds the guard and changes nothing else.
 - **S2: the operator has synced S1 and orphan-deleted both ApplicationSets.** The 50
   Applications are still there, unchanged, with no owner reference. `argocd-prd` shows the two
-  ApplicationSets as missing. If `argocd-prd` is synced now, it recreates them, they take the
-  Applications back, and the estate is in S1 again. That is harmless.
+  ApplicationSets as missing. The runbook's next sync of `argocd-prd` is the one after the flip.
+  A sync in S2 would recreate the ApplicationSets and delete nothing (invariant 1). The check
+  before the flip then stops the operator until they have been orphan-deleted again.
 - **S3: the operator flips the setting and syncs `argocd-prd`.** Neither the render nor the
   cluster has an ApplicationSet. `releases` exists but has not synced; it does not sync on its
   own yet, so that the operator's first sync is the one whose diff they read first.
@@ -52,8 +53,9 @@ The executor decides how the chart expresses these positions. It must never be p
 reach S3's render while an ApplicationSet still exists without the runbook's check stopping the
 operator first.
 
-**The way back.** From S3 or S4, flip the setting back. `argocd-prd` then drops `releases`
-(invariant 4 keeps the Applications) and recreates the ApplicationSets.
+**Fix forward.** There is no way back to the ApplicationSets. A failure past the orphan-delete is
+fixed forward on `releases` (plan.md's fix-forward ruling). Before the orphan-delete, stopping
+leaves the estate in S1.
 
 ## Proof before the real switch
 
@@ -70,7 +72,7 @@ operator first.
   - deleting the app-of-apps leaves the child in place;
   - teardown leaves nothing behind.
 
-  The real switch starts only after all of this holds.
+  It proves the forward path only. The real switch starts only after all of this holds.
 - **The webhook.** ArgoCDDeploy gets its relay webhook before S4, signed with the shared secret
   every hook uses (D49). The operator creates it, because only the operator reads that secret.
   A test push then shows `releases` refreshing from it.

@@ -107,7 +107,7 @@
     {
       "id": "V14",
       "area": "R6 — the switch runbook",
-      "description": "An operator runbook in Ansible's `docs/runbooks/` walks the hand-over in this order: a rehearsal on a throwaway ApplicationSet plus Application; ArgoCDDeploy's relay webhook; the equivalence check; guarding the ApplicationSets (`Prune=false`); orphan-deleting them (`kubectl delete applicationset … --cascade=orphan`); flipping the setting; syncing `argocd-prd`, which creates `releases`; reading `releases`' diff, which must show tracking metadata only; syncing `releases`; turning on its automated sync. Each step gives the operator's command, what they must see before going on, and the way back. The runbook ends with the list of what is dead after the switch. The webhook step is needed because ArgoCDDeploy's only GitHub hook delivers to Jenkins (`gh api repos/pvginkel/ArgoCDDeploy/hooks`, 2026-09-26), so without it a registry push would reach no Argo component (D6).",
+      "description": "An operator runbook in Ansible's `docs/runbooks/` walks the hand-over in this order: a rehearsal on a throwaway ApplicationSet plus Application; ArgoCDDeploy's relay webhook; the equivalence check; guarding the ApplicationSets (`Prune=false`); orphan-deleting them (`kubectl delete applicationset … --cascade=orphan`); the equivalence check again, right before the flip; flipping the setting; syncing `argocd-prd`, which creates `releases`; reading `releases`' diff, which must show tracking metadata only; syncing `releases`; turning on its automated sync; and, last, removing the docs' notes that a procedure is owed until the registry switch has run. Each step gives the operator's command and what they must see before going on. Per the fix-forward ruling, the runbook has no way back to the ApplicationSets and says that a failure past the orphan-delete is fixed forward on `releases`; the rehearsal proves the forward path only. The runbook ends with the list of what is dead after the switch. The webhook step is needed because ArgoCDDeploy's only GitHub hook delivers to Jenkins (`gh api repos/pvginkel/ArgoCDDeploy/hooks`, 2026-09-26), so without it a registry push would reach no Argo component (D6).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -124,7 +124,7 @@
     {
       "id": "V16",
       "area": "R6 — argo_migrate.py's register, flip and autosync",
-      "description": "\"...and `argo_migrate.py`'s register, flip and autosync steps.\" `flip` and `autosync` edit ArgoCDDeploy's registry file (a local commit, comments preserved) instead of HelmCharts' `release.yaml`. Every read the tool makes of an app-stage's registry entry uses the new registry: whether it is on Argo (`support/argo-migrate/argo_migrate.py:88-99`, `:935-937`), its upstream pin (`:444-450`) and its `syncOptions`. `register` edits only Architecture's `pipeline-producers.yaml` (`:1521-1533`) and never touched the registry, so it is unchanged. The tool's reads of HelmCharts' charts and configs stay.",
+      "description": "\"...and `argo_migrate.py`'s register, flip and autosync steps.\" `flip` and `autosync` edit ArgoCDDeploy's registry file (a local commit, comments preserved) instead of HelmCharts' `release.yaml`. Every read the tool makes of an app-stage's registry entry uses the new registry: whether it is on Argo (`support/argo-migrate/argo_migrate.py:88-99`, `:935-937`), its upstream pin (`:444-450`) and its `syncOptions`. Per the D2 ruling (a premise correction to R6's wording, accepted by the operator at review r1), `register` never touched the registry: it edits only Architecture's `pipeline-producers.yaml` (`:1521-1533`), so it is unchanged. The tool's reads of HelmCharts' charts and configs stay.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -140,7 +140,7 @@
     {
       "id": "V18",
       "area": "R7 — docs describe the Argo CD deploy path",
-      "description": "\"Docs that still describe HelmCharts as the deploy path: Ansible's CLAUDE.md, `docs/live-infra-access.md` and about a dozen runbooks.\" These docs describe the Argo CD deploy path (deploy repos, ArgoCDDeploy's registry) instead: Ansible's `CLAUDE.md`, `docs/live-infra-access.md`, the runbooks the rulings list, `docs/design-philosophy.md`, the `baseline`, `microk8s` and `microceph` role READMEs, and the `root` description in `.kubecoder/project.yaml`. In AnsibleSpecs, the estate register's tool split (`decisions.md:35`, `:48`) is covered too. Historical mentions stay historical.",
+      "description": "\"Docs that still describe HelmCharts as the deploy path: Ansible's CLAUDE.md, `docs/live-infra-access.md` and about a dozen runbooks.\" These docs describe the Argo CD deploy path (deploy repos, ArgoCDDeploy's registry) instead: Ansible's `CLAUDE.md`, `docs/live-infra-access.md`, the runbooks the rulings list, `docs/design-philosophy.md`, the `baseline`, `microk8s` and `microceph` role READMEs, and the `root` description in `.kubecoder/project.yaml`. In AnsibleSpecs, the estate register's tool split (`decisions.md:35`, `:48`) is covered too. Historical mentions stay historical. Per the docs-across-the-switch ruling, no doc calls the new registry live before the operator's switch. Each procedure that depends on which registry is live carries a one-line note that it is owed until the registry switch has run: registering an app (`docs/runbooks/argocd.md:218`), the handover flip (`:412`) and the cold-boot bootstrap (`:681-685`). The switch runbook's last step finds and removes those notes.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -181,6 +181,15 @@
       "id": "V23",
       "area": "HelmCharts untouched",
       "description": "This slice makes no commit to HelmCharts. Its `configs/prd/*/*/release.yaml` files are the live registry until the operator's switch, and inert afterwards. `recommend_resources.py`, the old registry validation and `terraform-modules/namespace` stay there.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V24",
+      "area": "R7 — the docs' owed notes gone after the switch",
+      "description": "After the operator's registry switch, the last step of the switch runbook has run. No doc still says that a procedure is owed until the registry switch has run, and the procedures those notes carried now describe the registry Argo reads.",
+      "owed_after": "the operator's registry switch, run from P6's runbook through its last step",
       "verdict": null,
       "rationale": "",
       "evidence": []

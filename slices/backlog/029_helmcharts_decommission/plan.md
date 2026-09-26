@@ -219,9 +219,10 @@ slice ships. Where the design moves, they are rewritten in place:
     For D27, an entry deleted from the registry waits for the operator's prune, because
     `releases` never prunes.
   - the ones whose mechanism moves: D6's generator knob; D39's registration path, which becomes
-    a push to ArgoCDDeploy through a relay webhook that ArgoCDDeploy does not have yet (see P5);
+    a push to ArgoCDDeploy through its relay webhook (the operator adds it in P6's runbook);
     D24's ApplicationSet wording; D38's `reconciler` key; and D62's templatePatch.
-- **`phases.md`'s endgame items** are brought in line.
+- **`phases.md`'s endgame items** are brought in line. The registry switch is among them as the
+  operator's step, owed until it has run, not as done.
 - **The estate register** (`/work/AnsibleSpecs/decisions.md`) no longer describes HelmCharts as
   the place apps and their Terraform deploy from. This covers its tool split, `:35` and `:48`,
   and the rest of that doctrine. This is R7's ask, applied to the doctrine every session reads
@@ -247,8 +248,7 @@ goes missing between pushes:
 The counts come from the published dataset
 (`https://architecture.webathome.org/data/v0.1/architecture.yaml`) at the time of the change. On
 2026-09-26 it held 40 `helm-charts` elements: 38 `ss:*` plus `svc:cluster-ceph-cephfs` and
-`svc:cluster-ceph-rbd`. 91 relations from 33 producers referenced 37 of them. `ss:dnsmasq` is
-already `dnsmasq-deploy`'s, so the session's count of 41 no longer holds.
+`svc:cluster-ceph-rbd`. 91 relations from 33 producers referenced 37 of them.
 
 - **Before the push,** show that the merged model validates with the change in place: every
   reference resolves when the collector runs over the current producers' artifacts.
@@ -334,11 +334,8 @@ each state renders what the attachment says.
   - Removing it from the render, or deleting it, never deletes an Application, so it carries no
     cascading finalizer.
   - Its project admits the Applications it creates in Argo's own namespace.
-- **Push-only stays true (D6).** Nothing polls. ArgoCDDeploy has no webhook to Argo today: its
-  one GitHub hook delivers to Jenkins (`gh api repos/pvginkel/ArgoCDDeploy/hooks`, 2026-09-26).
-  HelmCharts has a second hook to the relay; ArgoCDDeploy does not. So the rulings' "the webhook
-  ArgoCDDeploy already receives" does not hold. The hook is the operator's step in P6's runbook,
-  not chart content.
+- **Push-only stays true (D6).** Nothing polls. The relay webhook that makes a registry push
+  refresh `releases` is the operator's step in P6's runbook, not chart content.
 - **Decision citations.** Comments cite the decision ids from P1's done-record.
 
 ### P6 — The registry switch runbook
@@ -354,15 +351,20 @@ the run pushes to steady state, in this order:
 3. the equivalence check;
 4. the guard;
 5. the orphan-delete of both ApplicationSets;
-6. the flip;
-7. reading `releases`' diff;
-8. the sync;
-9. turning on automated sync.
+6. the equivalence check again, right before the flip;
+7. the flip;
+8. reading `releases`' diff;
+9. the sync;
+10. turning on automated sync;
+11. removing the docs' notes that a procedure is owed until the switch has run.
 
-Each step gives the command the operator runs (credentials per `docs/live-infra-access.md`),
-what they must see before going on, and the way back from that state. The runbook ends with the
-attachment's list of what is dead after the switch, so the follow-up has it.
+Each step gives the command the operator runs (credentials per `docs/live-infra-access.md`) and
+what they must see before going on. The runbook has no way back to the ApplicationSets: it says
+that a failure past the orphan-delete is fixed forward on `releases` (the fix-forward ruling).
+It ends with the attachment's list of what is dead after the switch, so the follow-up has it.
 
+- **The owed notes.** Step 11 says how to find every note. P9 writes the notes, so they must
+  match what this step finds.
 - **Written, not run.** Every mutation is the operator's (see Not in scope).
 - **The webhook secret.** The webhook is signed with the shared secret every hook uses (D49; the
   leaf is named in ArgoCDDeploy `config/prd/values.yaml`'s `credentials`). Only the operator reads
@@ -439,7 +441,16 @@ Some Ansible docs still describe HelmCharts as the deploy path. The rulings list
 - the `root` component's description in `.kubecoder/project.yaml`.
 
 After this phase they describe the Argo CD deploy path instead: deploy repos, and ArgoCDDeploy's
-registry. Historical mentions stay historical. Two specific fixes:
+registry. Historical mentions stay historical.
+
+Argo reads HelmCharts' registry until the operator's switch, so no doc calls the new registry live
+(the docs-across-the-switch ruling). Each procedure that depends on which registry is live
+carries a one-line note that it is owed until the registry switch has run. The ruling names
+three: registering an app (`docs/runbooks/argocd.md:218`), the handover flip (`:412`) and the
+cold-boot bootstrap (`:681-685`). Every note is one that the last step of P6's runbook finds as
+written.
+
+Two specific fixes:
 
 - **`CLAUDE.md`'s Architecture entry** says how that checkout comes to exist. The environment
   does not clone an undeclared repo; this slice's session found it missing on 2026-09-26.
