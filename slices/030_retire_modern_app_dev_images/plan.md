@@ -47,6 +47,14 @@
   FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppTemplate.
   Each push comes after the phase's own gate is green. This is the operator's explicit override
   of the confirm-every-push rule, for this slice and these repos only.
+- Ruling run-time N1 (2026-09-26, during the run): the operator created a new app off the
+  template just before the run started, and added Playwright 1.63.0 to
+  `modern-app-dev-playwright/build-matrix.json` for it (DockerImages `61d79df`). "Assuming the
+  image will be deleted from DockerImages, that can just be deleted. I'll add it myself to the
+  right image. You also don't have to migrate the new app." P11 deletes the directory with that
+  matrix entry in it; the entry is not carried to another image. The new app is not migrated and
+  is excepted from R1's "nothing outside DockerImages references either image", as DesignAssistant
+  is under D2.
 
 #### Settled by the planning session (the operator read these in refinement.md and did not object)
 
