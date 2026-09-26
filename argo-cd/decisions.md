@@ -11,7 +11,7 @@ Provenance shorthand: **CR** = `../change_requests/argocd_migration/change_reque
 `archive/review-fable.md`. Entries dated **2026-08-12** came from that day's working sessions.
 
 Two entries amend the CR itself — D25 (namespace) and D20 (ApplicationSet answers the CR's open
-question); those graduate to the estate-level `/work/AnsibleSpecs/decisions.md` when this is
+question; D63, the Argo CD native registry, supersedes it and answers it now); those graduate to the estate-level `/work/AnsibleSpecs/decisions.md` when this is
 sliced. D30 briefly amended CR decision 4's execution site (Terraform on srviac); the 2026-08-12
 gate-1 review moved execution back in-cluster, dissolving that amendment.
 
@@ -42,7 +42,7 @@ controller or repo-server mid-sync, on CRD and controller upgrades.
 
 **D5 — auto-sync ON in steady state; self-heal OFF.** Decided (CR; qa Q6). Self-heal off keeps
 manual `kubectl` edits alive during debugging. Cutover is governed per app by the registry's
-`autoSync` flag (D23): register with it off, review the diff, sync once manually, flip it on.
+`autoSync` flag (D23, D63): register with it off, review the diff, sync once manually, flip it on.
 
 **D6 — Push-only sync: polling disabled everywhere, including the ApplicationSet git
 generator.** Decided (qa Q6/Q12; notes overrule lifecycle's "generator polling stays on"). This
@@ -55,6 +55,14 @@ relay delivers every push to both (D49). Two knobs express it, one per controlle
 and `requeueAfterSeconds: 0` on each git generator for the ApplicationSet one.
 `applicationsetcontroller.requeue.after` cannot be used for this — it is clamped to a 1s minimum
 and falls back to 3m below it, while the generator's own field is returned verbatim.
+
+> **Amended 2026-09-26 (operator, slice 029 Ruling D2): one knob, from the registry switch.**
+> D63's registry is the source of an ordinary Application, `releases`, not of a generator. A
+> registry push is then what argocd-server acts on, as it does on a deploy-repo push, and
+> `timeout.reconciliation: 0s` alone keeps it push-only. The generator knob goes with the
+> ApplicationSets at the switch (D64). ArgoCDDeploy's only GitHub hook delivers to Jenkins; the
+> operator adds its relay hook in the switch runbook, and until then a push to ArgoCDDeploy
+> reaches no Argo component.
 
 **D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes the review's
 deploy-wait-swallows-failures notifications gap; target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
@@ -196,10 +204,19 @@ below; one tree serves Jenkins and Argo throughout the migration, and
 `grep -rn 'reconciler:' configs/prd/` reports progress. The registry is a **migration
 mechanism, not the target state** (D43).
 
+> **Superseded 2026-09-26 by D63 (operator, slice 029 Ruling D2), from the registry switch
+> (D64).** The registry moves into ArgoCDDeploy as one values file that a chart renders into
+> plain Applications; no ApplicationSet generates them. Until the operator's switch has run, the
+> ApplicationSets over HelmCharts' `release.yaml` tree described here are what Argo reads.
+
 **D21 — Two ApplicationSets, selected on local-chart vs upstream-chart entries.** Decided
 2026-08-12 (notes). `chart:` and `path:` are mutually exclusive within a source and the template
 is a typed struct, so one template cannot cover both without `templatePatch`. Explicitly an
 intermediate shape, revisited in the endgame (D43).
+
+> **Superseded 2026-09-26 by D63, from the registry switch (D64).** One Helm template renders
+> both kinds: an `if` on the entry's `upstream` renders one `source` or the three `sources` (D18,
+> D56).
 
 **D22 — Upstream chart versions are pinned in the registry entry.** Decided 2026-08-12 (notes).
 Accepted cost: those apps' chart version promotes by a registry commit rather than a branch
@@ -207,6 +224,10 @@ advance, splitting their promotion unit. Recorded upgrade path, not adopted: a m
 reading `config/{stage}/` from the deploy repo at its own revision restores full branch
 isolation, at the cost of a second generator layer — deploy-repo deliveries already reach the
 applicationset-controller, since the relay duplicates every one (D49).
+
+> **Amended 2026-09-26 (operator, slice 029 Ruling D2): the pin stays per stage, and the upgrade
+> path is not taken.** In D63's registry an upstream app's version is its stage's `version`. The
+> accepted cost above stands.
 
 **D23 — `deployed` and `autoSync` are plain YAML booleans.** Decided 2026-08-12 (operator
 question, verified against the applicationset controller source). The post-selector flattens
@@ -216,10 +237,96 @@ where Kubernetes label selectors are strings by type. With `goTemplate: true` th
 the real boolean. `reconciler:` is a string naturally. Verified on master-branch source;
 *proof item (Phase A):* re-confirm on the pinned Argo version — cheap.
 
+> **Superseded 2026-09-26 by D63, from the registry switch (D64).** `deployed` goes: a stage is
+> deployed by being in the registry. `autoSync` stays a per-stage boolean, default true, and the
+> registry chart's `values.schema.json` types it, so Helm refuses to render a non-boolean. No
+> selector flattens a parameter any more.
+
 **D24 — Application name and namespace derive from one expression: `<app>-<stage>`.** Decided
 (lifecycle). Reproduces the existing convention exactly — `release.py` already computes both
 that way for all 45 apps. The `resources-finalizer.argocd.argoproj.io` finalizer stays in the
 template; `preserveResourcesOnDeletion` stays off — the cascade is the point (D27).
+
+> **Amended 2026-09-26 (D63), from the registry switch (D64).** The registry chart computes both
+> from the entry's app key and stage key instead of path segments, and the finalizer sits in its
+> Application template. The rest stands.
+
+**D63 — The registry is ArgoCDDeploy's and Argo CD native: one values file, rendered by a chart
+into plain Applications.** Decided 2026-09-26 (operator, slice 029 Ruling D2: "I don't want a
+1:1 migration of what is in HelmCharts. That shape was for a migration. Target state can be Argo
+CD native."; ANS-109). Supersedes D20, D21 and D23. Amends D6, D22, D24, D27, D38, D39 and D62.
+It is live from the operator's registry switch (D64) and owed until that has run; until then
+Argo reads HelmCharts' `release.yaml` tree through the two ApplicationSets. This is the target
+shape, not an intermediate one, and from the switch it is the inventory of what runs (D65).
+
+- *Shape.* A small Helm chart in ArgoCDDeploy renders **one plain `Application` per app-stage**
+  from **one values file, which is the registry**. Its own Application, `releases`, deploys it,
+  and ArgoCDDeploy's `chart/` renders that Application (D64). Per app, an entry holds `repo`, an
+  optional `upstream: {repo, chart}`, an optional `syncOptions` (D62) and `stages:`. Each stage
+  may set `autoSync` (default true), `targetRevision` (default `main`) and, for an upstream app,
+  `version` (D22). The ruling's sketch; the exact spelling is the chart's:
+
+  ```yaml
+  kubecoder: {repo: KubeCoderDeploy, stages: {dev: {}, prd: {targetRevision: prd}}}
+  grafana: {repo: GrafanaDeploy, upstream: {repo: …, chart: grafana}, stages: {prd: {version: 10.5.15}}}
+  argocd: {repo: ArgoCDDeploy, stages: {prd: {autoSync: false}}}
+  ```
+- *Validation and tests.* The chart's `values.schema.json` is the key validation, so Helm
+  refuses to render a bad entry. ArgoCDDeploy's render test holds the tests. Each check
+  HelmCharts made on an Argo entry has a successor in one of them: the booleans are booleans,
+  `repo` carries the pvginkel prefix, `targetRevision` is not empty, the upstream block is
+  complete, and Argo's own entry never auto-syncs.
+- *What stays.* Application name and destination namespace `<app>-<stage>` (D24). The four hook
+  parameters: `hook.repo`, `hook.revision: $ARGOCD_APP_REVISION`, `hook.stage` and
+  `hook.namespace` (D30, D56). The `resources-finalizer.argocd.argoproj.io` finalizer (D24). The
+  autoSync semantics: automated `prune: true`, `selfHeal: false` and the retry block (D5, D46).
+  The `syncOptions` pass-through (D62). Push-only refresh (D6). The upstream chart version,
+  pinned per stage (D22).
+- *What goes.* `reconciler` (D38) and `deployed` (D23, D27); one file per stage and the
+  `configs/prd/<app>/<stage>/` tree; the two ApplicationSets and their local/upstream split
+  (D21); and with them Go templates escaped inside Helm, `templatePatch`, `missingkey=error` and
+  the path-segment indices.
+- *Stages are managed centrally.* Which stages an app runs is the registry's call, not the
+  deploy repo's: a stage is deployed by adding its entry and undeployed by deleting it.
+  `releases` auto-syncs **without prune** and without self-heal. A deleted entry's Application
+  shows as requiring pruning and goes only when the operator prunes it, so a bad registry commit
+  cannot cascade-delete apps (D27 as amended).
+- *Registration* is a push to ArgoCDDeploy, which its relay hook delivers to argocd-server, and
+  argocd-server refreshes `releases` (D39 as amended).
+- *No self-sync loop* (D15's concern about content in ArgoCDDeploy): the registry is `releases`'
+  source, and `argocd-prd`, which renders `chart/`, syncs only by hand (D3).
+
+**D64 — The registry switch hands the live Applications to `releases` without recreating any;
+fix forward.** Decided 2026-09-26 (operator, slice 029 Ruling D2, and the review r1 ruling: "I do
+not have to prove rollback back to HelmCharts. Fix forward please."). The switch is the
+operator's to run from Ansible's registry-switch runbook, and it is owed until it has run.
+
+- *What changes hands.* The 50 Applications in `argocd-prd` pass from the two ApplicationSets to
+  `releases`. On 2026-09-26, 41 were owned by `releases-local` and 9 by `releases-upstream`, and
+  `argocd-prd` itself is one of them. No Application is recreated and none has its spec changed:
+  before `releases`' first sync, its diff on them is tracking metadata only.
+- *The sequence.* Rehearse on a throwaway ApplicationSet plus Application. Add ArgoCDDeploy's
+  relay hook (D39 as amended). Run the equivalence check: the registry's render against the live
+  Applications, spec for spec. Guard the ApplicationSets so no sync can prune them
+  (`Prune=false`), then orphan-delete them (`kubectl delete applicationset … --cascade=orphan`).
+  Run the equivalence check again, right before the flip. Flip the one stage-level setting that
+  chooses the ApplicationSets or `releases`. Sync `argocd-prd`, which creates `releases`. Read
+  `releases`' diff, sync it, and turn on its automated sync. Last, remove the docs' notes that a
+  procedure is owed until the switch has run.
+- *What holds throughout.* No state of ArgoCDDeploy's `main`, synced with prune or without,
+  deletes an Application or cascade-deletes an ApplicationSet. The ApplicationSets and
+  `releases` never own the Applications at the same moment. `releases` comes up at the switch
+  without syncing on its own, so the operator's first sync is one whose diff they have read.
+  Deleting or pruning `releases`, or dropping it from the render, never deletes an Application:
+  it carries no cascading finalizer.
+- *Unproven until the rehearsal.* That `releases` adopts orphaned Applications this cleanly. The
+  rehearsal proves it on throwaway objects before the real switch, and it proves the forward
+  path only.
+- *No way back.* A failure past the orphan-delete is fixed forward on `releases`. Before the
+  orphan-delete, stopping leaves the guarded ApplicationSets in place.
+- *Dead after the switch,* for a follow-up to clear: the ApplicationSet branch and its setting,
+  `releases.registry`'s HelmCharts pointer, the render test's assertions about that registry,
+  HelmCharts' relay hook and the relay's applicationset-controller leg.
 
 ## Sync, lifecycle and teardown
 
@@ -250,6 +357,15 @@ deleted, finalizer cascades, namespace and every Kubernetes resource removed;
 Terraform-managed resources untouched) → *unregistered* (entry deleted, only after a destroy).
 *Destroyed* is named and unimplemented (D28). Undeploy is cheap and reversible; destroy is
 neither — leaving *undeployed* stays a human decision until D28 gets a design.
+
+> **Amended 2026-09-26 (operator, slice 029 Ruling D2), from the registry switch (D64): an
+> undeploy waits for the operator's prune.** D63's registry has no `deployed` flag. A stage is
+> deployed by being in the registry, and undeploying it is deleting its entry. `releases`
+> auto-syncs without prune, so the stage's Application shows as requiring pruning and is deleted
+> only when the operator prunes it; the finalizer then cascades as above. A bad registry commit
+> therefore cannot cascade-delete apps. The registry keeps no undeployed stage on record: its
+> Terraform-made resources and state survive with its deploy repo (D29), and D28's design has to
+> find them there.
 
 **D28 — Destroy is a named follow-up phase, with no design yet.** Decided 2026-08-12 (operator,
 restructure session). phases.md names the phase; nobody designs it in this project. Interlocks
@@ -444,6 +560,11 @@ look and stay usable. Accepted cost: a typo'd reconciler *value* is caught nowhe
 but `jenkins` means "not ours, skip", so `reconciler: jenkis` silently stops deploying instead
 of failing loud.
 
+> **Amended 2026-09-26 (D63): the key does not carry over.** D63's registry has no `reconciler`:
+> an entry is Argo's by being in it. This decision stays the record of HelmCharts' side, which
+> stays in the archived repo with the three parked apps (D60). After the registry switch (D64),
+> nothing Argo runs reads the key.
+
 **D39 — Each deploy repo's webhook is a Terraform resource in that repo's own Terraform.**
 Decided (lifecycle, bootstrap argument reworked for D6). `github_repository_webhook`, created on
 the first PreSync apply, surviving undeploy harmlessly, removed when destroy eventually exists.
@@ -455,6 +576,14 @@ provider set, and the hook's git token needs `admin:repo_hook` — folded into D
 token scoping, not assumed. Where one deploy repo backs several stages, exactly one stage's
 state owns the hook — a `manage_webhook` tfvar, true once per repo — since the resource is
 repo-scoped and the states per-stage (D32).
+
+> **Amended 2026-09-26 (D63), from the registry switch (D64): registration is a push to
+> ArgoCDDeploy.** The registry lives there, so a registration reaches Argo through ArgoCDDeploy's
+> relay hook. The operator creates that hook in the switch runbook, signed with the shared
+> secret (D49). argocd-server acts on the push by refreshing `releases`, which auto-syncs and
+> creates the Application; that Application's first sync runs PreSync and creates the deploy
+> repo's hook as before. HelmCharts' manually created registry hook serves nothing after the
+> switch.
 
 **D49 — One public endpoint: GitHub delivers to a relay, and Argo CD stays off the internet.**
 Decided 2026-08-17 (operator, 009's planning session; consult and slice 015 — closes O3). Every
@@ -640,9 +769,21 @@ Meanwhile, prefer not to add new things to HelmCharts. What replaces its residua
 carries a target-shape section so the intermediates are visibly intermediate. Amended by D60:
 the repository is archived, not deleted.
 
+> **Revisited 2026-09-26 (slice 029): the registry is D63, the residual roles D65.** HelmCharts
+> keeps the three parked apps (D60) and, until the registry switch (D64), the live registry. The
+> operator archives it once the switch has run and its Jenkins jobs are gone (ANS-121,
+> ANS-122).
+
 **D44 — The namespace Terraform logic is deleted once the last app migrates.** Decided
 2026-08-12 (notes). The namespace module and whatever still handles it in the migration tooling
 go; tracked in phases.md so it cannot be forgotten.
+
+> **Amended 2026-09-26 (slice 029): the module stays in the archived HelmCharts.**
+> `terraform-modules/namespace` is not deleted. 49 config files that HelmCharts keeps call it:
+> the 46 `configs/dev/<app>/_shared/infrastructure.tf` of the chart-development tree, and the
+> three parked apps' `configs/prd/<app>/_shared/infrastructure.tf` (D60, kept by D61). No
+> migrated app calls it. The migration tooling's handling stays with that tool:
+> `argo_migrate.py`'s scaffold strips the module (`support/argo-migrate/argo_migrate.py:495-502`).
 
 **D50 — Each deploy repo publishes its own architecture.** Decided 2026-09-21 (slice 014). A
 deploy repo carries a generated producer of its own: a `Jenkinsfile.architecture` running the
@@ -657,6 +798,10 @@ was; the flip's HelmCharts architecture build clears them. Flipping first publis
 without the app. KubeCoderDeploy and ArgoCDDeploy carry the first two; the steps, and which of them
 are the operator's, are `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own
 architecture producer".
+
+> **Amended 2026-09-26 (slice 029): the helm-charts producer is retired.** Architecture no longer
+> lists HelmCharts' producer; its product-catalog elements moved, ids kept, into Architecture's
+> own. A later handover has no duplicate window, since no HelmCharts build publishes the app.
 
 **D55 — Cross-app architecture edges resolve through published in-cluster interfaces.** Decided
 2026-09-23 (slice 025; operator: "I'm not opposed to going the interface route."). Both
@@ -795,6 +940,9 @@ same test verb (slice 028's Ruling T1). The Keycloak login test restated the rel
 copy, which GrafanaDeploy cannot see. DockerImages' `helmDeploy()` stage and HelmCharts'
 `gitToken` injection go last, once no Helm-deployed app needs them.
 
+> **Amended 2026-09-26 (slice 029).** The `release.yaml` files are the live registry only until
+> the registry switch (D64). After it they are inert, and they stay in the archived repo.
+
 **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
 Proposed 2026-09-24 (Claude, within the D54 run; ANS-103); decided 2026-09-24 (operator: follow
 the recommendation). Client-side apply writes `kubectl.kubernetes.io/last-applied-configuration`, and the API
@@ -816,17 +964,40 @@ that client-side apply accepts. Accurate diffs would take server-side diff's dry
 against the microk8s API servers. Revisit if Argo CD makes server-side apply its default, or a
 second reason appears besides oversized objects.
 
+> **Amended 2026-09-26 (D63), from the registry switch (D64).** `syncOptions` is an app-level
+> key in D63's registry, and the registry chart passes the list through to each of the app's
+> Applications; an app without the key renders none. The templatePatch goes with the
+> ApplicationSets, and `argo_migrate.py`'s `flip` writes the key into D63's registry file.
+
+**D65 — HelmCharts' residual roles have their answers (closes O2).** Decided 2026-09-26
+(operator, slice 029: "Delete collect-versions."; Rulings D3 and F1).
+
+- *The inventory of what runs* is ArgoCDDeploy's registry (D63), from the registry switch
+  (D64).
+- *collect-versions* is deleted (HelmCharts `91ce931`). *The version-poller*'s HelmCharts block
+  is gone (VersionPollerDeploy `9846433`): its config names only the Jenkins endpoint and the
+  registry, and nothing runs HelmCharts' `collect-version-dependencies` any more.
+- *recommend-resources* is a script under Ansible's `support/`, beside `argo-migrate`, run from
+  the Ansible project's KubeCoder environment. It enumerates the deploy repos from the registry,
+  clones them into a scratch directory, and reads Prometheus at `http://prometheus.home`. Its
+  recommendation policy is the old tool's, unchanged: a 7-day window, p75 CPU, p90 working-set
+  memory and the same rounding. It keys each app on the resolved chart, never on a directory
+  name. Step one writes one plain unified-diff patch per deploy repo into a report directory.
+  The operator deletes a file to skip that app, or edits hunks to overrule them. Step two
+  applies what is left to the clones, commits locally and shows the result; nothing is pushed
+  unless the operator asks. The container-to-values-path maps (`charts/*/resources-entry-map.json`)
+  move with it, so it reads nothing from HelmCharts.
+- *gen-architecture* found its home earlier (D50).
+- *The `configs/dev` caveat* (qa Q3's) is deferred (operator, Ruling F1: "I will just archive
+  the repo and figure this out later."). The chart-debugging tree, and hand-running a chart or
+  its Terraform on srvk8sdev, go into the archive with HelmCharts; doing it from a deploy repo is
+  for a later date. The archive does not wait on it.
+
 ## Open
 
 **O1** — decided: bulk (D51).
 
-**O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
-`recommend-resources`, `collect-versions` and the version-poller. Decided by endgame time;
-design.md carries the per-tool notes so the decision has an obvious shape when it comes.
-`gen-architecture` has left the bucket, decided (D50). Also in this bucket
-(qa Q3's caveat): the `configs/dev` chart-debugging tree and the ability to hand-run a chart or its
-Terraform ad hoc — the operator's srvk8sdev workflow must survive HelmCharts' deletion in some
-form.
+**O2** — decided: HelmCharts' residual roles have their answers (D65).
 
 **O4 — Whether a GitHub App replaces the hook's classic PAT** (D41). The PAT is `repo` on every
 private repository because fine-grained tokens do not cross resource owners; an App installation

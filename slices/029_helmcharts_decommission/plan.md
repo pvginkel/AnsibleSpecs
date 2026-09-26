@@ -230,6 +230,40 @@ slice ships. Where the design moves, they are rewritten in place:
 
 Record any decision id this phase allocates in its done-record; later phases cite it from there.
 
+**Done (P1).** AnsibleSpecs `argo-cd/` records the native registry as **D63**, the registry switch
+as **D64** and O2's close as **D65** (O2 now reads "decided (D65)"). D6, D20–D24, D27, D38, D39,
+D43, D44, D50, D61 and D62 carry dated amendment or supersession notes in place. `design.md`'s
+registry, rendering, webhook and lifecycle sections describe D63, with the ApplicationSets as the
+until-the-switch state; `phases.md`'s endgame and recommend-resources follow-up are current. The
+estate register names deploy repos and Argo CD as the deploy path. Branch `phase/029-P1`.
+
+Later phases:
+- Cite D63 (shape, schema, render test, `releases` never prunes), D64 (the switch sequence, its
+  invariants, fix forward, the dead-after list) and D65 (recommend-resources' home and shape; the
+  registry as inventory). The records leave the entry's exact spelling and the registry chart's
+  path to P4 ("the registry chart", "its values file"); P4 need not touch the records.
+- D64 and `phases.md`'s endgame name "Ansible's registry-switch runbook" with no path, and five
+  places state the switch as owed; P6 fills in the path and covers them (see P6).
+
+Record:
+- Settled beyond the plan's text: D27 as amended — an undeployed stage leaves no registry record;
+  its Terraform state and deploy repo remain, which D28's design must find. D50 — the retired
+  helm-charts producer leaves no duplicate window at a later handover. D61 — the `release.yaml`
+  files are inert after the switch. D43 — the archive follows the switch and the job deletion.
+- Estate register, beyond `:35`/`:48`: the Helm tier and the namespace example, the orchestrator
+  paragraphs, the chart-lifecycle TODO (deleted), ingress and registry, step-ca (StepCaDeploy; its
+  Secrets in `chart/templates/stage-manifests.yaml`), the `s3-storage` module (copied into deploy
+  repos' `terraform/modules/`), backup-server (StorageDeploy), the backup TF homes
+  (`PostgresPasDeploy`/`YoutrackDeploy` `terraform/main.tf`), the CA inventory (ten copies, five
+  images and five deploy repos, byte-identical to the canonical one on 2026-09-26; HelmCharts'
+  copies deploy nothing), Headlamp, and the HelmCharts push-gate and digest-resolution paragraphs
+  (deleted). Left as they are: the `configs/dev`/srvk8sdev mentions (F1), the historical rollout
+  notes and the `kubernetes` client pin list.
+- Found: ChartsDeploy's chart takes `homelab-shared` from charts.home (D17's trap), close-out B1;
+  `design.md` and `phases.md` say so.
+- Gate: AnsibleSpecs has no gate tooling. Relative links in the four edited files resolve, apart
+  from seven broken links in the estate register that predate this phase (close-out).
+
 ### P2 — Architecture: the product catalog moves in, the helm-charts producer goes
 
 Target: ../Architecture
@@ -369,6 +403,12 @@ It ends with the attachment's list of what is dead after the switch, so the foll
 - **The webhook secret.** The webhook is signed with the shared secret every hook uses (D49; the
   leaf is named in ArgoCDDeploy `config/prd/values.yaml`'s `credentials`). Only the operator reads
   that secret.
+- **The records name the runbook and state the switch as owed.** argo-cd `decisions.md` D64 and
+  `phases.md`'s endgame call it "Ansible's registry-switch runbook"; put its path in both. The
+  switch is stated as owed in D63, D64, `design.md`'s opening paragraph and its "The registry"
+  section, `phases.md`'s endgame, and the estate register's "Per-application TF" paragraph
+  (`grep -rn 'registry switch' /work/AnsibleSpecs/argo-cd /work/AnsibleSpecs/decisions.md`). The
+  runbook's last step marks it done there too, beside removing the docs' notes.
 
 ### P7 — argo-migrate: the new registry
 

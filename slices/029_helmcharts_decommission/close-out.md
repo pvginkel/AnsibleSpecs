@@ -65,6 +65,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — ChartsDeploy: the chart that deploys charts.home takes homelab-shared from charts.home itself (D17's trap) · major
+
+ChartsDeploy `chart/Chart.yaml` names `homelab-shared` 0.3.1 from `https://charts.home` as a dependency, and the repo vendors no tarball (`chart/` holds only `Chart.lock`, `Chart.yaml`, `templates/`, `values.yaml`; read with `gh api` 2026-09-26). Argo's repo-server has to fetch the library from charts.home to render the app that serves charts.home. argo-cd D17 names this trap and phases.md A.1 asked for a library-free chart; the move to ChartsDeploy did not keep it. Found while bringing argo-cd `design.md`'s charts.home paragraph current in P1, which now states it; not fixed here (out of scope).
+
+**Consequence:** On a rebuilt cluster, or whenever charts.home is down, Argo cannot render charts.home, so it cannot bring it back, and every app that uses the library stays unrenderable until someone starts charts.home by hand.
+
+**Provenance:** read — code-writer, P1, r1; gh api repos/pvginkel/ChartsDeploy (chart/Chart.yaml, tree)
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -114,4 +123,24 @@ The plan gates the hand-over behind one stage-level setting that the operator fl
 **Consequence:** Until the follow-up lands, ArgoCDDeploy carries a disabled ApplicationSet path next to the live registry, and a reader could take it for a live option.
 
 **Provenance:** read — plan-writer, planning r1, plan.md P5/P6 and attachments/registry-switch.md
+**Disposition:**
+
+### S5 — AnsibleSpecs README.md still names HelmCharts as the workloads repo · nit
+
+`/work/AnsibleSpecs/README.md` line 3: "Sister repos: [/work/Ansible](../Ansible) (code), [/work/HelmCharts](../HelmCharts) (workloads)." The workloads now deploy from per-app deploy repos, and ArgoCDDeploy holds the registry (argo-cd D63). P1's scope was the argo-cd records and the estate register, and P9's is Ansible's docs, so no phase touches this line.
+
+**Consequence:** A session that reads AnsibleSpecs' README first is pointed at HelmCharts for workloads.
+
+**Provenance:** read — code-writer, P1, r1
+**Disposition:**
+
+### S6 — The estate register links to seven slice and spec paths that have moved · cosmetic
+
+In `/work/AnsibleSpecs/decisions.md`, relative links to `slices/runtime-secrets-sweep.md`, `slices/microceph-prod.md` (three times), `slices/internal-ha-vips.md`, `specs/dns-reservation-api.md` and `specs/dns-reservation-terraform.md` resolve to nothing. The files were moved under `slices/completed/` and other paths. These links predate this slice, and P1 found them while checking its own links.
+
+code-writer P1 r1, 2026-09-26 — The targets now sit at `slices/completed/runtime-secrets-sweep.md`, `slices/completed/internal-ha-vips.md`, `change_requests/microceph_prod/microceph-prod.md` and `slices/completed/dns-reservation-provider/dns-reservation-{api,terraform}.md`.
+
+**Consequence:** Those links in the doctrine every session reads first lead nowhere.
+
+**Provenance:** witnessed — code-writer, P1, r1; a relative-link check over decisions.md
 **Disposition:**

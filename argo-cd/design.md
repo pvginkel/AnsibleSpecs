@@ -6,8 +6,10 @@ Decisions are cited as `Dn`/`On` from [`decisions.md`](decisions.md) and not re-
 the goal posts are [`brief.md`](brief.md); sequencing, the migration checklists and the endgame
 shape are [`phases.md`](phases.md); how positions moved over time is [`history.md`](history.md).
 
-Argo CD does not exist in the estate yet — no namespace, no CRDs, nothing in any repo. Standing
-it up is step zero, and nothing below describes running infrastructure.
+Argo CD runs on the prd cluster and deploys every app except the three parked ones (D60), and
+HelmCharts deploys nothing. The one place this design runs ahead of the live system is the
+registry: D63's shape is live from the operator's registry switch (D64), which is owed until it
+has run.
 
 ---
 
@@ -29,19 +31,19 @@ stages migrate — "dev excluded" excludes the `srvk8sdev` cluster, never a stag
 | Repo | Job |
 | --- | --- |
 | `<App>Deploy` (per app) | The app's complete deployment: chart, Terraform, stage config (D11) |
-| `ArgoCDDeploy` | Argo CD's own deploy repo — Argo manages itself (D3) |
+| `ArgoCDDeploy` | Argo CD's own deploy repo — Argo manages itself (D3) — and the registry (D63) |
 | `ArgoCDTools` | The presync scripts and the dedicated hook image built from them (D15, D31); also `aac-tools` |
 | `Charts` | Source of the library chart; publishes the static chart repo `https://charts.home` (D17) |
-| `HelmCharts` | Migration era only: the registry, plus every app not yet migrated (D20, D43) |
+| `HelmCharts` | Migration era only: the three parked apps (D60), and the live registry until the switch (D64); archived afterwards (D43) |
 
-## The estate today, in one paragraph
+## Where the estate came from, in one paragraph
 
-Jenkins builds images and calls `cicd.helmDeploy()`, which triggers the `IaC/HelmCharts`
-pipeline; that runs the deploy CLI inside the `iac` container on srviac. A gate stage first
-renders every release the build is about to deploy, lints the ones whose chart source is in the
-repo, and runs kubeconform on each render; then each release deploys — `terraform apply` →
+Jenkins built images and called `cicd.helmDeploy()`, which triggered the `IaC/HelmCharts`
+pipeline; that ran the deploy CLI inside the `iac` container on srviac. A gate stage first
+rendered every release the build was about to deploy, linted the ones whose chart source was in
+the repo, and ran kubeconform on each render; then each release deployed — `terraform apply` →
 `helm upgrade --install` → config phase (unused estate-wide) — resolving image tags to digests
-at deploy time with nothing written back to git. 45 releases are discovered by walking
+at deploy time with nothing written back to git. 45 releases were discovered by walking
 `configs/prd/`. Detail, if ever needed: the archived plan's "Current state" chapter — in git
 history once `archive/` is deleted.
 
@@ -75,25 +77,28 @@ config/
 
 An ordinary deploy repo where the app happens to be Argo CD (D3). `chart/` names the upstream
 `argo-cd` chart in `Chart.yaml` `dependencies:` with an exactly pinned version and adds the
-estate's own manifests on top: the two ApplicationSets, the AppProject, the notifications
+estate's own manifests on top: the `releases` Application that deploys the registry chart
+(D63, D64; the two ApplicationSets until the switch), the AppProject, the notifications
 configuration, the SSO wiring (D9), the `argocd-hooks` namespace with its identity and composed
 credential Secret (D33), the ESO leaves Argo's own credentials arrive through (D40), and the
 webhook relay's Deployment, Service and public annotation (D49). It carries no `terraform/`:
 Argo's one piece of own infrastructure is the Keycloak client, and that is hand-created (D9).
 
-Argo is an entry in the registry like any other, so **D24 names it too**: the entry is
-`configs/prd/argocd/prd/release.yaml`, the Application is `argocd-prd`, and it syncs into
-namespace `argocd-prd`. The Helm release name is `argocd-prd` as well, and that one is a
-contract rather than a preference — Argo templates a Helm source under the Application's own
-name and the ApplicationSet sets no `releaseName`, so most of the render's object names derive
-from it and `app.kubernetes.io/instance` — every workload's immutable selector — carries it.
+Argo is an entry in the registry like any other, so **D24 names it too**: the entry is `argocd`
+with a `prd` stage (HelmCharts' `configs/prd/argocd/prd/release.yaml` until the switch), the
+Application is `argocd-prd`, and it syncs into namespace `argocd-prd`. The Helm release name is
+`argocd-prd` as well, and that one is a contract rather than a preference — Argo templates a
+Helm source under the Application's own name and the registry sets no `releaseName`, so most of
+the render's object names derive from it and `app.kubernetes.io/instance` — every workload's
+immutable selector — carries it.
 
 Bootstrap happens exactly once, by hand: clone, `helm dependency build`, `helm install` under
-the release name `argocd-prd`, create the registry entry. `--create-namespace` is not the path:
-the chart ships `Namespace/argocd-prd` as a tracked manifest (D25), so the namespace is created
-first and stamped with Helm's ownership metadata, and the install adopts it rather than
-colliding with it. From then on the ApplicationSet generates an Application for `argocd/prd`
-like any other, and Argo adopts itself.
+the release name `argocd-prd`. `--create-namespace` is not the path: the chart ships
+`Namespace/argocd-prd` as a tracked manifest (D25), so the namespace is created first and
+stamped with Helm's ownership metadata, and the install adopts it rather than colliding with it.
+Argo's registry entry already exists. From the registry switch (D64) the install brings up
+`releases`, which renders `argocd-prd` with every other Application; until then the
+ApplicationSet generates it from HelmCharts' entry. Either way Argo then adopts itself.
 
 **Sharp edge** (D3): a self-sync can restart the controller or repo-server mid-sync — CRD and
 controller upgrades do exactly that. Mitigation: the `argocd` registry entry keeps
@@ -123,9 +128,9 @@ A plain NGINX container serving `index.yaml` and chart tarballs over HTTP at
 `https://charts.home` (D17). The library chart is `homelab-shared`, source in the `Charts` repo;
 migrated charts consume it through `Chart.yaml` `dependencies:` — a version pin against
 `repository: https://charts.home` — and Argo's repo-server runs `helm dependency build` at
-render time. Deployed from HelmCharts for the whole migration — deliberately, since charts.home
-is a render-time prerequisite for every migrated app and must not depend on anything that
-depends on it.
+render time. It deploys from its own `ChartsDeploy`. charts.home is a render-time prerequisite
+for every migrated app, so it must not depend on anything that depends on it (D17's trap) —
+which ChartsDeploy's chart does today, through its `homelab-shared` dependency on charts.home.
 
 The library chart carries the shared `_helpers.tpl` content (D16), prefixed `homelab-shared.*`,
 **and the hook Job template** (below), so a migrated chart gets both from a single dependency
@@ -140,194 +145,167 @@ outage — and it grows as apps migrate.
 
 ## The registry
 
-Migration-era only (D20, D43): `release.yaml` under `configs/prd/<app>/<stage>/`, one file per
-app-stage. `grep -rn 'reconciler:' configs/prd/` is the migration progress meter.
+The registry is one values file in ArgoCDDeploy: the values of a small chart that renders one
+plain `Application` per app-stage (D63), and the inventory of what runs (D65). **It is live from
+the operator's registry switch (D64), and owed until that has run**; until then Argo reads
+HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files through two ApplicationSets (below).
 
 ```yaml
-# configs/prd/kubecoder/dev/release.yaml — local-chart app
-reconciler: argo-cd          # defaults to jenkins when absent (D38)
-deployed: true               # false = undeploy: cascade delete (D27)
-autoSync: true               # false during cutover and for argocd itself (D5, D3)
-repo: https://github.com/pvginkel/KubeCoderDeploy.git
-targetRevision: main         # this stage's branch — the prd entry says prd
+kubecoder:                           # local-chart app, two stages
+  repo: KubeCoderDeploy
+  stages:
+    dev: {}                          # targetRevision main, autoSync true
+    prd: {targetRevision: prd}       # D34
+grafana:                             # upstream-chart app
+  repo: GrafanaDeploy
+  upstream: {repo: …, chart: grafana}
+  stages:
+    prd: {version: 10.5.15}          # the chart version, pinned per stage (D22)
+argocd:
+  repo: ArgoCDDeploy
+  stages:
+    prd: {autoSync: false}           # permanently (D3)
 ```
 
-```yaml
-# configs/prd/headlamp/prd/release.yaml — upstream-chart app (illustrative)
-reconciler: argo-cd
-deployed: true
-autoSync: true
-repo: https://github.com/pvginkel/HeadlampDeploy.git
-targetRevision: main
-upstream:                    # reuses the existing HelmCharts upstream: convention
-  repo: https://...
-  chart: headlamp
-  version: "0.30.1"          # pinned here (D22)
-```
+That is the ruling's sketch; the chart fixes the exact spelling. Per app an entry holds `repo`,
+an optional `upstream: {repo, chart}`, an optional `syncOptions` list passed through to its
+Applications (D62), and `stages:`. Per stage it may set `autoSync` (default `true`; D5),
+`targetRevision` (default `main`) and, for an upstream app, `version`. A stage runs by being in
+the registry: there is no `deployed` flag and no `reconciler` key.
 
-`deployed` and `autoSync` are plain booleans (D23) and **required in every entry** — the
-templates run with `missingkey=error`, so an absent key is a generation failure, not a default.
+The chart's `values.schema.json` is the key validation. Helm refuses to render a bad entry, so a
+typo'd key or a non-boolean `autoSync` fails the render instead of reaching an Application.
+ArgoCDDeploy's render test holds the tests, among them the checks HelmCharts made on an Argo
+entry: booleans are booleans, `repo` carries the pvginkel prefix, `targetRevision` is not empty,
+the upstream block is complete, and Argo's own entry never auto-syncs.
 
-Of the five keys, HelmCharts acts on `reconciler:` alone; the other four are Argo's, allowlisted
-so its unknown-key check stays a real typo-catcher. It also stops applying its own chart and
-`upstream:` schema checks to an entry another reconciler owns (D38) — which is why the upstream
-entry above can carry Argo's `{repo, chart, version}` block rather than HelmCharts' own
-`upstream:` shape, and why neither entry needs a `chart:` key.
+## Rendering Applications
 
-## Generating Applications
-
-Two ApplicationSets (D21), both shipped in ArgoCDDeploy's chart, both driven by a git files
-generator over `configs/prd/*/*/release.yaml` on HelmCharts `main`. They split on the presence
-of the `upstream` block, via `matchExpressions` on the flattened key: the local-chart set
-requires `upstream.chart` **DoesNotExist**, the upstream set **Exists**. Both also select
-`reconciler: argo-cd` and `deployed: "true"` (string on the manifest side, boolean in the file —
-D23).
-
-The local-chart set, trimmed to what is load-bearing:
+For each app and each of its stages the registry chart renders one Application. A local-chart
+stage, trimmed to what is load-bearing:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
-kind: ApplicationSet
+kind: Application
 metadata:
-  name: releases-local
+  name: kubecoder-dev                  # <app>-<stage> (D24)
   namespace: argocd-prd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
-  goTemplate: true
-  goTemplateOptions: ["missingkey=error"]
-  generators:
-    - git:
-        repoURL: https://github.com/pvginkel/HelmCharts.git
-        revision: main
-        files:
-          - path: "configs/prd/*/*/release.yaml"
-        requeueAfterSeconds: 0     # D6: the only knob that can express "off"
-      selector:
-        matchLabels:
-          reconciler: argo-cd
-          deployed: "true"
-        matchExpressions:
-          - { key: upstream.chart, operator: DoesNotExist }
-  template:
-    metadata:
-      name: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
-      finalizers:
-        - resources-finalizer.argocd.argoproj.io
-    spec:
-      project: releases
-      source:
-        repoURL: '{{ .repo }}'
-        targetRevision: '{{ .targetRevision }}'
-        path: chart
-        helm:
-          valueFiles:
-            - '../config/{{ index .path.segments 3 }}/values.yaml'
-          parameters:
-            - name: hook.repo
-              value: '{{ .repo }}'
-            - name: hook.revision
-              value: '$ARGOCD_APP_REVISION'
-            - name: hook.stage
-              value: '{{ index .path.segments 3 }}'
-            - name: hook.namespace
-              value: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
-      destination:
-        name: in-cluster
-        namespace: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
-  templatePatch: |
-    {{- if .autoSync }}
-    spec:
-      syncPolicy:
-        automated:
-          prune: true        # D46; the namespace is guarded by D26
-          selfHeal: false    # D5
-        retry:
-          limit: 3
-          backoff: { duration: 30s, factor: 2 }
-    {{- end }}
+  project: releases
+  source:
+    repoURL: https://github.com/pvginkel/KubeCoderDeploy.git
+    targetRevision: main
+    path: chart
+    helm:
+      valueFiles:
+        - ../config/dev/values.yaml
+      parameters:
+        - { name: hook.repo, value: https://github.com/pvginkel/KubeCoderDeploy.git }
+        - { name: hook.revision, value: $ARGOCD_APP_REVISION }
+        - { name: hook.stage, value: dev }
+        - { name: hook.namespace, value: kubecoder-dev }
+  destination:
+    name: in-cluster
+    namespace: kubecoder-dev
+  syncPolicy:                          # only where the stage's autoSync is true
+    automated:
+      prune: true                      # D46; the namespace is guarded by D26
+      selfHeal: false                  # D5
+    retry:
+      limit: 3
+      backoff: { duration: 30s, factor: 2 }
 ```
 
 Load-bearing details:
 
-- **Name and namespace derive from one expression** — `<app>-<stage>` from the path segments —
-  reproducing the existing convention for all 45 apps, so they cannot drift (D24). The
+- **Name and namespace derive from one expression**, `<app>-<stage>` from the entry's app key
+  and stage key, reproducing the existing convention, so they cannot drift (D24). The
   `hook.namespace` parameter carries that same expression, so the hook's PV reattach filters on
   the namespace Argo is syncing into rather than deriving one of its own (D29, D33).
-- **The glob is scoped to `configs/prd/`**: `configs/dev/` is the srvk8sdev tree, a different
-  cluster, and 40 of its app-stage pairs would collide with prd names.
-- **`goTemplate: true` is required** for the path-segment syntax, for boolean-typed parameters,
-  and for `templatePatch` — which exists because the template proper is a typed struct and
-  cannot conditionally include `syncPolicy`. The conditional-autoSync mechanism *is*
-  `templatePatch` (D5).
-- **The finalizer stays in the template.** Removing an entry — or flipping `deployed: false` —
-  deletes the generated Application, and the finalizer cascades the namespace and everything
-  tracked (D27). `preserveResourcesOnDeletion` stays off: the cascade is the point.
-- **Values by relative path** — `path: chart` plus `../config/{stage}/values.yaml` (D19).
-  *Proof item:* the `../` escape renders on the deployed Argo version; fallback is `$values`
-  multi-source for local charts too, an edit to this template and nothing else.
+- **The finalizer stays.** Deleting an Application cascades the namespace and everything
+  tracked (D27); `preserveResourcesOnDeletion` stays off, since the cascade is the point. What
+  deletes an Application is the operator's prune of `releases` (below).
+- **Values by relative path**: `path: chart` plus `../config/<stage>/values.yaml` (D19), proven
+  on the deployed Argo version.
 - `hook.revision` uses Argo's build-time substitution of `$ARGOCD_APP_REVISION` in helm
-  parameters — the mechanism that hands the hook the exact synced SHA (D30). *Proof item.*
+  parameters, the mechanism that hands the hook the exact synced SHA (D30); proven.
+- An app's `syncOptions` list lands in `syncPolicy.syncOptions` of each of its Applications
+  (D62).
 
-The upstream-chart set differs only in the source block — multi-source (D18):
+An upstream-chart stage differs only in the source block, multi-source (D18); a Helm `if` on the
+entry's `upstream` chooses it:
 
 ```yaml
-      sources:
-        - repoURL: '{{ .upstream.repo }}'
-          chart: '{{ .upstream.chart }}'
-          targetRevision: '{{ .upstream.version }}'   # a chart version…
-          helm:
-            valueFiles:
-              - '$values/config/{{ index .path.segments 3 }}/values.yaml'
-        - repoURL: '{{ .repo }}'
-          targetRevision: '{{ .targetRevision }}'      # …and a git branch (D18's wart)
-          ref: values
-        - repoURL: '{{ .repo }}'                        # the companion chart (D56)
-          targetRevision: '{{ .targetRevision }}'
-          path: chart
-          helm:
-            parameters:                                 # the same four as releases-local
-              - { name: hook.repo, value: '{{ .repo }}' }
-              - { name: hook.revision, value: '$ARGOCD_APP_REVISION' }
-              - { name: hook.stage, value: '{{ index .path.segments 3 }}' }
-              - { name: hook.namespace, value: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}' }
+  sources:
+    - repoURL: https://…                            # the upstream chart repository
+      chart: grafana
+      targetRevision: 10.5.15                       # a chart version…
+      helm:
+        valueFiles:
+          - $values/config/prd/values.yaml
+    - repoURL: https://github.com/pvginkel/GrafanaDeploy.git
+      targetRevision: main                          # …and a git branch (D18's wart)
+      ref: values
+    - repoURL: https://github.com/pvginkel/GrafanaDeploy.git   # the companion chart (D56)
+      targetRevision: main
+      path: chart
+      helm:
+        parameters:                                 # the same four as a local chart
+          - { name: hook.repo, value: https://github.com/pvginkel/GrafanaDeploy.git }
+          - { name: hook.revision, value: $ARGOCD_APP_REVISION }
+          - { name: hook.stage, value: prd }
+          - { name: hook.namespace, value: grafana-prd }
 ```
 
 The companion is source 2, not a wrapper: it never depends on the upstream chart, and it takes
 no stage values file, only the hook parameters. In a multi-source Application each source is
 built at its own revision, so `$ARGOCD_APP_REVISION` here is the deploy repo's SHA.
 
-This covers six of the nine upstream releases. The late-migration set is five charts with two
-distinct problems (D18): **post-render patching** — `grafana`, `prometheus` and local chart
-`mosquitto` — needing a CMP or Kustomize-with-Helm; and **post-install/post-rollout scripts** —
-`grafana`, `prometheus`, `external-secrets` and local chart `nginx` — run by the deploy CLI's
-`_run_hook` today, a mechanism with no Argo equivalent designed yet.
+**`releases` deploys the registry chart.** ArgoCDDeploy's `chart/` renders it as an ordinary
+Application whose source is the registry chart in ArgoCDDeploy at `main`, and whose destination
+is `argocd-prd`, where the Applications live. In steady state it auto-syncs with **prune off**
+and self-heal off. It carries no cascading finalizer, so deleting or pruning it, or dropping it
+from `chart/`'s render, never deletes an Application. At the switch it comes up without
+automated sync, so the operator's first sync is one whose diff they have read (D64).
 
-**The truncation risk, inherited knowingly.** An ApplicationSet that generates a *shorter* list
-cascade-deletes what fell off, tracked runtime included. Mitigations, not solutions: one small
-file per app-stage bounds any single edit's blast radius; `Prune=false` keeps a bad *render*
-(as opposed to a bad registry edit) from taking namespaces; `applicationsSync: create-update`
-would guard harder but is incompatible with undeploy-by-flag, and undeploy-by-flag is the
-lifecycle (D27).
+**A shorter registry deletes nothing on its own.** An entry that leaves the registry, by intent
+or by a bad commit, leaves its Application showing as requiring pruning, and the operator's prune
+is the only delete (D27 as amended). The ApplicationSets' truncation risk, a shorter generated
+list cascade-deleting whatever fell off it, has no successor. The cost is that an undeploy takes
+two steps: a registry commit and a prune.
+
+**Until the switch** the Applications come from two ApplicationSets in ArgoCDDeploy's chart,
+`releases-local` and `releases-upstream` (`chart/templates/applicationsets.yaml`). Git files
+generators over HelmCharts' `configs/prd/*/*/release.yaml` feed them, selected on
+`reconciler: argo-cd` and `deployed: true` and split on the `upstream` block (D20, D21, D23).
+They render the same Applications as above; D64's equivalence check compares the two, spec for
+spec. The switch removes them.
 
 ## Webhooks — push-only, through the relay
 
-Polling is off everywhere, including the generator (D6). Argo CD is not published: **every hook
+Polling is off everywhere, including, until the registry switch, the ApplicationSet generators
+(D6). Argo CD is not published: **every hook
 registers one URL**, `https://deploy-hooks.webathome.org/api/webhook`, the public endpoint of the
 webhook relay, which verifies GitHub's signature and duplicates each verified delivery to both
 receivers (D49).
 
 | Push to | Must reach | Effect |
 | --- | --- | --- |
-| **HelmCharts** (the registry) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
+| **ArgoCDDeploy** (the registry, D63) | argocd-server, `/api/webhook` | refreshes `releases`, which creates or updates Applications and leaves removed ones requiring pruning (D27) |
+| **HelmCharts** (the registry until the switch, D64) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
 | **Each deploy repo** | argocd-server, `/api/webhook` | refresh and sync the affected Application |
 
 Both receivers get every delivery, and the one a push does not concern no-ops on it cheaply —
 argocd-server matches the pushed repo against Application sources, the applicationset-controller
 against its generators. That is why the relay carries no routing table and gains no edit per
-migrated app.
+migrated app. After the registry switch the applicationset-controller leg serves nothing (D64).
 
 Both share the secret at `webhook.github.secret` in `argocd-secret`, and re-verify what the relay
 already verified. The relay is configured with that same value — one leaf, not a second secret.
-The registry hook is created manually, once. Each deploy repo's hook is a
+Each registry hook is created manually, once: HelmCharts' at standup, and ArgoCDDeploy's by the
+operator in the registry switch runbook (D64). Each deploy repo's hook is a
 `github_repository_webhook` resource in that repo's own Terraform (D39), so the PreSync apply
 creates it on first sync — bootstrap
 rides the registry hook, needing no polling. It is signed with that same shared secret: the hook's
@@ -377,7 +355,7 @@ receivers, which is what both-or-`502` buys.
   every cluster-scoped kind the project's charts render: `Namespace`, the CRDs and cluster RBAC
   Argo's own chart brings, and whatever each migrated chart adds as it arrives. The namespaced
   whitelist stays unset, where empty means everything. `destinations` is one `*-<stage>` glob
-  per stage the registry tree carries **plus** `argocd-hooks` — so a stage the estate adds later
+  per stage the registry carries **plus** `argocd-hooks` — so a stage the estate adds later
   owes an entry. `sourceRepos` is the owner prefix `https://github.com/pvginkel/*`, which covers
   the registry repo and every deploy repo because Argo's source globs do not cross a `/`, plus
   the upstream chart repositories (D18). Neither charts.home nor the argo-helm repository this
@@ -404,7 +382,7 @@ The flow, per sync of an app that has Terraform:
 
 1. Argo begins the sync and creates the hook Job in `argocd-hooks` (D33), handing it
    `hook.repo`, `hook.revision` (the exact synced SHA), `hook.stage` and `hook.namespace` — the
-   destination namespace, the same `<app>-<stage>` expression the ApplicationSet computes for
+   destination namespace, the same `<app>-<stage>` expression the registry computes for
    `destination.namespace` — via chart values.
 2. The pod runs the `argocd-hook` image (D31). The entrypoint clones the deploy repo at that SHA
    — the only runtime clone; the scripts are already in the image. The clone authenticates via
@@ -540,20 +518,26 @@ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** d
 
 ## Lifecycle
 
-All states are git states (D27):
+All states are git states (D27 as amended, from the registry switch, D64):
 
 | State | Expression | Effect |
 | --- | --- | --- |
-| **Registered** | entry exists, `deployed: false` | Nothing runs; Terraform config exists, state may or may not |
-| **Deployed** | `deployed: true` | Application generated; PreSync applies Terraform; chart syncs |
-| **Undeployed** | flip to `deployed: false` | Application deleted → cascade: namespace and all tracked resources go; Terraform-made resources survive (D29) |
-| **Unregistered** | entry deleted | Only after a destroy |
+| **Deployed** | the stage is in the registry | Application rendered; PreSync applies Terraform; chart syncs |
+| **Undeployed** | the stage's entry deleted, then pruned from `releases` by the operator | Application deleted → cascade: namespace and all tracked resources go; Terraform-made resources survive (D29) |
 | *Destroyed* | *not implemented* | *The named follow-up phase (D28); leaving* undeployed *stays a human decision until it exists* |
+
+Between the registry commit and the prune the Application shows as requiring pruning and keeps
+running. The registry keeps no undeployed stage on record; its Terraform state and deploy repo
+remain. Until the switch, HelmCharts' `deployed` flag expresses the states, as D27 first had
+them.
 
 Undeploy never destroys data — hooks fire on sync, not delete, and the ZFS datasets carry
 `prevent_destroy` besides (D29).
 
 ## Coexisting with Jenkins during the migration
+
+Every app but the three parked ones is on Argo, so what follows is HelmCharts' side as it stays
+in the archive. After the registry switch nothing Argo runs reads `reconciler:` (D38 as amended).
 
 The `reconciler:` key is the single ownership fact (D38):
 
@@ -565,8 +549,8 @@ The `reconciler:` key is the single ownership fact (D38):
   exactly the failure mode the rest of this list is built to avoid.
 - `discover_releases` skips any stage whose `release.yaml` names a non-`jenkins` reconciler,
   reading the file directly (no per-release subprocess, no chart-existence trip). The Jenkins
-  pipeline's release list and `collect-versions` both call it, so both inherit the skip, and a
-  skipped release gets no pipeline stage at all.
+  pipeline's release list calls it, so it inherits the skip, and a skipped release gets no
+  pipeline stage at all.
 - `resolve()` stops validating a non-`jenkins` entry as a HelmCharts release: past the top-level
   allowlist it runs neither the chart-existence check nor the stricter `upstream:` one, and
   carries no chart and no `upstream` into the resolved record. So `deploy config` exits 0 with a
@@ -587,16 +571,16 @@ The `reconciler:` key is the single ownership fact (D38):
   commit and the diff review, is phases.md's. KubeCoder's procedure, command by command, is the
   runbook `/work/Ansible/docs/runbooks/kubecoder-cutover.md`.
 
-**Ancillary tooling** that stops covering a migrated app enumerates the same key (O2):
-`recommend-resources` (becomes clone-edit-push against deploy repos, spanning them and the config
-tree at once, and stops keying the chart source on the config directory name — phases.md's named
-follow-up), `collect-versions`/version-poller (its role already changing to proposing pin-bump
-commits). None blocks the pilot; each needs its decision by endgame.
+**Ancillary tooling** has its answers (D65). `collect-versions` is deleted, and the
+version-poller no longer reads HelmCharts. `recommend-resources` is a script under Ansible's
+`support/`: it enumerates the deploy repos from the registry, keys each app on its resolved chart,
+writes one patch per deploy repo for the operator to delete or edit, and commits what is left to
+local clones.
 
 `gen-architecture` is the one already answered (D50). HelmCharts' copy renders via
 `deploy template`, and a migrated app has no release to render; the `aac-tools` image carries a
-deploy-repo generator that renders the repo's own chart the way the releases ApplicationSet has
-Argo render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
+deploy-repo generator that renders the repo's own chart the way its registry entry has Argo
+render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
 element ids HelmCharts' copy does, so a handover changes an element's owner and nothing else, and
 inbound edges from other producers never dangle. A provider in another app, whether still in
 HelmCharts or in a deploy repo of its own, resolves through the interfaces both generators
@@ -639,13 +623,9 @@ registration, and a handover's register-then-flip order — is
 
 ## Adjacent findings, recorded so they aren't lost
 
-Neither is this project's work:
+Not this project's work:
 
 - **`resolve_helm_args.get_chart_args` has a latent crash** — it keys the local-chart test on
   the config-directory name, not the chart name; a mismatched `chart:` falls through to the
   upstream path and raises through discovery for every release. One-line fix, nothing triggers
   it today.
-- **`gitToken` travels as a helm CLI argument for all 45 releases**; only `version-poller`
-  consumes it. It must become an ESO leaf when version-poller migrates — Argo has no such
-  argument to inject — and a PAT on a command line lands in process tables and echoed commands
-  regardless.

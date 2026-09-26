@@ -340,38 +340,37 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
   human decision until this phase is designed and built. Interlocks: Trello **#66**.
 - **Remaining apps** (O1): decided bulk, without the plugin first (D51); the run is [`bulk-migration.md`](bulk-migration.md). The post-render
   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
-- **`recommend-resources` reworked to span deploy repos** (O2; from slice 008's close-out, B5).
-  It walks `configs/prd/` and binds each release's chart source to the *config directory* name
-  (`tools/chart_tools/recommend_resources.py:168-176`), then reads `charts/<that name>/values.yaml`
-  (`:185`) and `charts/<that name>/resources-entry-map.json` (`:210`) — its docstring states the
-  assumption outright (`:163-165`). Two things break it. A release with an overriding `chart:` is
-  skipped without a word today, or — where a same-named chart directory happens to exist — has a
-  recommendation derived from the *wrong* chart's values written into the real config values file
-  (`:265-278`). And from the first cutover the migrated app's chart is not under `charts/` at all,
-  so the tool goes blind to exactly the apps this project moves. The rework: enumerate the deploy
-  repos **as well as** the config tree — HelmCharts still holds every unmigrated release for the
-  whole of Phase B — take the chart from the resolved chart rather than the directory the entry
-  was found in, and write recommendations back clone-edit-push (design.md's tooling note). Fixing
-  the mis-keying in place in HelmCharts was declined at close-out: the rework subsumes it, and
-  D43 argues against adding to HelmCharts meanwhile. The same mis-keying survives in
-  `Jenkinsfile:93-100`'s `changed(entry)`, which is Jenkins-side and outlives nothing here — a
-  separate fix, not this one.
+- **`recommend-resources` reworked to span deploy repos** (D65; from slice 008's close-out, B5):
+  a script under Ansible's `support/`, beside `argo-migrate`, that slice 029 builds. The old
+  tool in HelmCharts keyed each release's chart on the *config directory* name
+  (`tools/chart_tools/recommend_resources.py:168-176`, `:185`, `:210`), so a release with an
+  overriding `chart:` was skipped or took a recommendation from the wrong chart's values, and it
+  could not see a migrated app at all. The new one enumerates the deploy repos from the
+  registry, takes the chart from the resolved chart, and writes one patch per deploy repo for the
+  operator to delete or edit before anything is committed. The same mis-keying in HelmCharts'
+  `Jenkinsfile:93-100` `changed(entry)` stays in the archive; nothing deploys through it.
 
-## Endgame — the target shape, so the intermediates stay visibly intermediate (D43)
+## Endgame — the target shape (D43)
 
-Nothing here is scheduled; it is the direction the migration-era mechanisms point at.
+Where the migration-era mechanisms were pointing, and where each stands. The registry switch and
+the archive are the operator's steps; each item says what is owed.
 
-- **HelmCharts is deleted.** The registry was a migration mechanism; what replaces it as the
-  inventory of what runs is **O2**, decided by then. Prefer not to add new things to HelmCharts
-  meanwhile.
-- **The two-ApplicationSet shape is revisited** (D21), including D22's recorded upgrade path (a
-  matrix generator reading `config/{stage}/` at the deploy repo's own revision) if upstream
-  pin-in-registry chafes.
-- **charts.home moves to a `ChartsDeploy` repo** — remembering D17's trap: the chart deploying
-  charts.home must not depend on the library charts.home serves.
-- **The namespace Terraform module goes** (D44): `terraform-modules/namespace` and whatever
-  migration tooling still handles it, deleted once the last app migrates.
-- **Residual tooling finds homes** (O2): `recommend-resources` and
-  `collect-versions`/version-poller — each enumerating deploy repos instead of the config tree.
-  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator, run by
-  each deploy repo's own producer pipeline (D50).
+- **The registry moves to ArgoCDDeploy, Argo CD native** (D63), replacing the two-ApplicationSet
+  shape (D21); D22's upgrade path is not taken. Slice 029 builds it. **The registry switch (D64)
+  is the operator's step, owed until it has run**, from Ansible's registry-switch runbook: until
+  then Argo reads HelmCharts' `release.yaml` tree. A follow-up then clears what the switch leaves
+  dead (D64's list).
+- **HelmCharts is archived, not deleted** (D60), keeping the three parked apps. Owed to the
+  operator, in this order: its Jenkins jobs `IaC/HelmCharts` and `AaC/HelmCharts` are deleted
+  once nothing calls or consumes them (ANS-121), and the repository is archived once the
+  registry switch has run (ANS-122). Prefer not to add new things to HelmCharts meanwhile.
+- **charts.home moves to a `ChartsDeploy` repo** — done: charts.home deploys from ChartsDeploy.
+  D17's trap is not kept: ChartsDeploy's chart takes `homelab-shared` from charts.home itself.
+- **The namespace Terraform module stays in the archive** (D44 as amended): 49 kept config files
+  in HelmCharts call it, and no migrated app does.
+- **Residual tooling has its answers** (D65): `collect-versions` is deleted, the version-poller
+  no longer reads HelmCharts, `recommend-resources` is a script in Ansible's `support/` (named
+  follow-up above), and ArgoCDDeploy's registry is the inventory of what runs. `gen-architecture`
+  has its home: the `aac-tools` image's deploy-repo generator, run by each deploy repo's own
+  producer pipeline (D50). HelmCharts' `helm-charts` architecture producer is retired. The
+  `configs/dev` chart-debugging workflow is deferred and goes into the archive with HelmCharts.
