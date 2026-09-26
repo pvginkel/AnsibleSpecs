@@ -54,6 +54,26 @@ The phase gate `kc project test` in /work/KubeCoder fails before any test runs: 
 **Provenance:** witnessed | code-writer, P3, r1, /work/AnsibleSpecs/slices/030_retire_modern_app_dev_images/phases/P3/executor_result_r1.json
 **Disposition:**
 
+### A4 — Declare the minio and postgres services (and opensearch, for P9) in Ansible's .kubecoder/config.yaml, or rule a substitute gate, so P8's and P9's gates can run · major
+
+The ElectronicsInventory and IoTSupport gates need services that their own environments declare but this Ansible environment does not. This environment declares only `terraform-backend-git` (`.kubecoder/config.yaml`, `services:`). ElectronicsInventory's `.kubecoder/config.yaml` declares `minio` and `postgres`. IoTSupport's declares `postgres`, `minio` and `opensearch`. `kc env describe` already reports that the environment's setup failed for ElectronicsInventory, IoTSupport and ModernAppTemplate.
+
+What P8 witnessed at `phase/030-P8` `4bbec200`, the copier update to root v0.1.2 (committed, not pushed):
+- `kc project setup` fails at the backend's `scripts/init-dev-database.py`: `connection to server at "127.0.0.1", port 5432 failed: Connection refused`.
+- With the frontend set up (`kc project setup frontend`, `kc project build`), `kc project test` is red in both suites before any test runs. The backend fails with `Exit: S3 storage is not reachable at http://localhost:9000` (the conftest hard-exits). The frontend's Playwright global setup fails with `Could not connect to the endpoint URL: "http://localhost:9000/electronics-inventory-part-attachments/..."` while seeding its SQLite database.
+- `kc project lint` and `kc project build` are green.
+
+Neither test suite uses Postgres. Only setup's dev-database step does. S3 at `localhost:9000` is what the tests need.
+
+Options for the operator:
+(a) Add `minio` and `postgres` to `services:` in Ansible's `.kubecoder/config.yaml` (plus `opensearch` for P9), then restart the environment. The memory limit is 8Gi.
+(b) Rule that the Jenkins validation build replaces the local test gate for P8 and P9. That build runs the same `run-suite` suites against a RustFS sidecar, and #254 on `819a6475` ran backend 1137 and frontend 245 passed.
+
+**Consequence:** P8 (ElectronicsInventory) cannot go green here, so under ruling A1 it cannot push, and the run stops at P8; P9 (IoTSupport) meets the same wall.
+
+**Provenance:** witnessed — code-writer, P8, r1; /tmp/p8-gate.log, /tmp/p8-gate2.log, ElectronicsInventory test_results.md
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
