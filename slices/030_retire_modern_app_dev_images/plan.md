@@ -352,6 +352,33 @@ D1's first app, because its validation Job runs no sidecars (`use_s3: false` in
   image, is not in scope. Hand back a question carrying the build's evidence, and leave
   ZigbeeControl's `main` building green, not red, meanwhile.
 
+**Done (P6).** ZigbeeControl `0a2c4a9` (`phase/030-P6`, pushed to `main`): `copier update` took
+root `v0.1.2`. The diff has exactly P5's hunks: `_commit`, the validation stage comment, the image,
+the `work` emptyDir and its mount, and the suite runner's browser comment. No hand edits.
+`ZigbeeControl/ZigbeeControl` #60 is green (50 passed: backend 13, frontend 37, the same count as
+#59 on modern-app-dev-playwright). D1's two premises hold. The Job pod downloaded Chrome for
+Testing 148.0.7778.96 (chromium v1223), FFmpeg and the headless shell from `cdn.playwright.dev`
+into `/home/ubuntu/.cache/ms-playwright`. The frontend installed, built (`vite build`) and passed
+its Playwright suite on the image's Node 24.
+
+Later phases:
+- P7–P9: the release is proven, so take it the same way:
+  `cexec modern-app sh -c 'export UV_TOOL_DIR=/tmp/uvtool UV_CACHE_DIR=/tmp/uvcache; uvx copier update --trust --defaults --vcs-ref=v0.1.2'`
+  at the app root. Then follow the build with
+  `track_build.py --hash <sha> --appear-timeout 300 --diagnose <Team>/<Repo>`, and read the Job's
+  output from the build's archived `validation.log`.
+- P7–P9, gate: on a fresh checkout the frontend's `kc project test` fails until `kc project build`
+  has generated the gitignored `src/routeTree.gen.ts` (Vite: `Failed to resolve import
+  "./routeTree.gen"`). The first run on a cold Vite cache can also fail one test with React's
+  "Invalid hook call"; the run after it is clean.
+
+Record:
+- Every v0.1.2 `validation.log` opens with close-out B2's tar errors (#60, lines 3-5); they do not
+  change the result. The Vite build's `Failed to get git commit` stack trace (the tarball has no
+  `.git`) is also in #59's log, so the switch did not cause it.
+- The Job spec is not in the console, and the pod's pull events had aged out. The image is the
+  pushed `Jenkinsfile`'s literal `registry:5000/kube-coder-modern-app-toolchain:node-24`.
+
 ### P7 — DHCPApp: takes the root-template release
 
 Target: ../DHCPApp
