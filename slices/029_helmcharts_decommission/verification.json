@@ -164,7 +164,7 @@
     {
       "id": "V21",
       "area": "JenkinsPipelineUtils — the dead HelmCharts helpers",
-      "description": "JenkinsPipelineUtils no longer names `IaC/HelmCharts` or HelmCharts' assets. `cicd.helmDeploy()` (`vars/cicd.groovy:1-2`) and the `helmCharts` var's `scp`, `rsync` and `ssh` (`vars/helmCharts.groovy:177-196`) are gone, and a GitHub code search right before the removal found zero callers. `kaniko` and `kaniko2` remain, and the library's test gate compiles every `vars/*.groovy`.",
+      "description": "JenkinsPipelineUtils no longer names `IaC/HelmCharts`. `cicd.helmDeploy()` (`vars/cicd.groovy:1-2`) and the `helmCharts` var's `scp` are gone, and a GitHub code search right before the removal found zero callers. Per the P3 mid-run ruling, `rsync` and `ssh` stay unchanged (KitchenDisplay calls them with HelmCharts' `assets/kubernetes-pipeline-key`); they are the only place the library still names HelmCharts' assets (follow-up ANS-144). `kaniko` and `kaniko2` remain, and the library's test gate compiles every `vars/*.groovy`.",
       "verdict": null,
       "rationale": "",
       "evidence": []

@@ -156,9 +156,14 @@ move clears the way for the archive."
   chart from the resolved chart. Deploy repos hold the values at `config/prd/values.yaml`.
   Prometheus answers from this environment at `http://prometheus.home` (200, 2026-09-26).
 - **JenkinsPipelineUtils' dead HelmCharts code goes**: `vars/cicd.groovy`'s `helmDeploy()`
-  (`build job: 'IaC/HelmCharts'`) and `vars/helmCharts.groovy`'s `scp`/`rsync`/`ssh` helpers
-  that use `$WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key` — zero callers in the org
-  (GitHub code search, 2026-09-26). The `helmCharts` var's `kaniko`/`kaniko2` stay (heavily used).
+  (`build job: 'IaC/HelmCharts'`) and `vars/helmCharts.groovy`'s `scp` helper — zero callers.
+  The `helmCharts` var's `kaniko`/`kaniko2` stay (heavily used).
+  **Mid-run ruling (P3, 2026-09-26)**: the pre-removal search found KitchenDisplay's Jenkinsfile
+  (main) cloning HelmCharts and calling `helmCharts.ssh` (x2) and `helmCharts.rsync` with
+  `$WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key`. Operator chose: "Keep them +
+  follow-up" — keep `rsync`/`ssh` as they are, amend V21 so the library may still name HelmCharts'
+  assets for them, and KitchenDisplay keeps cloning the archived repo for its key. Moving the key
+  to a Jenkins SSH credential is follow-up ANS-144, not this slice.
 - **Docs (R7)**: currently-describing files include Ansible `CLAUDE.md`, `docs/live-infra-access.md`,
   runbooks `s3-mirror`, `openbao`, `step-ca-root-rotation`, `step-ca-bootstrap`, `ceph-vip`,
   `k8s-rebuild`, `k8s-upgrade`, `youtrack-restore`, `argocd`, `kubecoder-cutover`,
