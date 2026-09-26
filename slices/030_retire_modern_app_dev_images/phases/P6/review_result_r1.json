@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "ZigbeeControl 0a2c4a9 takes root template v0.1.2 by copier update with no hand edits: the suite runner is byte-identical to a fresh v0.1.2 render, and the Jenkinsfile differs only by a pre-existing app-local comment. Jenkins #60 on 0a2c4a9 is green, 50/50 as on #59, and its validation.log shows Chromium downloaded from cdn.playwright.dev and the frontend built and tested on the Node 24 image, so D1's premises hold.",
+ "details": "code_review_r1.md",
+ "findings": []}

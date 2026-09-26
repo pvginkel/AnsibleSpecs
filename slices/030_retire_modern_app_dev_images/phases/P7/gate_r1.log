@@ -1,0 +1,3 @@
+root: no test statements — skipped
+backend: cexec modern-app poetry run pytest    [  OK  ]
+frontend: cexec modern-app pnpm playwright test    [  OK  ]

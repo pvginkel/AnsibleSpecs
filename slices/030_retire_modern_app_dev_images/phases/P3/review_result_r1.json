@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "KubeCoder's Validate and contracts drift gate stages now run in containerTemplates.modern_app_toolchain with their commands unchanged, and the pipeline docs name the new container and image. No modern-app-dev reference is left in the repo. KubeCoder/Build-Main #546 on 2fea4ab2 is SUCCESS in the new image, with every check still running.",
+ "details": "code_review_r1.md",
+ "findings": []}

@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "HomelabTerraformProvider 51eaddd (pushed to main): the publish stage's `tf` container comes from containerTemplates.iac_toolchain, and the README and install-script headers no longer name modern-app-dev. IaC/HomelabTerraformProvider #37 is green; its publish stage ran in kube-coder-iac-toolchain and published provider 0.1.37.", "refuted": []}

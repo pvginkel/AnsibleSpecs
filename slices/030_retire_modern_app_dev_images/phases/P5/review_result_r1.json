@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "Root v0.1.2 meets P5's outcome: the validation Job runs in kube-coder-modern-app-toolchain:node-24 with a /work emptyDir, the lockfile lookup and pre-baked-browser claims are gone, the docs and changelog are updated, and the tag is on origin; nothing the apps' suites need is missing from the image. One advisory finding: the Job's tar extraction into the root-owned emptyDir prints errors and exits 2, which the script ignores.",
+ "details": "code_review_r1.md",
+ "findings": [
+   {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional",
+    "anchor": "repro-trace",
+    "summary": "tar xzf into the root:root 0777 /work emptyDir fails on the ./ entry (utime/chmod EPERM, exit 2) on every run; ignored by the script, so it is log noise only"}
+ ]}

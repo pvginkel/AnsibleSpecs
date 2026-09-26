@@ -46,12 +46,14 @@
   without asking each time, in JenkinsPipelineUtils, HomelabTerraformProvider, KubeCoder,
   FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppTemplate.
   Each push comes after the phase's own gate is green. This is the operator's explicit override
-  of the confirm-every-push rule, for this slice and these repos only. Exception, ruled
-  2026-09-26 during the run ("Jenkins build is the gate"): ElectronicsInventory (P8) and
-  IoTSupport (P9) test against Postgres, MinIO and OpenSearch services this environment does not
-  declare, so their `kc project test` is not run here. They push once `kc project lint` and the
-  build are green, and the app's Jenkins validation build is the test gate: the phase is not done
-  until that build is green.
+  of the confirm-every-push rule, for this slice and these repos only.
+- Ruling run-time S1 (2026-09-26, during the run, "Stop the slice here"): the run stops at P8.
+  ElectronicsInventory and IoTSupport test against Postgres, MinIO and OpenSearch, which this
+  environment does not declare, and the run loop cannot take a Jenkins build as a phase's gate: it
+  runs `kc project test` itself in any sibling repo that has a manifest. P8's work is on
+  ElectronicsInventory `main` (`4bbec200`, Jenkins #255 green), but the loop has not stamped or
+  merged it. P9 and everything after it are left to be finished by hand or in an environment of
+  their own. The run loop is not resumed on this plan as it stands.
 - Ruling run-time N1 (2026-09-26, during the run): the operator created a new app off the
   template just before the run started, and added Playwright 1.63.0 to
   `modern-app-dev-playwright/build-matrix.json` for it (DockerImages `61d79df`). "Assuming the

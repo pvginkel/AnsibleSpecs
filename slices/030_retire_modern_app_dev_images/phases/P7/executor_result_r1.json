@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "DHCPApp took root v0.1.2 via copier update (12947ae, exactly P5's hunks, pushed to main). DHCP/DHCPApp #49 is green: 62 passed and 4 skipped, same as #47, with Chromium downloaded in the Job. The push build #48 passed validation, then went red in kaniko on a Docker Hub connection reset and was re-run (close-out N2).", "refuted": []}
