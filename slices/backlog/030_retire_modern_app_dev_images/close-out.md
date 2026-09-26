@@ -34,6 +34,17 @@ plan-writer r2, 2026-09-26 — The repo set moved with review ruling Q1. ModernA
 **Provenance:** witnessed — plan-writer r1, run_loop.py run --dry-run output
 **Disposition:**
 
+### A2 — Settle V11 after the operator's registry deletion (ruling D3), after the run, following …
+
+V11 — "The registry repos are deleted": neither `modern-app-dev` nor `modern-app-dev-playwright` is in `registry:5000`'s catalog, both removed by the operator through the V10 procedure only after every moved consumer had a green build (V05); no garbage collect was run for it.
+
+`verification.json` marks V11 owed after: the operator's registry deletion (ruling D3), after the run, following the procedure P12 adds. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V11 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
