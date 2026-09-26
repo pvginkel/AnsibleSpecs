@@ -675,12 +675,13 @@ Nothing is pushed unless the operator asks.
 - **Proof in the phase.** Run step one against the live estate, which only reads. Run step two
   into the scratch clones. Push nothing.
 
-**Done (P8).** Ansible `phase/029-P8` `8b8fdff`. The tool is
+**Done (P8).** Ansible `phase/029-P8` `f7877e4`. The tool is
 `support/recommend-resources/recommend_resources.py`. `report DIR` clones the registry's deploy
 repos on `main` into `DIR/repos`. It writes `DIR/report/<Repo>.patch`: a `# ` preamble listing
 each change, then `git diff`. The containers it cannot place go in `DIR/not-placed.txt`. `apply
 DIR` checks every remaining patch first, and commits nothing if any fails the check or leaves
 invalid YAML. It then commits each on `main`, shows the commits and prints the push commands.
+A patch that applies but changes nothing leaves its repo uncommitted and out of the push list.
 The maps are `resources-entry-maps/<resolved chart>.json`. Root's `test:` is now a list that
 includes `python3 -m unittest discover -s support/recommend-resources`.
 
