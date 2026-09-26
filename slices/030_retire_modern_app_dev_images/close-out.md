@@ -69,6 +69,8 @@ Options for the operator:
 (a) Add `minio` and `postgres` to `services:` in Ansible's `.kubecoder/config.yaml` (plus `opensearch` for P9), then restart the environment. The memory limit is 8Gi.
 (b) Rule that the Jenkins validation build replaces the local test gate for P8 and P9. That build runs the same `run-suite` suites against a RustFS sidecar, and #254 on `819a6475` ran backend 1137 and frontend 245 passed.
 
+P8 executor, gate fix round 1, 2026-09-26 — The ruling that answered this (plan.md, A1 exception, "Jenkins build is the gate") did not reach the loop's gate. The driver still ran `kc project test` on P8 after the phase was done and green on Jenkins (#255, 4bbec200 on origin/main), and it went red for the same reason as before. The backend exits with "S3 storage is not reachable at http://localhost:9000", and the frontend's global setup fails on "Could not connect to the endpoint URL: http://localhost:9000/...". The environment still declares no minio or postgres service. P9 meets the same gate unless the driver skips `kc project test` for these two phases or the services are declared.
+
 **Consequence:** P8 (ElectronicsInventory) cannot go green here, so under ruling A1 it cannot push, and the run stops at P8; P9 (IoTSupport) meets the same wall.
 
 **Provenance:** witnessed — code-writer, P8, r1; /tmp/p8-gate.log, /tmp/p8-gate2.log, ElectronicsInventory test_results.md
@@ -106,6 +108,19 @@ The push of DHCPApp 12947ae built as DHCP/DHCPApp #48. Its validation passed on 
 **Consequence:** none — the red #48 stays in DHCPApp's build history; #49 is the build P7 is proven by.
 
 **Provenance:** witnessed, code-writer, P7, r1, DHCP/DHCPApp #48 console log
+**Disposition:**
+
+### N3 — Run stopped (blocked) in P8
+
+The driver's bail (`blocked`), as it recorded it:
+
+> The copier update to root v0.1.2 is committed on phase/030-P8 (4bbec200, exactly P5's hunks, not pushed); lint and build are green, but `kc project test` cannot pass here: both suites hard-fail on no S3 at localhost:9000 (and setup on no Postgres at :5432), because this Ansible environment lacks the minio/postgres services ElectronicsInventory's own env declares. Ruling A1 forbids the push without a green gate; close-out A4 asks the operator to declare minio+postgres (+opensearch for P9) in Ansible's .kubecoder/config.yaml and restart, or rule the Jenkins validation build as the substitute ga…
+
+Stopped 2026-09-26 20:16; resumed 2026-09-26 20:17.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
 ## Bugs
