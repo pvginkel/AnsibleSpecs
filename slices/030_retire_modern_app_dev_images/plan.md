@@ -437,8 +437,8 @@ modern-app-dev-playwright. The Job downloaded Chromium from `cdn.playwright.dev`
 
 Later phases:
 - P9: same route. Run `kc project lint` and `kc project build`, push, and track the push build with
-  `track_build.py --hash <sha> --appear-timeout 300 --diagnose <Team>/<Repo>`. That build is the
-  gate. IoTSupport's job path is not verified; `GET /api/json?tree=jobs[name,jobs[name]]` lists them.
+  `track_build.py --hash <sha> --appear-timeout 300 --diagnose IoTSupport/IoTSupport`. That build
+  is the gate.
 
 Record:
 - #255's `validation.log` opens with the same tar errors (close-out B2).
