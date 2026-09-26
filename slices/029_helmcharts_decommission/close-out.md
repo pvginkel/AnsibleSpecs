@@ -57,6 +57,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — P3's pre-removal caller check found a live caller the plan's search missed: KitchenDisplay deploys with helmCharts.rsync and helmCharts.ssh
+
+The plan said the library's scp, rsync and ssh helpers had zero callers in the org (GitHub code search, 2026-09-26). P3 re-ran the search before removing anything. KitchenDisplay's Jenkinsfile (main, last touched 69bd690, 2026-06-04; the repo was pushed 2026-09-13) clones HelmCharts into `HelmCharts/`, and its 'Deploy kitchendisplay' stage calls `helmCharts.ssh` twice (stop and start the systemd unit on 192.168.178.11) and `helmCharts.rsync` once (`bin/.` to `/var/local/kitchendisplay/bin`). Both helpers use `$WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key`. P3 removed only what has no caller: `cicd.helmDeploy()` and `helmCharts.scp` (JenkinsPipelineUtils phase/029-P3 6f87d09). It kept rsync and ssh, and returned a question to the operator.
+
+**Consequence:** V21 as written (the library names no HelmCharts asset) cannot hold without breaking KitchenDisplay's deploy stage or widening the slice; P3 waits on the operator's ruling.
+
+**Provenance:** witnessed | code-writer, P3, r1, gh search code 'helmCharts.rsync(' / 'helmCharts.ssh(' --owner pvginkel
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -188,4 +197,22 @@ P2 brought current the comments, schema examples, the producer kit (.claude/) an
 **Consequence:** A reader of Architecture's README, USAGE or update docs, or of that published element, is sent to HelmCharts, which is archived after ANS-122.
 
 **Provenance:** read | code-writer, P2, r1, grep of /work/Architecture at a4402f6
+**Disposition:**
+
+### S10 — Architecture's producer manual: the Ceph example no longer matches the 'service you own' rule it illustrates · nit
+
+In .claude/architecture/producer-manual.md:825-830, the 'Re-provide via your own service layer' bullet says to Realize 'a new cluster-local TechnologyService **you** own'. After P2 its Ceph example says svc:cluster-ceph-rbd is 'declared in the Architecture repo's shared catalog', so the deploying repo does not own the service in the example.
+
+**Consequence:** A producer that copies the example instead of the rule references a catalog service rather than declaring its own.
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:**
+
+### S11 — Intercom's dev-upload script takes the OTA signing key from a sibling HelmCharts checkout's assets/ · nit
+
+Intercom `tools/dev-upload/upload.bat` (last changed d3c3f3c, 2025-04-19) mounts `%CD%/../HelmCharts/assets` into its uploader container and signs with `/workspace/keys/kubernetes-signing-key`. It is a developer-machine script, not a Jenkins caller, so it does not block ANS-121. After ANS-122 the key still lives only in the archived repo.
+
+**Consequence:** A dev OTA upload of Intercom needs a HelmCharts clone for as long as the signing key lives only there; the archive leaves it readable, so nothing breaks.
+
+**Provenance:** read | code-writer, P3, r1, gh search code 'HelmCharts/assets' --owner pvginkel
 **Disposition:**
