@@ -426,6 +426,26 @@ As P7, for ElectronicsInventory (`Jenkinsfile:30` at `819a6475`). Its Job also r
 sidecar (`:100`), and its Jenkinsfile carries a stage of its own on top of the template's (the
 contributor documentation build, `:210`), which the update keeps. Pushed; the build is green.
 
+**Done (P8).** ElectronicsInventory `4bbec200` (`phase/030-P8`, pushed to `main`): `copier update`
+took root `v0.1.2` using P6's recipe. The diff has exactly P5's hunks, with no hand edits. The
+RustFS sidecar and the contributor documentation stage are unchanged. Under the A1 exception,
+`kc project lint` and `kc project build` were green here, and the Jenkins build was the test gate.
+`ElectronicsInventory/ElectronicsInventory` #255 is green. It ran 1382 tests: 1137 backend passed
+and 4 skipped, 245 frontend passed and 2 skipped. That is the same count as #254 on
+modern-app-dev-playwright. The Job downloaded Chromium from `cdn.playwright.dev`. No
+`modern-app-dev` string is left in the repo.
+
+Later phases:
+- P9: same route. Run `kc project lint` and `kc project build`, push, and track the push build with
+  `track_build.py --hash <sha> --appear-timeout 300 --diagnose <Team>/<Repo>`. That build is the
+  gate. IoTSupport's job path is not verified; `GET /api/json?tree=jobs[name,jobs[name]]` lists them.
+
+Record:
+- #255's `validation.log` opens with the same tar errors (close-out B2).
+- The frontend suite was flaky on the old image before the switch: #252 lost one test
+  (`auth.spec.ts`, "preserves full path including query params in redirect") and #253 lost three,
+  both on `819a6475`. A lone red frontend test here is not the image switch.
+
 ### P9 — IoTSupport: takes the root-template release
 
 Target: ../IoTSupport
