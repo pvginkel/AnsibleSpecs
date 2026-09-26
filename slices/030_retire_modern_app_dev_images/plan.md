@@ -543,6 +543,31 @@ PVC mounted at `/var/lib/registry` (`chart/templates/registry-deployment.yaml:19
 the image's own configuration and was not verified at planning. If the registry as deployed
 cannot do this without a RegistryDeploy change, that is a question.
 
+**Done (P12).** DockerImages `fa83aec` (`phase/030-P12`, not pushed: DockerImages is outside ruling
+A1) adds `docs/registry-management/delete-repository.md` and a row for it in the folder's
+`README.md`. The procedure has three steps. First, HEAD every tag and `DELETE` each distinct digest
+through `http://registry:5000`; every response must be `202`. Second, `kubectl exec` into the
+`app=registry` pod in `registry-prd` using the prd-write kubeconfig, and run
+`rm -rf /var/lib/registry/docker/registry/v2/repositories/<repo>`. Third, check that
+`/v2/_catalog?n=1000` no longer lists the repo. It runs no garbage collect. The registry as
+deployed does all of this, and RegistryDeploy needs no change.
+
+Later phases:
+- None of P13–P15 change. After the run, the operator runs the procedure once for
+  `modern-app-dev` and once for `modern-app-dev-playwright` (close-out A2), after DockerImages'
+  `main` carries P11 (close-out A5).
+
+Record:
+- Manifest deletes are enabled on the live registry. Its image is `registry@sha256:325b4b29…`,
+  which is Distribution v3 with its config at `/etc/distribution/config.yml`. registry-cleanup's jobs
+  on 2026-09-24 and 2026-09-25 logged 232 and 235 `Deleted`, and neither logged a
+  `Failed to delete`. `delete_manifest()` counts a delete only on a `202`. The GC log's storage
+  paths (`/docker/registry/v2/repositories/<repo>/…`) sit under the `/var/lib/registry` mount.
+- Gate: step 1 was run read-only against the live registry with `echo` in place of `DELETE`. It
+  resolves `modern-app-dev`'s 11 tags to 10 digests (`latest` and `2537` share one) and
+  `modern-app-dev-playwright`'s 2 tags to 2 digests. The catalog read `?n=1000` returns all 131
+  repos, both of these among them. DockerImages has no doc gate.
+
 ### P13 — AnsibleSpecs: the Terraform-version decision lists the images that install Terraform now
 
 Target: ../AnsibleSpecs

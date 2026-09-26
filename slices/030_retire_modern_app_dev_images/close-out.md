@@ -76,6 +76,15 @@ P8 executor, gate fix round 1, 2026-09-26 — The ruling that answered this (pla
 **Provenance:** witnessed — code-writer, P8, r1; /tmp/p8-gate.log, /tmp/p8-gate2.log, ElectronicsInventory test_results.md
 **Disposition:**
 
+### A5 — Push DockerImages main with P11 and P12 before the registry deletion · major
+
+P11 (fa83aec's parent 11fcb16, the two image directories deleted) and P12 (fa83aec, docs/registry-management/delete-repository.md) are committed on DockerImages phase branches and not pushed: DockerImages is outside ruling A1. The deletion procedure's precondition is that the image directories are gone from DockerImages' main. While they are still there, the push pipeline and version-poller's rebuild find both images by directory and push them to registry:5000 again.
+
+**Consequence:** If the registry deletion (A2) runs before that push, the next DockerImages rebuild recreates modern-app-dev and modern-app-dev-playwright in the registry, and V11 fails again.
+
+**Provenance:** witnessed | code-writer, P12, r1, plan.md P12 done-record
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -117,6 +126,19 @@ The driver's bail (`blocked`), as it recorded it:
 > The copier update to root v0.1.2 is committed on phase/030-P8 (4bbec200, exactly P5's hunks, not pushed); lint and build are green, but `kc project test` cannot pass here: both suites hard-fail on no S3 at localhost:9000 (and setup on no Postgres at :5432), because this Ansible environment lacks the minio/postgres services ElectronicsInventory's own env declares. Ruling A1 forbids the push without a green gate; close-out A4 asks the operator to declare minio+postgres (+opensearch for P9) in Ansible's .kubecoder/config.yaml and restart, or rule the Jenkins validation build as the substitute ga…
 
 Stopped 2026-09-26 20:16; resumed 2026-09-26 20:17.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
+
+### N4 — Run stopped (blocked) in P8
+
+The driver's bail (`blocked`), as it recorded it:
+
+> The red `kc project test` comes from the environment, not from the change. Both suites stop on the missing S3 service at localhost:9000: the backend fails with 'S3 storage is not reachable', and the frontend's global setup cannot reach the endpoint URL. This environment declares no minio or postgres service (close-out A4). Ruling A1's exception already names ElectronicsInventory's Jenkins validation build as P8's test gate, and #255 on 4bbec200 (origin/main) is green. The loop needs to honour that ruling for P8 and P9, or the services have to be declared. Standing them up by hand would be a w…
+
+Stopped 2026-09-26 20:43; resumed 2026-09-26 21:11.
 
 **Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
 
