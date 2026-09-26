@@ -32,6 +32,10 @@ Triaged 2026-09-24 from the ANS intake queue (the record: `handovers/triage_2026
 - **[029](slices/backlog/029_helmcharts_decommission/slice.md)** — HelmCharts decommission: the D61 cleanup, the version-poller and helm-charts producer, `collect-versions` deleted and a home for `recommend-resources`, the Argo CD registry move, and the docs (improvement).
 - **[030](slices/backlog/030_retire_modern_app_dev_images/slice.md)** — Retire modern-app-dev and modern-app-dev-playwright: their build and validation pipelines move to other images, then both images go (improvement).
 
+Triaged 2026-09-26 from the DHCP outage follow-up (the record: `handovers/triage_2026-09-26.md` at `8ecf048`):
+
+- **[031](slices/backlog/031_image_pins_by_tag_and_tracking_label/slice.md)** — Image pins by tag, and the tracking-tag label decides what registry-cleanup may delete: per-build tags for every matrix image and no digest pins, the label instead of the tag-name pattern, and the suspended registry-cleanup job (major).
+
 ## Completed
 
 | Slice | Was | Depends on | Consumed by |
