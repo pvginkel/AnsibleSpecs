@@ -139,3 +139,12 @@ FieldnotesApp/Jenkinsfile:3-4 ('then the HelmCharts target-state deploy that rol
 
 **Provenance:** read, code-writer, P4, r1, FieldnotesApp/Jenkinsfile
 **Disposition:**
+
+### S4 — ModernAppTemplate: change_workflow.md's release step says to bump by 0.1, but the repos tag patch releases · nit
+
+docs/change_workflow.md, "Tag the Release", says to create the next tag by bumping by 0.1 (`git tag v0.X`). The repos tag patch releases: the root template went v0.1.0 → v0.1.1 → v0.1.2 (this slice's P5), Backend v0.13.1/v0.13.2, Frontend v0.20.1/v0.20.2. The step could say when a patch bump and when a minor bump is right.
+
+**Consequence:** A reader following the doc tags a minor release where the repo's practice is a patch release, so version numbers stop saying how big a change was.
+
+**Provenance:** witnessed, executor, P5, r1, ModernAppTemplate docs/change_workflow.md:271-283
+**Disposition:**

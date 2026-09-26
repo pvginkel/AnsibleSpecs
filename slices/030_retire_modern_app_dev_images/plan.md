@@ -305,6 +305,31 @@ phase touches none of them.
   pushed with its tag (ruling A1). A review finding is fixed forward as a further release; a
   pushed tag never moves.
 
+**Done (P5).** ModernAppTemplate `0e6cde2` (`phase/030-P5`, pushed to `main`), tagged `v0.1.2` and
+pushed with the tag: the root template's validation Job runs in
+`registry:5000/kube-coder-modern-app-toolchain:node-24` with an `emptyDir` volume `work` mounted at
+`/work` on the `validation` container; the lockfile lookup and `validationImage` are gone; the
+suite runner's browser-install comment says CI downloads Chromium. `changelog.md` has a Root v0.1.2
+entry; `docs/copier_approach.md:74` names the new image.
+
+Later phases:
+- P6–P9: `copier update` at the app root takes `v0.1.2` (the tag is on origin and in
+  `/work/ModernAppTemplate`). Rendered with each app's answers, the release changes only the
+  validation stage's opening comment, its image line, and the new `volumes`/`volumeMounts` in
+  `Jenkinsfile`, and the browser-install comment in `tools/suite_runner/local.py`.
+- P9: IoTSupport's Job spec sits inside `withVault`, four spaces deeper than the template's, so
+  those hunks may conflict or land at the template's indentation. The result needs the new image,
+  the `work` emptyDir volume and its `/work` mount on `validation`, and no `playwrightVersion`.
+
+Record:
+- Smoke pod in `development` on the image, with the Job's securityContext and `/work` emptyDir:
+  uid 1000, `HOME=/home/ubuntu`, `/work` writable, corepack fetched `pnpm@9.0.0` (the apps'
+  `packageManager`) with no prompt, poetry 2.5.1, Python 3.13.7, GNU tar. The Chromium download
+  and the suites are P6's proof.
+- Each app's rendered Job spec parses as YAML with the volume and mount; EI and IoTSupport keep
+  `s3storage`. `kc project test` skips all three projects (no test verbs), as planned.
+- Close-out S4 (nit): `docs/change_workflow.md` says bump by 0.1; the repos tag patch releases.
+
 ### P6 — ZigbeeControl: takes the root-template release, and its build proves D1
 
 Target: ../ZigbeeControl
@@ -317,6 +342,8 @@ D1's first app, because its validation Job runs no sidecars (`use_s3: false` in
   (`tools/suite_runner/local.py:235`) come from the update, never from a hand edit
   (ModernAppTemplate's `CLAUDE.md`, "Template Change Workflow"). That file's recipe takes
   `copier` from the backend template's Poetry env, which this environment does not check out.
+  P5 ran copier as `uvx copier` in the `modern-app` sidecar with `UV_TOOL_DIR` and
+  `UV_CACHE_DIR` under `/tmp` (the sidecar's `~/.local` is read-only).
 - Pushed; the build is green, and its log shows Chromium downloaded inside the Job and the
   frontend built and tested on Node 24: D1's two premises. The done-record states both, with the
   build number.
