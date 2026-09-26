@@ -480,6 +480,38 @@ each state renders what the attachment says.
   refresh `releases` is the operator's step in P6's runbook, not chart content.
 - **Decision citations.** Comments cite the decision ids from P1's done-record.
 
+**Done (P5).** ArgoCDDeploy `phase/029-P5` `4afb8fb`, not pushed. The setting is `releases.owner`
+in `config/prd/values.yaml`, committed as `applicationsets`; its other value is `releases`. A
+second setting, `releases.autoSync` (committed `false`), turns on `releases`' automated sync.
+`chart/templates/releases.yaml` renders `releases`; `applicationsets.yaml` renders only under
+`applicationsets`, and each ApplicationSet now carries `argocd.argoproj.io/sync-options:
+Prune=false`. Any other `owner`, or a non-boolean `autoSync`, fails the render. The committed
+render differs from `50fd69a`'s by the two guard annotations alone.
+
+Later phases:
+- P6: the flip is `releases.owner: releases`, and turning on automated sync is
+  `releases.autoSync: true`. Each is an ArgoCDDeploy commit to `config/prd/values.yaml`, pushed,
+  then a manual sync of `argocd-prd`. In S3 `releases` has no `syncPolicy`, so step 9 is a manual
+  sync of `releases`. The render test prints the committed position (`… renders registry-switch
+  position S1|S3|S4`) and passes on every one of those commits unchanged.
+- P6: `releases` is `argocd-prd/releases`, in project `releases`. Its source is ArgoCDDeploy
+  `main`, `path: releases`, with no helm block; its destination is `in-cluster`/`argocd-prd`; it
+  has no finalizer. Its steady state is `automated: {prune: false, selfHeal: false}` plus D5's
+  retry block. The chart parts that are dead after the switch are in close-out S4's P5 note.
+
+Record:
+- The positions are `tests/render-chart.py`'s `SWITCH_STATES` overlays: S1 (S2 renders the same),
+  S3, S4. S1 renders both ApplicationSets, each with exactly the guard annotation, and no
+  Application; S3 and S4 render only `releases`; everything else renders identically in every
+  position, and `autoSync` changes nothing under S1. `releases`' source is the registry's
+  `apps.argocd` repo and branch; the AppProject admits its destination, source and
+  `argoproj.io/Application`; it passes the Application CRD. Four bad settings are refused.
+- Beyond the plan: stage fact `releases.chart.{repoURL, revision}` is `releases`' source; S4
+  carries D5's retry block; ArgoCDDeploy joins `REPOS`. D6: nothing new polls.
+- Proofs: 17 scratch-copy mutations turned the gate red (guard dropped, a finalizer, prune or
+  self-heal on, automated always or never, both or neither rendered, each validation removed, an
+  extra object in S3, among others). `gen-architecture`'s artifact is identical in S1 and S3.
+
 ### P6 — The registry switch runbook
 
 Target: root
@@ -491,13 +523,16 @@ the run pushes to steady state, in this order:
 1. the rehearsal;
 2. ArgoCDDeploy's relay webhook;
 3. the equivalence check (ArgoCDDeploy `tools/registry-equivalence.py`, P4);
-4. the guard;
+4. the guard (a sync of `argocd-prd` at P5's commit, which adds `Prune=false` to both
+   ApplicationSets and changes nothing else);
 5. the orphan-delete of both ApplicationSets;
 6. the equivalence check again, right before the flip;
-7. the flip;
+7. the flip (`releases.owner: releases` in ArgoCDDeploy `config/prd/values.yaml`, pushed,
+   then a sync of `argocd-prd`, which creates `releases`);
 8. reading `releases`' diff;
-9. the sync;
-10. turning on automated sync;
+9. the sync (manual: `releases` has no automated sync yet);
+10. turning on automated sync (`releases.autoSync: true` there, pushed, then a sync of
+    `argocd-prd`);
 11. removing the docs' notes that a procedure is owed until the switch has run.
 
 Each step gives the command the operator runs (credentials per `docs/live-infra-access.md`) and

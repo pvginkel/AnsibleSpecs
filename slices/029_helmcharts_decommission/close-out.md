@@ -160,6 +160,8 @@ The D61 pass removed every migrated app's Helm release Secret. A read on 2026-09
 
 The plan gates the hand-over behind one stage-level setting that the operator flips, so that every state of ArgoCDDeploy's `main` during the run is safe to sync. Once the switch is done, these are dead: the ApplicationSet branch and the setting in ArgoCDDeploy's chart; `releases.registry`, which points at HelmCharts; the render test's HelmCharts-registry assertions; HelmCharts' relay webhook; and the relay's applicationset-controller leg. Removing the chart parts changes nothing in the render. P6's runbook ends with this list (attachments/registry-switch.md, 'After the switch'). The slice cannot do the removal, because it has to wait for the operator's switch.
 
+executor P5 r1, 2026-09-26 — P5 names the chart parts. The branch is chart/templates/applicationsets.yaml and the setting is releases.owner (chart/values.yaml, config/prd/values.yaml). The test parts are tests/render-chart.py's S1 position, check_applicationsets and the helpers it calls, and HelmCharts in REPOS and PERMITTED_SOURCES. releases.owner's validation in chart/templates/releases.yaml goes too. releases.autoSync stays, true from the switch. Jenkinsfile.architecture's header also names HelmCharts' configs/prd/argocd/prd/release.yaml as where Argo's branch is set; from the switch that is releases/values.yaml's apps.argocd.
+
 **Consequence:** Until the follow-up lands, ArgoCDDeploy carries a disabled ApplicationSet path next to the live registry, and a reader could take it for a live option.
 
 **Provenance:** read — plan-writer, planning r1, plan.md P5/P6 and attachments/registry-switch.md
