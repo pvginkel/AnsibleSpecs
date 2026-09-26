@@ -1,0 +1,3575 @@
+/work/Ansible — P6: git diff 3433846acfb2..94a03e0bc72c
+
+docs/runbooks/registry-switch.md                          | 440 ++++++++++++++++++++++++++++++++++
+ support/registry-switch-rehearsal/app-of-apps.yaml        |  17 ++
+ support/registry-switch-rehearsal/applicationset.yaml     |  39 +++
+ support/registry-switch-rehearsal/child/configmap.yaml    |   8 +
+ support/registry-switch-rehearsal/child/namespace.yaml    |   7 +
+ support/registry-switch-rehearsal/parent/application.yaml |  29 +++
+ 6 files changed, 540 insertions(+)
+
+diff --git a/docs/runbooks/registry-switch.md b/docs/runbooks/registry-switch.md
+new file mode 100644
+index 0000000..bf268d6
+--- /dev/null
++++ b/docs/runbooks/registry-switch.md
+@@ -0,0 +1,440 @@
++# The registry switch
++
++Hands the live Applications in `argocd-prd` from HelmCharts' registry, which the two
++ApplicationSets `releases-local` and `releases-upstream` read, to ArgoCDDeploy's registry, which
++the `releases` Application syncs. No Application is recreated, and none has its spec changed. It
++runs once.
++
++Design context: AnsibleSpecs `argo-cd/decisions.md`
++([D63](../../../AnsibleSpecs/argo-cd/decisions.md): the registry is ArgoCDDeploy's `releases/`
++chart, and its `values.yaml` is the registry; D64: this switch, what holds throughout it, and why
++it only goes forward) and `design.md`'s "The registry". For day-to-day Argo operation, including
++reading an Application without the CLI, see [argocd.md](argocd.md). Every command here is the
++operator's keystroke.
++
++## No way back
++
++There is no way back to the ApplicationSets (D64: fix forward). Stopping before step 5's
++orphan-delete leaves the estate as it was, with the ApplicationSets guarded. A failure after it is
++fixed forward on `releases`. Correct the registry (ArgoCDDeploy `releases/values.yaml`) or the
++chart, push, and then read and sync `releases` again. **Never revert step 7's flip.** A sync at
++`releases.owner: applicationsets` recreates the ApplicationSets while `releases` still tracks the
++Applications. That breaks D64's rule that the two never own them at the same moment.
++
++## Before you start
++
++The shorthands every step uses. The credentials are the ones
++[live-infra-access.md](../live-infra-access.md) describes:
++
++```sh
++KC="--kubeconfig $HOME/.kube/config-prd-write --context prd"
++# A manual sync without prune: the UI's Sync with Prune unticked
++argosync() { cexec iac kubectl $KC patch application -n argocd-prd "$1" --type merge \
++  -p '{"operation":{"initiatedBy":{"username":"registry-switch"},"sync":{"syncStrategy":{"hook":{}}}}}'; }
++# Sync status, then the last operation's phase and message
++argostate() { cexec iac kubectl $KC get application -n argocd-prd "$1" \
++  -o jsonpath='{.status.sync.status} {.status.operationState.phase}: {.status.operationState.message}{"\n"}'; }
++# What a sync of the Application would change: its OutOfSync resources and their health
++outofsync() { cexec iac kubectl $KC get application -n argocd-prd "$1" \
++  -o jsonpath='{range .status.resources[?(@.status=="OutOfSync")]}{.kind}/{.name} {.health.status}{"\n"}{end}'; }
++# Every Application's name, uid and creation time
++apps() { cexec iac kubectl $KC get applications.argoproj.io -n argocd-prd --no-headers \
++  --sort-by=.metadata.name -o custom-columns=NAME:.metadata.name,UID:.metadata.uid,CREATED:.metadata.creationTimestamp; }
++```
++
++What must already be true:
++
++- **Slice 029 is pushed.** ArgoCDDeploy's `origin/main` carries the registry chart (`releases/`)
++  and the ApplicationSets' guard. Ansible's `origin/main` carries the rehearsal fixtures in
++  `support/registry-switch-rehearsal/`, and Argo reads them from there. Check ArgoCDDeploy:
++
++  ```sh
++  cd /work/ArgoCDDeploy && git switch main && git pull --ff-only && git status -sb && kc project test
++  ```
++
++  You should see `## main...origin/main` with nothing ahead or behind, and a green test whose output includes
++  `ok: config/prd/values.yaml renders registry-switch position S1`.
++- **`argocd-prd` was Synced before slice 029's push**, so the guard is the only thing its next
++  sync changes. Step 4 checks this.
++
++**The freeze.** From step 3 until step 10 is done, change no registry. That means no push to
++HelmCharts' `configs/prd/` or to ArgoCDDeploy's `releases/values.yaml`, and no `argo_migrate.py
++flip` or `autosync`. Step 6 catches one that slips through. Pushes to deploy repos are fine: the
++Applications keep syncing throughout.
++
++## 1. Rehearse on throwaway objects
++
++D64 leaves one thing unproven: that an app-of-apps adopts an orphaned Application this cleanly.
++The rehearsal proves it on throwaway objects before anything real moves. The throwaway
++ApplicationSet `switch-rehearsal-set` generates the Application `switch-rehearsal-tst`, which
++deploys one ConfigMap into the namespace `switch-rehearsal-tst`. The app-of-apps
++`switch-rehearsal-parent` renders that same Application from
++`support/registry-switch-rehearsal/parent/`. It has no finalizer and no sync policy, which is how
++`releases` comes up at the flip. Everything runs in project `releases`, as the real objects do.
++The rehearsal proves the forward path only, and it exercises `argosync` before the real syncs
++use it.
++
++```sh
++cd /work/Ansible
++# The child Application's uid, creation time, last sync start and spec, then its ConfigMap's uid
++rehearsal() { cexec iac kubectl $KC get application -n argocd-prd switch-rehearsal-tst \
++  -o jsonpath='{.metadata.uid} {.metadata.creationTimestamp} {.status.operationState.startedAt} {.spec}{"\n"}'; \
++  cexec iac kubectl $KC get configmap -n switch-rehearsal-tst switch-rehearsal -o jsonpath='{.metadata.uid}{"\n"}'; }
++```
++
++**a. Create the ApplicationSet.**
++
++```sh
++cexec iac kubectl $KC apply -f support/registry-switch-rehearsal/applicationset.yaml
++argostate switch-rehearsal-tst
++cexec iac kubectl $KC get application -n argocd-prd switch-rehearsal-tst -o jsonpath='{.metadata.ownerReferences[*].name}{"\n"}'
++rehearsal > /tmp/switch-rehearsal.before
++```
++
++You should see `Synced Succeeded: successfully synced …`. The child syncs on its own at creation;
++repeat `argostate` until it reads Synced. Its owner is `switch-rehearsal-set`, and the snapshot
++file holds two lines.
++
++**b. Orphan-delete the ApplicationSet.**
++
++```sh
++cexec iac kubectl $KC delete applicationset -n argocd-prd switch-rehearsal-set --cascade=orphan
++cexec iac kubectl $KC get application -n argocd-prd switch-rehearsal-tst -o jsonpath='{.metadata.ownerReferences}{"\n"}'
++rehearsal | diff /tmp/switch-rehearsal.before -
++```
++
++You should see an empty owner line and no diff output. The child Application and its ConfigMap are
++the same objects they were.
++
++**c. Create the app-of-apps and read its diff.**
++
++```sh
++cexec iac kubectl $KC apply -f support/registry-switch-rehearsal/app-of-apps.yaml
++argostate switch-rehearsal-parent
++outofsync switch-rehearsal-parent
++```
++
++You should see no operation phase, because the app-of-apps does not sync on its own. `outofsync`
++lists nothing but `Application/switch-rehearsal-tst`, and never as `Missing`. In the UI, open
++`switch-rehearsal-parent` and its *App Diff*: on `switch-rehearsal-tst` the only change is
++tracking metadata (the `argocd.argoproj.io/tracking-id` annotation), and nothing under `spec`. Note
++the diff's exact shape, because step 8 compares `releases`' diff with it.
++
++**d. Sync the app-of-apps.**
++
++```sh
++argosync switch-rehearsal-parent
++argostate switch-rehearsal-parent
++cexec iac kubectl $KC get application -n argocd-prd switch-rehearsal-tst \
++  -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}{"\n"}'
++rehearsal | diff /tmp/switch-rehearsal.before -
++```
++
++You should see `Synced Succeeded: …` and the tracking id
++`switch-rehearsal-parent:argoproj.io/Application:argocd-prd/switch-rehearsal-tst`. There is no
++diff output: the child is unchanged, and it has not synced again.
++
++**e. Delete the app-of-apps.**
++
++```sh
++cexec iac kubectl $KC delete application -n argocd-prd switch-rehearsal-parent
++rehearsal | diff /tmp/switch-rehearsal.before -
++```
++
++You should see the delete return at once, because the app-of-apps has no finalizer. There is still no diff output: the child
++stays.
++
++**f. Tear down.**
++
++```sh
++cexec iac kubectl $KC delete application -n argocd-prd switch-rehearsal-tst
++cexec iac kubectl $KC get applicationsets.argoproj.io,applications.argoproj.io -n argocd-prd -o name | grep switch-rehearsal
++cexec iac kubectl $KC get namespace switch-rehearsal-tst
++```
++
++You should see the delete return once the child's finalizer has removed the ConfigMap and the
++Namespace. The `grep` prints nothing, and the namespace is `NotFound`. If anything in a–f differs,
++stop: nothing real has moved. To abandon a failed rehearsal, delete whatever exists, in this order
++and without `--cascade=orphan`: the ApplicationSet, the app-of-apps, then the child.
++
++## 2. Give ArgoCDDeploy its relay webhook
++
++ArgoCDDeploy's only GitHub hook delivers to Jenkins, so today a push to it reaches no Argo component
++(D6). `releases` needs this hook before it syncs on its own (step 10). The hook is signed with the
++shared secret every hook uses (D49), at the leaf named in ArgoCDDeploy `config/prd/values.yaml`'s
++`credentials.leaves.webhook`. Only the operator reads it:
++
++```sh
++cd /work/Ansible && . scripts/bao-login.sh && cexec iac bao kv get -mount=kv -field=github_secret eso/prd/argocd/prd/webhook
++```
++
++On GitHub, go to ArgoCDDeploy → *Settings* → *Webhooks* → *Add webhook* and set:
++
++- payload URL `https://deploy-hooks.webathome.org/api/webhook`;
++- content type `application/json`;
++- that secret;
++- SSL verification on;
++- just the push event;
++- active.
++
++The pod's GitHub token can read hooks but cannot create them.
++
++```sh
++cexec iac gh api repos/pvginkel/ArgoCDDeploy/hooks --jq '.[] | [.id, .config.url, (.events | join(","))] | @tsv'
++cexec iac gh api repos/pvginkel/ArgoCDDeploy/hooks/<relay hook id>/deliveries --jq '.[] | [.event, .status_code] | @tsv'
++```
++
++You should see two hooks, Jenkins' and the relay's, each on `push`. The relay's deliveries show
++GitHub's creation ping as `ping 200`. The relay answers `200` only when every receiver accepted.
++A `401` means the secret does not match, and a `502` names the failed leg
++([argocd.md](argocd.md), "Webhooks"). From here a push to ArgoCDDeploy
++refreshes `argocd-prd` by webhook. Step 7's push proves it.
++
++## 3. Check the registry against the live Applications
++
++The check is read-only. `tools/registry-equivalence.py` renders the registry chart from the
++checkout and compares each Application's spec and finalizers with the live one in `argocd-prd`.
++
++```sh
++cd /work/ArgoCDDeploy && git pull --ff-only && cexec iac tools/registry-equivalence.py
++apps > /tmp/registry-switch-apps.before
++```
++
++You should see:
++
++- exit 0;
++- every line `equal`, its owner `ApplicationSet/releases-local` or
++  `ApplicationSet/releases-upstream`;
++- a last line of `50 rendered, 50 live in argocd-prd, 0 differing`, with the two counts equal.
++
++`kubecoder-prd`'s line lists a live-only `argocd.argoproj.io/hydrate` annotation, which is
++harmless: annotations are reported, not compared. A `DIFFERS`, `ONLY IN REGISTRY` or `ONLY LIVE`
++line is drift between the two registries. Correct `releases/values.yaml` to match what is live,
++push, and run this step again. `apps` records each Application's uid and creation time, which
++steps 5 and 9 compare against.
++
++## 4. Guard the ApplicationSets
++
++Syncing `argocd-prd` at slice 029's commit adds `argocd.argoproj.io/sync-options: Prune=false` to
++both ApplicationSets and changes nothing else. From then on, no sync deletes them, with prune or
++without. Slice 029's push came before the webhook, so refresh by hand first:
++
++```sh
++cexec iac kubectl $KC annotate application -n argocd-prd argocd-prd argocd.argoproj.io/refresh=normal --overwrite
++outofsync argocd-prd
++```
++
++You should see exactly `ApplicationSet/releases-local` and `ApplicationSet/releases-upstream`. In
++the UI, `argocd-prd`'s *App Diff* shows the one added annotation on each. Anything more is a change
++pending from before slice 029's push. Stop, and read and sync that on its own first
++([argocd.md](argocd.md), "Upgrading Argo CD").
++
++```sh
++argosync argocd-prd
++argostate argocd-prd
++cexec iac kubectl $KC get applicationsets.argoproj.io -n argocd-prd \
++  -o jsonpath='{range .items[*]}{.metadata.name} {.metadata.annotations.argocd\.argoproj\.io/sync-options}{"\n"}{end}'
++```
++
++You should see `Synced Succeeded: …`, then `releases-local Prune=false` and
++`releases-upstream Prune=false`.
++
++## 5. Orphan-delete both ApplicationSets
++
++Past this step there is no way back (above).
++
++```sh
++cexec iac kubectl $KC delete applicationset -n argocd-prd releases-local releases-upstream --cascade=orphan
++cexec iac kubectl $KC get applicationsets.argoproj.io -n argocd-prd
++apps | diff /tmp/registry-switch-apps.before -
++```
++
++You should see both reported as `deleted`, then `No resources found in argocd-prd namespace.`, and
++no diff output: every Application is still there, and each is the same object. `argocd-prd` now
++shows the two ApplicationSets as missing. Leave it: a sync here would recreate them, and step 6
++would then stop you.
++
++## 6. Check again, right before the flip
++
++```sh
++cexec iac kubectl $KC get applicationsets.argoproj.io -n argocd-prd
++cd /work/ArgoCDDeploy && git pull --ff-only && cexec iac tools/registry-equivalence.py
++```
++
++You should see `No resources found in argocd-prd namespace.`, then exit 0 with `… 0 differing`,
++and owner `none` on every line.
++
++- **An ApplicationSet is listed, or an owner is still `ApplicationSet/…`.** Someone synced
++  `argocd-prd` after step 5. Orphan-delete them again (step 5), then repeat this step.
++- **The check reports a difference.** The registry has drifted since step 3: a registration or a
++  flip slipped past the freeze. Correct `releases/values.yaml` to match the live Application,
++  push, and repeat this step.
++
++## 7. Flip the owner to `releases`
++
++```sh
++cd /work/ArgoCDDeploy && sed -i 's/^  owner: applicationsets$/  owner: releases/' config/prd/values.yaml && git --no-pager diff && kc project test
++```
++
++You should see a one-line diff, `owner: applicationsets` → `owner: releases`, and a green test
++whose output includes `ok: config/prd/values.yaml renders registry-switch position S3`.
++
++```sh
++git commit -am 'registry switch: releases owns the Applications (D64)' && git push && git rev-parse HEAD
++cexec iac kubectl $KC get application -n argocd-prd argocd-prd -o jsonpath='{.status.sync.revision}{"\n"}'
++outofsync argocd-prd
++```
++
++Do not refresh by hand. Within about ten seconds of the push, you should see:
++
++- `argocd-prd`'s revision become the pushed SHA, which means the webhook from step 2 delivered the push;
++- `outofsync` list exactly `Application/releases Missing`, with the two ApplicationSets gone from it.
++
++If the revision does not move, the webhook is not delivering. Fix it (step 2) before going on.
++
++```sh
++argosync argocd-prd
++argostate argocd-prd
++cexec iac kubectl $KC get application -n argocd-prd releases \
++  -o jsonpath='syncPolicy={.spec.syncPolicy} finalizers={.metadata.finalizers} operation={.status.operationState.phase}{"\n"}'
++```
++
++You should see `Synced Succeeded: …`, then `syncPolicy= finalizers= operation=`. `releases` exists
++with no automated sync and no finalizer, and it has not synced.
++
++## 8. Read `releases`' diff
++
++```sh
++argostate releases
++outofsync releases
++cexec iac kubectl $KC get application -n argocd-prd releases -o jsonpath='{range .status.resources[*]}{.name}{"\n"}{end}' | wc -l
++```
++
++You should see:
++
++- no operation phase;
++- `outofsync` lines naming only Applications from step 6's list, none of them `Missing`, since a
++  `Missing` one would be created;
++- a resource count equal to step 6's rendered count.
++
++In the UI, open `releases` and its *App Diff*. On each Application the diff is tracking metadata
++only, the shape the rehearsal's diff had in step 1c, and nothing under `spec`. If you see a spec
++change, do not sync. Correct `releases/values.yaml`, push, and read the diff again: `releases`
++does not sync on its own yet.
++
++## 9. Sync `releases`
++
++```sh
++argosync releases
++argostate releases
++apps | diff /tmp/registry-switch-apps.before -
++cexec iac kubectl $KC get applications.argoproj.io -n argocd-prd \
++  -o jsonpath='{range .items[*]}{.metadata.annotations.argocd\.argoproj\.io/tracking-id}{"\n"}{end}' \
++  | grep -c '^releases:argoproj.io/Application:argocd-prd/'
++cd /work/ArgoCDDeploy && cexec iac tools/registry-equivalence.py | grep -v '^equal'
++```
++
++You should see:
++
++- `Synced Succeeded: …`.
++- From `apps`, one added line for `releases` itself and nothing else: every Application kept its
++  uid and creation time.
++- A tracking count equal to the rendered count: `releases` now tracks every Application.
++- From the check, only `ONLY LIVE releases: …` and a last line whose live count is one more than
++  its rendered count, with `1 differing`. The one difference is `releases`' own Application,
++  which the registry does not render. Every other Application's spec is unchanged.
++
++`releases` owns the Applications. What is left is its automated sync.
++
++## 10. Turn on `releases`' automated sync
++
++```sh
++cd /work/ArgoCDDeploy && sed -i 's/^  autoSync: false$/  autoSync: true/' config/prd/values.yaml && git --no-pager diff && kc project test
++```
++
++You should see a one-line diff, `autoSync: false` → `autoSync: true`, and a green test whose output
++includes `ok: config/prd/values.yaml renders registry-switch position S4`.
++
++```sh
++git commit -am 'registry switch: releases syncs on its own (D64)' && git push && git rev-parse HEAD
++cexec iac kubectl $KC get application -n argocd-prd releases -o jsonpath='{.status.sync.revision}{"\n"}'
++outofsync argocd-prd
++```
++
++Do not refresh by hand. Within about ten seconds of the push, you should see:
++
++- `releases`' revision become the pushed SHA. A push to the registry's repo reaches `releases`
++  through the webhook, and nothing polls (D6).
++- `argocd-prd` list only `Application/releases`. Its *App Diff* adds a `syncPolicy`, automated with
++  `prune: false` and `selfHeal: false`, and the retry block, and nothing else.
++
++```sh
++argosync argocd-prd
++argostate argocd-prd
++cexec iac kubectl $KC get application -n argocd-prd releases -o jsonpath='{.spec.syncPolicy}{"\n"}'
++argostate releases
++```
++
++You should see:
++
++- `Synced Succeeded: …`;
++- `releases`' sync policy: automated with `prune` false and `selfHeal` false, and a retry of limit
++  3 with a 30s backoff at factor 2;
++- `releases` Synced.
++
++This is steady state. A registry push reaches `releases` by webhook, and `releases` syncs on its
++own. An entry deleted from the registry shows as requiring pruning until the operator prunes it (D27
++as amended). The freeze ends here.
++
++## 11. Remove the owed notes and mark the switch done
++
++The docs already describe the new registry. Each procedure that depends on which registry is live
++carries a one-line note that it is owed until the registry switch has run. To find every note:
++
++```sh
++cd /work/Ansible && git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md'
++```
++
++Delete each hit's whole note: its paragraph or blockquote, not just the matched line. The
++procedure around it stays as written. Run the grep again: it prints nothing. Commit and push.
++
++The records in AnsibleSpecs state the switch as owed in six places:
++
++```sh
++cd /work/AnsibleSpecs && grep -n 'owed until\|until the operator has run it' argo-cd/decisions.md argo-cd/design.md argo-cd/phases.md decisions.md
++```
++
++- `argo-cd/decisions.md`: D63 ("live from the operator's registry switch (D64) and owed until
++  that has run") and D64 ("it is owed until it has run").
++- `argo-cd/design.md`: the opening paragraph and "The registry".
++- `argo-cd/phases.md`: the endgame's registry item.
++- `decisions.md`: the "Per-application TF" paragraph ("until the operator has run it").
++
++Restate each as done, with the date the switch ran, and drop its "until then" clause. The grep
++also finds D64's sequence line, which says the docs' notes are owed "until the switch has run".
++That line describes this step, and it stays. Commit, staging by name: AnsibleSpecs is a shared
++working tree.
++
++This run settles slice 029's V15 and V24 (its close-out's A1 and A2).
++
++## Dead after the switch
++
++For the follow-up. Removing any of these changes nothing in the render.
++
++- **In ArgoCDDeploy's chart and render test:**
++  - The ApplicationSet branch, `chart/templates/applicationsets.yaml`.
++  - The setting `releases.owner` (in `chart/values.yaml` and `config/prd/values.yaml`) and its
++    validation in `chart/templates/releases.yaml`. `releases.autoSync` stays, true.
++  - `releases.registry`, which points at HelmCharts.
++  - The render test's assertions about the HelmCharts registry: `tests/render-chart.py`'s S1
++    position, `check_applicationsets` and the helpers it calls, and HelmCharts in `REPOS` and
++    `PERMITTED_SOURCES`.
++  - `Jenkinsfile.architecture`'s header, which names HelmCharts' `configs/prd/argocd/prd/release.yaml`
++    as where Argo's branch is set. That is now `releases/values.yaml`'s `apps.argocd`.
++- **Also dead, though not on D64's list:**
++  - `tools/registry-equivalence.py`. From the switch, `releases`' own sync status answers its
++    question, and it counts `releases` itself as `ONLY LIVE`.
++  - Ansible's `support/registry-switch-rehearsal/`, whose only reader is step 1.
++- **Serving nothing any more:**
++  - HelmCharts' relay webhook.
++  - The relay's applicationset-controller leg.
+diff --git a/support/registry-switch-rehearsal/app-of-apps.yaml b/support/registry-switch-rehearsal/app-of-apps.yaml
+new file mode 100644
+index 0000000..e413927
+--- /dev/null
++++ b/support/registry-switch-rehearsal/app-of-apps.yaml
+@@ -0,0 +1,17 @@
++---
++# The rehearsal's app-of-apps, shaped like `releases` at the flip: no
++# finalizer and no sync policy. The operator applies it with kubectl.
++apiVersion: argoproj.io/v1alpha1
++kind: Application
++metadata:
++  name: switch-rehearsal-parent
++  namespace: argocd-prd
++spec:
++  project: releases
++  source:
++    repoURL: https://github.com/pvginkel/Ansible.git
++    targetRevision: main
++    path: support/registry-switch-rehearsal/parent
++  destination:
++    name: in-cluster
++    namespace: argocd-prd
+diff --git a/support/registry-switch-rehearsal/applicationset.yaml b/support/registry-switch-rehearsal/applicationset.yaml
+new file mode 100644
+index 0000000..ad4e43e
+--- /dev/null
++++ b/support/registry-switch-rehearsal/applicationset.yaml
+@@ -0,0 +1,39 @@
++---
++# The registry switch's rehearsal (docs/runbooks/registry-switch.md, step 1):
++# a throwaway ApplicationSet shaped like releases-local, generating one
++# throwaway Application. The operator applies it with kubectl.
++apiVersion: argoproj.io/v1alpha1
++kind: ApplicationSet
++metadata:
++  name: switch-rehearsal-set
++  namespace: argocd-prd
++spec:
++  goTemplate: true
++  goTemplateOptions: ["missingkey=error"]
++  generators:
++    - list:
++        elements:
++          - stage: tst
++  template:
++    metadata:
++      name: 'switch-rehearsal-{{ .stage }}'
++      finalizers:
++        - resources-finalizer.argocd.argoproj.io
++    spec:
++      project: releases
++      source:
++        repoURL: https://github.com/pvginkel/Ansible.git
++        targetRevision: main
++        path: support/registry-switch-rehearsal/child
++      destination:
++        name: in-cluster
++        namespace: 'switch-rehearsal-{{ .stage }}'
++      syncPolicy:
++        automated:
++          prune: true
++          selfHeal: false
++        retry:
++          limit: 3
++          backoff:
++            duration: 30s
++            factor: 2
+diff --git a/support/registry-switch-rehearsal/child/configmap.yaml b/support/registry-switch-rehearsal/child/configmap.yaml
+new file mode 100644
+index 0000000..54ee7e6
+--- /dev/null
++++ b/support/registry-switch-rehearsal/child/configmap.yaml
+@@ -0,0 +1,8 @@
++---
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: switch-rehearsal
++  namespace: switch-rehearsal-tst
++data:
++  purpose: the registry switch's rehearsal, docs/runbooks/registry-switch.md
+diff --git a/support/registry-switch-rehearsal/child/namespace.yaml b/support/registry-switch-rehearsal/child/namespace.yaml
+new file mode 100644
+index 0000000..1e5c835
+--- /dev/null
++++ b/support/registry-switch-rehearsal/child/namespace.yaml
+@@ -0,0 +1,7 @@
++---
++apiVersion: v1
++kind: Namespace
++metadata:
++  name: switch-rehearsal-tst
++  annotations:
++    argocd.argoproj.io/sync-wave: "-1"
+diff --git a/support/registry-switch-rehearsal/parent/application.yaml b/support/registry-switch-rehearsal/parent/application.yaml
+new file mode 100644
+index 0000000..8b76770
+--- /dev/null
++++ b/support/registry-switch-rehearsal/parent/application.yaml
+@@ -0,0 +1,29 @@
++---
++# What the rehearsal's app-of-apps renders: the Application
++# ../applicationset.yaml generates, spec for spec, as the registry chart renders
++# the Applications the two ApplicationSets generate.
++apiVersion: argoproj.io/v1alpha1
++kind: Application
++metadata:
++  name: switch-rehearsal-tst
++  namespace: argocd-prd
++  finalizers:
++    - resources-finalizer.argocd.argoproj.io
++spec:
++  project: releases
++  source:
++    repoURL: https://github.com/pvginkel/Ansible.git
++    targetRevision: main
++    path: support/registry-switch-rehearsal/child
++  destination:
++    name: in-cluster
++    namespace: switch-rehearsal-tst
++  syncPolicy:
++    automated:
++      prune: true
++      selfHeal: false
++    retry:
++      limit: 3
++      backoff:
++        duration: 30s
++        factor: 2
+
+/work/Ansible — P7: git diff 94a03e0bc72c..b56fc9a7372e
+
+.kubecoder/project.yaml               |   2 +
+ docs/runbooks/argocd.md               |   2 +-
+ support/argo-migrate/argo_migrate.py  | 263 ++++++++++++++++++++++++++++++++++++++++++++----------
+ support/argo-migrate/stuck_fields.py  |  81 +++++++++++++++++
+ support/argo-migrate/test_registry.py | 161 +++++++++++++++++++++++++++++++++
+ 5 files changed, 460 insertions(+), 49 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 5935963..befc1f9 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -14,6 +14,8 @@ projects:
+       - cexec go sudo apt-get install -y --no-install-recommends librados-dev librbd-dev
+       - cexec iac poetry install --no-interaction
+       - cexec iac poetry run ansible-galaxy collection install -r ansible/collections/requirements.yml
++    # Not cexec-prefixed: argo-migrate runs in the dev container.
++    test: python3 -m unittest discover -s support/argo-migrate
+ 
+   ansible:
+     description: >-
+diff --git a/docs/runbooks/argocd.md b/docs/runbooks/argocd.md
+index fe3d4c5..398bd09 100644
+--- a/docs/runbooks/argocd.md
++++ b/docs/runbooks/argocd.md
+@@ -588,7 +588,7 @@ deployment,statefulset,daemonset,job,cronjob,ingress,networkpolicy,role,rolebind
+       .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]) else . end)' \
+   > /tmp/live.json
+ # cluster-scoped objects one at a time, passed as extra arguments
+-python3 /work/AnsibleSpecs/handovers/argo-adoption-blind-spot/stuck_fields.py \
++python3 /work/Ansible/support/argo-migrate/stuck_fields.py \
+   <ns> /tmp/render.yaml /tmp/live.json /tmp/ns.json /tmp/clusterrole.json
+ ```
+ 
+diff --git a/support/argo-migrate/argo_migrate.py b/support/argo-migrate/argo_migrate.py
+index 7abd1da..562b192 100644
+--- a/support/argo-migrate/argo_migrate.py
++++ b/support/argo-migrate/argo_migrate.py
+@@ -11,18 +11,26 @@ run record ANS-102). The steps, in order, are one subcommand each:
+     pins       DockerImages deploy-pins.json entries; lists app-built images for their Jenkinsfiles
+     publish    create the GitHub repo and push main; create and build AaC/<Repo>
+     register   add the producer to Architecture's pipeline-producers.yaml (commit only)
+-    flip       HelmCharts registry entry, autoSync false (commit only)
++    flip       the stage's registry entry, autoSync false (commit only)
+     surgery    move the stage's Terraform state from HelmCharts' key to the hook's
+     plan       the no-destroy plan: only the webhook may be created
+     preflight  stuck fields, and a server-side diff of the render against live
+     sync       the manual sync, and its checks
+     unreplace  after the first sync, drop the SSE rewrite's Replace=true from the Deployment (pushed)
+-    autosync   HelmCharts registry entry, autoSync true (commit only)
++    autosync   the stage's registry entry, autoSync true (commit only)
+ 
+ Every step checks what it needs and exits non-zero with a STOP line when anything differs
+ from the expected. A stopped app is parked: it keeps running as last deployed.
+ 
+-Pushes to HelmCharts and Architecture are left to the caller, so several apps can go in one push.
++The registry is ArgoCDDeploy's releases/values.yaml (argo-cd D63). Whether a stage is on Argo,
++its upstream pin and its syncOptions are read there. flip and autosync edit it in place, keeping
++its comments, and `helm lint releases` checks each edit against the registry's schema.
++
++flip and autosync are owed until the registry switch has run (docs/runbooks/registry-switch.md):
++until then Argo reads HelmCharts' release.yaml files, not this registry.
++
++Pushes to ArgoCDDeploy, Architecture and DockerImages are left to the caller, so several apps can
++go in one push.
+ 
+ Run from the dev container; helm, kubectl and terraform run in the `iac` sidecar via cexec.
+ """
+@@ -46,6 +54,9 @@ import yaml
+ 
+ HC = Path("/work/HelmCharts")
+ WORK = Path("/work")
++ARGOCD_DEPLOY = WORK / "ArgoCDDeploy"
++REGISTRY = "releases/values.yaml"
++STUCK_FIELDS = Path(__file__).resolve().parent / "stuck_fields.py"
+ HOME = Path.home()
+ KC = ["--kubeconfig", str(HOME / ".kube/config-prd-write"), "--context", "prd"]
+ HKC = ["--kubeconfig", str(HOME / ".kube/config-prd-write"), "--kube-context", "prd"]
+@@ -94,8 +105,8 @@ class App:
+         self.release = yaml.safe_load(rel.read_text()) if rel.exists() else {}
+         self.release = self.release or {}
+         self.chart_name = self.release.get("chart") or name
+-        # HelmCharts' shape before the flip ({repo_name, repo_url, chart: <repo>/<chart>}),
+-        # the registry's after it ({repo, chart, version}).
++        # HelmCharts' shape ({repo_name, repo_url, chart: <repo>/<chart>}) for a stage not yet
++        # migrated.
+         self.upstream = self.release.get("upstream")
+         self.repo_name = "".join(p.capitalize() for p in name.split("-")) + "Deploy"
+         self.path = WORK / self.repo_name
+@@ -110,6 +121,16 @@ class App:
+     def chart_src(self) -> Path:
+         return HC / "charts" / self.chart_name
+ 
++    @property
++    def entry(self) -> dict:
++        """The app's registry entry, {} when it has none."""
++        return registry_apps().get(self.name) or {}
++
++    @property
++    def on_argo(self) -> bool:
++        """A stage is on Argo by having an entry in the registry (argo-cd D63)."""
++        return self.stage in self.entry.get("stages", {})
++
+     def load_state(self) -> dict:
+         p = self.state_file
+         return json.loads(p.read_text()) if p.exists() else {}
+@@ -306,7 +327,7 @@ The PreSync hook applies `terraform/` with `config/{stage}/*.tfvars` against
+ `argocd/{repo}/{stage}/terraform.tfstate`.
+ 
+ - **The chart version** is pinned in two places that must agree: this app's registry entry
+-  (HelmCharts `configs/prd/{app}/{stage}/release.yaml`, `upstream.version`), which Argo
++  (ArgoCDDeploy `releases/values.yaml`, `apps.{app}.stages.{stage}.version`), which Argo
+   renders, and `architecture.yaml`'s `upstream:` block, which the architecture generator
+   renders (D57). Bump both in one change.
+ - **The companion** `chart/` renders only estate content: the Namespace (D25), the hook
+@@ -411,7 +432,8 @@ def extra_live(app: App) -> list[dict]:
+ 
+ 
+ def live_upstream(app: App) -> dict:
+-    """The upstream chart the live release runs, in the registry's shape (argo-cd D57).
++    """The upstream chart the live release runs, in architecture.yaml's `upstream:` shape
++    (argo-cd D57).
+ 
+     HelmCharts' release.yaml names the chart unversioned, so each deploy took the newest; the
+     version is what the release last installed, read off `helm list`."""
+@@ -441,12 +463,22 @@ def up_fmt(upstream: dict | None) -> dict:
+     return {f"up_{k}": v for k, v in (upstream or {}).items()}
+ 
+ 
++def registry_upstream(app: App) -> dict | None:
++    """The stage's upstream chart as the registry pins it, in architecture.yaml's shape."""
++    e = app.entry
++    if "upstream" not in e or app.stage not in e["stages"]:
++        return None
++    return {**e["upstream"], "version": e["stages"][app.stage]["version"]}
++
++
+ def check_upstream_pin(app: App) -> None:
+     """D57: the version lives twice, in the deploy repo and in the registry. Once flipped, the
+     two must be one."""
++    if not app.on_argo:
++        return
+     mine = repo_upstream(app)
+-    reg = app.upstream if app.release.get("reconciler") == "argo-cd" else None
+-    if reg is not None and mine != {k: str(v) for k, v in reg.items()}:
++    reg = registry_upstream(app)
++    if mine != reg:
+         raise Stop(f"registry upstream {reg} != the deploy repo's architecture.yaml {mine}")
+ 
+ 
+@@ -933,7 +965,7 @@ def add_stage(app: App, args) -> None:
+ 
+ 
+ def cmd_scaffold(app: App, args) -> None:
+-    if app.release.get("reconciler") == "argo-cd":
++    if app.on_argo:
+         raise Stop("already on Argo")
+     if app.release.get("disabled"):
+         raise Stop("disabled in HelmCharts")
+@@ -995,7 +1027,7 @@ def cmd_scaffold(app: App, args) -> None:
+     schema = p / "chart/values.schema.json"
+     if schema.exists():
+         # A closed schema must admit the keys the deploy repo adds: the library's own block,
+-        # the ApplicationSet's hook parameters and the pinned stamp.
++        # the Application's hook parameters and the pinned stamp.
+         sj = json.loads(schema.read_text())
+         props = sj.setdefault("properties", {})
+         props.setdefault("homelab-shared", {"type": "object"})
+@@ -1082,7 +1114,7 @@ def cmd_scaffold(app: App, args) -> None:
+             raise Stop("architecture.yaml already states upstream:")
+         up_text = (
+             "# The chart Argo CD renders as source 0 (argo-cd D57). The version is the one this app's\n"
+-            "# registry entry pins (HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both.\n"
++            "# registry entry pins (ArgoCDDeploy releases/values.yaml, the stage's version): bump both.\n"
+             + yaml.safe_dump({"upstream": upstream}, sort_keys=False) + "\n")
+     (p / "architecture.yaml").write_text(
+         "# The judgment layer the aac-tools generator reads (Jenkinsfile.architecture); copied\n"
+@@ -1228,7 +1260,8 @@ LAST_APPLIED_LIMIT = 262144
+ 
+ def cmd_verify(app: App, args) -> None:
+     up = repo_upstream(app)
+-    if up and app.release.get("reconciler") != "argo-cd" and live_upstream(app) != up:
++    on_argo = app.on_argo
++    if up and not on_argo and live_upstream(app) != up:
+         raise Stop(f"the live release runs {live_upstream(app)}, the deploy repo pins {up}")
+     check_upstream_pin(app)
+     everything = docs(render(app))
+@@ -1242,10 +1275,10 @@ def cmd_verify(app: App, args) -> None:
+     live_text = iac("helm", *HKC, "get", "manifest", app.ns, "-n", app.ns).stdout
+     live = {key(d): d for d in docs(live_text)}
+     manifests = app.stage_dir / "manifests.yaml"
+-    if manifests.exists() and app.release.get("reconciler") != "argo-cd":
++    if manifests.exists() and not on_argo:
+         for d in docs(manifests.read_text()):
+             live[key(d)] = d
+-    if app.release.get("reconciler") != "argo-cd":
++    if not on_argo:
+         for d in extra_live(app):
+             live[key(d)] = d
+     for kind, name, path in D59.get(app.name, {}).get("drops", []):
+@@ -1409,19 +1442,20 @@ def hc_releases_without(app: App) -> list[str]:
+     The bare chart name is the only name of a chart's prd release, and it selects the chart's
+     other stages too, so a non-prd stage cannot be left out while its prd is rendered.
+     """
+-    def flipped(chart: Path, stage: str) -> bool:
+-        rel = chart / stage / "release.yaml"
+-        return rel.exists() and (yaml.safe_load(rel.read_text()) or {}).get("reconciler") == "argo-cd"
++    apps = registry_apps()
+ 
+-    if app.stage != "prd" and (app.cfg / "prd").is_dir() and not flipped(app.cfg, "prd"):
++    def flipped(name: str, stage: str) -> bool:
++        return stage in (apps.get(name) or {}).get("stages", {})
++
++    if app.stage != "prd" and (app.cfg / "prd").is_dir() and not flipped(app.name, "prd"):
+         raise Stop(f"gen-architecture cannot render {app.name}'s prd release without its {app.stage} one: "
+                    f"flip prd first (HC-16)")
+     names = []
+     for chart in sorted(p for p in (HC / "configs/prd").iterdir() if p.is_dir()):
+         for stage in sorted(p.name for p in chart.iterdir() if p.is_dir() and p.name != "_shared"):
+-            # A flipped stage renders nothing in HelmCharts; naming it would select the chart's
+-            # other stages too, the moving one among them.
+-            if (chart.name, stage) != (app.name, app.stage) and not flipped(chart, stage):
++            # A flipped stage publishes through its deploy repo's producer; naming it would
++            # select the chart's other stages too, the moving one among them.
++            if (chart.name, stage) != (app.name, app.stage) and not flipped(chart.name, stage):
+                 names.append(chart.name if stage == "prd" else f"{chart.name}@{stage}")
+     return names
+ 
+@@ -1533,41 +1567,173 @@ def cmd_register(app: App, args) -> None:
+     log(f"registered {app.producer} (Architecture, local commit)")
+ 
+ 
+-def registry_entry(app: App, auto: bool) -> str:
+-    text = ("reconciler: argo-cd\ndeployed: true\n"
+-            f"autoSync: {'true' if auto else 'false'}\n"
+-            f"repo: {app.url}\ntargetRevision: main\n")
+-    if app.load_state().get("ssa"):
+-        # Objects over the last-applied limit: the Application applies server-side (D62).
+-        text += "syncOptions:\n  - ServerSideApply=true\n"
++def registry_apps() -> dict:
++    """The registry's apps, read afresh: flip and autosync rewrite the file."""
++    return yaml.safe_load((ARGOCD_DEPLOY / REGISTRY).read_text())["apps"]
++
++
++APP_KEY = re.compile(r"^  ([a-z0-9-]+):")
++STAGE_KEY = re.compile(r"^      ([a-z0-9-]+):")
++
++
++def indent(line: str) -> int:
++    return len(line) - len(line.lstrip(" "))
++
++
++def block_end(lines: list[str], key: int) -> int:
++    """The end of the block keyed at lines[key]: the first later non-blank line, comments
++    included, indented no deeper than the key."""
++    return next((i for i in range(key + 1, len(lines))
++                 if lines[i].strip() and indent(lines[i]) <= indent(lines[key])), len(lines))
++
++
++def keys_in(lines: list[str], pattern: re.Pattern, start: int, end: int) -> dict[str, int]:
++    return {m[1]: i for i in range(start, end) if (m := pattern.match(lines[i]))}
++
++
++def insert_at(lines: list[str], keys: dict[str, int], name: str, end: int) -> int:
++    """Where key `name` goes, in name order: above the first greater key and the comments that
++    open it, else at `end`."""
++    i = next((i for k, i in keys.items() if k > name), end)
++    while i < end and lines[i - 1].lstrip().startswith("#") and indent(lines[i - 1]) == indent(lines[i]):
++        i -= 1
++    return i
++
++
++def stages_block(lines: list[str], name: str) -> tuple[int, int]:
++    """The line of app `name`'s `stages:` key and the end of its block."""
++    top = lines.index("apps:\n")
++    apps = keys_in(lines, APP_KEY, top + 1, block_end(lines, top))
++    at = apps[name]
++    st = next((i for i in range(at + 1, block_end(lines, at)) if lines[i] == "    stages:\n"), None)
++    if st is None:
++        raise Stop(f"registry: {name} has no block `stages:`")
++    return st, block_end(lines, st)
++
++
++def checked(doc: dict, lines: list[str]) -> str:
++    """The edited text, which must parse to `doc`: nothing but the intended entry changed."""
++    text = "".join(lines)
++    if yaml.safe_load(text) != doc:
++        raise Stop("registry: the edit does not parse to the intended registry")
++    return text
++
++
++def flip_entry(app: App) -> tuple[dict, dict]:
++    """The app's registry entry, less its stages, and the stage's entry, as flip writes them."""
++    entry = {"repo": app.url}
+     up = repo_upstream(app)
+     if up:
+-        # The chart releases-upstream renders; the deploy repo's architecture.yaml pins the same
++        entry["upstream"] = {"repo": up["repo"], "chart": up["chart"]}
++    if app.load_state().get("ssa"):
++        entry["syncOptions"] = ["ServerSideApply=true"]
++    stage = {"autoSync": False}
++    if up:
++        # The chart the Application renders; the deploy repo's architecture.yaml pins the same
+         # version for the generator (argo-cd D57): bump both.
+-        text += yaml.safe_dump({"upstream": up}, sort_keys=False)
+-    return text
++        stage["version"] = up["version"]
++    return entry, stage
++
++
++def stage_lines(stage: str, fields: dict) -> list[str]:
++    return [f"      {stage}:\n", *(f"        {k}: {json.dumps(v)}\n" for k, v in fields.items())]
++
++
++def registry_flip(text: str, name: str, stage: str, entry: dict, fields: dict) -> str:
++    """`text` with app `name`'s `stage` added: the app's entry is `entry` plus its stages, and the
++    stage's is `fields`. A stage of an app the registry has joins its stages; every other line
++    stays as it was."""
++    import copy
++    doc = yaml.safe_load(text)
++    have = doc["apps"].get(name)
++    if have and stage in have["stages"]:
++        raise Stop(f"registry: {name}-{stage} is there already")
++    if have:
++        differ = sorted(k for k in {*entry, *have} - {"stages"} if entry.get(k) != have.get(k))
++        if differ:
++            raise Stop(f"registry: {name}'s {', '.join(differ)} differ from what {stage} needs: "
++                       f"{ {k: have.get(k) for k in differ} } != { {k: entry.get(k) for k in differ} }")
++    want = copy.deepcopy(doc)
++    want["apps"].setdefault(name, {**entry, "stages": {}})["stages"][stage] = fields
++    lines = text.splitlines(keepends=True)
++    if have:
++        st, end = stages_block(lines, name)
++        at = insert_at(lines, keys_in(lines, STAGE_KEY, st + 1, end), stage, end)
++        lines[at:at] = stage_lines(stage, fields)
++        return checked(want, lines)
++    block = [f"  {name}:\n", f"    repo: {entry['repo']}\n"]
++    if "upstream" in entry:
++        block += ["    upstream:\n", f"      repo: {entry['upstream']['repo']}\n",
++                  f"      chart: {entry['upstream']['chart']}\n"]
++    if "syncOptions" in entry:
++        block += ["    # Its render holds objects over the 256 KiB `last-applied-configuration`\n",
++                  "    # annotation that client-side apply writes (D62).\n",
++                  "    syncOptions:\n", *(f"      - {o}\n" for o in entry["syncOptions"])]
++    block += ["    stages:\n", *stage_lines(stage, fields)]
++    top = lines.index("apps:\n")
++    end = block_end(lines, top)
++    at = insert_at(lines, keys_in(lines, APP_KEY, top + 1, end), name, end)
++    lines[at:at] = block
++    return checked(want, lines)
++
++
++def registry_autosync(text: str, name: str, stage: str) -> str:
++    """`text` with app `name`'s `stage` auto-syncing: its `autoSync: false` line goes, with the
++    comment lines just above it, since true is the default."""
++    import copy
++    doc = yaml.safe_load(text)
++    stages = (doc["apps"].get(name) or {}).get("stages", {})
++    if stage not in stages:
++        raise Stop(f"registry: no {name}-{stage}; flip comes first")
++    if stages[stage].get("autoSync", True):
++        raise Stop(f"registry: {name}-{stage} auto-syncs already")
++    want = copy.deepcopy(doc)
++    del want["apps"][name]["stages"][stage]["autoSync"]
++    lines = text.splitlines(keepends=True)
++    st, end = stages_block(lines, name)
++    at = keys_in(lines, STAGE_KEY, st + 1, end)[stage]
++    off = [i for i in range(at + 1, block_end(lines, at))
++           if lines[i].split("#")[0].rstrip() == "        autoSync: false"]
++    if len(off) != 1:
++        raise Stop(f"registry: {name}-{stage} has no line `autoSync: false` to drop")
++    first = off[0]
++    while lines[first - 1].lstrip().startswith("#") and indent(lines[first - 1]) == 8:
++        first -= 1
++    del lines[first:off[0] + 1]
++    if not any(l.strip() and not l.lstrip().startswith("#") for l in lines[at + 1:block_end(lines, at)]):
++        key, comment = re.fullmatch(r"( *[a-z0-9-]+:)(.*)\n", lines[at]).groups()
++        lines[at] = f"{key} {{}}{comment}\n"
++    return checked(want, lines)
++
++
++def registry_commit(edit, message: str) -> None:
++    """Rewrites the registry with `edit`, has Helm check it against the registry's schema, and
++    commits it."""
++    f = ARGOCD_DEPLOY / REGISTRY
++    old = f.read_text()
++    f.write_text(edit(old))
++    lint = iac("helm", "lint", "releases", cwd=ARGOCD_DEPLOY, check=False)
++    if lint.returncode != 0:
++        f.write_text(old)
++        raise Stop(f"helm lint releases refuses the edit:\n{lint.stdout}{lint.stderr}")
++    run(["git", "commit", "-q", "-m", message, "--", REGISTRY], cwd=ARGOCD_DEPLOY)
+ 
+ 
+ def cmd_flip(app: App, args) -> None:
+-    d = app.stage_dir
+-    (d / "release.yaml").write_text(registry_entry(app, False))
+-    for n in ("values.yaml", "manifests.yaml"):
+-        if (d / n).exists():
+-            run(["git", "rm", "-q", str(d / n)], cwd=HC)
+-    run(["git", "add", str(d)], cwd=HC)
+-    run(["git", "commit", "-q", "-m",
+-         f"{app.name} {app.stage}: Argo CD reconciles the stage from {app.repo_name} (argo-cd D51)"], cwd=HC)
++    entry, fields = flip_entry(app)
++    registry_commit(lambda text: registry_flip(text, app.name, app.stage, entry, fields),
++                    f"{app.name} {app.stage}: Argo CD reconciles the stage from {app.repo_name} "
++                    "(argo-cd D51, D63)")
+     app.save_state(flipped=True)
+-    log("registry flipped, autoSync false (HelmCharts, local commit)")
++    log("registry flipped, autoSync false (ArgoCDDeploy, local commit)")
+ 
+ 
+ def cmd_autosync(app: App, args) -> None:
+     check_upstream_pin(app)
+-    (app.stage_dir / "release.yaml").write_text(registry_entry(app, True))
+-    run(["git", "add", str(app.stage_dir)], cwd=HC)
+-    run(["git", "commit", "-q", "-m", f"{app.name} {app.stage}: Argo CD auto-syncs the stage (argo-cd D51)"], cwd=HC)
++    registry_commit(lambda text: registry_autosync(text, app.name, app.stage),
++                    f"{app.name} {app.stage}: Argo CD auto-syncs the stage (argo-cd D51, D63)")
+     app.save_state(autosync=True)
+-    log("autoSync true (HelmCharts, local commit)")
++    log("autoSync true (ArgoCDDeploy, local commit)")
+ 
+ 
+ # ---------------------------------------------------------------------------------------------
+@@ -1711,6 +1877,8 @@ EXPECTED_STUCK = {"metadata.labels", "metadata.annotations"}
+ 
+ 
+ def cmd_preflight(app: App, args) -> None:
++    if not app.on_argo:
++        raise Stop("not flipped: the registry entry's syncOptions decide how the sync applies (D62)")
+     run(["git", "pull", "-q", "--ff-only"], cwd=app.path, check=False)
+     check_upstream_pin(app)
+     sha = run(["git", "rev-parse", "origin/main"], cwd=app.path).stdout.strip()
+@@ -1743,8 +1911,7 @@ def cmd_preflight(app: App, args) -> None:
+                 if r.returncode == 0:
+                     f.write_text(r.stdout)
+                     extras.append(str(f))
+-        r = run(["python3", "/work/AnsibleSpecs/handovers/argo-adoption-blind-spot/stuck_fields.py",
+-                 app.ns, str(tmp / "render.yaml"), str(tmp / "live.json"), *extras], check=False)
++        r = run(["python3", str(STUCK_FIELDS), app.ns, str(tmp / "render.yaml"), str(tmp / "live.json"), *extras], check=False)
+         out = r.stdout + r.stderr
+         (HOME / "bulk-migration/logs" / f"{app.ns}.preflight.txt").write_text(out)
+         objs = [d for d in docs(rtext) if not is_hook(d) and not helm_test(d)]
+@@ -1767,7 +1934,7 @@ def cmd_preflight(app: App, args) -> None:
+         # Server-side diff of the render against live: what the sync would change.
+         (tmp / "apply.yaml").write_text(yaml.safe_dump_all(objs))
+         side = (["--server-side", "--field-manager=argocd-controller", "--force-conflicts"]
+-                if app.load_state().get("ssa") else ["--server-side=false"])
++                if "ServerSideApply=true" in app.entry.get("syncOptions", []) else ["--server-side=false"])
+         d = iac("kubectl", *KC, "diff", "-n", app.ns, *side, "-f", str(tmp / "apply.yaml"), check=False)
+         (HOME / "bulk-migration/logs" / f"{app.ns}.diff.txt").write_text(d.stdout + d.stderr)
+         changed = diff_problems(d.stdout, ACCEPTED.get(app.name, {}).get("lines"))
+diff --git a/support/argo-migrate/stuck_fields.py b/support/argo-migrate/stuck_fields.py
+new file mode 100755
+index 0000000..c918929
+--- /dev/null
++++ b/support/argo-migrate/stuck_fields.py
+@@ -0,0 +1,81 @@
++#!/usr/bin/env python3
++"""What an Argo CD cutover will NOT change on a Helm-created release.
++
++Argo's first sync adopts live objects it renders, but it cannot remove a field the old
++chart set and the new render omits: the objects carry no
++`kubectl.kubernetes.io/last-applied-configuration`, so Argo's three-way merge degrades to a
++two-way one whose delete bucket is empty by construction. Server-side apply does not help
++either — the field is owned by the manager `helm`, and SSA only deletes a field when the
++manager that owns it stops declaring it. Both proven 2026-09-20; Ansible's
++docs/runbooks/argocd.md, "What a cutover does not change", has the finding.
++
++The test is decidable: a field sticks iff `metadata.managedFields` says helm owns it and the
++render never declares it. Same one level up for whole objects. This script computes both.
++
++Usage:
++    helm template <ns> chart --namespace <ns> --values config/<stage>/values.yaml \
++        --set hook.repo=...,hook.revision=...,hook.stage=<stage>,hook.namespace=<ns> > render.yaml
++    kubectl get <kinds> -n <ns> -o json --show-managed-fields > live.json
++    ./stuck_fields.py <ns> render.yaml live.json [extra-object.json ...]
++
++Cluster-scoped objects (Namespace, ClusterRole, ClusterRoleBinding) are fetched one at a time
++and passed as extra arguments. Ports and other API-defaulted subfields are matched leniently
++and `protocol` is dropped, or every defaulted field reads as a false positive.
++"""
++
++import json, yaml, sys
++NS=sys.argv[1]; REND=sys.argv[2]; LIVE=sys.argv[3]; EXTRA=sys.argv[4:]
++rend=[d for d in yaml.safe_load_all(open(REND)) if d]
++rmap={}
++for d in rend:
++    n=d['metadata'].get('name') or '<generated>'
++    rmap[(d['kind'],n)]=d
++live=[o for o in json.load(open(LIVE))['items'] if o['metadata'].get('namespace')==NS]
++for f in EXTRA:
++    try: live.append(json.load(open(f)))
++    except Exception: pass
++def helm_entry(o):
++    for f in o['metadata'].get('managedFields',[]):
++        if f.get('manager')=='helm' and not f.get('subresource'): return f
++def match(node,sel):
++    if not isinstance(node,list): return None
++    for it in node:
++        if isinstance(it,dict) and all(it.get(k)==v for k,v in sel.items()): return it
++    for it in node:
++        if isinstance(it,dict) and any(k in it for k in sel) and all(it.get(k)==v for k,v in sel.items() if k in it): return it
++def walk(fields,node,prefix=''):
++    for key,sub in (fields or {}).items():
++        if key=='.': continue
++        child=None; missing=True
++        if key.startswith('f:'):
++            name=key[2:]; here=f'{prefix}.{name}' if prefix else name
++            if isinstance(node,dict) and name in node: child,missing=node[name],False
++        elif key.startswith('k:'):
++            sel=json.loads(key[2:]); here=prefix+'['+','.join(f'{k}={v}' for k,v in sel.items())+']'
++            child=match(node,sel); missing=child is None
++        elif key.startswith('v:'):
++            val=json.loads(key[2:]); here=f'{prefix}[={val}]'; missing=not(isinstance(node,list) and val in node)
++        elif key.startswith('i:'):
++            i=int(key[2:]); here=f'{prefix}[{i}]'
++            if isinstance(node,list) and len(node)>i: child,missing=node[i],False
++        else: continue
++        if missing: yield here
++        elif sub and any(k!='.' for k in sub): yield from walk(sub,child,here)
++helm_objs=[o for o in live if (o['metadata'].get('annotations') or {}).get('meta.helm.sh/release-name')==NS]
++print(f'--- {NS}: {len(helm_objs)} Helm-stamped live objects, {len(rmap)} rendered ---')
++miss=[o for o in helm_objs if (o['kind'],o['metadata']['name']) not in rmap]
++print('A. Helm objects absent from the render:', ', '.join(f'{o["kind"]}/{o["metadata"]["name"]}' for o in miss) or 'none')
++from collections import Counter
++c=Counter(); detail={}
++for o in helm_objs:
++    k=(o['kind'],o['metadata']['name'])
++    if k not in rmap: continue
++    e=helm_entry(o)
++    if not e: print(f'   !! {k[0]}/{k[1]} has no helm manager entry'); continue
++    for p in walk(e.get('fieldsV1',{}),rmap[k]):
++        if p.startswith(('metadata.creationTimestamp','status')) or p.endswith('.protocol'): continue
++        lab = 'imagePullPolicy' if p.endswith('imagePullPolicy') else p
++        c[lab]+=1; detail.setdefault(lab,[]).append(f'{k[0]}/{k[1]}')
++print('B. Stuck fields:')
++for p,n in c.most_common(): print(f'     {p:52} x{n}')
++print('     TOTAL', sum(c.values()))
+diff --git a/support/argo-migrate/test_registry.py b/support/argo-migrate/test_registry.py
+new file mode 100644
+index 0000000..33bb3b9
+--- /dev/null
++++ b/support/argo-migrate/test_registry.py
+@@ -0,0 +1,161 @@
++"""flip's and autosync's edits of the registry text (argo_migrate.registry_flip, registry_autosync).
++
++Run: python3 -m unittest discover -s support/argo-migrate
++"""
++
++import unittest
++
++import yaml
++
++from argo_migrate import Stop, registry_autosync, registry_flip
++
++# The registry's shapes (ArgoCDDeploy releases/values.yaml): a commented first entry, an upstream
++# app with syncOptions, one with a single pinned stage, two stages with a comment between them,
++# and a last entry with a flow-style stage.
++REGISTRY = """\
++# The registry (D63): every app-stage Argo CD deploys.
++apps:
++  # Argo CD's own entry (D3).
++  argocd:
++    repo: https://github.com/pvginkel/ArgoCDDeploy.git
++    stages:
++      prd:
++        # Permanent (D3).
++        autoSync: false
++  cloudnative-pg:
++    repo: https://github.com/pvginkel/CloudnativePgDeploy.git
++    upstream:
++      repo: https://cloudnative-pg.github.io/charts
++      chart: cloudnative-pg
++    # Its CRDs exceed the 256 KiB annotation (D62).
++    syncOptions:
++      - ServerSideApply=true
++    stages:
++      prd:
++        version: "0.29.1"
++  grafana:
++    repo: https://github.com/pvginkel/GrafanaDeploy.git
++    upstream:
++      repo: https://grafana.github.io/helm-charts
++      chart: grafana
++    stages:
++      prd:
++        version: "10.5.15"
++  kubecoder:
++    repo: https://github.com/pvginkel/KubeCoderDeploy.git
++    stages:
++      dev: {}
++      # D34: prd tracks the `prd` branch.
++      prd:
++        targetRevision: prd
++  media:
++    repo: https://github.com/pvginkel/MediaDeploy.git
++    stages:
++      prd: {}
++"""
++
++GRAFANA = """\
++  grafana:
++    repo: https://github.com/pvginkel/GrafanaDeploy.git
++    upstream:
++      repo: https://grafana.github.io/helm-charts
++      chart: grafana
++    stages:
++      prd:
++        version: "10.5.15"
++"""
++GRAFANA_ENTRY = {"repo": "https://github.com/pvginkel/GrafanaDeploy.git",
++                 "upstream": {"repo": "https://grafana.github.io/helm-charts", "chart": "grafana"}}
++MEDIA = """\
++  media:
++    repo: https://github.com/pvginkel/MediaDeploy.git
++    stages:
++      prd: {}
++"""
++MEDIA_ENTRY = {"repo": "https://github.com/pvginkel/MediaDeploy.git"}
++KUBECODER_ENTRY = {"repo": "https://github.com/pvginkel/KubeCoderDeploy.git"}
++
++
++def without(text: str, part: str) -> str:
++    assert text.count(part) == 1, part
++    return text.replace(part, "")
++
++
++def comments(text: str) -> list[str]:
++    return [l for l in text.splitlines() if l.lstrip().startswith("#")]
++
++
++class Flip(unittest.TestCase):
++    def test_new_app_lands_in_name_order_and_autosync_restores_the_file(self):
++        before = without(REGISTRY, GRAFANA)
++        flipped = registry_flip(before, "grafana", "prd", GRAFANA_ENTRY,
++                                {"autoSync": False, "version": "10.5.15"})
++        self.assertEqual(flipped, REGISTRY.replace(
++            '      prd:\n        version: "10.5.15"\n',
++            '      prd:\n        autoSync: false\n        version: "10.5.15"\n'))
++        self.assertEqual(registry_autosync(flipped, "grafana", "prd"), REGISTRY)
++
++    def test_new_last_app_goes_at_the_end(self):
++        before = without(REGISTRY, MEDIA)
++        flipped = registry_flip(before, "media", "prd", MEDIA_ENTRY, {"autoSync": False})
++        self.assertEqual(flipped, before + "  media:\n    repo: https://github.com/pvginkel/MediaDeploy.git\n"
++                                           "    stages:\n      prd:\n        autoSync: false\n")
++        self.assertEqual(registry_autosync(flipped, "media", "prd"), REGISTRY)
++
++    def test_new_first_app_goes_above_the_next_entrys_comments(self):
++        flipped = registry_flip(REGISTRY, "aaa", "prd", {"repo": "https://github.com/pvginkel/AaaDeploy.git"},
++                                {"autoSync": False})
++        self.assertIn("apps:\n  aaa:\n    repo: https://github.com/pvginkel/AaaDeploy.git\n    stages:\n"
++                      "      prd:\n        autoSync: false\n  # Argo CD's own entry (D3).\n  argocd:\n", flipped)
++        self.assertEqual(comments(flipped), comments(REGISTRY))
++
++    def test_new_app_with_sync_options_carries_them_and_their_reason(self):
++        entry = {"repo": "https://github.com/pvginkel/ExternalSecretsDeploy.git",
++                 "upstream": {"repo": "https://charts.external-secrets.io", "chart": "external-secrets"},
++                 "syncOptions": ["ServerSideApply=true"]}
++        flipped = registry_flip(REGISTRY, "external-secrets", "prd", entry,
++                                {"autoSync": False, "version": "2.11.0"})
++        apps = yaml.safe_load(flipped)["apps"]
++        self.assertEqual(list(apps), ["argocd", "cloudnative-pg", "external-secrets", "grafana", "kubecoder",
++                                      "media"])
++        self.assertEqual(apps["external-secrets"],
++                         {**entry, "stages": {"prd": {"autoSync": False, "version": "2.11.0"}}})
++        self.assertIn("    # annotation that client-side apply writes (D62).\n    syncOptions:\n"
++                      "      - ServerSideApply=true\n", flipped)
++
++    def test_a_further_stage_joins_the_apps_stages_above_the_next_stages_comment(self):
++        before = without(REGISTRY, "      dev: {}\n")
++        flipped = registry_flip(before, "kubecoder", "dev", KUBECODER_ENTRY, {"autoSync": False})
++        self.assertIn("    stages:\n      dev:\n        autoSync: false\n      # D34: prd tracks", flipped)
++        self.assertEqual(registry_autosync(flipped, "kubecoder", "dev"), REGISTRY)
++
++    def test_a_stage_the_registry_has_stops(self):
++        with self.assertRaisesRegex(Stop, "kubecoder-prd is there already"):
++            registry_flip(REGISTRY, "kubecoder", "prd", KUBECODER_ENTRY, {"autoSync": False})
++
++    def test_a_stage_whose_app_entry_differs_stops(self):
++        with self.assertRaisesRegex(Stop, "kubecoder's syncOptions differ"):
++            registry_flip(REGISTRY, "kubecoder", "test", {**KUBECODER_ENTRY, "syncOptions": ["ServerSideApply=true"]},
++                          {"autoSync": False})
++
++
++class Autosync(unittest.TestCase):
++    def test_the_autosync_line_goes_with_its_comment_and_the_key_keeps_its_own(self):
++        text = REGISTRY.replace("      prd: {}\n", "      prd:  # media's only stage\n        autoSync: false\n")
++        self.assertEqual(registry_autosync(text, "media", "prd"),
++                         REGISTRY.replace("      prd: {}\n", "      prd: {}  # media's only stage\n"))
++        synced = registry_autosync(REGISTRY, "argocd", "prd")
++        self.assertIn("  argocd:\n    repo: https://github.com/pvginkel/ArgoCDDeploy.git\n    stages:\n"
++                      "      prd: {}\n  cloudnative-pg:\n", synced)
++
++    def test_a_stage_the_registry_lacks_stops(self):
++        with self.assertRaisesRegex(Stop, "no kubecoder-test; flip comes first"):
++            registry_autosync(REGISTRY, "kubecoder", "test")
++
++    def test_a_stage_already_auto_syncing_stops(self):
++        with self.assertRaisesRegex(Stop, "grafana-prd auto-syncs already"):
++            registry_autosync(REGISTRY, "grafana", "prd")
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+/work/Ansible — P8: git diff b56fc9a7372e..f7877e49f385
+
+.kubecoder/project.yaml                                         |   6 +-
+ support/recommend-resources/recommend_resources.py              | 677 ++++++++++++++++++++++++++++
+ .../resources-entry-maps/ceph-csi-cephfs.json                   |  12 +
+ .../recommend-resources/resources-entry-maps/ceph-csi-rbd.json  |  12 +
+ .../resources-entry-maps/cloudnative-pg.json                    |   3 +
+ .../resources-entry-maps/external-secrets.json                  |   5 +
+ support/recommend-resources/resources-entry-maps/grafana.json   |   3 +
+ support/recommend-resources/resources-entry-maps/headlamp.json  |   4 +
+ support/recommend-resources/resources-entry-maps/mosquitto.json |   3 +
+ .../recommend-resources/resources-entry-maps/prometheus.json    |   8 +
+ .../resources-entry-maps/step-certificates.json                 |   3 +
+ support/recommend-resources/test_recommend_resources.py         | 368 +++++++++++++++
+ 12 files changed, 1102 insertions(+), 2 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index befc1f9..d125245 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -14,8 +14,10 @@ projects:
+       - cexec go sudo apt-get install -y --no-install-recommends librados-dev librbd-dev
+       - cexec iac poetry install --no-interaction
+       - cexec iac poetry run ansible-galaxy collection install -r ansible/collections/requirements.yml
+-    # Not cexec-prefixed: argo-migrate runs in the dev container.
+-    test: python3 -m unittest discover -s support/argo-migrate
++    # Not cexec-prefixed: argo-migrate and recommend-resources run in the dev container.
++    test:
++      - python3 -m unittest discover -s support/argo-migrate
++      - python3 -m unittest discover -s support/recommend-resources
+ 
+   ansible:
+     description: >-
+diff --git a/support/recommend-resources/recommend_resources.py b/support/recommend-resources/recommend_resources.py
+new file mode 100644
+index 0000000..48594a0
+--- /dev/null
++++ b/support/recommend-resources/recommend_resources.py
+@@ -0,0 +1,677 @@
++#!/usr/bin/env python3
++"""Resource requests for every app-stage Argo CD deploys, from Prometheus (argo-cd D65).
++
++    report DIR   clone every deploy repo in ArgoCDDeploy's registry into DIR/repos, read the last
++                 7 days from Prometheus, and write one patch per deploy repo it would change into
++                 DIR/report; containers it cannot place are listed in DIR/not-placed.txt
++    apply DIR    apply the patches left in DIR/report to their clones and commit each on main
++
++Between the two steps the report is the operator's: deleting a patch leaves that deploy repo as it
++is, and an edited hunk is applied as edited. Nothing is pushed; `apply` prints the push commands.
++
++The recommendation policy is HelmCharts' tools/chart_tools/recommend_resources.py's: p75 CPU and
++p90 working-set memory over 7 days, CPU rounded up to one significant digit, memory up to the next
++quarter power of two, and a value only ever raised unless --reset. A container's requests go in
++its app-stage's config/<stage>/values.yaml, at `resources.<workload>.<container>.requests` when
++the stage's resolved chart declares that container there, else at the path the chart's map in
++resources-entry-maps/<chart>.json names. The resolved chart is the deploy repo's chart/, or for an
++upstream app the registry's chart at the stage's pinned version.
++
++Run from the dev container; helm runs in the `iac` sidecar via cexec.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import math
++import re
++import subprocess
++import sys
++import urllib.parse
++import urllib.request
++from collections import defaultdict
++from concurrent.futures import ThreadPoolExecutor
++from dataclasses import dataclass
++from datetime import datetime, timedelta, timezone
++from functools import cache
++from pathlib import Path
++from typing import Any, Optional
++
++import yaml
++
++HERE = Path(__file__).resolve().parent
++REGISTRY = Path("/work/ArgoCDDeploy/releases/values.yaml")
++MAPS = HERE / "resources-entry-maps"
++PROMETHEUS = "http://prometheus.home"
++NUM_DAYS = 7
++# Changes enter a deploy repo on main; a stage that tracks another branch, like KubeCoder's prd
++# (argo-cd D34), receives them by promotion.
++ENTRY_BRANCH = "main"
++COMMIT_MESSAGE = f"""\
++config: resource requests from {NUM_DAYS} days of Prometheus data
++
++p75 CPU and p90 working-set memory, by Ansible's support/recommend-resources (argo-cd D65).
++"""
++
++
++class Stop(Exception):
++    pass
++
++
++def log(msg: str) -> None:
++    print(f"[recommend-resources] {msg}", flush=True)
++
++
++def run(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
++    r = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
++    if check and r.returncode != 0:
++        raise Stop(f"command failed ({r.returncode}): {' '.join(cmd)}\n{r.stdout}\n{r.stderr}")
++    return r
++
++
++def git(clone: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
++    return run(["git", "-C", str(clone), *args], check=check)
++
++
++# ---------------------------------------------------------------------------------------------
++# The registry and the resolved chart
++
++
++@dataclass(frozen=True)
++class Stage:
++    app: str
++    stage: str
++    repo: str
++    upstream: Optional[dict]
++    version: Optional[str]
++    revision: str
++
++    @property
++    def ns(self) -> str:
++        return f"{self.app}-{self.stage}"
++
++    @property
++    def clone(self) -> str:
++        return self.repo.rsplit("/", 1)[1].removesuffix(".git")
++
++    @property
++    def values_file(self) -> str:
++        return f"config/{self.stage}/values.yaml"
++
++
++def registry_stages(registry: dict) -> dict[str, Stage]:
++    """Namespace -> app-stage; the namespace is always <app>-<stage> (argo-cd D24)."""
++    stages = {}
++    for app, entry in registry["apps"].items():
++        for stage, settings in entry["stages"].items():
++            s = Stage(app, stage, entry["repo"], entry.get("upstream"), settings.get("version"),
++                      settings.get("targetRevision", "main"))
++            stages[s.ns] = s
++    return stages
++
++
++@dataclass
++class Chart:
++    name: str
++    values: dict
++
++
++@cache
++def upstream_values(repo: str, chart: str, version: str) -> dict:
++    out = run(["cexec", "iac", "helm", "show", "values", chart, "--repo", repo, "--version", version],
++              cwd=HERE).stdout
++    return yaml.safe_load(out) or {}
++
++
++def resolve_chart(stage: Stage, clone: Path) -> Chart:
++    if stage.upstream:
++        chart = stage.upstream["chart"]
++        return Chart(chart, upstream_values(stage.upstream["repo"], chart, stage.version))
++    meta = yaml.safe_load((clone / "chart/Chart.yaml").read_text())
++    return Chart(meta["name"], yaml.safe_load((clone / "chart/values.yaml").read_text()) or {})
++
++
++# ---------------------------------------------------------------------------------------------
++# The recommendations
++
++
++@dataclass(frozen=True)
++class ContainerRef:
++    ns: str
++    pod: str
++    container: str
++
++
++@dataclass
++class Recommendation:
++    cpu: int
++    memory: int
++
++
++# Strips controller-generated pod suffixes to recover the workload name:
++#   Deployment / CronJob: <workload>-<8-10 char hash>-<5 char id>
++#   DaemonSet / Job:      <workload>-<5 char id>
++#   StatefulSet:          <workload>-<ordinal>
++_POD_SUFFIX_RE = re.compile(r"-(?:[a-z0-9]{8,10}-[a-z0-9]{5}|[a-z0-9]{5}|\d+)$")
++
++
++def infer_workload(pod: str) -> Optional[str]:
++    m = _POD_SUFFIX_RE.search(pod)
++    return pod[: m.start()] if m else None
++
++
++def promql(query: str, start: int, end: int, step: str = "300s") -> list:
++    params = urllib.parse.urlencode({"query": query, "start": start, "end": end, "step": step})
++    with urllib.request.urlopen(f"{PROMETHEUS}/api/v1/query_range?{params}", timeout=300) as r:
++        return json.load(r)["data"]["result"]
++
++
++def get_values_from_metrics(metrics: Any) -> dict[ContainerRef, list[float]]:
++    values = defaultdict(list)
++
++    for result in metrics:
++        try:
++            ns = result["metric"]["namespace"]
++            pod = result["metric"]["pod"]
++            container = result["metric"]["container"]
++
++            workload = infer_workload(pod)
++            if not workload:
++                continue
++
++            key = ContainerRef(ns, workload, container)
++
++            values[key].extend([float(val[1]) for val in result["values"]])
++        except KeyError:
++            continue
++
++    return values
++
++
++def percentile(values: list[float], q: float) -> float:
++    """numpy.percentile's default (linear) method, which the old tool used."""
++    s = sorted(values)
++    h = (len(s) - 1) * q / 100
++    lo = math.floor(h)
++    hi = min(lo + 1, len(s) - 1)
++    return s[lo] + (h - lo) * (s[hi] - s[lo])
++
++
++def get_recommendations(start: datetime, end: datetime) -> dict[ContainerRef, Recommendation]:
++    start_ts = int(start.timestamp())
++    end_ts = int(end.timestamp())
++
++    cpu_metrics = promql(
++        """
++        sum by (namespace, pod, container) (
++            rate(container_cpu_usage_seconds_total{container != "", container != "POD"}[5m])
++        )
++        """,
++        start_ts,
++        end_ts,
++    )
++
++    # working_set, not usage: container_memory_usage_bytes includes inactive
++    # page cache, which is reclaimable and is not what the scheduler packs
++    # against or what kubelet evicts on. Any container that moves bytes through
++    # the filesystem reads far higher on usage than it ever needs — registry-prd
++    # measured 727 MiB usage against 63 MiB working set.
++    mem_metrics = promql(
++        """
++        max by (namespace, pod, container) (
++            container_memory_working_set_bytes{container != "", container != "POD"}
++        )
++        """,
++        start_ts,
++        end_ts,
++    )
++
++    cpu_data = get_values_from_metrics(cpu_metrics)
++    mem_data = get_values_from_metrics(mem_metrics)
++
++    recommendations = {}
++
++    for key in set(cpu_data.keys() | mem_data.keys()):
++        cpu = cpu_data.get(key, [])
++        mem = mem_data.get(key, [])
++
++        cpu_req = (percentile(cpu, 75) if len(cpu) > 0 else 0) * 1000  # millicores
++        mem_req = (percentile(mem, 90) if len(mem) > 0 else 0) / (1024 * 1024)  # MiB
++
++        recommendations[key] = Recommendation(int(round(cpu_req)), int(round(mem_req)))
++
++    return recommendations
++
++
++def round_cpu_recommendation(value: int) -> int:
++    """Round up to 1 significant digit (e.g., 13 -> 20, 371 -> 400)"""
++    if value < 10:
++        return 0
++
++    power = math.floor(math.log10(abs(value)))
++    base = 10**power
++    rounded = math.ceil(value / base) * base
++
++    return int(rounded)
++
++
++def round_mem_recommendation(value: int) -> int:
++    """Return the next quarter-power-of-2 >= x (in Mi)"""
++
++    if value <= 0:
++        return 0
++
++    exponent = math.ceil(math.log2(value))
++    previous_power2 = 2 ** (exponent - 1)
++    step = previous_power2 // 4
++
++    for i in range(1, 5):
++        match = previous_power2 + step * (i - 1)
++        if value <= match:
++            return match
++
++    return 2**exponent
++
++
++def format_cpu(value: int) -> Optional[str]:
++    return f"{int(round(value))}m" if value > 0 else None
++
++
++def format_mem(value: int) -> Optional[str]:
++    return f"{int(round(value))}Mi" if value > 0 else None
++
++
++def parse_cpu(value: Optional[str]) -> int:
++    if not value:
++        return 0
++
++    if value.endswith("m"):
++        return int(value[:-1])
++    elif value.endswith("c"):
++        return int(value[:-1]) // 1000  # Convert from cores to millicores
++    else:
++        raise ValueError(f"Invalid CPU value format: {value}")
++
++
++def parse_mem(value: Optional[str]) -> int:
++    if not value:
++        return 0
++
++    if value.endswith("Mi"):
++        return int(value[:-2])
++    elif value.endswith("Gi"):
++        return int(value[:-2]) * 1024  # Convert GiB to MiB
++    elif value.endswith("Ki"):
++        return int(value[:-2]) // 1024  # Convert KiB to MiB
++    else:
++        raise ValueError(f"Invalid memory value format: {value}")
++
++
++# ---------------------------------------------------------------------------------------------
++# Where a container's requests go
++
++
++def is_resource_defined(ref: ContainerRef, chart: Chart) -> bool:
++    """Whether the chart's values declare resources.<workload>.<container>."""
++    resources = chart.values.get("resources")
++    if not isinstance(resources, dict) or ref.pod not in resources:
++        return False
++
++    containers = resources[ref.pod]
++    if not isinstance(containers, dict):
++        log(f"chart {chart.name} declares resources.{ref.pod} without a container map")
++        return False
++
++    return ref.container in containers
++
++
++@cache
++def entry_map(chart: str) -> dict[str, str]:
++    path = MAPS / f"{chart}.json"
++    return json.loads(path.read_text()) if path.exists() else {}
++
++
++def get_resources_path(ref: ContainerRef, chart: Chart) -> Optional[list[str]]:
++    if is_resource_defined(ref, chart):
++        return ["resources", ref.pod, ref.container, "requests"]
++
++    path = entry_map(chart.name).get(f"{ref.pod}/{ref.container}")
++    return path.split(".") if path else None
++
++
++# ---------------------------------------------------------------------------------------------
++# Editing a values file: every line the change does not need stays as it was, comments included.
++
++NULL_TAG = "tag:yaml.org,2002:null"
++
++
++def _compose(text: str) -> Optional[yaml.Node]:
++    return yaml.compose(text, Loader=yaml.SafeLoader)
++
++
++def _pair(node: yaml.MappingNode, key: str) -> Optional[tuple[yaml.Node, yaml.Node]]:
++    for k, v in node.value:
++        if isinstance(k, yaml.ScalarNode) and k.value == key:
++            return k, v
++    return None
++
++
++def _implicit_null(node: yaml.Node) -> bool:
++    """`key:` with nothing after it; its marks point at the next token, not at the key."""
++    return isinstance(node, yaml.ScalarNode) and node.tag == NULL_TAG and node.value == ""
++
++
++def _end_line(k: yaml.Node, v: yaml.Node) -> int:
++    """The last line of the mapping entry `k: v`."""
++    return k.end_mark.line if _implicit_null(v) else _node_end(v)
++
++
++def _node_end(node: yaml.Node) -> int:
++    if isinstance(node, yaml.MappingNode) and not node.flow_style:
++        return _end_line(*node.value[-1])
++    if isinstance(node, yaml.SequenceNode) and not node.flow_style:
++        return _node_end(node.value[-1])
++    m = node.end_mark
++    return m.line if m.column else m.line - 1
++
++
++def _insert(text: str, after: int, new: list[str]) -> str:
++    lines = text.splitlines(keepends=True)
++    if not lines[after].endswith("\n"):
++        lines[after] += "\n"
++    lines[after + 1:after + 1] = new
++    return "".join(lines)
++
++
++def _append(text: str, new: list[str]) -> str:
++    if text and not text.endswith("\n"):
++        text += "\n"
++    sep = "\n" if text.strip() and not text.endswith("\n\n") else ""
++    return text + sep + "".join(new)
++
++
++def _block(path: list[str], value: str, indent: int) -> list[str]:
++    lines = [" " * (indent + 2 * i) + f"{key}:\n" for i, key in enumerate(path[:-1])]
++    return [*lines, " " * (indent + 2 * (len(path) - 1)) + f"{path[-1]}: {value}\n"]
++
++
++def _flow(text: str, node: yaml.MappingNode, edit) -> str:
++    """Re-emits a flow mapping after `edit` changes its data; comments inside it are lost."""
++    data = yaml.safe_load(text[node.start_mark.index:node.end_mark.index])
++    edit(data)
++    new = yaml.safe_dump(data, default_flow_style=True, width=math.inf, sort_keys=False).strip()
++    return text[:node.start_mark.index] + new + text[node.end_mark.index:]
++
++
++def _nested_set(data: dict, path: list[str], value: str) -> None:
++    for key in path[:-1]:
++        if not isinstance(data.get(key), dict):
++            data[key] = {}
++        data = data[key]
++    data[path[-1]] = value
++
++
++def _nested_pop(data: dict, path: list[str]) -> None:
++    for key in path[:-1]:
++        data = data.get(key)
++        if not isinstance(data, dict):
++            return
++    data.pop(path[-1], None)
++
++
++def set_value(text: str, path: list[str], value: str) -> str:
++    """`text` with the scalar at `path` set to `value`. Mappings the path lacks are added in block
++    style, at the end of the deepest one it has; a new top-level key gets a blank line before it."""
++    node = _compose(text)
++    if node is None:
++        return _append(text, _block(path, value, 0))
++    root = node
++    for d, key in enumerate(path):
++        if not isinstance(node, yaml.MappingNode):
++            raise Stop(f"{'.'.join(path[:d]) or 'the document'} is not a mapping")
++        if node.flow_style:
++            return _flow(text, node, lambda data: _nested_set(data, path[d:], value))
++        pair = _pair(node, key)
++        if pair is None:
++            new = _block(path[d:], value, node.value[0][0].start_mark.column)
++            if node is root:
++                return _append(text, new)
++            return _insert(text, _end_line(*node.value[-1]), new)
++        k, v = pair
++        if d == len(path) - 1:
++            if not isinstance(v, yaml.ScalarNode):
++                raise Stop(f"{'.'.join(path)} is not a scalar")
++            if _implicit_null(v):
++                colon = text.index(":", k.end_mark.index)
++                return text[:colon + 1] + f" {value}" + text[colon + 1:]
++            quote = v.style if v.style in ("'", '"') else ""
++            return text[:v.start_mark.index] + f"{quote}{value}{quote}" + text[v.end_mark.index:]
++        if isinstance(v, yaml.MappingNode) and v.value:
++            node = v
++            continue
++        if isinstance(v, yaml.MappingNode) or (isinstance(v, yaml.ScalarNode) and v.tag == NULL_TAG):
++            # `key:`, `key: ~` or `key: {}`: the rest of the path becomes the key's block.
++            if not _implicit_null(v):
++                colon = text.index(":", k.end_mark.index)
++                text = text[:colon + 1] + text[v.end_mark.index:]
++            return _insert(text, k.start_mark.line, _block(path[d + 1:], value, k.start_mark.column + 2))
++        raise Stop(f"{'.'.join(path[:d + 1])} is {v.value!r}, not a mapping")
++    raise AssertionError("unreachable")
++
++
++def delete_value(text: str, path: list[str]) -> str:
++    """`text` without the key at `path`; a mapping it empties stays, as `{}`."""
++    node, owner = _compose(text), None
++    for d, key in enumerate(path):
++        if not isinstance(node, yaml.MappingNode):
++            return text
++        if node.flow_style:
++            return _flow(text, node, lambda data: _nested_pop(data, path[d:]))
++        pair = _pair(node, key)
++        if pair is None:
++            return text
++        k, v = pair
++        if d < len(path) - 1:
++            node, owner = v, k
++            continue
++        lines = text.splitlines(keepends=True)
++        del lines[k.start_mark.line:_end_line(k, v) + 1]
++        if len(node.value) == 1 and owner is not None:
++            # `{}`, not an empty value: null in a values file deletes the chart's default, and a
++            # dropped request means falling back to it.
++            line = lines[owner.start_mark.line]
++            colon = line.index(":", owner.end_mark.column)
++            lines[owner.start_mark.line] = line[:colon + 1] + " {}" + line[colon + 1:]
++        return "".join(lines)
++    raise AssertionError("unreachable")
++
++
++def _get(data: Any, path: list[str]) -> Any:
++    for key in path:
++        data = data.get(key) if isinstance(data, dict) else None
++    return data
++
++
++def revise(text: str, path: list[str], rec: Recommendation, reset: bool) -> tuple[str, list[str]]:
++    """The values text with one container's requests revised, and what changed."""
++    old = _get(yaml.safe_load(text), path)
++    old = old if isinstance(old, dict) else {}
++    changes = []
++    for field, parse, new in (
++        ("cpu", parse_cpu, format_cpu(round_cpu_recommendation(rec.cpu))),
++        ("memory", parse_mem, format_mem(round_mem_recommendation(rec.memory))),
++    ):
++        # Recommendations normally only ratchet upwards: a high-water mark is
++        # evidence the container really needed that much, and a quiet measurement
++        # window is not evidence it stopped. --reset drops that guard so a stale
++        # mark can be re-derived from the current window.
++        if not (reset or parse(new) > parse(old.get(field))):
++            continue
++        revised = set_value(text, [*path, field], new) if new else delete_value(text, [*path, field])
++        if revised != text:
++            changes.append(f"{field} {old.get(field) or 'unset'} -> {new or 'unset'}")
++            text = revised
++    return text, changes
++
++
++# ---------------------------------------------------------------------------------------------
++# Step one: the report
++
++
++def clone_all(stages: dict[str, Stage], repos: Path) -> None:
++    urls = sorted({(s.clone, s.repo) for s in stages.values()})
++    repos.mkdir(parents=True)
++
++    def clone(item: tuple[str, str]) -> None:
++        name, url = item
++        run(["git", "clone", "--quiet", "--branch", ENTRY_BRANCH, url, str(repos / name)])
++
++    with ThreadPoolExecutor(8) as pool:
++        list(pool.map(clone, urls))
++    log(f"cloned {len(urls)} deploy repos into {repos}")
++
++
++def preamble(name: str, start: datetime, end: datetime, lines: list[str]) -> str:
++    when = f"{start:%Y-%m-%d %H:%MZ} to {end:%Y-%m-%d %H:%MZ}"
++    head = [
++        f"recommend-resources: {name}",
++        f"Requests from Prometheus, {when}: p75 CPU, p90 working-set memory.",
++        f"Delete this file to leave {name} as it is, or edit a hunk to overrule it;",
++        f"`recommend_resources.py apply` commits what is left on {ENTRY_BRANCH}. Lines before the",
++        "first `diff --git` are ignored.",
++        "",
++    ]
++    return "".join(f"# {line}".rstrip() + "\n" for line in [*head, *lines, ""])
++
++
++def cmd_report(args: argparse.Namespace) -> None:
++    work = Path(args.workdir)
++    if work.exists():
++        raise Stop(f"{work} exists: step one starts from fresh clones")
++    stages = registry_stages(yaml.safe_load(Path(args.registry).read_text()))
++    repos, report = work / "repos", work / "report"
++    clone_all(stages, repos)
++    charts = {ns: resolve_chart(s, repos / s.clone) for ns, s in stages.items()}
++
++    end = datetime.now(timezone.utc)
++    start = end - timedelta(days=NUM_DAYS)
++    recommendations = get_recommendations(start, end)
++
++    texts: dict[Path, str] = {}
++    notes: dict[str, list[str]] = defaultdict(list)
++    promoted: dict[str, set[str]] = defaultdict(set)
++    unplaced = []
++    for ref in sorted(recommendations, key=lambda r: (r.ns, r.pod, r.container)):
++        stage = stages.get(ref.ns)
++        if not stage:
++            continue
++        rec = recommendations[ref]
++        path = get_resources_path(ref, charts[ref.ns])
++        if not path:
++            unplaced.append(f"{ref.ns} {ref.pod}/{ref.container} (chart {charts[ref.ns].name})")
++            continue
++        file = repos / stage.clone / stage.values_file
++        text = texts.setdefault(file, file.read_text())
++        texts[file], changes = revise(text, path, rec, args.reset)
++        if changes:
++            notes[stage.clone].append(
++                f"{ref.ns} {ref.pod}/{ref.container}: {', '.join(changes)} "
++                f"(measured {rec.cpu}m, {rec.memory}Mi)")
++            if stage.revision != ENTRY_BRANCH:
++                promoted[stage.clone].add(
++                    f"{ref.ns} tracks {stage.revision}: this reaches it by promotion (argo-cd D34).")
++
++    report.mkdir()
++    for file, text in texts.items():
++        file.write_text(text)
++    for name in sorted(notes):
++        diff = git(repos / name, "diff", "--no-color", "--no-ext-diff").stdout
++        git(repos / name, "checkout", "--", ".")
++        lines = [*notes[name], *sorted(promoted[name])]
++        (report / f"{name}.patch").write_text(preamble(name, start, end, lines) + diff)
++
++    (work / "not-placed.txt").write_text("".join(f"{line}\n" for line in unplaced))
++    log(f"{len(unplaced)} containers in registry namespaces have requests neither their chart's values "
++        f"nor its map place; they are listed in {work / 'not-placed.txt'}")
++    log(f"{len(notes)} of {len({s.clone for s in stages.values()})} deploy repos would change; "
++        f"the patches are in {report}")
++    log(f"delete or edit them, then: {Path(__file__).name} apply {work}")
++
++
++# ---------------------------------------------------------------------------------------------
++# Step two: apply what is left
++
++
++def cmd_apply(args: argparse.Namespace) -> None:
++    work = Path(args.workdir)
++    patches = sorted((work / "report").glob("*.patch"))
++    if not patches:
++        raise Stop(f"no patches in {work / 'report'}")
++    clones = {p: work / "repos" / p.stem for p in patches}
++
++    problems = []
++    for patch, clone in clones.items():
++        if not clone.is_dir():
++            problems.append(f"{patch.name}: no clone at {clone}")
++        elif git(clone, "rev-list", f"origin/{ENTRY_BRANCH}..HEAD").stdout.strip():
++            problems.append(f"{patch.name}: {clone} already carries a commit (apply ran already)")
++        elif (r := git(clone, "apply", "--index", "--recount", "--check", str(patch), check=False)).returncode:
++            problems.append(f"{patch.name}: {r.stderr.strip()}")
++    if problems:
++        raise Stop("nothing applied; fix or delete these patches:\n  " + "\n  ".join(problems))
++
++    for patch, clone in clones.items():
++        git(clone, "apply", "--index", "--recount", str(patch))
++    staged = {patch: git(clone, "diff", "--cached", "--name-only").stdout.split() for patch, clone in clones.items()}
++    for patch, names in staged.items():
++        for name in names:
++            try:
++                yaml.safe_load((clones[patch] / name).read_text())
++            except yaml.YAMLError as e:
++                problems.append(f"{patch.name}: {name} is not YAML after the patch: {e}")
++    if problems:
++        for clone in clones.values():
++            git(clone, "reset", "--hard", "--quiet", "HEAD")
++        raise Stop("nothing committed; fix these patches:\n  " + "\n  ".join(problems))
++
++    committed = []
++    for patch, clone in clones.items():
++        if not staged[patch]:
++            log(f"{patch.name} changes nothing; {clone.name} is left as it is")
++            continue
++        git(clone, "commit", "--quiet", "-m", COMMIT_MESSAGE)
++        log(f"{clone.name}:")
++        print(git(clone, "--no-pager", "show", "--stat", "--patch", "--no-color", "HEAD").stdout, flush=True)
++        committed.append(clone)
++    log(f"committed {len(committed)} deploy repos on {ENTRY_BRANCH}; nothing is pushed. To push them:")
++    for clone in committed:
++        print(f"  git -C {clone} push origin {ENTRY_BRANCH}")
++
++
++def main() -> int:
++    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    ap.add_argument("step", choices=["report", "apply"])
++    ap.add_argument("workdir", help="scratch directory: the clones and the report")
++    ap.add_argument("--registry", default=str(REGISTRY), help="report: ArgoCDDeploy's registry file")
++    ap.add_argument(
++        "--reset",
++        action="store_true",
++        help=(
++            "report: overwrite existing values even when the new recommendation is lower. Off by "
++            "default so recommendations only ratchet upwards. Containers absent from the "
++            "measurement window are untouched either way, but a container that merely ran quietly "
++            "will be revised down; re-run without --reset afterwards to let genuine peaks climb back."
++        ),
++    )
++    args = ap.parse_args()
++    try:
++        (cmd_report if args.step == "report" else cmd_apply)(args)
++    except Stop as e:
++        log(f"STOP: {e}")
++        return 1
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/support/recommend-resources/resources-entry-maps/ceph-csi-cephfs.json b/support/recommend-resources/resources-entry-maps/ceph-csi-cephfs.json
+new file mode 100644
+index 0000000..9a46651
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/ceph-csi-cephfs.json
+@@ -0,0 +1,12 @@
++{
++    "ceph-csi-cephfs-prd/csi-cephfsplugin": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-cephfs-prd/driver-registrar": "nodeplugin.registrar.resources.requests",
++    "ceph-csi-cephfs-prd/liveness-prometheus": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/csi-cephfsplugin": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/csi-cephfsplugin-controller": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/liveness-prometheus": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/csi-provisioner": "provisioner.provisioner.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/csi-snapshotter": "provisioner.snapshotter.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/csi-attacher": "provisioner.attacher.resources.requests",
++    "ceph-csi-cephfs-prd-provisioner/csi-resizer": "provisioner.resizer.resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/ceph-csi-rbd.json b/support/recommend-resources/resources-entry-maps/ceph-csi-rbd.json
+new file mode 100644
+index 0000000..dbd6675
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/ceph-csi-rbd.json
+@@ -0,0 +1,12 @@
++{
++    "ceph-csi-rbd-prd/csi-rbdplugin": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-rbd-prd/driver-registrar": "nodeplugin.registrar.resources.requests",
++    "ceph-csi-rbd-prd/liveness-prometheus": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/csi-rbdplugin": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/csi-rbdplugin-controller": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/liveness-prometheus": "nodeplugin.plugin.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/csi-provisioner": "provisioner.provisioner.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/csi-snapshotter": "provisioner.snapshotter.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/csi-attacher": "provisioner.attacher.resources.requests",
++    "ceph-csi-rbd-prd-provisioner/csi-resizer": "provisioner.resizer.resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/cloudnative-pg.json b/support/recommend-resources/resources-entry-maps/cloudnative-pg.json
+new file mode 100644
+index 0000000..6ebd5c2
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/cloudnative-pg.json
+@@ -0,0 +1,3 @@
++{
++    "cloudnative-pg-prd/manager": "resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/external-secrets.json b/support/recommend-resources/resources-entry-maps/external-secrets.json
+new file mode 100644
+index 0000000..7e9fd67
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/external-secrets.json
+@@ -0,0 +1,5 @@
++{
++    "external-secrets-prd/external-secrets": "resources.requests",
++    "external-secrets-prd-webhook/webhook": "webhook.resources.requests",
++    "external-secrets-prd-cert-controller/cert-controller": "certController.resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/grafana.json b/support/recommend-resources/resources-entry-maps/grafana.json
+new file mode 100644
+index 0000000..e090845
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/grafana.json
+@@ -0,0 +1,3 @@
++{
++    "grafana/grafana": "resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/headlamp.json b/support/recommend-resources/resources-entry-maps/headlamp.json
+new file mode 100644
+index 0000000..0a100f1
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/headlamp.json
+@@ -0,0 +1,4 @@
++{
++    "headlamp-prd/headlamp": "resources.requests",
++    "headlamp-prd/headlamp-plugin": "pluginsManager.resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/mosquitto.json b/support/recommend-resources/resources-entry-maps/mosquitto.json
+new file mode 100644
+index 0000000..1107fd3
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/mosquitto.json
+@@ -0,0 +1,3 @@
++{
++    "mosquitto/mosquitto": "mosquitto.resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/prometheus.json b/support/recommend-resources/resources-entry-maps/prometheus.json
+new file mode 100644
+index 0000000..bb15e41
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/prometheus.json
+@@ -0,0 +1,8 @@
++{
++    "prometheus-prd-server/prometheus-server": "server.resources.requests",
++    "prometheus-prd-alertmanager/alertmanager": "alertmanager.resources.requests",
++    "prometheus-prd-prometheus-pushgateway/pushgateway": "prometheus-pushgateway.resources.requests",
++    "prometheus-prd-prometheus-node/node-exporter": "prometheus-node-exporter.resources.requests",
++    "prometheus-prd-kube-state-metrics/kube-state-metrics": "kube-state-metrics.resources.requests",
++    "prometheus-prd-server/prometheus-server-configmap-reload": "configmapReload.prometheus.resources.requests"
++}
+diff --git a/support/recommend-resources/resources-entry-maps/step-certificates.json b/support/recommend-resources/resources-entry-maps/step-certificates.json
+new file mode 100644
+index 0000000..e126d32
+--- /dev/null
++++ b/support/recommend-resources/resources-entry-maps/step-certificates.json
+@@ -0,0 +1,3 @@
++{
++    "step-ca/step-certificates": "resources.requests"
++}
+diff --git a/support/recommend-resources/test_recommend_resources.py b/support/recommend-resources/test_recommend_resources.py
+new file mode 100644
+index 0000000..82521bb
+--- /dev/null
++++ b/support/recommend-resources/test_recommend_resources.py
+@@ -0,0 +1,368 @@
++"""recommend-resources: the policy, where a container's requests go, the values-file edits, and
++the report -> apply round trip on local git repositories.
++
++Run: python3 -m unittest discover -s support/recommend-resources
++"""
++
++import argparse
++import contextlib
++import io
++import os
++import subprocess
++import tempfile
++import textwrap
++import unittest
++from pathlib import Path
++from unittest import mock
++
++import yaml
++
++import recommend_resources as rr
++from recommend_resources import Chart, ContainerRef, Recommendation
++
++
++class Policy(unittest.TestCase):
++    def test_percentile_is_numpys_linear(self):
++        self.assertEqual(rr.percentile([4, 1, 3, 2], 75), 3.25)
++        self.assertAlmostEqual(rr.percentile([float(i) for i in range(1, 11)], 90), 9.1)
++        self.assertEqual(rr.percentile([5.0], 90), 5.0)
++
++    def test_workload_from_pod(self):
++        self.assertEqual(rr.infer_workload("calendar-support-6d9f8b7c5d-x2x9z"), "calendar-support")
++        self.assertEqual(rr.infer_workload("step-ca-0"), "step-ca")
++        # The maps' keys depend on this: an 8-10 char last word reads as a ReplicaSet hash.
++        self.assertEqual(rr.infer_workload("prometheus-prd-prometheus-node-exporter-9wrrz"),
++                         "prometheus-prd-prometheus-node")
++
++    def test_rounding(self):
++        self.assertEqual([rr.round_cpu_recommendation(v) for v in (9, 13, 371)], [0, 20, 400])
++        self.assertEqual([rr.round_mem_recommendation(v) for v in (0, 100, 118, 129)], [0, 112, 128, 160])
++
++    def test_window_and_percentiles(self):
++        series = {
++            "cpu": [{"metric": {"namespace": "a-prd", "pod": "a-0", "container": "c"},
++                     "values": [[0, "0.010"], [1, "0.020"], [2, "0.030"], [3, "0.050"]]}],
++            "mem": [{"metric": {"namespace": "a-prd", "pod": "a-0", "container": "c"},
++                     "values": [[0, str(v * 1024 * 1024)] for v in range(1, 11)]}],
++        }
++        calls = []
++
++        def promql(query, start, end, step="300s"):
++            calls.append((start, end, step))
++            return series["cpu" if "cpu" in query else "mem"]
++
++        start = rr.datetime(2026, 9, 19, tzinfo=rr.timezone.utc)
++        end = start + rr.timedelta(days=rr.NUM_DAYS)
++        with mock.patch.object(rr, "promql", promql):
++            recs = rr.get_recommendations(start, end)
++        self.assertEqual(calls, [(int(start.timestamp()), int(end.timestamp()), "300s")] * 2)
++        self.assertEqual(recs, {ContainerRef("a-prd", "a", "c"): Recommendation(35, 9)})
++
++
++class ResolvedChart(unittest.TestCase):
++    REGISTRY = {"apps": {
++        "calendar-support": {"repo": "https://github.com/pvginkel/CalendarSupportDeploy.git",
++                             "stages": {"prd": {}}},
++        "kubecoder": {"repo": "https://github.com/pvginkel/KubeCoderDeploy.git",
++                      "stages": {"dev": {}, "prd": {"targetRevision": "prd"}}},
++        "step-ca": {"repo": "https://github.com/pvginkel/StepCaDeploy.git",
++                    "upstream": {"repo": "https://smallstep.github.io/helm-charts", "chart": "step-certificates"},
++                    "stages": {"prd": {"version": "1.30.1"}}},
++    }}
++
++    def test_registry_stages(self):
++        stages = rr.registry_stages(self.REGISTRY)
++        self.assertEqual(sorted(stages), ["calendar-support-prd", "kubecoder-dev", "kubecoder-prd", "step-ca-prd"])
++        self.assertEqual(stages["kubecoder-dev"].revision, "main")
++        self.assertEqual(stages["kubecoder-prd"].revision, "prd")
++        self.assertEqual(stages["kubecoder-prd"].values_file, "config/prd/values.yaml")
++        self.assertEqual(stages["step-ca-prd"].clone, "StepCaDeploy")
++        self.assertEqual(stages["step-ca-prd"].version, "1.30.1")
++
++    def test_upstream_app_resolves_to_the_registry_chart_at_its_pin(self):
++        stage = rr.registry_stages(self.REGISTRY)["step-ca-prd"]
++        with mock.patch.object(rr, "run") as run:
++            run.return_value.stdout = "resources: {}\n"
++            chart = rr.resolve_chart(stage, Path("/nonexistent"))
++        self.assertEqual(chart, Chart("step-certificates", {"resources": {}}))
++        self.assertEqual(run.call_args.args[0][-5:], ["step-certificates", "--repo",
++                                                      "https://smallstep.github.io/helm-charts",
++                                                      "--version", "1.30.1"])
++
++    def test_local_app_resolves_to_the_deploy_repos_chart(self):
++        stage = rr.registry_stages(self.REGISTRY)["calendar-support-prd"]
++        with tempfile.TemporaryDirectory() as tmp:
++            (Path(tmp) / "chart").mkdir()
++            (Path(tmp) / "chart/Chart.yaml").write_text("name: calendar-support\n")
++            (Path(tmp) / "chart/values.yaml").write_text("resources:\n  a:\n    b: {}\n")
++            self.assertEqual(rr.resolve_chart(stage, Path(tmp)),
++                             Chart("calendar-support", {"resources": {"a": {"b": {}}}}))
++
++    def test_path_from_the_charts_values_first(self):
++        chart = Chart("calendar-support", {"resources": {"calendar-support": {"app": {}}}})
++        self.assertEqual(rr.get_resources_path(ContainerRef("calendar-support-prd", "calendar-support", "app"), chart),
++                         ["resources", "calendar-support", "app", "requests"])
++        self.assertIsNone(rr.get_resources_path(ContainerRef("calendar-support-prd", "other", "app"), chart))
++
++    def test_map_keyed_on_the_resolved_chart_not_the_app(self):
++        ref = ContainerRef("step-ca-prd", "step-ca", "step-certificates")
++        self.assertEqual(rr.get_resources_path(ref, Chart("step-certificates", {"resources": {}})),
++                         ["resources", "requests"])
++        self.assertIsNone(rr.get_resources_path(ref, Chart("step-ca", {})))
++
++    def test_every_map_names_a_requests_path(self):
++        maps = sorted(rr.MAPS.glob("*.json"))
++        self.assertEqual(len(maps), 9)
++        for m in maps:
++            for key, path in rr.entry_map(m.stem).items():
++                self.assertRegex(key, r"^[a-z0-9-]+/[a-z0-9-]+$", m.name)
++                self.assertTrue(path.endswith(".requests"), f"{m.name}: {path}")
++
++
++class Edit(unittest.TestCase):
++    VALUES = textwrap.dedent("""\
++        # Stage values.
++        image:
++          tag: "1.2"
++
++        resources:
++          app:
++            # The main container.
++            app:
++              requests:
++                memory: "112Mi"  # measured
++            sidecar:
++              requests:
++                cpu: 10m
++                memory: 16Mi
++
++        externalSecrets:
++          enabled: true
++        """)
++
++    def test_existing_value_replaced_in_place_keeping_quotes_and_comment(self):
++        out = rr.set_value(self.VALUES, ["resources", "app", "app", "requests", "memory"], "128Mi")
++        self.assertEqual(out, self.VALUES.replace('memory: "112Mi"  # measured', 'memory: "128Mi"  # measured'))
++
++    def test_missing_leaf_appended_to_its_mapping(self):
++        out = rr.set_value(self.VALUES, ["resources", "app", "app", "requests", "cpu"], "20m")
++        self.assertEqual(out, self.VALUES.replace('# measured\n', '# measured\n        cpu: 20m\n'))
++
++    def test_missing_mappings_added_at_the_end_of_the_deepest_one(self):
++        out = rr.set_value(self.VALUES, ["resources", "worker", "worker", "requests", "cpu"], "30m")
++        self.assertEqual(out, self.VALUES.replace(
++            "        memory: 16Mi\n",
++            "        memory: 16Mi\n  worker:\n    worker:\n      requests:\n        cpu: 30m\n"))
++        self.assertEqual(yaml.safe_load(out)["resources"]["worker"], {"worker": {"requests": {"cpu": "30m"}}})
++
++    def test_new_top_level_key_gets_a_blank_line(self):
++        text = "image:\n  tag: x\n"
++        self.assertEqual(rr.set_value(text, ["server", "resources", "requests", "cpu"], "20m"),
++                         "image:\n  tag: x\n\nserver:\n  resources:\n    requests:\n      cpu: 20m\n")
++        self.assertEqual(rr.set_value("", ["resources", "requests", "cpu"], "20m"),
++                         "resources:\n  requests:\n    cpu: 20m\n")
++
++    def test_empty_and_null_values_become_blocks(self):
++        for empty in (" {}", "", " ~"):
++            with self.subTest(empty=empty):
++                text = f"resources:{empty}\n  # upstream's comment\nnext: 1\n"
++                self.assertEqual(rr.set_value(text, ["resources", "requests", "cpu"], "20m"),
++                                 "resources:\n  requests:\n    cpu: 20m\n  # upstream's comment\nnext: 1\n")
++
++    def test_flow_mapping_stays_flow(self):
++        text = "resources:\n  requests: {cpu: 10m, memory: 64Mi}\n"
++        self.assertEqual(rr.set_value(text, ["resources", "requests", "memory"], "80Mi"),
++                         "resources:\n  requests: {cpu: 10m, memory: 80Mi}\n")
++
++    def test_scalar_on_the_path_refused(self):
++        with self.assertRaises(rr.Stop):
++            rr.set_value("resources: none\n", ["resources", "requests", "cpu"], "20m")
++
++    def test_delete_drops_the_line(self):
++        out = rr.delete_value(self.VALUES, ["resources", "app", "sidecar", "requests", "cpu"])
++        self.assertEqual(out, self.VALUES.replace("        cpu: 10m\n", ""))
++
++    def test_delete_of_the_last_key_leaves_an_empty_mapping(self):
++        out = rr.delete_value(self.VALUES, ["resources", "app", "app", "requests", "memory"])
++        self.assertEqual(out, self.VALUES.replace('requests:\n        memory: "112Mi"  # measured\n', "requests: {}\n"))
++        self.assertEqual(yaml.safe_load(out)["resources"]["app"]["app"], {"requests": {}})
++
++    def test_delete_of_an_absent_key_changes_nothing(self):
++        self.assertEqual(rr.delete_value(self.VALUES, ["resources", "nope", "requests", "cpu"]), self.VALUES)
++
++
++class Revise(unittest.TestCase):
++    PATH = ["resources", "a", "a", "requests"]
++    TEXT = "resources:\n  a:\n    a:\n      requests:\n        cpu: 200m\n        memory: 64Mi\n"
++
++    def test_only_raises(self):
++        text, changes = rr.revise(self.TEXT, self.PATH, Recommendation(cpu=13, memory=100), reset=False)
++        self.assertEqual(text, self.TEXT.replace("64Mi", "112Mi"))
++        self.assertEqual(changes, ["memory 64Mi -> 112Mi"])
++
++    def test_nothing_higher_nothing_changed(self):
++        self.assertEqual(rr.revise(self.TEXT, self.PATH, Recommendation(cpu=13, memory=20), reset=False),
++                         (self.TEXT, []))
++
++    def test_reset_lowers_and_drops_a_request_under_10m(self):
++        text, changes = rr.revise(self.TEXT, self.PATH, Recommendation(cpu=4, memory=20), reset=True)
++        self.assertEqual(text, "resources:\n  a:\n    a:\n      requests:\n        memory: 20Mi\n")
++        self.assertEqual(changes, ["cpu 200m -> unset", "memory 64Mi -> 20Mi"])
++
++    def test_adds_requests_the_file_lacks(self):
++        text, changes = rr.revise("image: x\n", self.PATH, Recommendation(cpu=13, memory=100), reset=False)
++        self.assertEqual(yaml.safe_load(text)["resources"], {"a": {"a": {"requests": {"cpu": "20m", "memory": "112Mi"}}}})
++        self.assertEqual(changes, ["cpu unset -> 20m", "memory unset -> 112Mi"])
++
++
++def sh(*cmd, cwd=None):
++    return subprocess.run(cmd, cwd=cwd, check=True, text=True, capture_output=True).stdout
++
++
++GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
++           "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
++
++
++@mock.patch.dict(os.environ, GIT_ENV)
++class RoundTrip(unittest.TestCase):
++    """report writes one patch per deploy repo that would change; the operator deletes one and
++    edits another; apply commits what is left, on main, and pushes nothing."""
++
++    def setUp(self):
++        self.tmp = Path(tempfile.mkdtemp())
++        self.addCleanup(sh, "rm", "-rf", str(self.tmp))
++        origins = self.tmp / "origins"
++        self.origins = {}
++        apps = {}
++        for name, chart_values, stages in (
++            ("AlphaDeploy", "resources:\n  alpha:\n    app: {}\n", {"prd": "image: a\n"}),
++            ("BetaDeploy", "resources:\n  beta:\n    app: {}\n",
++             {"prd": "resources:\n  beta:\n    app:\n      requests:\n        memory: 64Mi\n"}),
++            ("GammaDeploy", "resources:\n  gamma:\n    app: {}\n", {"dev": "image: g\n", "prd": "image: g\n"}),
++            ("QuietDeploy", "resources:\n  quiet:\n    app: {}\n",
++             {"prd": "resources:\n  quiet:\n    app:\n      requests:\n        cpu: 900m\n        memory: 4Gi\n"}),
++        ):
++            app = name.removesuffix("Deploy").lower()
++            repo = origins / f"{name}.git"
++            (repo / "chart").mkdir(parents=True)
++            (repo / "chart/Chart.yaml").write_text(f"name: {app}\n")
++            (repo / "chart/values.yaml").write_text(chart_values)
++            for stage, stage_values in stages.items():
++                (repo / "config" / stage).mkdir(parents=True)
++                (repo / "config" / stage / "values.yaml").write_text(stage_values)
++            sh("git", "init", "-q", "-b", "main", cwd=repo)
++            sh("git", "add", ".", cwd=repo)
++            sh("git", "commit", "-q", "-m", "init", cwd=repo)
++            self.origins[name] = repo
++            apps[app] = {"repo": f"file://{repo}", "stages": {stage: {} for stage in stages}}
++        self.registry = self.tmp / "registry.yaml"
++        apps["beta"]["stages"]["prd"]["targetRevision"] = "prd"
++        self.registry.write_text(yaml.safe_dump({"apps": apps}))
++        self.work = self.tmp / "work"
++
++    def metrics(self, query, start, end, step="300s"):
++        def series(ns, pod, container, cpu=0.013, mem=100):
++            value = cpu if "cpu" in query else mem * 1024 * 1024
++            return {"metric": {"namespace": ns, "pod": pod, "container": container}, "values": [[0, str(value)]]}
++        return [
++            *(series(f"{w}-prd", f"{w}-0", "app") for w in ("alpha", "beta", "gamma", "quiet")),
++            series("gamma-dev", "gamma-0", "app", cpu=0.3, mem=300),
++            series("alpha-prd", "alpha-0", "sidecar"),
++            series("elsewhere", "other-0", "app"),
++        ]
++
++    def step(self, name, **kw):
++        args = argparse.Namespace(workdir=str(self.work), registry=str(self.registry), reset=False, **kw)
++        out = io.StringIO()
++        with mock.patch.object(rr, "promql", self.metrics), contextlib.redirect_stdout(out):
++            getattr(rr, f"cmd_{name}")(args)
++        return out.getvalue()
++
++    def test_report_edit_apply(self):
++        self.step("report")
++        report = self.work / "report"
++        self.assertEqual(sorted(p.name for p in report.iterdir()),
++                         ["AlphaDeploy.patch", "BetaDeploy.patch", "GammaDeploy.patch"])
++        beta = (report / "BetaDeploy.patch").read_text()
++        self.assertIn("# beta-prd beta/app: cpu unset -> 20m, memory 64Mi -> 112Mi (measured 13m, 100Mi)\n"
++                      "# beta-prd tracks prd: this reaches it by promotion (argo-cd D34).\n", beta)
++        self.assertIn("+        cpu: 20m\n", beta)
++        self.assertEqual((self.work / "not-placed.txt").read_text(), "alpha-prd alpha/sidecar (chart alpha)\n")
++        # The clones stay at the origin's commit until apply.
++        self.assertEqual(sh("git", "status", "--porcelain", cwd=self.work / "repos/BetaDeploy"), "")
++
++        # The operator skips Gamma and overrules Beta's CPU.
++        (report / "GammaDeploy.patch").unlink()
++        (report / "BetaDeploy.patch").write_text(beta.replace("+        cpu: 20m\n", "+        cpu: 50m\n"))
++        out = self.step("apply")
++        self.assertIn("git -C", out)
++
++        beta_clone = self.work / "repos/BetaDeploy"
++        self.assertEqual(yaml.safe_load((beta_clone / "config/prd/values.yaml").read_text()),
++                         {"resources": {"beta": {"app": {"requests": {"memory": "112Mi", "cpu": "50m"}}}}})
++        self.assertEqual(sh("git", "rev-list", "--count", "origin/main..main", cwd=beta_clone), "1\n")
++        self.assertEqual(sh("git", "rev-list", "--count", "origin/main..main", cwd=self.work / "repos/GammaDeploy"), "0\n")
++        # Nothing reached the origins.
++        for repo in self.origins.values():
++            self.assertEqual(sh("git", "rev-list", "--count", "main", cwd=repo), "1\n")
++
++        with self.assertRaisesRegex(rr.Stop, "apply ran already"):
++            self.step("apply")
++
++    def test_each_stage_gets_its_own_values_file(self):
++        # Gamma's dev and prd share a workload key; dev measures higher.
++        self.step("report")
++        self.step("apply")
++        gamma = self.work / "repos/GammaDeploy"
++        self.assertEqual(yaml.safe_load((gamma / "config/dev/values.yaml").read_text())["resources"],
++                         {"gamma": {"app": {"requests": {"cpu": "300m", "memory": "320Mi"}}}})
++        self.assertEqual(yaml.safe_load((gamma / "config/prd/values.yaml").read_text())["resources"],
++                         {"gamma": {"app": {"requests": {"cpu": "20m", "memory": "112Mi"}}}})
++
++    def test_an_overrule_that_drops_a_line_applies(self):
++        # Dropping one `+` line leaves the hunk header's line count wrong.
++        self.step("report")
++        patch = self.work / "report/BetaDeploy.patch"
++        patch.write_text(patch.read_text().replace("+        cpu: 20m\n", ""))
++        self.step("apply")
++        self.assertEqual(yaml.safe_load((self.work / "repos/BetaDeploy/config/prd/values.yaml").read_text()),
++                         {"resources": {"beta": {"app": {"requests": {"memory": "112Mi"}}}}})
++
++    def test_an_overrule_back_to_the_current_values_leaves_that_repo_as_it_is(self):
++        self.step("report")
++        patch = self.work / "report/BetaDeploy.patch"
++        text = patch.read_text()
++        patch.write_text(text.replace("+        memory: 112Mi\n+        cpu: 20m\n", "+        memory: 64Mi\n"))
++        self.assertNotEqual(patch.read_text(), text)
++        out = self.step("apply")
++
++        beta = self.work / "repos/BetaDeploy"
++        self.assertEqual(sh("git", "status", "--porcelain", cwd=beta), "")
++        self.assertEqual(sh("git", "rev-list", "--count", "origin/main..main", cwd=beta), "0\n")
++        self.assertIn("BetaDeploy.patch changes nothing", out)
++        self.assertNotIn(f"git -C {beta} push", out)
++        for name in ("AlphaDeploy", "GammaDeploy"):
++            clone = self.work / "repos" / name
++            self.assertEqual(sh("git", "rev-list", "--count", "origin/main..main", cwd=clone), "1\n")
++            self.assertIn(f"git -C {clone} push", out)
++
++    def test_a_broken_patch_applies_nothing(self):
++        self.step("report")
++        report = self.work / "report"
++        alpha = (report / "AlphaDeploy.patch").read_text()
++        (report / "AlphaDeploy.patch").write_text(alpha.replace(" image: a\n", " image: zzz\n"))
++        with self.assertRaisesRegex(rr.Stop, "AlphaDeploy.patch"):
++            self.step("apply")
++        for name in ("AlphaDeploy", "BetaDeploy", "GammaDeploy"):
++            clone = self.work / "repos" / name
++            self.assertEqual(sh("git", "status", "--porcelain", cwd=clone), "")
++            self.assertEqual(sh("git", "rev-list", "--count", "origin/main..main", cwd=clone), "0\n")
++
++    def test_report_refuses_an_existing_workdir(self):
++        self.work.mkdir()
++        with self.assertRaisesRegex(rr.Stop, "fresh clones"):
++            self.step("report")
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+/work/Ansible — P9: git diff f7877e49f385..5cfdb0c3393b
+
+.kubecoder/project.yaml                     |   4 +-
+ CLAUDE.md                                   |  24 +++---
+ ansible/roles/baseline/README.md            |   2 +-
+ ansible/roles/microceph/README.md           |   2 +-
+ ansible/roles/microk8s/README.md            |   2 +-
+ ansible/roles/microk8s/defaults/main.yml    |   2 +-
+ docs/architecture/ansible-architecture.yaml |   8 +-
+ docs/design-philosophy.md                   |  11 +--
+ docs/live-infra-access.md                   |  17 ++--
+ docs/runbooks/argocd.md                     | 222 +++++++++++++++++++++++-------------------------
+ docs/runbooks/ceph-vip.md                   |   8 +-
+ docs/runbooks/k8s-rebuild.md                |  10 +--
+ docs/runbooks/k8s-upgrade.md                |  15 +---
+ docs/runbooks/kubecoder-cutover.md          |   6 ++
+ docs/runbooks/openbao.md                    |   2 +-
+ docs/runbooks/registry-switch.md            |   2 +
+ docs/runbooks/s3-mirror.md                  |  11 +--
+ docs/runbooks/step-ca-bootstrap.md          |  83 +++++++++---------
+ docs/runbooks/step-ca-root-rotation.md      |  43 +++++-----
+ docs/runbooks/youtrack-restore.md           |  10 ++-
+ 20 files changed, 236 insertions(+), 248 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index d125245..24fd1aa 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -3,8 +3,8 @@ projects:
+     description: >-
+       Ansible + Terraform managing the homelab infrastructure: Proxmox hosts,
+       the microk8s and microceph VMs on top, and the Linux dev box baseline.
+-      Jenkins runs the deploys through the IaC/* pipelines; Helm owns the
+-      Kubernetes workloads in the HelmCharts repo.
++      Jenkins runs its deploys through the IaC/* pipelines; Argo CD deploys
++      the Kubernetes workloads from per-app deploy repos.
+     jenkins: IaC/Deploy
+     setup:
+       # Not cexec-prefixed: the catalog secrets are projected into the dev
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 2fca1e9..664029e 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -1,9 +1,9 @@
+ # CLAUDE.md
+ 
+ Ansible + Terraform managing the homelab infrastructure: Proxmox hosts, the k8s and Ceph VMs and
+-clusters on top, and the Linux dev box baseline. Helm owns the Kubernetes workloads (in
+-`/work/HelmCharts`); Jenkins runs the deploys. Components are `ansible/`, `terraform/` and the
+-architecture artifact — `kc project list` is authoritative.
++clusters on top, and the Linux dev box baseline. Argo CD deploys the Kubernetes workloads from
++per-app deploy repos; Jenkins runs this repo's deploys. Components are `ansible/`, `terraform/`
++and the architecture artifact — `kc project list` is authoritative.
+ 
+ **Before proposing changes, read** [`/work/AnsibleSpecs/decisions.md`](../AnsibleSpecs/decisions.md)
+ — homelab doctrine: tool split, secrets, networking, MAC scheme, OS update policy — and the
+@@ -19,7 +19,7 @@ operator command. Do that directly and frictionlessly. You are a helpful infrast
+ a gatekeeper.
+ 
+ Before acting, make one determination: **is this a managed change to an infrastructure repo** (an
+-Ansible role/playbook, a Terraform module, a HelmCharts chart, a DockerImages image) **substantial
++Ansible role/playbook, a Terraform module, a deploy repo, a DockerImages image) **substantial
+ enough to warrant a tracked slice?** Then push back on doing it ad hoc and route it through
+ `/dev:triage` → `/dev:plan-slice` → `/dev:run-slice`. Each is a separate, explicit operator step;
+ authoring a slice is never permission to run it.
+@@ -69,15 +69,19 @@ as on srviac, which Jenkins uses and which stays up when Kubernetes is down. Det
+ ## Related repos on this machine
+ 
+ All under `/work`, same paths for Claude and operator: `AnsibleSpecs` (decisions, slices — a
+-separate git repo, commit there too), `HelmCharts`, `DockerImages`, `HomelabTerraformProvider`,
++separate git repo, commit there too), `HelmCharts` (the deploy path before Argo CD; its archive
++is ANS-122), `DockerImages`, `HomelabTerraformProvider`,
+ `Charts` (the `homelab-shared` Helm library chart and the `https://charts.home` chart repository —
+ see its README), `ArgoCDTools` (two images: `argocd-hook`, the Argo CD Terraform PreSync hook, and
+ `aac-tools`, the architecture-as-code commands a repo's checkout runs — see its README),
+-`ArgoCDDeploy` (Argo CD's own deploy repo — the wrapper chart, both ApplicationSets, the `releases`
+-AppProject and the `argocd-hooks` namespace), `KubeCoderDeploy` (KubeCoder's deploy repo, the Argo
+-CD pilot — see its README), `Architecture` (the architecture-as-code contract:
+-`pipeline-producers.yaml`, the element/relation schema and the producer manual — checked out
+-but deliberately not declared, see the note in `.kubecoder/config.yaml`) and
++`ArgoCDDeploy` (Argo CD's own deploy repo — the wrapper chart, the registry chart `releases/`,
++the `releases` AppProject and the `argocd-hooks` namespace),
++`KubeCoderDeploy` (KubeCoder's deploy repo, the Argo CD pilot — see its README), `Architecture`
++(the architecture-as-code contract: `pipeline-producers.yaml`, the element/relation schema, the
++shared product catalog and the producer manual — deliberately not declared, see the note in
++`.kubecoder/config.yaml`, so the environment does not clone it: clone it by hand
++(`git clone https://github.com/pvginkel/Architecture /work/Architecture`) and run
++`kc project setup` there before working in it) and
+ `JenkinsPipelineUtils` (the shared library every Jenkinsfile in the estate loads). The set is
+ declared in `.kubecoder/config.yaml`; adding one is an edit there plus `kc env restart`. The `iac`
+ runner's tree lives in this repo at `support/iac-agent/` — that is the copy to edit and the one the
+diff --git a/ansible/roles/baseline/README.md b/ansible/roles/baseline/README.md
+index fa04373..6bf56eb 100644
+--- a/ansible/roles/baseline/README.md
++++ b/ansible/roles/baseline/README.md
+@@ -7,7 +7,7 @@ Applies OS hygiene to a managed Ubuntu host. Ported from `/work/Obsidian/Linux.m
+ - Sets timezone to `Europe/Amsterdam` (override: `baseline_timezone`).
+ - Refreshes the apt cache; optionally runs `apt dist-upgrade` when `baseline_apt_dist_upgrade: true` (off by default — see "Updates" below for the longer story).
+ - Installs `qemu-guest-agent` and enables the service.
+-- Installs and enables `prometheus-node-exporter` on every managed host **except k8s nodes** — those already run `node_exporter` as an in-cluster DaemonSet bound to `:9100`, so the Debian package's service would collide on the port; they set `baseline_node_exporter: false` and the package is removed there instead. Pointing Prometheus at new targets is a HelmCharts change, separate from this role.
++- Installs and enables `prometheus-node-exporter` on every managed host **except k8s nodes** — those already run `node_exporter` as an in-cluster DaemonSet bound to `:9100`, so the Debian package's service would collide on the port; they set `baseline_node_exporter: false` and the package is removed there instead. Pointing Prometheus at new targets is a PrometheusDeploy change (`extraScrapeConfigs` in `config/prd/values.yaml`), separate from this role.
+ - **Applies the host's OS update class** (per `baseline_os_update_class`; default `cluster`):
+   - `cluster` — k8s/ceph nodes. Purges `unattended-upgrades`; the `update.yml` playbook owns drain+upgrade+reboot.
+   - `standalone` — VMs like `srviac` (and future OpenBao hosts). Installs `unattended-upgrades` and drops `/etc/apt/apt.conf.d/99-unattended-upgrades-iac` to auto-reboot in a quiet window per `baseline_unattended_reboot_time` (default `03:00`; stagger across standalone hosts).
+diff --git a/ansible/roles/microceph/README.md b/ansible/roles/microceph/README.md
+index be508e2..8ad3a7f 100644
+--- a/ansible/roles/microceph/README.md
++++ b/ansible/roles/microceph/README.md
+@@ -2,7 +2,7 @@
+ 
+ Installs and configures [microceph](https://documentation.ubuntu.com/canonical-microceph/) on an Ubuntu host: the snap pinned to a Ceph-release channel, a single-node cluster bootstrap, a raw-disk OSD, single-node pool sizing, daemon memory caps, and the RGW / CephFS / RBD capabilities.
+ 
+-Today it drives the **single-node dev cluster** co-located on `srvk8sdev` (`ceph_dev`), standing up isolated dev storage so HelmCharts iteration stops churning RBD images / RGW users on the prod Ceph cluster. The 3-node prd fleet (`srvceph1/2/3`) comes under it in **Phase 5** with `serial: 1` + drain hooks — the multi-node join path is intentionally not built yet.
++Today it drives the **single-node dev cluster** co-located on `srvk8sdev` (`ceph_dev`), standing up isolated dev storage so iteration on the dev cluster and the homelab Terraform provider stops churning RBD images / RGW users on the prod Ceph cluster. The 3-node prd fleet (`srvceph1/2/3`) comes under it in **Phase 5** with `serial: 1` + drain hooks — the multi-node join path is intentionally not built yet.
+ 
+ ## Mental model
+ 
+diff --git a/ansible/roles/microk8s/README.md b/ansible/roles/microk8s/README.md
+index 4c2991f..4d8c0dc 100644
+--- a/ansible/roles/microk8s/README.md
++++ b/ansible/roles/microk8s/README.md
+@@ -69,7 +69,7 @@ k8s_node_taints:
+ 
+ It's applied additively via `kubectl taint --overwrite`: the declared taint is set by key, and Kubernetes' own node-condition taints (`not-ready`, `unreachable`, …) plus a cordon's `unschedulable` flag are left intact. A `spec.taints` patch would replace the whole list and strip those, so the role deliberately doesn't do that. Idempotent — `kubectl taint` prints `not changed` and skips the API write when the taint already matches. Like labels, the role **adds/updates but never removes**: dropping a taint from inventory needs a one-shot `kubectl taint nodes <node> <key>-`.
+ 
+-**A `NoSchedule` taint repels DaemonSets as well as regular pods.** `calico-node` and `kube-proxy` tolerate everything already, but any *other* workload that must run on the tainted node needs a matching toleration — and those tolerations live with the workloads (HelmCharts), not here. For `srvk8s4` (tainted `homelab.local/performance=high:NoSchedule` so only KubeCoder runs there) that means the KubeCoder pods **and** the cluster DaemonSets it depends on — Ceph CSI (mandatory: the controller mounts CephFS), node-exporter, the MetalLB speaker, SMB CSI — must tolerate the taint, or they won't schedule on the node. The label/affinity attracts the opt-in pods; the taint repels the rest.
++**A `NoSchedule` taint repels DaemonSets as well as regular pods.** `calico-node` and `kube-proxy` tolerate everything already, but any *other* workload that must run on the tainted node needs a matching toleration — and those tolerations live with the workloads (their deploy repos), not here. For `srvk8s4` (tainted `homelab.local/performance=high:NoSchedule` so only KubeCoder runs there) that means the KubeCoder pods **and** the cluster DaemonSets it depends on — Ceph CSI (mandatory: the controller mounts CephFS), node-exporter, the MetalLB speaker, SMB CSI — must tolerate the taint, or they won't schedule on the node. The label/affinity attracts the opt-in pods; the taint repels the rest.
+ 
+ Note the reconcile runs on the primary, so a `rebuild-k8s.yml` run (whose converge play targets only the rebuilt node) does **not** apply the taint — it lands on the next full `site-k8s.yml`. There's a short window after a rebuild's uncordon where the node is schedulable but not yet tainted; for a born-tainted node, add `--register-with-taints` to the kubelet args instead (not done today).
+ 
+diff --git a/ansible/roles/microk8s/defaults/main.yml b/ansible/roles/microk8s/defaults/main.yml
+index 49c2d44..1ccfc4d 100644
+--- a/ansible/roles/microk8s/defaults/main.yml
++++ b/ansible/roles/microk8s/defaults/main.yml
+@@ -76,7 +76,7 @@ microk8s_metallb_advertisement_name: default-advertise-all-pools
+ microk8s_metallb_pool_addresses: []
+ 
+ # Memory requests for the addon-owned workloads (tasks/addon-resources.yml).
+-# Values come from the same derivation HelmCharts' recommend-resources uses —
++# Values come from the same derivation support/recommend-resources uses —
+ # p90 of the container's max working set over Prometheus history, rounded up
+ # to the next quarter-power-of-two. Re-derive them when a channel bump moves
+ # a component's footprint. An `addon:` key restricts an entry to clusters
+diff --git a/docs/architecture/ansible-architecture.yaml b/docs/architecture/ansible-architecture.yaml
+index 0850406..f11eae9 100644
+--- a/docs/architecture/ansible-architecture.yaml
++++ b/docs/architecture/ansible-architecture.yaml
+@@ -380,7 +380,7 @@ systemSoftware:
+ 
+   - id: ss:microceph-dev,b82bb4f6-27c6-4b0b-8554-e2d8a16cd253
+     label: microceph (dev)
+-    summary: Single-node microceph co-located on srvk8sdev. Isolated dev storage with size-1 pools — block (RBD), file (CephFS), and object (RGW/S3) — so HelmCharts iteration stops churning the prod Ceph cluster. Channel squid/stable (Ceph 19), a release ahead of prd's reef.
++    summary: Single-node microceph co-located on srvk8sdev. Isolated dev storage with size-1 pools — block (RBD), file (CephFS), and object (RGW/S3) — so iteration on the dev cluster and the homelab Terraform provider stops churning the prod Ceph cluster. Channel squid/stable (Ceph 19), a release ahead of prd's reef.
+     introduced: 2026-06-09
+     lifecycle: active
+     logo: ceph
+@@ -463,7 +463,7 @@ systemSoftware:
+ 
+   - id: ss:jenkins-inbound-agent-srviac,220788bb-ca5d-497c-bf83-38211b7d6d12
+     label: Jenkins inbound agent on srviac
+-    summary: Generic Jenkins inbound-agent systemd unit on srviac. Provides Jenkins the means to schedule pipelines onto this node; the work itself runs via the iac shim. No Specialization edge today — the ss:jenkins-agent catalog entry will land with HelmCharts.
++    summary: Generic Jenkins inbound-agent systemd unit on srviac. Provides Jenkins the means to schedule pipelines onto this node; the work itself runs via the iac shim. No Specialization edge, since no producer publishes an ss:jenkins-agent catalog entry.
+     introduced: 2026-05-28
+     lifecycle: active
+     logo: jenkins
+@@ -471,7 +471,7 @@ systemSoftware:
+ 
+   - id: ss:metallb-prd,02b1bffa-b296-428e-b6ba-be2a957285b5
+     label: MetalLB (prd)
+-    summary: MetalLB addon on the k8s-prd cluster, configured in L2 mode. Allocates LoadBalancer IPs from the pool below and announces them via gratuitous ARP. HelmCharts attaches per-LB interfaces on its consumers.
++    summary: MetalLB addon on the k8s-prd cluster, configured in L2 mode. Allocates LoadBalancer IPs from the pool below and announces them via gratuitous ARP. The LoadBalancer Services it serves are declared in the apps' deploy repos.
+     introduced: 2026-05-28
+     lifecycle: active
+     logo: metallb
+@@ -616,7 +616,7 @@ technologyServices:
+ 
+   - id: svc:ceph-rgw-dev,bb4a95c3-c8f4-4069-9aef-0746420a4eb8
+     label: Ceph RGW/S3 (dev)
+-    summary: RADOS Gateway S3 object-storage surface of the single-node dev microceph on srvk8sdev. Consumed by HelmCharts / homelab-provider iteration as isolated dev object storage.
++    summary: RADOS Gateway S3 object-storage surface of the single-node dev microceph on srvk8sdev. Consumed by dev-cluster and homelab Terraform provider iteration as isolated dev object storage.
+     introduced: 2026-06-09
+     lifecycle: active
+     logo: ceph
+diff --git a/docs/design-philosophy.md b/docs/design-philosophy.md
+index cb27db0..f361ecb 100644
+--- a/docs/design-philosophy.md
++++ b/docs/design-philosophy.md
+@@ -56,10 +56,11 @@ document down to what remains operationally useful.
+ 
+ ## What "tested" means here
+ 
+-There is no runnable test suite. `kc project test` runs yamllint, ansible-lint and
+-`terraform fmt -check` — that is a syntax and style gate, and passing it proves nothing about
+-behaviour. Behaviour is proven by the operator applying the change against real infrastructure and
+-reporting the output back. Never describe a change as verified on the strength of a green lint.
++The Ansible roles and the Terraform have no runnable test suite. `kc project test` runs yamllint,
++ansible-lint and `terraform fmt -check` over them — that is a syntax and style gate, and passing it
++proves nothing about behaviour. Only the Python tools under `support/` carry unit tests, which the
++root component's `test` runs. Behaviour is proven by the operator applying the change against real
++infrastructure and reporting the output back. Never describe a change as verified on the strength of a green lint.
+ 
+ The full picture is in [slice-testing-strategy.md](slice-testing-strategy.md).
+ 
+@@ -71,7 +72,7 @@ playbook — commit it before starting the next. When in doubt, commit.
+ 
+ Commit straight to the working branch (usually `main`) as you go — no topic/feature branches. This
+ is single-person homelab territory; there's no one to open a PR against, and a branch just adds a
+-merge step. Same rule in the sibling repos (HelmCharts, DockerImages).
++merge step. Same rule in the sibling repos (the deploy repos, DockerImages).
+ 
+ `/work/AnsibleSpecs` is a separate git repo with its own history — commit there too, and stage by
+ name: it is a shared working tree and parallel sessions live in it.
+diff --git a/docs/live-infra-access.md b/docs/live-infra-access.md
+index 29f2a92..e556097 100644
+--- a/docs/live-infra-access.md
++++ b/docs/live-infra-access.md
+@@ -41,16 +41,13 @@ cd ansible && ssh <options> ansible@srviac \
+   "sudo iac -c 'cd /work/Ansible/terraform/prd && terraform init -input=false && terraform plan'"
+ ```
+ 
+-A **HelmCharts release's** Terraform also needs OpenBao-held provider credentials. Load them and
+-plan in one shell — the verb is `deploy plan`, there is no bare `plan` script:
+-
+-```
+-. scripts/bao-login.sh && cd /work/HelmCharts && . scripts/setup-env.sh prd && cexec iac poetry run deploy plan prd/<chart>
+-```
+-
+-`setup-env.sh` reads OpenBao values into the environment, so it falls under `CLAUDE.md`'s "What
+-Claude doesn't read on its own" — ask first. On srviac the equivalent is the `IAC_SETUP` prelude in
+-HelmCharts' `Jenkinsfile`, then `/tmp/hcvenv/bin/deploy plan prd/<chart>`.
++A **deploy repo's** Terraform is applied by Argo CD's PreSync hook on each sync of its stage
++([argocd.md](runbooks/argocd.md)), and the hook has no plan step. Planning it from here takes the
++hook's inputs plus the OpenBao-held provider credentials, which HelmCharts' `scripts/setup-env.sh
++prd` loads. [kubecoder-cutover.md](runbooks/kubecoder-cutover.md)'s "The no-destroy plan" is the
++command written out, and `argo_migrate.py plan` in `support/argo-migrate/` runs it for a migrating
++app-stage. `setup-env.sh` reads OpenBao values into the environment, so it falls under
++`CLAUDE.md`'s "What Claude doesn't read on its own" — ask first.
+ 
+ **Lint before you commit.** There is no pre-commit hook — it was removed because it was breaking
+ commits. Run `kc project lint` before proposing a commit. `iac-on-push` runs the same ansible and
+diff --git a/docs/runbooks/argocd.md b/docs/runbooks/argocd.md
+index 398bd09..5ce0d8e 100644
+--- a/docs/runbooks/argocd.md
++++ b/docs/runbooks/argocd.md
+@@ -42,14 +42,16 @@ actually ran and the Phase A proof drill are recorded in slice 009's
+ | Helm release, Application, AppProject | `argocd-prd`, `argocd-prd`, `releases` |
+ | UI | `https://argocd.home`, or the bare `https://argocd` — Keycloak SSO (realm `homelab`, client `argocd`) |
+ | Deploy repo | `ArgoCDDeploy`: exact `argo-cd` pin in `chart/Chart.yaml`, stage values in `config/prd/values.yaml` |
+-| Registry | HelmCharts `configs/prd/<app>/<stage>/release.yaml` carrying `reconciler: argo-cd` |
+-| ApplicationSets | `releases-local`, `releases-upstream` (`missingkey=error`: one malformed entry fails the whole set) |
++| Registry | ArgoCDDeploy `releases/values.yaml`: one entry per app, one Application per stage (D63); `releases/values.schema.json` refuses a malformed entry |
++| Registry Application | `releases`: syncs the registry chart `releases/` from ArgoCDDeploy `main`, automated without prune or self-heal |
+ | Webhook edge | `https://deploy-hooks.webathome.org/api/webhook` → relay (2 replicas) → argocd-server and the applicationset-controller |
+ | Hook image | `registry:5000/argocd-hook:<n>` from ArgoCDTools; default pin in the `homelab-shared` library chart. Its Terraform is pinned to the version the `iac` images carry (AnsibleSpecs `decisions.md`, "Terraform version") |
+ | Terraform state | `pvginkel/TerraformState`, `argocd/<repo>/<stage>/terraform.tfstate`, sops/age |
+ | Notifications | Alertmanager `prometheus-prd-alertmanager.prometheus-prd:9093`, delivered to Telegram with no "resolved"; `ArgoCDSyncFailed` (critical, with sound), `ArgoCDHealthDegraded` (warning, silent) |
+ | Standing alerts | PrometheusDeploy's rule group `argocd`, over the application controller's metrics (Service `argocd-prd-application-controller-metrics`); `ArgoCDSyncStillFailed` (critical), `ArgoCDHealthStillDegraded` and `ArgoCDAlertsBlind` (warning) |
+ 
++> The two registry rows are owed until the registry switch has run ([registry-switch.md](registry-switch.md)): until then the ApplicationSets `releases-local` and `releases-upstream` generate the Applications from HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files.
++
+ Every credential arrives through ESO from OpenBao (`kv/` mount), refreshed hourly:
+ 
+ | ExternalSecret | Leaf and property | Reader |
+@@ -112,7 +114,10 @@ section. The resource tree only shows the refused object as *Missing*.
+    followed by `helm repo add` and `helm dependency build` is Argo's normal
+    first attempt, not a failure.
+ 4. **The Application does not appear, or does not refresh after a push.** The
+-   webhook, or the applicationset-controller's one-shot handler — both below.
++   webhook (below). A registry entry reaches its Application only through
++   `releases`' sync, so read `releases`' last operation and conditions too.
++
++   > This item's `releases` half is owed until the registry switch has run ([registry-switch.md](registry-switch.md)): until then suspect the applicationset-controller's one-shot handler (below).
+ 
+ Hook Jobs persist for the app's lifetime, one per sync (`backoffLimit: 0`, so a
+ failed hook is exactly one pod), and are removed with the Application.
+@@ -150,6 +155,9 @@ returns the previous value.
+ 
+ ## Restarting the applicationset-controller
+ 
++It serves only the ApplicationSets `releases-local` and `releases-upstream`, which the registry
++switch deletes ([registry-switch.md](registry-switch.md), step 5).
++
+ ```sh
+ cexec iac kubectl $KC -n argocd-prd rollout restart deploy/argocd-prd-applicationset-controller
+ ```
+@@ -186,19 +194,17 @@ is unaffected — it watches its settings.
+ 
+ 1. In ArgoCDDeploy, bump the exact `argo-cd` version in `chart/Chart.yaml`,
+    rebuild `Chart.lock`, run the repo's render gate, push.
+-2. ArgoCDDeploy has no webhook, so refresh `argocd-prd` by hand after the push:
++2. ArgoCDDeploy's relay webhook delivers the push, and `argocd-prd` goes
++   OutOfSync within seconds. Review the diff in the UI. The CRDs sync
++   server-side (`ServerSideApply=true` on all three).
+ 
+-   ```sh
+-   cexec iac kubectl $KC annotate application -n argocd-prd argocd-prd argocd.argoproj.io/refresh=normal --overwrite
+-   ```
++   > Owed until the registry switch has run ([registry-switch.md](registry-switch.md)), whose step 2 adds that webhook: until then refresh `argocd-prd` by hand (Webhooks).
+ 
+-   It goes OutOfSync within seconds. Review the diff in the UI. The CRDs sync
+-   server-side (`ServerSideApply=true` on all three).
+ 3. Sync by hand at a chosen moment (D3). The controller and repo-server restart
+    mid-sync, and every Application pauses with them.
+ 4. Verify: `argocd-prd` Synced and Healthy, every pod Running, the full
+    Application list back, and a webhook delivery accepted by both receivers. If
+-   Applications stop regenerating, restart the applicationset-controller.
++   the list does not come back, see item 4 of Diagnosing a failed sync.
+ 
+ ## Break-glass: the local admin account (D9)
+ 
+@@ -223,26 +229,30 @@ so any other identity gets nothing at all.
+ 
+ ## Registering, undeploying and unregistering an app
+ 
+-The entry, at HelmCharts `configs/prd/<app>/<stage>/release.yaml` — the path
+-names the Application and its namespace `<app>-<stage>`:
++> This section is owed until the registry switch has run ([registry-switch.md](registry-switch.md)): until then an edit to ArgoCDDeploy's registry deploys nothing.
++
++The registry is ArgoCDDeploy's `releases/values.yaml` (D63). An app's entry sits
++under `apps:`, and each of its stages becomes one Application, named and
++namespaced `<app>-<stage>`:
+ 
+ ```yaml
+-reconciler: argo-cd
+-deployed: true
+-autoSync: false
+-repo: https://github.com/pvginkel/<DeployRepo>
+-targetRevision: main
++apps:
++  <app>:
++    repo: https://github.com/pvginkel/<DeployRepo>.git
++    stages:
++      prd:
++        autoSync: false
+ ```
+ 
+-No `chart:` key. HelmCharts' suite (`kc project test`) gates the shape, and the
+-pipeline skips the release. Push; the ApplicationSet regenerates within seconds
+-and the Application appears OutOfSync. The first sync is manual.
+-
+-An app that HelmCharts deploys today moves onto Argo when this entry replaces its
+-`jenkins` one. A stage with no `release.yaml`, or with no `reconciler:` key, is
+-`jenkins`'s. The same push drops the stage from HelmCharts' architecture
+-artifact, so the app's own architecture producer is registered before it
+-([Giving an app its own architecture producer](#giving-an-app-its-own-architecture-producer)).
++An app whose chart comes from a Helm repository adds `upstream: {repo, chart}`,
++and each of its stages pins the chart's `version`. A stage may set
++`targetRevision` (default `main`), and `syncOptions` is app-level: every stage's
++Application gets it (D62). The file's header comment names every key, and
++`releases/values.schema.json` refuses anything else. Keep entries alphabetical.
++`helm lint releases` checks an edit against the schema, and ArgoCDDeploy's
++`kc project test` runs the render test. Push; the relay webhook refreshes
++`releases`, whose sync creates the Application OutOfSync. The first sync is
++manual.
+ 
+ What a sync does, in order: Argo applies the chart's `sync-wave: "-1"` Namespace
+ during its dry-run pass; the PreSync Job runs in `argocd-hooks` (clone at the
+@@ -250,37 +260,40 @@ synced SHA → terraform-backend-git → `terraform apply` with the stage tfvars
+ PV reattach); then the Sync waves. The app's Terraform takes `var.namespace` as
+ given and never creates it.
+ 
+-`autoSync: true` generates `syncPolicy.automated` (`prune: true`, `selfHeal:
+-false`) within about ten seconds and Argo syncs on its own; flipping it back
+-removes the policy.
++A stage without `autoSync`, or with `autoSync: true`, gets `syncPolicy.automated`
++(`prune: true`, `selfHeal: false`) and D5's retry block, and Argo syncs it on its
++own; `autoSync: false` renders no policy. Either change reaches the Application
++with `releases`' sync of the push.
+ 
+-**Undeploy** is `deployed: false`: the ApplicationSet deletes the Application and
+-the resources finalizer cascades — workloads, the `Prune=false` Namespace and
+-the hook Jobs were all gone within 45 seconds on 2026-09-13. What stays: the
+-state file in TerraformState (nothing prunes it until D28 is designed) and the
+-deploy repo's GitHub webhook. **Unregister** is deleting the entry directory.
++**Undeploy** a stage by deleting its entry. `releases` does not prune, so the
++Application stays, shown as requiring pruning, until the operator syncs
++`releases` with *Prune* ticked (D27 as amended). Then the resources finalizer
++cascades: workloads, the `Prune=false` Namespace and the hook Jobs were all gone
++within 45 seconds on 2026-09-13. What stays: the state file in TerraformState
++(nothing prunes it until D28 is designed) and the deploy repo's GitHub webhook.
++**Unregister** is deleting the app's whole entry, which undeploys each stage the
++same way.
+ 
+ ## Giving an app its own architecture producer
+ 
+ An app appears in the federated architecture model only while a registered
+-producer publishes it. HelmCharts' `helm-charts` producer publishes each stage
+-that is `jenkins`'s from the annotation file `charts/<app>/architecture.yaml`. It
+-leaves a stage out once that stage's entry says `reconciler: argo-cd`. So a
+-migrating app carries a producer of its own in its deploy repo, registered
+-before that flip, or it drops out of the model. An app new to the estate carries
+-one too. It has no current producer, so it has no flip to order against.
++producer publishes it, so every app on Argo carries a producer of its own in its
++deploy repo. During the migration, HelmCharts' `helm-charts` producer published
++each stage HelmCharts deployed, and each migrating app's producer took its stage
++over at a handover. That producer is retired from Architecture's
++`pipeline-producers.yaml` (slice 029), so an app that joins the model now has no
++current producer and nothing to hand over from.
+ 
+ The generator is `gen-architecture`, from ArgoCDTools' `aac-tools` image. It
+ renders `chart/` with `config/<stage>/values.yaml` the way Argo renders it, reads
+ the judgment layer, and writes `docs/architecture/<producer>.yaml`. Its ids are
+ uuid5s of the same natural keys, under the same namespace constant, that
+-HelmCharts' generator uses. So the new producer mints the ids `helm-charts`
+-publishes today, and no other producer's edge into the app dangles across the
++HelmCharts' generator used, so each migrated app kept its ids across its
+ handover.
+ 
+-A provider in another app resolves through the published set. Both generators
+-publish each Service they place on its workloads as an interface at its
+-in-cluster host, `<svc>.<ns>.svc`. They link every interface, exposed hosts
++A provider in another app resolves through the published set. The generator
++publishes each Service it places on its workloads as an interface at its
++in-cluster host, `<svc>.<ns>.svc`. It links every interface, exposed hosts
+ included, to the instances serving behind it (D55). A host the render cannot
+ place resolves to the instances that the published interfaces at that host
+ link. A host that resolves nowhere fails the build, and no artifact is written.
+@@ -292,7 +305,7 @@ The worked examples, to copy from:
+ 
+ | Deploy repo | Producer | Publishes | Case |
+ | --- | --- | --- | --- |
+-| `ArgoCDDeploy` | `argocd-deploy` | prd, from `main` | a new app: no current producer, no flip |
++| `ArgoCDDeploy` | `argocd-deploy` | prd, from `main` | a new app: no current producer |
+ | `KubeCoderDeploy` | `kubecoder-deploy` | prd, from `prd` | a handover from `helm-charts`; dev is not published |
+ 
+ What the deploy repo carries:
+@@ -313,7 +326,7 @@ What the deploy repo carries:
+   --stage <stage> --producer <app>-deploy` and `cexec aac-tools arch-validate
+   docs/architecture/<app>-deploy.yaml`.
+ 
+-What a migration would otherwise get wrong:
++What a new producer would otherwise get wrong:
+ 
+ - **One pipeline publishes one stage, from one branch.** The artifact is
+   attached to the pipeline, so a pipeline that built two stages would publish
+@@ -321,26 +334,21 @@ What a migration would otherwise get wrong:
+   stage from and passes that stage to `--stage`, which is required and takes one
+   value. That is the whole guard. The generator does not read the branch, and it
+   has no rule about which stages an app publishes. KubeCoder publishes prd only.
+-- **The moved annotation file states `introduced:`.** HelmCharts derives the
+-  date from the first commit that adds `charts/<app>`. A deploy repo's history
+-  dates the repo, not the app, so the generator requires the key and has no
+-  fallback. Copy the file verbatim and add HelmCharts' date. Every published
+-  element of the app carries that date, so a different date keeps the ids but
+-  changes every element:
++- **The annotation file states `introduced:`.** A deploy repo's history dates
++  the repo, not the app, so the generator requires the key and has no fallback.
++  A new app takes the date of the first commit that adds its deploy repo's
++  `chart/`, as ArgoCDDeploy's does. An annotation file copied from HelmCharts'
++  `charts/<app>/architecture.yaml` keeps HelmCharts' date, the first commit that
++  adds `charts/<app>`. Every published element of the app carries that date:
+ 
+   ```sh
+   git -C /work/HelmCharts log --diff-filter=A --reverse --format=%ad --date=short -- charts/<app> | head -1
+   ```
+ 
+-  HelmCharts keeps publishing the app from its own copy until the flip, so the
+-  two copies coexist until then. Record the copied commit in the deploy repo's
+-  `README.md`, and replay any change to HelmCharts' copy. A new app takes the
+-  date of the first commit that adds its deploy repo's `chart/`, as
+-  ArgoCDDeploy's does.
+ - **The producer id is `<app>-deploy`**, where `<app>` is `name:` in
+   `chart/Chart.yaml`. The generator keys every id on the chart's name, while
+-  Argo names the Application after the registry directory `configs/prd/<app>/`.
+-  The two must be equal, and nothing checks that yet. The id is not the repo name
++  Argo names the Application after the app's registry entry. The two must be
++  equal, and nothing checks that yet. The id is not the repo name
+   in kebab case, which would give `kube-coder-deploy`.
+ - **`.architecturerc` names the real sources.** The default `sources`,
+   `:(glob)**/docs/architecture/**`, matches nothing at a deploy repo's head,
+@@ -370,40 +378,19 @@ What a migration would otherwise get wrong:
+   green. The central architecture update reads those lines from the last green
+   build. Map the image, or know why it stays a gap.
+ 
+-The order runs from a committed producer to a registered one. Steps 4 and 5 are
++The order runs from a committed producer to a registered one. Steps 3 and 4 are
+ the operator's:
+ 
+ 1. Commit the files. `kc project test` in the deploy repo generates and
+    validates the artifact. Two regenerations from the same commit must be
+    byte-identical. A difference means render-time randomness reaches an id or
+    an emitted field.
+-2. At a handover, prove that the new producer's artifact equals what
+-   `helm-charts` publishes for the stage. The check clones the checkout's HEAD,
+-   so commit the judgment layer first:
+-
+-   ```sh
+-   cd /work/ArgoCDTools
+-   cexec iac python3 aac-tools/checks/handover_equality.py \
+-     --deploy-repo /work/<Repo> --stage <stage> --producer <app>-deploy
+-   ```
+-
+-   Exit 0 means the same element ids and the same ids for the relations the
+-   app's producer draws, with every field equal except those the check sets
+-   aside. ArgoCDTools' README (Gates) says how to read a difference. A relation
+-   that another producer draws against the app, such as a Serving edge from a
+-   consumer in another app, is listed as `drawn by <producer>: <id>` and is not
+-   compared: it resolves against an id the move keeps. The edges listed under
+-   `helm-charts` need the other half of the proof. HelmCharts, rendering every
+-   release but the app's, must still build and must draw each of them exactly
+-   as published. `argo_migrate.py arch`, the bulk migration's tool in
+-   `support/argo-migrate/`, runs both halves against one snapshot of the
+-   published set.
+-3. Push the published branch. A promotion branch must exist and carry the
++2. Push the published branch. A promotion branch must exist and carry the
+    producer. KubeCoderDeploy's `prd` is created from `main` by its promote job's
+    first run, at the prd cutover.
+-4. Create the Jenkins job `AaC/<Repo>` to run `Jenkinsfile.architecture`, and
++3. Create the Jenkins job `AaC/<Repo>` to run `Jenkinsfile.architecture`, and
+    build it. The first green build archives `docs/architecture/<app>-deploy.yaml`.
+-5. Only after that green build, register the producer with a PR against
++4. Only after that green build, register the producer with a PR against
+    `pipeline-producers.yaml` in `pvginkel/Architecture`:
+ 
+    ```yaml
+@@ -415,16 +402,10 @@ the operator's:
+    A registered producer with no archived artifact fails the collector's
+    discovery, and a failed collector run publishes nothing. `repo:` enrols the
+    producer in the central architecture update.
+-6. At a handover, flip the stage: push its registry entry
+-   ([above](#registering-undeploying-and-unregistering-an-app)). From
+-   registration until the flip, both producers declare the app's ids. The
+-   collector fails on the duplicates, the Architecture job is red, and the
+-   published model keeps the app as it was. The flip's HelmCharts architecture
+-   build leaves the stage out, and the next collector run is green, with the new
+-   producer owning the same ids. Flipping first would publish a green model
+-   without the app. Each stage flips on its own: a stage that the new producer
+-   does not publish leaves the model at its flip and needs no registration
+-   first. A new app has no step 6.
++
++Registering the producer and adding the app's registry entry
++([above](#registering-undeploying-and-unregistering-an-app)) do not wait on each
++other.
+ 
+ The central architecture update (`tooling/fleet.py` in `pvginkel/Architecture`)
+ does not yet serve a producer correctly when that producer builds a promotion
+@@ -445,8 +426,8 @@ stage is the first to run it.
+ What the manifest cannot show:
+ 
+ - **Never named `<app>-<stage>`.** The registry entry generates that name
+-  (above), and the ApplicationSet would take over an Application already
+-  holding it. Use `<app>-<stage>-preview`.
++  (above), and the registry would take over an Application already holding it.
++  Use `<app>-<stage>-preview`.
+ - **`helm.releaseName` pinned back to `<app>-<stage>`.** Argo passes the
+   Application's name to `helm template` as the release name unless
+   `spec.source.helm.releaseName` overrides it, so a preview would render
+@@ -497,7 +478,7 @@ For KubeCoder's dev stage:
+          releaseName: kubecoder-dev
+          valueFiles:
+            - ../config/dev/values.yaml
+-         # All four, as releases-local passes them: the library chart
++         # All four, as the registry passes them: the library chart
+          # required-guards each, so a missing one fails the whole render.
+          parameters:
+            - name: hook.repo
+@@ -615,9 +596,15 @@ The five pinned containers' `imagePullPolicy`, which Helm set to `Always`, is no
+ residue. KubeCoderDeploy's chart declares it `IfNotPresent`, so the first sync
+ takes the field over, and the diff table above shows the change.
+ 
+-Working notes, the probes behind the mechanism, and the full per-stage
+-inventory, taken before the chart declared the pull policy:
+-[`handovers/argo-adoption-blind-spot/`](../../../AnsibleSpecs/handovers/argo-adoption-blind-spot/findings-2026-09-20.md).
++The mechanism was proven on 2026-09-20 on a throwaway ConfigMap: the field
++manager `helm` created it with two fields, and `argocd-controller` then applied
++it with one. The other field survived a client-side apply, a server-side apply
++with `--force-conflicts`, and a server-side re-apply after helm's
++`managedFields` entry had been deleted. It went only once `argocd-controller`
++had declared the field itself and a later apply dropped it. The pre-flight's
++first run that day, before KubeCoderDeploy's chart declared the pull policy,
++counted 52 stuck fields on `kubecoder-dev` and 55 on `kubecoder-prd`, every one
++of them the residue above or that pull policy.
+ 
+ The alternative to adopting in place is recreating: delete the namespace and let
+ Argo build the release from nothing, which needs no enumeration because nothing
+@@ -627,8 +614,10 @@ state to interrupt. Which of the two is the estate's default is not yet decided.
+ 
+ ## Bootstrapping Argo from nothing
+ 
+-As run on 2026-09-04. Only when the cluster, or the `argocd-prd` namespace, is
+-gone.
++Steps 1 to 3 are as run on 2026-09-04. Only when the cluster, or the
++`argocd-prd` namespace, is gone.
++
++> Steps 4 to 6 are owed until the registry switch has run ([registry-switch.md](registry-switch.md)): until then restart the applicationset-controller (above) in place of step 4, which then generates `argocd-prd` from HelmCharts' `configs/prd/argocd/prd/release.yaml`, and the registry webhook of step 6 is HelmCharts'.
+ 
+ Before anything: `ArgoCDDeploy` pushed — the first self-sync clones
+ `origin/main`, so any bootstrap-time fix left unpushed is reverted by it; the
+@@ -679,18 +668,15 @@ the recipient committed in `config/prd/values.yaml`.
+      helm install argocd-prd chart --namespace argocd-prd --values config/prd/values.yaml'
+    ```
+ 
+-4. Restart the applicationset-controller (above). Two startup races hit it on
+-   2026-09-04: `failed to create webhook handler` (it reached its one-shot
+-   settings read before argocd-server had generated `server.secretkey`), and a
+-   single generation attempt against a repo-server not yet listening, which is
+-   never retried. Both look like a healthy install with zero Applications.
+-5. Argo's registry entry already exists (HelmCharts
+-   `configs/prd/argocd/prd/release.yaml`); after the restart the `argocd-prd`
+-   Application appears OutOfSync. Sync it once by hand — Argo has adopted itself.
+-   Log in via SSO to confirm the client.
+-6. The registry webhook on HelmCharts exists and survives a rebuild; GitHub's
+-   creation ping, or a redelivery, should log "both receivers accepted" at the
+-   relay.
++4. The install brings up `releases`, which syncs on its own and creates every
++   Application in the registry. Read it (Reading Argo without the CLI): Synced,
++   and the Application list back. If `releases` shows a `ComparisonError` or has
++   created nothing, refresh it by hand (Webhooks).
++5. Argo's registry entry already exists (ArgoCDDeploy `releases/values.yaml`,
++   `apps.argocd`), so the `argocd-prd` Application appears OutOfSync. Sync it
++   once by hand — Argo has adopted itself. Log in via SSO to confirm the client.
++6. ArgoCDDeploy's relay webhook exists and survives a rebuild; GitHub's creation
++   ping, or a redelivery, logs "both receivers accepted" at the relay.
+ 
+ ## Known behaviours
+ 
+@@ -714,6 +700,6 @@ the recipient committed in `config/prd/values.yaml`.
+   the controller for fifteen minutes, which leaves both blind.
+ - **Hook Jobs accumulate** for an app's lifetime; the delete policy never
+   matches a name carrying SHA and timestamp. They go with the Application.
+-- **Rebuilds.** Argo runs on prd only and keeps no node-local state, so a prd
+-  node rebuild does not touch it. `k8s-rebuild.md`'s note that HelmCharts
+-  releases on `srvk8sdev` need redeploying after a dev rebuild still holds.
++- **Rebuilds.** Argo runs on prd only, deploys only into prd (`in-cluster`) and
++  keeps no node-local state, so neither a prd node rebuild nor a `srvk8sdev`
++  rebuild touches it.
+diff --git a/docs/runbooks/ceph-vip.md b/docs/runbooks/ceph-vip.md
+index ecee910..87255e4 100644
+--- a/docs/runbooks/ceph-vip.md
++++ b/docs/runbooks/ceph-vip.md
+@@ -163,8 +163,8 @@ After all three nodes are up:
+ ## RGW S3 on the VIP (port 7480)
+ 
+ The same VIP fronts the RGW S3 endpoint. Every S3 consumer targets
+-`http://ceph:7480` (HelmCharts `configs/*/…-values.yaml`,
+-`s3.endpointUrl`), and the VIP follows the active mgr — so it can land
++`http://ceph:7480` (each deploy repo's `config/prd/values.yaml`, as
++`s3.endpointUrl` or StorageDeploy's `s3Mirror.s3Endpoint`), and the VIP follows the active mgr — so it can land
+ on **any** of the three nodes. **All three RGW daemons must therefore
+ listen on 7480**, or S3 via the VIP goes dark whenever it sits on a
+ node bound to a different port.
+@@ -196,8 +196,8 @@ are converted.
+ 
+ ## DNS
+ 
+-`ceph.home → 10.1.0.38` is a dnsmasq static host entry in HelmCharts
+-`configs/prd/dnsmasq.yaml` (`name: ceph`). No change needed here as
++`ceph.home → 10.1.0.38` is a dnsmasq static host entry in DnsmasqDeploy's
++`chart/templates/stage-manifests.yaml` (ConfigMap `static-hosts-config`, `name: ceph`). No change needed here as
+ long as that entry is present.
+ 
+ ## Phase 5 handoff
+diff --git a/docs/runbooks/k8s-rebuild.md b/docs/runbooks/k8s-rebuild.md
+index 63ca3f4..98a60d6 100644
+--- a/docs/runbooks/k8s-rebuild.md
++++ b/docs/runbooks/k8s-rebuild.md
+@@ -4,7 +4,7 @@ End-to-end procedure for rebuilding `k8s_prd` and `k8s_dev` nodes from scratch.
+ 
+ This runbook is the orchestrator. Each step is operator-driven; nothing automates the full sequence. Per `decisions.md` "Terraform and Ansible are peer tools — neither invokes the other."
+ 
+-**Networking shape**: prd k8s + Ceph nodes are bring-up tier — static IPs in `vms.tf`, hostname → IP triples curated by hand in HelmCharts `configs/prd/dnsmasq.yaml`. They opt out of the dynamic `homelab_dns_reservation` API via `static_ip = true` on the `managed-vm` module, because the dnsmasq sidecar runs in-cluster and the cluster nodes can't get their own DNS from a service they're required to bring up. srvk8sdev is dev-tier — single node, no in-cluster registry/dnsmasq dependency, dynamic reservation via the standard module path. See `decisions.md` "Ceph nodes and prd k8s nodes are static infrastructure".
++**Networking shape**: prd k8s + Ceph nodes are bring-up tier — static IPs in `vms.tf`, hostname → IP triples curated by hand in DnsmasqDeploy's `chart/templates/stage-manifests.yaml` (ConfigMap `static-hosts-config`). They opt out of the dynamic `homelab_dns_reservation` API via `static_ip = true` on the `managed-vm` module, because the dnsmasq sidecar runs in-cluster and the cluster nodes can't get their own DNS from a service they're required to bring up. srvk8sdev is dev-tier — single node, no in-cluster registry/dnsmasq dependency, dynamic reservation via the standard module path. See `decisions.md` "Ceph nodes and prd k8s nodes are static infrastructure".
+ 
+ ## Order
+ 
+@@ -90,7 +90,7 @@ Destroy is the standard — the same shape `srvk8s1` and `srvk8sdev` use. Nothin
+ 
+ ### 3. (Static-hosts is hand-curated; no edit unless the IP changes)
+ 
+-The target's entry in HelmCharts `configs/prd/dnsmasq.yaml` is operator-curated alongside Ceph + printers + IoT. As long as the rebuild keeps the same hostname → IP mapping (the typical case), no change is needed. If the IP changes, edit there and roll the dnsmasq StatefulSet before step 4.
++The target's entry in DnsmasqDeploy's `static-hosts-config` (`chart/templates/stage-manifests.yaml`) is operator-curated alongside Ceph + printers + IoT. As long as the rebuild keeps the same hostname → IP mapping (the typical case), no change is needed. If the IP changes, edit there and roll the dnsmasq StatefulSet before step 4.
+ 
+ ### 4. `terraform apply` — create the new VM
+ 
+@@ -163,7 +163,7 @@ This frees the NVMe (qemu releases the device on destroy; the ZFS pool's on-disk
+ 
+ ### 4. (Static-hosts is hand-curated; no edit unless the IP changes)
+ 
+-`srvk8s1`'s entry in HelmCharts `configs/prd/dnsmasq.yaml` is operator-curated alongside Ceph + printers + IoT. As long as the rebuild keeps the same hostname → IP mapping (the typical case), no change is needed. If the IP changes, edit there and roll the dnsmasq StatefulSet before step 6.
++`srvk8s1`'s entry in DnsmasqDeploy's `static-hosts-config` (`chart/templates/stage-manifests.yaml`) is operator-curated alongside Ceph + printers + IoT. As long as the rebuild keeps the same hostname → IP mapping (the typical case), no change is needed. If the IP changes, edit there and roll the dnsmasq StatefulSet before step 6.
+ 
+ ### 5. (Inventory unchanged)
+ 
+@@ -211,7 +211,7 @@ poetry run ansible-playbook playbooks/site.yml --limit srvk8s1 --check
+ 
+ ## Rebuild — `srvk8sdev` (single-node dev)
+ 
+-Different shape from prd: dev cluster is a single node, dev-tier networking (DHCP via the standard `homelab_dns_reservation`, not a static-hosts entry — see "Networking shape" at the top), no inter-node traffic, no zpool, no Ceph. The peer-count gate skips the eviction shape, so `evict-k8s.yml` is not part of this flow. The cluster gets fully replaced; HelmCharts deployments under `srvk8sdev` need re-deployment afterward (operator workflow, separate from this runbook). KubeCoder's cluster identities go with it too — the ServiceAccounts, bindings and token Secrets nothing reconciles — and are re-minted per the KubeCoder repo's `docs/operations/cluster-identity-remint.md`.
++Different shape from prd: dev cluster is a single node, dev-tier networking (DHCP via the standard `homelab_dns_reservation`, not a static-hosts entry — see "Networking shape" at the top), no inter-node traffic, no zpool, no Ceph. The peer-count gate skips the eviction shape, so `evict-k8s.yml` is not part of this flow. The cluster gets fully replaced, and nothing redeploys what ran on it: Argo CD deploys only into prd, and running a chart on `srvk8sdev` from a deploy repo is not yet settled (argo-cd D65). KubeCoder's cluster identities go with it too — the ServiceAccounts, bindings and token Secrets nothing reconciles — and are re-minted per the KubeCoder repo's `docs/operations/cluster-identity-remint.md`.
+ 
+ ```sh
+ # 1. Destroy the live VM:
+@@ -255,6 +255,6 @@ Verify `site.yml --check` reports zero changes against the rebuild target before
+ ## What this runbook does not cover
+ 
+ - Microceph rebuilds (Phase 5).
+-- HelmCharts redeploy on `srvk8sdev` after rebuild — operator workflow, see HelmCharts repo.
++- Redeploying charts on `srvk8sdev` after a rebuild — no workflow is settled since HelmCharts' `configs/dev` tree went into its archive (argo-cd D65).
+ - Re-minting KubeCoder's cluster identities after `srvk8sdev` is replaced, or after any full cluster loss — see the KubeCoder repo's `docs/operations/cluster-identity-remint.md`.
+ - Recovering from a corrupted dqlite database — `microk8s reset` is the reset hammer; deeper recovery is per microk8s upstream docs.
+diff --git a/docs/runbooks/k8s-upgrade.md b/docs/runbooks/k8s-upgrade.md
+index 06c6252..24f1905 100644
+--- a/docs/runbooks/k8s-upgrade.md
++++ b/docs/runbooks/k8s-upgrade.md
+@@ -115,17 +115,6 @@ deliberate defense-in-depth net. Check the bundled Calico version with
+ `microk8s kubectl -n kube-system get ds calico-node -o jsonpath='{.spec.template.spec.containers[0].image}'`
+ and cross-reference the issue.
+ 
+-## Move the HelmCharts chart gate to prd's new minor
+-
+-When prd's channel moves (`microk8s_channel` in `group_vars/k8s_prd.yml`),
+-set `KUBE_VERSION` in HelmCharts' `Jenkinsfile` to the new minor (e.g.
+-`1.36.0`). The pipeline's `Gate releases` stage lints and renders every
+-release it is about to deploy for that version, and kubeconform validates
+-each render against that version's schemas. Left on the old minor, the gate
+-checks prd's releases against an API prd no longer serves: an API version
+-the new minor removed still passes. The gate covers only the prd releases
+-the pipeline deploys, so a dev channel bump needs nothing here.
+-
+ ## Drain blocked by a PodDisruptionBudget
+ 
+ Drain uses `kubectl drain --ignore-daemonsets --delete-emptydir-data --timeout=300s`, which honours PodDisruptionBudgets. A PDB that can't be satisfied (e.g. a single-replica Deployment with `minAvailable: 1`, where evicting the only pod would violate the budget) blocks drain indefinitely; after the 5-minute timeout the playbook fails and the node stays cordoned.
+@@ -147,7 +136,7 @@ poetry run ansible-playbook playbooks/update-k8s.yml \
+ 
+ The force-delete bypasses the PDB by skipping the eviction API entirely. The Deployment recreates the pod on a still-schedulable node.
+ 
+-Long-term fix: audit `HelmCharts` for charts whose PDB blocks drain. For single-replica services, drop the PDB or switch from `minAvailable: 1` to `maxUnavailable: 1` (allows the one pod to be unavailable during a drain — same effect as no PDB during scheduled maintenance, but still protects against accidental concurrent disruption).
++Long-term fix: audit the deploy repos' charts for any whose PDB blocks drain. For single-replica services, drop the PDB or switch from `minAvailable: 1` to `maxUnavailable: 1` (allows the one pod to be unavailable during a drain — same effect as no PDB during scheduled maintenance, but still protects against accidental concurrent disruption).
+ 
+ ## Drain that succeeds and takes a service down anyway
+ 
+@@ -173,7 +162,7 @@ microk8s kubectl -n kube-system scale deployment/coredns --replicas=2
+ 
+ This is undeclared drift — `refresh-k8s-addons.yml` deletes and recreates the Deployment, which resets it to one replica. The durable fix is to declare the replica count, anti-affinity, and a PDB in the `microk8s` role; that is tracked as its own change and not yet done.
+ 
+-When auditing for others in this class, note that the "audit `HelmCharts`" pointer above is not enough on its own — CoreDNS is a kube-system addon, not a chart, and the same is true of anything else the addons install.
++When auditing for others in this class, note that the "audit the deploy repos' charts" pointer above is not enough on its own — CoreDNS is a kube-system addon, not a chart, and the same is true of anything else the addons install.
+ 
+ ## Workstation DNS during a roll
+ 
+diff --git a/docs/runbooks/kubecoder-cutover.md b/docs/runbooks/kubecoder-cutover.md
+index 906bf1f..83f43e7 100644
+--- a/docs/runbooks/kubecoder-cutover.md
++++ b/docs/runbooks/kubecoder-cutover.md
+@@ -5,6 +5,12 @@ cluster, off HelmCharts' Jenkins deploy and onto Argo CD, which syncs them from
+ Dev goes end to end first, then it sits, then prd follows. The operator executes every step. This
+ file gives the order, the exact commands, what each must show, and what stops the cutover.
+ 
++**This cutover has run.** Both stages were registered on Argo CD on 2026-09-23 and have deployed
++from KubeCoderDeploy since. The file stays as the record of how, so its HelmCharts steps describe
++the deploy path of that time. [WB-2](#wb-2-hand-a-stage-back-to-jenkins) can no longer run: the
++Helm release Secrets and HelmCharts' `configs/prd/kubecoder/_shared/` and `charts/kubecoder/` are
++gone (X1, X2; argo-cd D61).
++
+ Context: slice 012's [`plan.md`](../../../AnsibleSpecs/slices/012_kubecoder_argo_cutover/plan.md),
+ whose rulings are behind every step; the `argo-cd/` set:
+ [`design.md`](../../../AnsibleSpecs/argo-cd/design.md),
+diff --git a/docs/runbooks/openbao.md b/docs/runbooks/openbao.md
+index 706ae13..0a96dcb 100644
+--- a/docs/runbooks/openbao.md
++++ b/docs/runbooks/openbao.md
+@@ -136,7 +136,7 @@ and the latest backup's Raft snapshot is restored into it.
+ 
+ 1. **Fetch and unpack the latest backup.** `backup-server` is
+    upload-only — pull the object from the rclone destination it
+-   ships to (see the `storage` chart config in `/work/HelmCharts`).
++   ships to (`backupServer.rcloneRemote` in StorageDeploy's `config/prd/values.yaml`).
+    The newest `openbao/<ts>_openbao-backup.tgz.age` is the one you
+    want, not the `.metadata.json` file beside it:
+ 
+diff --git a/docs/runbooks/registry-switch.md b/docs/runbooks/registry-switch.md
+index bf268d6..d650f1c 100644
+--- a/docs/runbooks/registry-switch.md
++++ b/docs/runbooks/registry-switch.md
+@@ -435,6 +435,8 @@ For the follow-up. Removing any of these changes nothing in the render.
+   - `tools/registry-equivalence.py`. From the switch, `releases`' own sync status answers its
+     question, and it counts `releases` itself as `ONLY LIVE`.
+   - Ansible's `support/registry-switch-rehearsal/`, whose only reader is step 1.
++  - [argocd.md](argocd.md)'s "Restarting the applicationset-controller", which serves only the
++    ApplicationSets.
+ - **Serving nothing any more:**
+   - HelmCharts' relay webhook.
+   - The relay's applicationset-controller leg.
+diff --git a/docs/runbooks/s3-mirror.md b/docs/runbooks/s3-mirror.md
+index e86df3c..abf16ab 100644
+--- a/docs/runbooks/s3-mirror.md
++++ b/docs/runbooks/s3-mirror.md
+@@ -6,8 +6,9 @@ objects, when an earlier version of an object is needed, when the whole site is
+ `S3MirrorStale` fires (What can go wrong).
+ 
+ Design context: §"Backup" in [`../../../AnsibleSpecs/decisions.md`](../../../AnsibleSpecs/decisions.md).
+-The mirror is HelmCharts `charts/storage/files/s3-mirror/s3_mirror.py`, run nightly by the
+-`s3-mirror` CronJob in `storage-prd` and enabled only in `configs/prd/storage/prd/values.yaml`.
++The mirror is StorageDeploy's `chart/files/s3-mirror/s3_mirror.py`, run nightly by the
++`s3-mirror` CronJob in `storage-prd` and enabled only in `config/prd/values.yaml`
++(`s3Mirror.enabled`).
+ 
+ ## Conventions
+ 
+@@ -44,8 +45,8 @@ archive/<bucket>/<YYYYMMDDTHHMMSSZ>/<object key>   what the run started at that
+ 
+ | Credential | Where it lives | Used in |
+ |---|---|---|
+-| App key pair (read-write) | Secret `s3-credentials` in the app's namespace, written by the release's Terraform (HelmCharts `terraform-modules/s3-storage/main.tf`). No OpenBao or Roboform copy. | §2, §3 — writing into a production bucket |
+-| `backup-reader` key (read-only) | Secret `backup-reader-credentials` in `storage-prd`, written by the storage release's Terraform (HelmCharts `configs/prd/storage/_shared/infrastructure.tf`) | §5 — reading the live bucket |
++| App key pair (read-write) | Secret `s3-credentials` in the app's namespace, written by the app's Terraform (its deploy repo's `terraform/modules/s3-storage/main.tf`). No OpenBao or Roboform copy. | §2, §3 — writing into a production bucket |
++| `backup-reader` key (read-only) | Secret `backup-reader-credentials` in `storage-prd`, written by the storage app's Terraform (StorageDeploy `terraform/main.tf`) | §5 — reading the live bucket |
+ | Crypt password and salt | OpenBao, mount `kv`, path `eso/prd/storage/prd/s3-mirror` (fields `password`, `salt`); Roboform, next to the age key | every section |
+ | Drive login | The Google account that owns `Homelab Backups` | every section |
+ | Scratch user key | Created on dev Ceph by §5 step 4, removed by its step 8 | §5 |
+@@ -69,7 +70,7 @@ A release's RGW user is named after its namespace, and today every bucket name s
+    (<https://rclone.org/remote_setup/>).
+ 
+ 2. **The mirror.** The settings must match the mirror job's
+-   (HelmCharts `charts/storage/templates/s3-mirror-cronjob.yaml`); any difference decrypts nothing.
++   (StorageDeploy `chart/templates/s3-mirror-cronjob.yaml`); any difference decrypts nothing.
+    The password and salt are the values from Roboform (OpenBao holds the same pair), put through
+    `rclone obscure` as the job does:
+ 
+diff --git a/docs/runbooks/step-ca-bootstrap.md b/docs/runbooks/step-ca-bootstrap.md
+index 05d6dd0..49f95f7 100644
+--- a/docs/runbooks/step-ca-bootstrap.md
++++ b/docs/runbooks/step-ca-bootstrap.md
+@@ -36,7 +36,7 @@ This runbook is the *operational* path; it doesn't re-justify decisions.
+   Each secret gets its own entry with a descriptive name; copy-paste,
+   don't screenshot.
+ - Working directory during the ceremony is a fresh `mktemp -d`, not the
+-  Ansible or HelmCharts checkouts. Nothing the ceremony produces should
++  Ansible or deploy repo checkouts. Nothing the ceremony produces should
+   end up in git except the public root cert.
+ 
+ ---
+@@ -242,27 +242,25 @@ exactly as exported.
+ 
+ ### 7. Hand the encrypted intermediate to the chart
+ 
+-The HelmCharts `step-ca` deployment expects two pieces in a regular
+-k8s Secret named `step-ca-intermediate` in the chart's namespace:
++StepCaDeploy runs the upstream `step-certificates` chart in
++`existingSecrets` mode (`config/prd/values.yaml`). The chart reads the
++CA's material from these Secrets in `step-ca-prd`:
+ 
+-| Secret key | Source |
++| Secret | Keys |
+ |---|---|
+-| `intermediate_ca.key` | `.step/secrets/intermediate_ca_key` (encrypted PEM) |
+-| `password`            | `homelab-ca intermediate key passphrase` from Roboform |
++| `step-ca-certs` | `root_ca.crt`, `intermediate_ca.crt`, `ssh_host_ca_key.pub` |
++| `step-ca-secrets` | `intermediate_ca_key` (`.step/secrets/intermediate_ca_key`, encrypted PEM), `ssh_host_ca_key` |
++| `step-ca-ca-password` | `password`: `homelab-ca intermediate key passphrase` from Roboform |
++| `step-ca-config` | `ca.json`, `defaults.json` |
+ 
+-Create the Secret **before** the chart is first installed, in the
+-target cluster (`dev` first, then `prd`):
++Today StepCaDeploy's `chart/templates/stage-manifests.yaml` renders all
++four, every value base64-encoded, so the key and its passphrase are in
++git despite the Conventions above. AnsibleSpecs `decisions.md`
++("Intermediate key + passphrase") tracks moving them out.
+ 
+-```sh
+-kubectl -n step-ca-prd create secret generic step-ca-intermediate \
+-  --from-file=intermediate_ca.key=.step/secrets/intermediate_ca_key \
+-  --from-literal=password='<paste intermediate passphrase>'
+-```
+-
+-After the chart deploys and the pod confirms the intermediate
+-decrypts (look for `Serving HTTPS on :8443` in the pod logs), the
+-local `intermediate_ca_key` file is no longer needed — Roboform holds
+-the passphrase, the cluster holds the encrypted key.
++Once Argo has synced `step-ca-prd` and the pod confirms the
++intermediate decrypts (look for `Serving HTTPS on :8443` in the pod
++logs), the local `intermediate_ca_key` file is no longer needed.
+ 
+ ### 8. Encrypt the JWK provisioner password for Ansible
+ 
+@@ -337,23 +335,20 @@ of the day-zero ceremony).
+ 
+ ### 2. Hand the SSH host CA key to the chart
+ 
+-The `step-ca` release in HelmCharts runs in `existingSecrets` mode.
++StepCaDeploy's chart runs in `existingSecrets` mode (day-zero step 7).
+ Enabling the SSH host CA there:
+ 
+-- `configs/<env>/step-ca-values.yaml` — flip
+-  `existingSecrets.sshHostCa: true`.
+-- `configs/<env>/step-ca.yaml` — add the Secret the chart's
+-  `sshHostCa` mode consumes, carrying the `ssh_host_ca` private key
+-  and its passphrase. Confirm the Secret name and key names against
+-  the upstream `step-certificates` chart (`charts/step-ca/args.sh`
+-  pins the source).
+-
+-Both the `dev` and `prd` step-ca releases.
++- `config/prd/values.yaml` — set `existingSecrets.sshHostCa: true`.
++- `chart/templates/stage-manifests.yaml` — the `ssh_host_ca` private
++  key as `step-ca-secrets`' `ssh_host_ca_key`, its passphrase as
++  `step-ca-ssh-host-ca-password`'s `password`, and `ssh_host_ca.pub`
++  as `step-ca-certs`' `ssh_host_ca_key.pub`, each base64-encoded.
+ 
+ ### 3. Add the `ssh` block and host policy to `ca.json`
+ 
+ `ca.json` is the base64 `ca.json` value in the `step-ca-config`
+-Secret (`configs/<env>/step-ca.yaml`). Decode, edit, re-encode.
++Secret (StepCaDeploy's `chart/templates/stage-manifests.yaml`).
++Decode, edit, re-encode.
+ 
+ Add a top-level `ssh` block pointing at the mounted host CA key
+ (confirm the path against the rendered pod):
+@@ -390,9 +385,10 @@ Add SSH host durations to the provisioner's `claims`:
+ `1128h = 47 days` — the same lifetime as the X.509 leaves; the
+ `ssh_host_cert` role re-signs under a 14-day threshold.
+ 
+-Validate the JSON (`jq . <file>`), re-encode to base64 and deploy.
+-**The deploy is not what makes the edit live.** It applies the
+-Secret and rolls nothing — the release runs the upstream
++Validate the JSON (`jq . <file>`), re-encode to base64, commit to
++StepCaDeploy and push; Argo syncs `step-ca-prd`. **The sync is not
++what makes the edit live.** It applies the Secret and rolls nothing —
++the app runs the upstream
+ `smallstep/step-certificates` chart with no `checksum/config`
+ annotation on its pod template, so a Secret-payload edit leaves the
+ rendered workload unchanged — and step-ca reads `ca.json` at
+@@ -407,10 +403,9 @@ kubectl -n step-ca-prd rollout status  statefulset step-ca
+ Check that the restart took: `curl -sk https://ca.home/provisioners`
+ lists the provisioner you edited.
+ 
+-The workload is a StatefulSet, and the namespace is `step-ca-prd` on
+-both clusters — the release has a single stage, `prd`, and each
+-cluster's config declares that same namespace. Every `kubectl` in
+-this runbook addresses it.
++The workload is a StatefulSet in `step-ca-prd`, the one stage Argo
++deploys from StepCaDeploy. Every `kubectl` in this runbook addresses
++it.
+ 
+ ### 4. Verify SSH issuance
+ 
+@@ -542,14 +537,16 @@ You will be prompted for:
+   `homelab-ca intermediate key passphrase` (overwriting the old entry
+   *after* step 4 succeeds).
+ 
+-### 3. Replace the chart's Secret
++### 3. Replace the chart's Secrets
+ 
+-```sh
+-kubectl -n step-ca-prd create secret generic step-ca-intermediate \
+-  --from-file=intermediate_ca.key=.step/secrets/intermediate_ca_key \
+-  --from-literal=password='<new passphrase>' \
+-  --dry-run=client -o yaml | kubectl apply -f -
+-```
++In StepCaDeploy's `chart/templates/stage-manifests.yaml`, replace
++three values with the base64 of the new material: `step-ca-certs`'
++`intermediate_ca.crt` (`.step/certs/intermediate_ca.crt`),
++`step-ca-secrets`' `intermediate_ca_key`
++(`.step/secrets/intermediate_ca_key`) and `step-ca-ca-password`'s
++`password` (the new passphrase). Commit and push; Argo syncs
++`step-ca-prd`, and a `kubectl` edit to those Secrets would be undone
++by its next sync.
+ 
+ Restart the step-ca StatefulSet to pick up the new intermediate:
+ 
+diff --git a/docs/runbooks/step-ca-root-rotation.md b/docs/runbooks/step-ca-root-rotation.md
+index e50373e..9fc572d 100644
+--- a/docs/runbooks/step-ca-root-rotation.md
++++ b/docs/runbooks/step-ca-root-rotation.md
+@@ -39,7 +39,7 @@ procedure's shape depends on how they land.
+   the bundle carries two roots the two sides' ordering is no longer pinned and
+   the stage fires on every run. It needs the fingerprint-set comparison
+   `decisions.md` specifies first.
+-- **The deduplication decision is open.** Nine out-of-repo copies of the root
++- **The deduplication decision is open.** Ten out-of-repo copies of the root
+   are maintained by hand (below). Whether they collapse to one source or stay
+   copies changes what a rotation's change window contains.
+ 
+@@ -61,24 +61,24 @@ It is public, PEM-armored, and committed. `baseline` distributes it to every
+ managed host, and the step-ca bootstrap ceremony exports it here (step 6 of
+ [`step-ca-bootstrap.md`](step-ca-bootstrap.md)).
+ 
+-**Nine out-of-repo copies are on this inventory**, all byte-identical to it,
+-and a rotation updates all nine. HelmCharts' `charts/jenkins/files/ca/` and
+-`charts/kubecoder/files/ca/` reach the root through symlinks to that repo's
+-root-level copy, so they are not copies of their own and a rotation does not
+-touch them — a `find` that returns twelve paths is still this nine, plus those
+-two links and the canonical copy above.
++**Ten out-of-repo copies are on this inventory**, all byte-identical to it,
++and a rotation updates all ten. Four are in deploy repos not cloned under
++`/work`, so their rows name the repo. HelmCharts' copies (`homelab-root.crt`,
++`charts/nginx/files/ca/`, `charts/jenkins/files/ca/`) serve no deployed
++workload and are not on it.
+ 
+ | Path | What consumes it |
+ |---|---|
+-| `/work/HelmCharts/homelab-root.crt` | The `external-secrets` chart's `post-rollout.sh` builds a `ca.crt` Secret from it. The `kubecoder` chart renders this same file into a ConfigMap — `charts/kubecoder/files/ca/homelab-root.crt` is a symlink to it — and mounts it into the controller pod, which is handed the mounted path in `KUBECODER_STEP_CA_ROOT` and passes it to `step --root` when it asks step-ca to sign an environment pod's SSH host certificate. The controller keeps no copy of its own: a chart deploy carries it, no image rebuild. |
+-| `/work/HelmCharts/charts/nginx/files/ca/homelab-root.crt` | Mounted by the nginx manager Deployment and its renewal CronJob; the `certbot` image's `args.sh` bind-mounts this same file at run time. |
++| `ExternalSecretsDeploy`: `chart/files/homelab-root.crt` | Rendered into the ConfigMap `homelab-root-ca` (key `ca.crt`), the `caProvider` by which ESO verifies OpenBao's step-ca-issued listener. |
++| `NginxDeploy`: `chart/files/ca/homelab-root.crt` | Rendered into the ConfigMap `nginx-configmap-ca`, mounted by the nginx manager Deployment and its renewal CronJob. |
++| `JenkinsDeploy`: `chart/files/ca/homelab-root.crt` | Rendered into the ConfigMap `jenkins-configmap-ca`, which Jenkins' init container imports into the Java truststore. |
+ | `/work/ArgoCDTools/argocd-hook/image/homelab-root.crt` | Baked into the `argocd-hook` image's trust store — the Argo CD Terraform PreSync hook. |
+ | `/work/ArgoCDTools/aac-tools/image/homelab-root.crt` | Baked into the `aac-tools` image's trust store — the architecture generator and `arch-validate`, which KubeCoder offers as a toolchain sidecar and a deploy repo's `Jenkinsfile.architecture` pulls. It is how a run reaches `https://charts.home` for the chart dependency; `https://architecture.webathome.org` presents a publicly trusted leaf, so neither the dataset nor the validator needs this root. |
+ | `/work/DockerImages/kube-coder-dev-base/homelab-root.crt` | Baked into the KubeCoder dev base image's trust store, and pointed at by `NODE_EXTRA_CA_CERTS`. |
+ | `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt` | Baked into the arm64 cross toolchain sidecar's trust store, and pointed at by `REQUESTS_CA_BUNDLE`. Built on `dockcross/linux-arm64`, **not** on `kube-coder-dev-base`, so a rebuild of that base does not carry it. |
+ | `/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt` | The same, for the ESP-IDF toolchain sidecar, on `espressif/idf`. A matrix directory: every IDF version in `build-matrix.json` is rebuilt from this one copy. |
+ | `/work/ArgoCDDeploy/chart/files/homelab-root.crt` | Rendered into a ConfigMap and mounted into Argo CD's repo-server at `/etc/ssl/certs/homelab-root.crt`, which is how `helm dependency build` comes to trust `https://charts.home`. Not an image copy: it lands on Argo's next sync of its own chart, which is manual (D3). |
+-| `/work/KubeCoderDeploy/chart/files/ca/homelab-root.crt` | KubeCoder's Argo CD deploy repo's copy of the `kubecoder` chart: the same ConfigMap, controller mount and `step --root` use as the `/work/HelmCharts/homelab-root.crt` row. A real file, not a symlink — Argo's repo-server refuses a symlink that leaves the repository. Nothing deploys it until KubeCoder's cutover to Argo (slice 012); from then it is the copy the controller gets, landing on KubeCoder's next sync. |
++| `KubeCoderDeploy`: `chart/files/ca/homelab-root.crt` | Rendered into the ConfigMap `kubecoder-controller-ca` and mounted into the controller pod, which is handed the mounted path in `KUBECODER_STEP_CA_ROOT` and passes it to `step --root` when it asks step-ca to sign an environment pod's SSH host certificate. The controller keeps no copy of its own: a sync carries it, no image rebuild. A real file, not a symlink — Argo's repo-server refuses a symlink that leaves the repository. |
+ 
+ **Two images consume the cert without holding their own copy** — they need no
+ edit, but they do need a rebuild:
+@@ -95,9 +95,10 @@ landing: the five baked copies — `argocd-hook`, `aac-tools`,
+ `kube-coder-dev-base` and the two KubeCoder toolchain sidecars — and the `iac`
+ image that reads the canonical file directly only take effect once their image
+ is rebuilt **and** the workloads pulling it are restarted onto the new tag. The
+-`ArgoCDDeploy` copy needs no rebuild, but it does need a sync — and Argo CD
+-syncs itself only when the operator says so, so it is the one copy a rotation
+-can leave behind without any pipeline noticing.
++deploy repos' copies need no rebuild, but they do need a sync. The four app
++repos' copies land with their app's sync of the push. Argo CD syncs itself only
++when the operator says so, so the `ArgoCDDeploy` copy is the one a rotation can
++leave behind without any pipeline noticing.
+ 
+ ## What a rotation breaks besides TLS: the provider mirror
+ 
+@@ -138,24 +139,26 @@ from the repos and hosts after that.
+ 
+ ## Verifying the inventory is still whole
+ 
+-The ten paths are duplicates by convention, not by mechanism, so drift
++The eleven paths are duplicates by convention, not by mechanism, so drift
+ between them is silent. Check them against each other before and after any
+-change window:
++change window. The deploy repos not cloned under `/work` are read from their
++`main` on GitHub:
+ 
+ ```sh
+ md5sum /work/Ansible/ansible/roles/baseline/files/homelab-root.crt \
+-       /work/HelmCharts/homelab-root.crt \
+-       /work/HelmCharts/charts/nginx/files/ca/homelab-root.crt \
+        /work/ArgoCDTools/argocd-hook/image/homelab-root.crt \
+        /work/ArgoCDTools/aac-tools/image/homelab-root.crt \
+        /work/DockerImages/kube-coder-dev-base/homelab-root.crt \
+        /work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt \
+        /work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt \
+-       /work/ArgoCDDeploy/chart/files/homelab-root.crt \
+-       /work/KubeCoderDeploy/chart/files/ca/homelab-root.crt
++       /work/ArgoCDDeploy/chart/files/homelab-root.crt
++for f in ExternalSecretsDeploy/chart/files NginxDeploy/chart/files/ca \
++         JenkinsDeploy/chart/files/ca KubeCoderDeploy/chart/files/ca; do
++  gh api "repos/pvginkel/${f%%/*}/contents/${f#*/}/homelab-root.crt" -H 'Accept: application/vnd.github.raw' | md5sum
++done
+ ```
+ 
+-All ten hashes must match.
++All eleven hashes must match.
+ 
+ The same check for the provider mirror config:
+ 
+diff --git a/docs/runbooks/youtrack-restore.md b/docs/runbooks/youtrack-restore.md
+index 3cff665..6445afa 100644
+--- a/docs/runbooks/youtrack-restore.md
++++ b/docs/runbooks/youtrack-restore.md
+@@ -5,8 +5,9 @@ and the restore drill. Read this when YouTrack's database is lost or corrupted,
+ is gone, or when `YouTrackBackupStale` fires (What can go wrong).
+ 
+ Design context: §"Backup" in [`../../../AnsibleSpecs/decisions.md`](../../../AnsibleSpecs/decisions.md).
+-The backup is HelmCharts `charts/youtrack/files/backup/backup.py`, run nightly by the
+-`youtrack-backup` CronJob in `youtrack-prd` and enabled only in `configs/prd/youtrack/prd/values.yaml`.
++The backup is YoutrackDeploy's `chart/files/backup/backup.py`, run nightly by the
++`youtrack-backup` CronJob in `youtrack-prd` and enabled only in `config/prd/values.yaml`
++(`backup.enabled`).
+ 
+ ## Conventions
+ 
+@@ -36,8 +37,9 @@ archive of 87 entries — `youtrack/` (the database files, and `blobs/` holding
+   upload's time in UTC. The 30 newest objects are kept.
+ - YouTrack also keeps its 3 newest archives in `backups/` on its own volume, named
+   `<YYYY-MM-DD-HH-MM-SS>.tar.gz`. They die with the volume.
+-- A backup restores only into the same or a newer YouTrack version. Use the image tag production
+-  runs, from HelmCharts `charts/youtrack/values.yaml`.
++- A backup restores only into the same or a newer YouTrack version. Use the image production
++  runs: YoutrackDeploy's `config/prd/values.yaml` pins it by digest (`images.youtrack`), so where
++  a step below says production's tag, run `jetbrains/youtrack@sha256:…` with that digest.
+ 
+ ## Credentials

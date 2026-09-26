@@ -1,0 +1,1558 @@
+/work/ArgoCDDeploy — P4: git diff 307d94f3aef8..50fd69a07190
+
+.kubecoder/project.yaml              |   1 +
+ releases/Chart.yaml                  |   6 +
+ releases/templates/_helpers.tpl      |  19 +++
+ releases/templates/applications.yaml |  83 +++++++++++++
+ releases/values.schema.json          |  95 +++++++++++++++
+ releases/values.yaml                 | 266 ++++++++++++++++++++++++++++++++++++++++
+ tests/render-chart.py                | 365 +++++++++++++++++++++++++++++++++++++++++++++++++++----
+ tools/registry-equivalence.py        |  94 ++++++++++++++
+ 8 files changed, 906 insertions(+), 23 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 034a712..4f580fc 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -16,6 +16,7 @@ projects:
+     lint:
+       - cexec iac tests/build-deps.sh
+       - cexec iac helm lint chart --values config/prd/values.yaml
++      - cexec iac helm lint releases
+     # The gate is the render: tests/render-chart.py asserts what the decision
+     # register fixes against the objects helm actually produces. The last two
+     # statements are the commands Jenkinsfile.architecture runs.
+diff --git a/releases/Chart.yaml b/releases/Chart.yaml
+new file mode 100644
+index 0000000..8c4cc62
+--- /dev/null
++++ b/releases/Chart.yaml
+@@ -0,0 +1,6 @@
++# The registry chart (D63): values.yaml is the registry, and the chart renders
++# one plain Application per app-stage from it.
++apiVersion: v2
++name: releases
++version: "0.1"
++type: application
+diff --git a/releases/templates/_helpers.tpl b/releases/templates/_helpers.tpl
+new file mode 100644
+index 0000000..633b4f0
+--- /dev/null
++++ b/releases/templates/_helpers.tpl
+@@ -0,0 +1,19 @@
++{{/*
++The four hook parameters, all of them: the library chart `required`-guards every
++one (/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:45-48), so
++three fails the whole render of every app that includes the hook.
++`$ARGOCD_APP_REVISION` is Argo's, substituted with the synced SHA at build time
++(D30): the only way the hook learns which commit to clone. hook.namespace is the
++destination namespace, so the hook's PV reattach filters on the namespace Argo is
++syncing into (D29, D33).
++*/}}
++{{- define "releases.hookParameters" -}}
++- name: hook.repo
++  value: {{ .repo | quote }}
++- name: hook.revision
++  value: "$ARGOCD_APP_REVISION"
++- name: hook.stage
++  value: {{ .stage | quote }}
++- name: hook.namespace
++  value: {{ .name | quote }}
++{{- end }}
+diff --git a/releases/templates/applications.yaml b/releases/templates/applications.yaml
+new file mode 100644
+index 0000000..99dbd02
+--- /dev/null
++++ b/releases/templates/applications.yaml
+@@ -0,0 +1,83 @@
++{{/*
++One Application per app-stage (D63). Name and destination namespace are the one
++string <app>-<stage> (D24), in the project ArgoCDDeploy's chart/ creates (D10).
++The finalizer makes deleting an Application an undeploy that cascades to its
++namespace and everything tracked with it (D27).
++
++An upstream app is multi-source (D18): the chart from its own Helm repository at
++the stage's pinned version, the values from the deploy repo, and the deploy
++repo's companion chart/ (D56) with the hook parameters. Each source builds at its
++own revision, so $ARGOCD_APP_REVISION in the third is the deploy repo's SHA. A
++local app reads its stage's values out of the chart path (D19).
++
++autoSync turns on `prune`, because a manifest that leaves the render leaves the
++cluster (D46), and no `selfHeal`, so a debug edit to a tracked resource stays
++until someone syncs (D5). `default` would turn an explicit `autoSync: false`
++into true, hence `hasKey`.
++*/}}
++{{- range $app, $entry := .Values.apps }}
++{{- range $stage, $settings := $entry.stages }}
++{{- $name := printf "%s-%s" $app $stage }}
++{{- $revision := $settings.targetRevision | default "main" }}
++{{- $autoSync := ternary $settings.autoSync true (hasKey $settings "autoSync") }}
++{{- $hook := dict "repo" $entry.repo "stage" $stage "name" $name }}
++---
++apiVersion: argoproj.io/v1alpha1
++kind: Application
++metadata:
++  name: {{ $name | quote }}
++  namespace: {{ $.Release.Namespace }}
++  finalizers:
++    - resources-finalizer.argocd.argoproj.io
++spec:
++  project: releases
++  {{- if $entry.upstream }}
++  sources:
++    - repoURL: {{ $entry.upstream.repo | quote }}
++      chart: {{ $entry.upstream.chart | quote }}
++      targetRevision: {{ $settings.version | quote }}
++      helm:
++        valueFiles:
++          - {{ printf "$values/config/%s/values.yaml" $stage | quote }}
++    - repoURL: {{ $entry.repo | quote }}
++      targetRevision: {{ $revision | quote }}
++      ref: values
++    - repoURL: {{ $entry.repo | quote }}
++      targetRevision: {{ $revision | quote }}
++      path: chart
++      helm:
++        parameters:
++          {{- include "releases.hookParameters" $hook | nindent 10 }}
++  {{- else }}
++  source:
++    repoURL: {{ $entry.repo | quote }}
++    targetRevision: {{ $revision | quote }}
++    path: chart
++    helm:
++      valueFiles:
++        - {{ printf "../config/%s/values.yaml" $stage | quote }}
++      parameters:
++        {{- include "releases.hookParameters" $hook | nindent 8 }}
++  {{- end }}
++  destination:
++    name: in-cluster
++    namespace: {{ $name | quote }}
++  {{- if or $autoSync $entry.syncOptions }}
++  syncPolicy:
++    {{- if $autoSync }}
++    automated:
++      prune: true
++      selfHeal: false
++    retry:
++      limit: 3
++      backoff:
++        duration: 30s
++        factor: 2
++    {{- end }}
++    {{- with $entry.syncOptions }}
++    syncOptions:
++      {{- toYaml . | nindent 6 }}
++    {{- end }}
++  {{- end }}
++{{- end }}
++{{- end }}
+diff --git a/releases/values.schema.json b/releases/values.schema.json
+new file mode 100644
+index 0000000..4deabde
+--- /dev/null
++++ b/releases/values.schema.json
+@@ -0,0 +1,95 @@
++{
++  "$schema": "http://json-schema.org/draft-07/schema#",
++  "$comment": "The registry's key validation (D63): Helm refuses to render values this schema does not accept. additionalProperties is false at every level, so a misspelt key fails instead of being ignored.",
++  "type": "object",
++  "required": ["apps"],
++  "additionalProperties": false,
++  "properties": {
++    "apps": {
++      "type": "object",
++      "required": ["argocd"],
++      "propertyNames": { "$ref": "#/definitions/name" },
++      "additionalProperties": { "$ref": "#/definitions/app" },
++      "properties": {
++        "argocd": {
++          "$comment": "Argo's own entry: registered, from ArgoCDDeploy, and never auto-syncing, since a self-sync can restart the controller or the repo-server mid-sync (D3). Deleting its stage would leave argocd-prd requiring pruning, and the prune would delete Argo.",
++          "allOf": [
++            { "$ref": "#/definitions/app" },
++            {
++              "properties": {
++                "repo": { "const": "https://github.com/pvginkel/ArgoCDDeploy.git" },
++                "stages": {
++                  "required": ["prd"],
++                  "additionalProperties": {
++                    "required": ["autoSync"],
++                    "properties": { "autoSync": { "const": false } }
++                  }
++                }
++              }
++            }
++          ]
++        }
++      }
++    }
++  },
++  "definitions": {
++    "name": {
++      "$comment": "An app or stage key; <app>-<stage> is a namespace name, so both are DNS labels.",
++      "type": "string",
++      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
++    },
++    "app": {
++      "type": "object",
++      "required": ["repo", "stages"],
++      "additionalProperties": false,
++      "properties": {
++        "repo": {
++          "$comment": "A deploy repo under the owner the repo credential and the AppProject's source glob cover.",
++          "type": "string",
++          "pattern": "^https://github\\.com/pvginkel/[A-Za-z0-9._-]+\\.git$"
++        },
++        "upstream": {
++          "type": "object",
++          "required": ["repo", "chart"],
++          "additionalProperties": false,
++          "properties": {
++            "repo": { "type": "string", "pattern": "^https://\\S+$" },
++            "chart": { "type": "string", "minLength": 1 }
++          }
++        },
++        "syncOptions": {
++          "type": "array",
++          "minItems": 1,
++          "items": { "type": "string", "minLength": 1 }
++        },
++        "stages": {
++          "$comment": "A stage is deployed by being here (D27 as amended), so an app with none has no entry.",
++          "type": "object",
++          "minProperties": 1,
++          "propertyNames": { "$ref": "#/definitions/name" },
++          "additionalProperties": { "$ref": "#/definitions/stage" }
++        }
++      },
++      "if": { "required": ["upstream"] },
++      "then": {
++        "properties": { "stages": { "additionalProperties": { "required": ["version"] } } }
++      },
++      "else": {
++        "properties": { "stages": { "additionalProperties": { "not": { "required": ["version"] } } } }
++      }
++    },
++    "stage": {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "autoSync": { "type": "boolean" },
++        "targetRevision": { "type": "string", "minLength": 1 },
++        "version": {
++          "$comment": "The upstream chart's version, pinned per stage (D22). A string: an unquoted 1.20 is the number 1.2.",
++          "type": "string",
++          "minLength": 1
++        }
++      }
++    }
++  }
++}
+diff --git a/releases/values.yaml b/releases/values.yaml
+new file mode 100644
+index 0000000..068431e
+--- /dev/null
++++ b/releases/values.yaml
+@@ -0,0 +1,266 @@
++# The registry (D63): every app-stage Argo CD deploys, one entry per app. The
++# chart renders one Application per stage, named and namespaced <app>-<stage>
++# (D24). values.schema.json refuses an entry that is not this shape.
++#
++#   repo         the deploy repo.
++#   upstream     {repo, chart}: the chart comes from a Helm repository (D18); the
++#                deploy repo supplies the stage values and a companion chart/
++#                (D56), and every stage pins the chart's `version` (D22).
++#   syncOptions  passed through to each of the app's Applications (D62).
++#   stages       <stage>: {autoSync, targetRevision, version}. autoSync defaults
++#                to true and targetRevision to main; `version` is an upstream
++#                app's, and required there.
++#
++# A stage is deployed by being here; undeploying it is deleting its entry, which
++# leaves its Application requiring pruning until the operator prunes it (D27 as
++# amended). D64's registry switch hands the live Applications to this chart, and
++# tools/registry-equivalence.py compares its render with them.
++apps:
++  # Argo CD's own entry (D3): the Application through which Argo manages itself.
++  # values.schema.json pins its repo, its prd stage and its autoSync.
++  argocd:
++    repo: https://github.com/pvginkel/ArgoCDDeploy.git
++    stages:
++      # Tracks main: D34's dev-tracks-main / prd-tracks-prd split is per-app, and
++      # ArgoCDDeploy carries no `prd` branch.
++      prd:
++        # Permanent, not a cutover default (D3's sharp edge): a self-sync can
++        # restart the application controller or the repo-server mid-sync, so an
++        # Argo upgrade is a manual sync at a moment the operator picks.
++        autoSync: false
++  calendar-support:
++    repo: https://github.com/pvginkel/CalendarSupportDeploy.git
++    stages:
++      prd: {}
++  ceph-csi-cephfs:
++    repo: https://github.com/pvginkel/CephCsiCephfsDeploy.git
++    upstream:
++      repo: https://ceph.github.io/csi-charts
++      chart: ceph-csi-cephfs
++    stages:
++      prd:
++        version: "3.18.0"
++  ceph-csi-rbd:
++    repo: https://github.com/pvginkel/CephCsiRbdDeploy.git
++    upstream:
++      repo: https://ceph.github.io/csi-charts
++      chart: ceph-csi-rbd
++    stages:
++      prd:
++        version: "3.18.0"
++  charts:
++    repo: https://github.com/pvginkel/ChartsDeploy.git
++    stages:
++      prd: {}
++  cloudnative-pg:
++    repo: https://github.com/pvginkel/CloudnativePgDeploy.git
++    upstream:
++      repo: https://cloudnative-pg.github.io/charts
++      chart: cloudnative-pg
++    # Its CRDs exceed the 256 KiB `last-applied-configuration` annotation that
++    # client-side apply writes (D62).
++    syncOptions:
++      - ServerSideApply=true
++    stages:
++      prd:
++        version: "0.29.1"
++  csi-driver-smb:
++    repo: https://github.com/pvginkel/CsiDriverSmbDeploy.git
++    upstream:
++      repo: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
++      chart: csi-driver-smb
++    stages:
++      prd:
++        version: "1.20.3"
++  dnsmasq:
++    repo: https://github.com/pvginkel/DnsmasqDeploy.git
++    stages:
++      prd: {}
++  elasticsearch:
++    repo: https://github.com/pvginkel/ElasticsearchDeploy.git
++    stages:
++      prd: {}
++  electronics-inventory:
++    repo: https://github.com/pvginkel/ElectronicsInventoryDeploy.git
++    stages:
++      prd: {}
++  external-secrets:
++    repo: https://github.com/pvginkel/ExternalSecretsDeploy.git
++    upstream:
++      repo: https://charts.external-secrets.io
++      chart: external-secrets
++    # Its CRDs exceed the 256 KiB `last-applied-configuration` annotation that
++    # client-side apply writes (D62).
++    syncOptions:
++      - ServerSideApply=true
++    stages:
++      prd:
++        version: "2.11.0"
++  fieldnotes:
++    repo: https://github.com/pvginkel/FieldnotesDeploy.git
++    stages:
++      prd: {}
++  filebeat:
++    repo: https://github.com/pvginkel/FilebeatDeploy.git
++    stages:
++      prd: {}
++  ginbov-nl:
++    repo: https://github.com/pvginkel/GinbovNlDeploy.git
++    stages:
++      prd: {}
++  git-sync:
++    repo: https://github.com/pvginkel/GitSyncDeploy.git
++    stages:
++      prd: {}
++  grafana:
++    repo: https://github.com/pvginkel/GrafanaDeploy.git
++    upstream:
++      repo: https://grafana.github.io/helm-charts
++      chart: grafana
++    stages:
++      prd:
++        version: "10.5.15"
++  guacamole:
++    repo: https://github.com/pvginkel/GuacamoleDeploy.git
++    stages:
++      prd: {}
++  headlamp:
++    repo: https://github.com/pvginkel/HeadlampDeploy.git
++    upstream:
++      repo: https://kubernetes-sigs.github.io/headlamp/
++      chart: headlamp
++    stages:
++      prd:
++        version: "0.45.0"
++  homeapps:
++    repo: https://github.com/pvginkel/HomeappsDeploy.git
++    stages:
++      prd: {}
++  homeassistant-mcp:
++    repo: https://github.com/pvginkel/HomeassistantMcpDeploy.git
++    stages:
++      prd: {}
++  iac-provisioner:
++    repo: https://github.com/pvginkel/IacProvisionerDeploy.git
++    stages:
++      prd: {}
++  infra-statistics:
++    repo: https://github.com/pvginkel/InfraStatisticsDeploy.git
++    stages:
++      prd: {}
++  intercom:
++    repo: https://github.com/pvginkel/IntercomDeploy.git
++    stages:
++      prd: {}
++  iot:
++    repo: https://github.com/pvginkel/IotDeploy.git
++    stages:
++      prd: {}
++  jenkins:
++    repo: https://github.com/pvginkel/JenkinsDeploy.git
++    stages:
++      prd: {}
++  keycloak:
++    repo: https://github.com/pvginkel/KeycloakDeploy.git
++    stages:
++      dev: {}
++      prd: {}
++  kubecoder:
++    repo: https://github.com/pvginkel/KubeCoderDeploy.git
++    stages:
++      dev: {}
++      # D34: prd tracks the `prd` branch, which promotion advances.
++      prd:
++        targetRevision: prd
++  media:
++    repo: https://github.com/pvginkel/MediaDeploy.git
++    stages:
++      prd: {}
++  models:
++    repo: https://github.com/pvginkel/ModelsDeploy.git
++    stages:
++      prd: {}
++  mosquitto:
++    repo: https://github.com/pvginkel/MosquittoDeploy.git
++    stages:
++      prd: {}
++  newsfilter:
++    repo: https://github.com/pvginkel/NewsfilterDeploy.git
++    stages:
++      prd: {}
++  nginx:
++    repo: https://github.com/pvginkel/NginxDeploy.git
++    stages:
++      prd: {}
++  pgadmin:
++    repo: https://github.com/pvginkel/PgadminDeploy.git
++    stages:
++      prd: {}
++  postgres-pas:
++    repo: https://github.com/pvginkel/PostgresPasDeploy.git
++    stages:
++      prd: {}
++  prometheus:
++    repo: https://github.com/pvginkel/PrometheusDeploy.git
++    upstream:
++      repo: https://prometheus-community.github.io/helm-charts
++      chart: prometheus
++    stages:
++      prd:
++        version: "29.33.0"
++  registry:
++    repo: https://github.com/pvginkel/RegistryDeploy.git
++    stages:
++      prd: {}
++  scantopdf:
++    repo: https://github.com/pvginkel/ScantopdfDeploy.git
++    stages:
++      prd: {}
++  source:
++    repo: https://github.com/pvginkel/SourceDeploy.git
++    stages:
++      prd: {}
++  step-ca:
++    repo: https://github.com/pvginkel/StepCaDeploy.git
++    upstream:
++      repo: https://smallstep.github.io/helm-charts
++      chart: step-certificates
++    stages:
++      prd:
++        version: "1.30.1"
++  storage:
++    repo: https://github.com/pvginkel/StorageDeploy.git
++    stages:
++      prd: {}
++  telegram-mcp:
++    repo: https://github.com/pvginkel/TelegramMcpDeploy.git
++    stages:
++      prd: {}
++  tfmirror:
++    repo: https://github.com/pvginkel/TfmirrorDeploy.git
++    stages:
++      prd: {}
++  trello-mcp:
++    repo: https://github.com/pvginkel/TrelloMcpDeploy.git
++    stages:
++      prd: {}
++  version-poller:
++    repo: https://github.com/pvginkel/VersionPollerDeploy.git
++    stages:
++      prd: {}
++  webathome-org:
++    repo: https://github.com/pvginkel/WebathomeOrgDeploy.git
++    stages:
++      prd: {}
++  youtrack-mcp:
++    repo: https://github.com/pvginkel/YoutrackMcpDeploy.git
++    stages:
++      prd: {}
++  youtrack:
++    repo: https://github.com/pvginkel/YoutrackDeploy.git
++    stages:
++      prd: {}
++  zigbee2mqtt:
++    repo: https://github.com/pvginkel/Zigbee2mqttDeploy.git
++    stages:
++      prd: {}
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 5a17f5a..9449472 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -6,6 +6,11 @@ dependency built from chart/Chart.lock, templated under the Application's own
+ name against ../config/prd/values.yaml (D19) — so what this asserts is what the
+ cluster gets.
+ 
++It also renders releases/, the registry chart (D63), the way the `releases`
++Application renders it: one plain Application per app-stage, each asserted
++against the registry entry it comes from, and its values.schema.json refusing
++every malformed entry.
++
+ Run tests/build-deps.sh first; the render needs chart/charts/ populated.
+ """
+ 
+@@ -180,6 +185,109 @@ REFUSED_SOURCES = ("https://github.com/someone-else/Deploy.git",)
+ # in their own namespace.
+ SECRET_REF = re.compile(r"^\$(?P<secret>[^:]+):(?P<key>.+)$")
+ 
++# The registry chart (D63). The release name is the `releases` Application's;
++# the templates never read it.
++REGISTRY_RELEASE = "releases"
++REGISTRY_CHART = "releases"
++REGISTRY_VALUES = REPO / REGISTRY_CHART / "values.yaml"
++FINALIZER = "resources-finalizer.argocd.argoproj.io"
++# What autoSync turns on: pruning (D46), no self-heal (D5), and the retry block.
++AUTO_SYNC = {
++    "automated": {"prune": True, "selfHeal": False},
++    "retry": {"limit": 3, "backoff": {"duration": "30s", "factor": 2}},
++}
++# An Application's name is its destination namespace (D24).
++DNS_LABEL = re.compile(r"[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?")
++# How Helm refuses values its chart's values.schema.json does not accept.
++SCHEMA_REFUSAL = "values don't meet the specifications of the schema"
++EXAMPLE = {"repo": "https://github.com/pvginkel/ExampleDeploy.git", "stages": {"prd": {}}}
++EXAMPLE_UPSTREAM = {"repo": "https://charts.example.org", "chart": "example"}
++# Registry overlays the schema must refuse, layered onto the registry itself; a
++# null deletes a key, as in any Helm values file.
++REFUSED_ENTRIES = {
++    "autoSync as a string": {"example": {**EXAMPLE, "stages": {"prd": {"autoSync": "false"}}}},
++    "a repo outside the pvginkel owner": {
++        "example": {**EXAMPLE, "repo": "https://github.com/someone-else/ExampleDeploy.git"},
++    },
++    "an entry without a repo": {"example": {"stages": {"prd": {}}}},
++    "an empty targetRevision": {"example": {**EXAMPLE, "stages": {"prd": {"targetRevision": ""}}}},
++    "an upstream block without its chart": {
++        "example": {
++            **EXAMPLE,
++            "upstream": {"repo": EXAMPLE_UPSTREAM["repo"]},
++            "stages": {"prd": {"version": "1.0.0"}},
++        },
++    },
++    "an upstream block without its repo": {
++        "example": {
++            **EXAMPLE,
++            "upstream": {"chart": EXAMPLE_UPSTREAM["chart"]},
++            "stages": {"prd": {"version": "1.0.0"}},
++        },
++    },
++    "an upstream block with an empty chart": {
++        "example": {
++            **EXAMPLE,
++            "upstream": {**EXAMPLE_UPSTREAM, "chart": ""},
++            "stages": {"prd": {"version": "1.0.0"}},
++        },
++    },
++    "an upstream block with an empty repo": {
++        "example": {
++            **EXAMPLE,
++            "upstream": {**EXAMPLE_UPSTREAM, "repo": ""},
++            "stages": {"prd": {"version": "1.0.0"}},
++        },
++    },
++    "an upstream stage without its version": {"example": {**EXAMPLE, "upstream": EXAMPLE_UPSTREAM}},
++    "an upstream stage with an empty version": {
++        "example": {**EXAMPLE, "upstream": EXAMPLE_UPSTREAM, "stages": {"prd": {"version": ""}}},
++    },
++    "a version on an app without an upstream": {
++        "example": {**EXAMPLE, "stages": {"prd": {"version": "1.0.0"}}},
++    },
++    "an app key the shape does not have": {"example": {**EXAMPLE, "reconciler": "argo-cd"}},
++    "a stage key the shape does not have": {
++        "example": {**EXAMPLE, "stages": {"prd": {"deployed": True}}},
++    },
++    "an upstream key the shape does not have": {
++        "example": {
++            **EXAMPLE,
++            "upstream": {**EXAMPLE_UPSTREAM, "version": "1.0.0"},
++            "stages": {"prd": {"version": "1.0.0"}},
++        },
++    },
++    "an app without stages": {"example": {**EXAMPLE, "stages": {}}},
++    "syncOptions that are not a list": {
++        "example": {**EXAMPLE, "syncOptions": "ServerSideApply=true"},
++    },
++    "an app key that is not a DNS label": {"Example": EXAMPLE},
++    "Argo's own entry auto-syncing": {"argocd": {"stages": {"prd": {"autoSync": True}}}},
++    "Argo's own entry left to the autoSync default": {
++        "argocd": {"stages": {"prd": {"autoSync": None}}},
++    },
++    "Argo's own entry without its prd stage": {
++        "argocd": {"stages": {"prd": None, "dev": {"autoSync": False}}},
++    },
++    "Argo's own entry from another repo": {
++        "argocd": {"repo": "https://github.com/pvginkel/ExampleDeploy.git"},
++    },
++    "Argo's own entry deregistered": {"argocd": None},
++}
++# And overlays it must accept, so that a refusal above is the schema's verdict on
++# that one entry rather than on the overlay mechanism.
++ACCEPTED_ENTRIES = {
++    "a local entry on every default": {"example": EXAMPLE},
++    "an upstream entry with every key set": {
++        "example": {
++            **EXAMPLE,
++            "upstream": EXAMPLE_UPSTREAM,
++            "syncOptions": ["ServerSideApply=true"],
++            "stages": {"prd": {"autoSync": False, "targetRevision": "prd", "version": "1.0.0"}},
++        },
++    },
++}
++
+ # Slice 015's relay: the one internet-facing workload in front of an Argo CD that
+ # is deliberately not reachable from the internet (the O3 ruling).
+ RELAY = f"{RELEASE}-webhook-relay"
+@@ -230,19 +338,26 @@ def check(condition, message):
+         failures.append(message)
+ 
+ 
+-def render():
+-    result = subprocess.run(
+-        [
+-            "helm", "template", RELEASE, "chart",
+-            "--namespace", NAMESPACE,
+-            "--values", "config/prd/values.yaml",
+-        ],
++def helm_template(release, chart, *values, overlay=None):
++    """`helm template` into argocd-prd, with an overlay layered on last through stdin."""
++    args = ["helm", "template", release, chart, "--namespace", NAMESPACE]
++    for path in values:
++        args += ["--values", path]
++    if overlay is not None:
++        args += ["--values", "-"]
++    return subprocess.run(
++        args,
+         cwd=REPO,
++        input=None if overlay is None else yaml.safe_dump(overlay),
+         capture_output=True,
+         text=True,
+     )
++
++
++def render(release, chart, *values):
++    result = helm_template(release, chart, *values)
+     if result.returncode != 0:
+-        sys.exit(f"helm template failed:\n{result.stderr}")
++        sys.exit(f"helm template {chart} failed:\n{result.stderr}")
+     return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+ 
+ 
+@@ -416,6 +531,17 @@ def normalize_repo(url):
+     return url.lower().rstrip("/").removesuffix(".git")
+ 
+ 
++def project_permits_namespace(spec, namespace):
++    return any(glob_match(d["namespace"], namespace) for d in spec.get("destinations", []))
++
++
++def project_permits_source(spec, repo):
++    return any(
++        glob_match(normalize_repo(entry), normalize_repo(repo), "/")
++        for entry in spec.get("sourceRepos", [])
++    )
++
++
+ def check_appproject(docs):
+     """What a generated Application may source, reach and create (D10)."""
+     project = find(docs, "AppProject", PROJECT)
+@@ -433,27 +559,27 @@ def check_appproject(docs):
+             f"generated Applications address",
+         )
+ 
+-    def permits(namespace):
+-        return any(glob_match(d["namespace"], namespace) for d in destinations)
+-
+     for namespace in PERMITTED_NAMESPACES:
+-        check(permits(namespace), f"AppProject/{PROJECT} refuses a sync into {namespace}")
++        check(
++            project_permits_namespace(spec, namespace),
++            f"AppProject/{PROJECT} refuses a sync into {namespace}",
++        )
+     for namespace in REFUSED_NAMESPACES:
+         check(
+-            not permits(namespace),
++            not project_permits_namespace(spec, namespace),
+             f"AppProject/{PROJECT} lets any app in it write to {namespace}",
+         )
+ 
+-    def sources(repo):
+-        return any(
+-            glob_match(normalize_repo(entry), normalize_repo(repo), "/")
+-            for entry in spec.get("sourceRepos", [])
+-        )
+-
+     for repo in PERMITTED_SOURCES:
+-        check(sources(repo), f"AppProject/{PROJECT} refuses {repo} as an Application source")
++        check(
++            project_permits_source(spec, repo),
++            f"AppProject/{PROJECT} refuses {repo} as an Application source",
++        )
+     for repo in REFUSED_SOURCES:
+-        check(not sources(repo), f"AppProject/{PROJECT} accepts {repo} as an Application source")
++        check(
++            not project_permits_source(spec, repo),
++            f"AppProject/{PROJECT} accepts {repo} as an Application source",
++        )
+ 
+     # An empty clusterResourceWhitelist permits no cluster-scoped resource at all,
+     # so the list is taken against this render: every cluster-scoped object the
+@@ -660,6 +786,193 @@ def check_upstream_set(appset):
+     )
+ 
+ 
++def registry_entries():
++    """<app>-<stage> -> (entry, stage, stage settings), read from the registry file itself."""
++    apps = yaml.safe_load(REGISTRY_VALUES.read_text())["apps"]
++    return {
++        f"{app}-{stage}": (entry, stage, settings)
++        for app, entry in apps.items()
++        for stage, settings in entry["stages"].items()
++    }
++
++
++def check_registry(docs, registered):
++    """The registry renders one plain Application per app-stage and nothing else (D63)."""
++    entries = registry_entries()
++    kinds = sorted({doc["kind"] for doc in registered})
++    check(kinds == ["Application"], f"the registry chart renders {kinds}, not Applications alone")
++    names = [doc["metadata"]["name"] for doc in registered]
++    # `a-b` stage `c` and `a` stage `b-c` would be one Application, owned twice.
++    duplicates = sorted({name for name in names if names.count(name) > 1})
++    check(not duplicates, f"two app-stages render one Application name: {duplicates}")
++    check(
++        set(names) == set(entries),
++        f"the registry's app-stages and its Applications differ: {sorted(set(names) ^ set(entries))}",
++    )
++    project = find(docs, "AppProject", PROJECT)
++    for app in registered:
++        name = app["metadata"]["name"]
++        if name in entries:
++            check_registered_application(app, *entries[name], project)
++
++    # D3's sharp edge: a self-sync can restart the controller or the repo-server
++    # mid-sync, and a deleted entry would leave Argo itself requiring pruning.
++    argocd = find(registered, "Application", RELEASE)
++    check(argocd is not None, f"the registry renders no {RELEASE}, through which Argo manages itself")
++    if argocd is not None:
++        check(
++            "automated" not in (argocd["spec"].get("syncPolicy") or {}),
++            f"{RELEASE} syncs itself automatically (D3)",
++        )
++
++
++def check_registered_application(app, entry, stage, settings, project):
++    """One Application, checked against the registry entry and stage it comes from."""
++    metadata, spec = app["metadata"], app["spec"]
++    name = metadata["name"]
++    check(
++        DNS_LABEL.fullmatch(name) is not None,
++        f"{name} is not a namespace name, and it names the Application's destination (D24)",
++    )
++    check(
++        metadata.get("namespace") == NAMESPACE,
++        f"{name} lands in {metadata.get('namespace')!r}, not Argo's own namespace",
++    )
++    check(
++        metadata.get("finalizers") == [FINALIZER],
++        f"{name} carries finalizers {metadata.get('finalizers')!r}: its deletion has to cascade (D27)",
++    )
++    # The live Applications carry none, so releases' first diff on them is
++    # tracking metadata only (D64).
++    check(
++        not metadata.get("labels") and not metadata.get("annotations"),
++        f"{name} renders labels or annotations the live Applications do not carry",
++    )
++    check(spec.get("project") == PROJECT, f"{name} is in project {spec.get('project')!r}")
++    destination = spec.get("destination")
++    check(
++        destination == {"name": "in-cluster", "namespace": name},
++        f"{name}'s destination {destination!r} is not its own namespace on this cluster (D24)",
++    )
++
++    revision = settings.get("targetRevision", "main")
++    # The library chart requires all four (_tf-presync-hook.tpl:45-48), and
++    # $ARGOCD_APP_REVISION is how the hook learns the synced SHA (D30).
++    hook = {
++        "hook.repo": entry["repo"],
++        "hook.revision": "$ARGOCD_APP_REVISION",
++        "hook.stage": stage,
++        "hook.namespace": name,
++    }
++    if "upstream" in entry:
++        check_registered_upstream(name, spec, entry, stage, settings, revision, hook)
++    else:
++        check("sources" not in spec, f"{name} has no upstream block but renders sources")
++        source = spec.get("source", {})
++        check(
++            (source.get("repoURL"), source.get("targetRevision"), source.get("path"))
++            == (entry["repo"], revision, "chart"),
++            f"{name} renders {source.get('repoURL')!r}@{source.get('targetRevision')!r} "
++            f"{source.get('path')!r}, not its deploy repo's chart/ at {revision!r}",
++        )
++        helm = source.get("helm", {})
++        check(
++            helm.get("valueFiles") == [f"../config/{stage}/values.yaml"],
++            f"{name} reads {helm.get('valueFiles')!r}, not its stage values beside the chart (D19)",
++        )
++        parameters = {p["name"]: p.get("value") for p in helm.get("parameters", [])}
++        check(parameters == hook, f"{name} passes hook parameters {parameters!r}, not {hook!r}")
++
++    auto_sync = settings.get("autoSync", True)
++    policy = spec.get("syncPolicy") or {}
++    automated = {key: policy[key] for key in AUTO_SYNC if key in policy}
++    check(
++        automated == (AUTO_SYNC if auto_sync else {}),
++        f"{name} renders {automated!r} for autoSync {auto_sync} (D5, D46)",
++    )
++    check(
++        policy.get("syncOptions") == entry.get("syncOptions"),
++        f"{name} passes syncOptions {policy.get('syncOptions')!r}, not its entry's "
++        f"{entry.get('syncOptions')!r} (D62)",
++    )
++    check(
++        set(policy) <= {*AUTO_SYNC, "syncOptions"},
++        f"{name} carries a syncPolicy the registry does not describe: {policy!r}",
++    )
++
++    project_spec = project["spec"] if project else {}
++    check(
++        project_permits_namespace(project_spec, name),
++        f"AppProject/{PROJECT} refuses {name}'s destination: its stage is not one the project permits",
++    )
++    for source in spec.get("sources") or [spec.get("source", {})]:
++        check(
++            project_permits_source(project_spec, source.get("repoURL", "")),
++            f"AppProject/{PROJECT} refuses {name}'s source {source.get('repoURL')!r}",
++        )
++
++
++def check_registered_upstream(name, spec, entry, stage, settings, revision, hook):
++    """The chart at the stage's pinned version (D22), the deploy repo as $values (D18),
++    and the deploy repo's companion chart with the hook parameters (D56)."""
++    check("source" not in spec, f"{name} carries a single source as well as sources")
++    sources = spec.get("sources", [])
++    check(len(sources) == 3, f"{name} has {len(sources)} sources, not the chart, values and companion")
++    if len(sources) != 3:
++        return
++    chart, values, companion = sources
++    upstream = entry["upstream"]
++    check(
++        (chart.get("repoURL"), chart.get("chart"), chart.get("targetRevision"))
++        == (upstream["repo"], upstream["chart"], settings["version"]),
++        f"{name}'s chart source {chart!r} is not {upstream['chart']} {settings['version']} "
++        f"from {upstream['repo']}",
++    )
++    check(
++        chart.get("helm") == {"valueFiles": [f"$values/config/{stage}/values.yaml"]},
++        f"{name}'s chart reads {chart.get('helm')!r}, not the stage values the ref below serves",
++    )
++    check(
++        values == {"repoURL": entry["repo"], "targetRevision": revision, "ref": "values"},
++        f"{name}'s second source {values!r} is not its deploy repo at {revision!r} as $values",
++    )
++    check(
++        (companion.get("repoURL"), companion.get("targetRevision"), companion.get("path"))
++        == (entry["repo"], revision, "chart")
++        and "ref" not in companion,
++        f"{name}'s third source {companion!r} is not its deploy repo's companion chart",
++    )
++    helm = companion.get("helm", {})
++    check(
++        "valueFiles" not in helm,
++        f"{name}'s companion chart reads a values file: stage values belong to the upstream chart",
++    )
++    parameters = {p["name"]: p.get("value") for p in helm.get("parameters", [])}
++    check(parameters == hook, f"{name}'s companion passes hook parameters {parameters!r}, not {hook!r}")
++
++
++def check_registry_schema():
++    """values.schema.json is the registry's key validation: Helm refuses to render
++    an entry it does not accept."""
++    for what, overlay in REFUSED_ENTRIES.items():
++        result = helm_template(REGISTRY_RELEASE, REGISTRY_CHART, overlay={"apps": overlay})
++        check(
++            result.returncode != 0 and SCHEMA_REFUSAL in result.stderr,
++            f"the registry schema accepts {what}",
++        )
++    for what, overlay in ACCEPTED_ENTRIES.items():
++        result = helm_template(REGISTRY_RELEASE, REGISTRY_CHART, overlay={"apps": overlay})
++        names = (
++            {doc["metadata"]["name"] for doc in yaml.safe_load_all(result.stdout) if doc}
++            if result.returncode == 0
++            else set()
++        )
++        check(
++            "example-prd" in names,
++            f"the registry chart does not render {what}: {result.stderr.strip()}",
++        )
++
++
+ def check_custom_resources(docs):
+     """A key the CRD does not define is pruned on apply, silently, so it fails here."""
+     schemas = {}
+@@ -1394,7 +1707,8 @@ def check_hook_rbac(docs):
+ 
+ 
+ def main():
+-    docs = render()
++    docs = render(RELEASE, "chart", "config/prd/values.yaml")
++    registered = render(REGISTRY_RELEASE, REGISTRY_CHART)
+     materialised = external_secrets(docs)
+     check_complete_install(docs)
+     check_release_name(docs)
+@@ -1402,7 +1716,11 @@ def main():
+     check_register_values(docs)
+     check_appproject(docs)
+     check_applicationsets(docs)
+-    check_custom_resources(docs)
++    check_registry(docs, registered)
++    check_registry_schema()
++    # The Application CRD comes from chart/'s render and the registry's
++    # Applications are its instances.
++    check_custom_resources(docs + registered)
+     check_server_exposure(docs)
+     check_repo_server_trust(docs)
+     check_notifications(docs)
+@@ -1422,6 +1740,7 @@ def main():
+             print(f"FAIL: {failure}", file=sys.stderr)
+         sys.exit(1)
+     print(f"ok: {len(docs)} objects render into {NAMESPACE} and {HOOK_NAMESPACE}")
++    print(f"ok: the registry renders {len(registered)} Applications into {NAMESPACE}")
+ 
+ 
+ main()
+diff --git a/tools/registry-equivalence.py b/tools/registry-equivalence.py
+new file mode 100755
+index 0000000..4ed2eb6
+--- /dev/null
++++ b/tools/registry-equivalence.py
+@@ -0,0 +1,94 @@
++#!/usr/bin/env python3
++"""Read-only: does the registry render the live Applications, spec for spec?
++
++Renders releases/ from this checkout the way Argo renders it into argocd-prd,
++reads the Applications in argocd-prd on the prd cluster, and compares each
++pair's spec and finalizers. Exits non-zero on any difference, and on an
++Application only one side has. Owner references, labels and annotations are
++reported per Application, not compared: that is the tracking metadata D64's
++registry switch changes, and nothing in the render sets them.
++
++Needs helm and a kubeconfig that can read Applications in argocd-prd; the
++default one can. From the repo root: cexec iac tools/registry-equivalence.py
++"""
++
++import difflib
++import json
++import pathlib
++import subprocess
++import sys
++
++import yaml
++
++REPO = pathlib.Path(__file__).resolve().parent.parent
++CONTEXT = "prd"
++NAMESPACE = "argocd-prd"
++
++
++def run(*args):
++    result = subprocess.run(args, cwd=REPO, capture_output=True, text=True)
++    if result.returncode != 0:
++        sys.exit(f"{' '.join(args)} failed:\n{result.stderr}")
++    return result.stdout
++
++
++def rendered():
++    out = run("helm", "template", "releases", "releases", "--namespace", NAMESPACE)
++    return {doc["metadata"]["name"]: doc for doc in yaml.safe_load_all(out) if doc}
++
++
++def live():
++    out = run(
++        "kubectl", "--context", CONTEXT, "--namespace", NAMESPACE,
++        "get", "applications.argoproj.io", "--output", "json",
++    )
++    return {doc["metadata"]["name"]: doc for doc in json.loads(out)["items"]}
++
++
++def compared(app):
++    """What the render fixes: the spec, and the finalizer that makes deletion an undeploy."""
++    return {"finalizers": app["metadata"].get("finalizers", []), "spec": app["spec"]}
++
++
++def tracking(app):
++    metadata = app["metadata"]
++    owners = [f"{o['kind']}/{o['name']}" for o in metadata.get("ownerReferences", [])]
++    notes = [f"owner {', '.join(owners) or 'none'}"]
++    for field in ("labels", "annotations"):
++        if metadata.get(field):
++            notes.append(f"{field} {sorted(metadata[field])}")
++    return "; ".join(notes)
++
++
++def dump(value):
++    return yaml.safe_dump(value, sort_keys=True).splitlines()
++
++
++def main():
++    desired, current = rendered(), live()
++    differ = 0
++    for name in sorted(desired.keys() | current.keys()):
++        if name not in current:
++            differ += 1
++            print(f"ONLY IN REGISTRY  {name}: no live Application of this name")
++            continue
++        if name not in desired:
++            differ += 1
++            print(f"ONLY LIVE         {name}: the registry carries no entry for it")
++            continue
++        want, have = compared(desired[name]), compared(current[name])
++        if want == have:
++            print(f"equal             {name} ({tracking(current[name])})")
++            continue
++        differ += 1
++        print(f"DIFFERS           {name}")
++        for line in difflib.unified_diff(dump(have), dump(want), "live", "registry", lineterm=""):
++            print(f"    {line}")
++    print(
++        f"{len(desired)} rendered, {len(current)} live in {NAMESPACE}, "
++        f"{differ} differing"
++    )
++    sys.exit(1 if differ else 0)
++
++
++main()
+
+/work/ArgoCDDeploy — P5: git diff 50fd69a07190..4afb8fb82971
+
+chart/templates/applicationsets.yaml |  41 ++++++++----
+ chart/templates/releases.yaml        |  60 +++++++++++++++++
+ chart/values.yaml                    |  22 +++++--
+ config/prd/values.yaml               |  13 +++-
+ tests/render-chart.py                | 194 ++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ 5 files changed, 303 insertions(+), 27 deletions(-)
+
+diff --git a/chart/templates/applicationsets.yaml b/chart/templates/applicationsets.yaml
+index 83dda60..4dbad4c 100644
+--- a/chart/templates/applicationsets.yaml
++++ b/chart/templates/applicationsets.yaml
+@@ -1,5 +1,14 @@
+ {{/*
+-The two ApplicationSets that turn registry entries into Applications (D20, D21).
++The two ApplicationSets that turn registry entries into Applications (D20, D21),
++rendered only while `releases.owner` names them; releases.yaml checks the
++setting.
++
++Each carries `Prune=false` (D64): deleting an ApplicationSet the default way
++deletes every Application it owns, and each Application's finalizer then deletes
++its namespace (D24, D27). The guard makes a sync that no longer renders them,
++with prune or without, leave them in place; only the operator's orphan-delete
++removes them.
++
+ Backticked text is Argo's template language, not Helm's: the
+ applicationset-controller evaluates it per entry against that entry's parsed keys.
+ 
+@@ -8,18 +17,6 @@ entry gets one source from the deploy repo, an upstream-chart entry two (D18) 
+ and the selector is the safety property: an entry that does not name
+ `reconciler: argo-cd` and `deployed: true` never reaches a template at all.
+ */}}
+-{{- $releases := .Values.releases }}
+-{{- $registry := $releases.registry }}
+-{{- $repoURL := required "releases.registry.repoURL is a stage fact: set it in config/{stage}/values.yaml" $registry.repoURL }}
+-{{- $revision := required "releases.registry.revision is a stage fact: set it in config/{stage}/values.yaml" $registry.revision }}
+-{{- $files := required "releases.registry.files is a stage fact: set it in config/{stage}/values.yaml" $registry.files }}
+-{{/*
+-`<app>` and `<stage>` are path segments 2 and 3 of
+-configs/<cluster>/<app>/<stage>/release.yaml, so these indices and the glob's
+-depth move together.
+-*/}}
+-{{- $stage := `{{ index .path.segments 3 }}` }}
+-{{- $appStage := `{{ index .path.segments 2 }}-{{ index .path.segments 3 }}` }}
+ {{/*
+ The conditional-autoSync mechanism (D5), defined once and used by both sets: the
+ template proper is a typed struct that cannot conditionally carry `syncPolicy`, so
+@@ -61,11 +58,26 @@ spec:
+ {{ `{{- end }}` }}
+ {{ `{{- end }}` }}
+ {{- end }}
++{{- $releases := .Values.releases }}
++{{- if eq $releases.owner "applicationsets" }}
++{{- $registry := $releases.registry }}
++{{- $repoURL := required "releases.registry.repoURL is a stage fact: set it in config/{stage}/values.yaml" $registry.repoURL }}
++{{- $revision := required "releases.registry.revision is a stage fact: set it in config/{stage}/values.yaml" $registry.revision }}
++{{- $files := required "releases.registry.files is a stage fact: set it in config/{stage}/values.yaml" $registry.files }}
++{{/*
++`<app>` and `<stage>` are path segments 2 and 3 of
++configs/<cluster>/<app>/<stage>/release.yaml, so these indices and the glob's
++depth move together.
++*/}}
++{{- $stage := `{{ index .path.segments 3 }}` }}
++{{- $appStage := `{{ index .path.segments 2 }}-{{ index .path.segments 3 }}` }}
+ apiVersion: argoproj.io/v1alpha1
+ kind: ApplicationSet
+ metadata:
+   name: releases-local
+   namespace: {{ .Release.Namespace }}
++  annotations:
++    argocd.argoproj.io/sync-options: Prune=false
+ spec:
+   # Required for the path-segment syntax, for typed booleans and for
+   # templatePatch. missingkey=error makes an entry missing a required key a
+@@ -141,6 +153,8 @@ kind: ApplicationSet
+ metadata:
+   name: releases-upstream
+   namespace: {{ .Release.Namespace }}
++  annotations:
++    argocd.argoproj.io/sync-options: Prune=false
+ spec:
+   goTemplate: true
+   goTemplateOptions: ["missingkey=error"]
+@@ -202,3 +216,4 @@ spec:
+         namespace: '{{ $appStage }}'
+   templatePatch: |
+     {{- include "releases.autoSyncPatch" . | nindent 4 }}
++{{- end }}
+diff --git a/chart/templates/releases.yaml b/chart/templates/releases.yaml
+new file mode 100644
+index 0000000..d077804
+--- /dev/null
++++ b/chart/templates/releases.yaml
+@@ -0,0 +1,60 @@
++{{/*
++The registry's own Application (D63): it syncs releases/, the registry chart,
++which renders one Application per app-stage into `releases`' destination
++namespace. That is Argo's own namespace, where Argo reads Applications, and the
++project admits it there (D10).
++
++`releases.owner` chooses between this Application and the two ApplicationSets
++(applicationsets.yaml), so the two never own the live Applications at the same
++moment. The registry switch flips it once (D64).
++
++Nothing `releases` does deletes an Application:
++- No finalizer, so deleting `releases`, or pruning it out of this render, deletes
++  it alone and leaves every Application it created (D64).
++- Automated sync without prune, so an entry deleted from the registry shows as
++  requiring pruning until the operator prunes it (D27 as amended). No self-heal,
++  and the retry block every auto-synced Application carries (D5).
++- `releases.autoSync` off renders no automated sync at all: that is how
++  `releases` comes up at the switch, so the operator's first sync is one whose
++  diff they have read (D64).
++
++A registry push reaches `releases` through ArgoCDDeploy's relay webhook, and
++nothing polls (D6 as amended).
++*/}}
++{{- $releases := .Values.releases }}
++{{- $owner := required "releases.owner is a stage fact: set it in config/{stage}/values.yaml" $releases.owner }}
++{{- if not (has $owner (list "applicationsets" "releases")) }}
++{{- fail (printf "releases.owner is %q, and it is either applicationsets or releases" $owner) }}
++{{- end }}
++{{- if not (kindIs "bool" $releases.autoSync) }}
++{{- fail "releases.autoSync is a stage fact, true or false: set it in config/{stage}/values.yaml" }}
++{{- end }}
++{{- if eq $owner "releases" }}
++{{- $chart := $releases.chart }}
++apiVersion: argoproj.io/v1alpha1
++kind: Application
++metadata:
++  name: releases
++  namespace: {{ .Release.Namespace }}
++spec:
++  project: {{ $releases.project }}
++  source:
++    repoURL: {{ required "releases.chart.repoURL is a stage fact: set it in config/{stage}/values.yaml" $chart.repoURL | quote }}
++    targetRevision: {{ required "releases.chart.revision is a stage fact: set it in config/{stage}/values.yaml" $chart.revision | quote }}
++    # Its values.yaml is the registry, so no value file.
++    path: releases
++  destination:
++    name: in-cluster
++    namespace: {{ .Release.Namespace }}
++  {{- if $releases.autoSync }}
++  syncPolicy:
++    automated:
++      prune: false
++      selfHeal: false
++    retry:
++      limit: 3
++      backoff:
++        duration: 30s
++        factor: 2
++  {{- end }}
++{{- end }}
+diff --git a/chart/values.yaml b/chart/values.yaml
+index d2efcd8..9e1203e 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -3,13 +3,27 @@
+ # generated Application reaches as ../config/{stage}/values.yaml (D19).
+ argo-cd: {}
+ 
+-# What the ApplicationSets generate from, and what the AppProject lets a
+-# generated Application source and reach. Estate facts, so
+-# config/{stage}/values.yaml supplies them and the templates `required`-guard each
+-# one: a generator pointed at nothing generates nothing and renders clean.
++# Who generates the Applications, from what, and what the AppProject lets an
++# Application source and reach. Estate facts, so config/{stage}/values.yaml
++# supplies them and the templates `required`-guard each one: a generator pointed
++# at nothing generates nothing and renders clean.
+ releases:
+   # Fixed by D10 rather than per stage: one dedicated project, named once.
+   project: releases
++  # Which of the two owns the live Applications (D64): `applicationsets`, the two
++  # ApplicationSets reading `registry` below, or `releases`, the Application that
++  # syncs this repo's registry chart from `chart` below (D63). The render carries
++  # one or the other, never both.
++  owner:
++  # `releases`' automated sync, true or false. Off while the registry switch
++  # adopts the live Applications, so the operator's first sync of `releases` is
++  # one whose diff they have read (D64).
++  autoSync:
++  # Where `releases` reads the registry chart, releases/, from.
++  chart:
++    repoURL:
++    revision:
++  # HelmCharts' release.yaml tree, which the ApplicationSets generate from.
+   registry:
+     repoURL:
+     revision:
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index e12b801..276599c 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -188,8 +188,19 @@ argo-cd:
+         subPath: homelab-root.crt
+         readOnly: true
+ 
+-# What the ApplicationSets read and what the AppProject permits on this cluster.
++# Who generates the Applications, from what, and what the AppProject permits on
++# this cluster.
+ releases:
++  # The registry switch (D64) flips this to `releases`, once, after both
++  # ApplicationSets have been orphan-deleted; there is no way back (fix forward).
++  owner: applicationsets
++  # Turned on once the operator has synced `releases` for the first time (D64).
++  autoSync: false
++  # Where `releases` reads the registry chart: the repo and branch argocd-prd
++  # syncs chart/ from.
++  chart:
++    repoURL: https://github.com/pvginkel/ArgoCDDeploy.git
++    revision: main
+   registry:
+     # The registry is HelmCharts' own config tree: one release.yaml per app-stage,
+     # and `reconciler: argo-cd` is the key that hands an entry to Argo (D20).
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 9449472..9fad1f3 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -11,6 +11,11 @@ Application renders it: one plain Application per app-stage, each asserted
+ against the registry entry it comes from, and its values.schema.json refusing
+ every malformed entry.
+ 
++And it renders chart/ in each position of the registry switch (D64): the two
++ApplicationSets, guarded against a prune, or the `releases` Application that
++syncs the registry chart, never both and nothing else changed, and reports
++which position the committed config renders.
++
+ Run tests/build-deps.sh first; the render needs chart/charts/ populated.
+ """
+ 
+@@ -48,11 +53,13 @@ CONTROLLER = f"{RELEASE}-application-controller"
+ # auto-sync a revision whose last sync failed, which separates a failed sync Argo
+ # no longer retries from D5 drift and from a retry in flight.
+ APP_CONDITIONS = ("SyncError",)
+-# Every repository Argo reads: the registry it generates from, and the pilot
+-# deploy repo standing in for the ~10 Phase B adds. One credential covers both.
++# Every repository Argo reads: the registry it generates from, the pilot deploy
++# repo standing in for the ~10 Phase B adds, and this repo, which `releases`
++# reads the registry chart from. One credential covers them all.
+ REPOS = (
+     "https://github.com/pvginkel/HelmCharts",
+     "https://github.com/pvginkel/KubeCoderDeploy",
++    "https://github.com/pvginkel/ArgoCDDeploy",
+ )
+ # The AppProject every generated Application runs under, and the three names the
+ # library chart's Job template hard-codes
+@@ -196,6 +203,32 @@ AUTO_SYNC = {
+     "automated": {"prune": True, "selfHeal": False},
+     "retry": {"limit": 3, "backoff": {"duration": "30s", "factor": 2}},
+ }
++
++# The registry switch (D64). releases.owner chooses the two ApplicationSets or
++# the `releases` Application, and releases.autoSync turns on `releases`'
++# automated sync. Each position is an overlay on the stage config. S1 is the
++# state the run pushes, and S2, the cluster after the orphan-delete, renders the
++# same; S3 is the flip, before `releases`' first sync; S4 is steady state.
++CONFIG = "config/prd/values.yaml"
++SWITCH_STATES = {
++    "S1": {"owner": "applicationsets", "autoSync": False},
++    "S3": {"owner": "releases", "autoSync": False},
++    "S4": {"owner": "releases", "autoSync": True},
++}
++APPLICATIONSETS = ("releases-local", "releases-upstream")
++# A prune skips a resource carrying this, so a sync that no longer renders an
++# ApplicationSet cannot delete it, and with it every Application it owns.
++PRUNE_GUARD = {"argocd.argoproj.io/sync-options": "Prune=false"}
++# `releases`' automated sync: no prune (D27 as amended), no self-heal (D5).
++RELEASES_AUTO_SYNC = {"automated": {"prune": False, "selfHeal": False}, "retry": AUTO_SYNC["retry"]}
++# Settings chart/ must refuse to render rather than pick a side for, and the key
++# its refusal names.
++REFUSED_SETTINGS = {
++    "an owner that is neither": ({"owner": "both"}, "releases.owner"),
++    "no owner": ({"owner": None}, "releases.owner"),
++    "autoSync as a string": ({"autoSync": "false"}, "releases.autoSync"),
++    "no autoSync": ({"autoSync": None}, "releases.autoSync"),
++}
+ # An Application's name is its destination namespace (D24).
+ DNS_LABEL = re.compile(r"[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?")
+ # How Helm refuses values its chart's values.schema.json does not accept.
+@@ -354,8 +387,8 @@ def helm_template(release, chart, *values, overlay=None):
+     )
+ 
+ 
+-def render(release, chart, *values):
+-    result = helm_template(release, chart, *values)
++def render(release, chart, *values, overlay=None):
++    result = helm_template(release, chart, *values, overlay=overlay)
+     if result.returncode != 0:
+         sys.exit(f"helm template {chart} failed:\n{result.stderr}")
+     return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+@@ -542,6 +575,19 @@ def project_permits_source(spec, repo):
+     )
+ 
+ 
++def project_permits_namespaced(spec, group, kind):
++    """An unset or empty namespaced whitelist permits every kind (D10); a blacklist refuses."""
++
++    def listed(entries):
++        return any(
++            glob_match(entry.get("group", ""), group) and glob_match(entry["kind"], kind)
++            for entry in entries or []
++        )
++
++    whitelist = spec.get("namespaceResourceWhitelist")
++    return (not whitelist or listed(whitelist)) and not listed(spec.get("namespaceResourceBlacklist"))
++
++
+ def check_appproject(docs):
+     """What a generated Application may source, reach and create (D10)."""
+     project = find(docs, "AppProject", PROJECT)
+@@ -646,6 +692,12 @@ def check_applicationsets(docs):
+     )
+     generators = []
+     for name, appset in sorted(appsets.items()):
++        annotations = appset["metadata"].get("annotations")
++        check(
++            annotations == PRUNE_GUARD,
++            f"{name} carries annotations {annotations!r}, not the prune guard alone: a sync "
++            f"that no longer renders it deletes it and every Application it owns (D64)",
++        )
+         spec = appset["spec"]
+         # Without goTemplate the path-segment syntax, the typed booleans and
+         # templatePatch are all unavailable; without missingkey=error an entry
+@@ -973,6 +1025,122 @@ def check_registry_schema():
+         )
+ 
+ 
++def canonical(docs):
++    return sorted(yaml.safe_dump(doc, sort_keys=True) for doc in docs)
++
++
++def switched(doc):
++    """What releases.owner chooses between: the ApplicationSets, or `releases`."""
++    return doc["kind"] == "ApplicationSet" or (
++        doc["kind"] == "Application" and doc["metadata"]["name"] == REGISTRY_RELEASE
++    )
++
++
++def check_switch(docs, states):
++    """Each position of the registry switch renders what D64 says, and only that.
++
++    Returns the positions the committed config renders.
++    """
++    unswitched = canonical(doc for doc in states["S1"] if not switched(doc))
++    differing = [
++        state
++        for state, rendered in states.items()
++        if canonical(doc for doc in rendered if not switched(doc)) != unswitched
++    ]
++    check(
++        not differing,
++        f"{differing} differ from S1 in more than the ApplicationSets and releases",
++    )
++    s1_auto = render(
++        RELEASE, "chart", CONFIG, overlay={"releases": {**SWITCH_STATES["S1"], "autoSync": True}}
++    )
++    check(
++        canonical(s1_auto) == canonical(states["S1"]),
++        "releases.autoSync changes the render while the ApplicationSets own the Applications",
++    )
++    project = find(docs, "AppProject", PROJECT)
++    for state, rendered in states.items():
++        setting = SWITCH_STATES[state]
++        appsets = sorted(doc["metadata"]["name"] for doc in rendered if doc["kind"] == "ApplicationSet")
++        applications = [doc for doc in rendered if doc["kind"] == "Application"]
++        if setting["owner"] == "applicationsets":
++            check(
++                appsets == sorted(APPLICATIONSETS),
++                f"{state} renders ApplicationSets {appsets}, not {sorted(APPLICATIONSETS)}",
++            )
++            check(not applications, f"{state} renders an Application beside the ApplicationSets")
++            continue
++        check(not appsets, f"{state} renders ApplicationSets {appsets} beside releases")
++        names = [doc["metadata"]["name"] for doc in applications]
++        check(names == [REGISTRY_RELEASE], f"{state} renders Applications {names}, not {REGISTRY_RELEASE}")
++        if names == [REGISTRY_RELEASE]:
++            check_releases_application(state, applications[0], setting["autoSync"], project)
++    return [state for state, rendered in states.items() if canonical(rendered) == canonical(docs)]
++
++
++def check_releases_application(state, app, auto_sync, project):
++    """`releases` syncs the registry chart into Argo's own namespace and deletes nothing (D63, D64)."""
++    metadata, spec = app["metadata"], app["spec"]
++    check(
++        metadata.get("namespace") == NAMESPACE,
++        f"{state}: releases lands in {metadata.get('namespace')!r}, not Argo's own namespace",
++    )
++    check(
++        not metadata.get("finalizers"),
++        f"{state}: releases carries finalizers {metadata.get('finalizers')!r}, so deleting it "
++        f"deletes every Application it created (D64)",
++    )
++    check(spec.get("project") == PROJECT, f"{state}: releases is in project {spec.get('project')!r}")
++    # The repo and branch argocd-prd renders chart/ from, so the setting and the
++    # registry it hands the Applications to come from one line of commits; and no
++    # value file, because the chart's values.yaml is the registry.
++    argocd = yaml.safe_load(REGISTRY_VALUES.read_text())["apps"]["argocd"]
++    expected = {
++        "repoURL": argocd["repo"],
++        "targetRevision": argocd["stages"]["prd"].get("targetRevision", "main"),
++        "path": REGISTRY_CHART,
++    }
++    check(
++        "sources" not in spec and spec.get("source") == expected,
++        f"{state}: releases renders {spec.get('source')!r}, not the registry chart as "
++        f"argocd-prd's own repo and branch carry it: {expected!r}",
++    )
++    # The registry chart renders its Applications into the release namespace.
++    check(
++        spec.get("destination") == {"name": "in-cluster", "namespace": NAMESPACE},
++        f"{state}: releases' destination {spec.get('destination')!r} is not Argo's own namespace",
++    )
++    policy = spec.get("syncPolicy") or {}
++    check(
++        policy == (RELEASES_AUTO_SYNC if auto_sync else {}),
++        f"{state}: releases renders syncPolicy {policy!r} for autoSync {auto_sync}; it prunes "
++        f"and self-heals never, and syncs on its own only once turned on (D64)",
++    )
++    project_spec = project["spec"] if project else {}
++    check(
++        project_permits_namespace(project_spec, NAMESPACE),
++        f"AppProject/{PROJECT} refuses releases' destination {NAMESPACE}",
++    )
++    check(
++        project_permits_source(project_spec, expected["repoURL"]),
++        f"AppProject/{PROJECT} refuses releases' source {expected['repoURL']}",
++    )
++    check(
++        project_permits_namespaced(project_spec, "argoproj.io", "Application"),
++        f"AppProject/{PROJECT} refuses the Applications releases creates",
++    )
++
++
++def check_switch_refusals():
++    """chart/ refuses a setting that names neither side rather than render one."""
++    for what, (setting, key) in REFUSED_SETTINGS.items():
++        result = helm_template(RELEASE, "chart", CONFIG, overlay={"releases": setting})
++        check(
++            result.returncode != 0 and key in result.stderr,
++            f"chart/ renders with {what} instead of refusing on {key}",
++        )
++
++
+ def check_custom_resources(docs):
+     """A key the CRD does not define is pruned on apply, silently, so it fails here."""
+     schemas = {}
+@@ -1707,7 +1875,11 @@ def check_hook_rbac(docs):
+ 
+ 
+ def main():
+-    docs = render(RELEASE, "chart", "config/prd/values.yaml")
++    docs = render(RELEASE, "chart", CONFIG)
++    states = {
++        state: render(RELEASE, "chart", CONFIG, overlay={"releases": setting})
++        for state, setting in SWITCH_STATES.items()
++    }
+     registered = render(REGISTRY_RELEASE, REGISTRY_CHART)
+     materialised = external_secrets(docs)
+     check_complete_install(docs)
+@@ -1715,12 +1887,15 @@ def main():
+     check_namespace_manifest(docs)
+     check_register_values(docs)
+     check_appproject(docs)
+-    check_applicationsets(docs)
++    check_applicationsets(states["S1"])
++    committed = check_switch(docs, states)
++    check_switch_refusals()
+     check_registry(docs, registered)
+     check_registry_schema()
+-    # The Application CRD comes from chart/'s render and the registry's
+-    # Applications are its instances.
+-    check_custom_resources(docs + registered)
++    # The Application CRD comes from chart/'s render, and `releases` and the
++    # registry's Applications are its instances.
++    switched_docs = [doc for state in states.values() for doc in state if switched(doc)]
++    check_custom_resources(docs + registered + switched_docs)
+     check_server_exposure(docs)
+     check_repo_server_trust(docs)
+     check_notifications(docs)
+@@ -1741,6 +1916,7 @@ def main():
+         sys.exit(1)
+     print(f"ok: {len(docs)} objects render into {NAMESPACE} and {HOOK_NAMESPACE}")
+     print(f"ok: the registry renders {len(registered)} Applications into {NAMESPACE}")
++    print(f"ok: {CONFIG} renders registry-switch position {' '.join(committed)}")
+ 
+ 
+ main()

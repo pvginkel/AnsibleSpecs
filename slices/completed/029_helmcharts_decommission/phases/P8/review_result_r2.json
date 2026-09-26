@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round-1 blockers F1-F3 are resolved: a no-op overrule leaves its repo uncommitted and off the push list, and new round-trip tests cover line-dropping hunk edits (--recount) and the per-stage values file. Every reviewer mutation of those paths now fails the suite. The fix commits add no new findings.",
+ "details": "code_review_r2.md",
+ "findings": []}

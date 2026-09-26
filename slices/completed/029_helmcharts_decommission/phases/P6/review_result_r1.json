@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The registry-switch runbook walks the plan's eleven steps in order, each with the operator's command and what to see, fixes forward, and ends with the dead-after list. Its claims about the guard render, the flip and autoSync edits, the equivalence tool, the webhook proof and step 11's greps all held on targeted runs. One advisory: some status reads run straight after an asynchronous sync or refresh.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "Steps 1d, 4, 9 and 10 read status straight after an asynchronous argosync/refresh with no wait instruction; step 1d's no-diff proof can pass on a pre-sync read"}]}

@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "The catalog move is right: the 37 elements are identical to the published originals except for producer, all 91 relations resolve, and the right three are dropped. But moving the products under producer 'architecture' without the helm-charts exclude adds 35 upstream app products and 80 Specialization edges to the published Infrastructure view, and the Done record says the view is unchanged.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "Infrastructure view gains the 35 catalog products (+80 Specialization edges); the Done record claims its contents are unchanged"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Producer manual's Ceph example (catalog-declared service) contradicts the 'TechnologyService you own' rule it illustrates"}
+ ]}

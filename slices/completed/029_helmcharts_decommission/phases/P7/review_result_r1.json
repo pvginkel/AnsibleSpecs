@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "flip and autosync edit ArgoCDDeploy's releases/values.yaml through checked, comment-keeping text edits, and every on-Argo, upstream-pin and syncOptions read goes to the new registry. A round trip over all 49 real app-stages and a read-equivalence check against HelmCharts origin/main passed. One advisory coverage note.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+               "summary": "Root's new unit suite covers only the text edits; the V16 registry reads and the parse-equality guard checked() are untested (a no-op checked() survives all 10 tests)"}]}

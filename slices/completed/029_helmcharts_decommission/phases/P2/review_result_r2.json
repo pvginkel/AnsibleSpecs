@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round-1 F1 is resolved: the Infrastructure view now excludes exactly the catalog's 35 systemSoftware ids, so its resolved scope matches base again. The collector's exclude-resolution check passes, and a mutation run shows the new viewer test fails without the exclude list. The fix commit introduces no new problems.",
+ "details": "code_review_r2.md",
+ "findings": []}

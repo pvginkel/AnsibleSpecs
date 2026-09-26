@@ -1,0 +1,1061 @@
+/work/AnsibleSpecs — P1: git diff a1c0bd0efc68..546c0db2073d
+
+argo-cd/decisions.md | 189 ++++++++++++++++++++++++++++++++++++--
+ argo-cd/design.md    | 356 ++++++++++++++++++++++++++++++++++-------------------------------------
+ argo-cd/phases.md    |  69 +++++++-------
+ decisions.md         |  53 +++++------
+ 4 files changed, 406 insertions(+), 261 deletions(-)
+
+diff --git a/argo-cd/decisions.md b/argo-cd/decisions.md
+index eeb04ff..92bb1fd 100644
+--- a/argo-cd/decisions.md
++++ b/argo-cd/decisions.md
+@@ -11,7 +11,7 @@ Provenance shorthand: **CR** = `../change_requests/argocd_migration/change_reque
+ `archive/review-fable.md`. Entries dated **2026-08-12** came from that day's working sessions.
+ 
+ Two entries amend the CR itself — D25 (namespace) and D20 (ApplicationSet answers the CR's open
+-question); those graduate to the estate-level `/work/AnsibleSpecs/decisions.md` when this is
++question; D63, the Argo CD native registry, supersedes it and answers it now); those graduate to the estate-level `/work/AnsibleSpecs/decisions.md` when this is
+ sliced. D30 briefly amended CR decision 4's execution site (Terraform on srviac); the 2026-08-12
+ gate-1 review moved execution back in-cluster, dissolving that amendment.
+ 
+@@ -42,7 +42,7 @@ controller or repo-server mid-sync, on CRD and controller upgrades.
+ 
+ **D5 — auto-sync ON in steady state; self-heal OFF.** Decided (CR; qa Q6). Self-heal off keeps
+ manual `kubectl` edits alive during debugging. Cutover is governed per app by the registry's
+-`autoSync` flag (D23): register with it off, review the diff, sync once manually, flip it on.
++`autoSync` flag (D23, D63): register with it off, review the diff, sync once manually, flip it on.
+ 
+ **D6 — Push-only sync: polling disabled everywhere, including the ApplicationSet git
+ generator.** Decided (qa Q6/Q12; notes overrule lifecycle's "generator polling stays on"). This
+@@ -56,6 +56,14 @@ and `requeueAfterSeconds: 0` on each git generator for the ApplicationSet one.
+ `applicationsetcontroller.requeue.after` cannot be used for this — it is clamped to a 1s minimum
+ and falls back to 3m below it, while the generator's own field is returned verbatim.
+ 
++> **Amended 2026-09-26 (operator, slice 029 Ruling D2): one knob, from the registry switch.**
++> D63's registry is the source of an ordinary Application, `releases`, not of a generator. A
++> registry push is then what argocd-server acts on, as it does on a deploy-repo push, and
++> `timeout.reconciliation: 0s` alone keeps it push-only. The generator knob goes with the
++> ApplicationSets at the switch (D64). ArgoCDDeploy's only GitHub hook delivers to Jenkins; the
++> operator adds its relay hook in the switch runbook, and until then a push to ArgoCDDeploy
++> reaches no Argo component.
++
+ **D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes the review's
+ deploy-wait-swallows-failures notifications gap; target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.
+ The plan assumes Alertmanager is available as a target — operator decision — and Argo's
+@@ -196,11 +204,20 @@ below; one tree serves Jenkins and Argo throughout the migration, and
+ `grep -rn 'reconciler:' configs/prd/` reports progress. The registry is a **migration
+ mechanism, not the target state** (D43).
+ 
++> **Superseded 2026-09-26 by D63 (operator, slice 029 Ruling D2), from the registry switch
++> (D64).** The registry moves into ArgoCDDeploy as one values file that a chart renders into
++> plain Applications; no ApplicationSet generates them. Until the operator's switch has run, the
++> ApplicationSets over HelmCharts' `release.yaml` tree described here are what Argo reads.
++
+ **D21 — Two ApplicationSets, selected on local-chart vs upstream-chart entries.** Decided
+ 2026-08-12 (notes). `chart:` and `path:` are mutually exclusive within a source and the template
+ is a typed struct, so one template cannot cover both without `templatePatch`. Explicitly an
+ intermediate shape, revisited in the endgame (D43).
+ 
++> **Superseded 2026-09-26 by D63, from the registry switch (D64).** One Helm template renders
++> both kinds: an `if` on the entry's `upstream` renders one `source` or the three `sources` (D18,
++> D56).
++
+ **D22 — Upstream chart versions are pinned in the registry entry.** Decided 2026-08-12 (notes).
+ Accepted cost: those apps' chart version promotes by a registry commit rather than a branch
+ advance, splitting their promotion unit. Recorded upgrade path, not adopted: a matrix generator
+@@ -208,6 +225,10 @@ reading `config/{stage}/` from the deploy repo at its own revision restores full
+ isolation, at the cost of a second generator layer — deploy-repo deliveries already reach the
+ applicationset-controller, since the relay duplicates every one (D49).
+ 
++> **Amended 2026-09-26 (operator, slice 029 Ruling D2): the pin stays per stage, and the upgrade
++> path is not taken.** In D63's registry an upstream app's version is its stage's `version`. The
++> accepted cost above stands.
++
+ **D23 — `deployed` and `autoSync` are plain YAML booleans.** Decided 2026-08-12 (operator
+ question, verified against the applicationset controller source). The post-selector flattens
+ every generated parameter through `fmt.Sprintf("%v")` before label matching, so boolean `true`
+@@ -216,11 +237,97 @@ where Kubernetes label selectors are strings by type. With `goTemplate: true` th
+ the real boolean. `reconciler:` is a string naturally. Verified on master-branch source;
+ *proof item (Phase A):* re-confirm on the pinned Argo version — cheap.
+ 
++> **Superseded 2026-09-26 by D63, from the registry switch (D64).** `deployed` goes: a stage is
++> deployed by being in the registry. `autoSync` stays a per-stage boolean, default true, and the
++> registry chart's `values.schema.json` types it, so Helm refuses to render a non-boolean. No
++> selector flattens a parameter any more.
++
+ **D24 — Application name and namespace derive from one expression: `<app>-<stage>`.** Decided
+ (lifecycle). Reproduces the existing convention exactly — `release.py` already computes both
+ that way for all 45 apps. The `resources-finalizer.argocd.argoproj.io` finalizer stays in the
+ template; `preserveResourcesOnDeletion` stays off — the cascade is the point (D27).
+ 
++> **Amended 2026-09-26 (D63), from the registry switch (D64).** The registry chart computes both
++> from the entry's app key and stage key instead of path segments, and the finalizer sits in its
++> Application template. The rest stands.
++
++**D63 — The registry is ArgoCDDeploy's and Argo CD native: one values file, rendered by a chart
++into plain Applications.** Decided 2026-09-26 (operator, slice 029 Ruling D2: "I don't want a
++1:1 migration of what is in HelmCharts. That shape was for a migration. Target state can be Argo
++CD native."; ANS-109). Supersedes D20, D21 and D23. Amends D6, D22, D24, D27, D38, D39 and D62.
++It is live from the operator's registry switch (D64) and owed until that has run; until then
++Argo reads HelmCharts' `release.yaml` tree through the two ApplicationSets. This is the target
++shape, not an intermediate one, and from the switch it is the inventory of what runs (D65).
++
++- *Shape.* A small Helm chart in ArgoCDDeploy renders **one plain `Application` per app-stage**
++  from **one values file, which is the registry**. Its own Application, `releases`, deploys it,
++  and ArgoCDDeploy's `chart/` renders that Application (D64). Per app, an entry holds `repo`, an
++  optional `upstream: {repo, chart}`, an optional `syncOptions` (D62) and `stages:`. Each stage
++  may set `autoSync` (default true), `targetRevision` (default `main`) and, for an upstream app,
++  `version` (D22). The ruling's sketch; the exact spelling is the chart's:
++
++  ```yaml
++  kubecoder: {repo: KubeCoderDeploy, stages: {dev: {}, prd: {targetRevision: prd}}}
++  grafana: {repo: GrafanaDeploy, upstream: {repo: …, chart: grafana}, stages: {prd: {version: 10.5.15}}}
++  argocd: {repo: ArgoCDDeploy, stages: {prd: {autoSync: false}}}
++  ```
++- *Validation and tests.* The chart's `values.schema.json` is the key validation, so Helm
++  refuses to render a bad entry. ArgoCDDeploy's render test holds the tests. Each check
++  HelmCharts made on an Argo entry has a successor in one of them: the booleans are booleans,
++  `repo` carries the pvginkel prefix, `targetRevision` is not empty, the upstream block is
++  complete, and Argo's own entry never auto-syncs.
++- *What stays.* Application name and destination namespace `<app>-<stage>` (D24). The four hook
++  parameters: `hook.repo`, `hook.revision: $ARGOCD_APP_REVISION`, `hook.stage` and
++  `hook.namespace` (D30, D56). The `resources-finalizer.argocd.argoproj.io` finalizer (D24). The
++  autoSync semantics: automated `prune: true`, `selfHeal: false` and the retry block (D5, D46).
++  The `syncOptions` pass-through (D62). Push-only refresh (D6). The upstream chart version,
++  pinned per stage (D22).
++- *What goes.* `reconciler` (D38) and `deployed` (D23, D27); one file per stage and the
++  `configs/prd/<app>/<stage>/` tree; the two ApplicationSets and their local/upstream split
++  (D21); and with them Go templates escaped inside Helm, `templatePatch`, `missingkey=error` and
++  the path-segment indices.
++- *Stages are managed centrally.* Which stages an app runs is the registry's call, not the
++  deploy repo's: a stage is deployed by adding its entry and undeployed by deleting it.
++  `releases` auto-syncs **without prune** and without self-heal. A deleted entry's Application
++  shows as requiring pruning and goes only when the operator prunes it, so a bad registry commit
++  cannot cascade-delete apps (D27 as amended).
++- *Registration* is a push to ArgoCDDeploy, which its relay hook delivers to argocd-server, and
++  argocd-server refreshes `releases` (D39 as amended).
++- *No self-sync loop* (D15's concern about content in ArgoCDDeploy): the registry is `releases`'
++  source, and `argocd-prd`, which renders `chart/`, syncs only by hand (D3).
++
++**D64 — The registry switch hands the live Applications to `releases` without recreating any;
++fix forward.** Decided 2026-09-26 (operator, slice 029 Ruling D2, and the review r1 ruling: "I do
++not have to prove rollback back to HelmCharts. Fix forward please."). The switch is the
++operator's to run from Ansible's registry-switch runbook, and it is owed until it has run.
++
++- *What changes hands.* The 50 Applications in `argocd-prd` pass from the two ApplicationSets to
++  `releases`. On 2026-09-26, 41 were owned by `releases-local` and 9 by `releases-upstream`, and
++  `argocd-prd` itself is one of them. No Application is recreated and none has its spec changed:
++  before `releases`' first sync, its diff on them is tracking metadata only.
++- *The sequence.* Rehearse on a throwaway ApplicationSet plus Application. Add ArgoCDDeploy's
++  relay hook (D39 as amended). Run the equivalence check: the registry's render against the live
++  Applications, spec for spec. Guard the ApplicationSets so no sync can prune them
++  (`Prune=false`), then orphan-delete them (`kubectl delete applicationset … --cascade=orphan`).
++  Run the equivalence check again, right before the flip. Flip the one stage-level setting that
++  chooses the ApplicationSets or `releases`. Sync `argocd-prd`, which creates `releases`. Read
++  `releases`' diff, sync it, and turn on its automated sync. Last, remove the docs' notes that a
++  procedure is owed until the switch has run.
++- *What holds throughout.* No state of ArgoCDDeploy's `main`, synced with prune or without,
++  deletes an Application or cascade-deletes an ApplicationSet. The ApplicationSets and
++  `releases` never own the Applications at the same moment. `releases` comes up at the switch
++  without syncing on its own, so the operator's first sync is one whose diff they have read.
++  Deleting or pruning `releases`, or dropping it from the render, never deletes an Application:
++  it carries no cascading finalizer.
++- *Unproven until the rehearsal.* That `releases` adopts orphaned Applications this cleanly. The
++  rehearsal proves it on throwaway objects before the real switch, and it proves the forward
++  path only.
++- *No way back.* A failure past the orphan-delete is fixed forward on `releases`. Before the
++  orphan-delete, stopping leaves the guarded ApplicationSets in place.
++- *Dead after the switch,* for a follow-up to clear: the ApplicationSet branch and its setting,
++  `releases.registry`'s HelmCharts pointer, the render test's assertions about that registry,
++  HelmCharts' relay hook and the relay's applicationset-controller leg.
++
+ ## Sync, lifecycle and teardown
+ 
+ **D25 — The namespace is a tracked chart manifest.** Decided (qa Q2/Q13; **reverses CR decision
+@@ -251,6 +358,15 @@ Terraform-managed resources untouched) → *unregistered* (entry deleted, only a
+ *Destroyed* is named and unimplemented (D28). Undeploy is cheap and reversible; destroy is
+ neither — leaving *undeployed* stays a human decision until D28 gets a design.
+ 
++> **Amended 2026-09-26 (operator, slice 029 Ruling D2), from the registry switch (D64): an
++> undeploy waits for the operator's prune.** D63's registry has no `deployed` flag. A stage is
++> deployed by being in the registry, and undeploying it is deleting its entry. `releases`
++> auto-syncs without prune, so the stage's Application shows as requiring pruning and is deleted
++> only when the operator prunes it; the finalizer then cascades as above. A bad registry commit
++> therefore cannot cascade-delete apps. The registry keeps no undeployed stage on record: its
++> Terraform-made resources and state survive with its deploy repo (D29), and D28's design has to
++> find them there.
++
+ **D28 — Destroy is a named follow-up phase, with no design yet.** Decided 2026-08-12 (operator,
+ restructure session). phases.md names the phase; nobody designs it in this project. Interlocks
+ with the separately tracked decommission path, Trello **#66**.
+@@ -444,6 +560,11 @@ look and stay usable. Accepted cost: a typo'd reconciler *value* is caught nowhe
+ but `jenkins` means "not ours, skip", so `reconciler: jenkis` silently stops deploying instead
+ of failing loud.
+ 
++> **Amended 2026-09-26 (D63): the key does not carry over.** D63's registry has no `reconciler`:
++> an entry is Argo's by being in it. This decision stays the record of HelmCharts' side, which
++> stays in the archived repo with the three parked apps (D60). After the registry switch (D64),
++> nothing Argo runs reads the key.
++
+ **D39 — Each deploy repo's webhook is a Terraform resource in that repo's own Terraform.**
+ Decided (lifecycle, bootstrap argument reworked for D6). `github_repository_webhook`, created on
+ the first PreSync apply, surviving undeploy harmlessly, removed when destroy eventually exists.
+@@ -456,6 +577,14 @@ token scoping, not assumed. Where one deploy repo backs several stages, exactly
+ state owns the hook — a `manage_webhook` tfvar, true once per repo — since the resource is
+ repo-scoped and the states per-stage (D32).
+ 
++> **Amended 2026-09-26 (D63), from the registry switch (D64): registration is a push to
++> ArgoCDDeploy.** The registry lives there, so a registration reaches Argo through ArgoCDDeploy's
++> relay hook. The operator creates that hook in the switch runbook, signed with the shared
++> secret (D49). argocd-server acts on the push by refreshing `releases`, which auto-syncs and
++> creates the Application; that Application's first sync runs PreSync and creates the deploy
++> repo's hook as before. HelmCharts' manually created registry hook serves nothing after the
++> switch.
++
+ **D49 — One public endpoint: GitHub delivers to a relay, and Argo CD stays off the internet.**
+ Decided 2026-08-17 (operator, 009's planning session; consult and slice 015 — closes O3). Every
+ hook — the registry repo's manual one and each deploy repo's D39 Terraform one — registers the
+@@ -640,10 +769,22 @@ Meanwhile, prefer not to add new things to HelmCharts. What replaces its residua
+ carries a target-shape section so the intermediates are visibly intermediate. Amended by D60:
+ the repository is archived, not deleted.
+ 
++> **Revisited 2026-09-26 (slice 029): the registry is D63, the residual roles D65.** HelmCharts
++> keeps the three parked apps (D60) and, until the registry switch (D64), the live registry. The
++> operator archives it once the switch has run and its Jenkins jobs are gone (ANS-121,
++> ANS-122).
++
+ **D44 — The namespace Terraform logic is deleted once the last app migrates.** Decided
+ 2026-08-12 (notes). The namespace module and whatever still handles it in the migration tooling
+ go; tracked in phases.md so it cannot be forgotten.
+ 
++> **Amended 2026-09-26 (slice 029): the module stays in the archived HelmCharts.**
++> `terraform-modules/namespace` is not deleted. 49 config files that HelmCharts keeps call it:
++> the 46 `configs/dev/<app>/_shared/infrastructure.tf` of the chart-development tree, and the
++> three parked apps' `configs/prd/<app>/_shared/infrastructure.tf` (D60, kept by D61). No
++> migrated app calls it. The migration tooling's handling stays with that tool:
++> `argo_migrate.py`'s scaffold strips the module (`support/argo-migrate/argo_migrate.py:495-502`).
++
+ **D50 — Each deploy repo publishes its own architecture.** Decided 2026-09-21 (slice 014). A
+ deploy repo carries a generated producer of its own: a `Jenkinsfile.architecture` running the
+ `aac-tools` image's deploy-repo generator over the repo's committed judgment layer, under the
+@@ -658,6 +799,10 @@ without the app. KubeCoderDeploy and ArgoCDDeploy carry the first two; the steps
+ are the operator's, are `/work/Ansible/docs/runbooks/argocd.md`'s "Giving an app its own
+ architecture producer".
+ 
++> **Amended 2026-09-26 (slice 029): the helm-charts producer is retired.** Architecture no longer
++> lists HelmCharts' producer; its product-catalog elements moved, ids kept, into Architecture's
++> own. A later handover has no duplicate window, since no HelmCharts build publishes the app.
++
+ **D55 — Cross-app architecture edges resolve through published in-cluster interfaces.** Decided
+ 2026-09-23 (slice 025; operator: "I'm not opposed to going the interface route."). Both
+ Kubernetes generators, aac-tools' deploy-repo one (D50) and HelmCharts' own copy, publish each
+@@ -795,6 +940,9 @@ same test verb (slice 028's Ruling T1). The Keycloak login test restated the rel
+ copy, which GrafanaDeploy cannot see. DockerImages' `helmDeploy()` stage and HelmCharts'
+ `gitToken` injection go last, once no Helm-deployed app needs them.
+ 
++> **Amended 2026-09-26 (slice 029).** The `release.yaml` files are the live registry only until
++> the registry switch (D64). After it they are inert, and they stay in the archived repo.
++
+ **D62 — A registry entry may carry `syncOptions:`, passed through to its Application.**
+ Proposed 2026-09-24 (Claude, within the D54 run; ANS-103); decided 2026-09-24 (operator: follow
+ the recommendation). Client-side apply writes `kubectl.kubernetes.io/last-applied-configuration`, and the API
+@@ -816,17 +964,40 @@ that client-side apply accepts. Accurate diffs would take server-side diff's dry
+ against the microk8s API servers. Revisit if Argo CD makes server-side apply its default, or a
+ second reason appears besides oversized objects.
+ 
++> **Amended 2026-09-26 (D63), from the registry switch (D64).** `syncOptions` is an app-level
++> key in D63's registry, and the registry chart passes the list through to each of the app's
++> Applications; an app without the key renders none. The templatePatch goes with the
++> ApplicationSets, and `argo_migrate.py`'s `flip` writes the key into D63's registry file.
++
++**D65 — HelmCharts' residual roles have their answers (closes O2).** Decided 2026-09-26
++(operator, slice 029: "Delete collect-versions."; Rulings D3 and F1).
++
++- *The inventory of what runs* is ArgoCDDeploy's registry (D63), from the registry switch
++  (D64).
++- *collect-versions* is deleted (HelmCharts `91ce931`). *The version-poller*'s HelmCharts block
++  is gone (VersionPollerDeploy `9846433`): its config names only the Jenkins endpoint and the
++  registry, and nothing runs HelmCharts' `collect-version-dependencies` any more.
++- *recommend-resources* is a script under Ansible's `support/`, beside `argo-migrate`, run from
++  the Ansible project's KubeCoder environment. It enumerates the deploy repos from the registry,
++  clones them into a scratch directory, and reads Prometheus at `http://prometheus.home`. Its
++  recommendation policy is the old tool's, unchanged: a 7-day window, p75 CPU, p90 working-set
++  memory and the same rounding. It keys each app on the resolved chart, never on a directory
++  name. Step one writes one plain unified-diff patch per deploy repo into a report directory.
++  The operator deletes a file to skip that app, or edits hunks to overrule them. Step two
++  applies what is left to the clones, commits locally and shows the result; nothing is pushed
++  unless the operator asks. The container-to-values-path maps (`charts/*/resources-entry-map.json`)
++  move with it, so it reads nothing from HelmCharts.
++- *gen-architecture* found its home earlier (D50).
++- *The `configs/dev` caveat* (qa Q3's) is deferred (operator, Ruling F1: "I will just archive
++  the repo and figure this out later."). The chart-debugging tree, and hand-running a chart or
++  its Terraform on srvk8sdev, go into the archive with HelmCharts; doing it from a deploy repo is
++  for a later date. The archive does not wait on it.
++
+ ## Open
+ 
+ **O1** — decided: bulk (D51).
+ 
+-**O2 — What replaces HelmCharts' residual roles** — the inventory of what runs,
+-`recommend-resources`, `collect-versions` and the version-poller. Decided by endgame time;
+-design.md carries the per-tool notes so the decision has an obvious shape when it comes.
+-`gen-architecture` has left the bucket, decided (D50). Also in this bucket
+-(qa Q3's caveat): the `configs/dev` chart-debugging tree and the ability to hand-run a chart or its
+-Terraform ad hoc — the operator's srvk8sdev workflow must survive HelmCharts' deletion in some
+-form.
++**O2** — decided: HelmCharts' residual roles have their answers (D65).
+ 
+ **O4 — Whether a GitHub App replaces the hook's classic PAT** (D41). The PAT is `repo` on every
+ private repository because fine-grained tokens do not cross resource owners; an App installation
+diff --git a/argo-cd/design.md b/argo-cd/design.md
+index 7cca7b7..2951783 100644
+--- a/argo-cd/design.md
++++ b/argo-cd/design.md
+@@ -6,8 +6,10 @@ Decisions are cited as `Dn`/`On` from [`decisions.md`](decisions.md) and not re-
+ the goal posts are [`brief.md`](brief.md); sequencing, the migration checklists and the endgame
+ shape are [`phases.md`](phases.md); how positions moved over time is [`history.md`](history.md).
+ 
+-Argo CD does not exist in the estate yet — no namespace, no CRDs, nothing in any repo. Standing
+-it up is step zero, and nothing below describes running infrastructure.
++Argo CD runs on the prd cluster and deploys every app except the three parked ones (D60), and
++HelmCharts deploys nothing. The one place this design runs ahead of the live system is the
++registry: D63's shape is live from the operator's registry switch (D64), which is owed until it
++has run.
+ 
+ ---
+ 
+@@ -29,19 +31,19 @@ stages migrate — "dev excluded" excludes the `srvk8sdev` cluster, never a stag
+ | Repo | Job |
+ | --- | --- |
+ | `<App>Deploy` (per app) | The app's complete deployment: chart, Terraform, stage config (D11) |
+-| `ArgoCDDeploy` | Argo CD's own deploy repo — Argo manages itself (D3) |
++| `ArgoCDDeploy` | Argo CD's own deploy repo — Argo manages itself (D3) — and the registry (D63) |
+ | `ArgoCDTools` | The presync scripts and the dedicated hook image built from them (D15, D31); also `aac-tools` |
+ | `Charts` | Source of the library chart; publishes the static chart repo `https://charts.home` (D17) |
+-| `HelmCharts` | Migration era only: the registry, plus every app not yet migrated (D20, D43) |
++| `HelmCharts` | Migration era only: the three parked apps (D60), and the live registry until the switch (D64); archived afterwards (D43) |
+ 
+-## The estate today, in one paragraph
++## Where the estate came from, in one paragraph
+ 
+-Jenkins builds images and calls `cicd.helmDeploy()`, which triggers the `IaC/HelmCharts`
+-pipeline; that runs the deploy CLI inside the `iac` container on srviac. A gate stage first
+-renders every release the build is about to deploy, lints the ones whose chart source is in the
+-repo, and runs kubeconform on each render; then each release deploys — `terraform apply` →
++Jenkins built images and called `cicd.helmDeploy()`, which triggered the `IaC/HelmCharts`
++pipeline; that ran the deploy CLI inside the `iac` container on srviac. A gate stage first
++rendered every release the build was about to deploy, linted the ones whose chart source was in
++the repo, and ran kubeconform on each render; then each release deployed — `terraform apply` →
+ `helm upgrade --install` → config phase (unused estate-wide) — resolving image tags to digests
+-at deploy time with nothing written back to git. 45 releases are discovered by walking
++at deploy time with nothing written back to git. 45 releases were discovered by walking
+ `configs/prd/`. Detail, if ever needed: the archived plan's "Current state" chapter — in git
+ history once `archive/` is deleted.
+ 
+@@ -75,25 +77,28 @@ config/
+ 
+ An ordinary deploy repo where the app happens to be Argo CD (D3). `chart/` names the upstream
+ `argo-cd` chart in `Chart.yaml` `dependencies:` with an exactly pinned version and adds the
+-estate's own manifests on top: the two ApplicationSets, the AppProject, the notifications
++estate's own manifests on top: the `releases` Application that deploys the registry chart
++(D63, D64; the two ApplicationSets until the switch), the AppProject, the notifications
+ configuration, the SSO wiring (D9), the `argocd-hooks` namespace with its identity and composed
+ credential Secret (D33), the ESO leaves Argo's own credentials arrive through (D40), and the
+ webhook relay's Deployment, Service and public annotation (D49). It carries no `terraform/`:
+ Argo's one piece of own infrastructure is the Keycloak client, and that is hand-created (D9).
+ 
+-Argo is an entry in the registry like any other, so **D24 names it too**: the entry is
+-`configs/prd/argocd/prd/release.yaml`, the Application is `argocd-prd`, and it syncs into
+-namespace `argocd-prd`. The Helm release name is `argocd-prd` as well, and that one is a
+-contract rather than a preference — Argo templates a Helm source under the Application's own
+-name and the ApplicationSet sets no `releaseName`, so most of the render's object names derive
+-from it and `app.kubernetes.io/instance` — every workload's immutable selector — carries it.
++Argo is an entry in the registry like any other, so **D24 names it too**: the entry is `argocd`
++with a `prd` stage (HelmCharts' `configs/prd/argocd/prd/release.yaml` until the switch), the
++Application is `argocd-prd`, and it syncs into namespace `argocd-prd`. The Helm release name is
++`argocd-prd` as well, and that one is a contract rather than a preference — Argo templates a
++Helm source under the Application's own name and the registry sets no `releaseName`, so most of
++the render's object names derive from it and `app.kubernetes.io/instance` — every workload's
++immutable selector — carries it.
+ 
+ Bootstrap happens exactly once, by hand: clone, `helm dependency build`, `helm install` under
+-the release name `argocd-prd`, create the registry entry. `--create-namespace` is not the path:
+-the chart ships `Namespace/argocd-prd` as a tracked manifest (D25), so the namespace is created
+-first and stamped with Helm's ownership metadata, and the install adopts it rather than
+-colliding with it. From then on the ApplicationSet generates an Application for `argocd/prd`
+-like any other, and Argo adopts itself.
++the release name `argocd-prd`. `--create-namespace` is not the path: the chart ships
++`Namespace/argocd-prd` as a tracked manifest (D25), so the namespace is created first and
++stamped with Helm's ownership metadata, and the install adopts it rather than colliding with it.
++Argo's registry entry already exists. From the registry switch (D64) the install brings up
++`releases`, which renders `argocd-prd` with every other Application; until then the
++ApplicationSet generates it from HelmCharts' entry. Either way Argo then adopts itself.
+ 
+ **Sharp edge** (D3): a self-sync can restart the controller or repo-server mid-sync — CRD and
+ controller upgrades do exactly that. Mitigation: the `argocd` registry entry keeps
+@@ -123,9 +128,9 @@ A plain NGINX container serving `index.yaml` and chart tarballs over HTTP at
+ `https://charts.home` (D17). The library chart is `homelab-shared`, source in the `Charts` repo;
+ migrated charts consume it through `Chart.yaml` `dependencies:` — a version pin against
+ `repository: https://charts.home` — and Argo's repo-server runs `helm dependency build` at
+-render time. Deployed from HelmCharts for the whole migration — deliberately, since charts.home
+-is a render-time prerequisite for every migrated app and must not depend on anything that
+-depends on it.
++render time. It deploys from its own `ChartsDeploy`. charts.home is a render-time prerequisite
++for every migrated app, so it must not depend on anything that depends on it (D17's trap) —
++which ChartsDeploy's chart does today, through its `homelab-shared` dependency on charts.home.
+ 
+ The library chart carries the shared `_helpers.tpl` content (D16), prefixed `homelab-shared.*`,
+ **and the hook Job template** (below), so a migrated chart gets both from a single dependency
+@@ -140,194 +145,167 @@ outage — and it grows as apps migrate.
+ 
+ ## The registry
+ 
+-Migration-era only (D20, D43): `release.yaml` under `configs/prd/<app>/<stage>/`, one file per
+-app-stage. `grep -rn 'reconciler:' configs/prd/` is the migration progress meter.
++The registry is one values file in ArgoCDDeploy: the values of a small chart that renders one
++plain `Application` per app-stage (D63), and the inventory of what runs (D65). **It is live from
++the operator's registry switch (D64), and owed until that has run**; until then Argo reads
++HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files through two ApplicationSets (below).
+ 
+ ```yaml
+-# configs/prd/kubecoder/dev/release.yaml — local-chart app
+-reconciler: argo-cd          # defaults to jenkins when absent (D38)
+-deployed: true               # false = undeploy: cascade delete (D27)
+-autoSync: true               # false during cutover and for argocd itself (D5, D3)
+-repo: https://github.com/pvginkel/KubeCoderDeploy.git
+-targetRevision: main         # this stage's branch — the prd entry says prd
++kubecoder:                           # local-chart app, two stages
++  repo: KubeCoderDeploy
++  stages:
++    dev: {}                          # targetRevision main, autoSync true
++    prd: {targetRevision: prd}       # D34
++grafana:                             # upstream-chart app
++  repo: GrafanaDeploy
++  upstream: {repo: …, chart: grafana}
++  stages:
++    prd: {version: 10.5.15}          # the chart version, pinned per stage (D22)
++argocd:
++  repo: ArgoCDDeploy
++  stages:
++    prd: {autoSync: false}           # permanently (D3)
+ ```
+ 
+-```yaml
+-# configs/prd/headlamp/prd/release.yaml — upstream-chart app (illustrative)
+-reconciler: argo-cd
+-deployed: true
+-autoSync: true
+-repo: https://github.com/pvginkel/HeadlampDeploy.git
+-targetRevision: main
+-upstream:                    # reuses the existing HelmCharts upstream: convention
+-  repo: https://...
+-  chart: headlamp
+-  version: "0.30.1"          # pinned here (D22)
+-```
+-
+-`deployed` and `autoSync` are plain booleans (D23) and **required in every entry** — the
+-templates run with `missingkey=error`, so an absent key is a generation failure, not a default.
++That is the ruling's sketch; the chart fixes the exact spelling. Per app an entry holds `repo`,
++an optional `upstream: {repo, chart}`, an optional `syncOptions` list passed through to its
++Applications (D62), and `stages:`. Per stage it may set `autoSync` (default `true`; D5),
++`targetRevision` (default `main`) and, for an upstream app, `version`. A stage runs by being in
++the registry: there is no `deployed` flag and no `reconciler` key.
+ 
+-Of the five keys, HelmCharts acts on `reconciler:` alone; the other four are Argo's, allowlisted
+-so its unknown-key check stays a real typo-catcher. It also stops applying its own chart and
+-`upstream:` schema checks to an entry another reconciler owns (D38) — which is why the upstream
+-entry above can carry Argo's `{repo, chart, version}` block rather than HelmCharts' own
+-`upstream:` shape, and why neither entry needs a `chart:` key.
++The chart's `values.schema.json` is the key validation. Helm refuses to render a bad entry, so a
++typo'd key or a non-boolean `autoSync` fails the render instead of reaching an Application.
++ArgoCDDeploy's render test holds the tests, among them the checks HelmCharts made on an Argo
++entry: booleans are booleans, `repo` carries the pvginkel prefix, `targetRevision` is not empty,
++the upstream block is complete, and Argo's own entry never auto-syncs.
+ 
+-## Generating Applications
++## Rendering Applications
+ 
+-Two ApplicationSets (D21), both shipped in ArgoCDDeploy's chart, both driven by a git files
+-generator over `configs/prd/*/*/release.yaml` on HelmCharts `main`. They split on the presence
+-of the `upstream` block, via `matchExpressions` on the flattened key: the local-chart set
+-requires `upstream.chart` **DoesNotExist**, the upstream set **Exists**. Both also select
+-`reconciler: argo-cd` and `deployed: "true"` (string on the manifest side, boolean in the file —
+-D23).
+-
+-The local-chart set, trimmed to what is load-bearing:
++For each app and each of its stages the registry chart renders one Application. A local-chart
++stage, trimmed to what is load-bearing:
+ 
+ ```yaml
+ apiVersion: argoproj.io/v1alpha1
+-kind: ApplicationSet
++kind: Application
+ metadata:
+-  name: releases-local
++  name: kubecoder-dev                  # <app>-<stage> (D24)
+   namespace: argocd-prd
++  finalizers:
++    - resources-finalizer.argocd.argoproj.io
+ spec:
+-  goTemplate: true
+-  goTemplateOptions: ["missingkey=error"]
+-  generators:
+-    - git:
+-        repoURL: https://github.com/pvginkel/HelmCharts.git
+-        revision: main
+-        files:
+-          - path: "configs/prd/*/*/release.yaml"
+-        requeueAfterSeconds: 0     # D6: the only knob that can express "off"
+-      selector:
+-        matchLabels:
+-          reconciler: argo-cd
+-          deployed: "true"
+-        matchExpressions:
+-          - { key: upstream.chart, operator: DoesNotExist }
+-  template:
+-    metadata:
+-      name: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
+-      finalizers:
+-        - resources-finalizer.argocd.argoproj.io
+-    spec:
+-      project: releases
+-      source:
+-        repoURL: '{{ .repo }}'
+-        targetRevision: '{{ .targetRevision }}'
+-        path: chart
+-        helm:
+-          valueFiles:
+-            - '../config/{{ index .path.segments 3 }}/values.yaml'
+-          parameters:
+-            - name: hook.repo
+-              value: '{{ .repo }}'
+-            - name: hook.revision
+-              value: '$ARGOCD_APP_REVISION'
+-            - name: hook.stage
+-              value: '{{ index .path.segments 3 }}'
+-            - name: hook.namespace
+-              value: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
+-      destination:
+-        name: in-cluster
+-        namespace: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}'
+-  templatePatch: |
+-    {{- if .autoSync }}
+-    spec:
+-      syncPolicy:
+-        automated:
+-          prune: true        # D46; the namespace is guarded by D26
+-          selfHeal: false    # D5
+-        retry:
+-          limit: 3
+-          backoff: { duration: 30s, factor: 2 }
+-    {{- end }}
++  project: releases
++  source:
++    repoURL: https://github.com/pvginkel/KubeCoderDeploy.git
++    targetRevision: main
++    path: chart
++    helm:
++      valueFiles:
++        - ../config/dev/values.yaml
++      parameters:
++        - { name: hook.repo, value: https://github.com/pvginkel/KubeCoderDeploy.git }
++        - { name: hook.revision, value: $ARGOCD_APP_REVISION }
++        - { name: hook.stage, value: dev }
++        - { name: hook.namespace, value: kubecoder-dev }
++  destination:
++    name: in-cluster
++    namespace: kubecoder-dev
++  syncPolicy:                          # only where the stage's autoSync is true
++    automated:
++      prune: true                      # D46; the namespace is guarded by D26
++      selfHeal: false                  # D5
++    retry:
++      limit: 3
++      backoff: { duration: 30s, factor: 2 }
+ ```
+ 
+ Load-bearing details:
+ 
+-- **Name and namespace derive from one expression** — `<app>-<stage>` from the path segments —
+-  reproducing the existing convention for all 45 apps, so they cannot drift (D24). The
++- **Name and namespace derive from one expression**, `<app>-<stage>` from the entry's app key
++  and stage key, reproducing the existing convention, so they cannot drift (D24). The
+   `hook.namespace` parameter carries that same expression, so the hook's PV reattach filters on
+   the namespace Argo is syncing into rather than deriving one of its own (D29, D33).
+-- **The glob is scoped to `configs/prd/`**: `configs/dev/` is the srvk8sdev tree, a different
+-  cluster, and 40 of its app-stage pairs would collide with prd names.
+-- **`goTemplate: true` is required** for the path-segment syntax, for boolean-typed parameters,
+-  and for `templatePatch` — which exists because the template proper is a typed struct and
+-  cannot conditionally include `syncPolicy`. The conditional-autoSync mechanism *is*
+-  `templatePatch` (D5).
+-- **The finalizer stays in the template.** Removing an entry — or flipping `deployed: false` —
+-  deletes the generated Application, and the finalizer cascades the namespace and everything
+-  tracked (D27). `preserveResourcesOnDeletion` stays off: the cascade is the point.
+-- **Values by relative path** — `path: chart` plus `../config/{stage}/values.yaml` (D19).
+-  *Proof item:* the `../` escape renders on the deployed Argo version; fallback is `$values`
+-  multi-source for local charts too, an edit to this template and nothing else.
++- **The finalizer stays.** Deleting an Application cascades the namespace and everything
++  tracked (D27); `preserveResourcesOnDeletion` stays off, since the cascade is the point. What
++  deletes an Application is the operator's prune of `releases` (below).
++- **Values by relative path**: `path: chart` plus `../config/<stage>/values.yaml` (D19), proven
++  on the deployed Argo version.
+ - `hook.revision` uses Argo's build-time substitution of `$ARGOCD_APP_REVISION` in helm
+-  parameters — the mechanism that hands the hook the exact synced SHA (D30). *Proof item.*
++  parameters, the mechanism that hands the hook the exact synced SHA (D30); proven.
++- An app's `syncOptions` list lands in `syncPolicy.syncOptions` of each of its Applications
++  (D62).
+ 
+-The upstream-chart set differs only in the source block — multi-source (D18):
++An upstream-chart stage differs only in the source block, multi-source (D18); a Helm `if` on the
++entry's `upstream` chooses it:
+ 
+ ```yaml
+-      sources:
+-        - repoURL: '{{ .upstream.repo }}'
+-          chart: '{{ .upstream.chart }}'
+-          targetRevision: '{{ .upstream.version }}'   # a chart version…
+-          helm:
+-            valueFiles:
+-              - '$values/config/{{ index .path.segments 3 }}/values.yaml'
+-        - repoURL: '{{ .repo }}'
+-          targetRevision: '{{ .targetRevision }}'      # …and a git branch (D18's wart)
+-          ref: values
+-        - repoURL: '{{ .repo }}'                        # the companion chart (D56)
+-          targetRevision: '{{ .targetRevision }}'
+-          path: chart
+-          helm:
+-            parameters:                                 # the same four as releases-local
+-              - { name: hook.repo, value: '{{ .repo }}' }
+-              - { name: hook.revision, value: '$ARGOCD_APP_REVISION' }
+-              - { name: hook.stage, value: '{{ index .path.segments 3 }}' }
+-              - { name: hook.namespace, value: '{{ index .path.segments 2 }}-{{ index .path.segments 3 }}' }
++  sources:
++    - repoURL: https://…                            # the upstream chart repository
++      chart: grafana
++      targetRevision: 10.5.15                       # a chart version…
++      helm:
++        valueFiles:
++          - $values/config/prd/values.yaml
++    - repoURL: https://github.com/pvginkel/GrafanaDeploy.git
++      targetRevision: main                          # …and a git branch (D18's wart)
++      ref: values
++    - repoURL: https://github.com/pvginkel/GrafanaDeploy.git   # the companion chart (D56)
++      targetRevision: main
++      path: chart
++      helm:
++        parameters:                                 # the same four as a local chart
++          - { name: hook.repo, value: https://github.com/pvginkel/GrafanaDeploy.git }
++          - { name: hook.revision, value: $ARGOCD_APP_REVISION }
++          - { name: hook.stage, value: prd }
++          - { name: hook.namespace, value: grafana-prd }
+ ```
+ 
+ The companion is source 2, not a wrapper: it never depends on the upstream chart, and it takes
+ no stage values file, only the hook parameters. In a multi-source Application each source is
+ built at its own revision, so `$ARGOCD_APP_REVISION` here is the deploy repo's SHA.
+ 
+-This covers six of the nine upstream releases. The late-migration set is five charts with two
+-distinct problems (D18): **post-render patching** — `grafana`, `prometheus` and local chart
+-`mosquitto` — needing a CMP or Kustomize-with-Helm; and **post-install/post-rollout scripts** —
+-`grafana`, `prometheus`, `external-secrets` and local chart `nginx` — run by the deploy CLI's
+-`_run_hook` today, a mechanism with no Argo equivalent designed yet.
+-
+-**The truncation risk, inherited knowingly.** An ApplicationSet that generates a *shorter* list
+-cascade-deletes what fell off, tracked runtime included. Mitigations, not solutions: one small
+-file per app-stage bounds any single edit's blast radius; `Prune=false` keeps a bad *render*
+-(as opposed to a bad registry edit) from taking namespaces; `applicationsSync: create-update`
+-would guard harder but is incompatible with undeploy-by-flag, and undeploy-by-flag is the
+-lifecycle (D27).
++**`releases` deploys the registry chart.** ArgoCDDeploy's `chart/` renders it as an ordinary
++Application whose source is the registry chart in ArgoCDDeploy at `main`, and whose destination
++is `argocd-prd`, where the Applications live. In steady state it auto-syncs with **prune off**
++and self-heal off. It carries no cascading finalizer, so deleting or pruning it, or dropping it
++from `chart/`'s render, never deletes an Application. At the switch it comes up without
++automated sync, so the operator's first sync is one whose diff they have read (D64).
++
++**A shorter registry deletes nothing on its own.** An entry that leaves the registry, by intent
++or by a bad commit, leaves its Application showing as requiring pruning, and the operator's prune
++is the only delete (D27 as amended). The ApplicationSets' truncation risk, a shorter generated
++list cascade-deleting whatever fell off it, has no successor. The cost is that an undeploy takes
++two steps: a registry commit and a prune.
++
++**Until the switch** the Applications come from two ApplicationSets in ArgoCDDeploy's chart,
++`releases-local` and `releases-upstream` (`chart/templates/applicationsets.yaml`). Git files
++generators over HelmCharts' `configs/prd/*/*/release.yaml` feed them, selected on
++`reconciler: argo-cd` and `deployed: true` and split on the `upstream` block (D20, D21, D23).
++They render the same Applications as above; D64's equivalence check compares the two, spec for
++spec. The switch removes them.
+ 
+ ## Webhooks — push-only, through the relay
+ 
+-Polling is off everywhere, including the generator (D6). Argo CD is not published: **every hook
++Polling is off everywhere, including, until the registry switch, the ApplicationSet generators
++(D6). Argo CD is not published: **every hook
+ registers one URL**, `https://deploy-hooks.webathome.org/api/webhook`, the public endpoint of the
+ webhook relay, which verifies GitHub's signature and duplicates each verified delivery to both
+ receivers (D49).
+ 
+ | Push to | Must reach | Effect |
+ | --- | --- | --- |
+-| **HelmCharts** (the registry) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
++| **ArgoCDDeploy** (the registry, D63) | argocd-server, `/api/webhook` | refreshes `releases`, which creates or updates Applications and leaves removed ones requiring pruning (D27) |
++| **HelmCharts** (the registry until the switch, D64) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
+ | **Each deploy repo** | argocd-server, `/api/webhook` | refresh and sync the affected Application |
+ 
+ Both receivers get every delivery, and the one a push does not concern no-ops on it cheaply —
+ argocd-server matches the pushed repo against Application sources, the applicationset-controller
+ against its generators. That is why the relay carries no routing table and gains no edit per
+-migrated app.
++migrated app. After the registry switch the applicationset-controller leg serves nothing (D64).
+ 
+ Both share the secret at `webhook.github.secret` in `argocd-secret`, and re-verify what the relay
+ already verified. The relay is configured with that same value — one leaf, not a second secret.
+-The registry hook is created manually, once. Each deploy repo's hook is a
++Each registry hook is created manually, once: HelmCharts' at standup, and ArgoCDDeploy's by the
++operator in the registry switch runbook (D64). Each deploy repo's hook is a
+ `github_repository_webhook` resource in that repo's own Terraform (D39), so the PreSync apply
+ creates it on first sync — bootstrap
+ rides the registry hook, needing no polling. It is signed with that same shared secret: the hook's
+@@ -377,7 +355,7 @@ receivers, which is what both-or-`502` buys.
+   every cluster-scoped kind the project's charts render: `Namespace`, the CRDs and cluster RBAC
+   Argo's own chart brings, and whatever each migrated chart adds as it arrives. The namespaced
+   whitelist stays unset, where empty means everything. `destinations` is one `*-<stage>` glob
+-  per stage the registry tree carries **plus** `argocd-hooks` — so a stage the estate adds later
++  per stage the registry carries **plus** `argocd-hooks` — so a stage the estate adds later
+   owes an entry. `sourceRepos` is the owner prefix `https://github.com/pvginkel/*`, which covers
+   the registry repo and every deploy repo because Argo's source globs do not cross a `/`, plus
+   the upstream chart repositories (D18). Neither charts.home nor the argo-helm repository this
+@@ -404,7 +382,7 @@ The flow, per sync of an app that has Terraform:
+ 
+ 1. Argo begins the sync and creates the hook Job in `argocd-hooks` (D33), handing it
+    `hook.repo`, `hook.revision` (the exact synced SHA), `hook.stage` and `hook.namespace` — the
+-   destination namespace, the same `<app>-<stage>` expression the ApplicationSet computes for
++   destination namespace, the same `<app>-<stage>` expression the registry computes for
+    `destination.namespace` — via chart values.
+ 2. The pod runs the `argocd-hook` image (D31). The entrypoint clones the deploy repo at that SHA
+    — the only runtime clone; the scripts are already in the image. The clone authenticates via
+@@ -540,21 +518,27 @@ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** d
+ 
+ ## Lifecycle
+ 
+-All states are git states (D27):
++All states are git states (D27 as amended, from the registry switch, D64):
+ 
+ | State | Expression | Effect |
+ | --- | --- | --- |
+-| **Registered** | entry exists, `deployed: false` | Nothing runs; Terraform config exists, state may or may not |
+-| **Deployed** | `deployed: true` | Application generated; PreSync applies Terraform; chart syncs |
+-| **Undeployed** | flip to `deployed: false` | Application deleted → cascade: namespace and all tracked resources go; Terraform-made resources survive (D29) |
+-| **Unregistered** | entry deleted | Only after a destroy |
++| **Deployed** | the stage is in the registry | Application rendered; PreSync applies Terraform; chart syncs |
++| **Undeployed** | the stage's entry deleted, then pruned from `releases` by the operator | Application deleted → cascade: namespace and all tracked resources go; Terraform-made resources survive (D29) |
+ | *Destroyed* | *not implemented* | *The named follow-up phase (D28); leaving* undeployed *stays a human decision until it exists* |
+ 
++Between the registry commit and the prune the Application shows as requiring pruning and keeps
++running. The registry keeps no undeployed stage on record; its Terraform state and deploy repo
++remain. Until the switch, HelmCharts' `deployed` flag expresses the states, as D27 first had
++them.
++
+ Undeploy never destroys data — hooks fire on sync, not delete, and the ZFS datasets carry
+ `prevent_destroy` besides (D29).
+ 
+ ## Coexisting with Jenkins during the migration
+ 
++Every app but the three parked ones is on Argo, so what follows is HelmCharts' side as it stays
++in the archive. After the registry switch nothing Argo runs reads `reconciler:` (D38 as amended).
++
+ The `reconciler:` key is the single ownership fact (D38):
+ 
+ - `_RELEASE_KEYS` gains `reconciler`, `deployed`, `autoSync`, `repo`, `targetRevision` — the
+@@ -565,8 +549,8 @@ The `reconciler:` key is the single ownership fact (D38):
+   exactly the failure mode the rest of this list is built to avoid.
+ - `discover_releases` skips any stage whose `release.yaml` names a non-`jenkins` reconciler,
+   reading the file directly (no per-release subprocess, no chart-existence trip). The Jenkins
+-  pipeline's release list and `collect-versions` both call it, so both inherit the skip, and a
+-  skipped release gets no pipeline stage at all.
++  pipeline's release list calls it, so it inherits the skip, and a skipped release gets no
++  pipeline stage at all.
+ - `resolve()` stops validating a non-`jenkins` entry as a HelmCharts release: past the top-level
+   allowlist it runs neither the chart-existence check nor the stricter `upstream:` one, and
+   carries no chart and no `upstream` into the resolved record. So `deploy config` exits 0 with a
+@@ -587,16 +571,16 @@ The `reconciler:` key is the single ownership fact (D38):
+   commit and the diff review, is phases.md's. KubeCoder's procedure, command by command, is the
+   runbook `/work/Ansible/docs/runbooks/kubecoder-cutover.md`.
+ 
+-**Ancillary tooling** that stops covering a migrated app enumerates the same key (O2):
+-`recommend-resources` (becomes clone-edit-push against deploy repos, spanning them and the config
+-tree at once, and stops keying the chart source on the config directory name — phases.md's named
+-follow-up), `collect-versions`/version-poller (its role already changing to proposing pin-bump
+-commits). None blocks the pilot; each needs its decision by endgame.
++**Ancillary tooling** has its answers (D65). `collect-versions` is deleted, and the
++version-poller no longer reads HelmCharts. `recommend-resources` is a script under Ansible's
++`support/`: it enumerates the deploy repos from the registry, keys each app on its resolved chart,
++writes one patch per deploy repo for the operator to delete or edit, and commits what is left to
++local clones.
+ 
+ `gen-architecture` is the one already answered (D50). HelmCharts' copy renders via
+ `deploy template`, and a migrated app has no release to render; the `aac-tools` image carries a
+-deploy-repo generator that renders the repo's own chart the way the releases ApplicationSet has
+-Argo render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
++deploy-repo generator that renders the repo's own chart the way its registry entry has Argo
++render it, one stage per run, writing `docs/architecture/<producer>.yaml`. It mints the same
+ element ids HelmCharts' copy does, so a handover changes an element's owner and nothing else, and
+ inbound edges from other producers never dangle. A provider in another app, whether still in
+ HelmCharts or in a deploy repo of its own, resolves through the interfaces both generators
+@@ -639,13 +623,9 @@ registration, and a handover's register-then-flip order — is
+ 
+ ## Adjacent findings, recorded so they aren't lost
+ 
+-Neither is this project's work:
++Not this project's work:
+ 
+ - **`resolve_helm_args.get_chart_args` has a latent crash** — it keys the local-chart test on
+   the config-directory name, not the chart name; a mismatched `chart:` falls through to the
+   upstream path and raises through discovery for every release. One-line fix, nothing triggers
+   it today.
+-- **`gitToken` travels as a helm CLI argument for all 45 releases**; only `version-poller`
+-  consumes it. It must become an ESO leaf when version-poller migrates — Argo has no such
+-  argument to inject — and a PAT on a command line lands in process tables and echoed commands
+-  regardless.
+diff --git a/argo-cd/phases.md b/argo-cd/phases.md
+index 7f50a26..7900f40 100644
+--- a/argo-cd/phases.md
++++ b/argo-cd/phases.md
+@@ -340,38 +340,37 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
+   human decision until this phase is designed and built. Interlocks: Trello **#66**.
+ - **Remaining apps** (O1): decided bulk, without the plugin first (D51); the run is [`bulk-migration.md`](bulk-migration.md). The post-render
+   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
+-- **`recommend-resources` reworked to span deploy repos** (O2; from slice 008's close-out, B5).
+-  It walks `configs/prd/` and binds each release's chart source to the *config directory* name
+-  (`tools/chart_tools/recommend_resources.py:168-176`), then reads `charts/<that name>/values.yaml`
+-  (`:185`) and `charts/<that name>/resources-entry-map.json` (`:210`) — its docstring states the
+-  assumption outright (`:163-165`). Two things break it. A release with an overriding `chart:` is
+-  skipped without a word today, or — where a same-named chart directory happens to exist — has a
+-  recommendation derived from the *wrong* chart's values written into the real config values file
+-  (`:265-278`). And from the first cutover the migrated app's chart is not under `charts/` at all,
+-  so the tool goes blind to exactly the apps this project moves. The rework: enumerate the deploy
+-  repos **as well as** the config tree — HelmCharts still holds every unmigrated release for the
+-  whole of Phase B — take the chart from the resolved chart rather than the directory the entry
+-  was found in, and write recommendations back clone-edit-push (design.md's tooling note). Fixing
+-  the mis-keying in place in HelmCharts was declined at close-out: the rework subsumes it, and
+-  D43 argues against adding to HelmCharts meanwhile. The same mis-keying survives in
+-  `Jenkinsfile:93-100`'s `changed(entry)`, which is Jenkins-side and outlives nothing here — a
+-  separate fix, not this one.
+-
+-## Endgame — the target shape, so the intermediates stay visibly intermediate (D43)
+-
+-Nothing here is scheduled; it is the direction the migration-era mechanisms point at.
+-
+-- **HelmCharts is deleted.** The registry was a migration mechanism; what replaces it as the
+-  inventory of what runs is **O2**, decided by then. Prefer not to add new things to HelmCharts
+-  meanwhile.
+-- **The two-ApplicationSet shape is revisited** (D21), including D22's recorded upgrade path (a
+-  matrix generator reading `config/{stage}/` at the deploy repo's own revision) if upstream
+-  pin-in-registry chafes.
+-- **charts.home moves to a `ChartsDeploy` repo** — remembering D17's trap: the chart deploying
+-  charts.home must not depend on the library charts.home serves.
+-- **The namespace Terraform module goes** (D44): `terraform-modules/namespace` and whatever
+-  migration tooling still handles it, deleted once the last app migrates.
+-- **Residual tooling finds homes** (O2): `recommend-resources` and
+-  `collect-versions`/version-poller — each enumerating deploy repos instead of the config tree.
+-  `gen-architecture` has its home already: the `aac-tools` image's deploy-repo generator, run by
+-  each deploy repo's own producer pipeline (D50).
++- **`recommend-resources` reworked to span deploy repos** (D65; from slice 008's close-out, B5):
++  a script under Ansible's `support/`, beside `argo-migrate`, that slice 029 builds. The old
++  tool in HelmCharts keyed each release's chart on the *config directory* name
++  (`tools/chart_tools/recommend_resources.py:168-176`, `:185`, `:210`), so a release with an
++  overriding `chart:` was skipped or took a recommendation from the wrong chart's values, and it
++  could not see a migrated app at all. The new one enumerates the deploy repos from the
++  registry, takes the chart from the resolved chart, and writes one patch per deploy repo for the
++  operator to delete or edit before anything is committed. The same mis-keying in HelmCharts'
++  `Jenkinsfile:93-100` `changed(entry)` stays in the archive; nothing deploys through it.
++
++## Endgame — the target shape (D43)
++
++Where the migration-era mechanisms were pointing, and where each stands. The registry switch and
++the archive are the operator's steps; each item says what is owed.
++
++- **The registry moves to ArgoCDDeploy, Argo CD native** (D63), replacing the two-ApplicationSet
++  shape (D21); D22's upgrade path is not taken. Slice 029 builds it. **The registry switch (D64)
++  is the operator's step, owed until it has run**, from Ansible's registry-switch runbook: until
++  then Argo reads HelmCharts' `release.yaml` tree. A follow-up then clears what the switch leaves
++  dead (D64's list).
++- **HelmCharts is archived, not deleted** (D60), keeping the three parked apps. Owed to the
++  operator, in this order: its Jenkins jobs `IaC/HelmCharts` and `AaC/HelmCharts` are deleted
++  once nothing calls or consumes them (ANS-121), and the repository is archived once the
++  registry switch has run (ANS-122). Prefer not to add new things to HelmCharts meanwhile.
++- **charts.home moves to a `ChartsDeploy` repo** — done: charts.home deploys from ChartsDeploy.
++  D17's trap is not kept: ChartsDeploy's chart takes `homelab-shared` from charts.home itself.
++- **The namespace Terraform module stays in the archive** (D44 as amended): 49 kept config files
++  in HelmCharts call it, and no migrated app does.
++- **Residual tooling has its answers** (D65): `collect-versions` is deleted, the version-poller
++  no longer reads HelmCharts, `recommend-resources` is a script in Ansible's `support/` (named
++  follow-up above), and ArgoCDDeploy's registry is the inventory of what runs. `gen-architecture`
++  has its home: the `aac-tools` image's deploy-repo generator, run by each deploy repo's own
++  producer pipeline (D50). HelmCharts' `helm-charts` architecture producer is retired. The
++  `configs/dev` chart-debugging workflow is deferred and goes into the archive with HelmCharts.
+diff --git a/decisions.md b/decisions.md
+index bf76ce8..e02a732 100644
+--- a/decisions.md
++++ b/decisions.md
+@@ -32,28 +32,26 @@ Load-bearing rules. Specific decisions in this doc are consequences; if a princi
+ Three tiers, each with its own ownership tool. The line between tiers is unit lifecycle.
+ 
+ - **Ansible — bring-up tier.** Lifecycle == the host's. Proxmox host config, VM OS baseline, microk8s/microceph install + upgrade, cluster infrastructure that exists before any application does (CNI mode + autodetect, MetalLB IP pool, kernel modules, addon enablement, registry mirror config, CSI driver install).
+-- **Terraform — declarative resource tier.** Lifecycle decoupled from any single host, declarative API available. VM existence (`bpg/proxmox` provider, lives in this repo's `terraform/`). Per-application durable resources via the homelab provider (Ceph RBD images, CephFS subvolumes, ZFS datasets), the kubernetes provider (static PersistentVolumes; namespaces for the releases HelmCharts deploys), and the Keycloak provider (realms, clients, roles). The per-application TF lives alongside the Helm chart — in `/work/HelmCharts`, or in the app's deploy repo once Argo CD deploys it — not in this repo.
+-- **Helm — runtime tier.** Lifecycle == an application release. Deployments, StatefulSets, Services, Ingress, ConfigMaps, application Secrets, PVCs (claimed against TF-owned PVs), HPAs, PDBs. Per-stage values files. Continues to deploy via Jenkins.
++- **Terraform — declarative resource tier.** Lifecycle decoupled from any single host, declarative API available. VM existence (`bpg/proxmox` provider, lives in this repo's `terraform/`). Per-application durable resources via the homelab provider (Ceph RBD images, CephFS subvolumes, ZFS datasets), the kubernetes provider (static PersistentVolumes, and the Secrets that carry what Terraform mints), and the Keycloak provider (realms, clients, roles). The per-application TF lives in the app's deploy repo, beside its Helm chart — not in this repo.
++- **Helm — runtime tier.** Lifecycle == an application release. Deployments, StatefulSets, Services, Ingress, ConfigMaps, application Secrets, PVCs (claimed against TF-owned PVs), HPAs, PDBs. Per-stage values files. Argo CD deploys each app from its own deploy repo ([`argo-cd/`](argo-cd/decisions.md)).
+ 
+ Worked examples:
+ 
+ - A Ceph RBD image outlives every pod that mounts it. TF owns the image; Helm owns the pod that mounts the PVC.
+-- A Kubernetes namespace outlives any single chart in it (reinstalls, multiple subcharts). TF owns the namespace; Helm deploys into it. For an app Argo CD deploys the Application is the unit instead: the namespace is a tracked manifest in the app's own chart, and the app's Terraform never manages it — the PreSync hook is granted no `namespaces` ([`argo-cd/decisions.md`](argo-cd/decisions.md) D25, D33).
++- A Kubernetes namespace lives and dies with the app's Argo CD Application: it is a tracked manifest in the app's own chart, and the app's Terraform never manages it — the PreSync hook is granted no `namespaces` ([`argo-cd/decisions.md`](argo-cd/decisions.md) D25, D33).
+ - A static PersistentVolume holds data. TF owns it with `claimRef` pre-binding and `Retain` reclaim policy. The PVC that binds it is templated by Helm.
+ - A Keycloak realm represents identity, not application code. TF owns it. Helm charts consume it.
+ - microk8s itself, microceph itself, the CSI drivers — all cluster bring-up, all Ansible.
+ 
+ Why three tiers, not two: Ansible at the resource layer is a thin wrapper around shell-outs with no state model. Terraform's resource graph, plan-time drift detection, and explicit destroy semantics match what Ceph / Kubernetes / Keycloak expose as declarative APIs. Helm's job — application runtime — doesn't change.
+ 
+-**Per-application TF lives in `/work/HelmCharts`** for the releases HelmCharts deploys. An app Argo CD deploys keeps its Terraform in its deploy repo's `terraform/`, which the PreSync hook applies with `config/<stage>/*.tfvars` ([`argo-cd/design.md`](argo-cd/design.md)); KubeCoder's `KubeCoderDeploy` is built, its cutover pending. In HelmCharts, each release directory carries an optional `infrastructure.tf` (resources the chart depends on — namespace, PVs, Ceph images, ZFS datasets) and an optional `configuration.tf` (resources that depend on the chart being deployed — Keycloak realm config). The deploy CLI runs `terraform apply infra` → `helm upgrade --install` → `terraform apply config`. Per-release TF state, separate from this repo's VM-tier state. Design: [`slices/completed/helm-tf-deploy-harness.md`](slices/completed/helm-tf-deploy-harness.md). Provider extensions for Ceph + ZFS resources: [`slices/completed/tf-provider-resource-extensions.md`](slices/completed/tf-provider-resource-extensions.md) (+ [`zfs-dataset-provider`](slices/completed/zfs-dataset-provider/plan.md)).
++**Per-application TF lives in the app's deploy repo**, in `terraform/`, with the stage differences in `config/<stage>/*.tfvars`. Argo CD's PreSync hook applies it in-cluster on every sync of the stage, and a failed apply fails the sync ([`argo-cd/design.md`](argo-cd/design.md); argo-cd D30). Each stage has its own state, keyed `argocd/<repo>/<stage>/terraform.tfstate`, in the same state store as this repo's VM tier and separate from its states (argo-cd D32). A deploy repo carries a copy of each module it uses under `terraform/modules/`. Which apps and stages run is the Argo CD registry: ArgoCDDeploy's from the registry switch, HelmCharts' `release.yaml` tree until the operator has run it ([`argo-cd/decisions.md`](argo-cd/decisions.md) D63, D64). HelmCharts' Helm + TF harness — a per-release `infrastructure.tf` and `configuration.tf` run by its deploy CLI ([`slices/completed/helm-tf-deploy-harness.md`](slices/completed/helm-tf-deploy-harness.md)) — deploys nothing; it stays in the archived repo with the three parked apps (argo-cd D60). Provider extensions for Ceph + ZFS resources: [`slices/completed/tf-provider-resource-extensions.md`](slices/completed/tf-provider-resource-extensions.md) (+ [`zfs-dataset-provider`](slices/completed/zfs-dataset-provider/plan.md)).
+ 
+-**TODO — chart lifecycle in the HelmCharts refactor.** The refactor must cover the full chart lifecycle, not just updates to existing charts: deploying a brand-new chart and deleting a chart both need first-class support. Today `resolve-helm-args.py` fails for new charts, and deletion isn't handled at all. Mechanism is open — tracked here so the refactor design closes both gaps.
++**Terraform and Ansible never invoke each other** — peer tools sequenced by the operator (or, for an app's own Terraform, by its Argo CD sync). A composite operation that needs both — drain via Ansible, destroy the VM on Proxmox and `terraform apply` to recreate it, reattach + re-converge via Ansible — is documented in the relevant runbook as a sequence of operator commands, never a single playbook that shells out to `terraform`. Keeps responsibility boundaries clean: TF changes are auditable in `terraform plan`; Ansible changes are auditable in `--check --diff`; mixing them blurs both, and a TF failure halfway through an Ansible play is harder to recover from than a TF failure between two playbook invocations.
+ 
+-**Terraform and Ansible never invoke each other** — peer tools sequenced by the operator (or by Jenkins for the application monorepo). A composite operation that needs both — drain via Ansible, destroy the VM on Proxmox and `terraform apply` to recreate it, reattach + re-converge via Ansible — is documented in the relevant runbook as a sequence of operator commands, never a single playbook that shells out to `terraform`. Keeps responsibility boundaries clean: TF changes are auditable in `terraform plan`; Ansible changes are auditable in `--check --diff`; mixing them blurs both, and a TF failure halfway through an Ansible play is harder to recover from than a TF failure between two playbook invocations.
++**Operator-runs-TF rule** (CLAUDE.md) governs this repo's `terraform/` (VMs, host wiring) — those applies happen at the operator's keystroke. An app's Terraform runs in its Argo CD PreSync hook, gated on the sync; Argo CD is the orchestrator for the application deploy ([`argo-cd/decisions.md`](argo-cd/decisions.md) D1, D30).
+ 
+-**Operator-runs-TF rule** (CLAUDE.md) governs this repo's `terraform/` (VMs, host wiring) — those applies happen at the operator's keystroke. The application monorepo's per-release TF runs through Jenkins alongside Helm; Jenkins is the orchestrator for the application deploy, just as it has been for `helm upgrade --install`.
+-
+-The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified bring-up steps (`.microk8s.yaml`, MetalLB IPAddressPools, registry mirror config, procedural install docs) in a third location that today belongs on the Ansible side. The microk8s build-out absorbed its contents into the `microk8s` role and inventory; KubernetesConfig is now **marked for deletion** (it holds secrets) — tracked in [`slices/runtime-secrets-sweep.md`](slices/runtime-secrets-sweep.md) §4. The operator runs their own ingress controller and own container registry from HelmCharts — `core/ingress` and `core/registry` are not enabled.
++The pre-Ansible `/work/KubernetesConfig` repo predates this split: it codified bring-up steps (`.microk8s.yaml`, MetalLB IPAddressPools, registry mirror config, procedural install docs) in a third location that today belongs on the Ansible side. The microk8s build-out absorbed its contents into the `microk8s` role and inventory; KubernetesConfig is now **marked for deletion** (it holds secrets) — tracked in [`slices/runtime-secrets-sweep.md`](slices/runtime-secrets-sweep.md) §4. The operator runs their own ingress controller and own container registry as apps of their own (`NginxDeploy`, `RegistryDeploy`) — `core/ingress` and `core/registry` are not enabled.
+ 
+ ### Terraform version
+ 
+@@ -80,7 +78,7 @@ Rotation of AppRole `secret_id`s and of application secrets lives in the operato
+ - **AppRole `secret_id` whose value lives in the consumer's UI credential store** (`jenkins`): `bao write -force` to mint, paste the new `secret_id` into the existing credential in Jenkins → Manage Credentials, then `bao write auth/approle/role/jenkins/secret-id-destroy accessor=<old-accessor>` once pipelines have picked up the new value. The Jenkins case sits in this category because the HashiCorp Vault plugin doesn't bridge to `kubernetes-credentials-provider` (no `SecretToCredentialConverter` extensions), so the credential is operator-typed into the UI rather than ESO-materialised — and JCasC was rejected as over-machinery for a rotation that's operator-initiated, not TTL-driven.
+ - **AppRole `secret_id` whose value lives in a hand-staged k8s Secret** (`eso` on the prd cluster, `eso-dev` on the dev cluster — bootstrap-tier): same `bao write -force`, but the new value is written via `kubectl create secret … --dry-run=client | kubectl apply -f -` into the `openbao-eso-approle` Secret in that cluster's `external-secrets` namespace, followed by `kubectl rollout restart deployment/external-secrets` because ESO reads the AppRole material on pod startup only.
+ - **Application secrets** (everything under `kv/iac`, `kv/jenkins`, `kv/eso/<chart>`): `bao kv put` to the new value; consumer picks up on next resolution. No restarts.
+-- **An application secret the CA it authenticates to also holds** (`kv/eso/prd/kubecoder/<stage>/step-ca-provisioner-password`): reads as the bullet above and behaves like neither half of it. The value decrypts `kubecoder-jwk`'s `encryptedKey` in step-ca's own `ca.json`, so a KV-only `bao kv put` leaves the two sides disagreeing until the blob is re-encrypted under the new password, deployed through `HelmCharts`, and the step-ca pod rolled — step-ca reads `ca.json` at process start only. The consuming end needs a restart too: the KubeCoder controller takes the value as a start-time env var through a `secretKeyRef`, with nothing hashing that Secret into the pod template, so an ESO refresh never reaches a running controller. Rotate as: write both leaves, re-encrypt and deploy, roll step-ca, roll the controller.
++- **An application secret the CA it authenticates to also holds** (`kv/eso/prd/kubecoder/<stage>/step-ca-provisioner-password`): reads as the bullet above and behaves like neither half of it. The value decrypts `kubecoder-jwk`'s `encryptedKey` in step-ca's own `ca.json`, so a KV-only `bao kv put` leaves the two sides disagreeing until the blob is re-encrypted under the new password, deployed through `StepCaDeploy` (its chart carries `step-ca-config`), and the step-ca pod rolled — step-ca reads `ca.json` at process start only. The consuming end needs a restart too: the KubeCoder controller takes the value as a start-time env var through a `secretKeyRef`, with nothing hashing that Secret into the pod template, so an ESO refresh never reaches a running controller. Rotate as: write both leaves, re-encrypt and deploy, roll step-ca, roll the controller.
+ 
+ TODOs:
+ - Capture all three patterns in `docs/runbooks/openbao.md` (per-consumer cold-boot sections already planned by the slice — fold rotation into the same per-consumer subsections).
+@@ -91,16 +89,16 @@ TODOs:
+ 
+ Every release that talks to S3 owns its own RGW user, minted by Terraform. The shared `csi-prd` and `csi-dev` users are deleted.
+ 
+-- **Per-release users.** HelmCharts `terraform-modules/s3-storage` wraps the provider's `homelab_s3_storage`: one RGW user named after the release namespace (`<chart>-<stage>`), owning exactly the release's buckets, with `max_buckets = -1` so it can never create another. Its keys go into the Terraform-written Secret `s3-credentials` in the release namespace; OpenBao holds no copy. Rotation is per release (`key_rotation`), so blast radius bounds itself. The user follows the namespace, not the cluster: the prd cluster hosts every stage, and each stage's release has its own user.
+-- **The admin key is not an app credential.** The provider creates users and buckets with the per-cluster RGW admin key in `kv/shared/<cluster>/ceph-rgw/s3`, read by the HelmCharts deploy (the `jenkins` and `iac-agent` AppRoles) and by the Argo CD PreSync hook.
++- **Per-release users.** The `s3-storage` Terraform module, copied into each deploy repo that uses it (`terraform/modules/s3-storage`), wraps the provider's `homelab_s3_storage`: one RGW user named after the release namespace (`<chart>-<stage>`), owning exactly the release's buckets, with `max_buckets = -1` so it can never create another. Its keys go into the Terraform-written Secret `s3-credentials` in the release namespace; OpenBao holds no copy. Rotation is per release (`key_rotation`), so blast radius bounds itself. The user follows the namespace, not the cluster: the prd cluster hosts every stage, and each stage's release has its own user.
++- **The admin key is not an app credential.** The provider creates users and buckets with the per-cluster RGW admin key in `kv/shared/<cluster>/ceph-rgw/s3`, read by the Argo CD PreSync hook through `argocd-hook-credentials`. The `jenkins` and `iac-agent` AppRoles still hold the grant they had for the HelmCharts deploy, which deploys nothing.
+ - **CI validation users.** HelmCharts `configs/dev/_ci/` mints one user per app validation pipeline, with the same resource, on the dev cluster's microceph; the operator copies the keys to `kv/shared/validation/<app>/s3` for Jenkins.
+-- **The one exception: `backup-reader`, fleet-wide and read-only** (slice 022, an operator overrule of per-app-only). The S3 mirror (§"Backup") reads every production-stage bucket. A per-app user reads only its own buckets and can write them, so without the reader the mirror would hold every app's read-write key or the admin key; one reader, granted per bucket, reads them all and can change none. The prd `storage` release creates it with the provider's `homelab_s3_reader`: admin capability `buckets=read` (bucket enumeration through the admin API) and nothing more, `max_buckets = -1`, no bucket of its own. Its keys go into the Terraform-written Secret `backup-reader-credentials` in `storage-prd`. The grant is `homelab_s3_storage`'s `grant_backup_reader`: a bucket policy allowing the reader `s3:ListBucket` and `s3:GetObject`, and it is the bucket's whole policy. `terraform-modules/s3-storage` sets it for every namespace ending in `-prd`, so no call site sets anything and no new production bucket goes ungranted. The provider takes the reader's name from `HOMELAB_S3_BACKUP_READER`, set only in the prd cluster's env (HelmCharts `_providers/clusters.yaml`); on the dev cluster no reader is configured and the grant writes nothing.
++- **The one exception: `backup-reader`, fleet-wide and read-only** (slice 022, an operator overrule of per-app-only). The S3 mirror (§"Backup") reads every production-stage bucket. A per-app user reads only its own buckets and can write them, so without the reader the mirror would hold every app's read-write key or the admin key; one reader, granted per bucket, reads them all and can change none. The prd `storage` release creates it with the provider's `homelab_s3_reader`: admin capability `buckets=read` (bucket enumeration through the admin API) and nothing more, `max_buckets = -1`, no bucket of its own. Its keys go into the Terraform-written Secret `backup-reader-credentials` in `storage-prd`. The grant is `homelab_s3_storage`'s `grant_backup_reader`: a bucket policy allowing the reader `s3:ListBucket` and `s3:GetObject`, and it is the bucket's whole policy. The `s3-storage` module sets it for every namespace ending in `-prd`, so no call site sets anything and no new production bucket goes ungranted. The provider takes the reader's name from `HOMELAB_S3_BACKUP_READER`, set only in the prd hook's environment (ArgoCDDeploy `config/prd/values.yaml`, bound by its render gate to HelmCharts' `_providers/clusters.yaml`); on the dev cluster no reader is configured and the grant writes nothing.
+ 
+ ## OpenBao backup / DR
+ 
+ - **Canonical backup**: a daily `.tgz` bundling a native Raft snapshot (`bao operator raft snapshot save`) and a plaintext JSON export of the KV secrets + policies + auth/mount config. The snapshot is the restore artifact — atomic, complete, and the supported recovery path. The JSON export is break-glass: it lets a secret be read with `age` + `jq` and no running OpenBao, and is not itself a restore mechanism.
+ - **Runs on all three nodes; leader-only execution.** Each srvvaultN has a systemd timer (daily, randomised delay) that fires the same wrapper script; the script guards on `/v1/sys/leader`'s `is_self` flag, so the two followers exit in milliseconds and only the leader writes. If a leadership election is in flight when the timers fire, all three skip — the next cycle picks it up.
+-- **Backup path**: the wrapper authenticates via an AppRole with a read-only export policy — `list`/`read` on the policy catalogue, auth methods, mounts, and the KV-v2 tree, plus `read` on `sys/storage/raft/snapshot` for the snapshot; its one other grant is `update` on `auth/token/revoke-self`, so a login can revoke its own token — assembles the `.tgz`, and POSTs it to the in-cluster `backup-server` (a small Go service in `/work/DockerImages/backup-server/`, deployed by the `storage` chart in `/work/HelmCharts`). The bearer token authorising the upload lives on each srvvaultN as a file (mode 0400, owner openbao), materialised there by the `openbao` role.
++- **Backup path**: the wrapper authenticates via an AppRole with a read-only export policy — `list`/`read` on the policy catalogue, auth methods, mounts, and the KV-v2 tree, plus `read` on `sys/storage/raft/snapshot` for the snapshot; its one other grant is `update` on `auth/token/revoke-self`, so a login can revoke its own token — assembles the `.tgz`, and POSTs it to the in-cluster `backup-server` (a small Go service in `/work/DockerImages/backup-server/`, deployed by the `storage` app from `StorageDeploy`). The bearer token authorising the upload lives on each srvvaultN as a file (mode 0400, owner openbao), materialised there by the `openbao` role.
+ - **Server-side encryption.** `backup-server` holds the operator's age public key (single recipient, in the `backup-server-age-key` ConfigMap), encrypts each upload with it, and streams the ciphertext via `rclone` to the existing cloud-storage path. The age **private** key lives only in Roboform; without it, no backup is recoverable. **OpenBao itself never holds the age key, public or private** — encryption happens server-side.
+ - **Retention** is enforced server-side by `backup-server`. Each scope's retention is a field of its record in the server's credential store (`credentials.json`, one record per scope holding its upload token and retention; DockerImages `backup-server/src/internal/auth/store.go`), set per scope through the provider's `homelab_backup_credential` (`openbao`: 14, Ansible `terraform/prd/openbao.tf`). After each successful upload it keeps the scope's N newest backups and prunes the rest, each with its metadata file; metadata files do not count toward N. The OpenBao timer does not manage retention.
+ - **Freshness is watched by `backup-server`, not by the nodes.** Each upload declares how long it stays valid: the wrapper sends `valid_for=52h`. Once the backup has landed in cloud storage, `backup-server` writes `<backup object>.metadata.json` beside it, holding only `{"valid_for":"52h"}`. A stream is scope + file name. It is watched while any of its kept backups declares a validity, and overdue once its newest backup's landing time plus the newest declared validity has passed. `backup-server` reads every scope folder under its remote, whether or not the scope still has a credential: the credential store also authorizes uploads, so watching through it would let a lost store or a removed credential stop a scope's uploads and its alert together. It reads at start, hourly and right after each upload, reads a stream's newest metadata file only when it does not remember it already, and publishes each stream's landing and valid-until times on pod port 8081, inside the cluster only. Production Prometheus scrapes it through the Service annotations and raises two critical alerts in Alertmanager: `BackupOverdue` once a stream passes its valid-until, and `BackupWatcherBlind` once no full read of cloud storage has succeeded for 6 h, including when `backup-server` cannot be scraped at all. 52 h rather than 48 because the timer fires at 02:00 with up to 1 h random delay: one missed night stays quiet, two in a row alert. The followers still exit 0; no node's unit status is the signal. Triage, and retiring a scope (it alerts until its `.metadata.json` files are deleted by hand): Ansible `docs/runbooks/backup-freshness.md`.
+@@ -138,14 +136,14 @@ Once OpenBao is up, runtime secrets are resolved at IaC-container startup by an
+ 
+ Homelab-wide CA for internal-DNS TLS. Stands up in its own phase ahead of OpenBao so the CA is proven against four consumers (PVE, microk8s API, DNS management API, `backup-server`) before any OpenBao role-apply touches it. OpenBao's three listener certs follow in the next phase using the same role.
+ 
+-- **`step-ca`** (Smallstep), Helm-deployed from `HelmCharts`.
++- **`step-ca`** (Smallstep), deployed by Argo CD from `StepCaDeploy`.
+ - **Two issuance paths from a single CA, by consumer location**:
+-  - **In-cluster consumers** use cert-manager driven by step-ca's **ACME** provisioner, replicating the existing public-cert flow (cert-manager + Let's Encrypt) with a different directory URL. A step-ca `ClusterIssuer` lands in HelmCharts; consumers opt in by annotation on their Ingress. No bespoke Ansible plumbing.
++  - **In-cluster consumers** use cert-manager driven by step-ca's **ACME** provisioner, replicating the existing public-cert flow (cert-manager + Let's Encrypt) with a different directory URL. A step-ca `ClusterIssuer` lands in a deploy repo; consumers opt in by annotation on their Ingress. No bespoke Ansible plumbing.
+   - **VM consumers** use a reusable Ansible role, `internal_tls`, driving step-ca's **JWK** provisioner via `step ca certificate` / `step ca renew`. The role installs `step-cli`, pulls the JWK provisioner password from ansible-vault into a `mktemp` file for the duration of the task, issues or renews, installs the cert with the caller-specified path / mode / owner, and notifies the caller's reload handler. Re-issue is threshold-gated (default 14 days remaining) and driven weekly by `iac-scheduled-certs` — the same Friday job that renews the SSH host certs, running `playbooks/renew-internal-tls.yml` across every leaf in the fleet, which weekly against a 14-day window gives two attempts before any leaf lapses. The converge playbooks issue the leaves too (`site.yml` for the pveproxy leaves, `site-k8s.yml` for the kube-apiserver SNI leaves, `site-openbao.yml` for the OpenBao listener leaves), but only under a hand-started iac-apply; iac-scheduled-drift is `--check`-only, so it can never sign one. **Drift checks the leaves at 7 days, one certs-job period shorter than the role's 14** (`-e internal_tls_renewal_threshold_days=7` in `Jenkinsfile.iac-scheduled-drift`): a leaf inside its window is the Friday job's business, so drift reds only for a renewal that Friday already missed — the backstop, not the noise. Keep it at the role's threshold minus the certs job's period if either moves.
+ - **JWK provisioner password is bootstrap-tier**: a single fleet-wide password, encrypted in the Ansible repo via ansible-vault, passphrase in Roboform. Lives alongside the OpenBao seal key, ansible-vault passphrase, and the IaC agent's AppRole credentials in the irreducible-literal set — never moves into OpenBao, because OpenBao's own listener cert is issued by this same path. **Per-provisioner name scoping is wanted and not in place.** `ansible-jwk`'s `ca.json` entry carries an exact-name `options.x509.allow.dns` list (the Proxmox hosts, `srvceph1..3`, the `kubernetes*` and `kubernetes-api*` names) plus an `allow.ip` list, and `kubecoder-jwk` is configured the same way — but step-ca 0.30.2 does not honour per-provisioner name policy from a file-based `ca.json`; it fills those fields only through the remote-management API, which this estate does not use. Both lists are dead configuration: OpenBao's listener leaf, issued through `ansible-jwk`, carries `secrets.home` and `srvvault1.home`, neither of them listed. Until the controls exist, neither password is limited to any set of names. Implementing them is Trello #993.
+ - **KubeCoder's own provisioner password is the exception, and lives in OpenBao.** KubeCoder drives this CA through a JWK provisioner of its own — `kubecoder-jwk`, separate key and separate password, never the fleet's — and that password is materialised into the cluster by ESO from `kv/eso/prd/kubecoder/<stage>/step-ca-provisioner-password` rather than kept in ansible-vault. The bullet above rules that out for `ansible-jwk`, but its reason is bootstrap ordering: OpenBao's own listener cert is issued through that provisioner, so that password must be available before OpenBao is. KubeCoder is not in the whole-site bring-up order (§OpenBao backup / DR), so the reason does not reach it. Recorded as an explicit exception rather than left to land silently; the bootstrap-tier rule is unchanged and `ansible-jwk`'s password stays out of OpenBao.
+ - **Two-tier hierarchy**. `step ca init` produces root + intermediate. **Root key goes offline to Roboform immediately after init**; only the intermediate runs in the pod. Cluster compromise forges leaves until the next intermediate rotation; rotation is a one-shot from `wrkdev` and does not touch any client trust store.
+-- **Intermediate key + passphrase: regular Kubernetes Secret**, not delivered via ESO from OpenBao. The chicken-and-egg of OpenBao-needs-cert-from-step-ca-needs-passphrase-from-OpenBao is not worth the marginal security gain when short leaf validity already bounds blast radius. **Materialised at cluster bring-up via a small Ansible role from ansible-vault'd source files**, not committed as plaintext-base64 manifests in HelmCharts — same bootstrap-tier posture as the JWK provisioner password and the OpenBao seal key. Covers all four `step-ca-*` Secrets that currently live in `configs/prd/step-ca.yaml` (`step-ca-config`, `step-ca-secrets`, `step-ca-ca-password`, `step-ca-ssh-host-ca-password`); the only non-secret entry in that file is `step-ca-certs` (public certs + SSH host CA pub), which can stay in HelmCharts or move to a ConfigMap. Extraction tracked in the runtime-secrets-sweep slice's §Loose ends; this is what makes `configs/prd/step-ca.yaml` publishable.
++- **Intermediate key + passphrase: regular Kubernetes Secret**, not delivered via ESO from OpenBao. The chicken-and-egg of OpenBao-needs-cert-from-step-ca-needs-passphrase-from-OpenBao is not worth the marginal security gain when short leaf validity already bounds blast radius. **Materialised at cluster bring-up via a small Ansible role from ansible-vault'd source files**, not committed as plaintext-base64 manifests in a deploy repo — same bootstrap-tier posture as the JWK provisioner password and the OpenBao seal key. Covers all four `step-ca-*` Secrets that currently live in `StepCaDeploy`'s `chart/templates/stage-manifests.yaml` (`step-ca-config`, `step-ca-secrets`, `step-ca-ca-password`, `step-ca-ssh-host-ca-password`); the only non-secret entry in that file is `step-ca-certs` (public certs + SSH host CA pub), which can stay in the chart or move to a ConfigMap. Extraction tracked in the runtime-secrets-sweep slice's §Loose ends; this is what makes that file publishable.
+ - **Leaf cert validity: 47 days**, all consumers. The `internal_tls` role re-issues a VM leaf when remaining validity drops below 14 days; in-cluster leaves are re-issued by the monthly `certificate-renewer` CronJob. Each leaf's absolute expiry is meant to be published as the Prometheus gauge `internal_tls_cert_not_after_seconds`, and today only the Proxmox and OpenBao leaves get one: the `internal_tls` role writes it to the node-exporter textfile collector and skips the write where that directory is absent — the steady state on the k8s nodes, which run node_exporter as an in-cluster DaemonSet — so the four kube-apiserver SNI leaves (srvk8s1–3, srvk8sdev) have no gauge. Of the hosts that do write it, Prometheus's `homelab-nodes` job scrapes only the Proxmox nodes, and the in-cluster collector for the certbot path is not built. The design is a single Prometheus alert on a stalled renewer at `<10` days remaining — below both the 14-day VM renewal threshold and the in-cluster monthly path's ~17-day steady-state floor, so it signals a real failure rather than flapping every renewal cycle — and **no alert exists on any leaf yet**. The alert rule, the in-cluster metric and the kube-apiserver leaves' metric path are **deferred** (observability is not a current priority); design parked in [`slices/deferred/internal-tls-monitoring.md`](slices/deferred/internal-tls-monitoring.md).
+ - **Trust-store distribution**:
+   - **Managed Linux hosts**: the `baseline` role places the root cert in `/usr/local/share/ca-certificates/homelab-root.crt` and runs `update-ca-certificates`. Picked up automatically by openssl, curl, Python, Go, and most other Linux TLS clients. Root rotation = role edit + apply.
+@@ -167,8 +165,8 @@ The "year 9" rotation event needs both the outgoing and the incoming root truste
+ - **Drift comparison is by fingerprint set, not byte diff.** Once the bundle carries two roots, `/roots.pem`'s ordering is no longer pinned to the repo's. The `iac-scheduled-drift` "Homelab CA root drift" stage parses both sides and asserts the SHA-256 fingerprint sets are equal.
+ - **On-host shape: one file per cert.** Debian's `update-ca-certificates` walks `/usr/local/share/ca-certificates/` and processes only one PEM block per `.crt` file; a multi-cert bundle dropped there is silently truncated. The `baseline` ca-trust task splits the bundle and writes each cert as `/usr/local/share/ca-certificates/homelab-root-<fp8>.crt`, where `<fp8>` is the first 8 hex chars of the cert's SHA-256 fingerprint. Naming by fingerprint (not by position-in-bundle) keeps filenames stable across bundle reordering and across removal of a root post-rotation, so neither churns `update-ca-certificates -f` runs.
+ - **The install task reconciles, not just writes.** baseline enumerates desired certs (from the bundle) against present `homelab-root-*.crt` files on disk and `state: absent`s the diff. Without this, the retired root lingers on every host past the cutover and is trusted forever. The existing self-heal grep against `/etc/ssl/certs/ca-certificates.crt` generalises to a loop over the desired set.
+-- **Nine out-of-repo copies of the same file exist**, all byte-identical to the Ansible canonical copy — `/work/HelmCharts/homelab-root.crt`, `/work/HelmCharts/charts/nginx/files/ca/homelab-root.crt`, `/work/ArgoCDTools/argocd-hook/image/homelab-root.crt` (the Argo CD presync hook image), `/work/ArgoCDTools/aac-tools/image/homelab-root.crt` (the `aac-tools` image), `/work/DockerImages/kube-coder-dev-base/homelab-root.crt`, `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt`, `/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt`, `/work/ArgoCDDeploy/chart/files/homelab-root.crt` (mounted into Argo CD's repo-server so `helm dependency build` trusts `https://charts.home`) and `/work/KubeCoderDeploy/chart/files/ca/homelab-root.crt` (KubeCoder's controller CA mount once KubeCoder deploys from Argo). HelmCharts' `charts/jenkins/` and `charts/kubecoder/` reach the root through symlinks to the repo-root copy, so they are not separate copies and a rotation does not touch them. A rotation that updates the in-repo bundle here must update all nine in the same change window, ordered *before* the new root starts appearing in step-ca's `/roots.pem` (otherwise the drift pipeline fires until the others catch up); the five image copies additionally need their images rebuilt to take effect, and the ArgoCDDeploy copy needs a sync of Argo's own chart, which is manual by design. Eventual fix is to collapse the duplication — single source via submodule, build-time fetch from this repo, or moving the canonical copy under HelmCharts and having Ansible read from there — recorded as a follow-up rather than blocking the next rotation.
+-- **The KubeCoder controller keeps no copy of its own.** It validates `https://ca.home` when it asks step-ca to sign an environment pod's SSH host certificate, and its base image (`python:slim`) carries stock Debian roots only — so the root reaches it as a chart mount rather than through the image's trust store: HelmCharts' `kubecoder` chart renders the repo-root copy into a ConfigMap and hands the pod the mounted path in `KUBECODER_STEP_CA_ROOT`, and `/work/KubeCoderDeploy/chart/files/ca/homelab-root.crt` takes that over once KubeCoder deploys from Argo. A rotation lands there by a chart deploy, with no image rebuild. The controller image did bake its own `/work/KubeCoder/controller/homelab-root.crt` until September 2026; that file is gone and the Dockerfile no longer copies it.
++- **Ten out-of-repo copies of the same file are in use**, all byte-identical to the Ansible canonical copy. Five are baked into images: `/work/ArgoCDTools/argocd-hook/image/homelab-root.crt` (the Argo CD presync hook image), `/work/ArgoCDTools/aac-tools/image/homelab-root.crt` (the `aac-tools` image), `/work/DockerImages/kube-coder-dev-base/homelab-root.crt`, `/work/DockerImages/kube-coder-arm64-cross-toolchain/homelab-root.crt` and `/work/DockerImages/kube-coder-esp-idf-toolchain/homelab-root.crt`. Five ride deploy repos' charts: `ArgoCDDeploy` `chart/files/homelab-root.crt` (mounted into Argo CD's repo-server so `helm dependency build` trusts `https://charts.home`), `ExternalSecretsDeploy` `chart/files/homelab-root.crt` (the `homelab-root-ca` ConfigMap, argo-cd D59), `JenkinsDeploy` `chart/files/ca/homelab-root.crt`, `KubeCoderDeploy` `chart/files/ca/homelab-root.crt` (KubeCoder's controller CA mount, below) and `NginxDeploy` `chart/files/ca/homelab-root.crt`. HelmCharts' copies (`homelab-root.crt`, `charts/nginx/files/ca/`, and the `charts/jenkins/` and `charts/kubecoder/` symlinks to the first) deploy nothing and stay in the archive. A rotation that updates the in-repo bundle here must update all ten in the same change window, ordered *before* the new root starts appearing in step-ca's `/roots.pem` (otherwise the drift pipeline fires until the others catch up); the five image copies additionally need their images rebuilt to take effect, and each deploy-repo copy reaches the cluster with its app's next sync, which for ArgoCDDeploy's is a manual sync of Argo's own chart (argo-cd D3). Eventual fix is to collapse the duplication — single source via submodule, or build-time fetch from this repo — recorded as a follow-up rather than blocking the next rotation.
++- **The KubeCoder controller keeps no copy of its own.** It validates `https://ca.home` when it asks step-ca to sign an environment pod's SSH host certificate, and its base image (`python:slim`) carries stock Debian roots only — so the root reaches it as a chart mount rather than through the image's trust store: `KubeCoderDeploy`'s chart renders its `chart/files/ca/homelab-root.crt` into a ConfigMap and hands the pod the mounted path in `KUBECODER_STEP_CA_ROOT`. A rotation lands there by a chart deploy, with no image rebuild. The controller image did bake its own `/work/KubeCoder/controller/homelab-root.crt` until September 2026; that file is gone and the Dockerfile no longer copies it.
+ - **Runbook**: `docs/runbooks/step-ca-root-rotation.md`. Documents the cutover sequence — generate new root offline, install in step-ca alongside the old, add to the bundle in every copy the runbook inventories (and rebuild the images carrying one), confirm the drift pipeline goes green, fleet-wide `baseline` apply to land the second cert, soak, then remove the old root from step-ca + every copy + apply again to drop it from hosts. Parallels the existing "Intermediate rotation" section in `step-ca-bootstrap.md` but at a different scope and cadence.
+ 
+ TODOs gating the next rotation:
+@@ -235,7 +233,7 @@ For the three pve hosts, fidelity to the role definitions is the only reachable
+ 
+ Specifics deferred to the [`microceph-prod`](slices/microceph-prod.md) slice; the preferred shape is recorded here so the slice inherits the constraint:
+ 
+-1. **Upgrade first** — bring the cluster to its target microceph LTS channel via `snap refresh`, mons before OSDs, `serial: 1`. Soak under real workload for several days; confirm `HEALTH_OK` and that HelmCharts consumers are unaffected.
++1. **Upgrade first** — bring the cluster to its target microceph LTS channel via `snap refresh`, mons before OSDs, `serial: 1`. Soak under real workload for several days; confirm `HEALTH_OK` and that the apps consuming Ceph are unaffected.
+ 2. **Then rebuild** — drain a node, destroy the VM on Proxmox and `terraform apply` to recreate it, apply baseline + microceph role, reattach the existing OSD disks (passthrough disks, which the Proxmox destroy leaves in place; BlueStore OSDs carry their identity on-disk). Repeat one node at a time.
+ 3. **Fallback if microceph won't adopt existing OSDs**: stand up a single-node temp cluster on `pve`'s spare `/dev/sda`, mirror data over (`rbd mirror` for RBD; rsync of a snapshot for CephFS), cut consumers over, rebuild the original nodes, migrate back, decommission the temp cluster, reclaim the spare.
+ 
+@@ -272,7 +270,7 @@ Deferred / revisit:
+ 
+ ### k8s version policy
+ 
+-**Track a recent `stable` channel — not pre-release.** Same low-surprise logic as Ceph, but k8s moves fast enough that pinning to the previous LTS strands us behind the addon/CNI and HelmCharts ecosystem, so we track a current `stable` minor instead. Never `candidate`/`beta`/`edge` except for a brief, deliberate upgrade soak. Channel pinned per cluster in `group_vars/k8s_{prd,dev}.yml` so dev runs a minor ahead of prd and soaks it before prd moves. Upgrade when the running minor nears EOL, a security fix forces it, or a fix we need lands upstream.
++**Track a recent `stable` channel — not pre-release.** Same low-surprise logic as Ceph, but k8s moves fast enough that pinning to the previous LTS strands us behind the addon/CNI and Helm chart ecosystem, so we track a current `stable` minor instead. Never `candidate`/`beta`/`edge` except for a brief, deliberate upgrade soak. Channel pinned per cluster in `group_vars/k8s_{prd,dev}.yml` so dev runs a minor ahead of prd and soaks it before prd moves. Upgrade when the running minor nears EOL, a security fix forces it, or a fix we need lands upstream.
+ 
+ Today **`1.35/stable` is the homelab k8s base version** (prd). Dev runs `1.36/stable`, a minor ahead, to soak the next release before prd moves. The scratch fleet is not currently deployed — its `group_vars` channel pin is inert until the fleet is stood up, so don't read it as a live version. The strict-confinement variants (`*-strict/stable`) are rejected — extra surface for limited benefit on this workload.
+ 
+@@ -348,7 +346,7 @@ operator ruled it does not belong in `docs/runbooks/k8s-rebuild.md`.
+ 
+ Today: microk8s's `dashboard` addon (the upstream `kubernetes/dashboard` project bundled with the snap). The operator depends on the web UI day-to-day; codified into `microk8s_addons` for prd and dev.
+ 
+-**Revisit after the plan**: [Headlamp](https://headlamp.dev/) (CNCF, modern UI, plugin system) deployed as a Helm chart in `HelmCharts`. Same web-UI workflow, version ownership shifts off microk8s's release cadence onto the operator's Helm flow. `k9s` (terminal UI) and OpenLens / desktop apps are off the table — operator wants browser-based.
++**Revisit after the plan**: [Headlamp](https://headlamp.dev/) (CNCF, modern UI, plugin system) as the replacement. It runs now, deployed by Argo CD from `HeadlampDeploy` (upstream chart), and the dashboard addon is still enabled beside it. Same web-UI workflow, version ownership shifts off microk8s's release cadence onto the operator's Helm flow. `k9s` (terminal UI) and OpenLens / desktop apps are off the table — operator wants browser-based.
+ 
+ ### The prd apiserver trusts Keycloak as an OIDC issuer
+ 
+@@ -567,7 +565,7 @@ How Terraform and Ansible run in production once Phase 10 lands. The operator wo
+ - **Dedicated Jenkins agent VM** for Terraform and Ansible runs. Not shared with other build workloads.
+ - **All logic lives in a Docker image.** The CI job pulls and runs the container on every execution; the agent VM holds no tool versions, no clone, no credentials cache. VM stays fully stateless and disposable.
+ - **tfstate lives in a dedicated Git repo, reached through an http backend.** `terraform-backend-git` (a daemon `iac-impl` starts in the container) serves `terraform/{prd,scratch}` state, pulling/pushing `pvginkel/TerraformState` and encrypting at rest with sops + age. See "Terraform state via `terraform-backend-git`" above. (Originally a plain clone-and-commit of the state repo by `iac-impl`; the backend replaced it.)
+-- **Concurrency control: per-state lock branches, no host lock.** `terraform-backend-git` takes a `locks/<state-path>` branch per state, so a force-unlock means deleting that branch — unlike the old file-based model, which had no remote lock. The `/var/lock/iac.lock` flock that once serialised `iac` invocations on srviac is removed (Trello #506). As a state guard it was illusory — wrkdev and the KubeCoder pod write the same store and it saw neither — and `flock -w 60` failed on contention rather than queueing, so a collision became a red build. Cross-job serialisation comes from Jenkins instead: the `IaC Agent` node has one executor, so the IaC and HelmCharts jobs queue behind one another. Accepted loss: hand-run Ansible on srviac no longer interlocks with a running job (terraform still does, via lock branches).
++- **Concurrency control: per-state lock branches, no host lock.** `terraform-backend-git` takes a `locks/<state-path>` branch per state, so a force-unlock means deleting that branch — unlike the old file-based model, which had no remote lock. The `/var/lock/iac.lock` flock that once serialised `iac` invocations on srviac is removed (Trello #506). As a state guard it was illusory — wrkdev and the KubeCoder pod write the same store and it saw neither — and `flock -w 60` failed on contention rather than queueing, so a collision became a red build. Cross-job serialisation comes from Jenkins instead: the `IaC Agent` node has one executor, so the IaC jobs queue behind one another. Accepted loss: hand-run Ansible on srviac no longer interlocks with a running job (terraform still does, via lock branches).
+ 
+ Path split — what runs where:
+ 
+@@ -596,7 +594,6 @@ Deferred / revisit:
+ Each push-triggered pipeline below runs its checks ahead of the step that changes something, cheapest first, and a failing check fails the build before that step runs:
+ 
+ - **Ansible (`iac-on-push`)**: yamllint, ansible-lint in strict mode and `terraform fmt -check` — the dev loop's `kc project lint`, kept identical — then `terraform validate` on both roots, ahead of the plan. `iac-apply` does not re-run them.
+-- **HelmCharts**: every release the build is about to deploy is rendered with the values and `--set` args its deploy uses, and linted where its chart source is in the repo; kubeconform validates each render in strict mode against prd's Kubernetes version (a pin in the `Jenkinsfile` that moves with prd's channel — `docs/runbooks/k8s-upgrade.md`), before the first release deploys or uninstalls.
+ - **HomelabTerraformProvider**: `go vet` and the unit tests, before the registry publish. The acceptance tests need live backends and stay a manual run.
+ - **ArgoCDTools**: both images' unit tests, in the `iac` toolchain image their local test verbs run in, before either image build.
+ 
+@@ -604,9 +601,7 @@ Each push-triggered pipeline below runs its checks ahead of the step that change
+ 
+ **DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert, and so does a scan that could not complete. The scan never changes the build result.
+ 
+-**Image pins follow provenance.** Third-party scanner and validator images are pinned by digest — trivy in `DockerImages`' scan stage, kubeconform in `HelmCharts`' render gate — because an upstream tag moving under a gate changes what the gate accepts without a commit here. Images we build ourselves are not digest-pinned: we control what the tag points at, so which tag a consumer takes — floating or pinned — is the consuming site's call.
+-
+-**HelmCharts' deploy-time digest resolution is not a pin in that sense.** Its deploy tooling (`resolve_helm_args.py`, which `migrate-release.py --no-pin` turns off) rewrites every image reference in a chart's templates to `@sha256:` at deploy time, and the `Jenkinsfile` uses the resolved digest as the signal that a release changed and has to be deployed. That resolution follows whatever the written tag points at *now* — it fixes what one deploy runs, not what a later one will — where a pin above is a reference committed here that an upstream tag move cannot shift. The two uses of the word are different mechanisms; only the first gates anything.
++**Image pins follow provenance.** Third-party scanner and validator images are pinned by digest — trivy in `DockerImages`' scan stage — because an upstream tag moving under a gate changes what the gate accepts without a commit here. Images we build ourselves are not digest-pinned: we control what the tag points at, so which tag a consumer takes — floating or pinned — is the consuming site's call.
+ 
+ ## Backup
+ 
+@@ -616,8 +611,8 @@ Each push-triggered pipeline below runs its checks ahead of the step that change
+ - **Git** — covers everything in this repo.
+ - **Off-cluster copies of production data**, each on Google Drive under `gdrive-pieter:Homelab Backups`:
+   - *OpenBao* — the leader srvvaultN's daily `.tgz` through `backup-server`, scope `openbao`, 14 newest uploads kept (Ansible `terraform/prd/openbao.tf`); age-encrypted to the operator's key, private half in Roboform. `BackupOverdue` fires critical after 52 h without a new backup. Triage: Ansible `docs/runbooks/backup-freshness.md`. See §"OpenBao backup / DR".
+-  - *`postgres-pas` databases* — the `postgres-backup` CronJob's nightly `pg_dump` of each application database through `backup-server`, scope `postgres-pas`, 90 newest uploads kept (HelmCharts `configs/prd/postgres-pas/_shared/infrastructure.tf`); the same age key. `BackupOverdue` fires critical for a database after 52 h without a new dump of it; a database dropped on purpose alerts until pruning removes its last dump or its `.metadata.json` files are deleted by hand. Triage: Ansible `docs/runbooks/backup-freshness.md`.
+-  - *YouTrack* — the `youtrack-backup` CronJob in `youtrack-prd`, nightly: YouTrack writes its own database backup (issues, attachments, the built-in Hub), which the job starts and downloads over the REST API as the `backup` service user (token in OpenBao `eso/prd/youtrack/prd/backup`) and posts through `backup-server`, scope `youtrack`, 30 newest uploads kept (HelmCharts `configs/prd/youtrack/_shared/infrastructure.tf`); the same age key. Not the RBD volume: the embedded database cannot be copied while open, and the volume is `ReadWriteOnce`. Its uploads declare no validity, so `BackupOverdue` does not watch it; `YouTrackBackupStale` fires critical after 52 h without a successful run of the CronJob. Restore and drill: Ansible `docs/runbooks/youtrack-restore.md`.
++  - *`postgres-pas` databases* — the `postgres-backup` CronJob's nightly `pg_dump` of each application database through `backup-server`, scope `postgres-pas`, 90 newest uploads kept (`PostgresPasDeploy` `terraform/main.tf`); the same age key. `BackupOverdue` fires critical for a database after 52 h without a new dump of it; a database dropped on purpose alerts until pruning removes its last dump or its `.metadata.json` files are deleted by hand. Triage: Ansible `docs/runbooks/backup-freshness.md`.
++  - *YouTrack* — the `youtrack-backup` CronJob in `youtrack-prd`, nightly: YouTrack writes its own database backup (issues, attachments, the built-in Hub), which the job starts and downloads over the REST API as the `backup` service user (token in OpenBao `eso/prd/youtrack/prd/backup`) and posts through `backup-server`, scope `youtrack`, 30 newest uploads kept (`YoutrackDeploy` `terraform/main.tf`); the same age key. Not the RBD volume: the embedded database cannot be copied while open, and the volume is `ReadWriteOnce`. Its uploads declare no validity, so `BackupOverdue` does not watch it; `YouTrackBackupStale` fires critical after 52 h without a successful run of the CronJob. Restore and drill: Ansible `docs/runbooks/youtrack-restore.md`.
+   - *Production-stage RGW buckets* — the `s3-mirror` CronJob in `storage-prd`, nightly: an incremental `rclone sync` of every bucket owned by a `-prd` RGW user, read as `backup-reader` (§"Ceph RGW credentials"), into an rclone crypt remote at `Homelab Backups/s3-mirror`. Decrypted, `current/<bucket>/` is live state and `archive/<bucket>/<run stamp>/` holds what that run replaced or deleted; the 30 newest archive folders per bucket are kept, so history counts changes, not days. A bucket gone from RGW keeps its mirror. Key: the crypt password and salt, in OpenBao `eso/prd/storage/prd/s3-mirror` and in Roboform. `S3MirrorStale` fires critical after 52 h without a successful run. Restore and drill: Ansible `docs/runbooks/s3-mirror.md`.
+ - **Knowingly not covered**: RBD volumes, CephFS subvolumes, and buckets of any stage but prd — including every bucket on the dev cluster's Ceph (slice 022 rulings T2, T3).

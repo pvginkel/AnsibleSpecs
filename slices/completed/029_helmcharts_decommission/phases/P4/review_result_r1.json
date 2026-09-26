@@ -1,0 +1,8 @@
+{"outcome": "issues",
+ "summary": "The registry chart, values file, schema and equivalence check meet P4's outcome: 50 entries match HelmCharts origin/main exactly, chart/'s render is unchanged, and the equivalence check re-ran green against prd. One blocking gap: the render test never proves that the schema refuses an empty upstream repo or chart. HelmCharts' tests did, and a mutation dropping both constraints stays green (V11).",
+ "details": "code_review_r1.md",
+ "findings": [
+   {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional",
+    "anchor": "coverage-gap",
+    "summary": "No render-test case refuses an empty upstream repo or chart; a mutation dropping both schema constraints keeps the gate green, losing HelmCharts' test_prd_tree.py:128-136 coverage (V11)"}
+ ]}

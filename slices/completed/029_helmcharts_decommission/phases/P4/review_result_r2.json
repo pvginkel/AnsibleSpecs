@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round 1's F1 is resolved. REFUSED_ENTRIES gains an empty upstream chart case and an empty upstream repo case, and loosening either schema constraint alone now fails the render test on its own case (mutations run). The fix adds nothing new.",
+ "details": "code_review_r2.md",
+ "findings": []}

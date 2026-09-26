@@ -1,0 +1,17 @@
+{"outcome": "issues",
+ "summary": "recommend-resources meets the D3 shape, and its policy and resolved-chart keying hold. Blocking: apply aborts halfway when the operator edits a patch back to the file's current values (F1). The hunk-edit overrule that relies on --recount has no test (F2), and neither does the per-stage write path for non-prd stages (F3).",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "failing-test",
+   "summary": "A patch edited back to the current values applies as a no-op; git commit then fails mid-loop, leaving earlier repos committed, later ones staged, and a re-run refused"},
+  {"id": "F2", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "coverage-gap",
+   "summary": "V08 hunk edits are tested only for a same-line-count edit; removing --recount, which line-deleting overrules need, leaves the suite green"},
+  {"id": "F3", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "coverage-gap",
+   "summary": "config/<stage>/values.yaml for non-prd stages (kubecoder-dev, keycloak-dev) is untested; hard-coding config/prd survives the suite"},
+  {"id": "F4", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "Local-app resolved-chart name is asserted only where chart name equals app name; keying on the app name survives"},
+  {"id": "F5", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "apply's invalid-YAML refusal and its reset rollback have no test"},
+  {"id": "F6", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "Out of scope (verbatim policy): requests are raised without regard to limits; the proof already puts prometheus-server's request equal to its limit"}
+ ]}

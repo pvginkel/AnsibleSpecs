@@ -1,0 +1,2 @@
+tooling: cexec modern-app poetry run ruff check .    [  OK  ]
+tooling: cexec modern-app poetry run mypy .    [  OK  ]

@@ -1,7 +1,8 @@
 # Close-out — slice 029 helmcharts_decommission
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-26 11:18 → 15:59 · 9 phases · 1 bail-out (1 operator question) · 1 test round · doc
+phase done · $90.41 (planner 15 %, research 3 %, rework 4 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold

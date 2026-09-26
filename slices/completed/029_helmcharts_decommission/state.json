@@ -1,0 +1,1327 @@
+{
+  "slice": "029_helmcharts_decommission",
+  "created_at": "2026-09-26T11:18:49.235339+02:00",
+  "plugin_version": "0.9.48",
+  "orchestrator": {
+    "session": "08d41fab-e319-445a-b4cd-34aaa6bebf08",
+    "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/08d41fab-e319-445a-b4cd-34aaa6bebf08.jsonl"
+  },
+  "run_phase": "done",
+  "bases": {
+    "/work/Ansible": "main",
+    "/work/AnsibleSpecs": "main",
+    "/work/Architecture": "main",
+    "/work/JenkinsPipelineUtils": "main",
+    "/work/ArgoCDDeploy": "main"
+  },
+  "known_phases": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9"
+  ],
+  "phases": {
+    "1": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P1",
+      "target": "../AnsibleSpecs",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 0,
+      "gate_green_commit": null,
+      "gate_green_log": null,
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "c8e84d316a80f6cada6189c307d2446e5486a618",
+      "landed": {
+        "root": "/work/AnsibleSpecs",
+        "base": "a1c0bd0efc684fd3646b7858de71178e1483ac88",
+        "head": "546c0db2073dddf4290bd8401470cdaeb34b6ec5"
+      }
+    },
+    "2": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P2",
+      "target": "../Architecture",
+      "executor_rounds": 2,
+      "gate_fix_rounds": 0,
+      "review_rounds": 2,
+      "gate_runs": 2,
+      "gate_green_commit": "d7c48781d84a70fe79b50aa618c5dfc10a1f761c",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P2/gate_r2.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "d7c48781d84a70fe79b50aa618c5dfc10a1f761c",
+      "landed": {
+        "root": "/work/Architecture",
+        "base": "0f616f25f71aeda038fac05111932274bedead9b",
+        "head": "d7c48781d84a70fe79b50aa618c5dfc10a1f761c"
+      }
+    },
+    "3": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P3",
+      "target": "../JenkinsPipelineUtils",
+      "executor_rounds": 2,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "6f87d0902fc327ed0113b871e90a06193cb05222",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P3/gate_r1.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "6f87d0902fc327ed0113b871e90a06193cb05222",
+      "landed": {
+        "root": "/work/JenkinsPipelineUtils",
+        "base": "a43f45e0fc5c6495112f8cdadc5bf5821ae67e07",
+        "head": "6f87d0902fc327ed0113b871e90a06193cb05222"
+      }
+    },
+    "4": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P4",
+      "target": "../ArgoCDDeploy",
+      "executor_rounds": 2,
+      "gate_fix_rounds": 0,
+      "review_rounds": 2,
+      "gate_runs": 2,
+      "gate_green_commit": "50fd69a07190f4dafa57817c1196371b5389dbb0",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P4/gate_r2.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "50fd69a07190f4dafa57817c1196371b5389dbb0",
+      "landed": {
+        "root": "/work/ArgoCDDeploy",
+        "base": "307d94f3aef83c5ec5668c7dd8b71e6556e559b6",
+        "head": "50fd69a07190f4dafa57817c1196371b5389dbb0"
+      }
+    },
+    "5": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P5",
+      "target": "../ArgoCDDeploy",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "4afb8fb829714f43eb531979ceeaa9db1607a3cd",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P5/gate_r1.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "4afb8fb829714f43eb531979ceeaa9db1607a3cd",
+      "landed": {
+        "root": "/work/ArgoCDDeploy",
+        "base": "50fd69a07190f4dafa57817c1196371b5389dbb0",
+        "head": "4afb8fb829714f43eb531979ceeaa9db1607a3cd"
+      }
+    },
+    "6": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P6",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 2,
+      "gate_green_commit": null,
+      "gate_green_log": null,
+      "gate_nothing_ran_commit": "94a03e0bc72ced132102285151415b27e25c1d40",
+      "reviewed_head": "94a03e0bc72ced132102285151415b27e25c1d40",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "3433846acfb2c09a17d8f437e2b58e152e476f3e",
+        "head": "94a03e0bc72ced132102285151415b27e25c1d40"
+      }
+    },
+    "7": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P7",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "b56fc9a7372ea54bddcd7aad832809e0b2d03196",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P7/gate_r1.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "b56fc9a7372ea54bddcd7aad832809e0b2d03196",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "94a03e0bc72ced132102285151415b27e25c1d40",
+        "head": "b56fc9a7372ea54bddcd7aad832809e0b2d03196"
+      }
+    },
+    "8": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P8",
+      "target": "root",
+      "executor_rounds": 2,
+      "gate_fix_rounds": 0,
+      "review_rounds": 2,
+      "gate_runs": 2,
+      "gate_green_commit": "f7877e49f38539b8155604a3cfdf605e74d77830",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P8/gate_r2.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "f7877e49f38539b8155604a3cfdf605e74d77830",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "b56fc9a7372ea54bddcd7aad832809e0b2d03196",
+        "head": "f7877e49f38539b8155604a3cfdf605e74d77830"
+      }
+    },
+    "9": {
+      "status": "merged",
+      "stage": null,
+      "branch": "phase/029-P9",
+      "target": "root",
+      "executor_rounds": 1,
+      "gate_fix_rounds": 0,
+      "review_rounds": 1,
+      "gate_runs": 1,
+      "gate_green_commit": "5cfdb0c3393bb4845bad873984384751e0e273b3",
+      "gate_green_log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/phases/P9/gate_r1.log",
+      "gate_nothing_ran_commit": null,
+      "reviewed_head": "5cfdb0c3393bb4845bad873984384751e0e273b3",
+      "landed": {
+        "root": "/work/Ansible",
+        "base": "f7877e49f38539b8155604a3cfdf605e74d77830",
+        "head": "5cfdb0c3393bb4845bad873984384751e0e273b3"
+      }
+    }
+  },
+  "generation": 0,
+  "test_rounds": 1,
+  "sweep_runs": 2,
+  "gate_sweep": {
+    "run": 2,
+    "commits": {
+      "/work/Ansible": "ca536a612d47b6736ca8f739c10797bbc0644f0b",
+      "/work/Architecture": "d7c48781d84a70fe79b50aa618c5dfc10a1f761c",
+      "/work/ArgoCDDeploy": "4afb8fb829714f43eb531979ceeaa9db1607a3cd",
+      "/work/JenkinsPipelineUtils": "6f87d0902fc327ed0113b871e90a06193cb05222"
+    },
+    "outcome": "green",
+    "green": true,
+    "ran_at": "2026-09-26T15:11:37.933433+02:00",
+    "results": [
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "lint",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_root_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_root_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "root",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_root_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "lint",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_ansible_lint.log",
+        "duration_s": 15
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_ansible_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "ansible",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_ansible_test.log",
+        "duration_s": 15
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "lint",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_terraform_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_terraform_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "terraform",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_terraform_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "lint",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_architecture_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_architecture_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Ansible",
+        "component": "architecture",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Ansible_architecture_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "root",
+        "verb": "lint",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_root_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "root",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_root_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "root",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_root_test.log",
+        "duration_s": 3
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "tooling",
+        "verb": "lint",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_tooling_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "tooling",
+        "verb": "build",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_tooling_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "tooling",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_tooling_test.log",
+        "duration_s": 38
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "viewer",
+        "verb": "lint",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_viewer_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "viewer",
+        "verb": "build",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_viewer_build.log",
+        "duration_s": 6
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "viewer",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_viewer_test.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "service",
+        "verb": "lint",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_service_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "service",
+        "verb": "build",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_service_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/Architecture",
+        "component": "service",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/Architecture_service_test.log",
+        "duration_s": 2
+      },
+      {
+        "repo": "/work/ArgoCDDeploy",
+        "component": "root",
+        "verb": "lint",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/ArgoCDDeploy_root_lint.log",
+        "duration_s": 2
+      },
+      {
+        "repo": "/work/ArgoCDDeploy",
+        "component": "root",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/ArgoCDDeploy_root_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/ArgoCDDeploy",
+        "component": "root",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/ArgoCDDeploy_root_test.log",
+        "duration_s": 18
+      },
+      {
+        "repo": "/work/JenkinsPipelineUtils",
+        "component": "root",
+        "verb": "lint",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/JenkinsPipelineUtils_root_lint.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/JenkinsPipelineUtils",
+        "component": "root",
+        "verb": "build",
+        "outcome": "nothing_ran",
+        "green": false,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/JenkinsPipelineUtils_root_build.log",
+        "duration_s": 0
+      },
+      {
+        "repo": "/work/JenkinsPipelineUtils",
+        "component": "root",
+        "verb": "test",
+        "outcome": "green",
+        "green": true,
+        "log": "/work/AnsibleSpecs/slices/029_helmcharts_decommission/sweeps/r2/JenkinsPipelineUtils_root_test.log",
+        "duration_s": 2
+      }
+    ]
+  },
+  "consult_seq": 1,
+  "in_flight": null,
+  "bailouts": [
+    {
+      "reason": "operator_question",
+      "phase": "3",
+      "question": true,
+      "ts": "2026-09-26T12:07:37.625342+02:00",
+      "run_phase": "phases",
+      "details": "The pre-removal code search found a live caller: KitchenDisplay's Jenkinsfile (main) clones HelmCharts and deploys with helmCharts.ssh (x2) and helmCharts.rsync, both using $WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key. So far only cicd.helmDeploy() and helmCharts.scp are removed, since neither has a caller (JenkinsPipelineUtils phase/029-P3 6f87d09, gate green); rsync and ssh are kept. Operator: (a) keep rsync/ssh as they are, amending V21 so the library still names HelmCharts' assets and KitchenDisplay keeps cloning the archived repo for its key; (b) move the key to a Jenkins SSH cre\u2026",
+      "reported": true
+    }
+  ],
+  "appended_phases": [],
+  "history": [
+    {
+      "ts": "2026-09-26T11:33:15.533251+02:00",
+      "phase": "1",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "AnsibleSpecs argo-cd records the Argo CD native registry as D63, the registry switch as D64 and O2's close as D65, with dated amendment/supersession notes on D6, D20-D24, D27, D38, D39, D43, D44 (namespace module stays in the archive), D50, D61 and D62; design.md and phases.md are brought in line, and the estate register names deploy repos and Argo CD as the deploy path. Committed on phase/029-P1 as c8e84d3; P6 was edited in place to put the runbook path in D64 and to cover the records' owed-switch mentions.",
+      "session": "c4b5198b-5461-4c1b-ba1c-6df16efe0f77",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/c4b5198b-5461-4c1b-ba1c-6df16efe0f77.jsonl",
+      "duration_s": 865
+    },
+    {
+      "ts": "2026-09-26T11:41:00.609806+02:00",
+      "phase": "1",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "P1's records meet the phase outcome: D63/D64/D65 are recorded, every decision the plan names is amended or superseded in place, D44's facts and the estate register's new claims check out against the repos and live state. Two advisory Minor findings, no blocking ones.",
+      "session": "ed2a2aaf-0684-4cb7-ba55-c16019e0ce4f",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/ed2a2aaf-0684-4cb7-ba55-c16019e0ce4f.jsonl",
+      "duration_s": 465,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "comment-prose",
+          "anchor": "none",
+          "summary": "decisions.md:279's k8s-upgrade pin list still requires bumping and redeploying HelmCharts' deploy tooling, which deploys nothing and will be archived"
+        },
+        {
+          "id": "F2",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "other",
+          "anchor": "none",
+          "summary": "plan.md:406-411 (added by the executor) gives P6, Target: root, edits in AnsibleSpecs that the phase's per-repo branch and review would not cover"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T11:51:24.646039+02:00",
+      "phase": "2",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Architecture a4402f6 on phase/029-P2 (not pushed): the helm-charts producer's 37 referenced elements move, UUIDs and fields unchanged, into docs/architecture/catalog.yaml; opensearch, phpmyadmin and rabbitmq are dropped; the registry entry, the Infrastructure view exclude and the stale producer text are removed. The collector over AaC/Architecture #2048's inputs reproduces the published dataset at base; with the change all 91 relations resolve, no id is duplicated and the warnings are unchanged. kc project test and lint are green.",
+      "session": "3f821a59-f053-4490-be20-ba069b64e2eb",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/3f821a59-f053-4490-be20-ba069b64e2eb.jsonl",
+      "duration_s": 623
+    },
+    {
+      "ts": "2026-09-26T11:52:16.538746+02:00",
+      "phase": "2",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "service: cexec modern-app npm test    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 51
+    },
+    {
+      "ts": "2026-09-26T11:56:57.051488+02:00",
+      "phase": "2",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "issues",
+      "summary": "The catalog move is right: the 37 elements are identical to the published originals except for producer, all 91 relations resolve, and the right three are dropped. But moving the products under producer 'architecture' without the helm-charts exclude adds 35 upstream app products and 80 Specialization edges to the published Infrastructure view, and the Done record says the view is unchanged.",
+      "session": "f305414a-18ee-4836-8f10-fdc5ccea1505",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/f305414a-18ee-4836-8f10-fdc5ccea1505.jsonl",
+      "duration_s": 280,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Major",
+          "impact": "blocking",
+          "category": "functional",
+          "anchor": "repro-trace",
+          "summary": "Infrastructure view gains the 35 catalog products (+80 Specialization edges); the Done record claims its contents are unchanged"
+        },
+        {
+          "id": "F2",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "comment-prose",
+          "anchor": "none",
+          "summary": "Producer manual's Ceph example (catalog-declared service) contradicts the 'TechnologyService you own' rule it illustrates"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T12:01:58.009199+02:00",
+      "phase": "2",
+      "role": "code-writer",
+      "round": 2,
+      "outcome": "done",
+      "summary": "F1 witnessed: with the viewer's real resolveViewScope over the published dataset, the branch put the 35 catalog products into the Infrastructure view (185 to 220 elements, 211 to 291 edges). Fixed in Architecture d7c4878: views/infrastructure.yaml excludes the 35 by id, so the scope is identical to base again. A new viewer test over the repo's catalog, rack hardware and view failed at a4402f6 and passes now. The gate is green and the done-record is updated.",
+      "session": "70b642ce-0d98-4479-a332-6ac5108dd45e",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/70b642ce-0d98-4479-a332-6ac5108dd45e.jsonl",
+      "duration_s": 300
+    },
+    {
+      "ts": "2026-09-26T12:02:47.942472+02:00",
+      "phase": "2",
+      "role": "gate",
+      "round": 2,
+      "outcome": "green",
+      "summary": "service: cexec modern-app npm test    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 49
+    },
+    {
+      "ts": "2026-09-26T12:04:40.031052+02:00",
+      "phase": "2",
+      "role": "code-reviewer",
+      "round": 2,
+      "outcome": "signoff",
+      "summary": "Round-1 F1 is resolved: the Infrastructure view now excludes exactly the catalog's 35 systemSoftware ids, so its resolved scope matches base again. The collector's exclude-resolution check passes, and a mutation run shows the new viewer test fails without the exclude list. The fix commit introduces no new problems.",
+      "session": "d782ec1a-5065-4337-af26-df45995fd954",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/d782ec1a-5065-4337-af26-df45995fd954.jsonl",
+      "duration_s": 112
+    },
+    {
+      "ts": "2026-09-26T12:07:37.613233+02:00",
+      "phase": "3",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "question",
+      "summary": "The pre-removal code search found a live caller: KitchenDisplay's Jenkinsfile (main) clones HelmCharts and deploys with helmCharts.ssh (x2) and helmCharts.rsync, both using $WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key. So far only cicd.helmDeploy() and helmCharts.scp are removed, since neither has a caller (JenkinsPipelineUtils phase/029-P3 6f87d09, gate green); rsync and ssh are kept. Operator: (a) keep rsync/ssh as they are, amending V21 so the library still names HelmCharts' assets and KitchenDisplay keeps cloning the archived repo for its key; (b) move the key to a Jenkins SSH credential, rework the helpers to use it and drop KitchenDisplay's HelmCharts clone (widens the slice to KitchenDisplay plus an operator step to create the credential); or (c) remove them anyway, which breaks KitchenDisplay's deploy stage?",
+      "session": "712cef91-2b4f-4fe2-badd-a98d17da7aae",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/712cef91-2b4f-4fe2-badd-a98d17da7aae.jsonl",
+      "duration_s": 176
+    },
+    {
+      "ts": "2026-09-26T12:11:47.441769+02:00",
+      "phase": "3",
+      "role": "code-writer",
+      "round": 2,
+      "outcome": "done",
+      "summary": "Following the P3 ruling, JenkinsPipelineUtils phase/029-P3 (6f87d09) removes cicd.helmDeploy() and helmCharts.scp. helmCharts.rsync and helmCharts.ssh stay for KitchenDisplay (follow-up ANS-144). A second GitHub code search right before hand-back found no code caller of helmDeploy, scp or IaC/HelmCharts, and kc project test is green. The done-record is appended to the plan, and close-out S12 notes a stale helmDeploy mention in ElectronicsInventory's docs.",
+      "session": "7e0a34d7-b16a-4692-b9b9-96fce513fedb",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/7e0a34d7-b16a-4692-b9b9-96fce513fedb.jsonl",
+      "duration_s": 60
+    },
+    {
+      "ts": "2026-09-26T12:11:49.516245+02:00",
+      "phase": "3",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: cexec java mvn -B -q -f tests/pom.xml test    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 2
+    },
+    {
+      "ts": "2026-09-26T12:14:49.924681+02:00",
+      "phase": "3",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "P3 removes cicd.helmDeploy() and helmCharts.scp and keeps rsync/ssh per the P3 mid-run ruling. The library no longer names IaC/HelmCharts, and an independent caller sweep, including non-default branches, found no caller that breaks. No findings.",
+      "session": "80e63c0c-b05d-4e6f-86ab-eb45e498c51b",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/80e63c0c-b05d-4e6f-86ab-eb45e498c51b.jsonl",
+      "duration_s": 180
+    },
+    {
+      "ts": "2026-09-26T12:26:49.055171+02:00",
+      "phase": "4",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "ArgoCDDeploy phase/029-P4 19e40d3 adds releases/, the Argo CD native registry: values.yaml with the 50 live app-stages, a values.schema.json that makes Helm refuse every malformed entry, and one plain Application per app-stage. The render test covers each Application and 20 schema refusals; chart/'s render is unchanged. The read-only tools/registry-equivalence.py passed against prd: 50 rendered, 50 live, 0 differing. Gate green; done-record and later-phase pointers committed in AnsibleSpecs 05a72d6.",
+      "session": "2a4b6c6d-a998-42a3-805a-de9b0b27212e",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/2a4b6c6d-a998-42a3-805a-de9b0b27212e.jsonl",
+      "duration_s": 718
+    },
+    {
+      "ts": "2026-09-26T12:26:58.103414+02:00",
+      "phase": "4",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: cexec aac-tools arch-validate docs/architecture/argocd-deploy.yaml    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 9
+    },
+    {
+      "ts": "2026-09-26T12:32:05.037709+02:00",
+      "phase": "4",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "issues",
+      "summary": "The registry chart, values file, schema and equivalence check meet P4's outcome: 50 entries match HelmCharts origin/main exactly, chart/'s render is unchanged, and the equivalence check re-ran green against prd. One blocking gap: the render test never proves that the schema refuses an empty upstream repo or chart. HelmCharts' tests did, and a mutation dropping both constraints stays green (V11).",
+      "session": "bd2ec03b-293c-4d14-96e7-c181f4c22782",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/bd2ec03b-293c-4d14-96e7-c181f4c22782.jsonl",
+      "duration_s": 306,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Major",
+          "impact": "blocking",
+          "category": "functional",
+          "anchor": "coverage-gap",
+          "summary": "No render-test case refuses an empty upstream repo or chart; a mutation dropping both schema constraints keeps the gate green, losing HelmCharts' test_prd_tree.py:128-136 coverage (V11)"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T12:33:10.272849+02:00",
+      "phase": "4",
+      "role": "code-writer",
+      "round": 2,
+      "outcome": "done",
+      "summary": "F1 witnessed (schema with upstream repo/chart loosened to {type: string} left the render test green), then fixed: REFUSED_ENTRIES gains an empty upstream chart and an empty upstream repo case, and each loosening now fails the gate on its own case. ArgoCDDeploy phase/029-P4 50fd69a; kc project test and lint green; done-record updated (22 refusals).",
+      "session": "ccb469d8-3542-415c-bd98-cc81824c2cb8",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/ccb469d8-3542-415c-bd98-cc81824c2cb8.jsonl",
+      "duration_s": 65
+    },
+    {
+      "ts": "2026-09-26T12:33:18.417785+02:00",
+      "phase": "4",
+      "role": "gate",
+      "round": 2,
+      "outcome": "green",
+      "summary": "root: cexec aac-tools arch-validate docs/architecture/argocd-deploy.yaml    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 8
+    },
+    {
+      "ts": "2026-09-26T12:34:18.458669+02:00",
+      "phase": "4",
+      "role": "code-reviewer",
+      "round": 2,
+      "outcome": "signoff",
+      "summary": "Round 1's F1 is resolved. REFUSED_ENTRIES gains an empty upstream chart case and an empty upstream repo case, and loosening either schema constraint alone now fails the render test on its own case (mutations run). The fix adds nothing new.",
+      "session": "90db801f-9d99-4c40-b6e3-a3e1012cfc81",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/90db801f-9d99-4c40-b6e3-a3e1012cfc81.jsonl",
+      "duration_s": 60
+    },
+    {
+      "ts": "2026-09-26T12:49:20.375477+02:00",
+      "phase": "5",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "ArgoCDDeploy phase/029-P5 4afb8fb: releases.owner (committed applicationsets) chooses the two ApplicationSets, now each carrying Prune=false, or the new `releases` Application (no finalizer, never prunes or self-heals, automated only once releases.autoSync is true). The render test renders S1/S3/S4, proves only the switched objects differ, and reports the committed position (S1). kc project lint and test are green; the done-record and P6's step details are committed in AnsibleSpecs 78015dd.",
+      "session": "b7f0c4c9-e154-4026-b113-e2a2853b1c5d",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/b7f0c4c9-e154-4026-b113-e2a2853b1c5d.jsonl",
+      "duration_s": 901
+    },
+    {
+      "ts": "2026-09-26T12:49:40.086509+02:00",
+      "phase": "5",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: cexec aac-tools arch-validate docs/architecture/argocd-deploy.yaml    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 19
+    },
+    {
+      "ts": "2026-09-26T12:55:55.588504+02:00",
+      "phase": "5",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "P5 meets its outcome: releases.owner (committed applicationsets) renders either the guarded ApplicationSets or the finalizer-less, prune-less `releases` Application, never both, and bad settings are refused. The committed render differs from the base by the two Prune=false annotations alone, and the gate passes unchanged at S3 and S4 (verified by targeted runs).",
+      "session": "9e07c3e9-033a-4947-b661-49e9be2e94d2",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/9e07c3e9-033a-4947-b661-49e9be2e94d2.jsonl",
+      "duration_s": 375
+    },
+    {
+      "ts": "2026-09-26T13:09:17.219191+02:00",
+      "phase": "6",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Ansible 94a03e0 adds docs/runbooks/registry-switch.md, which walks the eleven switch steps in order, each with the operator's command and what to see, fixes forward, and ends with the dead-after list. It also adds the rehearsal fixtures in support/registry-switch-rehearsal/, which Argo reads from main. AnsibleSpecs: the runbook's path is in D64 and phases.md's endgame, the done-record is appended, and P9 is told the exact phrase step 11's grep finds.",
+      "session": "94ca52ee-3e28-42a1-a76a-70d4be8931a6",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/94ca52ee-3e28-42a1-a76a-70d4be8931a6.jsonl",
+      "duration_s": 801
+    },
+    {
+      "ts": "2026-09-26T13:09:17.231985+02:00",
+      "phase": "6",
+      "role": "gate",
+      "round": 1,
+      "outcome": "nothing_ran",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-26T13:21:30.661941+02:00",
+      "phase": "6",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "The registry-switch runbook walks the plan's eleven steps in order, each with the operator's command and what to see, fixes forward, and ends with the dead-after list. Its claims about the guard render, the flip and autoSync edits, the equivalence tool, the webhook proof and step 11's greps all held on targeted runs. One advisory: some status reads run straight after an asynchronous sync or refresh.",
+      "session": "3a938129-8d65-4129-9529-7ba1583b995b",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/3a938129-8d65-4129-9529-7ba1583b995b.jsonl",
+      "duration_s": 733,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "functional",
+          "anchor": "none",
+          "summary": "Steps 1d, 4, 9 and 10 read status straight after an asynchronous argosync/refresh with no wait instruction; step 1d's no-diff proof can pass on a pre-sync read"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T13:21:30.679097+02:00",
+      "phase": "6",
+      "role": "gate",
+      "round": 2,
+      "outcome": "nothing_ran",
+      "summary": "root: no test statements \u2014 skipped",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-26T13:33:48.560421+02:00",
+      "phase": "7",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "argo-migrate's flip and autosync now edit ArgoCDDeploy releases/values.yaml, keeping its comments. Each edit is re-parsed, checked with helm lint, and committed locally. Every on-Argo, upstream-pin and syncOptions read goes to the registry. stuck_fields.py moved to support/argo-migrate/, and the tool's preflight and the argocd runbook run it from there. The proof was on a scratch clone, and root's gate now runs the new registry-edit unit tests (Ansible b56fc9a; plan and close-out S16/S17 in AnsibleSpecs 7641780).",
+      "session": "894f78a9-c2d2-406e-b1da-cf0eb807ee62",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/894f78a9-c2d2-406e-b1da-cf0eb807ee62.jsonl",
+      "duration_s": 737
+    },
+    {
+      "ts": "2026-09-26T13:33:48.737010+02:00",
+      "phase": "7",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: python3 -m unittest discover -s support/argo-migrate    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-26T13:39:57.635874+02:00",
+      "phase": "7",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "flip and autosync edit ArgoCDDeploy's releases/values.yaml through checked, comment-keeping text edits, and every on-Argo, upstream-pin and syncOptions read goes to the new registry. A round trip over all 49 real app-stages and a read-equivalence check against HelmCharts origin/main passed. One advisory coverage note.",
+      "session": "6627c94e-0647-4fce-a48c-48a7242d0adf",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/6627c94e-0647-4fce-a48c-48a7242d0adf.jsonl",
+      "duration_s": 368,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "other",
+          "anchor": "none",
+          "summary": "Root's new unit suite covers only the text edits; the V16 registry reads and the parse-equality guard checked() are untested (a no-op checked() survives all 10 tests)"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T13:54:09.568972+02:00",
+      "phase": "8",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "support/recommend-resources/recommend_resources.py (Ansible phase/029-P8 8b8fdff): `report DIR` clones the registry's deploy repos, reads 7 days from prometheus.home under the old policy keyed on the resolved chart, and writes one editable patch per deploy repo; `apply DIR` applies what is left, commits on main and pushes nothing. The nine maps moved in (step-ca's as step-certificates.json), and root's test gate runs the new suite. Proven live: 31 patches; after one was deleted and one hunk overruled, 30 scratch commits. Nothing pushed.",
+      "session": "778c3857-f42b-4231-99c3-133c7b5b9d18",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/778c3857-f42b-4231-99c3-133c7b5b9d18.jsonl",
+      "duration_s": 851
+    },
+    {
+      "ts": "2026-09-26T13:54:09.994228+02:00",
+      "phase": "8",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: python3 -m unittest discover -s support/recommend-resources    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-26T14:00:30.119148+02:00",
+      "phase": "8",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "issues",
+      "summary": "recommend-resources meets the D3 shape, and its policy and resolved-chart keying hold. Blocking: apply aborts halfway when the operator edits a patch back to the file's current values (F1). The hunk-edit overrule that relies on --recount has no test (F2), and neither does the per-stage write path for non-prd stages (F3).",
+      "session": "9a73c90c-b516-4f95-b9ac-50516007b15a",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/9a73c90c-b516-4f95-b9ac-50516007b15a.jsonl",
+      "duration_s": 380,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Major",
+          "impact": "blocking",
+          "category": "functional",
+          "anchor": "failing-test",
+          "summary": "A patch edited back to the current values applies as a no-op; git commit then fails mid-loop, leaving earlier repos committed, later ones staged, and a re-run refused"
+        },
+        {
+          "id": "F2",
+          "severity": "Major",
+          "impact": "blocking",
+          "category": "functional",
+          "anchor": "coverage-gap",
+          "summary": "V08 hunk edits are tested only for a same-line-count edit; removing --recount, which line-deleting overrules need, leaves the suite green"
+        },
+        {
+          "id": "F3",
+          "severity": "Major",
+          "impact": "blocking",
+          "category": "functional",
+          "anchor": "coverage-gap",
+          "summary": "config/<stage>/values.yaml for non-prd stages (kubecoder-dev, keycloak-dev) is untested; hard-coding config/prd survives the suite"
+        },
+        {
+          "id": "F4",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "functional",
+          "anchor": "none",
+          "summary": "Local-app resolved-chart name is asserted only where chart name equals app name; keying on the app name survives"
+        },
+        {
+          "id": "F5",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "functional",
+          "anchor": "none",
+          "summary": "apply's invalid-YAML refusal and its reset rollback have no test"
+        },
+        {
+          "id": "F6",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "other",
+          "anchor": "none",
+          "summary": "Out of scope (verbatim policy): requests are raised without regard to limits; the proof already puts prometheus-server's request equal to its limit"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T14:03:05.289671+02:00",
+      "phase": "8",
+      "role": "code-writer",
+      "round": 2,
+      "outcome": "done",
+      "summary": "F1 witnessed (apply stopped at BetaDeploy's `git commit`: nothing to commit) and fixed in Ansible phase/029-P8 f7877e4: a patch that applies but stages nothing is logged as changing nothing, left uncommitted and kept out of the push list. F2 and F3 have round-trip tests: dropping one `+` line from a hunk, and a dev stage writing its own config/dev/values.yaml. Each fails under the reviewer's mutation (no --recount; values_file pinned to prd). Gate green.",
+      "session": "a8bb5857-6ad9-4e40-bb32-7e267b06ca2b",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/a8bb5857-6ad9-4e40-bb32-7e267b06ca2b.jsonl",
+      "duration_s": 155
+    },
+    {
+      "ts": "2026-09-26T14:03:06.116055+02:00",
+      "phase": "8",
+      "role": "gate",
+      "round": 2,
+      "outcome": "green",
+      "summary": "root: python3 -m unittest discover -s support/recommend-resources    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-26T14:04:54.284794+02:00",
+      "phase": "8",
+      "role": "code-reviewer",
+      "round": 2,
+      "outcome": "signoff",
+      "summary": "Round-1 blockers F1-F3 are resolved: a no-op overrule leaves its repo uncommitted and off the push list, and new round-trip tests cover line-dropping hunk edits (--recount) and the per-stage values file. Every reviewer mutation of those paths now fails the suite. The fix commits add no new findings.",
+      "session": "970e682f-81d6-4f5d-9113-a84dfb945702",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/970e682f-81d6-4f5d-9113-a84dfb945702.jsonl",
+      "duration_s": 108
+    },
+    {
+      "ts": "2026-09-26T14:52:15.932607+02:00",
+      "phase": "9",
+      "role": "code-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Ansible 5cfdb0c: CLAUDE.md, live-infra-access, design-philosophy, the root description, the three role READMEs, the architecture summaries and every runbook that named HelmCharts now describe the deploy repos and ArgoCDDeploy's registry. argocd.md carries five 'owed until the registry switch has run' notes that step 11's grep finds, and the stuck-field finding is stated in the runbook. The handover flip gets no note because no handover remains, so the step is gone (close-out N3). Gate green; done-record and close-out N3, N4, S20\u2013S24 are in AnsibleSpecs 3dd2b36.",
+      "session": "94c78153-48c6-413f-be4b-be96cbf64a29",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/94c78153-48c6-413f-be4b-be96cbf64a29.jsonl",
+      "duration_s": 2841
+    },
+    {
+      "ts": "2026-09-26T14:52:16.658782+02:00",
+      "phase": "9",
+      "role": "gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "root: python3 -m unittest discover -s support/recommend-resources    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 0
+    },
+    {
+      "ts": "2026-09-26T15:02:59.419838+02:00",
+      "phase": "9",
+      "role": "code-reviewer",
+      "round": 1,
+      "outcome": "signoff",
+      "summary": "P9's docs describe the deploy repos and ArgoCDDeploy's registry. The claims checked against the deploy repos, the registry chart and the handover findings all hold. Step 11's grep finds exactly the owed notes, and deleting them leaves text that reads correctly. The architecture and ansible gates are green on 5cfdb0c. Four advisory prose findings, none blocking.",
+      "session": "d8c7af29-1b81-4189-8e21-c470b99454ee",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/d8c7af29-1b81-4189-8e21-c470b99454ee.jsonl",
+      "duration_s": 642,
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "comment-prose",
+          "anchor": "none",
+          "summary": "step-ca-bootstrap.md day-zero step 7 no longer says to write the ceremony's new material into StepCaDeploy's stage-manifests.yaml"
+        },
+        {
+          "id": "F2",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "comment-prose",
+          "anchor": "none",
+          "summary": "design-philosophy.md says every unit test is under support/ and run by root's gate; tools/ai_workflow/test_track_build.py is neither"
+        },
+        {
+          "id": "F3",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "comment-prose",
+          "anchor": "none",
+          "summary": "kubecoder-cutover.md's P3 record cites argocd.md producer steps 2, 4 and 5, which P9 renumbered and removed"
+        },
+        {
+          "id": "F4",
+          "severity": "Minor",
+          "impact": "advisory",
+          "category": "comment-prose",
+          "anchor": "none",
+          "summary": "k8s-rebuild.md says HelmCharts' configs/dev tree already went into its archive; the archive is ANS-122, after the slice"
+        }
+      ]
+    },
+    {
+      "ts": "2026-09-26T15:04:51.571572+02:00",
+      "phase": null,
+      "role": "sweep",
+      "round": 1,
+      "outcome": "green",
+      "summary": "30 command(s), 13 of them ran nothing",
+      "session": null,
+      "transcript": null,
+      "duration_s": 112
+    },
+    {
+      "ts": "2026-09-26T15:09:47.654032+02:00",
+      "phase": null,
+      "role": "consult",
+      "round": 1,
+      "outcome": "complete",
+      "summary": "Every acceptance criterion has delivered work behind it: V01/V03 are re-checks of pre-planning work, V02/V06/V17 are P1 (D44 amended, D63-D65), V04/V05 P2, V21 P3 (amended by the mid-run ruling), V10-V12 P4, V13 P5, V14 P6, V16/V19 P7, V07-V09 P8, V18-V20 P9 (N3 records why the handover flip has no note: the step is gone), V22/V23 follow from P2, P3 and no HelmCharts commit, and V15/V24 are owed after the operator's switch (A1, A2). No done-record admits an owed leftover, and no phase depends on something nothing produced. P9's review residue in files the slice touched is fixed (Ansible ca536a6; AnsibleSpecs 150fb1a for S6's links), and S6, S26, S27 and S28 are struck. S25, the step-ca day-zero step 7 omission, is a real procedure gap and not mechanical. The reviewer rated it Minor advisory, so it stays a close-out entry, noted with the facts a fix needs.",
+      "session": "b8732579-55c1-41eb-8984-056ecf521eff",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/b8732579-55c1-41eb-8984-056ecf521eff.jsonl",
+      "duration_s": 296
+    },
+    {
+      "ts": "2026-09-26T15:11:37.933472+02:00",
+      "phase": null,
+      "role": "sweep",
+      "round": 2,
+      "outcome": "green",
+      "summary": "30 command(s), 13 of them ran nothing",
+      "session": null,
+      "transcript": null,
+      "duration_s": 110
+    },
+    {
+      "ts": "2026-09-26T15:44:17.932432+02:00",
+      "phase": null,
+      "role": "test-agent",
+      "round": 1,
+      "outcome": "clean",
+      "summary": "Read the diffs and live state (registry equivalence 50/50/0 differing on prd, ArgoCDDeploy chart renders in S1/S3 diffed against the pre-slice base, schema refusals, mutation proofs, recommend-resources report+apply into scratch clones, the Architecture merge simulated then confirmed on the live dataset), and checked off verification.json: 22 verified, V15 and V24 owed to the operator's registry switch. Pushed Ansible ca536a6 (IaC/Build-Main #218 green, terraform plan 'No changes'; nothing to converge, so no iac-apply), ArgoCDDeploy 4afb8fb (AaC #9 green, argocd-prd still Synced at 307d94f, nothing live changed), JenkinsPipelineUtils 6f87d09, and Architecture d7c4878; that push turned AaC/Architecture #2068 red (P2's viewer test reads repo files the image build's build-viewer stage lacked), so the test-fixer's Dockerfile fix d73109d was pushed and #2069 is green, with the live dataset now free of the helm-charts producer (close-out N5). AnsibleSpecs is deliberately not pushed (A4). Owed to the operator: the registry switch \u2014 follow /work/Ansible/docs/runbooks/registry-switch.md steps 1-11, starting with the rehearsal `cd /work/Ansible && cexec iac kubectl --kubeconfig ~/.kube/config-prd-write --context prd apply -f support/registry-switch-rehearsal/applicationset.yaml` (step 3 re-checks with `cd /work/ArgoCDDeploy && cexec iac tools/registry-equivalence.py`), which settles V15 (A1) and, through step 11, V24 (A2).",
+      "session": "eef5a107-f164-41f5-93f8-12723e0a8d93",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/eef5a107-f164-41f5-93f8-12723e0a8d93.jsonl",
+      "duration_s": 1957
+    },
+    {
+      "ts": "2026-09-26T15:58:26.102354+02:00",
+      "phase": null,
+      "role": "doc-writer",
+      "round": 1,
+      "outcome": "done",
+      "summary": "Updated: Ansible (43b88c5 on phase/029-docs): registry-switch.md's argosync and step-4 refresh now wait for completion, step-ca-bootstrap step 7 says what to write into StepCaDeploy, argocd.md's kubeconfig claim, slice-testing-strategy/design-philosophy test claims, CLAUDE.md's tracker reference, and the prd inventory/playbook/role/variables.tf comments; AnsibleSpecs (91a4d96, 5990392): D63/D64/D65, design.md, phases.md, history.md arcs, README, the doctrine's pin list, and the close-out Summary, Focus lines and notes; Architecture (5b3e4f6) prose and producer manual; ArgoCDDeploy (83b6cf8) README and project description. Gates green: Ansible kc project lint, ArgoCDDeploy kc project lint, Architecture service tests. Unverified: none. The argosync wait is grounded in Argo CD v3.5.1's source, and step 7 in StepCaDeploy's Secret structure, but neither has been run live.",
+      "session": "e516f81e-540c-4568-ae73-b0f5df8ba75e",
+      "transcript": "/home/ubuntu/.claude/projects/-work-Ansible/e516f81e-540c-4568-ae73-b0f5df8ba75e.jsonl",
+      "duration_s": 845
+    },
+    {
+      "ts": "2026-09-26T15:58:59.326345+02:00",
+      "phase": null,
+      "role": "doc-gate",
+      "round": 1,
+      "outcome": "green",
+      "summary": "architecture: cexec iac ./scripts/arch-validate.py docs/architecture/ansible-architecture.yaml    [  OK  ]",
+      "session": null,
+      "transcript": null,
+      "duration_s": 33
+    }
+  ],
+  "updated_at": "2026-09-26T15:59:05.443767+02:00",
+  "doc_phase": {
+    "stage": "done",
+    "gate_runs": 1,
+    "nudges": 0,
+    "session": "e516f81e-540c-4568-ae73-b0f5df8ba75e"
+  },
+  "cost": {
+    "ts": "2026-09-26T15:59:12+02:00",
+    "cost_usd": 90.41,
+    "planner_cost_usd": 13.53,
+    "planner_share": 0.15,
+    "research_cost_usd": 3.01,
+    "research_share": 0.033,
+    "consult_cost_usd": 2.07,
+    "consult_share": 0.023,
+    "rework_cost_usd": 4.05,
+    "rework_share": 0.045,
+    "turns": {
+      "sessions": 41,
+      "turns": 1377,
+      "cost_per_turn_usd": 0.0658,
+      "retry_fumble_turns": 54,
+      "batchable_strict_turns": 72,
+      "avoidable_turns": 126,
+      "avoidable_share": 0.092,
+      "avoidable_cost_usd": 8.29,
+      "by_role": {
+        "code-writer": {
+          "n": 13,
+          "turns": 482,
+          "cost_usd": 38.51,
+          "tools_per_turn": 1.12,
+          "reads_per_turn": 1.53,
+          "orient_turns": 11,
+          "ctx_first": 42968,
+          "ctx_mean": 140309,
+          "ctx_max": 286356,
+          "retry_fumble_turns": 15,
+          "batchable_strict_turns": 22,
+          "breaks": 2
+        },
+        "code-reviewer": {
+          "n": 12,
+          "turns": 297,
+          "cost_usd": 19.27,
+          "tools_per_turn": 1.24,
+          "reads_per_turn": 2.03,
+          "orient_turns": 8,
+          "ctx_first": 27062,
+          "ctx_mean": 88308,
+          "ctx_max": 206062,
+          "retry_fumble_turns": 4,
+          "batchable_strict_turns": 18,
+          "breaks": 0
+        },
+        "plan-writer": {
+          "n": 2,
+          "turns": 76,
+          "cost_usd": 6.52,
+          "tools_per_turn": 1.12,
+          "reads_per_turn": 2.3,
+          "orient_turns": 25,
+          "ctx_first": 26630,
+          "ctx_mean": 119369,
+          "ctx_max": 250145,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 4,
+          "breaks": 0
+        },
+        "doc-writer": {
+          "n": 1,
+          "turns": 105,
+          "cost_usd": 6.41,
+          "tools_per_turn": 1.04,
+          "reads_per_turn": 1.27,
+          "orient_turns": 26,
+          "ctx_first": 44225,
+          "ctx_mean": 165732,
+          "ctx_max": 248535,
+          "retry_fumble_turns": 4,
+          "batchable_strict_turns": 9,
+          "breaks": 0
+        },
+        "test-agent": {
+          "n": 1,
+          "turns": 107,
+          "cost_usd": 5.73,
+          "tools_per_turn": 1.16,
+          "reads_per_turn": 1.59,
+          "orient_turns": 24,
+          "ctx_first": 28728,
+          "ctx_mean": 191660,
+          "ctx_max": 288002,
+          "retry_fumble_turns": 15,
+          "batchable_strict_turns": 8,
+          "breaks": 0
+        },
+        "plan-reviewer": {
+          "n": 1,
+          "turns": 39,
+          "cost_usd": 3.9,
+          "tools_per_turn": 1.33,
+          "reads_per_turn": 2.85,
+          "orient_turns": 15,
+          "ctx_first": 26054,
+          "ctx_mean": 153947,
+          "ctx_max": 237092,
+          "retry_fumble_turns": 3,
+          "batchable_strict_turns": 2,
+          "breaks": 0
+        },
+        "subagent:general-purpose": {
+          "n": 6,
+          "turns": 159,
+          "cost_usd": 3.81,
+          "tools_per_turn": 1.38,
+          "reads_per_turn": 1.62,
+          "orient_turns": 19,
+          "ctx_first": 28632,
+          "ctx_mean": 64448,
+          "ctx_max": 107554,
+          "retry_fumble_turns": 12,
+          "batchable_strict_turns": 2,
+          "breaks": 2
+        },
+        "orchestrator:plan": {
+          "n": 1,
+          "turns": 49,
+          "cost_usd": 3.11,
+          "tools_per_turn": 0.88,
+          "reads_per_turn": 1.55,
+          "orient_turns": 22,
+          "ctx_first": 39955,
+          "ctx_mean": 121734,
+          "ctx_max": 173785,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 2,
+          "breaks": 0
+        },
+        "consult": {
+          "n": 1,
+          "turns": 36,
+          "cost_usd": 2.07,
+          "tools_per_turn": 1.0,
+          "reads_per_turn": 1.31,
+          "orient_turns": 16,
+          "ctx_first": 29312,
+          "ctx_mean": 111264,
+          "ctx_max": 144403,
+          "retry_fumble_turns": 1,
+          "batchable_strict_turns": 4,
+          "breaks": 0
+        },
+        "orchestrator:run": {
+          "n": 1,
+          "turns": 16,
+          "cost_usd": 0.64,
+          "tools_per_turn": 1.0,
+          "reads_per_turn": 0.81,
+          "orient_turns": 11,
+          "ctx_first": 38298,
+          "ctx_mean": 48798,
+          "ctx_max": 55372,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 1,
+          "breaks": 1
+        },
+        "subagent:dev:refinement-writer": {
+          "n": 1,
+          "turns": 3,
+          "cost_usd": 0.51,
+          "tools_per_turn": 1.0,
+          "reads_per_turn": 0.67,
+          "orient_turns": 1,
+          "ctx_first": 18416,
+          "ctx_mean": 27912,
+          "ctx_max": 35434,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        },
+        "subagent:dev:test-fixer": {
+          "n": 1,
+          "turns": 8,
+          "cost_usd": 0.14,
+          "tools_per_turn": 1.0,
+          "reads_per_turn": 1.5,
+          "orient_turns": 3,
+          "ctx_first": 15511,
+          "ctx_mean": 26920,
+          "ctx_max": 32625,
+          "retry_fumble_turns": 0,
+          "batchable_strict_turns": 0,
+          "breaks": 0
+        }
+      }
+    },
+    "warnings": []
+  }
+}

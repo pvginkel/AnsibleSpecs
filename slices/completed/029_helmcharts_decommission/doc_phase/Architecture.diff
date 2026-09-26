@@ -1,0 +1,795 @@
+/work/Architecture — P2: git diff 0f616f25f71a..d7c48781d84a
+
+.claude/architecture/producer-manual.md                     |  24 +--
+ .claude/skills/seed-architecture/SKILL.md                   |   2 +-
+ docs/architecture/catalog.yaml                              | 337 ++++++++++++++++++++++++++++++++
+ pipeline-producers.schema.yaml                              |   2 +-
+ pipeline-producers.yaml                                     |   3 -
+ schema/v0.1/examples/invalid-additional-property.yaml       |   2 +-
+ schema/v0.1/examples/invalid-malformed-id.yaml              |   2 +-
+ schema/v0.1/examples/invalid-unknown-relationship-type.yaml |   2 +-
+ schema/v0.1/examples/valid-full.yaml                        |   4 +-
+ schema/v0.1/examples/valid-minimal.yaml                     |   2 +-
+ tooling/fleet.py                                            |   2 +-
+ tools/ha-fleet/README.md                                    |   4 +-
+ tools/ha-fleet/annotations.yaml                             |   2 +-
+ tools/ha-fleet/gen-ha-fleet.py                              |  12 +-
+ viewer/src/components/ArchitectureMap.tsx                   |   2 +-
+ viewer/src/views/infrastructure-view.test.ts                |  61 ++++++
+ viewer/src/views/scope.ts                                   |   4 +-
+ views.schema.yaml                                           |   2 +-
+ views/infrastructure.yaml                                   |  44 ++++-
+ views/intercom.yaml                                         |   2 +-
+ 20 files changed, 475 insertions(+), 40 deletions(-)
+
+diff --git a/.claude/architecture/producer-manual.md b/.claude/architecture/producer-manual.md
+index 69a9620..d8e8d63 100644
+--- a/.claude/architecture/producer-manual.md
++++ b/.claude/architecture/producer-manual.md
+@@ -30,8 +30,8 @@ the consolidated dataset at:
+   https://architecture.webathome.org/data/v0.1/validation-report.json
+ 
+ Other producers reference your elements by UUID. Ansible publishes
+-nodes/VMs/clusters → HelmCharts references those when declaring
+-cluster services → app repos reference HelmCharts's service UUIDs.
++nodes/VMs/clusters → deploy repos reference those when declaring the
++instances they run → other producers reference those instances' UUIDs.
+ The merged dataset eventually drives the rendered architecture
+ diagram (viewer migration is later).
+ 
+@@ -736,7 +736,7 @@ adds this repo as a registered producer:
+ producers:
+   # … other entries …
+   - id: <kebab-id>                  # matches the bare kebab in this repo's architecture YAML producer: key
+-    jenkinsJob: <Jenkins job path>  # e.g. ansible/master, HelmCharts/master
++    jenkinsJob: <Jenkins job path>  # e.g. AaC/Ansible, AaC/KubeCoderDeploy
+     repo: <owner>/<name>            # GitHub repo the central architecture update clones
+ ```
+ 
+@@ -780,10 +780,10 @@ The conventions below describe the **expected** ownership patterns per producer
+ | Producer | Typically owns |
+ |---|---|
+ | Ansible | Devices, Nodes (hypervisors/VMs/clusters), VM-level daemons, OS-layer services |
+-| HelmCharts | Cluster-deployed SystemSoftware, ApplicationServices/Interfaces, SoftwareProduct entries for cluster-published software |
++| Deploy repos (`<App>Deploy`) | The running instances of what they deploy (cluster SystemSoftware, ApplicationComponents), the ApplicationServices/Interfaces those publish, and the `Specialization` edges to their products |
+ | Per-app repos (EI, IoT, …) | ApplicationComponents (pods), ApplicationServices/Interfaces, app-specific SoftwareProduct entries |
+ | DockerImages | Each in-house app's **full logical architecture** — the «SoftwareProduct» identity (`app:<name>,<uuid>`, via `sourceRepository`), the ApplicationServices/Interfaces it exposes, any capability it realizes, and its consumption edges. Source for many apps lives here, so it plays the per-app-repo role for each. Image identity / build provenance is a *separate* concern, still v0.2 (no v0.1 element kind for container images). |
+-| Architecture (self-producer) | Homeless elements: physical network/rack hardware, IoT/RF devices, Home Assistant. Files live under `docs/architecture/` in the Architecture repo itself. |
++| Architecture (self-producer) | Homeless elements: physical network/rack hardware, IoT/RF devices, Home Assistant, and the shared catalog (`catalog.yaml`) — the upstream «SoftwareProduct» entries deploy repos' instances Specialize, plus the cluster Ceph storage services. Files live under `docs/architecture/` in the Architecture repo itself. |
+ 
+ ### Product vs instance, across producers
+ 
+@@ -796,11 +796,12 @@ merge-conflict point:
+ - The repo that **deploys** it owns the running **instance** and the
+   `Specialization` instance→product edge — referencing the product by
+   its UUID.
+-- A **repackaged upstream** image emits no product of its own; the
+-  **deployer** owns the upstream product entry (`ss:dnsmasq,<uuid>`,
+-  `ss:keycloak,<uuid>`). When more than one producer deploys the same
+-  upstream, one owns the single catalog entry and the others reference
+-  its UUID.
++- A **repackaged upstream** image emits no product of its own; its
++  upstream product entry is in the Architecture repo's shared catalog
++  (`ss:keycloak,<uuid>`), or, where the catalog does not carry it, the
++  **deployer** owns it (`ss:dnsmasq,<uuid>`). When more than one
++  producer deploys the same upstream, one owns the single catalog entry
++  and the others reference its UUID.
+ - A product is declared **once**; everyone else references the UUID,
+   resolved from the published dataset.
+ - **Model what a thing is, not how it's packaged.** A custom-built image
+@@ -826,7 +827,8 @@ Two shapes:
+   consumes their backend and `Realization`-s a new cluster-local
+   `TechnologyService` **you** own, which your workloads then consume.
+   Ceph storage: `ceph-csi-rbd` realises `svc:cluster-ceph-rbd,<uuid>`
+-  (yours), served by Ansible's `svc:ceph-vip-prd,<uuid>`.
++  (declared in the Architecture repo's shared catalog), served by
++  Ansible's `svc:ceph-vip-prd,<uuid>`.
+ - **Operator-mediated** — a deploy-time operator reads a backend on behalf
+   of many workloads and hands them a *derived* local resource. The real
+   runtime edge is `backend —Serving→ the operator`, drawn once from the
+diff --git a/.claude/skills/seed-architecture/SKILL.md b/.claude/skills/seed-architecture/SKILL.md
+index 56cb800..469466d 100644
+--- a/.claude/skills/seed-architecture/SKILL.md
++++ b/.claude/skills/seed-architecture/SKILL.md
+@@ -82,7 +82,7 @@ remove it:
+ ```
+ 
+ `<producer-id>` is the bare kebab this repo will use as its `producer:`
+-envelope key (e.g. `ansible`, `helm-charts`, `docker-images`) — infer from
++envelope key (e.g. `ansible`, `docker-images`, `kubecoder-deploy`) — infer from
+ `CLAUDE.md`/repo name, or ask the operator.
+ 
+ ### Bucket vocabulary — tag every candidate with exactly one
+diff --git a/docs/architecture/catalog.yaml b/docs/architecture/catalog.yaml
+new file mode 100644
+index 0000000..42353a8
+--- /dev/null
++++ b/docs/architecture/catalog.yaml
+@@ -0,0 +1,337 @@
++# Architecture repo as self-producer — the shared catalog.
++#
++# Third-party «SoftwareProduct» entries, declared once here and referenced by
++# UUID: the deploy repos' running instances Specialize them. Plus the two
++# in-cluster Ceph storage services the ceph-csi deploy repos' instances
++# realize. Every edge to these elements is authored in the consuming
++# producer's own artifact, not here.
++
++schemaVersion: "0.1"
++producer: architecture
++
++systemSoftware:
++  - id: ss:alertmanager,2bf90d10-968d-58dd-988b-64e60ed66577
++    label: Alertmanager
++    summary: Handles and routes alerts sent by Prometheus.
++    homepage: https://prometheus.io/docs/alerting/latest/alertmanager/
++    logo: prometheus
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:ceph-csi,99b0ab70-52e7-5561-bff1-2ab0726805f5
++    label: Ceph CSI
++    summary: Container Storage Interface driver for Ceph RBD and CephFS.
++    homepage: https://github.com/ceph/ceph-csi
++    logo: ceph
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:cloudnative-pg,45788854-0235-5907-8215-b69933d7a51a
++    label: CloudNativePG
++    summary: Kubernetes operator that manages the lifecycle of PostgreSQL clusters.
++    homepage: https://cloudnative-pg.io/
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:code-server,ac5d5bb3-b443-5d06-953b-d9537f74a5ca
++    label: code-server
++    summary: VS Code running in the browser, served from a container.
++    homepage: https://github.com/coder/code-server
++    logo: code-server
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:csi-driver-smb,dcffca3c-ce4e-5331-98a7-2b2d565d543a
++    label: CSI Driver SMB
++    summary: Container Storage Interface driver for SMB/CIFS shares.
++    homepage: https://github.com/kubernetes-csi/csi-driver-smb
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:csi-sidecars,65d1b6b0-c46f-5e04-a104-a4d2330be20f
++    label: Kubernetes CSI sidecars
++    summary: Upstream CSI helper sidecars (provisioner, attacher, resizer, snapshotter, node-driver-registrar, livenessprobe).
++    homepage: https://kubernetes-csi.github.io/docs/sidecar-containers.html
++    logo: kubernetes
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:elasticsearch,2785b71a-323e-5e7c-9930-77e2cc6d91b9
++    label: Elasticsearch
++    summary: Distributed search and analytics engine.
++    homepage: https://www.elastic.co/elasticsearch
++    logo: elasticsearch
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:external-secrets,8e55b3e7-55cc-5474-944c-5fe1da61e4a8
++    label: External Secrets Operator
++    summary: Syncs secrets from external stores into Kubernetes Secrets.
++    homepage: https://external-secrets.io/
++    logo: external-secrets
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:filebeat,de617dc4-7fb3-51f2-b6b5-853e49845ccb
++    label: Filebeat
++    summary: Lightweight log shipper for the Elastic stack.
++    homepage: https://www.elastic.co/beats/filebeat
++    logo: elastic
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:gitblit,5b20c5e2-f7a9-5260-b290-fcaafadbb786
++    label: Gitblit
++    summary: Git repository server with web UI and access control.
++    homepage: https://gitblit.github.io/gitblit/
++    logo: gitblit
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:gluetun,ffbdb696-0a4c-5a53-81e8-82bd9a3926c9
++    label: Gluetun
++    summary: VPN client container providing an encrypted network tunnel.
++    homepage: https://github.com/qdm12/gluetun
++    logo: gluetun
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:grafana,cf2a31ec-e091-578e-8790-243fe2033d19
++    label: Grafana
++    summary: Dashboards and visualization over metrics and logs.
++    homepage: https://grafana.com/
++    logo: grafana
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:guacamole,78a04457-f776-5de7-a921-17a8456608c0
++    label: Apache Guacamole
++    summary: Clientless remote desktop gateway (web RDP/VNC/SSH).
++    homepage: https://guacamole.apache.org/
++    logo: guacamole
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:guacd,e5c50537-5f0e-5aba-a453-ebf2e4016f76
++    label: guacd
++    summary: Guacamole proxy daemon that speaks the remote-desktop protocols.
++    homepage: https://guacamole.apache.org/
++    logo: guacamole
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:ha-mcp,8e184e95-d2a3-5d13-bbae-0278d227d13d
++    label: Home Assistant MCP
++    summary: MCP server exposing Home Assistant to AI/LLM clients.
++    homepage: https://github.com/homeassistant-ai/ha-mcp
++    logo: home-assistant
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:headlamp,fd569d7a-7ddb-53a3-b4ee-9d1221924c7e
++    label: Headlamp
++    summary: Web UI for Kubernetes cluster management and visualization.
++    homepage: https://headlamp.dev/
++    logo: headlamp
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:jenkins,75976213-4d44-5e55-8d75-8fe7d0f31a5b
++    label: Jenkins
++    summary: Automation server for CI/CD pipelines.
++    homepage: https://www.jenkins.io/
++    logo: jenkins
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8
++    label: Keycloak
++    summary: Open-source identity and access management / OIDC provider.
++    homepage: https://www.keycloak.org/
++    logo: keycloak
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:kibana,7a74e885-7e5a-57f4-8f60-c453ff77a2f4
++    label: Kibana
++    summary: Visualization and exploration UI for Elasticsearch.
++    homepage: https://www.elastic.co/kibana
++    logo: kibana
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:kube-state-metrics,704373e8-64f6-5951-91ba-aacc11ff2d84
++    label: kube-state-metrics
++    summary: Exposes Kubernetes object state as Prometheus metrics.
++    homepage: https://github.com/kubernetes/kube-state-metrics
++    logo: kubernetes
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:mosquitto,9a6db5ed-3ea0-5448-b44c-fdd820046ac8
++    label: Eclipse Mosquitto
++    summary: MQTT message broker.
++    homepage: https://mosquitto.org/
++    logo: mosquitto
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:nginx,52f8a89b-3c97-5d93-96c5-ddb11ea99419
++    label: NGINX
++    summary: HTTP server and reverse proxy.
++    homepage: https://nginx.org/
++    logo: nginx
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:pgadmin,7a8a31f5-13ed-5d39-8d80-f69e8a597109
++    label: pgAdmin
++    summary: Web administration UI for PostgreSQL.
++    homepage: https://www.pgadmin.org/
++    logo: pgadmin
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:pgbouncer,2341e63d-ff3d-5b88-8ae8-858972687b49
++    label: PgBouncer
++    summary: Lightweight connection pooler for PostgreSQL.
++    homepage: https://www.pgbouncer.org/
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:plex,46e0f5cc-e890-546b-8bbe-75349844b873
++    label: Plex Media Server
++    summary: Media library server with transcoding and client delivery.
++    homepage: https://www.plex.tv/
++    logo: plex
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:postgresql,95d28707-a44c-5ce5-a797-759616b6935b
++    label: PostgreSQL
++    summary: Object-relational SQL database.
++    homepage: https://www.postgresql.org/
++    logo: postgresql
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:prometheus,4387fd7b-496d-5d1b-9a59-7bf6802118bc
++    label: Prometheus
++    summary: Time-series metrics collection and alerting.
++    homepage: https://prometheus.io/
++    logo: prometheus
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:prometheus-config-reloader,27ec8609-42a7-58ca-88bf-db9d07042beb
++    label: Prometheus config-reloader
++    summary: Sidecar that reloads Prometheus/Alertmanager config on change.
++    homepage: https://github.com/prometheus-operator/prometheus-operator
++    logo: prometheus
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:pushgateway,2d30f39a-ed07-5079-8513-9eccf0e4b40b
++    label: Prometheus Pushgateway
++    summary: Accepts metrics pushed by short-lived/batch jobs for Prometheus.
++    homepage: https://github.com/prometheus/pushgateway
++    logo: prometheus
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:registry,a7a12ba2-d9ad-5e4a-aef1-2345679411fe
++    label: Docker Registry
++    summary: OCI image storage and distribution (distribution/registry).
++    homepage: https://distribution.github.io/distribution/
++    logo: docker
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:samba,37d9b478-532d-550e-b0d0-a0c04e637306
++    label: Samba
++    summary: SMB/CIFS file and print server.
++    homepage: https://www.samba.org/
++    logo: samba
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:step-ca,840e0bef-c625-50f0-9d98-04db30f4a465
++    label: step-ca
++    summary: Online certificate authority with ACME support.
++    homepage: https://smallstep.com/docs/step-ca/
++    logo: smallstep
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:trello-mcp,0cfa3247-387f-5ec4-b10a-c75f09fc6487
++    label: Trello MCP Server
++    summary: MCP server exposing Trello boards, lists, and cards as tools, served over Streamable HTTP.
++    homepage: https://github.com/delorenj/mcp-server-trello
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:youtrack,2ae1a926-acfc-5cb6-9a69-a5c81605fc87
++    label: YouTrack
++    summary: Issue tracker and agile project management server.
++    homepage: https://www.jetbrains.com/youtrack/
++    logo: youtrack
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++  - id: ss:zigbee2mqtt,b9996e83-6dc4-5fc2-92ad-e361c4fcfb24
++    label: Zigbee2MQTT
++    summary: Bridges Zigbee devices to MQTT for home automation.
++    homepage: https://www.zigbee2mqtt.io/
++    logo: zigbee2mqtt
++    stereotype: SoftwareProduct
++    lifecycle: active
++    introduced: 2024-07-13
++
++technologyServices:
++  - id: svc:cluster-ceph-cephfs,6d5615a9-59fd-59c7-822a-d31c86cd476c
++    label: Cluster Ceph Cephfs
++    summary: In-cluster Ceph storage service (cluster-ceph-cephfs) provided by the CSI driver and consumed by workload PVCs.
++    introduced: 2024-08-25
++    lifecycle: active
++    cluster: prd
++
++  - id: svc:cluster-ceph-rbd,02509593-ffcf-5740-9fa9-c14f90c1a160
++    label: Cluster Ceph Rbd
++    summary: In-cluster Ceph storage service (cluster-ceph-rbd) provided by the CSI driver and consumed by workload PVCs.
++    introduced: 2024-08-25
++    lifecycle: active
++    cluster: prd
+diff --git a/pipeline-producers.schema.yaml b/pipeline-producers.schema.yaml
+index d3ffd5b..b3d8ecb 100644
+--- a/pipeline-producers.schema.yaml
++++ b/pipeline-producers.schema.yaml
+@@ -72,6 +72,6 @@ properties:
+             owner). For single-family in-house producers, this gives the whole
+             product family one logo from a single line. Validated against the
+             bundled logo library at collect time. Omit for multi-product
+-            producers (docker-images, helm-charts) — they carry per-product
++            producers (docker-images, architecture) — they carry per-product
+             logos instead.
+           minLength: 1
+diff --git a/pipeline-producers.yaml b/pipeline-producers.yaml
+index 7bffc00..7e4ef86 100644
+--- a/pipeline-producers.yaml
++++ b/pipeline-producers.yaml
+@@ -23,9 +23,6 @@ producers:
+     # No `repo`: the artifact is generated from the live fleet, not from
+     # sources in a producer repo.
+     jenkinsJob: AaC/Home Assistant Fleet
+-  - id: helm-charts
+-    repo: pvginkel/HelmCharts
+-    jenkinsJob: AaC/HelmCharts
+   - id: docker-images
+     repo: pvginkel/DockerImages
+     jenkinsJob: AaC/DockerImages
+diff --git a/schema/v0.1/examples/invalid-additional-property.yaml b/schema/v0.1/examples/invalid-additional-property.yaml
+index d0c2e79..fede08d 100644
+--- a/schema/v0.1/examples/invalid-additional-property.yaml
++++ b/schema/v0.1/examples/invalid-additional-property.yaml
+@@ -5,7 +5,7 @@
+ # rejected at the element's path.
+ 
+ schemaVersion: "0.1"
+-producer: helmcharts
++producer: example
+ 
+ nodes:
+   - id: node:prd-cluster
+diff --git a/schema/v0.1/examples/invalid-malformed-id.yaml b/schema/v0.1/examples/invalid-malformed-id.yaml
+index 95d4e89..c7b6df3 100644
+--- a/schema/v0.1/examples/invalid-malformed-id.yaml
++++ b/schema/v0.1/examples/invalid-malformed-id.yaml
+@@ -3,7 +3,7 @@
+ # Node id violates the kebab-case regex (uppercase + underscore not allowed).
+ 
+ schemaVersion: "0.1"
+-producer: helmcharts
++producer: example
+ 
+ nodes:
+   - id: node:Bad_ID
+diff --git a/schema/v0.1/examples/invalid-unknown-relationship-type.yaml b/schema/v0.1/examples/invalid-unknown-relationship-type.yaml
+index 6eae513..eb427ee 100644
+--- a/schema/v0.1/examples/invalid-unknown-relationship-type.yaml
++++ b/schema/v0.1/examples/invalid-unknown-relationship-type.yaml
+@@ -4,7 +4,7 @@
+ # not in that list is rejected.
+ 
+ schemaVersion: "0.1"
+-producer: helmcharts
++producer: example
+ 
+ nodes:
+   - id: node:prd-cluster
+diff --git a/schema/v0.1/examples/valid-full.yaml b/schema/v0.1/examples/valid-full.yaml
+index 9d269b6..9fb9e5e 100644
+--- a/schema/v0.1/examples/valid-full.yaml
++++ b/schema/v0.1/examples/valid-full.yaml
+@@ -1,11 +1,11 @@
+ # Full-coverage artifact: exercises every subset element kind plus one
+ # representative relation of several ArchiMate relationship types. Mirrors
+-# (a simplified slice of) what HelmCharts would emit for the prd cluster:
++# (a simplified slice of) the prd cluster:
+ # Keycloak realising IAM, EI as an in-house application stack, Postgres as
+ # a shared platform service, plus an external API endpoint.
+ 
+ schemaVersion: "0.1"
+-producer: helmcharts
++producer: example
+ 
+ devices:
+   - id: device:proxmox-pve1,22222222-2222-4222-8222-222222222221
+diff --git a/schema/v0.1/examples/valid-minimal.yaml b/schema/v0.1/examples/valid-minimal.yaml
+index 4562d04..42df379 100644
+--- a/schema/v0.1/examples/valid-minimal.yaml
++++ b/schema/v0.1/examples/valid-minimal.yaml
+@@ -2,7 +2,7 @@
+ # Demonstrates the smallest dataset the validator accepts.
+ 
+ schemaVersion: "0.1"
+-producer: helmcharts
++producer: example
+ 
+ nodes:
+   - id: node:prd-cluster,33333333-3333-4333-8333-333333333331
+diff --git a/tooling/fleet.py b/tooling/fleet.py
+index 51081b1..4075b75 100644
+--- a/tooling/fleet.py
++++ b/tooling/fleet.py
+@@ -431,7 +431,7 @@ def load_state(spec_repo: Path) -> dict[str, Review]:
+ 
+     The state file maps producer id to the producer's last review:
+ 
+-        helm-charts:
++        docker-images:
+           reviewed: <commit its architecture was last reviewed at>
+           gaps:
+             - <a gap its AaC build reported then>
+diff --git a/tools/ha-fleet/README.md b/tools/ha-fleet/README.md
+index 33d9462..8a84dfe 100644
+--- a/tools/ha-fleet/README.md
++++ b/tools/ha-fleet/README.md
+@@ -3,7 +3,7 @@
+ A **separate** architecture producer that snapshots the live Home Assistant
+ device fleet once a day and emits it as an Architecture-as-Code artifact, so the
+ Home Assistant view *is* the live network. Same generated-producer pattern as
+-HelmCharts / DockerImages: the artifact is a build output; the source of truth is
++DockerImages: the artifact is a build output; the source of truth is
+ `gen-ha-fleet.py` + the `annotations.yaml` layer.
+ 
+ It is its **own** producer (`producer: home-automation-fleet`) with its **own
+@@ -26,7 +26,7 @@ each related into `cap:home-automation`:
+ 
+ **Excluded (logged):** `manufacturer == "Pieter"` (in-house firmware, modeled by
+ the firmware producers + `cap:iot-device` — avoids double-modeling), the Z2M
+-Bridge pseudo-devices (Z2M software is modeled by helm-charts), HACS virtual
++Bridge pseudo-devices (Z2M software is modeled by zigbee2mqtt-deploy), HACS virtual
+ helpers, and everything outside the allowlist (AV/media/companion/HA-internal:
+ sonos, samsungtv, cast, mobile_app, sun, backup, sql, …). The inclusion rule is
+ an explicit allowlist; every dropped device is counted in the stderr gap report.
+diff --git a/tools/ha-fleet/annotations.yaml b/tools/ha-fleet/annotations.yaml
+index 3207d7b..fde3a4f 100644
+--- a/tools/ha-fleet/annotations.yaml
++++ b/tools/ha-fleet/annotations.yaml
+@@ -4,7 +4,7 @@
+ # are "zigbee:0x<ieee>", others "<domain>:<id>" or "mac:<mac>".
+ 
+ # Maps each Zigbee2MQTT *bridge* (by its bridge IEEE) to the Z2M *instance*
+-# element id (helm-charts producer) the leaves under it should Serve. This is
++# element id (zigbee2mqtt-deploy producer) the leaves under it should Serve. This is
+ # what puts each leaf within depth-1 of cap:home-automation in the view.
+ #
+ # NOTE TO OPERATOR — VERIFY THE FLOOR ASSIGNMENT. HA does not expose which
+diff --git a/tools/ha-fleet/gen-ha-fleet.py b/tools/ha-fleet/gen-ha-fleet.py
+index c4e662f..b26ee5d 100644
+--- a/tools/ha-fleet/gen-ha-fleet.py
++++ b/tools/ha-fleet/gen-ha-fleet.py
+@@ -1,11 +1,11 @@
+ #!/usr/bin/env python3
+ """Generate the `home-automation-fleet` architecture artifact from live Home Assistant.
+ 
+-This is a *generated* architecture producer (same pattern as HelmCharts /
+-DockerImages): the artifact is a build output, the source of truth is this
+-generator plus the per-element annotation layer (`annotations.yaml`). It is its
+-OWN producer (`producer: home-automation-fleet`), built by its OWN scheduled
+-Jenkins job, not the main collector pipeline — only this job touches HA.
++This is a *generated* architecture producer (same pattern as DockerImages):
++the artifact is a build output, the source of truth is this generator plus the
++per-element annotation layer (`annotations.yaml`). It is its OWN producer
++(`producer: home-automation-fleet`), built by its OWN scheduled Jenkins job,
++not the main collector pipeline — only this job touches HA.
+ 
+ It introspects HA's device/entity/area registries over the WebSocket API and
+ emits one `device:` element for every HA-integrated *home-automation* hardware
+@@ -16,7 +16,7 @@ INCLUSION RULE (explicit allowlist; everything else is dropped and logged):
+   - Zigbee leaves: a device whose registry `identifiers` carry an
+     `("mqtt", "zigbee2mqtt_0x<ieee>")` tuple AND that walks `via_device_id` to a
+     `Zigbee2MQTT / Bridge` pseudo-device. The bridge pseudo-devices themselves
+-    are excluded (the Z2M *software* is modeled by helm-charts).
++    are excluded (the Z2M *software* is modeled by zigbee2mqtt-deploy).
+   - Integration devices in ALLOWED_INTEGRATIONS (dsmr / ecowitt / smlight /
+     matter / esphome / overkiz) — the P1 energy meters, the Ecowitt weather
+     gateway, the SLZB coordinators, Matter and ESPHome/WiFi devices, and the
+diff --git a/viewer/src/components/ArchitectureMap.tsx b/viewer/src/components/ArchitectureMap.tsx
+index 916aaaf..be70ed9 100644
+--- a/viewer/src/components/ArchitectureMap.tsx
++++ b/viewer/src/components/ArchitectureMap.tsx
+@@ -181,7 +181,7 @@ function ArchitectureNodeCard({ data }: NodeProps<Node<ArchNodeData>>) {
+     }
+   }
+ 
+-  // A deployed-container instance (helm-charts producer) carries release /
++  // A deployed-container instance (a deploy-repo producer) carries release /
+   // workload / container in stats; its card leads with the container and a
+   // "release » workload" locator. Everything else (products, services) keeps
+   // the label + kind-label shape.
+diff --git a/viewer/src/views/infrastructure-view.test.ts b/viewer/src/views/infrastructure-view.test.ts
+new file mode 100644
+index 0000000..7742504
+--- /dev/null
++++ b/viewer/src/views/infrastructure-view.test.ts
+@@ -0,0 +1,61 @@
++import { readFileSync } from "node:fs";
++import { describe, expect, it } from "vitest";
++import { parse } from "yaml";
++import { buildModel } from "../data/model";
++import type { Manifest, ManifestElement, ViewDefinition } from "../data/manifest";
++import { ELEMENT_KINDS, KIND_TO_ARRAY } from "../generated/vocab";
++import { resolveViewScope } from "./scope";
++
++// The authored Infrastructure view resolved over the self-producer's own files.
++// The shared catalog and the rack hardware share the `architecture` producer, so
++// no producer gate can tell them apart.
++
++function readRepo<T>(path: string): T {
++  return parse(readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8")) as T;
++}
++
++type Arrays = Record<string, ManifestElement[]>;
++
++/** One artifact file's elements by manifest array, stamped with the file's
++ *  producer the way the collector merges them. */
++function readArtifact(path: string): Arrays {
++  const doc = readRepo<Record<string, unknown>>(path);
++  return Object.fromEntries(
++    ELEMENT_KINDS.map((kind) => {
++      const key = KIND_TO_ARRAY[kind];
++      const elements = (doc[key] ?? []) as ManifestElement[];
++      return [key, elements.map((el) => ({ ...el, producer: doc.producer as string }))];
++    }),
++  );
++}
++
++const ids = (arrays: Arrays): string[] =>
++  Object.values(arrays)
++    .flat()
++    .map((el) => el.id);
++
++describe("the Infrastructure view over the self-producer's artifact", () => {
++  const catalog = readArtifact("docs/architecture/catalog.yaml");
++  const hardware = readArtifact("docs/architecture/infrastructure.yaml");
++  const manifest = {
++    ...Object.fromEntries(
++      Object.keys(catalog).map((key) => [key, [...catalog[key], ...hardware[key]]]),
++    ),
++    relations: [],
++    derived: { capabilityRealizations: {} },
++  } as unknown as Manifest;
++  const scope = resolveViewScope(
++    readRepo<ViewDefinition>("views/infrastructure.yaml"),
++    buildModel(manifest),
++    manifest,
++  );
++
++  it("leaves out the shared catalog's products", () => {
++    expect(ids(catalog).filter((id) => scope.has(id))).toEqual([]);
++  });
++
++  it("shows the rack and network hardware", () => {
++    expect(ids(hardware).length).toBeGreaterThan(0);
++    expect(ids(hardware).filter((id) => !scope.has(id))).toEqual([]);
++  });
++});
+diff --git a/viewer/src/views/scope.ts b/viewer/src/views/scope.ts
+index b30f86f..f85d9b4 100644
+--- a/viewer/src/views/scope.ts
++++ b/viewer/src/views/scope.ts
+@@ -189,8 +189,8 @@ export function resolveViewScope(
+   const capMembers = capabilityMembers(manifest);
+   // Universe gates: excludeInstances (env-/release-tagged runtime instances, see
+   // model.ts), excludeKinds (whole kinds, e.g. the physical Device fleet) and
+-  // excludeProducers (everything from a producer, e.g. the home-automation /
+-  // helm-charts fleets) drop matching elements from the predicate base and the
++  // excludeProducers (everything from a producer, e.g. the home-automation
++  // fleet) drop matching elements from the predicate base and the
+   // neighbour expansion, and they aren't traversed, so neighbourDepth can't pull
+   // them back. An explicit `include` overrides them (see below). With no gate
+   // set, admits is a cheap pass-through.
+diff --git a/views.schema.yaml b/views.schema.yaml
+index 122652c..9a1332a 100644
+--- a/views.schema.yaml
++++ b/views.schema.yaml
+@@ -149,7 +149,7 @@ properties:
+       every element is dropped from the view — the same universe gate as
+       `excludeInstances`/`excludeKinds`, keyed on producer. Use to keep a whole
+       source out of an otherwise-broad view, e.g. the home-automation/IoT device
+-      fleets and the helm-charts release instances out of Infrastructure.
++      fleets out of Infrastructure.
+   neighbourDepth:
+     type: integer
+     minimum: 0
+diff --git a/views/infrastructure.yaml b/views/infrastructure.yaml
+index 1b7708a..add6abd 100644
+--- a/views/infrastructure.yaml
++++ b/views/infrastructure.yaml
+@@ -5,9 +5,47 @@ icon: Network
+ predicate:
+   kinds: [Node, Device, SystemSoftware]
+ # Keep the substrate (compute Nodes, network Devices, host system software), drop
+-# the noise: the home-automation/IoT device fleets and the helm-charts release
+-# instances (apps deployed into environments) belong in their own views. Note
++# the noise: the home-automation/IoT device fleets belong in their own views. Note
+ # this can't be excludeInstances — the prd server Nodes are themselves env-tagged
+ # instances, and dropping instances would delete the servers.
+-excludeProducers: [home-automation-fleet, iotsupport-app, helm-charts]
++excludeProducers: [home-automation-fleet, iotsupport-app]
++# The shared catalog's products (docs/architecture/catalog.yaml) are the
++# software the deploy repos run, not substrate. They share the architecture
++# producer with the rack hardware, so they are excluded by id.
++exclude:
++  - ss:alertmanager,2bf90d10-968d-58dd-988b-64e60ed66577 # Alertmanager
++  - ss:ceph-csi,99b0ab70-52e7-5561-bff1-2ab0726805f5 # Ceph CSI
++  - ss:cloudnative-pg,45788854-0235-5907-8215-b69933d7a51a # CloudNativePG
++  - ss:code-server,ac5d5bb3-b443-5d06-953b-d9537f74a5ca # code-server
++  - ss:csi-driver-smb,dcffca3c-ce4e-5331-98a7-2b2d565d543a # CSI Driver SMB
++  - ss:csi-sidecars,65d1b6b0-c46f-5e04-a104-a4d2330be20f # Kubernetes CSI sidecars
++  - ss:elasticsearch,2785b71a-323e-5e7c-9930-77e2cc6d91b9 # Elasticsearch
++  - ss:external-secrets,8e55b3e7-55cc-5474-944c-5fe1da61e4a8 # External Secrets Operator
++  - ss:filebeat,de617dc4-7fb3-51f2-b6b5-853e49845ccb # Filebeat
++  - ss:gitblit,5b20c5e2-f7a9-5260-b290-fcaafadbb786 # Gitblit
++  - ss:gluetun,ffbdb696-0a4c-5a53-81e8-82bd9a3926c9 # Gluetun
++  - ss:grafana,cf2a31ec-e091-578e-8790-243fe2033d19 # Grafana
++  - ss:guacamole,78a04457-f776-5de7-a921-17a8456608c0 # Apache Guacamole
++  - ss:guacd,e5c50537-5f0e-5aba-a453-ebf2e4016f76 # guacd
++  - ss:ha-mcp,8e184e95-d2a3-5d13-bbae-0278d227d13d # Home Assistant MCP
++  - ss:headlamp,fd569d7a-7ddb-53a3-b4ee-9d1221924c7e # Headlamp
++  - ss:jenkins,75976213-4d44-5e55-8d75-8fe7d0f31a5b # Jenkins
++  - ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8 # Keycloak
++  - ss:kibana,7a74e885-7e5a-57f4-8f60-c453ff77a2f4 # Kibana
++  - ss:kube-state-metrics,704373e8-64f6-5951-91ba-aacc11ff2d84 # kube-state-metrics
++  - ss:mosquitto,9a6db5ed-3ea0-5448-b44c-fdd820046ac8 # Eclipse Mosquitto
++  - ss:nginx,52f8a89b-3c97-5d93-96c5-ddb11ea99419 # NGINX
++  - ss:pgadmin,7a8a31f5-13ed-5d39-8d80-f69e8a597109 # pgAdmin
++  - ss:pgbouncer,2341e63d-ff3d-5b88-8ae8-858972687b49 # PgBouncer
++  - ss:plex,46e0f5cc-e890-546b-8bbe-75349844b873 # Plex Media Server
++  - ss:postgresql,95d28707-a44c-5ce5-a797-759616b6935b # PostgreSQL
++  - ss:prometheus,4387fd7b-496d-5d1b-9a59-7bf6802118bc # Prometheus
++  - ss:prometheus-config-reloader,27ec8609-42a7-58ca-88bf-db9d07042beb # Prometheus config-reloader
++  - ss:pushgateway,2d30f39a-ed07-5079-8513-9eccf0e4b40b # Prometheus Pushgateway
++  - ss:registry,a7a12ba2-d9ad-5e4a-aef1-2345679411fe # Docker Registry
++  - ss:samba,37d9b478-532d-550e-b0d0-a0c04e637306 # Samba
++  - ss:step-ca,840e0bef-c625-50f0-9d98-04db30f4a465 # step-ca
++  - ss:trello-mcp,0cfa3247-387f-5ec4-b10a-c75f09fc6487 # Trello MCP Server
++  - ss:youtrack,2ae1a926-acfc-5cb6-9a69-a5c81605fc87 # YouTrack
++  - ss:zigbee2mqtt,b9996e83-6dc4-5fc2-92ad-e361c4fcfb24 # Zigbee2MQTT
+ neighbourDepth: 0
+diff --git a/views/intercom.yaml b/views/intercom.yaml
+index 88391e9..47719ae 100644
+--- a/views/intercom.yaml
++++ b/views/intercom.yaml
+@@ -29,7 +29,7 @@ include:
+   # in each id (device:intercom-vN-<hash>) doesn't need pinning.
+   - "/^device:intercom-v/"
+ includeUnexpanded:
+-  # The helm-charts instances are matched by id prefix, like the units.
++  # The deploy-repo instances are matched by id prefix, like the units.
+   - "/^ss:jenkins-prd-jenkins-jenkins,/"
+   - "/^ss:trello-mcp-prd-trello-mcp-server,/"
+   - "/^ss:git-sync-prd-gitblit-gitblit-app,/"

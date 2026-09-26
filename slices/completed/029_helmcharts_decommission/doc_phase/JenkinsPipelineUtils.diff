@@ -1,0 +1,48 @@
+/work/JenkinsPipelineUtils — P3: git diff a43f45e0fc5c..6f87d0902fc3
+
+vars/cicd.groovy       | 9 ++-------
+ vars/helmCharts.groovy | 8 --------
+ 2 files changed, 2 insertions(+), 15 deletions(-)
+
+diff --git a/vars/cicd.groovy b/vars/cicd.groovy
+index ac87baf..670ce2b 100644
+--- a/vars/cicd.groovy
++++ b/vars/cicd.groovy
+@@ -1,16 +1,11 @@
+-def helmDeploy(boolean wait = false) {
+-    build job: 'IaC/HelmCharts', wait: wait
+-}
+-
+ /**
+  * Commits an app's image pins into its deploy repository: clone, write the
+  * named YAML paths in the named values files, commit, push -- the whole set as
+  * one commit, so no stage is left behind on the previous build (D45, D47).
+  *
+  * Under Argo CD the deploy repo's history is the deployed state, so this call
+- * is to a deploy repo what helmDeploy() above is to the Helm pipeline: the
+- * point where a build hands its images to CD. Apps decide which YAML paths
+- * carry which tags; the git mechanics are the library's.
++ * is the point where a build hands its images to CD. Apps decide which YAML
++ * paths carry which tags; the git mechanics are the library's.
+  *
+  * The write is surgical. Values files are hand-curated, and everything this
+  * does not write -- comments, key order, every other key -- survives it. A path
+diff --git a/vars/helmCharts.groovy b/vars/helmCharts.groovy
+index 1bf1d4f..b4a017b 100644
+--- a/vars/helmCharts.groovy
++++ b/vars/helmCharts.groovy
+@@ -171,14 +171,6 @@ String rebuildAtIso(int days) {
+         "yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+ }
+ 
+-/**
+- * Copies files to a remote host via SCP using the pipeline SSH key.
+- */
+-def scp(String source, String target) {
+-    sh 'chmod 600 $WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key'
+-    sh "scp -r -i $WORKSPACE/HelmCharts/assets/kubernetes-pipeline-key -o StrictHostKeyChecking=no \"$source\" \"$target\""
+-}
+-
+ /**
+  * Syncs files to a remote host via rsync using the pipeline SSH key.
+  */
