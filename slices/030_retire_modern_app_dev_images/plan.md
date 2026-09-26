@@ -190,6 +190,25 @@ container is untouched. No mention of either image remains in the repo: the pipe
 stand. Pushed; the build is green through the publish stage, which publishes a provider version
 as every build does.
 
+**Done (P2).** HomelabTerraformProvider `51eaddd` (`phase/030-P2`, pushed to `main`): the `tf`
+container is `containerTemplates.iac_toolchain('tf')`; `IaC/HomelabTerraformProvider` #37 is
+green, its publish stage ran in `registry:5000/kube-coder-iac-toolchain` and pushed provider
+`0.1.37` to TerraformRegistry (`b823f16`). No `modern-app` string is left in the repo.
+
+Later phases:
+- P10: HomelabTerraformProvider no longer calls `modern_app_dev`.
+
+Record:
+- README names the images that bake the `network_mirror` `/etc/terraform.rc` as they stand:
+  `kube-coder-dev-base` (so every KubeCoder toolchain on it), Ansible's `support/iac-image`,
+  ArgoCDTools' `argocd-hook` (each sets `TF_CLI_CONFIG_FILE`).
+- The install scripts' headers no longer claim the images read the filesystem-mirror layout they
+  install into; they say the images resolve from the tfmirror.home network mirror (matching the
+  README's Install section). `install-local.sh`'s stale "same install path" as the pipeline is gone.
+- Pre-push: `scripts/registry-publish.sh` ran green in the environment's `iac` sidecar (uid 1000,
+  Terraform v1.16.3, Python 3.13.7) against a local build.
+- Gate: `kc project test` and `kc project lint` green.
+
 ### P3 — KubeCoder: Validate and the contracts drift gate run in the modern-app toolchain container
 
 Target: ../KubeCoder
