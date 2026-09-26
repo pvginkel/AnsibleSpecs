@@ -66,8 +66,8 @@
   does); removing `modern_app_dev` from JenkinsPipelineUtils and the two image directories from
   DockerImages only after every consumer is green; the registry deletion last.
 - The consumer repos were added to this environment's `.kubecoder/config.yaml` at planning
-  (Ansible `e957d13`, `3ff6193`: KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory,
-  IoTSupport, ZigbeeControl, ModernAppFrontendTemplate, ModernAppTemplate). The operator restarts
+  (Ansible `e957d13`, `3ff6193`, `9998eec`: KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory,
+  IoTSupport, ZigbeeControl, ModernAppTemplate). The operator restarts
   the environment before the run, so they are checked out as `../<Repo>` siblings. DesignAssistant
   is deliberately not added. Until that restart they are not under `/work` (KubeCoder already
   is): read them from a throwaway clone under `/tmp` of `https://github.com/pvginkel/<Repo>`,
