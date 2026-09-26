@@ -573,7 +573,7 @@ Record:
   exit on `REPO: set REPO to the repository` for `REPO` unset or empty; an interactive bash skips
   the command and keeps the shell.
 
-### P13 — AnsibleSpecs: the Terraform-version decision lists the images that install Terraform now
+### P13 — AnsibleSpecs: the Terraform-version decision lists the images that install Terraform now ✅ DONE 2026-09-26
 
 Target: ../AnsibleSpecs
 
