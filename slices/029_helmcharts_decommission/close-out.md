@@ -144,3 +144,21 @@ code-writer P1 r1, 2026-09-26 — The targets now sit at `slices/completed/runti
 
 **Provenance:** witnessed — code-writer, P1, r1; a relative-link check over decisions.md
 **Disposition:**
+
+### S7 — The estate register's k8s-upgrade pin list still names HelmCharts' deploy tooling as a consumer to bump and redeploy · minor
+
+AnsibleSpecs `decisions.md:279` lists "the Helm deploy tooling in `HelmCharts/tools/requirements.txt`" among the `kubernetes` Python client pins that a cluster upgrade must bump and redeploy first. After this slice HelmCharts deploys nothing (argo-cd `design.md:10`). P1 left the list as it is on purpose. ArgoCDTools does not use the client, so no live consumer is missing from the list.
+
+**Consequence:** The next k8s upgrade run from the doctrine tries to commit a pin bump to HelmCharts, which is archived after ANS-122 and not to be added to before it (D43).
+
+**Provenance:** read — code-reviewer, P1, r1; phases/P1/code_review_r1.md F1
+**Disposition:**
+
+### S8 — P6 carries AnsibleSpecs edits (the runbook path in D64 and phases.md) under Target: root · nit
+
+P1 added `plan.md:406-411` to P6. It asks P6 to put the switch runbook's path into argo-cd `decisions.md` D64 and `phases.md`, both in AnsibleSpecs, but P6's `Target:` is `root`. The phase branch and its review cover one repo, so these edits sit outside both.
+
+**Consequence:** P6's AnsibleSpecs edits can land on whatever AnsibleSpecs branch is checked out, unreviewed.
+
+**Provenance:** read — code-reviewer, P1, r1; phases/P1/code_review_r1.md F2
+**Disposition:**
