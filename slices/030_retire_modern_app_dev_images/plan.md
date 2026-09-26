@@ -485,6 +485,18 @@ Target: ../JenkinsPipelineUtils
 `containerTemplates.modern_app_dev` (`vars/containerTemplates.groovy:89-90`) is deleted, after
 P2–P4 moved its three callers and their builds went green. `kc project test` green.
 
+**Done (P10).** JenkinsPipelineUtils `46e6bc3` (`phase/030-P10`, pushed to `main`):
+`containerTemplates.modern_app_dev` is deleted; `modern_app_toolchain` and `iac_toolchain` stay.
+`kc project test` is green. No `modern_app_dev` or `modern-app-dev` string is left in the repo.
+
+Later phases:
+- P11: no pipeline in the estate pulls `registry:5000/modern-app-dev` through the library any more.
+  DesignAssistant (D2) never called the template: its `Jenkinsfile` hardcodes the Playwright image.
+
+Before deleting, `git grep modern_app_dev origin/main` found no caller in KubeCoder, FieldnotesApp,
+HomelabTerraformProvider, the four apps or ModernAppTemplate. DesignAssistant's `main` and
+`develop` have no call either.
+
 ### P11 — DockerImages: the two image directories are gone
 
 Target: ../DockerImages
