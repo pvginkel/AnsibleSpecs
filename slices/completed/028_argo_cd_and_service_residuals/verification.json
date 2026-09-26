@@ -5,7 +5,7 @@
       "area": "R1 — ANS-47 standing sync-failed alert",
       "description": "The Argo CD sync-failed alert no longer expires after 5 minutes while the app stays failed. An auto-synced app whose sync failed, and that Argo CD no longer retries, raises a standing alert. The alert stays up until the app next syncs successfully, then resolves (Ruling D1). An app synced by hand keeps the immediate event only (Ruling D1's limit).",
       "owed_after": "../PrometheusDeploy",
-      "verdict": "owed",
+      "verdict": "pass",
       "rationale": "Owed to the operator after ../PrometheusDeploy (and ../ArgoCDDeploy pushed and argocd-prd synced first). Earned offline: ArgoCDSyncStillFailed (critical, for 10m) is SyncError joined to argocd_app_info by app, and holds through a new sync until it succeeds; the promtool cases walk a failure, a second failure, a manual success, restarts and gaps. The 'no longer expires after 5 minutes' behaviour itself needs Alertmanager and a real failed sync, which nothing offline exercises. Settles with: (1) after both pushes, `curl -sG http://prometheus-prd-server.prometheus-prd.svc/api/v1/rules` lists group argocd and `curl -sG http://prometheus-prd-server.prometheus-prd.svc/api/v1/query --data-urlencode 'query=ALERTS{alertname=~\"ArgoCD.*\"}'` is empty while every app is Synced/Healthy; (2) one deliberate failed auto-sync on a low-stakes app: ArgoCDSyncFailed arrives at once, ArgoCDSyncStillFailed about 10 m after the retries end (~14 m after the failure), it stays up, and a fixing commit sends a real 'resolved'.",
       "evidence": [
         "ArgoCDDeploy/config/prd/values.yaml:92-102: app-sync-failed carries labels, annotations and generatorURL only",
@@ -14,7 +14,8 @@
         "argoproj/argo-cd v3.5.1 controller/appcontroller.go:2332-2334: auto-sync returns before the SyncError check for an app without automated sync",
         "PrometheusDeploy config/prd/values.yaml (group argocd, ArgoCDSyncStillFailed) and tests/alert-rules/argocd.yml cases 1-4: read in full; sweep r1 PrometheusDeploy_root_test.log: tests/alert-rules.sh OK (promtool 3.14.0 = live Prometheus 3.14.0, buildinfo)",
         "live 2026-09-25 baseline (read-only): count(argocd_app_info), count(argocd_app_condition) and ALERTS{alertname=~\"ArgoCD.*\"} are all empty; the live rules ConfigMap holds no ArgoCD rule",
-        "live 2026-09-25: the pinned quay.io/argoproj/argocd:v3.5.1 controller accepts --metrics-application-conditions (strings) and its binary carries the metric name argocd_app_condition"
+        "live 2026-09-25: the pinned quay.io/argoproj/argocd:v3.5.1 controller accepts --metrics-application-conditions (strings) and its binary carries the metric name argocd_app_condition",
+        "live 2026-09-26 drill (throwaway auto-synced app drill-sync-failed, destination a missing namespace): sync failed 09:09Z after 3 retries; ArgoCDSyncStillFailed fired 09:20Z to telegram-critical and was still active at 09:26Z; fixing the app (destination development) synced 09:26:37Z and the alert resolved 09:27Z with a real Telegram [RESOLVED] (operator saw both). Rule group argocd loaded, ALERTS empty with all 50 apps Synced/Healthy."
       ]
     },
     {
@@ -22,12 +23,13 @@
       "area": "R1 — ANS-47 standing degraded alert",
       "description": "`on-health-degraded` has the same shape and is fixed the same way. An app that Argo CD reports Degraded for longer than a transient dip raises a standing alert. The alert stays up until the app's health leaves Degraded, then resolves.",
       "owed_after": "../PrometheusDeploy",
-      "verdict": "owed",
+      "verdict": "pass",
       "rationale": "Owed to the operator after ../PrometheusDeploy. Earned offline: ArgoCDHealthStillDegraded (warning, for 15m) fires for any app, hand-synced included, holds through a sync, a controller restart and a gap, and resolves when health leaves Degraded; a 14-minute dip and a healthy app stay quiet (promtool case 3, and the gap and deletion cases). Settles with the same two reads as V01 (rules loaded, ALERTS empty when healthy), then: a Degraded app for over 15 m raises ArgoCDHealthStillDegraded (silent, warning) and a real 'resolved' arrives when it recovers.",
       "evidence": [
         "ArgoCDDeploy/config/prd/values.yaml:103-112,122-126: app-health-degraded template and on-health-degraded trigger, same event shape as the sync-failed one",
         "PrometheusDeploy tests/alert-rules/argocd.yml case 3 ('an app degraded for 15m fires, holds through a sync, a controller restart and a gap, and resolves when healthy; a shorter dip stays quiet, and a hand-synced app fires too'): read; sweep r1 PrometheusDeploy_root_test.log OK",
-        "live 2026-09-25 (read-only GET of the controller's :8082/metrics from a scratch pod): 50 argocd_app_info series, every one health_status=\"Healthy\" and sync_status=\"Synced\"; label names name, namespace, dest_namespace, health_status, sync_status, autosync_enabled, operation match the rule's selectors"
+        "live 2026-09-25 (read-only GET of the controller's :8082/metrics from a scratch pod): 50 argocd_app_info series, every one health_status=\"Healthy\" and sync_status=\"Synced\"; label names name, namespace, dest_namespace, health_status, sync_status, autosync_enabled, operation match the rule's selectors",
+        "live 2026-09-26 drill: same app deployed with a non-existent image tag went Degraded 09:36Z; ArgoCDHealthStillDegraded fired 09:52Z to telegram-warning; restoring the image made it Healthy and the alert resolved 09:53Z with a real resolve request."
       ]
     },
     {
@@ -35,14 +37,15 @@
       "area": "R1 — D7's events without a false resolve",
       "description": "D7's immediate events still arrive as today: ArgoCDSyncFailed is critical and carries Argo CD's error text, and ArgoCDHealthDegraded is a warning. Their expiry no longer sends a \"resolved\". Every other alert still sends its resolved message (Ruling D1).",
       "owed_after": "../PrometheusDeploy",
-      "verdict": "owed",
+      "verdict": "pass",
       "rationale": "Owed to the operator after ../PrometheusDeploy. Earned offline: the two templates are unchanged (rendered: ArgoCDSyncFailed severity critical with .app.status.operationState.message as the description; ArgoCDHealthDegraded severity warning); the values' route block sends them to telegram-critical-no-resolve and telegram-warning-no-resolve (send_resolved false, loud/silent by severity), and tests/alert-routing.py, which walks the chart-rendered Alertmanager config, asserts that every other rule still reaches a receiver with send_resolved true. What only a live Alertmanager shows: the expiry after resolve_timeout (5m) sends nothing, and an unrelated alert still sends its 'resolved'. Settles with: after the push, `curl -s http://prometheus-prd-alertmanager.prometheus-prd.svc:9093/api/v2/status` shows the two -no-resolve receivers; then the V01 failed-sync drill: the event's message arrives once and no 'resolved' follows 5-6 m later.",
       "evidence": [
         "PrometheusDeploy/config/prd/values.yaml:327-339: route tree, severity=\"critical\" to telegram-critical, repeat_interval 12h",
         "PrometheusDeploy/config/prd/values.yaml:351-367: telegram-critical and telegram-warning both send_resolved: true",
         "ArgoCDDeploy helm template (re-rendered in this pass): argocd-notifications-cm template.app-sync-failed / template.app-health-degraded and trigger.on-sync-failed / trigger.on-health-degraded unchanged from the pre-slice shape",
         "PrometheusDeploy config/prd/values.yaml route block: matchers alertname=~\"ArgoCDSyncFailed|ArgoCDHealthDegraded\" -> telegram-warning-no-resolve, nested severity=\"critical\" -> telegram-critical-no-resolve; tests/alert-routing.py read in full; sweep r1 PrometheusDeploy_root_test.log: tests/alert-routing.py OK",
-        "live 2026-09-25 baseline: the running Alertmanager config has only telegram-critical and telegram-warning, both send_resolved true"
+        "live 2026-09-25 baseline: the running Alertmanager config has only telegram-critical and telegram-warning, both send_resolved true",
+        "live 2026-09-26 drill: ArgoCDSyncFailed (critical, Argo CD's error text) went to telegram-critical-no-resolve and ArgoCDHealthDegraded (warning) to telegram-warning-no-resolve; on each expiry alertmanager_notifications_total rose with no rise in notification_requests_total (resolve suppressed), and the operator received no [RESOLVED] for either. Alertmanager status lists both -no-resolve receivers with send_resolved false; telegram-critical/-warning keep true."
       ]
     },
     {
@@ -77,14 +80,15 @@
       "area": "R1 — Argo CD metrics reach Prometheus",
       "description": "Argo CD's application controller exposes the application metrics the standing rules read, and Prometheus scrapes them. Offline, this shows in ArgoCDDeploy's render assertions. Live, it is owed until the operator pushes and manually syncs argocd-prd.",
       "owed_after": "../ArgoCDDeploy",
-      "verdict": "owed",
+      "verdict": "pass",
       "rationale": "Owed to the operator after ../ArgoCDDeploy is pushed and argocd-prd synced by hand. Earned offline: re-rendered in this pass, the chart yields Service argocd-prd-application-controller-metrics (port 8082 -> targetPort metrics, annotated prometheus.io/scrape: \"true\"), controller args --metrics-port=8082 and --metrics-application-conditions=SyncError, and the chart's controller NetworkPolicy admits `metrics` from any namespace (live too); Prometheus' running kubernetes-service-endpoints job keeps any Service carrying that annotation, so no scrape is owed; the flag exists in the pinned v3.5.1 image. Settles with: `curl -sG http://prometheus-prd-server.prometheus-prd.svc/api/v1/query --data-urlencode 'query=up{job=\"kubernetes-service-endpoints\",service=\"argocd-prd-application-controller-metrics\"}'` is 1 and `count(argocd_app_info)` is 50 (argocd_app_condition stays empty until a SyncError).",
       "evidence": [
         "live 2026-09-25 (kubectl get svc -n argocd-prd): no application-controller metrics Service",
         "argo-cd chart 10.3.3 values.yaml:1029-1049: controller.metrics.enabled false by default, service port 8082",
         "ArgoCDDeploy helm template (this pass): 70 objects; Service, args and argocd-cm as described; sweep r1 ArgoCDDeploy_root_test.log: tests/render-chart.py OK",
         "live 2026-09-25: kubectl -n argocd-prd get svc has no controller metrics Service; the live networkpolicy argocd-prd-application-controller admits port metrics from namespaceSelector {}; the live Prometheus job config (honor_labels true, endpointslice SD) keeps services on prometheus.io/scrape=true",
-        "live 2026-09-25: the running controller already serves :8082/metrics with 50 argocd_app_info series whose labels match the rules; argocd_app_condition is absent because the flag is not set yet (count 0)"
+        "live 2026-09-25: the running controller already serves :8082/metrics with 50 argocd_app_info series whose labels match the rules; argocd_app_condition is absent because the flag is not set yet (count 0)",
+        "live 2026-09-26 after argocd-prd synced to 307d94f: up{service=\"argocd-prd-application-controller-metrics\"} = 1, count(argocd_app_info) = 50, argocd_app_condition empty; ArgoCDAlertsBlind had fired 07:25Z-08:48Z (PrometheusDeploy synced before argocd-prd) and cleared at the sync."
       ]
     },
     {
@@ -103,7 +107,7 @@
       "area": "R2 — ANS-46 login through https://argocd/",
       "description": "Login through https://argocd/ works. A login started at https://argocd/ completes instead of answering `Invalid redirect URL: the protocol and host (including port) must match and the path must be within allowed URLs if provided`. https://argocd.home/ keeps working, and notification links still point at argocd.home. Live, this is owed until the operator pushes and manually syncs argocd-prd.",
       "owed_after": "../ArgoCDDeploy",
-      "verdict": "owed",
+      "verdict": "pass",
       "rationale": "Owed to the operator after ../ArgoCDDeploy is pushed and argocd-prd synced by hand. Earned offline: re-rendered, argocd-cm has url https://argocd.home unchanged and additionalUrls '- https://argocd'; the render gate decodes it and requires every nginx server-name alias to be an allowed https host. Baseline witnessed live today: `curl -sk 'https://argocd/auth/login?return_url=https%3A%2F%2Fargocd%2Fapplications'` answers 400 with the card's exact message, while https://argocd.home/... answers 303 to Keycloak with redirect_uri=https://argocd.home/auth/callback. Settles with: the same curl for host argocd answers 303 to Keycloak with redirect_uri=https%3A%2F%2Fargocd%2Fauth%2Fcallback, a browser login at https://argocd/ completes (Keycloak must allow that callback: the hand-made client's https://argocd/* per the card, not checked here), https://argocd.home/ still logs in, and a notification link still names argocd.home.",
       "evidence": [
         "ArgoCDDeploy/config/prd/values.yaml:7-8: global.domain argocd.home drives argocd-cm url; no additionalUrls",
@@ -111,7 +115,8 @@
         "argoproj/argo-cd v3.5.1 util/oidc/oidc.go:449-450: return_url validated against url plus additionalUrls, with the card's error text",
         "argoproj/argo-cd v3.5.1 util/settings/settings.go:2314: OIDC redirect URL chosen per request host",
         "ArgoCDDeploy helm template (this pass): argocd-cm {url: https://argocd.home, additionalUrls: '- https://argocd\\n'}; sweep r1 ArgoCDDeploy_root_test.log: tests/render-chart.py (check_login_urls) OK",
-        "live 2026-09-25 baseline (read-only curl): https://argocd/auth/login?return_url=... -> 400 'Invalid redirect URL: the protocol and host (including port) must match and the path must be within allowed URLs if provided'; https://argocd.home/auth/login?... -> 303 to auth.ginbov.nl (redirect_uri https://argocd.home/auth/callback); live argocd-cm.additionalUrls is empty"
+        "live 2026-09-25 baseline (read-only curl): https://argocd/auth/login?return_url=... -> 400 'Invalid redirect URL: the protocol and host (including port) must match and the path must be within allowed URLs if provided'; https://argocd.home/auth/login?... -> 303 to auth.ginbov.nl (redirect_uri https://argocd.home/auth/callback); live argocd-cm.additionalUrls is empty",
+        "live 2026-09-26: https://argocd/auth/login answers 303 to Keycloak with redirect_uri=https://argocd/auth/callback; argocd.home unchanged; the operator completed a browser login at https://argocd/; alert links still name argocd.home."
       ]
     },
     {
@@ -139,7 +144,8 @@
         "KubeCoderDeploy/Jenkinsfile.promote:112-116: Advancing prd",
         "KubeCoderDeploy/Jenkinsfile.promote:118-131: Recording the release (annotated tag, push)",
         "KubeCoderDeploy Jenkinsfile.promote:76-83 (tag lookup, refusal, recordOnly), :105-131 (skipped stages), :139-142 (message) at 4dda8ce: read; sweep r1 KubeCoderDeploy_root_test.log/lint OK (they do not execute the pipeline, as the plan says)",
-        "scratch git repo, this pass: `git tag --list 'release-*' --points-at <sha>` printed release-7 for an annotated tag on the older commit, release-9 (not other-1) on the newer, nothing with no tag, and the same in a fresh clone"
+        "scratch git repo, this pass: `git tag --list 'release-*' --points-at <sha>` printed release-7 for an annotated tag on the older commit, release-9 (not other-1) on the newer, nothing with no tag, and the same in a fresh clone",
+        "live 2026-09-26: Promote-PRD #7 with commit=10b6c7b (prd's tip, tagged release-6) refused 'prd is already at 10b6c7b..., released as release-6: nothing to promote'; #8 promoted b6e32c0 as release-8. The record-only path (tagless prd tip) was not exercised; it needs a real failed recording."
       ]
     },
     {
@@ -160,14 +166,15 @@
       "area": "R5 — ANS-105 gitblit prunes stale gb_lucene.conf entries",
       "description": "gitblit prunes stale branch entries from gb_lucene.conf so indexing does not stall. At pod start, the `clean-lucene-locks` init container drops each `[aliases]`/`[branches]` entry whose branch is not in that repository's `gitblit.indexBranch`. It never drops an entry Gitblit still indexes, and the lock cleanup is unchanged.",
       "owed_after": "../GitSyncDeploy",
-      "verdict": "owed",
+      "verdict": "pass",
       "rationale": "Owed to the operator after ../GitSyncDeploy is pushed: the push restarts gitblit in prd (search and the MCP server are briefly down), and the init container then runs the new script for the first time on the real volume. Earned offline: the shipped script drops an [aliases]/[branches] pair only when its branch is neither listed in gitblit.indexBranch nor, under `default`, a local branch at HEAD's commit (or any branch when HEAD does not resolve), rewrites a conf only when an entry goes, leaves the lock cleanup's files the same, and the rendered init container script is line-for-line chart/files/clean-lucene.sh. Run under the exact live image (docker.io/library/busybox@sha256:cac8f90b..., BusyBox v1.38.0, which the running clean-lucene-locks container pulled) in a scratch pod, the test passed in both invocation forms: the file itself, and `sh -c <rendered script> clean-lucene <root>` as the init container runs it. Settles with: `kubectl -n git-sync-prd logs deploy/gitblit -c clean-lucene-locks` exits cleanly and shows no `dropped` lines unless a branch left indexBranch (on 2026-09-25 the volume held 490 aliases in 376 confs, none stale), the pod reaches 3/3 Running, and a search returns hits.",
       "evidence": [
         "GitSyncDeploy/chart/templates/gitblit-deployment.yaml:29-40: clean-lucene-locks (busybox) deletes only write.lock and gb_lucene.conf.lock*",
         "DockerImages/git-sync/git-sync.sh:42-75: gitblit.indexBranch kept as full ref names via git config --add/--unset",
         "gitblit-org/gitblit LuceneService.updateIndex (deletedBranches loop) and LuceneRepoIndexStore (lucene/<version>/gb_lucene.conf): aliases never removed",
         "GitSyncDeploy chart/files/clean-lucene.sh and chart/templates/gitblit-deployment.yaml at 22b6967: read in full; helm template (this pass) extracts an init container script identical to the file, command [sh -c <script> clean-lucene /git], no securityContext (root, so chown works)",
-        "live 2026-09-25: the running init container's image is docker.io/library/busybox:latest, imageID busybox@sha256:cac8f90bbee42dc962a6b38bb1a235948d070385bb9d996bba15a6db8d364008; scratch pod in namespace development ran tests/clean-lucene.sh under it twice, 'clean-lucene: all checks passed' both times (pod and ConfigMap deleted afterwards)"
+        "live 2026-09-25: the running init container's image is docker.io/library/busybox:latest, imageID busybox@sha256:cac8f90bbee42dc962a6b38bb1a235948d070385bb9d996bba15a6db8d364008; scratch pod in namespace development ran tests/clean-lucene.sh under it twice, 'clean-lucene: all checks passed' both times (pod and ConfigMap deleted afterwards)",
+        "live 2026-09-26: gitblit pod 3/3 Running after the GitSyncDeploy push; clean-lucene-locks exited 0 with no dropped lines."
       ]
     },
     {
