@@ -293,11 +293,14 @@ The counts come from the published dataset
 
 Once this phase lands, `AaC/HelmCharts` has no consumer. That is ANS-121's precondition.
 
-**Done (P2).** Architecture `a4402f6` on `phase/029-P2`, one commit. The 37 referenced elements
+**Done (P2).** Architecture `phase/029-P2`: `a4402f6` (the move, one commit) and `d7c4878` (the
+Infrastructure view fix). The 37 referenced elements
 (35 `ss:*` products and the two `svc:cluster-ceph-*`) now live in
 `docs/architecture/catalog.yaml` under `producer: architecture`, UUIDs and every published field
 unchanged. `ss:opensearch`, `ss:phpmyadmin` and `ss:rabbitmq` are gone. The `helm-charts`
-registry entry and the Infrastructure view's `excludeProducers` mention are removed. Comments,
+registry entry and the Infrastructure view's `excludeProducers` mention are removed; the view
+`exclude`s the 35 catalog products by id instead, since they share the `architecture` producer
+with the rack hardware. Comments,
 schema examples and the producer kit no longer name `helm-charts` as a live producer. Not
 pushed: a push to Architecture's `main` rebuilds and redeploys the published dataset. Until it
 lands, the dataset still carries `helm-charts` and `AaC/HelmCharts` still has a consumer (V22).
@@ -327,8 +330,12 @@ Record:
   `tools/ha-fleet/` README, annotations and docstring, `.claude/` (the manual's ownership table,
   the repackaged-upstream and Ceph examples, the job example; the seed skill). The five schema
   examples now say `producer: example`. Test fixtures that use HelmCharts as a sample name stay.
-- Found: the Infrastructure view admits the deploy repos' 94 release instances (close-out B3).
-  That predates this phase; the view's contents are unchanged by it.
+- Infrastructure view (review r1 F1): without the `exclude` list the 35 catalog products enter it
+  (185 → 220 elements, 211 → 291 edges over the published dataset, via the viewer's
+  `resolveViewScope`); with it the scope is identical to base. `viewer/src/views/
+  infrastructure-view.test.ts` fails when a catalog product is in scope or the rack hardware is not.
+- Found: the view admits the deploy repos' 94 release instances (close-out B3). That predates
+  this phase.
 - Gate: `kc project test` and `kc project lint` in `/work/Architecture` are green.
 
 ### P3 — JenkinsPipelineUtils: the dead HelmCharts helpers go
