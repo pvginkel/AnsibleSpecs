@@ -243,7 +243,7 @@ Record:
 - Round 1 stopped blocked, before the push, because the gate needed tools this environment lacked.
   Round 2: `kc project test` passed, then push, then #546.
 
-### P4 — FieldnotesApp: Validate runs in the modern-app toolchain container
+### P4 — FieldnotesApp: Validate runs in the modern-app toolchain container ✅ DONE 2026-09-26
 
 Target: ../FieldnotesApp
 
