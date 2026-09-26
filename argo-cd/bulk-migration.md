@@ -100,8 +100,18 @@ elasticsearch's setup Job ran once under its hashed name; the first DockerImages
 pods once afterwards. prometheus's alertmanager StatefulSet was recreated with
 `--cascade=orphan` (D59) and adopted its pod without a restart.
 
-**Cleanup (D61):** the last batch synced at 19:45Z, so the one pass is due from 2026-09-25 19:45Z.
-`configs/dev/<app>` stays, and with it every `charts/<app>` a dev entry renders (D61).
+**Cleanup (D61), run 2026-09-26:** all 50 Applications `Synced Healthy` and nothing firing
+after the soak, which took in the 2026-09-25 power cut. HelmCharts `eeceac0` deletes every
+migrated app's `configs/prd/<app>/_shared/` but storage's, external-secrets' prd
+`clustersecretstore.yaml`, and the seven charts no remaining release renders: charts,
+fieldnotes, homeapps, models, tfmirror, youtrack and youtrack-mcp. An upstream release needs
+`charts/<app>` for its hooks, so the upstream apps with a `configs/dev` entry keep theirs.
+`test_youtrack_backup.py` moved to YoutrackDeploy (`1be6b99`, unittest, in its test verb).
+storage's `_shared/` waits on `test_s3_storage_backup_grant.py`, which reads it. On prd, 439
+`sh.helm.release.v1.*` Secrets in the 47 migrated namespaces, grafana's Helm `grafana`
+Secret and `elasticsearch-setup-lhd4e` are deleted; argocd-prd's bootstrap release Secret
+stays. DockerImages `6041476` drops its `helmDeploy()` stage, HelmCharts `6e8a054` its
+`gitToken` injection. IaC/HelmCharts #6757 is green and deployed nothing.
 
 **Disabled in HelmCharts, not migrated (D60):** open-webui, shell, design-assistant.
 
