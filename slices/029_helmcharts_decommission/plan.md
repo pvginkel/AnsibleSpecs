@@ -605,6 +605,42 @@ The tool's preflight (`:1746`) and the argocd runbook (`docs/runbooks/argocd.md:
 moves into Ansible beside the tool, and both run it from there. That settles the executable half
 of R7's pointer; the runbook's prose is P9's.
 
+**Done (P7).** Ansible `phase/029-P7` `b56fc9a`. `flip` adds the stage to ArgoCDDeploy
+`releases/values.yaml` with `autoSync: false`. `autosync` drops that line. Both are text edits
+that keep every comment. An edit must re-parse to the intended registry and pass
+`helm lint releases`, and is then a local ArgoCDDeploy commit. Every on-Argo, upstream-pin and
+`syncOptions` read goes to the registry. `stuck_fields.py` is now
+`support/argo-migrate/stuck_fields.py`, and the argocd runbook's command runs it from there. Root's
+test gate now runs `python3 -m unittest discover -s support/argo-migrate` (`test_registry.py`).
+
+Later phases:
+- P8: root's `test:` is that one command; P8's tests join it, which makes the key a list.
+- P9: the tool's docstring carries its own owed note, one paragraph that step 11's grep finds;
+  it is the only hit so far. `docs/design-philosophy.md`'s "There is no runnable test suite"
+  no longer holds for root. `stuck_fields.py`'s docstring cites the argocd runbook's "What a
+  cutover does not change" for the finding: keep that title, or update the citation.
+
+Settled beyond the plan's text:
+- An app's entry is `repo`, then `upstream: {repo, chart}` from the deploy repo's
+  `architecture.yaml`, then `syncOptions: [ServerSideApply=true]` with a D62 comment when
+  `verify` found oversized objects, then `stages`. The stage's `version` is quoted. A new app
+  goes in name order, above the next entry's leading comments. A further stage joins its app's
+  `stages` the same way, and stops if the app-level fields differ.
+- `flip` stops if the stage is there already, and `autosync` stops if it auto-syncs already or
+  has no entry. `preflight` stops when the stage has no entry, because the entry's `syncOptions`
+  decide its server-side diff. `check_upstream_pin` compares whenever the stage is on Argo.
+- `flip` no longer touches HelmCharts: it `git rm`'d the stage's `values.yaml` and
+  `manifests.yaml` there before. `arch`'s HelmCharts half reads "flipped" from the registry.
+  The scaffold's README and `architecture.yaml` text name the registry file.
+- Proof: on a scratch clone of ArgoCDDeploy with grafana and cloudnative-pg removed, flip and
+  autosync of both, plus calendar-support `dev`, gave back P5's file. The only differences were
+  cloudnative-pg's reworded D62 comment and the added `dev: {}`. The schema refused `autosync
+  argocd`, and the file was restored. On today's state, the registry's 50 stages equal
+  HelmCharts' 50 `argo-cd` ones, `arch`'s release names come out as before, and all nine live
+  upstream pins agree with their deploy repos.
+- AnsibleSpecs' handover keeps its dated copy of `stuck_fields.py`, which its findings name.
+  Nothing runs it. Close-out S16 and S17 are this phase's.
+
 ### P8 — recommend-resources across the deploy repos
 
 Target: root
@@ -635,7 +671,7 @@ Nothing is pushed unless the operator asks.
   gets its values through promotion, never through a direct commit.
 - **The container-to-values-path maps come with the tool.** HelmCharts keeps them for nine
   charts (`charts/*/resources-entry-map.json`); the scaffold left them behind
-  (`argo_migrate.py:970`). With the maps beside the tool, it reads nothing from HelmCharts.
+  (`argo_migrate.py:1002`). With the maps beside the tool, it reads nothing from HelmCharts.
 - **Proof in the phase.** Run step one against the live estate, which only reads. Run step two
   into the scratch clones. Push nothing.
 

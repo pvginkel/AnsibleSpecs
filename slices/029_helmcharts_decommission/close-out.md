@@ -258,3 +258,30 @@ docs/runbooks/argocd.md's Conventions: "the read-only default kubeconfig cannot 
 
 **Provenance:** witnessed — code-writer, P6, r1, kubectl reads while testing the registry-switch runbook's helpers
 **Disposition:**
+
+### S15 — Ansible registry-switch runbook: status reads run straight after an asynchronous sync or refresh, with no instruction to wait · nit
+
+docs/runbooks/registry-switch.md's argosync is a kubectl patch of operation and returns before the sync runs; step 4's hand refresh likewise. Steps 1d, 4, 9 and 10 read status in the same block and state the post-completion result as what the operator should see; only step 1a says to repeat until Synced. In step 1d the rehearsal diff ('no diff output', the proof that the child is unchanged after the app-of-apps' sync) is met vacuously by a read taken before the sync applies the child; the same block's tracking-id read fails in that case, so re-running the whole block recovers. In step 4, argostate right after argosync prints the previous operation (OutOfSync Succeeded), and outofsync right after the refresh prints nothing, a case the step has no branch for.
+
+**Consequence:** An operator who pastes a step block whole sees pre-completion state and has to re-run; in the rehearsal's step 1d, re-running only the failing read would leave the adoption proof resting on a pre-sync diff.
+
+**Provenance:** read — code-reviewer, P6, r1, phases/P6/code_review_r1.md F1
+**Disposition:**
+
+### S16 — The nine upstream deploy repos' README and architecture.yaml name HelmCharts' release.yaml as the registry entry that pins the chart version · nit
+
+argo-migrate's scaffold wrote the line into each upstream deploy repo: the README's "chart version" bullet (`HelmCharts configs/prd/<app>/<stage>/release.yaml, upstream.version`) and the comment above architecture.yaml's `upstream:` block. Read on GrafanaDeploy `main` (README.md:10, architecture.yaml:9). The same text is in CephCsiCephfsDeploy, CephCsiRbdDeploy, CloudnativePgDeploy, CsiDriverSmbDeploy, ExternalSecretsDeploy, HeadlampDeploy, PrometheusDeploy and StepCaDeploy, since the same template wrote all nine. P7 changed the scaffold templates to name ArgoCDDeploy `releases/values.yaml` (the stage's `version`). The nine repos are outside this slice, and P9 targets Ansible only.
+
+**Consequence:** Once the registry switch has run, an operator bumping an upstream chart who follows the deploy repo's README edits HelmCharts' inert release.yaml, not the registry Argo reads. The live version does not move, and D57's two pins drift apart.
+
+**Provenance:** witnessed, code-writer, P7 r1, gh api repos/pvginkel/GrafanaDeploy/contents/{README.md,architecture.yaml}
+**Disposition:**
+
+### S17 — argo-migrate's arch step still runs HelmCharts' generator for a helm-charts producer that no longer publishes · nit
+
+cmd_arch's second half (`helm_charts_without`, `hc_releases_without`) renders every HelmCharts release but the migrating app's, and checks that the edges helm-charts publishes are still drawn. Once P2's Architecture push lands, the published dataset has no helm-charts relations. The check then compares against nothing, and all it still asks is that HelmCharts' `gen-architecture` builds from the archived checkout. P7 moved its on-Argo read to the registry and left the half in place, because the plan keeps the tool's HelmCharts reads. Removing it (and `HC / docs/architecture/helm-charts.yaml`) is a follow-up for after that push.
+
+**Consequence:** Each remaining migration's arch step needs a working poetry environment in the archived HelmCharts checkout, and fails if it has none, for a check with nothing left to protect.
+
+**Provenance:** read, code-writer, P7 r1, support/argo-migrate/argo_migrate.py cmd_arch
+**Disposition:**
