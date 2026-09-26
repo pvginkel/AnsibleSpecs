@@ -96,6 +96,15 @@ FieldnotesApp's Jenkinsfile calls `cicd.writeVersionPins` (stage 'Write image pi
 **Provenance:** read, code-writer, P4, r1, FieldnotesApp/Jenkinsfile and the job's /api/json
 **Disposition:**
 
+### B2 — ModernAppTemplate: the v0.1.2 validation Job's tar extraction into the root-owned /work emptyDir fails and exits 2 on every run · minor
+
+Root template v0.1.2 mounts an emptyDir at /work (root:root, 0777) for a Job that runs as uid 1000. `tar xzf /work/staging/context.tar.gz -C /work` (root/template/Jenkinsfile.jinja:80) then cannot set the mode or mtime of the archive`s `./` entry. It prints "Cannot utime" and "Cannot change mode", then "Exiting with failure status due to previous errors", and exits 2. The files are extracted, and the script has no `set -e`, so the suites run and the build result is unaffected. I witnessed this on the image in a throwaway development pod.
+
+**Consequence:** Every validation.log from an app on v0.1.2 shows a tar failure right after "Code received, extracting...". Someone diagnosing a red validation build meets a spurious error first.
+
+**Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
