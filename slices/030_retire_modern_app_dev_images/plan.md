@@ -581,6 +581,22 @@ The "Terraform version" decision (`decisions.md:58`) names modern-app-dev among 
 pin Terraform and says to bump "all four" together. It is corrected to the set as it stands
 once P11 has landed.
 
+**Done (P13).** AnsibleSpecs `decisions.md` (`phase/030-P13`): the "Terraform version" decision
+names three images, ArgoCDTools' `argocd-hook`, Ansible's `support/iac-image` and DockerImages'
+`kube-coder-iac-toolchain`, and says "Bump all three together". Beyond the plan's text, the
+step-ca root-rotation TODO in the same file (`decisions.md:173`) now says "the parallel three-copy
+`terraform.rc` set": P11 deleted `modern-app-dev/terraform.rc`. No `modern-app-dev` string is left
+in `decisions.md`.
+
+Later phases:
+- P14: `decisions.md` already counts three `terraform.rc` copies. The runbook's "four
+  byte-identical copies" and its `md5sum` list are brought to the same three.
+
+Grounding: the three images are the only Dockerfiles in DockerImages (at P12's `a963dfd`),
+ArgoCDTools and Ansible that set `TERRAFORM_VERSION`. The remaining `terraform.rc` copies are
+`support/iac-image`, `argocd-hook/image` and `kube-coder-dev-base`. The "nine out-of-repo copies"
+of the root CA are unchanged, since P11 deleted no CA file.
+
 ### P14 — Ansible: the runbooks and comments that name modern-app-dev
 
 Target: root
