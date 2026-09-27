@@ -250,7 +250,7 @@ tests import the PyYAML the script runs with, not a PyPI copy. Premise correctio
 `tunnel-reclaim` (python:slim) do not, so `python3-yaml` does not reach those containers. The
 tracker runs in the dev container, which builds on the base.
 
-### P4 — The tracker follows a green build's handoff into its Argo CD sync
+### P4 — The tracker follows a green build's handoff into its Argo CD sync ✅ DONE 2026-09-27
 
 Target: kube-coder-dev-local-home
 
