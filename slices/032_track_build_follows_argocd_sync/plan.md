@@ -177,7 +177,7 @@ repo the job pushed. No Groovy test harness exists in KubeCoderDeploy (its gate 
 and Terraform); the file compiles under Groovy 2.4.21, Jenkins' version
 (`FileSystemCompiler`, java container). The forms are witnessed live by V16.
 
-### P2 — Ansible drops its copy of the tracker
+### P2 — Ansible drops its copy of the tracker ✅ DONE 2026-09-27
 
 Target: root
 
