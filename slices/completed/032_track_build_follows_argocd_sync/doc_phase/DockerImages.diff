@@ -1,0 +1,2799 @@
+/work/DockerImages — P3: git diff febcc3d5e674..cbc411b3040d
+
+.kubecoder/project.yaml                             |  8 ++++++++
+ kube-coder-dev-base/Dockerfile                      |  8 ++++++--
+ kube-coder-dev-local-home/tests/test_track_build.py | 12 +++++++++---
+ kube-coder-dev-local-home/track_build.py            |  4 ++--
+ 4 files changed, 25 insertions(+), 7 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 2015cc7..267b67a 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -17,6 +17,14 @@ projects:
+     cwd: .
+     test: cexec iac ./scripts/arch-validate.py --quiet */architecture.yaml
+ 
++  kube-coder-dev-local-home:
++    description: >-
++      track_build.py, the Jenkins build tracker the dev image puts on PATH,
++      and its unit suite.
++    # No container's python3 carries pytest. uv overlays it on the system
++    # python3, whose PyYAML is the one the script runs with.
++    test: cexec iac uv run --no-project --python /usr/bin/python3 --with pytest python -m pytest -q
++
+ # The Dockerfile-only directories declare no gate: there is nothing to run
+ # for them short of building the image. The other in-repo suites are not
+ # declared yet.
+diff --git a/kube-coder-dev-base/Dockerfile b/kube-coder-dev-base/Dockerfile
+index b9c686d..07d1d8c 100644
+--- a/kube-coder-dev-base/Dockerfile
++++ b/kube-coder-dev-base/Dockerfile
+@@ -28,8 +28,11 @@ ENV PATH="/home/ubuntu/.local/bin:${PATH}" \
+     TF_CLI_CONFIG_FILE=/etc/terraform.rc
+ 
+ # The base essentials: the shared command-line utilities (see the header — every tool
+-# sidecar needs them, not just the dev container), tini (the init/reaper binary) and
+-# sudo (the runtime sudo binary plus the visudo the grant's build-time check needs).
++# sidecar needs them, not just the dev container), tini (the init/reaper binary),
++# sudo (the runtime sudo binary plus the visudo the grant's build-time check needs) and
++# python3-yaml, the one non-stdlib module track_build.py (kube-coder-dev-local-home)
++# imports: the script runs under the system python3 of whichever container mounts the
++# local-home volume.
+ # ubuntu-full may already pull sudo in at important priority; installing it explicitly
+ # is robust either way (apt is idempotent) and is required so the `visudo -cf` below
+ # cannot fail with `visudo: not found`.
+@@ -39,6 +42,7 @@ RUN apt-get update -yqq && \
+         fd-find \
+         git \
+         jq \
++        python3-yaml \
+         ripgrep \
+         sudo \
+         tini \
+diff --git a/kube-coder-dev-local-home/tests/test_track_build.py b/kube-coder-dev-local-home/tests/test_track_build.py
+index 682daf9..de7c428 100644
+--- a/kube-coder-dev-local-home/tests/test_track_build.py
++++ b/kube-coder-dev-local-home/tests/test_track_build.py
+@@ -1,5 +1,5 @@
+-"""Tests for track_build.find_downstream_build — locating the downstream run a
+-build triggered, across the builds list and the queue.
++"""Tests for track_build: its argument defaults, and find_downstream_build —
++locating the downstream run a build triggered, across the builds list and the queue.
+ 
+ The load-bearing behaviour is what `--trigger-timeout` bounds (R-052): DISCOVERY
+ of the downstream run, not its wait for an executor. A build that has been found
+@@ -7,7 +7,7 @@ sitting in the queue has demonstrably been triggered, so the timeout must not ki
+ the tracker while it waits — but a queue item that is cancelled must still fail
+ rather than poll forever.
+ 
+-Run: `python3 -m pytest` from `kube-coder-dev-local-home/`.
++Run: `kc project test kube-coder-dev-local-home` from the DockerImages checkout.
+ """
+ 
+ import importlib.util
+@@ -158,3 +158,9 @@ class TestGivingUp:
+         rounds = [([], [_queue_item()])] * 10 + [([], [])]
+         with pytest.raises(track_build.JenkinsError, match="left the queue without starting"):
+             find(rounds)
++
++
++class TestDefaults:
++    def test_appear_timeout_defaults_to_five_minutes(self):
++        args = track_build.parse_args(["Org/Repo", "--hash", "abc123"])
++        assert args.appear_timeout == 300.0
+diff --git a/kube-coder-dev-local-home/track_build.py b/kube-coder-dev-local-home/track_build.py
+index 76baded..2f2291c 100755
+--- a/kube-coder-dev-local-home/track_build.py
++++ b/kube-coder-dev-local-home/track_build.py
+@@ -365,9 +365,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+     parser.add_argument(
+         "--appear-timeout",
+         type=float,
+-        default=30.0,
++        default=300.0,
+         metavar="SECONDS",
+-        help="how long to wait for a --hash build to appear (default: 30)",
++        help="how long to wait for a --hash build to appear (default: 300, 5 minutes)",
+     )
+     parser.add_argument(
+         "--trigger-timeout",
+
+/work/DockerImages — P4: git diff cbc411b3040d..555b1d6bda6b
+
+kube-coder-dev-local-home/tests/test_follow_argocd.py | 799 ++++++++++++++++++++++++++++++++++++++
+ kube-coder-dev-local-home/track_build.py              | 681 +++++++++++++++++++++++++++++++-
+ 2 files changed, 1474 insertions(+), 6 deletions(-)
+
+diff --git a/kube-coder-dev-local-home/tests/test_follow_argocd.py b/kube-coder-dev-local-home/tests/test_follow_argocd.py
+new file mode 100644
+index 0000000..60d0585
+--- /dev/null
++++ b/kube-coder-dev-local-home/tests/test_follow_argocd.py
+@@ -0,0 +1,799 @@
++"""Tests for track_build's follow into Argo CD: parsing the handoff lines a green
++build prints, matching them to Applications, and waiting until each has rolled
++the handed-off commit or reached a stop.
++
++The Application fixtures take the shapes Argo CD v3.5 serves in argocd-prd:
++single-source (`path: chart`, `../config/<stage>/values.yaml`) and three-source
++upstream-chart apps (`$values/config/<stage>/values.yaml` through a `ref: values`
++source). Git questions go to real repositories: a bare origin, a clone that
++pushes to it, and the environment's clone under a temporary /work, which has to
++fetch to learn the pushed commits.
++
++Run: `kc project test kube-coder-dev-local-home` from the DockerImages checkout.
++"""
++
++import collections
++import importlib.util
++import subprocess
++from pathlib import Path
++
++import pytest
++
++_spec = importlib.util.spec_from_file_location(
++    "track_build", Path(__file__).resolve().parent.parent / "track_build.py"
++)
++track_build = importlib.util.module_from_spec(_spec)
++_spec.loader.exec_module(track_build)
++
++POLL = 5.0
++PICKUP = 120.0
++ROLL = 600.0
++BUILD = "KubeCoder/Build-Main #551"
++DEV = "config/dev/values.yaml"
++PRD = "config/prd/values.yaml"
++
++
++class FakeClock:
++    """A clock that only moves when the code under test sleeps."""
++
++    def __init__(self):
++        self.now = 0.0
++
++    def monotonic(self) -> float:
++        return self.now
++
++    def sleep(self, seconds: float) -> None:
++        self.now += seconds
++
++
++@pytest.fixture
++def clock(monkeypatch):
++    fake = FakeClock()
++    monkeypatch.setattr(track_build.time, "monotonic", fake.monotonic)
++    monkeypatch.setattr(track_build.time, "sleep", fake.sleep)
++    return fake
++
++
++def _git(cwd, *args) -> str:
++    proc = subprocess.run(
++        ["git", "-C", str(cwd), "-c", "user.name=test", "-c", "user.email=test@example.com", *args],
++        check=True,
++        capture_output=True,
++        text=True,
++    )
++    return proc.stdout.strip()
++
++
++class DeployRepo:
++    """A deploy repo on its origin, and the environment's clone of it in work/."""
++
++    def __init__(self, root: Path, work: Path, name: str):
++        origin = root / "origin" / f"{name}.git"
++        origin.mkdir(parents=True)
++        _git(origin, "init", "--quiet", "--bare", "--initial-branch=main")
++        self.pusher = root / "pusher" / name
++        _git(root, "clone", "--quiet", str(origin), str(self.pusher))
++        self.initial = self.commit()
++        self.clone = work / name
++        _git(root, "clone", "--quiet", str(origin), str(self.clone))
++
++    def commit(self, branch: str = "main") -> str:
++        """Push a new commit to ``branch``; the environment's clone does not have it yet."""
++        _git(self.pusher, "commit", "--quiet", "--allow-empty", "-m", "ci: image pins")
++        _git(self.pusher, "push", "--quiet", "origin", f"HEAD:{branch}")
++        return _git(self.pusher, "rev-parse", "HEAD")
++
++    def push_to(self, sha: str, branch: str) -> None:
++        _git(self.pusher, "push", "--quiet", "origin", f"{sha}:refs/heads/{branch}")
++
++
++@pytest.fixture
++def work(tmp_path) -> Path:
++    path = tmp_path / "work"
++    path.mkdir()
++    return path
++
++
++@pytest.fixture
++def deploy_repo(tmp_path, work):
++    return lambda name: DeployRepo(tmp_path, work, name)
++
++
++# --- Application fixtures -------------------------------------------------------------------
++
++
++def _url(repo: str) -> str:
++    return f"https://github.com/pvginkel/{repo}.git"
++
++
++def _hook(repo: str, stage: str, namespace: str) -> dict:
++    return {
++        "parameters": [
++            {"name": "hook.repo", "value": _url(repo)},
++            {"name": "hook.revision", "value": "$ARGOCD_APP_REVISION"},
++            {"name": "hook.stage", "value": stage},
++            {"name": "hook.namespace", "value": namespace},
++        ]
++    }
++
++
++def _app(
++    name,
++    spec_sources,
++    revisions_of,
++    compared,
++    *,
++    sync="Synced",
++    health="Healthy",
++    last_sync=None,
++    phase="Succeeded",
++    message="successfully synced (all tasks run)",
++    running=False,
++    automated=True,
++    conditions=(),
++):
++    """An Application compared at ``compared``, whose last sync was of ``last_sync``."""
++    last_sync = last_sync or compared
++    spec = {"destination": {"name": "in-cluster", "namespace": name}, **spec_sources}
++    if automated:
++        spec["syncPolicy"] = {
++            "automated": {"prune": True, "selfHeal": False},
++            "retry": {"backoff": {"duration": "30s", "factor": 2}, "limit": 3},
++        }
++    status = {
++        "sync": {"comparedTo": dict(spec_sources), **revisions_of(compared), "status": sync},
++        "health": {"status": health},
++        "operationState": {
++            "phase": "Running" if running else phase,
++            "message": message,
++            "operation": {"initiatedBy": {"automated": True}, "sync": revisions_of(last_sync)},
++            "syncResult": revisions_of(last_sync),
++        },
++    }
++    if conditions:
++        status["conditions"] = list(conditions)
++    app = {
++        "apiVersion": "argoproj.io/v1alpha1",
++        "kind": "Application",
++        "metadata": {"name": name, "namespace": "argocd-prd"},
++        "spec": spec,
++        "status": status,
++    }
++    if running:
++        app["operation"] = {"initiatedBy": {"automated": True}, "sync": revisions_of(compared)}
++    return app
++
++
++def single_source(name, repo, branch, stage, compared, **state):
++    source = {
++        "helm": {**_hook(repo, stage, name), "valueFiles": [f"../config/{stage}/values.yaml"]},
++        "path": "chart",
++        "repoURL": _url(repo),
++        "targetRevision": branch,
++    }
++    return _app(name, {"source": source}, lambda rev: {"revision": rev}, compared, **state)
++
++
++def three_source(name, repo, chart, version, stage, compared, **state):
++    sources = [
++        {
++            "chart": chart,
++            "helm": {"valueFiles": [f"$values/config/{stage}/values.yaml"]},
++            "repoURL": f"https://{chart}.github.io/helm-charts",
++            "targetRevision": version,
++        },
++        {"ref": "values", "repoURL": _url(repo), "targetRevision": "main"},
++        {
++            "helm": _hook(repo, stage, name),
++            "path": "chart",
++            "repoURL": _url(repo),
++            "targetRevision": "main",
++        },
++    ]
++    return _app(
++        name,
++        {"sources": sources},
++        lambda rev: {"revisions": [version, rev, rev]},
++        compared,
++        **state,
++    )
++
++
++def kubecoder_dev(compared, **state):
++    return single_source("kubecoder-dev", "KubeCoderDeploy", "main", "dev", compared, **state)
++
++
++def kubecoder_prd(compared, **state):
++    return single_source("kubecoder-prd", "KubeCoderDeploy", "prd", "prd", compared, **state)
++
++
++def keycloak(stage, compared, **state):
++    return single_source(f"keycloak-{stage}", "KeycloakDeploy", "main", stage, compared, **state)
++
++
++def grafana_prd(compared, **state):
++    return three_source(
++        "grafana-prd", "GrafanaDeploy", "grafana", "10.5.15", "prd", compared, **state
++    )
++
++
++# --- handoff lines, as the console prints them ------------------------------------------------
++
++
++def pin_line(repo, sha, *files):
++    return f"****/{repo} {sha} pins {', '.join(files)}."
++
++
++def promote_line(sha):
++    return f"pvginkel/KubeCoderDeploy {sha} pushed to prd."
++
++
++def already_on_line(sha):
++    return f"pvginkel/KubeCoderDeploy {sha} already on prd: nothing pushed."
++
++
++def already_carries_line(repo):
++    return f"****/{repo} already carries these pins: nothing committed, nothing pushed."
++
++
++def console(*lines) -> str:
++    """A console excerpt around the handoff lines, with Jenkins' \\r\\n line ends."""
++    body = [
++        "[Pipeline] { (Write image pins)",
++        "+ git commit --quiet -m 'ci: image pins from KubeCoder/Build-Main #551'",
++        *lines,
++        "[Pipeline] }",
++        "Finished: SUCCESS",
++    ]
++    return "\r\n".join(body) + "\r\n"
++
++
++class FakeKube:
++    """Serves scripted states per app: the listing gives every app its first state,
++    each later GET of an app its next one. The last state repeats."""
++
++    def __init__(self, *timelines):
++        self.timelines = {t[0]["metadata"]["name"]: list(t) for t in timelines}
++        self.gets = collections.Counter()
++
++    def applications(self):
++        return [timeline[0] for timeline in self.timelines.values()]
++
++    def application(self, name):
++        self.gets[name] += 1
++        timeline = self.timelines[name]
++        return timeline[min(self.gets[name], len(timeline) - 1)]
++
++
++@pytest.fixture
++def follow(clock, work):
++    """Run follow_deploys over one build's console; return (report, log lines)."""
++
++    def _follow(kube, *lines, pickup=PICKUP, roll=ROLL):
++        log: list[str] = []
++        report = track_build.follow_deploys(
++            lambda: kube, str(work), [(BUILD, console(*lines))], pickup, roll, POLL, log.append
++        )
++        return report, log
++
++    return _follow
++
++
++def states(report) -> dict[str, str]:
++    return {f.name: f.state for f in report.followed}
++
++
++def printed(report, capsys) -> str:
++    track_build.print_follow(report)
++    return capsys.readouterr().out
++
++
++SHA = "46e0aa8965387fab8b2e89a8b2fa088cfb72e6e4"
++
++
++class TestParseHandoffs:
++    def test_the_pin_line_is_read_although_its_owner_is_masked(self):
++        # KubeCoder/Build-Main #551's console. The git commit trace above the pin line is
++        # not a handoff.
++        handoffs = track_build.parse_handoffs(
++            BUILD, console(pin_line("KubeCoderDeploy", SHA, DEV, PRD))
++        )
++        assert handoffs == [
++            track_build.Handoff(BUILD, "KubeCoderDeploy", "main", SHA, (DEV, PRD), True)
++        ]
++
++    def test_every_pin_line_of_a_build_that_pins_several_repos(self):
++        # DockerImages #2548 printed ten, one per deploy repo its images feed.
++        text = console(
++            *(
++                pin_line(repo, SHA, PRD)
++                for repo in ("StorageDeploy", "NginxDeploy", "RegistryDeploy")
++            )
++        )
++        handoffs = track_build.parse_handoffs("DockerImages #2548", text)
++        assert [h.repo for h in handoffs] == ["StorageDeploy", "NginxDeploy", "RegistryDeploy"]
++        assert all(h.pushed and h.branch == "main" and h.files == (PRD,) for h in handoffs)
++
++    def test_a_promotion_that_moved_prd(self):
++        [handoff] = track_build.parse_handoffs(
++            "KubeCoder/Promote-PRD #9", console(promote_line(SHA))
++        )
++        assert handoff == track_build.Handoff(
++            "KubeCoder/Promote-PRD #9", "KubeCoderDeploy", "prd", SHA, None, True
++        )
++
++    def test_a_promotion_that_only_records_a_release_pushed_nothing(self):
++        [handoff] = track_build.parse_handoffs(
++            "KubeCoder/Promote-PRD #9", console(already_on_line(SHA))
++        )
++        assert (handoff.branch, handoff.sha, handoff.files, handoff.pushed) == (
++            "prd",
++            SHA,
++            None,
++            False,
++        )
++
++    def test_already_carries_names_no_commit(self):
++        [handoff] = track_build.parse_handoffs(
++            BUILD, console(already_carries_line("KubeCoderDeploy"))
++        )
++        assert (handoff.repo, handoff.branch, handoff.sha, handoff.pushed) == (
++            "KubeCoderDeploy",
++            "main",
++            None,
++            False,
++        )
++
++    def test_a_console_without_a_handoff_line(self):
++        assert track_build.parse_handoffs(BUILD, console()) == []
++
++
++class TestMatching:
++    OLD = "0" * 40
++
++    def handoff(self, repo, branch="main", files=None, pushed=True):
++        return track_build.Handoff(BUILD, repo, branch, SHA, files, pushed)
++
++    def test_a_kubecoder_pin_waits_on_dev_and_not_on_prd_which_tracks_the_prd_branch(self):
++        # Build-Main pins both values files on main; kubecoder-prd tracks branch prd.
++        handoff = self.handoff("KubeCoderDeploy", files=(DEV, PRD))
++        assert track_build.matching_sources(kubecoder_dev(self.OLD), handoff) == [0]
++        assert track_build.matching_sources(kubecoder_prd(self.OLD), handoff) == []
++
++    def test_a_promotion_waits_on_prd_only(self):
++        handoff = self.handoff("KubeCoderDeploy", branch="prd")
++        assert track_build.matching_sources(kubecoder_prd(self.OLD), handoff) == [0]
++        assert track_build.matching_sources(kubecoder_dev(self.OLD), handoff) == []
++
++    def test_a_dev_only_pin_on_a_shared_branch_waits_on_the_dev_app_only(self):
++        # keycloak-dev and keycloak-prd both track main and differ by values file.
++        handoff = self.handoff("KeycloakDeploy", files=(DEV,))
++        assert track_build.matching_sources(keycloak("dev", self.OLD), handoff) == [0]
++        assert track_build.matching_sources(keycloak("prd", self.OLD), handoff) == []
++
++    def test_a_handoff_naming_no_files_matches_every_app_on_the_branch(self):
++        handoff = self.handoff("KeycloakDeploy", pushed=False)
++        assert track_build.matching_sources(keycloak("dev", self.OLD), handoff) == [0]
++        assert track_build.matching_sources(keycloak("prd", self.OLD), handoff) == [0]
++
++    def test_a_three_source_app_matches_through_its_values_ref(self):
++        # The upstream chart names $values/config/prd/values.yaml; both deploy-repo sources roll.
++        handoff = self.handoff("GrafanaDeploy", files=(PRD,))
++        assert track_build.matching_sources(grafana_prd(self.OLD), handoff) == [1, 2]
++        assert track_build.value_files(grafana_prd(self.OLD), "GrafanaDeploy", "main") == {PRD}
++
++    def test_a_three_source_app_does_not_match_another_stages_file(self):
++        handoff = self.handoff("GrafanaDeploy", files=(DEV,))
++        assert track_build.matching_sources(grafana_prd(self.OLD), handoff) == []
++
++    def test_another_repos_app_does_not_match(self):
++        handoff = self.handoff("KeycloakDeploy", files=(DEV, PRD))
++        assert track_build.matching_sources(kubecoder_dev(self.OLD), handoff) == []
++
++
++class TestClone:
++    def test_a_descendant_contains_the_commit_and_an_ancestor_does_not(self, deploy_repo):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        later = repo.commit()
++        clone = track_build.Clone(str(repo.clone))
++        # Neither commit is in the clone yet: asking fetches them.
++        assert clone.contains(later, pin)
++        assert clone.contains(pin, pin)
++        assert not clone.contains(repo.initial, pin)
++
++    def test_head_reads_the_branch_after_a_fetch(self, deploy_repo):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        clone = track_build.Clone(str(repo.clone))
++        clone.fetch()
++        assert clone.head("main") == pin
++
++    def test_a_commit_the_origin_does_not_have_is_an_operational_error(self, deploy_repo):
++        repo = deploy_repo("KubeCoderDeploy")
++        clone = track_build.Clone(str(repo.clone))
++        with pytest.raises(track_build.FollowError, match="merge-base"):
++            clone.contains("f" * 40, repo.initial)
++
++
++class TestFollowRolls:
++    def test_waits_until_argo_has_seen_synced_and_settled_the_commit(
++        self, deploy_repo, follow, clock
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        kube = FakeKube(
++            [
++                kubecoder_dev(old),
++                # OutOfSync at the new commit, over a finished sync of the previous one.
++                kubecoder_dev(pin, sync="OutOfSync", last_sync=old),
++                kubecoder_dev(pin, sync="OutOfSync", last_sync=old, running=True),
++                kubecoder_dev(pin, health="Progressing"),
++                kubecoder_dev(pin),
++            ],
++            [kubecoder_prd(old)],
++        )
++        report, log = follow(kube, pin_line("KubeCoderDeploy", pin, DEV, PRD))
++        assert states(report) == {"kubecoder-dev": track_build.ROLLED}
++        assert report.exit_status() == 0
++        assert clock.now == 4 * POLL
++        assert kube.gets["kubecoder-prd"] == 0
++        assert any("kubecoder-dev" in line and "OutOfSync" in line for line in log)
++
++    def test_out_of_sync_at_the_commit_over_a_finished_earlier_sync_is_not_rolled(
++        self, deploy_repo
++    ):
++        # argocd-prd on 2026-09-27: compared at 83b6cf8, last sync at 307d94f.
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        app = kubecoder_dev(pin, sync="OutOfSync", last_sync=old)
++        clone = track_build.Clone(str(repo.clone))
++        assert track_build.app_state(app, [0], pin, clone) == track_build.ROLLING
++
++    def test_synced_at_a_commit_that_rendered_no_change_is_rolled(self, deploy_repo, follow, clock):
++        # grafana-prd: Synced at fed8ed0 over a 3bd4dc9 sync, no new sync run.
++        repo = deploy_repo("GrafanaDeploy")
++        old, pin = repo.initial, repo.commit()
++        report, _ = follow(
++            FakeKube([grafana_prd(pin, last_sync=old)]), pin_line("GrafanaDeploy", pin, PRD)
++        )
++        assert states(report) == {"grafana-prd": track_build.ROLLED}
++        assert report.exit_status() == 0
++        assert clock.now == 0
++
++    def test_synced_at_a_later_commit_is_rolled(self, deploy_repo, follow):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        later = repo.commit()
++        report, _ = follow(
++            FakeKube([kubecoder_dev(later)]), pin_line("KubeCoderDeploy", pin, DEV, PRD)
++        )
++        assert states(report) == {"kubecoder-dev": track_build.ROLLED}
++
++    def test_a_promotion_follows_kubecoder_prd_to_the_promoted_commit(
++        self, deploy_repo, follow, clock
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        old = repo.initial
++        repo.push_to(old, "prd")
++        promoted = repo.commit()
++        repo.push_to(promoted, "prd")
++        kube = FakeKube(
++            [
++                kubecoder_prd(old),
++                kubecoder_prd(promoted, sync="OutOfSync", last_sync=old),
++                kubecoder_prd(promoted),
++            ],
++            [kubecoder_dev(promoted)],
++        )
++        report, _ = follow(kube, promote_line(promoted))
++        assert states(report) == {"kubecoder-prd": track_build.ROLLED}
++        assert kube.gets["kubecoder-dev"] == 0
++        assert clock.now == 2 * POLL
++
++    def test_a_failed_sync_of_an_earlier_commit_is_not_this_commits_failure(
++        self, deploy_repo, follow
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        kube = FakeKube(
++            [
++                kubecoder_dev(
++                    pin, sync="OutOfSync", last_sync=old, phase="Failed", message="old failure"
++                ),
++                kubecoder_dev(pin, sync="OutOfSync", last_sync=old, running=True),
++                kubecoder_dev(pin),
++            ]
++        )
++        report, _ = follow(kube, pin_line("KubeCoderDeploy", pin, DEV))
++        assert states(report) == {"kubecoder-dev": track_build.ROLLED}
++
++    def test_the_summary_reports_each_app(self, deploy_repo, follow, capsys):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        report, _ = follow(
++            FakeKube([kubecoder_dev(pin)]), pin_line("KubeCoderDeploy", pin, DEV, PRD)
++        )
++        out = printed(report, capsys)
++        assert f"KubeCoderDeploy {pin[:7]} pushed to main, pins {DEV}, {PRD} ({BUILD})" in out
++        assert f"kubecoder-dev  rolled  Synced at {pin[:7]}, health Healthy" in out
++        assert "Result: rolled" in out
++
++
++class TestFollowFails:
++    def test_a_sync_error_condition_fails_the_roll(self, deploy_repo, follow, capsys):
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        error = {
++            "type": "SyncError",
++            "message": "Failed sync attempt to " + pin + ": one or more objects failed",
++        }
++        report, _ = follow(
++            FakeKube([kubecoder_dev(pin, sync="OutOfSync", last_sync=old, conditions=[error])]),
++            pin_line("KubeCoderDeploy", pin, DEV),
++        )
++        assert states(report) == {"kubecoder-dev": track_build.FAILED}
++        assert report.exit_status() == 5
++        assert "SyncError: Failed sync attempt" in printed(report, capsys)
++
++    def test_a_failed_sync_of_the_commit_fails_the_roll(self, deploy_repo, follow, capsys):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        app = kubecoder_dev(
++            pin, sync="OutOfSync", phase="Failed", message="PreSync hook tf-presync failed"
++        )
++        report, _ = follow(FakeKube([app]), pin_line("KubeCoderDeploy", pin, DEV))
++        assert report.exit_status() == 5
++        assert "last sync Failed: PreSync hook tf-presync failed" in printed(report, capsys)
++
++    def test_a_roll_that_settles_degraded_fails(self, deploy_repo, follow):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        kube = FakeKube(
++            [kubecoder_dev(pin, health="Progressing"), kubecoder_dev(pin, health="Degraded")]
++        )
++        report, _ = follow(kube, pin_line("KubeCoderDeploy", pin, DEV))
++        assert states(report) == {"kubecoder-dev": track_build.FAILED}
++
++    def test_an_app_without_automated_sync_stops_at_once(self, deploy_repo, follow, clock, capsys):
++        # argocd-prd, the one Application Argo CD does not sync on its own.
++        repo = deploy_repo("ArgoCDDeploy")
++        old, pin = repo.initial, repo.commit()
++        app = single_source(
++            "argocd-prd",
++            "ArgoCDDeploy",
++            "main",
++            "prd",
++            pin,
++            sync="OutOfSync",
++            last_sync=old,
++            automated=False,
++        )
++        report, _ = follow(FakeKube([app]), pin_line("ArgoCDDeploy", pin, PRD))
++        assert states(report) == {"argocd-prd": track_build.MANUAL}
++        assert report.exit_status() == 7
++        assert clock.now == 0
++        assert "Ask the operator to sync it in Argo CD" in printed(report, capsys)
++
++    def test_argo_not_seeing_the_commit_stops_at_the_pickup_deadline(
++        self, deploy_repo, follow, clock, capsys
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        report, _ = follow(FakeKube([kubecoder_dev(old)]), pin_line("KubeCoderDeploy", pin, DEV))
++        assert states(report) == {"kubecoder-dev": track_build.NOT_SEEN}
++        assert report.exit_status() == 7
++        assert clock.now == PICKUP
++        assert "lost webhook" in printed(report, capsys)
++
++    def test_the_roll_deadline_runs_from_when_argo_saw_the_commit(
++        self, deploy_repo, follow, clock, capsys
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        kube = FakeKube(
++            [kubecoder_dev(old), kubecoder_dev(old), kubecoder_dev(pin, health="Progressing")]
++        )
++        report, _ = follow(kube, pin_line("KubeCoderDeploy", pin, DEV))
++        assert states(report) == {"kubecoder-dev": track_build.NOT_DONE}
++        assert report.exit_status() == 6
++        assert clock.now == 2 * POLL + ROLL
++        out = printed(report, capsys)
++        assert f"kubecoder-dev  NOT DONE  Synced at {pin[:7]}, health Progressing" in out
++        assert "roll deadline" in out
++
++    def test_a_failure_outranks_a_stalled_roll(self, deploy_repo, follow):
++        repo = deploy_repo("KeycloakDeploy")
++        pin = repo.commit()
++        kube = FakeKube(
++            [keycloak("dev", pin, health="Progressing")],
++            [keycloak("prd", pin, health="Degraded")],
++        )
++        report, _ = follow(kube, pin_line("KeycloakDeploy", pin, DEV, PRD), roll=POLL)
++        assert states(report) == {
++            "keycloak-dev": track_build.NOT_DONE,
++            "keycloak-prd": track_build.FAILED,
++        }
++        assert report.exit_status() == 5
++
++
++class TestNothingToWaitFor:
++    def test_missing_clones_stop_before_anything_is_waited_on(
++        self, deploy_repo, follow, work, capsys
++    ):
++        # A DockerImages build pins several deploy repos; only RegistryDeploy is cloned here.
++        registry = deploy_repo("RegistryDeploy")
++        pin = registry.commit()
++        kube = FakeKube(
++            [single_source("storage-prd", "StorageDeploy", "main", "prd", SHA)],
++            [single_source("nginx-prd", "NginxDeploy", "main", "prd", SHA)],
++            [single_source("registry-prd", "RegistryDeploy", "main", "prd", registry.initial)],
++        )
++        report, _ = follow(
++            kube,
++            pin_line("StorageDeploy", SHA, PRD),
++            pin_line("NginxDeploy", SHA, PRD),
++            pin_line("RegistryDeploy", pin, PRD),
++        )
++        assert report.exit_status() == 4
++        assert list(report.missing) == ["StorageDeploy", "NginxDeploy"]
++        assert report.followed == [] and sum(kube.gets.values()) == 0
++        out = printed(report, capsys)
++        assert (
++            "StorageDeploy: git clone https://github.com/pvginkel/StorageDeploy.git "
++            f"{work}/StorageDeploy" in out
++        )
++        assert (
++            f"NginxDeploy: git clone https://github.com/pvginkel/NginxDeploy.git {work}/NginxDeploy"
++            in out
++        )
++        assert ".kubecoder/config.yaml" in out
++
++    def test_already_carries_reports_the_branch_head_without_waiting(
++        self, deploy_repo, follow, clock, capsys
++    ):
++        # Health can sit stale at Progressing when nothing new is synced: reported, not waited on.
++        repo = deploy_repo("KubeCoderDeploy")
++        head = repo.commit()
++        kube = FakeKube([kubecoder_dev(head, health="Progressing")], [kubecoder_prd(repo.initial)])
++        report, _ = follow(kube, already_carries_line("KubeCoderDeploy"))
++        assert states(report) == {"kubecoder-dev": track_build.CURRENT}
++        assert report.commits[report.handoffs[0]] == head
++        assert report.exit_status() == 0
++        assert clock.now == 0 and sum(kube.gets.values()) == 0
++        out = printed(report, capsys)
++        assert f"main already carries these pins, nothing pushed; main is at {head[:7]}" in out
++        assert f"Synced at {head[:7]}, health Progressing (at {head[:7]})" in out
++
++    def test_a_promotion_that_pushed_nothing_reports_against_its_commit(
++        self, deploy_repo, follow, clock, capsys
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        promoted = repo.commit()
++        later = repo.commit()
++        repo.push_to(later, "prd")
++        report, _ = follow(
++            FakeKube([kubecoder_prd(later, sync="OutOfSync")]), already_on_line(promoted)
++        )
++        assert states(report) == {"kubecoder-prd": track_build.CURRENT}
++        assert report.exit_status() == 0 and clock.now == 0
++        assert f"OutOfSync at {later[:7]}, health Healthy (past {promoted[:7]})" in printed(
++            report, capsys
++        )
++
++    def test_a_handoff_no_application_follows_is_reported(self, follow, capsys):
++        # No clone either: nothing is followed, so git is never asked.
++        report, _ = follow(FakeKube([kubecoder_dev(SHA)]), pin_line("SomeOtherDeploy", SHA, PRD))
++        assert report.exit_status() == 0
++        assert report.missing == {}
++        assert (
++            "No Argo CD Application follows SomeOtherDeploy main with those values files"
++            in printed(report, capsys)
++        )
++
++    def test_no_handoff_line_says_the_pipeline_may_need_a_fix(self, work, capsys):
++        def no_kube():
++            raise AssertionError("the kubeconfig is not read when there is nothing to follow")
++
++        report = track_build.follow_deploys(
++            no_kube, str(work), [(BUILD, console())], PICKUP, ROLL, POLL, print
++        )
++        assert report.exit_status() == 0
++        out = printed(report, capsys)
++        assert f"No handoff line in the console of {BUILD}" in out
++        assert "may need a fix" in out
++
++
++class TestDefaults:
++    def test_the_follow_is_on_with_a_ten_minute_roll_deadline(self):
++        args = track_build.parse_args(["Org/Repo", "--hash", "abc123"])
++        assert args.follow_argocd is True
++        assert args.roll_timeout == 600.0
++        assert args.pickup_timeout == 120.0
++
++    def test_the_follow_can_be_turned_off(self):
++        assert (
++            track_build.parse_args(
++                ["Org/Repo", "--buildnr", "1", "--no-follow-argocd"]
++            ).follow_argocd
++            is False
++        )
++
++
++class RunJenkins:
++    """One finished build of Org/Repo, #7, with a scripted result and console."""
++
++    result = "SUCCESS"
++    text = ""
++
++    def __init__(self, base_url, user, token):
++        pass
++
++    def get_json(self, path, tree=None):
++        if tree == "fullName":
++            return {"fullName": "Org/Repo"}
++        return {
++            "number": 7,
++            "building": False,
++            "result": self.result,
++            "duration": 60000,
++            "url": "https://jenkins/job/Org/job/Repo/7/",
++            "fullDisplayName": "Org » Repo #7",
++        }
++
++    def get_console(self, path):
++        return self.text
++
++
++class TestRun:
++    @pytest.fixture
++    def run(self, monkeypatch, clock, work, tmp_path):
++        monkeypatch.setenv("JENKINS_TOKEN", "token")
++        monkeypatch.setattr(track_build, "_WORK", str(work))
++
++        def _run(result, text, kube, *extra):
++            RunJenkins.result, RunJenkins.text = result, text
++            monkeypatch.setattr(track_build, "Jenkins", RunJenkins)
++            monkeypatch.setattr(track_build, "Kube", lambda kubeconfig, context: kube)
++            argv = ["Org/Repo", "--buildnr", "7", "--log-dir", str(tmp_path / "logs"), *extra]
++            return track_build.run(track_build.parse_args(argv))
++
++        return _run
++
++    def test_a_green_build_is_followed_into_argo_cd_by_default(self, run, deploy_repo, capsys):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        status = run(
++            "SUCCESS",
++            console(pin_line("KubeCoderDeploy", pin, DEV, PRD)),
++            FakeKube([kubecoder_dev(pin)]),
++        )
++        out = capsys.readouterr().out
++        assert status == 0
++        assert "=== Argo CD follow ===" in out and "kubecoder-dev  rolled" in out
++
++    def test_the_follow_decides_the_exit_status(self, run, deploy_repo):
++        repo = deploy_repo("KubeCoderDeploy")
++        old, pin = repo.initial, repo.commit()
++        kube = FakeKube([kubecoder_dev(old)])
++        assert run("SUCCESS", console(pin_line("KubeCoderDeploy", pin, DEV)), kube) == 7
++
++    def test_no_handoff_line_exits_with_the_builds_result(self, run, capsys):
++        assert run("SUCCESS", console(), None) == 0
++        assert "may need a fix" in capsys.readouterr().out
++
++    def test_a_failed_build_is_not_followed(self, run, capsys):
++        assert run("FAILURE", console(pin_line("KubeCoderDeploy", SHA, DEV)), None) == 1
++        assert "Argo CD follow" not in capsys.readouterr().out
++
++    def test_no_follow_argocd_skips_the_follow(self, run, capsys):
++        assert (
++            run(
++                "SUCCESS",
++                console(pin_line("KubeCoderDeploy", SHA, DEV)),
++                None,
++                "--no-follow-argocd",
++            )
++            == 0
++        )
++        assert "Argo CD follow" not in capsys.readouterr().out
+diff --git a/kube-coder-dev-local-home/track_build.py b/kube-coder-dev-local-home/track_build.py
+index 2f2291c..f79bf2f 100755
+--- a/kube-coder-dev-local-home/track_build.py
++++ b/kube-coder-dev-local-home/track_build.py
+@@ -30,14 +30,53 @@ Disable with ``--no-wait-downstream``.
+ **Already-finished builds** are handled identically and return immediately, so
+ tracking a build (and its downstream) long after both completed is fast.
+ 
++**Argo CD deploys.** A green build that deploys through Argo CD ends by pushing
++to its deploy repo, and Argo CD rolls that commit afterwards. So once every
++tracked build is green, the script reads the handoff lines their consoles print,
++and waits until every Argo CD Application a handoff touches has rolled the
++handed-off commit. Disable with ``--no-follow-argocd``. The handoff lines:
++
++    <owner>/<Repo> <sha> pins <file>, <file>.     cicd.writeVersionPins, branch main
++    <owner>/<Repo> <sha> pushed to prd.           Promote-PRD
++    <owner>/<Repo> already carries these pins: nothing committed, nothing pushed.
++    <owner>/<Repo> <sha> already on prd: nothing pushed.
++
++The first two pushed a commit, so there is a sync to wait for. An Application
++follows one when a source of it tracks that repo and branch and, for a pin line,
++its helm ``valueFiles`` name a pinned file. It has rolled the commit when Argo CD
++reports it ``Synced`` at the commit or a descendant, with no sync running and its
++health not ``Progressing``. The last two pushed nothing: each matched app's
++current state is reported, not waited on.
++
++Argo CD is read from the Kubernetes API with ``~/.kube/config`` (context
++``prd``, namespace ``argocd-prd``), read-only. Git questions are asked only of the
++environment's own clone of the deploy repo, ``/work/<Repo>``, fetched first.
++
+ Output:
+   * Live, state-change-only progress on **stderr** (timestamped).
+-  * A high-level **summary of every completed build on stdout** (always).
++  * A high-level **summary of every completed build on stdout** (always), and of
++    every Application followed or reported.
+   * The **full console log of any non-SUCCESS build written to disk**, with the
+     path named in the summary; successful builds' logs are never dumped.
+ 
+-Exit status: ``0`` all tracked builds succeeded; ``1`` a tracked build did not
+-succeed; ``3`` an operational problem (auth, build never appeared, etc.).
++Exit status:
++  ``0`` every tracked build succeeded and every Application a handoff pushed to
++      rolled its commit. A build with no handoff line, a handoff that pushed
++      nothing and a handoff no Application follows are reported, and leave it 0.
++  ``1`` a tracked build did not succeed; nothing is followed into Argo CD.
++  ``3`` an operational problem (Jenkins or Kubernetes auth, a build that never
++      appeared, a git fetch that failed, etc.).
++  ``4`` the builds are green, but a deploy repo they pushed to has no clone in
++      ``/work``: the deploy is untracked. The summary gives the ``git clone`` line
++      for each missing repo.
++  ``5`` a roll failed: an Application's sync of the commit failed, it carries an
++      error condition (``SyncError`` …), or it settled ``Degraded`` or ``Missing``.
++  ``6`` an Application had not rolled the commit ``--roll-timeout`` seconds after
++      Argo CD saw it.
++  ``7`` Argo CD will not roll the commit on its own: it had not seen the commit
++      after ``--pickup-timeout`` seconds (a lost webhook), or the Application has
++      no automated sync policy.
++  When Applications end differently, 5 wins over 7, and 7 over 6.
+ 
+ Auth: Jenkins base URL from ``--url`` or ``$JENKINS_URL``; user from ``--user``
+ or ``$JENKINS_USER``; API token from the env var named by ``--token-env``
+@@ -48,13 +87,19 @@ import argparse
+ import base64
+ import json
+ import os
++import posixpath
+ import re
++import ssl
++import subprocess
+ import sys
+ import tempfile
+ import time
+ import urllib.error
+ import urllib.parse
+ import urllib.request
++from dataclasses import dataclass, field
++
++import yaml
+ 
+ # How many recent builds to scan when matching by hash / upstream cause. The
+ # build we want is always near the head of the list, and some target-state jobs
+@@ -67,6 +112,46 @@ _SCHEDULED_RE = re.compile(
+     r"^(?:Scheduling project: |Starting building: )(.+?)(?: #\d+)?$", re.MULTILINE
+ )
+ 
++# The owner is not captured: writeVersionPins prints its line inside a
++# credentials block, where Jenkins masks the GitHub user as `****`.
++_HANDOFF_RE = re.compile(
++    r"\S+/(?P<repo>\S+) (?P<sha>[0-9a-f]{40}) "
++    r"(?:pins (?P<files>.+)"
++    r"|pushed to (?P<pushed>\S+)"
++    r"|already on (?P<already>\S+): nothing pushed)\."
++)
++_ALREADY_PINNED_RE = re.compile(
++    r"\S+/(?P<repo>\S+) already carries these pins: nothing committed, nothing pushed\."
++)
++# cicd.writeVersionPins commits to the deploy repo's main branch, and only there.
++_PIN_BRANCH = "main"
++
++_WORK = "/work"
++_KUBECONFIG = "~/.kube/config"
++# Every Application lives here; the dev cluster serves no `applications` resource.
++_ARGOCD_CONTEXT = "prd"
++_APPS_PATH = "apis/argoproj.io/v1alpha1/namespaces/argocd-prd/applications"
++_GIT_TIMEOUT = 120
++
++_OP_RUNNING = ("Running", "Terminating")
++_OP_FAILED = ("Failed", "Error")
++_UNHEALTHY = ("Degraded", "Missing")
++
++# A followed Application's state. UNSEEN and ROLLING are waited on; the rest end
++# the wait. CURRENT marks an app reported for a handoff that pushed nothing.
++UNSEEN, ROLLING, ROLLED, FAILED = "unseen", "rolling", "rolled", "failed"
++MANUAL, NOT_SEEN, NOT_DONE, CURRENT = "manual", "not-seen", "not-done", "current"
++_LABELS = {
++    UNSEEN: "not seen yet",
++    ROLLING: "rolling",
++    ROLLED: "rolled",
++    FAILED: "FAILED",
++    MANUAL: "MANUAL SYNC",
++    NOT_SEEN: "NOT SEEN",
++    NOT_DONE: "NOT DONE",
++    CURRENT: "current",
++}
++
+ 
+ class JenkinsError(Exception):
+     """An operational failure talking to Jenkins (auth, missing build, ...)."""
+@@ -337,6 +422,543 @@ def print_summary(
+         print(f"Result: all {len(rows)} tracked build(s) succeeded.")
+ 
+ 
++class FollowError(Exception):
++    """An operational failure following a handoff into Argo CD (kubeconfig, API, git)."""
++
++
++@dataclass(frozen=True)
++class Handoff:
++    """A build's report of what it pushed to a deploy repo, or that it pushed nothing."""
++
++    build: str  # the build that printed it, e.g. "KubeCoder/Build-Main #551"
++    repo: str  # the deploy repo's name; its clone is /work/<repo>
++    branch: str
++    sha: str | None  # None for "already carries these pins": the branch head is reported
++    files: tuple[str, ...] | None  # pinned repo-root paths; None matches every app on the branch
++    pushed: bool  # a new commit, so a sync to wait for
++
++
++def parse_handoffs(build: str, console: str) -> list[Handoff]:
++    """The handoff lines in a build's console, in the order it printed them."""
++    out: list[Handoff] = []
++    # splitlines, not a MULTILINE regex: Jenkins consoles carry \r\n line ends.
++    for line in console.splitlines():
++        if match := _HANDOFF_RE.fullmatch(line):
++            repo, sha = match["repo"], match["sha"]
++            if match["files"] is not None:
++                files = tuple(match["files"].split(", "))
++                out.append(Handoff(build, repo, _PIN_BRANCH, sha, files, True))
++            elif match["pushed"] is not None:
++                out.append(Handoff(build, repo, match["pushed"], sha, None, True))
++            else:
++                out.append(Handoff(build, repo, match["already"], sha, None, False))
++        elif match := _ALREADY_PINNED_RE.fullmatch(line):
++            out.append(Handoff(build, match["repo"], _PIN_BRANCH, None, None, False))
++    return out
++
++
++def _named(entries: list[dict] | None, name: str, kind: str, path: str) -> dict:
++    for entry in entries or []:
++        if entry.get("name") == name:
++            return entry[kind]
++    raise FollowError(f"the kubeconfig {path} has no {kind} named {name!r}")
++
++
++class Kube:
++    """Read-only Kubernetes API client for one kubeconfig context (stdlib + PyYAML)."""
++
++    def __init__(self, kubeconfig: str, context: str):
++        path = os.path.expanduser(kubeconfig)
++        try:
++            with open(path) as fh:
++                config = yaml.safe_load(fh)
++        except OSError as e:
++            raise FollowError(f"cannot read the kubeconfig {path}: {e.strerror}") from e
++        ctx = _named(config.get("contexts"), context, "context", path)
++        cluster = _named(config.get("clusters"), ctx["cluster"], "cluster", path)
++        user = _named(config.get("users"), ctx["user"], "user", path)
++        self.server = cluster["server"].rstrip("/")
++        ca = base64.b64decode(cluster["certificate-authority-data"]).decode()
++        self._tls = ssl.create_default_context(cadata=ca)
++        # The microk8s cluster CA carries no keyUsage extension, which the strict
++        # X.509 checks Python 3.13 enables by default reject. Chain and hostname
++        # verification stay on.
++        self._tls.verify_flags &= ~ssl.VERIFY_X509_STRICT
++        self._token = user["token"]
++
++    def get(self, path: str) -> dict:
++        req = urllib.request.Request(f"{self.server}/{path}")
++        req.add_header("Authorization", f"Bearer {self._token}")
++        try:
++            with urllib.request.urlopen(req, timeout=30, context=self._tls) as resp:
++                return json.load(resp)
++        except urllib.error.HTTPError as e:
++            raise FollowError(f"the Kubernetes API answered HTTP {e.code} for {path}") from e
++        except urllib.error.URLError as e:
++            raise FollowError(
++                f"cannot reach the Kubernetes API at {self.server}: {e.reason}"
++            ) from e
++
++    def applications(self) -> list[dict]:
++        return self.get(_APPS_PATH)["items"]
++
++    def application(self, name: str) -> dict:
++        return self.get(f"{_APPS_PATH}/{urllib.parse.quote(name)}")
++
++
++class Clone:
++    """The environment's clone of a deploy repo, the only place git questions go."""
++
++    def __init__(self, path: str):
++        self.path = path
++        self._contains: dict[tuple[str, str], bool] = {}
++
++    def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
++        command = f"git -C {self.path} {' '.join(args)}"
++        try:
++            proc = subprocess.run(
++                ["git", "-C", self.path, *args],
++                capture_output=True,
++                text=True,
++                timeout=_GIT_TIMEOUT,
++            )
++        except subprocess.TimeoutExpired as e:
++            raise FollowError(f"{command} did not finish within {_GIT_TIMEOUT}s") from e
++        if check and proc.returncode != 0:
++            raise FollowError(f"{command} failed: {proc.stderr.strip()}")
++        return proc
++
++    def fetch(self) -> None:
++        self._git("fetch", "--quiet", "origin")
++
++    def head(self, branch: str) -> str:
++        return self._git("rev-parse", f"refs/remotes/origin/{branch}").stdout.strip()
++
++    def _has(self, rev: str) -> bool:
++        return self._git("cat-file", "-e", f"{rev}^{{commit}}", check=False).returncode == 0
++
++    def contains(self, rev: str, sha: str) -> bool:
++        """Whether ``rev`` is ``sha`` or a descendant of it."""
++        if rev == sha:
++            return True
++        key = (rev, sha)
++        if key not in self._contains:
++            if not (self._has(rev) and self._has(sha)):
++                self.fetch()
++            proc = self._git("merge-base", "--is-ancestor", sha, rev, check=False)
++            if proc.returncode not in (0, 1):
++                raise FollowError(
++                    f"git -C {self.path} merge-base --is-ancestor {sha} {rev} failed: "
++                    f"{proc.stderr.strip()}"
++                )
++            self._contains[key] = proc.returncode == 0
++        return self._contains[key]
++
++
++def _sources(app: dict) -> list[dict]:
++    spec = app["spec"]
++    return spec["sources"] if spec.get("sources") else [spec["source"]]
++
++
++def _repo_name(url: str) -> str:
++    """``https://github.com/pvginkel/KubeCoderDeploy.git`` -> ``KubeCoderDeploy``."""
++    return url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
++
++
++def _tracks(source: dict, repo: str, branch: str) -> bool:
++    return _repo_name(source.get("repoURL", "")) == repo and source.get("targetRevision") == branch
++
++
++def value_files(app: dict, repo: str, branch: str) -> set[str]:
++    """Repo-root paths of the app's helm valueFiles that ``repo`` at ``branch`` supplies.
++
++    A values file is named relative to its source's ``path`` (``../config/prd/values.yaml``
++    beside ``path: chart``), or through a ``ref`` source (``$values/config/prd/values.yaml``).
++    """
++    sources = _sources(app)
++    refs = {s["ref"]: s for s in sources if s.get("ref")}
++    out: set[str] = set()
++    for source in sources:
++        for name in (source.get("helm") or {}).get("valueFiles") or []:
++            if name.startswith("$"):
++                ref, _, path = name[1:].partition("/")
++                supplier = refs.get(ref)
++            else:
++                supplier = source
++                path = posixpath.normpath(posixpath.join(source.get("path", ""), name))
++            if supplier is not None and _tracks(supplier, repo, branch):
++                out.add(path)
++    return out
++
++
++def matching_sources(app: dict, handoff: Handoff) -> list[int]:
++    """Indexes of the app's sources that roll ``handoff``; empty when the app does not."""
++    indexes = [i for i, s in enumerate(_sources(app)) if _tracks(s, handoff.repo, handoff.branch)]
++    if indexes and handoff.files is not None:
++        if not value_files(app, handoff.repo, handoff.branch) & set(handoff.files):
++            return []
++    return indexes
++
++
++def _revisions(app: dict, block: dict, indexes: list[int]) -> list[str | None]:
++    """The revisions ``block`` (sync status or sync result) records for those sources."""
++    revisions = (
++        block.get("revisions") if app["spec"].get("sources") else [block.get("revision")]
++    ) or []
++    return [revisions[i] if i < len(revisions) else None for i in indexes]
++
++
++def _at(clone: Clone, revisions: list[str | None], sha: str) -> bool:
++    return all(rev and clone.contains(rev, sha) for rev in revisions)
++
++
++def _automated(app: dict) -> bool:
++    automated = (app["spec"].get("syncPolicy") or {}).get("automated")
++    return automated is not None and automated.get("enabled", True)
++
++
++def _error_conditions(app: dict) -> list[dict]:
++    conditions = (app.get("status") or {}).get("conditions") or []
++    return [c for c in conditions if c.get("type", "").endswith("Error")]
++
++
++def _sync_running(app: dict) -> bool:
++    op_state = (app.get("status") or {}).get("operationState") or {}
++    return bool(app.get("operation")) or op_state.get("phase") in _OP_RUNNING
++
++
++def app_state(app: dict, indexes: list[int], sha: str, clone: Clone) -> str:
++    """Where ``app`` stands on commit ``sha``: UNSEEN, ROLLING, ROLLED or FAILED.
++
++    The compared revision moves before any sync, so an app OutOfSync at ``sha`` is
++    still rolling; a commit that renders no change leaves the app Synced with no
++    new sync, and that is rolled.
++    """
++    status = app.get("status") or {}
++    sync = status.get("sync") or {}
++    if not _at(clone, _revisions(app, sync, indexes), sha):
++        return UNSEEN
++    if _error_conditions(app):
++        return FAILED
++    if _sync_running(app):
++        return ROLLING
++    op_state = status.get("operationState") or {}
++    if op_state.get("phase") in _OP_FAILED and _at(
++        clone, _revisions(app, op_state.get("syncResult") or {}, indexes), sha
++    ):
++        return FAILED
++    if sync.get("status") != "Synced":
++        return ROLLING
++    health = (status.get("health") or {}).get("status")
++    if health == "Progressing":
++        return ROLLING
++    return FAILED if health in _UNHEALTHY else ROLLED
++
++
++def _one_line(text: str) -> str:
++    return " ".join(text.split())
++
++
++def describe(app: dict, indexes: list[int]) -> str:
++    """What Argo CD reports for the app, e.g. ``Synced at 46e0aa8, health Healthy``."""
++    status = app.get("status") or {}
++    sync = status.get("sync") or {}
++    revisions = ", ".join(dict.fromkeys((rev or "?")[:7] for rev in _revisions(app, sync, indexes)))
++    parts = [
++        f"{sync.get('status', 'Unknown')} at {revisions}",
++        f"health {(status.get('health') or {}).get('status', 'Unknown')}",
++    ]
++    op_state = status.get("operationState") or {}
++    if _sync_running(app):
++        parts.append("sync running")
++    elif op_state.get("phase") in _OP_FAILED:
++        parts.append(f"last sync {op_state['phase']}: {_one_line(op_state.get('message', ''))}")
++    parts += [f"{c['type']}: {_one_line(c.get('message', ''))}" for c in _error_conditions(app)]
++    if not _automated(app):
++        parts.append("no automated sync policy")
++    return ", ".join(parts)
++
++
++@dataclass
++class Followed:
++    """One Application a handoff touches, and where it stands on the handed-off commit."""
++
++    handoff: Handoff
++    name: str
++    indexes: list[int]
++    app: dict  # as Argo CD last reported it
++    clone: Clone
++    sha: str  # the handed-off commit, or the branch head for "already carries these pins"
++    state: str = UNSEEN
++    seen_at: float | None = None
++
++    def relation(self) -> str:
++        """Where the app's compared revision sits relative to ``sha``."""
++        revisions = _revisions(
++            self.app, (self.app.get("status") or {}).get("sync") or {}, self.indexes
++        )
++        if all(rev == self.sha for rev in revisions):
++            return f"at {self.sha[:7]}"
++        if _at(self.clone, revisions, self.sha):
++            return f"past {self.sha[:7]}"
++        return f"not at {self.sha[:7]}"
++
++
++@dataclass
++class FollowReport:
++    """What following the tracked builds' handoffs into Argo CD found."""
++
++    builds: list[str]
++    handoffs: list[Handoff]
++    pickup_timeout: float
++    roll_timeout: float
++    commits: dict[Handoff, str] = field(default_factory=dict)
++    followed: list[Followed] = field(default_factory=list)
++    unmatched: list[Handoff] = field(default_factory=list)
++    missing: dict[str, tuple[str, str]] = field(default_factory=dict)  # repo -> (URL, clone path)
++    error: str | None = None
++
++    def exit_status(self) -> int:
++        if self.error:
++            return 3
++        if self.missing:
++            return 4
++        states = {f.state for f in self.followed}
++        for state, status in ((FAILED, 5), (NOT_SEEN, 7), (MANUAL, 7), (NOT_DONE, 6)):
++            if state in states:
++                return status
++        return 0
++
++
++def follow_deploys(
++    make_kube,
++    work: str,
++    builds: list[tuple[str, str]],
++    pickup_timeout: float,
++    roll_timeout: float,
++    poll: float,
++    log,
++) -> FollowReport:
++    """Follow the handoffs in green builds' consoles (``(label, console)`` pairs) into Argo CD."""
++    handoffs = [h for label, console in builds for h in parse_handoffs(label, console)]
++    report = FollowReport([label for label, _ in builds], handoffs, pickup_timeout, roll_timeout)
++    if handoffs:
++        try:
++            _follow(report, make_kube(), work, poll, log)
++        except FollowError as exc:
++            log(f"error following into Argo CD: {exc}")
++            report.error = str(exc)
++    return report
++
++
++def _follow(report: FollowReport, kube: Kube, work: str, poll: float, log) -> None:
++    apps = kube.applications()
++    matched: list[tuple[Handoff, dict, list[int]]] = []
++    urls: dict[str, str] = {}
++    for handoff in report.handoffs:
++        found = [(app, idx) for app in apps if (idx := matching_sources(app, handoff))]
++        if not found:
++            log(f"{handoff.repo} {handoff.branch}: no Argo CD Application follows it")
++            report.unmatched.append(handoff)
++        for app, indexes in found:
++            matched.append((handoff, app, indexes))
++            urls.setdefault(handoff.repo, _sources(app)[indexes[0]]["repoURL"])
++
++    # Every missing clone is found before anything is waited on, so one stop names them all.
++    clones: dict[str, Clone] = {}
++    for repo, url in urls.items():
++        path = os.path.join(work, repo)
++        if os.path.exists(os.path.join(path, ".git")):
++            clones[repo] = Clone(path)
++        else:
++            report.missing[repo] = (url, path)
++    if report.missing:
++        log(f"no clone in {work} of: {', '.join(report.missing)}")
++        return
++
++    for clone in clones.values():
++        clone.fetch()
++    for handoff in report.handoffs:
++        if handoff.repo in clones:
++            report.commits[handoff] = handoff.sha or clones[handoff.repo].head(handoff.branch)
++    for handoff, app, indexes in matched:
++        report.followed.append(
++            Followed(
++                handoff,
++                app["metadata"]["name"],
++                indexes,
++                app,
++                clones[handoff.repo],
++                report.commits[handoff],
++            )
++        )
++
++    for followed in report.followed:
++        if not followed.handoff.pushed:
++            followed.state = CURRENT
++            state = describe(followed.app, followed.indexes)
++            log(f"{followed.name}: {state} ({followed.relation()})")
++    _wait(
++        [f for f in report.followed if f.handoff.pushed],
++        kube,
++        report.pickup_timeout,
++        report.roll_timeout,
++        poll,
++        log,
++    )
++
++
++def _wait(
++    followed: list[Followed],
++    kube: Kube,
++    pickup_timeout: float,
++    roll_timeout: float,
++    poll: float,
++    log,
++) -> None:
++    """Poll each app until it has rolled its commit or reaches a stop."""
++    pickup_deadline = time.monotonic() + pickup_timeout
++    announced: dict[int, str] = {}
++    pending = list(followed)
++    while pending:
++        now = time.monotonic()
++        for f in pending:
++            state = app_state(f.app, f.indexes, f.sha, f.clone)
++            if state in (ROLLED, FAILED):
++                f.state = state
++            elif not _automated(f.app):
++                f.state = MANUAL
++            elif state == UNSEEN:
++                f.state = NOT_SEEN if now >= pickup_deadline else UNSEEN
++            else:
++                if f.seen_at is None:
++                    f.seen_at = now
++                f.state = NOT_DONE if now >= f.seen_at + roll_timeout else ROLLING
++            line = (
++                f"{f.name} ({f.handoff.repo} {f.sha[:7]}): {_LABELS[f.state]} — "
++                f"{describe(f.app, f.indexes)}"
++            )
++            if announced.get(id(f)) != line:
++                log(line)
++                announced[id(f)] = line
++        pending = [f for f in pending if f.state in (UNSEEN, ROLLING)]
++        if pending:
++            time.sleep(poll)
++            fresh = {
++                name: kube.application(name) for name in dict.fromkeys(f.name for f in pending)
++            }
++            for f in pending:
++                f.app = fresh[f.name]
++
++
++def _handoff_heading(handoff: Handoff, commit: str | None) -> str:
++    if handoff.files is not None:
++        what = f"{handoff.sha[:7]} pushed to {handoff.branch}, pins {', '.join(handoff.files)}"
++    elif handoff.pushed:
++        what = f"{handoff.sha[:7]} pushed to {handoff.branch}"
++    elif handoff.sha:
++        what = f"{handoff.sha[:7]} already on {handoff.branch}, nothing pushed"
++    else:
++        head = f"; {handoff.branch} is at {commit[:7]}" if commit else ""
++        what = f"{handoff.branch} already carries these pins, nothing pushed{head}"
++    return f"{handoff.repo} {what} ({handoff.build})"
++
++
++def _names(report: FollowReport, state: str) -> str:
++    return ", ".join(f.name for f in report.followed if f.state == state)
++
++
++def _follow_results(report: FollowReport) -> list[str]:
++    if report.error:
++        return [f"Result: following into Argo CD failed — {report.error}"]
++    if report.missing:
++        lines = [
++            "Result: deploy untracked — the builds are green, but the tracker asks git only of "
++            "this environment's own clone of a deploy repo, and these have none:"
++        ]
++        lines += [
++            f"  {repo}: git clone {url} {path}" for repo, (url, path) in report.missing.items()
++        ]
++        lines.append(
++            "Clone them now and re-run this command to follow the deploy. So that the next "
++            "start of this environment clones them, declare each in its .kubecoder/config.yaml."
++        )
++        return lines
++    lines = []
++    if failed := _names(report, FAILED):
++        lines.append(
++            f"Result: the roll FAILED on {failed}; Argo CD's own words are on its line above. "
++            f"Fix the cause and push again."
++        )
++    if not_seen := _names(report, NOT_SEEN):
++        lines.append(
++            f"Result: Argo CD had not seen the commit on {not_seen} after "
++            f"{report.pickup_timeout:g}s (--pickup-timeout). Argo CD syncs on push only, so a "
++            f"lost webhook leaves an app stale but green: ask the operator to refresh it in Argo "
++            f"CD, or to redeliver the push from the GitHub repo's Recent Deliveries, then re-run "
++            f"this command."
++        )
++    if manual := _names(report, MANUAL):
++        lines.append(
++            f"Result: {manual} has no automated sync policy, so Argo CD will not roll the commit "
++            f"on its own, and this tracker only reads. Ask the operator to sync it in Argo CD, "
++            f"then re-run this command."
++        )
++    if not_done := _names(report, NOT_DONE):
++        lines.append(
++            f"Result: {not_done} had not rolled at the {report.roll_timeout:g}s roll deadline "
++            f"(--roll-timeout); its line above is what Argo CD reports, not a verdict on the "
++            f"workload. Argo CD's health can sit stale at Progressing when a commit renders no "
++            f"change and so brings no sync: check the workload itself, or re-run this command "
++            f"to keep waiting."
++        )
++    if not lines:
++        if rolled := _names(report, ROLLED):
++            lines.append(
++                f"Result: rolled — Argo CD runs the handed-off commit, or a later one, on {rolled}."
++            )
++        else:
++            lines.append(
++                "Result: nothing to wait for — no handoff pushed a commit an Application follows."
++            )
++    return lines
++
++
++def print_follow(report: FollowReport) -> None:
++    print("\n=== Argo CD follow ===")
++    if not report.handoffs:
++        print(
++            f"No handoff line in the console of {', '.join(report.builds)}: nothing to follow into "
++            f"Argo CD. A pipeline that deploys through Argo CD prints one once it has pushed to "
++            f"its deploy repo: cicd.writeVersionPins' '<owner>/<Repo> <sha> pins <files>.', or "
++            f"Promote-PRD's '<owner>/<Repo> <sha> pushed to prd.'. If this repo deploys through "
++            f"Argo CD, its pipeline may need a fix before track_build.py can follow the deployment."
++        )
++        return
++    if not report.missing:
++        for handoff in report.handoffs:
++            print(_handoff_heading(handoff, report.commits.get(handoff)))
++            if handoff in report.unmatched:
++                pinned = " with those values files" if handoff.files is not None else ""
++                print(
++                    f"  No Argo CD Application follows {handoff.repo} {handoff.branch}{pinned}: "
++                    f"nothing to follow. If {handoff.repo} deploys through Argo CD, compare its "
++                    f"Application's source (repoURL, targetRevision, helm valueFiles) with this "
++                    f"handoff."
++                )
++            apps = [f for f in report.followed if f.handoff is handoff]
++            name_w = max((len(f.name) for f in apps), default=0)
++            label_w = max((len(_LABELS[f.state]) for f in apps), default=0)
++            for f in apps:
++                detail = describe(f.app, f.indexes)
++                if f.state == CURRENT:
++                    detail += f" ({f.relation()})"
++                print(f"  {f.name:<{name_w}}  {_LABELS[f.state]:<{label_w}}  {detail}")
++        print()
++    for line in _follow_results(report):
++        print(line)
++
++
+ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+     parser = argparse.ArgumentParser(
+         description="Track a precise Jenkins build (and what it triggers) to completion.",
+@@ -354,6 +976,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+         default=True,
+         help="also track pipelines this build triggers (default: on)",
+     )
++    parser.add_argument(
++        "--follow-argocd",
++        dest="follow_argocd",
++        action=argparse.BooleanOptionalAction,
++        default=True,
++        help="once the builds are green, wait until Argo CD has rolled what they pushed to "
++        "their deploy repos (default: on)",
++    )
++    parser.add_argument(
++        "--pickup-timeout",
++        type=float,
++        default=120.0,
++        metavar="SECONDS",
++        help="how long Argo CD may take to see a pushed deploy commit (default: 120)",
++    )
++    parser.add_argument(
++        "--roll-timeout",
++        type=float,
++        default=600.0,
++        metavar="SECONDS",
++        help="how long an Application may take to roll a commit once Argo CD has seen it "
++        "(default: 600, 10 minutes)",
++    )
+     parser.add_argument(
+         "--url", default=os.environ.get("JENKINS_URL", "https://jenkins.webathome.org")
+     )
+@@ -416,10 +1061,15 @@ def run(args: argparse.Namespace) -> int:
+ 
+     tracked: list[tuple[str, str, dict]] = [(args.job, job_url, primary)]
+     op_error: str | None = None
++    consoles: dict[tuple[str, int], str] = {}
++
++    def console_of(url: str, number: int) -> str:
++        if (url, number) not in consoles:
++            consoles[(url, number)] = jk.get_console(f"{url}/{number}")
++        return consoles[(url, number)]
+ 
+     if args.wait_downstream:
+-        console = jk.get_console(f"{job_url}/{primary['number']}")
+-        for ds_name in discover_downstream_jobs(console):
++        for ds_name in discover_downstream_jobs(console_of(job_url, primary["number"])):
+             log(f"Discovered downstream pipeline: {ds_name}")
+             ds_url = job_to_url(ds_name)
+             try:
+@@ -454,13 +1104,32 @@ def run(args: argparse.Namespace) -> int:
+                 diagnoses.append((name, build, failure_tail(console)))
+         rows.append((name, build, logfile))
+ 
++    report: FollowReport | None = None
++    if args.follow_argocd and not op_error and not any_failed:
++        report = follow_deploys(
++            lambda: Kube(_KUBECONFIG, _ARGOCD_CONTEXT),
++            _WORK,
++            [
++                (f"{name} #{build['number']}", console_of(url, build["number"]))
++                for name, url, build in tracked
++            ],
++            args.pickup_timeout,
++            args.roll_timeout,
++            args.poll_interval,
++            log,
++        )
++
+     print_summary(rows, events, op_error)
+     for name, build, tail in diagnoses:
+         print(f"\n=== Failure tail: {name} #{build['number']} ({build.get('result')}) ===")
+         print(tail)
++    if report is not None:
++        print_follow(report)
+     if op_error:
+         return 3
+-    return 1 if any_failed else 0
++    if any_failed:
++        return 1
++    return report.exit_status() if report is not None else 0
+ 
+ 
+ def main() -> int:
+
+/work/DockerImages — P5: git diff 555b1d6bda6b..c797d33ac9d1
+
+kube-coder-dev-local-home/tests/test_follow_argocd.py | 543 +++++++++++++++++++++++++++++++++++++-
+ kube-coder-dev-local-home/track_build.py              | 398 +++++++++++++++++++++++++++-
+ 2 files changed, 920 insertions(+), 21 deletions(-)
+
+diff --git a/kube-coder-dev-local-home/tests/test_follow_argocd.py b/kube-coder-dev-local-home/tests/test_follow_argocd.py
+index 60d0585..d9bc662 100644
+--- a/kube-coder-dev-local-home/tests/test_follow_argocd.py
++++ b/kube-coder-dev-local-home/tests/test_follow_argocd.py
+@@ -1,6 +1,7 @@
+ """Tests for track_build's follow into Argo CD: parsing the handoff lines a green
+-build prints, matching them to Applications, and waiting until each has rolled
+-the handed-off commit or reached a stop.
++build prints, matching them to Applications, waiting until each has rolled the
++handed-off commit or reached a stop, and saving the diagnosis of a roll that
++failed or missed the roll deadline.
+ 
+ The Application fixtures take the shapes Argo CD v3.5 serves in argocd-prd:
+ single-source (`path: chart`, `../config/<stage>/values.yaml`) and three-source
+@@ -14,6 +15,8 @@ Run: `kc project test kube-coder-dev-local-home` from the DockerImages checkout.
+ 
+ import collections
+ import importlib.util
++import io
++import re
+ import subprocess
+ from pathlib import Path
+ 
+@@ -250,11 +253,15 @@ def console(*lines) -> str:
+ 
+ class FakeKube:
+     """Serves scripted states per app: the listing gives every app its first state,
+-    each later GET of an app its next one. The last state repeats."""
++    each later GET of an app its next one. The last state repeats. ``objects`` holds
++    the live objects by collection path, ``logs`` the pod logs by (namespace, pod,
++    container)."""
+ 
+-    def __init__(self, *timelines):
++    def __init__(self, *timelines, objects=None, logs=None):
+         self.timelines = {t[0]["metadata"]["name"]: list(t) for t in timelines}
+         self.gets = collections.Counter()
++        self.objects = objects or {}
++        self.logs = logs or {}
+ 
+     def applications(self):
+         return [timeline[0] for timeline in self.timelines.values()]
+@@ -264,15 +271,53 @@ class FakeKube:
+         timeline = self.timelines[name]
+         return timeline[min(self.gets[name], len(timeline) - 1)]
+ 
++    def items(self, path, fieldSelector="", labelSelector=""):
++        return [
++            obj
++            for obj in self.objects.get(path, [])
++            if _selected(obj, fieldSelector, labelSelector)
++        ]
++
++    def log(self, namespace, pod, container):
++        return self.logs[(namespace, pod, container)]
++
++
++def _terms(selector: str) -> list[list[str]]:
++    return [term.split("=", 1) for term in selector.split(",") if term]
++
++
++def _selected(obj, field_selector, label_selector) -> bool:
++    """Equality selectors, as the Kubernetes API applies them."""
++    for key, value in _terms(field_selector):
++        node = obj
++        for part in key.split("."):
++            node = node.get(part, {})
++        if node != value:
++            return False
++    labels = obj["metadata"].get("labels") or {}
++    return all(labels.get(key) == value for key, value in _terms(label_selector))
++
+ 
+ @pytest.fixture
+-def follow(clock, work):
++def log_dir(tmp_path) -> Path:
++    return tmp_path / "logs"
++
++
++@pytest.fixture
++def follow(clock, work, log_dir):
+     """Run follow_deploys over one build's console; return (report, log lines)."""
+ 
+     def _follow(kube, *lines, pickup=PICKUP, roll=ROLL):
+         log: list[str] = []
+         report = track_build.follow_deploys(
+-            lambda: kube, str(work), [(BUILD, console(*lines))], pickup, roll, POLL, log.append
++            lambda: kube,
++            str(work),
++            [(BUILD, console(*lines))],
++            pickup,
++            roll,
++            POLL,
++            str(log_dir),
++            log.append,
+         )
+         return report, log
+ 
+@@ -691,12 +736,12 @@ class TestNothingToWaitFor:
+             in printed(report, capsys)
+         )
+ 
+-    def test_no_handoff_line_says_the_pipeline_may_need_a_fix(self, work, capsys):
++    def test_no_handoff_line_says_the_pipeline_may_need_a_fix(self, work, log_dir, capsys):
+         def no_kube():
+             raise AssertionError("the kubeconfig is not read when there is nothing to follow")
+ 
+         report = track_build.follow_deploys(
+-            no_kube, str(work), [(BUILD, console())], PICKUP, ROLL, POLL, print
++            no_kube, str(work), [(BUILD, console())], PICKUP, ROLL, POLL, str(log_dir), print
+         )
+         assert report.exit_status() == 0
+         out = printed(report, capsys)
+@@ -704,6 +749,479 @@ class TestNothingToWaitFor:
+         assert "may need a fix" in out
+ 
+ 
++# --- the diagnosis of a failed or stalled roll ------------------------------------------------
++
++HOOKS = "argocd-hooks"
++HOOK_JOBS = f"apis/batch/v1/namespaces/{HOOKS}/jobs"
++HOOK_PODS = f"api/v1/namespaces/{HOOKS}/pods"
++NS = "kubecoder-dev"
++DEPLOYMENTS = f"apis/apps/v1/namespaces/{NS}/deployments"
++PODS = f"api/v1/namespaces/{NS}/pods"
++EVENTS = f"api/v1/namespaces/{NS}/events"
++
++
++def hook_job(app, sha, uid, *, condition):
++    """The PreSync hook Job the argocd-hook chart creates for ``app`` at ``sha``."""
++    return {
++        "metadata": {
++            "name": f"tf-presync-{app}",
++            "namespace": HOOKS,
++            "creationTimestamp": "2026-09-27T07:38:29Z",
++            "labels": {"batch.kubernetes.io/controller-uid": uid, "job-name": f"tf-presync-{app}"},
++        },
++        "spec": {
++            "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
++            "template": {
++                "spec": {
++                    "containers": [
++                        {
++                            "name": "terraform",
++                            "image": "registry:5000/argocd-hook:10",
++                            "args": [_url("KubeCoderDeploy"), sha, "dev", app],
++                        }
++                    ]
++                }
++            },
++        },
++        "status": {"conditions": [condition]},
++    }
++
++
++FAILED_JOB = {
++    "type": "Failed",
++    "status": "True",
++    "reason": "BackoffLimitExceeded",
++    "message": "Job has reached the specified backoff limit",
++}
++
++
++def hook_pod(app, uid, suffix, state):
++    return {
++        "metadata": {
++            "name": f"tf-presync-{app}-{suffix}",
++            "namespace": HOOKS,
++            "creationTimestamp": "2026-09-27T07:38:29Z",
++            "labels": {"batch.kubernetes.io/controller-uid": uid, "job-name": f"tf-presync-{app}"},
++        },
++        "spec": {"containers": [{"name": "terraform"}]},
++        "status": {
++            "phase": "Failed" if "terminated" in state else "Pending",
++            "containerStatuses": [
++                {"name": "terraform", "ready": False, "restartCount": 0, "state": state}
++            ],
++        },
++    }
++
++
++def deployment(name, *, replicas=1, updated=1, available=1, generation=2, observed=2, **status):
++    return {
++        "metadata": {"name": name, "namespace": NS, "generation": generation},
++        "spec": {"replicas": replicas},
++        "status": {
++            "observedGeneration": observed,
++            "replicas": replicas,
++            "updatedReplicas": updated,
++            "availableReplicas": available,
++            **status,
++        },
++    }
++
++
++def pod_of(deployment_name, template_hash, suffix, **status):
++    replica_set = f"{deployment_name}-{template_hash}"
++    return {
++        "metadata": {
++            "name": f"{replica_set}-{suffix}",
++            "namespace": NS,
++            "labels": {"pod-template-hash": template_hash},
++            "ownerReferences": [{"kind": "ReplicaSet", "name": replica_set, "controller": True}],
++        },
++        "status": {"phase": "Running", **status},
++    }
++
++
++def warning(kind, name, reason, message, count=1):
++    return {
++        "metadata": {"name": f"{name}.18a2b3c4d5e6f7a8", "namespace": NS},
++        "involvedObject": {"kind": kind, "name": name, "namespace": NS},
++        "reason": reason,
++        "message": message,
++        "count": count,
++        "lastTimestamp": "2026-09-27T09:10:03Z",
++        "type": "Warning",
++    }
++
++
++def entry(group, kind, name, namespace=NS, **extra):
++    """A ``status.resources[]`` entry, as Argo CD v3.5 writes it: no health field."""
++    fields = {
++        "kind": kind,
++        "name": name,
++        "namespace": namespace,
++        "status": "Synced",
++        "version": "v1",
++    }
++    if group:
++        fields["group"] = group
++    return {**fields, **extra}
++
++
++def sections(text) -> dict[str, list[str]]:
++    parts = re.split(r"^== (.+) ==$", text, flags=re.MULTILINE)[1:]
++    return {title: body.strip("\n").split("\n") for title, body in zip(parts[::2], parts[1::2])}
++
++
++class TestDiagnosis:
++    def test_a_failed_roll_saves_its_diagnosis_and_the_summary_names_it(
++        self, deploy_repo, follow, log_dir, capsys
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        error = {
++            "type": "SyncError",
++            "message": f"Failed sync attempt to {pin}: one or more objects failed to apply",
++            "lastTransitionTime": "2026-09-27T09:11:00Z",
++        }
++        app = kubecoder_dev(
++            pin,
++            sync="OutOfSync",
++            phase="Failed",
++            message="one or more synchronization tasks completed unsuccessfully (retried 3 times).",
++            conditions=[error],
++        )
++        app["status"]["operationState"]["syncResult"]["resources"] = [
++            entry("", "Namespace", NS, syncPhase="PreSync", hookPhase="Succeeded", message="ok"),
++            entry(
++                "batch",
++                "Job",
++                f"tf-presync-{NS}",
++                HOOKS,
++                syncPhase="PreSync",
++                hookType="PreSync",
++                hookPhase="Failed",
++                message="Job has reached the specified backoff limit",
++            ),
++            entry(
++                "",
++                "ConfigMap",
++                "kubecoder-controller-config",
++                status="SyncFailed",
++                syncPhase="Sync",
++                hookPhase="Running",
++                message='ConfigMap "kubecoder-controller-config" is invalid',
++            ),
++        ]
++        app["status"]["resources"] = [entry("apps", "Deployment", "kubecoder-controller")]
++        uid = "9b2cc0cb"
++        terminated = {"terminated": {"exitCode": 1, "reason": "Error"}}
++        kube = FakeKube(
++            [app],
++            objects={
++                HOOK_JOBS: [hook_job(NS, pin, uid, condition=FAILED_JOB)],
++                HOOK_PODS: [
++                    hook_pod(NS, uid, "94zcv", terminated),
++                    # A pod of the Job's previous run, which carries another uid.
++                    hook_pod(NS, "older", "x1y2z", terminated),
++                ],
++                DEPLOYMENTS: [deployment("kubecoder-controller")],
++            },
++            logs={
++                (HOOKS, f"tf-presync-{NS}-94zcv", "terraform"): (
++                    "presync: terraform apply\nError: creating client: 401 Unauthorized\n"
++                )
++            },
++        )
++        report, log = follow(kube, pin_line("KubeCoderDeploy", pin, DEV))
++        assert report.exit_status() == 5
++
++        path = log_dir / f"argocd_kubecoder-dev_{pin[:7]}.log"
++        assert report.followed[0].diagnosis == str(path)
++        assert f"kubecoder-dev: diagnosis saved to {path}" in log
++        found = sections(path.read_text())
++        assert found["Operation"][2] == (
++            "message: one or more synchronization tasks completed unsuccessfully (retried 3 times)."
++        )
++        assert found["Conditions"] == [
++            f"SyncError: Failed sync attempt to {pin}: one or more objects failed to apply"
++        ]
++        assert found["Resources the sync failed"] == [
++            f"PreSync batch/Job {HOOKS}/tf-presync-{NS}: Synced, hook Failed: "
++            "Job has reached the specified backoff limit",
++            f"Sync ConfigMap {NS}/kubecoder-controller-config: SyncFailed: ConfigMap "
++            '"kubecoder-controller-config" is invalid',
++        ]
++        assert found["Resources not healthy"][1:] == ["none: each is healthy"]
++        assert found[f"PreSync hook Job {HOOKS}/tf-presync-{NS}"] == [
++            "created 2026-09-27T07:38:29Z; Failed True BackoffLimitExceeded: "
++            "Job has reached the specified backoff limit",
++            f"container terraform args: {_url('KubeCoderDeploy')} {pin} dev {NS}",
++            f"--- log of pod tf-presync-{NS}-94zcv, container terraform ---",
++            "presync: terraform apply",
++            "Error: creating client: 401 Unauthorized",
++        ]
++        assert f"  {'':<13}  ↳ diagnosis: {path}" in printed(report, capsys).splitlines()
++
++    def test_a_stalled_roll_saves_the_same_evidence_at_the_roll_deadline(
++        self, deploy_repo, follow, log_dir, capsys
++    ):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        app = kubecoder_dev(pin, health="Progressing")
++        app["status"]["resources"] = [
++            entry("apps", "Deployment", "kubecoder-controller"),
++            entry("apps", "Deployment", "kubecoder-controller-extra"),
++            entry("", "Service", "kubecoder-controller"),
++        ]
++        crashing = pod_of(
++            "kubecoder-controller",
++            "5d8f7c9b4d",
++            "x2x7q",
++            conditions=[
++                {
++                    "type": "Ready",
++                    "status": "False",
++                    "reason": "ContainersNotReady",
++                    "message": "containers with unready status: [controller]",
++                },
++                {"type": "PodScheduled", "status": "True"},
++            ],
++            containerStatuses=[
++                {
++                    "name": "controller",
++                    "ready": False,
++                    "restartCount": 7,
++                    "state": {
++                        "waiting": {
++                            "reason": "CrashLoopBackOff",
++                            "message": "back-off 5m0s restarting failed container=controller",
++                        }
++                    },
++                    "lastState": {"terminated": {"exitCode": 1, "reason": "Error"}},
++                }
++            ],
++        )
++        ready = {"conditions": [{"type": "Ready", "status": "True"}]}
++        # Its name starts with the Deployment's, but its ReplicaSet is another Deployment's.
++        other = pod_of("kubecoder-controller-extra", "5d8f7c9b4d", "a1b2c", **ready)
++        unavailable = {
++            "type": "Available",
++            "status": "False",
++            "reason": "MinimumReplicasUnavailable",
++            "message": "Deployment does not have minimum availability.",
++        }
++        uid = "9b2cc0cb"
++        running = {"type": "Complete", "status": "False"}
++        kube = FakeKube(
++            [app],
++            objects={
++                DEPLOYMENTS: [
++                    deployment("kubecoder-controller", available=0, conditions=[unavailable]),
++                    deployment("kubecoder-controller-extra"),
++                ],
++                PODS: [
++                    pod_of("kubecoder-controller", "5d8f7c9b4d", "old01", **ready),
++                    crashing,
++                    other,
++                ],
++                EVENTS: [
++                    warning(
++                        "Pod",
++                        crashing["metadata"]["name"],
++                        "BackOff",
++                        "Back-off restarting failed container controller",
++                        count=12,
++                    ),
++                    warning("Pod", other["metadata"]["name"], "Unhealthy", "Readiness probe"),
++                    {
++                        **warning("Pod", crashing["metadata"]["name"], "Pulled", "ok"),
++                        "type": "Normal",
++                    },
++                ],
++                HOOK_JOBS: [hook_job(NS, pin, uid, condition=running)],
++                HOOK_PODS: [
++                    hook_pod(NS, uid, "94zcv", {"waiting": {"reason": "ContainerCreating"}})
++                ],
++            },
++        )
++        report, _ = follow(kube, pin_line("KubeCoderDeploy", pin, DEV), roll=POLL)
++        assert report.exit_status() == 6
++
++        path = log_dir / f"argocd_kubecoder-dev_{pin[:7]}.log"
++        found = sections(path.read_text())
++        assert found["Resources not healthy"] == [
++            "Health judged from the live objects: the Deployments, StatefulSets, DaemonSets, "
++            "Jobs, PersistentVolumeClaims and ExternalSecrets the Application lists.",
++            f"apps/Deployment {NS}/kubecoder-controller: 0 of 1 updated replicas available",
++            "  condition Available False MinimumReplicasUnavailable: "
++            "Deployment does not have minimum availability.",
++            f"  pod {crashing['metadata']['name']}: Running; Ready False ContainersNotReady: "
++            "containers with unready status: [controller]; container controller waiting "
++            "CrashLoopBackOff: back-off 5m0s restarting failed container=controller, "
++            "7 restarts, last exit 1 (Error)",
++            f"  event 2026-09-27T09:10:03Z BackOff x12 Pod {crashing['metadata']['name']}: "
++            "Back-off restarting failed container controller",
++        ]
++        # The hook pod has not started, so there is no log to read.
++        assert found[f"PreSync hook Job {HOOKS}/tf-presync-{NS}"][-1] == (
++            f"--- pod tf-presync-{NS}-94zcv, container terraform: not started "
++            "(ContainerCreating) ---"
++        )
++        out = printed(report, capsys)
++        assert f"↳ diagnosis: {path}" in out
++        assert "the diagnosis file below its line lists the live resources" in out
++
++    def test_each_judged_kind_is_healthy_or_says_why_not(self):
++        def sts(name, ready, **spec):
++            return {
++                "metadata": {"name": name, "generation": 1},
++                "spec": {"replicas": 3, **spec},
++                "status": {"observedGeneration": 1, "readyReplicas": ready, "updatedReplicas": 1},
++            }
++
++        failed_job = {"metadata": {"name": "migrate"}, "status": {"conditions": [FAILED_JOB]}}
++        not_ready = {
++            "type": "Ready",
++            "status": "False",
++            "reason": "SecretSyncedError",
++            "message": "could not get secret data from provider",
++        }
++        app = {
++            "status": {
++                "resources": [
++                    entry("apps", "Deployment", "web"),
++                    entry("apps", "Deployment", "api"),
++                    entry("apps", "Deployment", "gone", status="OutOfSync"),
++                    entry("apps", "StatefulSet", "db"),
++                    entry("apps", "StatefulSet", "db-partitioned"),
++                    entry("apps", "DaemonSet", "agent"),
++                    entry("batch", "Job", "migrate"),
++                    entry("batch", "Job", "hook-job", hook=True),
++                    entry("", "PersistentVolumeClaim", "data"),
++                    entry("", "PersistentVolumeClaim", "bound"),
++                    entry("external-secrets.io", "ExternalSecret", "creds"),
++                    entry("rbac.authorization.k8s.io", "ClusterRole", "reader", namespace=None),
++                ]
++            }
++        }
++        objects = {
++            DEPLOYMENTS: [deployment("web"), deployment("api", generation=3)],
++            f"apis/apps/v1/namespaces/{NS}/statefulsets": [
++                sts("db", 2),
++                # A partitioned rollout that has updated every pod it is allowed to.
++                sts("db-partitioned", 3, updateStrategy={"rollingUpdate": {"partition": 2}}),
++            ],
++            f"apis/apps/v1/namespaces/{NS}/daemonsets": [
++                {
++                    "metadata": {"name": "agent", "generation": 1},
++                    "spec": {},
++                    "status": {
++                        "observedGeneration": 1,
++                        "desiredNumberScheduled": 4,
++                        "updatedNumberScheduled": 4,
++                        "numberAvailable": 3,
++                    },
++                }
++            ],
++            f"apis/batch/v1/namespaces/{NS}/jobs": [
++                failed_job,
++                {**failed_job, "metadata": {"name": "hook-job"}},
++            ],
++            f"api/v1/namespaces/{NS}/persistentvolumeclaims": [
++                {"metadata": {"name": "data"}, "status": {"phase": "Pending"}},
++                {"metadata": {"name": "bound"}, "status": {"phase": "Bound"}},
++            ],
++            f"apis/external-secrets.io/v1/namespaces/{NS}/externalsecrets": [
++                {"metadata": {"name": "creds"}, "status": {"conditions": [not_ready]}}
++            ],
++        }
++        lines = track_build._unhealthy_lines(FakeKube(objects=objects), app)
++        assert lines[1:] == [
++            f"apps/Deployment {NS}/api: its controller has not observed the latest spec",
++            f"apps/Deployment {NS}/gone: not in the cluster",
++            f"apps/StatefulSet {NS}/db: 2 of 3 pods ready",
++            f"apps/DaemonSet {NS}/agent: 3 of 4 pods available",
++            f"batch/Job {NS}/migrate: failed",
++            "  condition Failed True BackoffLimitExceeded: "
++            "Job has reached the specified backoff limit",
++            f"PersistentVolumeClaim {NS}/data: phase Pending",
++            f"external-secrets.io/ExternalSecret {NS}/creds: not Ready",
++            "  condition Ready False SecretSyncedError: could not get secret data from provider",
++        ]
++
++    def test_a_hook_job_that_is_gone_or_has_lost_its_pod(self):
++        assert track_build._hook_lines(FakeKube(), f"tf-presync-{NS}") == [
++            f"no Job tf-presync-{NS} in {HOOKS}"
++        ]
++        complete = {"type": "Complete", "status": "True", "reason": "CompletionsReached"}
++        kube = FakeKube(objects={HOOK_JOBS: [hook_job(NS, SHA, "uid", condition=complete)]})
++        assert track_build._hook_lines(kube, f"tf-presync-{NS}")[-1] == (
++            "no pod of it is left, so no log"
++        )
++
++    def test_a_read_that_fails_is_written_into_its_section(self, deploy_repo, follow, log_dir):
++        class ForbiddenHooks(FakeKube):
++            def items(self, path, **query):
++                if HOOKS in path:
++                    raise track_build.FollowError(
++                        f"the Kubernetes API answered HTTP 403 for {path}"
++                    )
++                return super().items(path, **query)
++
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        app = kubecoder_dev(pin, sync="OutOfSync", phase="Failed", message="hook failed")
++        report, _ = follow(ForbiddenHooks([app]), pin_line("KubeCoderDeploy", pin, DEV))
++        assert report.exit_status() == 5
++        found = sections((log_dir / f"argocd_kubecoder-dev_{pin[:7]}.log").read_text())
++        assert found["Operation"][2] == "message: hook failed"
++        assert found[f"PreSync hook Job {HOOKS}/tf-presync-{NS}"] == [
++            f"could not read: the Kubernetes API answered HTTP 403 for {HOOK_JOBS}"
++        ]
++
++    def test_an_app_that_rolled_or_was_not_seen_saves_nothing(self, deploy_repo, follow, log_dir):
++        repo = deploy_repo("KeycloakDeploy")
++        old, pin = repo.initial, repo.commit()
++        kube = FakeKube([keycloak("dev", pin)], [keycloak("prd", old)])
++        report, _ = follow(kube, pin_line("KeycloakDeploy", pin, DEV, PRD))
++        assert states(report) == {
++            "keycloak-dev": track_build.ROLLED,
++            "keycloak-prd": track_build.NOT_SEEN,
++        }
++        assert [f.diagnosis for f in report.followed] == [None, None]
++        assert not log_dir.exists()
++
++
++class TestKube:
++    def test_lists_with_selectors_and_reads_a_pod_log_as_text(self, monkeypatch):
++        kube = track_build.Kube.__new__(track_build.Kube)
++        kube.server, kube._tls, kube._token = "https://srvk8s:16443", None, "token"
++        requested = []
++
++        def urlopen(req, timeout, context):
++            requested.append((req.full_url, req.get_header("Authorization")))
++            if req.full_url.split("?")[0].endswith("/log"):
++                return io.BytesIO(b"presync: terraform apply\n")
++            return io.BytesIO(b'{"items": [{"metadata": {"name": "tf-presync-kubecoder-dev"}}]}')
++
++        monkeypatch.setattr(track_build.urllib.request, "urlopen", urlopen)
++        jobs = kube.items(HOOK_JOBS, fieldSelector=f"metadata.name=tf-presync-{NS}")
++        assert jobs == [{"metadata": {"name": "tf-presync-kubecoder-dev"}}]
++        assert kube.log(HOOKS, "tf-presync-kubecoder-dev-94zcv", "terraform") == (
++            "presync: terraform apply\n"
++        )
++        assert requested == [
++            (
++                f"https://srvk8s:16443/{HOOK_JOBS}?fieldSelector=metadata.name%3Dtf-presync-{NS}",
++                "Bearer token",
++            ),
++            (
++                f"https://srvk8s:16443/{HOOK_PODS}/tf-presync-kubecoder-dev-94zcv/log"
++                "?container=terraform",
++                "Bearer token",
++            ),
++        ]
++
++
+ class TestDefaults:
+     def test_the_follow_is_on_with_a_ten_minute_roll_deadline(self):
+         args = track_build.parse_args(["Org/Repo", "--hash", "abc123"])
+@@ -797,3 +1315,12 @@ class TestRun:
+             == 0
+         )
+         assert "Argo CD follow" not in capsys.readouterr().out
++
++    def test_a_failed_roll_is_diagnosed_into_the_log_dir(self, run, deploy_repo, tmp_path, capsys):
++        repo = deploy_repo("KubeCoderDeploy")
++        pin = repo.commit()
++        app = kubecoder_dev(pin, sync="OutOfSync", phase="Failed", message="hook failed")
++        assert run("SUCCESS", console(pin_line("KubeCoderDeploy", pin, DEV)), FakeKube([app])) == 5
++        path = tmp_path / "logs" / f"argocd_kubecoder-dev_{pin[:7]}.log"
++        assert path.is_file()
++        assert f"↳ diagnosis: {path}" in capsys.readouterr().out
+diff --git a/kube-coder-dev-local-home/track_build.py b/kube-coder-dev-local-home/track_build.py
+index f79bf2f..56e7776 100755
+--- a/kube-coder-dev-local-home/track_build.py
++++ b/kube-coder-dev-local-home/track_build.py
+@@ -58,6 +58,11 @@ Output:
+     every Application followed or reported.
+   * The **full console log of any non-SUCCESS build written to disk**, with the
+     path named in the summary; successful builds' logs are never dumped.
++  * For an Application whose roll failed or missed the roll deadline, a
++    **diagnosis written to disk** beside those logs, named in the summary: the
++    sync operation, the conditions, the resources the sync failed, the live
++    resources that are not healthy, and the log of its ``tf-presync-<app>`` hook
++    Job in ``argocd-hooks``.
+ 
+ Exit status:
+   ``0`` every tracked build succeeded and every Application a handoff pushed to
+@@ -131,6 +136,7 @@ _KUBECONFIG = "~/.kube/config"
+ # Every Application lives here; the dev cluster serves no `applications` resource.
+ _ARGOCD_CONTEXT = "prd"
+ _APPS_PATH = "apis/argoproj.io/v1alpha1/namespaces/argocd-prd/applications"
++_HOOKS_NAMESPACE = "argocd-hooks"
+ _GIT_TIMEOUT = 120
+ 
+ _OP_RUNNING = ("Running", "Terminating")
+@@ -486,12 +492,14 @@ class Kube:
+         self._tls.verify_flags &= ~ssl.VERIFY_X509_STRICT
+         self._token = user["token"]
+ 
+-    def get(self, path: str) -> dict:
+-        req = urllib.request.Request(f"{self.server}/{path}")
++    def _open(self, path: str, query: dict[str, str]):
++        url = f"{self.server}/{path}"
++        if query:
++            url += "?" + urllib.parse.urlencode(query)
++        req = urllib.request.Request(url)
+         req.add_header("Authorization", f"Bearer {self._token}")
+         try:
+-            with urllib.request.urlopen(req, timeout=30, context=self._tls) as resp:
+-                return json.load(resp)
++            return urllib.request.urlopen(req, timeout=30, context=self._tls)
+         except urllib.error.HTTPError as e:
+             raise FollowError(f"the Kubernetes API answered HTTP {e.code} for {path}") from e
+         except urllib.error.URLError as e:
+@@ -499,8 +507,21 @@ class Kube:
+                 f"cannot reach the Kubernetes API at {self.server}: {e.reason}"
+             ) from e
+ 
++    def get(self, path: str, **query: str) -> dict:
++        with self._open(path, query) as resp:
++            return json.load(resp)
++
++    def items(self, path: str, **query: str) -> list[dict]:
++        """The objects of a collection, e.g. ``api/v1/namespaces/<ns>/pods``."""
++        return self.get(path, **query)["items"]
++
++    def log(self, namespace: str, pod: str, container: str) -> str:
++        path = f"api/v1/namespaces/{namespace}/pods/{pod}/log"
++        with self._open(path, {"container": container}) as resp:
++            return resp.read().decode("utf-8", "replace")
++
+     def applications(self) -> list[dict]:
+-        return self.get(_APPS_PATH)["items"]
++        return self.items(_APPS_PATH)
+ 
+     def application(self, name: str) -> dict:
+         return self.get(f"{_APPS_PATH}/{urllib.parse.quote(name)}")
+@@ -691,6 +712,7 @@ class Followed:
+     sha: str  # the handed-off commit, or the branch head for "already carries these pins"
+     state: str = UNSEEN
+     seen_at: float | None = None
++    diagnosis: str | None = None  # the file save_diagnosis wrote, for a FAILED or NOT_DONE app
+ 
+     def relation(self) -> str:
+         """Where the app's compared revision sits relative to ``sha``."""
+@@ -737,21 +759,25 @@ def follow_deploys(
+     pickup_timeout: float,
+     roll_timeout: float,
+     poll: float,
++    log_dir: str,
+     log,
+ ) -> FollowReport:
+-    """Follow the handoffs in green builds' consoles (``(label, console)`` pairs) into Argo CD."""
++    """Follow the handoffs in green builds' consoles (``(label, console)`` pairs) into Argo CD.
++
++    A FAILED or NOT_DONE app's diagnosis is written into ``log_dir``.
++    """
+     handoffs = [h for label, console in builds for h in parse_handoffs(label, console)]
+     report = FollowReport([label for label, _ in builds], handoffs, pickup_timeout, roll_timeout)
+     if handoffs:
+         try:
+-            _follow(report, make_kube(), work, poll, log)
++            _follow(report, make_kube(), work, poll, log_dir, log)
+         except FollowError as exc:
+             log(f"error following into Argo CD: {exc}")
+             report.error = str(exc)
+     return report
+ 
+ 
+-def _follow(report: FollowReport, kube: Kube, work: str, poll: float, log) -> None:
++def _follow(report: FollowReport, kube: Kube, work: str, poll: float, log_dir: str, log) -> None:
+     apps = kube.applications()
+     matched: list[tuple[Handoff, dict, list[int]]] = []
+     urls: dict[str, str] = {}
+@@ -804,6 +830,7 @@ def _follow(report: FollowReport, kube: Kube, work: str, poll: float, log) -> No
+         report.pickup_timeout,
+         report.roll_timeout,
+         poll,
++        log_dir,
+         log,
+     )
+ 
+@@ -814,6 +841,7 @@ def _wait(
+     pickup_timeout: float,
+     roll_timeout: float,
+     poll: float,
++    log_dir: str,
+     log,
+ ) -> None:
+     """Poll each app until it has rolled its commit or reaches a stop."""
+@@ -841,6 +869,9 @@ def _wait(
+             if announced.get(id(f)) != line:
+                 log(line)
+                 announced[id(f)] = line
++            if f.state in (FAILED, NOT_DONE):
++                f.diagnosis = save_diagnosis(kube, f, log_dir)
++                log(f"{f.name}: diagnosis saved to {f.diagnosis}")
+         pending = [f for f in pending if f.state in (UNSEEN, ROLLING)]
+         if pending:
+             time.sleep(poll)
+@@ -851,6 +882,340 @@ def _wait(
+                 f.app = fresh[f.name]
+ 
+ 
++def _ref(resource: dict) -> str:
++    """``apps/Deployment kubecoder-dev/kubecoder-controller`` for a resource entry."""
++    group = f"{resource['group']}/" if resource.get("group") else ""
++    namespace = f"{resource['namespace']}/" if resource.get("namespace") else ""
++    return f"{group}{resource['kind']} {namespace}{resource['name']}"
++
++
++def _condition(condition: dict) -> str:
++    head = " ".join(str(condition[k]) for k in ("type", "status", "reason") if condition.get(k))
++    message = _one_line(condition.get("message", ""))
++    return f"{head}: {message}" if message else head
++
++
++def _unobserved(obj: dict) -> bool:
++    return obj["metadata"].get("generation", 0) > (obj.get("status") or {}).get(
++        "observedGeneration", 0
++    )
++
++
++def _deployment_problem(deployment: dict) -> str | None:
++    spec, status = deployment["spec"], deployment.get("status") or {}
++    if spec.get("paused"):
++        return None
++    if _unobserved(deployment):
++        return "its controller has not observed the latest spec"
++    if any(c.get("reason") == "ProgressDeadlineExceeded" for c in status.get("conditions") or []):
++        return "exceeded its progress deadline"
++    want, updated = spec.get("replicas", 1), status.get("updatedReplicas", 0)
++    if updated < want:
++        return f"{updated} of {want} replicas updated"
++    if (old := status.get("replicas", 0) - updated) > 0:
++        return f"{old} old replicas pending termination"
++    if (available := status.get("availableReplicas", 0)) < updated:
++        return f"{available} of {updated} updated replicas available"
++    return None
++
++
++def _statefulset_problem(statefulset: dict) -> str | None:
++    spec, status = statefulset["spec"], statefulset.get("status") or {}
++    if _unobserved(statefulset):
++        return "its controller has not observed the latest spec"
++    want = spec.get("replicas", 1)
++    if (ready := status.get("readyReplicas", 0)) < want:
++        return f"{ready} of {want} pods ready"
++    strategy = spec.get("updateStrategy") or {}
++    if strategy.get("type") == "OnDelete":
++        return None
++    target = want - (strategy.get("rollingUpdate") or {}).get("partition", 0)
++    if (updated := status.get("updatedReplicas", 0)) < target:
++        return f"{updated} of {target} pods updated"
++    return None
++
++
++def _daemonset_problem(daemonset: dict) -> str | None:
++    spec, status = daemonset["spec"], daemonset.get("status") or {}
++    if _unobserved(daemonset):
++        return "its controller has not observed the latest spec"
++    if (spec.get("updateStrategy") or {}).get("type") == "OnDelete":
++        return None
++    desired = status.get("desiredNumberScheduled", 0)
++    if (updated := status.get("updatedNumberScheduled", 0)) < desired:
++        return f"{updated} of {desired} pods updated"
++    if (available := status.get("numberAvailable", 0)) < desired:
++        return f"{available} of {desired} pods available"
++    return None
++
++
++def _true_conditions(obj: dict) -> set[str]:
++    conditions = (obj.get("status") or {}).get("conditions") or []
++    return {c["type"] for c in conditions if c.get("status") == "True"}
++
++
++def _job_problem(job: dict) -> str | None:
++    true = _true_conditions(job)
++    if "Failed" in true:
++        return "failed"
++    if true & {"Complete", "Suspended"}:
++        return None
++    return f"not finished, {(job.get('status') or {}).get('active', 0)} pods active"
++
++
++def _pvc_problem(claim: dict) -> str | None:
++    phase = (claim.get("status") or {}).get("phase", "Unknown")
++    return None if phase == "Bound" else f"phase {phase}"
++
++
++def _external_secret_problem(secret: dict) -> str | None:
++    return None if "Ready" in _true_conditions(secret) else "not Ready"
++
++
++# The kinds whose health the diagnosis judges from the live object, by (group, kind): the
++# collection they are listed from and what makes one unhealthy. Argo CD v3.5 serves each
++# resource's health only through its API server (resourceHealthSource: appTree), which the
++# kubeconfig's token cannot call, so these follow its rules for the kinds the estate deploys.
++_JUDGED = {
++    ("apps", "Deployment"): ("deployments", _deployment_problem),
++    ("apps", "StatefulSet"): ("statefulsets", _statefulset_problem),
++    ("apps", "DaemonSet"): ("daemonsets", _daemonset_problem),
++    ("batch", "Job"): ("jobs", _job_problem),
++    ("", "PersistentVolumeClaim"): ("persistentvolumeclaims", _pvc_problem),
++    ("external-secrets.io", "ExternalSecret"): ("externalsecrets", _external_secret_problem),
++}
++_JUDGED_KINDS = (
++    "Deployments, StatefulSets, DaemonSets, Jobs, PersistentVolumeClaims and ExternalSecrets"
++)
++
++
++def _owns(kind: str, name: str, pod: dict) -> bool:
++    """Whether the workload ``kind``/``name`` owns ``pod`` (a Deployment through its ReplicaSet)."""
++    metadata = pod["metadata"]
++    if kind == "Deployment":
++        kind, name = (
++            "ReplicaSet",
++            f"{name}-{(metadata.get('labels') or {}).get('pod-template-hash')}",
++        )
++    return any(
++        o.get("kind") == kind and o.get("name") == name
++        for o in metadata.get("ownerReferences") or []
++    )
++
++
++def _container_problem(status: dict) -> str | None:
++    state = status.get("state") or {}
++    terminated = state.get("terminated")
++    if status.get("ready") or (terminated and terminated.get("exitCode") == 0):
++        return None
++    if waiting := state.get("waiting"):
++        message = f": {_one_line(waiting['message'])}" if waiting.get("message") else ""
++        now = f"waiting {waiting.get('reason', '')}{message}"
++    elif terminated:
++        now = f"exited {terminated.get('exitCode')} ({terminated.get('reason', '')})"
++    else:
++        now = "running, not ready"
++    parts = [f"container {status['name']} {now}"]
++    if status.get("restartCount"):
++        parts.append(f"{status['restartCount']} restarts")
++    if last := (status.get("lastState") or {}).get("terminated"):
++        parts.append(f"last exit {last.get('exitCode')} ({last.get('reason', '')})")
++    return ", ".join(parts)
++
++
++def _pod_problem(pod: dict) -> str | None:
++    status = pod.get("status") or {}
++    phase = status.get("phase", "Unknown")
++    if phase == "Succeeded" or (phase == "Running" and "Ready" in _true_conditions(pod)):
++        return None
++    parts = [phase]
++    parts += [
++        _condition(c)
++        for c in status.get("conditions") or []
++        if c.get("status") != "True" and c.get("message")
++    ]
++    containers = (status.get("initContainerStatuses") or []) + (
++        status.get("containerStatuses") or []
++    )
++    parts += [p for c in containers if (p := _container_problem(c))]
++    return "; ".join(parts)
++
++
++def _event_line(event: dict) -> str:
++    involved = event.get("involvedObject") or {}
++    when = event.get("lastTimestamp") or event.get("eventTime") or "?"
++    count = event.get("count") or (event.get("series") or {}).get("count") or 1
++    return (
++        f"event {when} {event.get('reason', '')} x{count} {involved.get('kind')} "
++        f"{involved.get('name')}: {_one_line(event.get('message', ''))}"
++    )
++
++
++def _unhealthy_lines(kube: Kube, app: dict) -> list[str]:
++    """The live resources the app lists that are not healthy, with their pods and warnings."""
++    lines = [f"Health judged from the live objects: the {_JUDGED_KINDS} the Application lists."]
++    listed: dict[str, dict[str, dict]] = {}
++    unhealthy: list[tuple[dict, dict | None, str]] = []
++    for resource in (app.get("status") or {}).get("resources") or []:
++        key = (resource.get("group", ""), resource["kind"])
++        if key not in _JUDGED or resource.get("hook") or not resource.get("namespace"):
++            continue
++        plural, judge = _JUDGED[key]
++        api = f"apis/{key[0]}" if key[0] else "api"
++        collection = f"{api}/{resource['version']}/namespaces/{resource['namespace']}/{plural}"
++        if collection not in listed:
++            listed[collection] = {o["metadata"]["name"]: o for o in kube.items(collection)}
++        obj = listed[collection].get(resource["name"])
++        reason = judge(obj) if obj is not None else "not in the cluster"
++        if reason:
++            unhealthy.append((resource, obj, reason))
++    if not unhealthy:
++        return lines + ["none: each is healthy"]
++
++    pods: dict[str, list[dict]] = {}
++    events: dict[str, list[dict]] = {}
++    for resource, obj, reason in unhealthy:
++        lines.append(f"{_ref(resource)}: {reason}")
++        if obj is None:
++            continue
++        namespace = resource["namespace"]
++        if namespace not in pods:
++            pods[namespace] = kube.items(f"api/v1/namespaces/{namespace}/pods")
++            events[namespace] = kube.items(
++                f"api/v1/namespaces/{namespace}/events", fieldSelector="type=Warning"
++            )
++        lines += [
++            f"  condition {_condition(c)}"
++            for c in (obj.get("status") or {}).get("conditions") or []
++        ]
++        related = {(resource["kind"], resource["name"])}
++        for pod in pods[namespace]:
++            if _owns(resource["kind"], resource["name"], pod):
++                related.add(("Pod", pod["metadata"]["name"]))
++                related |= {
++                    (o.get("kind"), o.get("name")) for o in pod["metadata"]["ownerReferences"]
++                }
++                if problem := _pod_problem(pod):
++                    lines.append(f"  pod {pod['metadata']['name']}: {problem}")
++        warnings = [
++            e
++            for e in events[namespace]
++            if (
++                (e.get("involvedObject") or {}).get("kind"),
++                (e.get("involvedObject") or {}).get("name"),
++            )
++            in related
++        ]
++        warnings.sort(key=lambda e: e.get("lastTimestamp") or e.get("eventTime") or "")
++        lines += [f"  {_event_line(e)}" for e in warnings]
++    return lines
++
++
++def _hook_lines(kube: Kube, job_name: str) -> list[str]:
++    """The PreSync hook Job's state and its pods' logs."""
++    jobs = kube.items(
++        f"apis/batch/v1/namespaces/{_HOOKS_NAMESPACE}/jobs",
++        fieldSelector=f"metadata.name={job_name}",
++    )
++    if not jobs:
++        return [f"no Job {job_name} in {_HOOKS_NAMESPACE}"]
++    job = jobs[0]
++    true = [
++        _condition(c)
++        for c in (job.get("status") or {}).get("conditions") or []
++        if c.get("status") == "True"
++    ]
++    lines = [
++        f"created {job['metadata'].get('creationTimestamp', '?')}; "
++        + ("; ".join(true) or f"{(job.get('status') or {}).get('active', 0)} pods active")
++    ]
++    lines += [
++        f"container {c['name']} args: {' '.join(c.get('args') or [])}"
++        for c in job["spec"]["template"]["spec"]["containers"]
++    ]
++    selector = ",".join(f"{k}={v}" for k, v in job["spec"]["selector"]["matchLabels"].items())
++    pods = kube.items(f"api/v1/namespaces/{_HOOKS_NAMESPACE}/pods", labelSelector=selector)
++    if not pods:
++        lines.append("no pod of it is left, so no log")
++    for pod in sorted(pods, key=lambda p: p["metadata"].get("creationTimestamp", "")):
++        name = pod["metadata"]["name"]
++        statuses = {s["name"]: s for s in (pod.get("status") or {}).get("containerStatuses") or []}
++        for container in pod["spec"]["containers"]:
++            state = (statuses.get(container["name"]) or {}).get("state") or {}
++            if "running" not in state and "terminated" not in state:
++                reason = (state.get("waiting") or {}).get("reason", "no status yet")
++                lines.append(
++                    f"--- pod {name}, container {container['name']}: not started ({reason}) ---"
++                )
++                continue
++            lines.append(f"--- log of pod {name}, container {container['name']} ---")
++            lines.append(kube.log(_HOOKS_NAMESPACE, name, container["name"]).rstrip("\n"))
++    return lines
++
++
++def _read(lines) -> list[str]:
++    # A failed read is written into its own section instead of raised: the roll's verdict is
++    # already decided, and the rest of the diagnosis stands without it.
++    try:
++        return lines()
++    except FollowError as exc:
++        return [f"could not read: {exc}"]
++
++
++def diagnosis(kube: Kube, followed: Followed) -> str:
++    """What Argo CD and the cluster report on a failed or stalled roll, as text."""
++    app, handoff = followed.app, followed.handoff
++    status = app.get("status") or {}
++    op_state = status.get("operationState") or {}
++    if op_state:
++        sync = (op_state.get("operation") or {}).get("sync") or {}
++        revisions = sync.get("revisions") or [sync.get("revision")]
++        operation = [
++            (
++                f"phase {op_state.get('phase')}, started {op_state.get('startedAt', '?')}, "
++                f"finished {op_state.get('finishedAt', '-')}, "
++                f"retries {op_state.get('retryCount', 0)}"
++            ),
++            f"revisions: {', '.join(rev or '?' for rev in revisions)}",
++            f"message: {_one_line(op_state.get('message', ''))}",
++        ]
++    else:
++        operation = ["none recorded"]
++    failed = [
++        f"{r.get('syncPhase', 'Sync')} {_ref(r)}: {r.get('status')}"
++        + (f", hook {r['hookPhase']}" if r.get("hookType") else "")
++        + f": {_one_line(r.get('message', ''))}"
++        for r in (op_state.get("syncResult") or {}).get("resources") or []
++        if r.get("status") == "SyncFailed" or r.get("hookPhase") in _OP_FAILED
++    ]
++    hook = f"tf-presync-{followed.name}"
++    sections = [
++        (
++            f"{followed.name}: {_LABELS[followed.state]} rolling {handoff.repo} {followed.sha}",
++            [
++                f"handoff: {_handoff_heading(handoff, followed.sha)}",
++                f"Argo CD reports: {describe(app, followed.indexes)}",
++                f"read at {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
++            ],
++        ),
++        ("Operation", operation),
++        ("Conditions", [_condition(c) for c in status.get("conditions") or []] or ["none"]),
++        ("Resources the sync failed", failed or ["none"]),
++        ("Resources not healthy", _read(lambda: _unhealthy_lines(kube, app))),
++        (f"PreSync hook Job {_HOOKS_NAMESPACE}/{hook}", _read(lambda: _hook_lines(kube, hook))),
++    ]
++    return "\n\n".join(f"== {title} ==\n" + "\n".join(lines) for title, lines in sections) + "\n"
++
++
++def save_diagnosis(kube: Kube, followed: Followed, log_dir: str) -> str:
++    """Write the app's diagnosis into ``log_dir``; return the file's path."""
++    os.makedirs(log_dir, exist_ok=True)
++    path = os.path.join(log_dir, f"argocd_{followed.name}_{followed.sha[:7]}.log")
++    with open(path, "w") as fh:
++        fh.write(diagnosis(kube, followed))
++    return path
++
++
+ def _handoff_heading(handoff: Handoff, commit: str | None) -> str:
+     if handoff.files is not None:
+         what = f"{handoff.sha[:7]} pushed to {handoff.branch}, pins {', '.join(handoff.files)}"
+@@ -887,8 +1252,10 @@ def _follow_results(report: FollowReport) -> list[str]:
+     lines = []
+     if failed := _names(report, FAILED):
+         lines.append(
+-            f"Result: the roll FAILED on {failed}; Argo CD's own words are on its line above. "
+-            f"Fix the cause and push again."
++            f"Result: the roll FAILED on {failed}; Argo CD's own words are on its line above, "
++            f"and the diagnosis file below that line holds the operation, the conditions, the "
++            f"failed and unhealthy resources and the PreSync hook's log. Fix the cause and push "
++            f"again."
+         )
+     if not_seen := _names(report, NOT_SEEN):
+         lines.append(
+@@ -909,8 +1276,9 @@ def _follow_results(report: FollowReport) -> list[str]:
+             f"Result: {not_done} had not rolled at the {report.roll_timeout:g}s roll deadline "
+             f"(--roll-timeout); its line above is what Argo CD reports, not a verdict on the "
+             f"workload. Argo CD's health can sit stale at Progressing when a commit renders no "
+-            f"change and so brings no sync: check the workload itself, or re-run this command "
+-            f"to keep waiting."
++            f"change and so brings no sync: the diagnosis file below its line lists the live "
++            f"resources that are not healthy, and the PreSync hook's log. Check those, or re-run "
++            f"this command to keep waiting."
+         )
+     if not lines:
+         if rolled := _names(report, ROLLED):
+@@ -954,6 +1322,8 @@ def print_follow(report: FollowReport) -> None:
+                 if f.state == CURRENT:
+                     detail += f" ({f.relation()})"
+                 print(f"  {f.name:<{name_w}}  {_LABELS[f.state]:<{label_w}}  {detail}")
++                if f.diagnosis:
++                    print(f"  {'':<{name_w}}  ↳ diagnosis: {f.diagnosis}")
+         print()
+     for line in _follow_results(report):
+         print(line)
+@@ -1026,7 +1396,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+     parser.add_argument(
+         "--log-dir",
+         default=os.path.join(tempfile.gettempdir(), "track_build"),
+-        help="where to write failing builds' console logs",
++        help="where to write failing builds' console logs, and the diagnosis of an Argo CD "
++        "roll that failed or missed the roll deadline",
+     )
+     parser.add_argument(
+         "--diagnose",
+@@ -1116,6 +1487,7 @@ def run(args: argparse.Namespace) -> int:
+             args.pickup_timeout,
+             args.roll_timeout,
+             args.poll_interval,
++            args.log_dir,
+             log,
+         )

@@ -1,0 +1,11 @@
+{"outcome": "issues",
+ "summary": "The four rewritten instructions match the tracker's exits, remedies and diagnosis. But live-verification.md:128-130 still sends test agents to 'Path 1's commands' to confirm the roll by hand, and this diff deleted those commands, which contradicts V14.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional",
+   "anchor": "contradiction",
+   "summary": "live-verification.md:128-130 still has agents confirm the roll by hand via 'Path 1's commands', which the diff deleted from deploy-operations (V14)"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose",
+   "anchor": "none",
+   "summary": "card-runner step 6 covers 'rolled' and 'no handoff line' but not the tracker's other exit-0 outcomes (handoff no app follows, handoff that pushed nothing)"}
+ ]}

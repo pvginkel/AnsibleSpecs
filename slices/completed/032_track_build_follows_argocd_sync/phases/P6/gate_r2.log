@@ -1,0 +1,8 @@
+root: cexec python uv run --all-packages pytest    [  OK  ]
+worker: cexec go go test -race ./...    [  OK  ]
+worker: cexec go sh -c 'go install github.com/atombender/go-jsonschema@v0.22.0 && tmp=$(mktemp -d) && $(go env GOPATH)/bin/go-jsonschema --only-models --tags json -p contracts -o "$tmp/contracts_gen.go" internal/contracts/contracts.schema.json && diff -u internal/contracts/contracts_gen.go "$tmp/contracts_gen.go"'    [  OK  ]
+vscode-extension: cexec frontend npm test    [  OK  ]
+vscode-extension: cexec frontend npm run typecheck    [  OK  ]
+vscode-desktop: cexec frontend npm test    [  OK  ]
+vscode-desktop: cexec frontend npm run typecheck    [  OK  ]
+manual: cexec python uv run --all-packages --group manual mkdocs build --strict -f manual/mkdocs.yml    [  OK  ]

@@ -1,0 +1,3 @@
+backup-server: cexec go go test ./...    [  OK  ]
+architecture: cexec iac ./scripts/arch-validate.py --quiet */architecture.yaml    [  OK  ]
+kube-coder-dev-local-home: cexec iac uv run --no-project --python /usr/bin/python3 --with pytest python -m pytest -q    [  OK  ]

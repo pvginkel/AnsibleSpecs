@@ -1,7 +1,8 @@
 # Close-out — slice 032 track_build_follows_argocd_sync
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-27 11:59 → 13:36 · 6 phases · 1 bail-out · 1 test round · doc phase done · $34.72
+(planner 26 %, research 3 %, rework 2 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,12 +14,20 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+`track_build.py` now follows a green build into the Argo CD sync of the commit it pushed to a
+deploy repo, by default, for every Argo-deployed repo. It reads the Applications from the Kubernetes
+API through `~/.kube/config`, and asks git only of the environment's own `/work` clone. It stops
+with its own exit status on a missing clone (4), a failed roll (5), the roll deadline (6), or a
+commit Argo CD will not roll on its own (7). On 5 and 6 it writes a diagnosis file. Promote-PRD
+prints a handoff line, so prd promotions are followed too. `--appear-timeout` defaults to
+5 minutes. DockerImages `kube-coder-dev-local-home/` is the tracker's only copy (Ansible's is
+deleted), its suite is gated, and the dev base declares PyYAML. KubeCoder's deploy docs, card
+runner and test plan take the tracker's exit 0 as the roll instead of a hand check.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A1 only. Run `KubeCoder/Promote-PRD` and track it with `track_build.py KubeCoder/Promote-PRD
+--buildnr <m>`: no real promote console has been followed yet, so V16 stays open until then.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -36,7 +45,8 @@ V16 — A real Promote-PRD run prints the handoff line, and track_build.py point
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: The six phases ran as planned. The one surprise came late: DockerImages `main` had diverged
+from origin before the push, and was rebased cleanly with its gate re-run (N1).
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -55,24 +65,28 @@ Before pushing, DockerImages local main (cbc411b/555b1d6/c797d33, the P3-P5 comm
 **Provenance:** witnessed — test-agent, test phase r1; dev:rebase-agent sub-agent run, and IaC/Build-Main #224
 **Disposition:**
 
+### N2 — Run stopped (blocked) in the doc phase
+
+The driver's bail (`blocked`), as it recorded it:
+
+> main in /work/KubeCoderDeploy has diverged from origin/main (1 local commit(s) origin lacks, 1 on origin that main lacks), so the doc phase's commits there cannot go out as a fast-forward — bring main up to origin/main there and push it by hand, then resume
+
+Stopped 2026-09-27 13:36; resumed 2026-09-27 13:36.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
+
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: B2 first: after a green build, a transient Kubernetes read error crashes the follow with exit 1
+(witnessed, DockerImages). B4 is next, read from the code and not run: the default-on follow makes
+Architecture's fleet update report every Argo-deployed producer unresolved. B3 (DockerImages) and B1
+(ArgoCDDeploy, stale health only) are minor. Three of the four are witnessed. B2 and B3 are in this
+slice's repos; B1 and B4 are elsewhere.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
-
-### B1 — ArgoCDDeploy (argocd-prd): eight Applications stay Progressing after the 2026-09-27 controller restart, though their workloads are ready · minor
-
-Eight Applications in argocd-prd have reported health Progressing since 04:08–04:16 UTC on 2026-09-27, when the application controller restarted (pod started 04:12:26): calendar-support-prd, ginbov-nl-prd, grafana-prd, headlamp-prd, homeassistant-mcp-prd, registry-prd, scantopdf-prd and telegram-mcp-prd. Their workloads are ready. At 09:07 UTC, registry-prd's and telegram-mcp-prd's Deployments were at 1/1 with pods Running for 4h51m. None of the eight has been synced since, and apps synced after the restart show the normal few seconds from sync to Healthy (e.g. kubecoder-dev, op finished 07:38:49, Healthy 07:39:02). So health recomputes after a sync but did not after the restart. With polling off (timeout.reconciliation: 0s, argo-cd D6), nothing else refreshes an app. The slice's done check trusts Argo's app health (plan P4), and relies on the sync it waits for to recompute it.
-
-plan-writer, planning r2, 2026-09-27 — Since the plan review r1 ruling F1, the tracker bounds the roll, so an app in this state no longer holds it until the agent gives up. A handoff that pushed nothing is only reported, so it cannot hang on this state. A pushed commit that renders no change for such an app brings no sync to recompute its health. The tracker then stops at the roll deadline (default 10 minutes) and names the app as still Progressing, although its workloads are ready: a false stop, bounded, whose saved evidence shows the ready workloads.
-
-**Consequence:** Argo CD's UI, and anything that reads app health, shows eight prd apps still rolling that are not, until each one next syncs. An app in that state whose health were not recomputed after a tracked sync would hold track_build.py until the agent gives up.
-
-**Provenance:** witnessed — plan-writer, planning r1, kubectl get applications -n argocd-prd -o json and get deploy,pods in registry-prd / telegram-mcp-prd (2026-09-27 09:07 UTC)
-**Disposition:**
 
 ### B2 — DockerImages track_build.py: a Kubernetes read timeout or dropped connection during the Argo CD follow crashes with exit 1 and no build summary · major
 
@@ -89,6 +103,26 @@ consult 1, 2026-09-27 — Not appended as a phase: no requirement or acceptance 
 **Provenance:** witnessed, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
 **Disposition:**
 
+### B4 — Architecture tooling/fleet.py: the tracker's default Argo CD follow turns a green producer push into an unresolved one · major
+
+fleet.py's track() (tooling/fleet.py:1218-1247) runs `track_build.py <job> --hash <sha> --appear-timeout 1800` and treats every exit other than 0 and 1 as a tracker that could not finish: the producer goes to the report's Unresolved section and the run exits 1. With the follow on by default, a producer whose build calls cicd.writeVersionPins (KubeCoder, FieldnotesApp, DockerImages, Architecture itself and the others) now ends at exit 4 in an environment with no clone of its deploy repo, and the Architecture environment's .kubecoder/config.yaml declares none. Where a clone exists, the push also waits out the roll, up to --pickup-timeout plus --roll-timeout per app inside TRACK_TIMEOUT (5400 s), and a roll the update did not cause (exit 5, 6 or 7) is blamed on it. The tool asks whether CI stayed green, not whether the deploy rolled. The same code's docstring (fleet.py:1224) and docs/architecture-update.md:102 still give the tracker's appear default as 30 s; it is 300 s. Read from the code, not run.
+
+**Consequence:** The next fleet architecture update reports every Argo-deployed producer's push unresolved and exits 1, though its builds were green.
+
+**Provenance:** read, doc-writer, doc phase, r1: Architecture tooling/fleet.py:1218-1247, Architecture .kubecoder/config.yaml
+**Disposition:**
+
+### B1 — ArgoCDDeploy (argocd-prd): eight Applications stay Progressing after the 2026-09-27 controller restart, though their workloads are ready · minor
+
+Eight Applications in argocd-prd have reported health Progressing since 04:08–04:16 UTC on 2026-09-27, when the application controller restarted (pod started 04:12:26): calendar-support-prd, ginbov-nl-prd, grafana-prd, headlamp-prd, homeassistant-mcp-prd, registry-prd, scantopdf-prd and telegram-mcp-prd. Their workloads are ready. At 09:07 UTC, registry-prd's and telegram-mcp-prd's Deployments were at 1/1 with pods Running for 4h51m. None of the eight has been synced since, and apps synced after the restart show the normal few seconds from sync to Healthy (e.g. kubecoder-dev, op finished 07:38:49, Healthy 07:39:02). So health recomputes after a sync but did not after the restart. With polling off (timeout.reconciliation: 0s, argo-cd D6), nothing else refreshes an app. The slice's done check trusts Argo's app health (plan P4), and relies on the sync it waits for to recompute it.
+
+plan-writer, planning r2, 2026-09-27 — Since the plan review r1 ruling F1, the tracker bounds the roll, so an app in this state no longer holds it until the agent gives up. A handoff that pushed nothing is only reported, so it cannot hang on this state. A pushed commit that renders no change for such an app brings no sync to recompute its health. The tracker then stops at the roll deadline (default 10 minutes) and names the app as still Progressing, although its workloads are ready: a false stop, bounded, whose saved evidence shows the ready workloads.
+
+**Consequence:** Argo CD's UI, and anything that reads app health, shows eight prd apps still rolling that are not, until each one next syncs. An app in that state whose health were not recomputed after a tracked sync would hold track_build.py until the agent gives up.
+
+**Provenance:** witnessed — plan-writer, planning r1, kubectl get applications -n argocd-prd -o json and get deploy,pods in registry-prd / telegram-mcp-prd (2026-09-27 09:07 UTC)
+**Disposition:**
+
 ### B3 — DockerImages track_build.py: a handoff that pushed nothing, to an uncloned deploy repo, stops with exit 4 'deploy untracked' · minor
 
 _follow puts every matched handoff's repo through the clone check whatever handoff.pushed is. So an 'already carries these pins' line, or Promote-PRD's 'already on prd: nothing pushed', to a repo with no /work clone gives exit 4 and 'Clone them now and re-run this command to follow the deploy'. The plan says a handoff that pushed nothing is not a stop, and the docstring says it leaves the status 0. The plan also has the already-carries report read main's head from the clone, so the two rules collide here. Rare today: every pin caller pins a build-numbered tag.
@@ -102,7 +136,7 @@ consult 1, 2026-09-27 — Not appended as a phase: the plan does not owe one out
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: None raised. The run needed no ruling it did not get.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -110,19 +144,11 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S3 needs a decision: how to confirm a KubeCoderDeploy push with no Jenkins build to follow.
+S5 and S6 are small fixes outside this slice's repos. S2 is tracker hardening and the only
+witnessed one. S4 was closed in the doc phase.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
-
-### ~~S1 — Ansible docs/live-infra-access.md says the tracker is built into the dev image; it ships in the local-home image, without its tests · nit~~ — resolved by consult 1 (Ansible 94be15b): docs/live-infra-access.md now says the tracker ships in the local-home image, built from kube-coder-dev-local-home/ where its tests live, and names the Argo CD follow; kc project lint re-run, green; struck by consult 1
-
-The rewritten paragraph (docs/live-infra-access.md:57-59) says track_build.py "is built into the dev image from DockerImages kube-coder-dev-local-home/, tests included". DockerImages kube-coder-dev-local-home/Dockerfile:17-24 builds a separate scratch image, the local-home image. It is mounted at ~/.local and copies only track_build.py (:24), so the tests are not in it. Suggestion: say "the local-home image" (KubeCoder docs use that name), and attach "tests included" to the directory rather than the image. The doc phase could fold this in.
-
-**Consequence:** A reader looking for the tracker in the kube-coder-dev image's Dockerfile would not find it. The paragraph names the right directory, so it is otherwise harmless.
-
-**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
-**Disposition:**
 
 ### S2 — DockerImages track_build.py: the roll diagnosis judges the health of six kinds only, so a Degraded app of another kind reads 'none: each is healthy' · minor
 
@@ -146,7 +172,40 @@ The card-pass deploy rule for KubeCoderDeploy workers is 'the Argo sync of main 
 
 card-runner.md:152-159 names two exit-0 outcomes: the follow section reporting each app rolled, and 'no handoff line' (the deploy rule decides). track_build.py also exits 0 with 'Result: nothing to wait for — no handoff pushed a commit an Application follows.' (:1289-1291, remark at :1309-1315), and with apps reported 'current' when a handoff pushed nothing. Step 6 applies to every repo, and it gives neither of these a rule.
 
+doc-writer, doc phase r1, 2026-09-27 — Closed in KubeCoder e.g. card-runner.md step 6: an exit 0 that rolled nothing — no handoff line, or a Result reading 'nothing to wait for' (a handoff that pushed nothing, or one no Application follows) — confirms no deploy, and the deploy rule alone decides. Commit 13ba3adc on KubeCoder main.
+
 **Consequence:** A card worker whose pin line matches no Argo CD Application gets exit 0 with nothing rolled, and may report the deploy confirmed; the tracker's own remark says to compare the Application's source.
 
 **Provenance:** read, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
 **Disposition:**
+
+### S5 — FieldnotesApp docs/slice-test-plan.md §3 tracks its push as if the tracker stopped at the build · minor
+
+Its command, `track_build.py FieldnotesApp --hash … --appear-timeout 120 --diagnose` run under `timeout` sized for about five minutes, now follows the pin commit into FieldnotesDeploy's Argo CD sync. The FieldnotesApp environment declares no FieldnotesDeploy clone, so the command ends at exit 4 naming it, and the page does not say what exits 4 to 7 mean. Its text on IaC/HelmCharts predates this slice. Other repos' deploy docs were ruled out of the slice's scope, so the page is left as it is.
+
+**Consequence:** A FieldnotesApp slice's test phase gets exit 4 after a green build and finds nothing on its page about it; the tracker's own Result line is its only guide.
+
+**Provenance:** read, doc-writer, doc phase, r1: FieldnotesApp docs/slice-test-plan.md:160-175, FieldnotesApp Jenkinsfile:189, FieldnotesApp .kubecoder/config.yaml
+**Disposition:**
+
+### S6 — JenkinsPipelineUtils vars/cicd.groovy: nothing at writeVersionPins' echo says track_build.py parses the pin line · minor
+
+track_build.py reads the two echoes in writeVersionPins (vars/cicd.groovy:114 and :133) with a fixed pattern. Jenkinsfile.promote's handoff carries a comment saying so; the shared library's echoes carry none, and JenkinsPipelineUtils is live in every job on push. A one-line comment beside them would name the contract.
+
+**Consequence:** A reworded pin line leaves every Argo-deployed build with the tracker's 'no handoff line' remark and exit 0, with nothing followed into Argo CD.
+
+**Provenance:** read, doc-writer, doc phase, r1: JenkinsPipelineUtils vars/cicd.groovy:100-136
+**Disposition:**
+
+### ~~S1 — Ansible docs/live-infra-access.md says the tracker is built into the dev image; it ships in the local-home image, without its tests · nit~~ — resolved by consult 1 (Ansible 94be15b): docs/live-infra-access.md now says the tracker ships in the local-home image, built from kube-coder-dev-local-home/ where its tests live, and names the Argo CD follow; kc project lint re-run, green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+The rewritten paragraph (docs/live-infra-access.md:57-59) says track_build.py "is built into the dev image from DockerImages kube-coder-dev-local-home/, tests included". DockerImages kube-coder-dev-local-home/Dockerfile:17-24 builds a separate scratch image, the local-home image. It is mounted at ~/.local and copies only track_build.py (:24), so the tests are not in it. Suggestion: say "the local-home image" (KubeCoder docs use that name), and attach "tests included" to the directory rather than the image. The doc phase could fold this in.
+
+**Consequence:** A reader looking for the tracker in the kube-coder-dev image's Dockerfile would not find it. The paragraph names the right directory, so it is otherwise harmless.
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+</details>

@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "tools/ai_workflow/ is deleted with no remaining references, and no coverage is lost: the script is byte-identical to DockerImages', and the tests differ only in the import path and Run: line. Both named doc paragraphs point at DockerImages. One advisory prose inaccuracy.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "live-infra-access.md:57-59 says the tracker is built into 'the dev image … tests included'; it ships in the separate local-home image, which carries only track_build.py"}]}

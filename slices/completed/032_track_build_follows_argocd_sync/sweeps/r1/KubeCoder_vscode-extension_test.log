@@ -1,0 +1,2 @@
+vscode-extension: cexec frontend npm test    [  OK  ]
+vscode-extension: cexec frontend npm run typecheck    [  OK  ]

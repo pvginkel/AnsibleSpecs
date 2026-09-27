@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Round-1 F1 is resolved: live-verification step 1 now confirms dev runs the image from the tracker's exit 0 with kubecoder-dev rolled, not from Path 1's deleted kubectl commands. No KubeCoder instruction still sends agents to check a Build-Main roll by hand, and the fix commit introduces nothing new.",
+ "details": "code_review_r2.md",
+ "findings": []}

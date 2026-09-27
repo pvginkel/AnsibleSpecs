@@ -37,7 +37,6 @@ Triaged 2026-09-26 from the DHCP outage follow-up (the record: `handovers/triage
 
 Triaged 2026-09-27 from DockerImages' DI-7 and DI-10 (the record: `handovers/triage_2026-09-27.md` at `6dfe621`):
 
-- **[032](slices/backlog/032_track_build_follows_argocd_sync/slice.md)** — track_build.py follows a green build into its Argo CD sync: the pin commit (and Promote-PRD's prd fast-forward) tracked to a synced, healthy app by default for every Argo-deployed repo, git lookups from the environment's own clone only, and a 5-minute default `--appear-timeout` (feature).
 
 ## Completed
 
@@ -90,6 +89,7 @@ Triaged 2026-09-27 from DockerImages' DI-7 and DI-10 (the record: `handovers/tri
 | [028 argo-cd-and-service-residuals](slices/completed/028_argo_cd_and_service_residuals/plan.md) | — | — | Argo CD and service residuals: a standing sync-failed alert, login through `https://argocd/`, the PreSync hook's `terraform init`, the promote re-run after a failed tag push, and gitblit's stalled index (minor). |
 | [029 helmcharts-decommission](slices/completed/029_helmcharts_decommission/plan.md) | — | — | HelmCharts decommission: the D61 cleanup, the version-poller and helm-charts producer, `collect-versions` deleted and a home for `recommend-resources`, the Argo CD registry move, and the docs (improvement). |
 | [030 retire-modern-app-dev-images](slices/completed/030_retire_modern_app_dev_images/plan.md) | — | — | Retire modern-app-dev and modern-app-dev-playwright: their build and validation pipelines move to other images, then both images go (improvement). |
+| [032 track-build-follows-argocd-sync](slices/completed/032_track_build_follows_argocd_sync/plan.md) | — | — | track_build.py follows a green build into its Argo CD sync: the pin commit (and Promote-PRD's prd fast-forward) tracked to a synced, healthy app by default for every Argo-deployed repo, git lookups from the environment's own clone only, and a 5-minute default `--appear-timeout` (feature). |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

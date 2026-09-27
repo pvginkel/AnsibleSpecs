@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Jenkinsfile.promote prints exactly one handoff line on every green run: `pushed to prd.` after the fast-forward or `already on prd: nothing pushed.` on the record-only re-run. Both carry the full sha and the repo the job pushed, and the done-record regex tells them apart from the pin line and from every other console line (checked against live Promote-PRD #9). No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

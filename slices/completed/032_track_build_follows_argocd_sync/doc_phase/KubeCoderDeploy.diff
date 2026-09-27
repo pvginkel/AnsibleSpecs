@@ -1,0 +1,42 @@
+/work/KubeCoderDeploy — P1: git diff 46e0aa896538..35e1f8127900
+
+Jenkinsfile.promote | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/Jenkinsfile.promote b/Jenkinsfile.promote
+index e422047..67bc07b 100644
+--- a/Jenkinsfile.promote
++++ b/Jenkinsfile.promote
+@@ -33,6 +33,7 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+ ]) {
+     node(POD_LABEL) {
+         container('k8s') {
++            String repo = 'pvginkel/KubeCoderDeploy'
+             String checkout = "${pwd(tmp: true)}/KubeCoderDeploy"
+             String release = "release-${currentBuild.number}"
+             String sha
+@@ -60,7 +61,7 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+ 
+                         rm -rf '${checkout}'
+                         git clone --quiet \\
+-                            "https://\${GIT_USER}:\${GIT_TOKEN}@github.com/pvginkel/KubeCoderDeploy.git" '${checkout}'
++                            "https://\${GIT_USER}:\${GIT_TOKEN}@github.com/${repo}.git" '${checkout}'
+                         git -C '${checkout}' config user.name 'jenkins'
+                         git -C '${checkout}' config user.email 'jenkins@webathome.org'
+                     """
+@@ -130,6 +131,15 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
+                 }
+             }
+ 
++            // The handoff track_build.py (DockerImages kube-coder-dev-local-home) parses to follow
++            // prd's Argo CD sync, in the shape of cicd.writeVersionPins' pin line: `<owner/repo>
++            // <sha> …`. Only the `pushed to` form moved prd and so brings a sync.
++            if (recordOnly) {
++                echo "${repo} ${sha} already on prd: nothing pushed."
++            } else {
++                echo "${repo} ${sha} pushed to prd."
++            }
++
+             stage('Recording the release') {
+                 String references = ''
+                 for (int i = 0; i < pins.size(); i++) {

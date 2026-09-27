@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "P5 meets its outcome: a FAILED or NOT_DONE app gets one argocd_<app>_<sha7>.log in --log-dir. It holds the operation, the conditions, the sync-failed and live-unhealthy resources and the tf-presync-<app> hook log, and the summary names it. The tests catch the behaviour, and the live premises (hook Job names, selectors, list RBAC) hold on prd. The one advisory finding is the B2 class, already on record.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional",
+   "anchor": "failing-test",
+   "summary": "A TimeoutError while a diagnosis read's body is read escapes _read (FollowError only), so the decided exit 5/6 becomes a traceback and exit 1. This is the B2 class, already noted there."}
+ ]}

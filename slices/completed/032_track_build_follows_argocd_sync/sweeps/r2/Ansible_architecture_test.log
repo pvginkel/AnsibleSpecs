@@ -1,0 +1,1 @@
+architecture: cexec iac ./scripts/arch-validate.py docs/architecture/ansible-architecture.yaml    [  OK  ]

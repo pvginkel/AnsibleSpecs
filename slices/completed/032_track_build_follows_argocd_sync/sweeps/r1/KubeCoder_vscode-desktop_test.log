@@ -1,0 +1,2 @@
+vscode-desktop: cexec frontend npm test    [  OK  ]
+vscode-desktop: cexec frontend npm run typecheck    [  OK  ]

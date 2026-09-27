@@ -1,0 +1,150 @@
+/work/KubeCoder — P6: git diff 6153cd103a72..0b6168ffa7ae
+
+.claude/agents/card-runner.md        | 10 ++++++++--
+ .claude/skills/card-pass/SKILL.md    | 10 ++++++----
+ docs/operations/deploy-operations.md | 49 +++++++++++++++++++++++++++++++++++++++++--------
+ docs/operations/live-verification.md |  9 ++++-----
+ docs/operations/slice-test-plan.md   |  9 ++++++---
+ 5 files changed, 65 insertions(+), 22 deletions(-)
+
+diff --git a/.claude/agents/card-runner.md b/.claude/agents/card-runner.md
+index b7f82587..8e0e0838 100644
+--- a/.claude/agents/card-runner.md
++++ b/.claude/agents/card-runner.md
+@@ -149,8 +149,14 @@ Implement exactly that in /work/<Name>, then land and deploy it.
+    your commit, then read it until it finishes — ONE Jenkins MCP call at a time, never concurrent.
+    A disabled job, or a repo with no CI: say so; the push is then the end of the line. A build
+    superseded by a later one is reported by the later one's result.
+-6. Confirm the deploy. <DEPLOY RULE> A green build is not a rolled deploy. Jenkins answering 502
+-   for about five minutes after a push that redeploys it is not a failure: wait it out.
++6. Confirm the deploy. <DEPLOY RULE> A green build is not a rolled deploy. track_build.py follows
++   a green build into the Argo CD sync of the commit it pushed to a deploy repo: when its summary's
++   "=== Argo CD follow ===" section reports each app rolled, that is the roll. Its other stops
++   (exits 4 to 7) end in a "Result:" line that says what happened and what to do; one that needs
++   the operator, or a change outside this card (the .kubecoder/config.yaml declaration exit 4 asks
++   for), goes under Left undone. When it says it found no handoff line to follow, the deploy rule
++   alone decides. Jenkins answering 502 for about five minutes after a push that redeploys it is not
++   a failure: wait it out.
+ 7. A red build caused by your change: fix forward and push again, or revert and push the revert.
+    Never leave the default branch red. If you cannot make it green, move your commits to a branch
+    `card-pass/<ID>`, reset the default branch to origin, and say so.
+diff --git a/.claude/skills/card-pass/SKILL.md b/.claude/skills/card-pass/SKILL.md
+index 11e4d32c..ca99a76b 100644
+--- a/.claude/skills/card-pass/SKILL.md
++++ b/.claude/skills/card-pass/SKILL.md
+@@ -129,10 +129,12 @@ repo as `owner/Name` (a second work repo when the fix spans two in one environme
+ candidate host when placement was a guess), the card verbatim as `get_issues` returned it
+ (description and comments), the date, and the **deploy rule** for the work repo — for `pvginkel/KubeCoder` and `pvginkel/KubeCoderDeploy` the dev-only rule
+ above, worded for the worker: *"Deployed means rolled to dev: `track_build.py KubeCoder/Build-Main
+---hash "$(git rev-parse HEAD)" --appear-timeout 900`, then the roll check in
+-`docs/operations/deploy-operations.md` ('A green build is not a rolled dev'). You never promote to
+-prd."* — for KubeCoderDeploy, the Argo sync of `main` to `kubecoder-dev`; for any other repo, *"the
+-way this repo's docs say a push is deployed; 'nothing deploys' is an answer."*
++--hash "$(git rev-parse HEAD)" --appear-timeout 900` waits past the green build until Argo CD has
++rolled its pin commit to `kubecoder-dev`, and its exit 0 with the summary reporting `kubecoder-dev`
++rolled is the deploy. Its other stops are in `docs/operations/deploy-operations.md` ('A green build
++is not a rolled dev'). You never promote to prd."* — for KubeCoderDeploy, the Argo sync of `main`
++to `kubecoder-dev`; for any other repo, *"the way this repo's docs say a push is deployed; 'nothing
++deploys' is an answer."*
+ 
+ A runner returns twice. After **phase 1** it hands back the worker's proposal — recommendation,
+ alternative, *if wrong*, push blast radius, gate, restart, risk, unclear — with whether a restart is
+diff --git a/docs/operations/deploy-operations.md b/docs/operations/deploy-operations.md
+index dffdab47..9ade5c23 100644
+--- a/docs/operations/deploy-operations.md
++++ b/docs/operations/deploy-operations.md
+@@ -89,14 +89,47 @@ It needs `$JENKINS_TOKEN` and takes `--diagnose` for the failure tail on a red b
+ `/work/DockerImages/kube-coder-dev-local-home/`, and reaches this environment's `PATH` through the
+ local-home image built there.
+ 
+-**A green build is not a rolled dev.** The build ends at the pin commit. dev has rolled once its
+-controller Deployment names the build's `dev-<n>` and has finished rolling out:
+-
+-```bash
+-cexec iac kubectl -n kubecoder-dev get deploy kubecoder-controller \
+-  -o jsonpath='{.spec.template.spec.containers[?(@.name=="kubecoder-controller")].image}{"\n"}'
+-cexec iac kubectl -n kubecoder-dev rollout status deploy/kubecoder-controller --timeout=10m
+-```
++**A green build is not a rolled dev, so the tracker waits for the roll.** The build ends at the
++pin commit it pushes to KubeCoderDeploy's `main`, and Argo CD rolls that commit to `kubecoder-dev`
++afterwards. Once the build is green, `track_build.py` reads the pin line from its console and
++follows the commit into Argo CD. It reads the Applications from the Kubernetes API with the
++default `~/.kube/config` and asks git only of `/work/KubeCoderDeploy`, which this environment
++declares. The pin line names `config/prd/values.yaml` too, but `kubecoder-prd` tracks `prd`, not
++`main`, so only `kubecoder-dev` is waited on; prd rolls at promotion (Path 2). The tracker returns
++once `kubecoder-dev` is `Synced` at the pin commit or a later one, with no sync running and its
++health not `Progressing`. Exit `0` with the summary's `=== Argo CD follow ===` section reporting
++`kubecoder-dev` rolled **is** the roll: nothing is left to check by hand. A build whose pins
++`main` already carried pushes nothing, and the tracker reports dev's current state without
++waiting. Build-Main's `Write image pins` stage prints a handoff line on every green build, so a
++summary saying the tracker found none is a pipeline fault to report, not a rolled dev.
++
++Every other stop has an exit status of its own, and the summary's `Result:` line says what to do:
++
++- **`4`, deploy untracked** — the build is green, but a deploy repo it pushed to has no clone in
++  `/work`. Run the `git clone` line the summary gives, re-run the same command, and declare the
++  repo in `.kubecoder/config.yaml` so the environment's next start clones it.
++- **`5`, the roll failed** — the sync of the commit failed, the app carries an error condition
++  (`SyncError` …), or it settled `Degraded` or `Missing`. Fix the cause and push again, as for a
++  red build.
++- **`6`, not rolled by the deadline** — `--roll-timeout` (600 s by default, counted from when Argo
++  CD saw the commit) passed before the app rolled. The app's line is what Argo CD reports, not a
++  verdict on the workload: its health can sit stale at `Progressing` when a commit renders no
++  change and so brings no sync. The diagnosis tells the two apart (below); re-run the command to
++  keep waiting.
++- **`7`, Argo CD will not roll it on its own** — Argo CD had not seen the commit after
++  `--pickup-timeout` (120 s by default; it syncs on push only, so a lost webhook leaves dev stale
++  but green), or the app has no automated sync policy. Both are the operator's: a refresh or a
++  sync in Argo CD, or the push redelivered from the GitHub repo's Recent Deliveries; then re-run.
++
++On `5` and `6` the tracker writes a diagnosis beside the failing builds' console logs,
++`<--log-dir>/argocd_<app>_<sha7>.log` (`/tmp/track_build` by default), and the summary names it:
++the sync operation, the conditions, the resources the sync failed, the live resources that are
++not healthy with their pods and Warning events, and the `tf-presync-<app>` hook Job's log. On `6`,
++an app whose `Argo CD reports:` line has it `Synced` at the commit or a later one with no sync
++running, and whose "Resources not healthy" section reads `none: each is healthy`, runs the commit
++with only its Argo CD health stale; that section judges the kinds it lists, and a resource it
++names is the rollout that is stuck. When apps end differently, `5` wins over `7` and `7` over `6`.
++`1` is a red build, with nothing followed; `3` is an operational problem.
+ 
+ ## Path 2 — `Promote-PRD` promotes a commit on `main` to prd
+ 
+diff --git a/docs/operations/live-verification.md b/docs/operations/live-verification.md
+index 32bd4498..1dff3c51 100644
+--- a/docs/operations/live-verification.md
++++ b/docs/operations/live-verification.md
+@@ -125,11 +125,10 @@ the commit is on `main` and changes no file prd renders, so a promotion that car
+ nothing on prd, and D178 needs no exception. Declare the key in that file only; the shared
+ `chart/values.yaml` reaches prd at the next promotion ([config-key-rollout.md](config-key-rollout.md)).
+ 
+-1. **Confirm dev runs the image that knows the key**: the controller Deployment names the
+-   `dev-<n>` of the Build-Main that carries the slice, and has finished rolling out (Path 1's
+-   commands). A value that lands ahead of that image is a half-landed pair: dev's controller
+-   refuses to start, and neither the build nor the sync goes red
+-   ([deploy-hazards.md](deploy-hazards.md)).
++1. **Confirm dev runs the image that knows the key**: `track_build.py` on the Build-Main that
++   carries the slice exited `0` with `kubecoder-dev` rolled (Path 1). A value that lands ahead of
++   that image is a half-landed pair: dev's controller refuses to start, and neither the build nor
++   the sync goes red ([deploy-hazards.md](deploy-hazards.md)).
+ 2. **Commit the value and push.** Pull `main` first, since every Build-Main commits its pins into
+    this same file. Add the key at the end of the `controllerConfig:` block, clear of the `images:`
+    pins, so a pin commit landing in between cannot conflict with the revert. A key that a startup
+diff --git a/docs/operations/slice-test-plan.md b/docs/operations/slice-test-plan.md
+index 8f76d267..d5ec818b 100644
+--- a/docs/operations/slice-test-plan.md
++++ b/docs/operations/slice-test-plan.md
+@@ -84,9 +84,12 @@ image changes (§2 step 4), never a permission one.
+    choose; the driver never pushes for you.
+ 
+ 5. **Wait for the CI build** with `track_build.py` — never hand-poll Jenkins; the command is in
+-   [deploy-operations.md](deploy-operations.md). The green build ends at its pin commit, and Argo's
+-   sync of that commit rolls `kubecoder@dev`: confirm dev runs the build (the commands are in the
+-   same place) before any live check. A red build routes per §4 before any live check.
++   [deploy-operations.md](deploy-operations.md). The green build ends at its pin commit, and the
++   tracker follows that commit into Argo's sync of `kubecoder@dev`: its exit `0`, with the summary
++   reporting `kubecoder-dev` rolled, is dev running the build, and the live checks start there. A
++   red build (exit `1`) or a failed roll (exit `5`, the diagnosis file named in the summary) routes
++   per §4 before any live check. Every other stop, and what it asks of you, is in the same doc's
++   "A green build is not a rolled dev".
+ 
+ ## 3. Live tests on `kubecoder@dev`
