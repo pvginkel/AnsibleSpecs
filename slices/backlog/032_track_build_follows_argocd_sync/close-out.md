@@ -23,6 +23,17 @@ Focus: <!-- doc-writer: what the operator must do before the slice's outcome hol
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
+### A1 — Settle V16 after the operator's next KubeCoder/Promote-PRD run (promotion is run by …
+
+V16 — A real Promote-PRD run prints the handoff line, and track_build.py pointed at that build follows kubecoder-prd to the promoted commit.
+
+`verification.json` marks V16 owed after: the operator's next KubeCoder/Promote-PRD run (promotion is run by hand; no role in the run promotes). The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V16 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
