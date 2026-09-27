@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "F1 fixed in KubeCoder 0b6168ff on phase/032-P6: live-verification.md step 1 of 'Proving an optional controllerConfig key on dev' no longer cites Path 1's deleted kubectl commands; it confirms dev runs the image by the tracker's exit 0 with kubecoder-dev rolled. kc project test green; done-record lists the fifth instruction.", "refuted": []}

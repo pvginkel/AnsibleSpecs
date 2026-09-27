@@ -418,8 +418,9 @@ Each one agrees with what the tracker now does. Where the tracker followed the A
 return is the roll. Where it remarked that it had nothing to follow, the repo's own deploy rule
 still decides.
 
-**Done (P6).** KubeCoder `47056e22` on `phase/032-P6`: the four instructions say the tracker
-waits for the roll, and none sends an agent to check it by hand. Where each one now sits:
+**Done (P6).** KubeCoder `47056e22` and `0b6168ff` on `phase/032-P6`: the four
+instructions, and live-verification's, say the tracker waits for the roll, and none sends an agent
+to check it by hand. Where each one now sits:
 
 - `docs/operations/deploy-operations.md:92-132`, "A green build is not a rolled dev, so the tracker
   waits for the roll". The kubectl check is gone. Exit 0, with the `=== Argo CD follow ===`
@@ -433,6 +434,9 @@ waits for the roll, and none sends an agent to check it by hand. Where each one 
   reports each app rolled is the roll. A stop that needs the operator, or the `.kubecoder/config.yaml`
   declaration exit 4 asks for, goes under Left undone. With no handoff line, the deploy rule alone
   decides.
+- `docs/operations/live-verification.md:128-131`, step 1 of "Proving an optional `controllerConfig`
+  key on dev", which cited Path 1's deleted kubectl commands: the tracker's exit 0 with
+  `kubecoder-dev` rolled confirms dev runs the image.
 
 Later phases:
 - Doc phase: `docs/operations/pipeline-dependencies.md:26` still lists `$JENKINS_TOKEN` as the
