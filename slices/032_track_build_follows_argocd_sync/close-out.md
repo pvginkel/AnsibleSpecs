@@ -73,6 +73,8 @@ code-writer P5 r1, 2026-09-27 — P5's diagnosis adds reads through the same Kub
 
 code-reviewer P5 r1, 2026-09-27 — Witnessed for the diagnosis too (phases/P5/code_review_r1.md F1). A FakeKube whose items() raises TimeoutError on the argocd-hooks path, over a Failed kubecoder-dev sync, gets past _read and follow_deploys. The exit-5 verdict, already decided, is lost to a traceback.
 
+consult 1, 2026-09-27 — Not appended as a phase: no requirement or acceptance criterion names transport errors, and the Jenkins client has had the same hole since before this slice. It stays for the operator's disposition. It is the one entry here that the follow's default-on makes more likely, and the fix is confined to Kube._open and the response reads: treat OSError and http.client.HTTPException as FollowError, which exits 3.
+
 **Consequence:** Rarely, after a green build, an agent gets exit 1 and a traceback, and may go fixing a build that succeeded. The follow runs by default and makes up to ~100+ API reads per run.
 
 **Provenance:** witnessed, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
@@ -81,6 +83,8 @@ code-reviewer P5 r1, 2026-09-27 — Witnessed for the diagnosis too (phases/P5/c
 ### B3 — DockerImages track_build.py: a handoff that pushed nothing, to an uncloned deploy repo, stops with exit 4 'deploy untracked' · minor
 
 _follow puts every matched handoff's repo through the clone check whatever handoff.pushed is. So an 'already carries these pins' line, or Promote-PRD's 'already on prd: nothing pushed', to a repo with no /work clone gives exit 4 and 'Clone them now and re-run this command to follow the deploy'. The plan says a handoff that pushed nothing is not a stop, and the docstring says it leaves the status 0. The plan also has the already-carries report read main's head from the clone, so the two rules collide here. Rare today: every pin caller pins a build-numbered tag.
+
+consult 1, 2026-09-27 — Not appended as a phase: the plan does not owe one outcome over the other. V03 (R3, the operator's own words: if the deploy repo's clone isn't there, stop) and V18 (ruling F1: a handoff that pushed nothing is reported, not waited on) each hold for their own case, and this entry is where they meet. The code takes R3's side, and 'already carries' needs the clone anyway to read main's head. Which rule should win for a no-push handoff to an uncloned repo is the operator's call. If R3 should give way, the exit-4 check skips handoffs whose pushed is false, and the already-carries report goes without the head comparison.
 
 **Consequence:** An agent with a green build that deployed nothing is told the deploy is untracked and to clone a repo, and gets a non-zero exit.
 
@@ -102,7 +106,7 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — Ansible docs/live-infra-access.md says the tracker is built into the dev image; it ships in the local-home image, without its tests · nit
+### ~~S1 — Ansible docs/live-infra-access.md says the tracker is built into the dev image; it ships in the local-home image, without its tests · nit~~ — resolved by consult 1 (Ansible 94be15b): docs/live-infra-access.md now says the tracker ships in the local-home image, built from kube-coder-dev-local-home/ where its tests live, and names the Argo CD follow; kc project lint re-run, green; struck by consult 1
 
 The rewritten paragraph (docs/live-infra-access.md:57-59) says track_build.py "is built into the dev image from DockerImages kube-coder-dev-local-home/, tests included". DockerImages kube-coder-dev-local-home/Dockerfile:17-24 builds a separate scratch image, the local-home image. It is mounted at ~/.local and copies only track_build.py (:24), so the tests are not in it. Suggestion: say "the local-home image" (KubeCoder docs use that name), and attach "tests included" to the directory rather than the image. The doc phase could fold this in.
 
@@ -127,4 +131,13 @@ The card-pass deploy rule for KubeCoderDeploy workers is 'the Argo sync of main 
 **Consequence:** A card-pass worker that pushes KubeCoderDeploy main has to work out for itself how to confirm kubecoder-dev synced, or reports the deploy unconfirmed.
 
 **Provenance:** read, code-writer, P6, r1, KubeCoderDeploy tree and card-pass SKILL.md
+**Disposition:**
+
+### S4 — KubeCoder card-runner step 6 does not say what an exit-0 follow with no app rolled means (a handoff no Application follows, or one that pushed nothing) · minor
+
+card-runner.md:152-159 names two exit-0 outcomes: the follow section reporting each app rolled, and 'no handoff line' (the deploy rule decides). track_build.py also exits 0 with 'Result: nothing to wait for — no handoff pushed a commit an Application follows.' (:1289-1291, remark at :1309-1315), and with apps reported 'current' when a handoff pushed nothing. Step 6 applies to every repo, and it gives neither of these a rule.
+
+**Consequence:** A card worker whose pin line matches no Argo CD Application gets exit 0 with nothing rolled, and may report the deploy confirmed; the tracker's own remark says to compare the Application's source.
+
+**Provenance:** read, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
 **Disposition:**
