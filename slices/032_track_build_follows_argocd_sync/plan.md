@@ -208,7 +208,7 @@ Record. The script was byte-identical to DockerImages `origin/main`'s at deletio
 differed only in the "Run:" line and the import path's `.parent` depth, so every deleted case has
 its successor in `kube-coder-dev-local-home/tests/test_track_build.py`.
 
-### P3 — DockerImages readies the tracker: a gated suite, a declared PyYAML, a 5-minute appear timeout
+### P3 — DockerImages readies the tracker: a gated suite, a declared PyYAML, a 5-minute appear timeout ✅ DONE 2026-09-27
 
 Target: ../DockerImages
 Creates: kube-coder-dev-local-home
