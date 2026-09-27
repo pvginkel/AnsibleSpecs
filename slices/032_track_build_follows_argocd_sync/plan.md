@@ -344,7 +344,7 @@ from the Application's `repoURL`, since the console masks them. Live, read-only:
 rolled at 46e0aa8, exit 0; ElectronicsInventory #255 → exit 4 naming ElectronicsInventoryDeploy;
 DockerImages #2548 → exit 4 naming the nine uncloned repos (all but RegistryDeploy).
 
-### P5 — A failed or stalled roll leaves its diagnosis on disk
+### P5 — A failed or stalled roll leaves its diagnosis on disk ✅ DONE 2026-09-27
 
 Target: kube-coder-dev-local-home
 
