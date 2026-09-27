@@ -24,6 +24,25 @@
   stops with a distinct exit status (the build was green, the deploy is untracked), names the
   missing deploy repo, gives the exact `git clone` line to run now, and says to declare the repo
   in the environment's `.kubecoder/config.yaml` for next time. Operator: "D1: Correct."
+  Re-affirmed at plan review r1 (A3: the cost is one clone per deploy repo, not per environment —
+  a DockerImages build pins into up to 22 deploy repos): "No, this is fine. If the script is clear
+  what repo it's missing, we're good." So the message must name every missing deploy repo, each
+  with its own `git clone` line.
+- Ruling (2026-09-27, plan review r1 F1): the roll wait is bounded. A roll deadline — default 10
+  minutes, overridable by a flag — after which the tracker stops with its own exit status, names
+  every app still `Progressing`, and saves the same evidence as a failed roll. A handoff that
+  pushed no new deploy commit ("already carries these pins", or a promote re-run that only
+  records a release tag) has no new sync to wait for: the tracker reports the app's current sync
+  and health state and returns, rather than waiting on health (Argo health can sit stale at
+  `Progressing` until the next sync; close-out B1). Operator: "Agreed on the rest."
+- Ruling (2026-09-27, plan review r1 A1): the KubeCoder docs phase also covers
+  `docs/operations/slice-test-plan.md` step 5 ("Wait for the CI build" — "confirm dev runs the
+  build … before any live check") and `.claude/agents/card-runner.md`'s standing rule "A green
+  build is not a rolled deploy.", not only deploy-operations.md. Operator: "Agreed on the rest."
+- Ruling (2026-09-27, plan review r1 A2): the tracker's PyYAML dependency is declared, not
+  incidental: `python3-yaml` is installed explicitly in DockerImages `kube-coder-dev-base/Dockerfile`
+  (today it is present only as a dependency of apt `yq`, `ubuntu-pro-client` and `netplan.io`).
+  Operator: "Agreed on the rest."
 
 #### Settled by the planning session (operator saw these in refinement.md and did not object)
 
@@ -80,10 +99,14 @@
   `valueFiles` entry naming a pinned file — so a dev-only change does not wait on a prd app
   tracking the same branch. Upstream-chart apps have `spec.sources[]` (8 are 3-source: chart +
   `ref: values` + companion `chart/`, argo-cd D18/D56) with per-source `status.sync.revisions[]`.
-- **Done** = the app's sync revision is the pin commit or a descendant (`git merge-base
-  --is-ancestor` in the `/work` clone, after a fetch), `status.operationState.phase` terminal,
-  `health.status` not `Progressing`.
-- **Stop rather than hang**: a deadline on Argo seeing the commit (push-only sync; argo-cd D6 "a
+- **Done** (plan review r1 F2; operator: "Agreed on the rest.") = what Argo reports live, not
+  what it last compared: the app is `Synced` at the pin commit or a descendant (`git merge-base
+  --is-ancestor` in the `/work` clone, after a fetch; on multi-source apps, the deploy-repo
+  sources' `status.sync.revisions[]`), no operation is running, and `health.status` is not
+  `Progressing`. An app `OutOfSync` at the new commit with its previous operation finished is still
+  waited on (the compared revision moves before any sync). A commit that renders no change leaves
+  the app `Synced` with no new operation, and that is done.
+- **Stop rather than hang**: the roll deadline (ruling F1 above); a deadline on Argo seeing the commit (push-only sync; argo-cd D6 "a
   dropped webhook is stale-but-green, not delayed"); a `SyncError` condition; an app with no
   `syncPolicy.automated` (argo-cd D63; today only the `argocd-prd` Application). On a failed or
   unhealthy roll, save the operation message, conditions, failed or Degraded resources and the

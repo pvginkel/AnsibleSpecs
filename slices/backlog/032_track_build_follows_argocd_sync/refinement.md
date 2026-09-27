@@ -17,6 +17,7 @@
 **If this is wrong.** One extra clone per environment, or six small config commits later. Nothing breaks.
 
 **Operator.** D1: Correct. (2026-09-27, in chat)
+Re-affirmed at plan review, told the cost is one clone per deploy repo rather than per environment (a DockerImages build feeds up to 22 deploy repos): "No, this is fine. If the script is clear what repo it's missing, we're good."
 
 ## Open facts — questions only you can answer
 
