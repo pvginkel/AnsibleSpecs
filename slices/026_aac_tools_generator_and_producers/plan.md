@@ -201,7 +201,7 @@ done-record and hands back `done`.
 
 ### P5 — KubeCoderDeploy maps kube-coder-tunnel-reclaim
 
-Target: ../KubeCoderDeploy
+Target: ../scratch/KubeCoderDeploy
 
 **First, check the restart (Ruling F3).** The sidecar's `gen-architecture --help` must print
 the contract P3 put there, including `served_by` and P2's container scoping. If it does not,
@@ -241,7 +241,7 @@ Delivery view.
 
 ### P7 — Alertmanager is served by the Telegram Bot API
 
-Target: ../PrometheusDeploy
+Target: ../scratch/PrometheusDeploy
 
 PrometheusDeploy's judgment layer declares `svc:telegram-bot-api` serving the `alertmanager`
 image (R5). The generated model then has a Serving edge from the Telegram Bot API to

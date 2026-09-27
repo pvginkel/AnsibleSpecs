@@ -125,9 +125,10 @@
   so an old self-labelled bare number (live example: `ssegateway-validation:56`, labelled `56`,
   built 2026-09-24) counting as a tracking tag cannot switch the floor off. Tested with the
   label rule.
-- **RegistryDeploy is checked out** at `/work/RegistryDeploy` (cloned at planning; declared in
-  Ansible's `.kubecoder/config.yaml`, Ansible `7154030`). Operator: "You dont have to restart to
-  get the repo. Just clone it."
+- **RegistryDeploy is checked out** under `/work/scratch/RegistryDeploy`, not declared in
+  Ansible's `.kubecoder/config.yaml` (operator, 2026-09-27: a repo a slice needs belongs in
+  scratch). An environment that runs this slice clones RegistryDeploy and KubeCoderDeploy into
+  `/work/scratch/` first.
 
 #### Grounding (session, verified 2026-09-26 — binds the plan)
 
@@ -291,7 +292,7 @@ to trust the label.
 
 ### P2 — KubeCoderDeploy pins kube-coder-tunnel-reclaim to a build
 
-Target: ../KubeCoderDeploy
+Target: ../scratch/KubeCoderDeploy
 
 KubeCoderDeploy stops running `kube-coder-tunnel-reclaim:latest` (R5). The controller pod's
 tunnel-reclaim container runs a build-number tag of the image: the newest build when the phase
@@ -416,7 +417,7 @@ Target: ../DockerImages
 
 ### P7 — RegistryDeploy: cleanup runs again, nightly, in dry-run
 
-Target: ../RegistryDeploy
+Target: ../scratch/RegistryDeploy
 
 Ruling D1. The registry-cleanup chart gets a dry-run setting, turned on, which drives P4's
 switch. The CronJob's suspension and its comment go
