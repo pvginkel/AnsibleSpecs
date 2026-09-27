@@ -227,6 +227,29 @@ on that base, so the declaration covers whichever container runs the script.
 R6: the `--appear-timeout` default becomes 5 minutes (`track_build.py:366-371`, now `30.0`), and
 the help text agrees.
 
+**Done (P3).** DockerImages `cbc411b` on `phase/032-P3`. `.kubecoder/project.yaml` declares
+component `kube-coder-dev-local-home` (cwd defaults to the directory):
+`cexec iac uv run --no-project --python /usr/bin/python3 --with pytest python -m pytest -q`.
+`kube-coder-dev-base/Dockerfile` installs `python3-yaml` in the base apt list. `--appear-timeout`
+defaults to `300.0`, help "(default: 300, 5 minutes)", pinned by
+`TestDefaults.test_appear_timeout_defaults_to_five_minutes`. `kc project test` green, all three
+components (tracker suite: 10 passed).
+
+Later phases:
+- Target the suite with `kc project test kube-coder-dev-local-home` from `/work/DockerImages`.
+- The suite runs under the `iac` sidecar's `/usr/bin/python3` 3.13.7, with the system PyYAML
+  6.0.2 (`/usr/lib/python3/dist-packages`) importable and the latest pytest from PyPI overlaid.
+  Test deps beyond pytest need their own `--with` in the test line.
+- The test file's docstring now reads "Tests for track_build: its argument defaults, and
+  find_downstream_build …". New cases can go in that file or in new `tests/test_*.py` files; each
+  file loads `track_build.py` by path with `importlib`, as the existing one does.
+
+Record. `uv run --no-project` layers pytest over the system interpreter's site-packages, so the
+tests import the PyYAML the script runs with, not a PyPI copy. Premise correction: not every
+`kube-coder-*` image builds on the base. `arm64-cross` (dockcross), `esp-idf` (espressif/idf) and
+`tunnel-reclaim` (python:slim) do not, so `python3-yaml` does not reach those containers. The
+tracker runs in the dev container, which builds on the base.
+
 ### P4 — The tracker follows a green build's handoff into its Argo CD sync
 
 Target: kube-coder-dev-local-home
