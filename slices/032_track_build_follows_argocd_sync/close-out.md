@@ -71,6 +71,8 @@ Kube.get catches only HTTPError/URLError. A response-read timeout (bare TimeoutE
 
 code-writer P5 r1, 2026-09-27 — P5's diagnosis adds reads through the same Kube._open: Kube.items and Kube.log (the hook pod's log). _read turns a FollowError into a 'could not read' line in the file, but a timeout raised while the response body is read (json.load / resp.read, outside _open's try) is not a FollowError. So B2's exposure covers the diagnosis too, and a fix in Kube covers both.
 
+code-reviewer P5 r1, 2026-09-27 — Witnessed for the diagnosis too (phases/P5/code_review_r1.md F1). A FakeKube whose items() raises TimeoutError on the argocd-hooks path, over a Failed kubecoder-dev sync, gets past _read and follow_deploys. The exit-5 verdict, already decided, is lost to a traceback.
+
 **Consequence:** Rarely, after a green build, an agent gets exit 1 and a traceback, and may go fixing a build that succeeded. The follow runs by default and makes up to ~100+ API reads per run.
 
 **Provenance:** witnessed, code-reviewer, P4, r1, phases/P4/code_review_r1.md F1
@@ -116,4 +118,13 @@ Argo CD v3.5 keeps each resource's health out of the Application (resourceHealth
 **Consequence:** If a roll ends Degraded because of an unjudged kind (the CNPG Cluster today), the diagnosis names no unhealthy resource. The agent still has the operation, the conditions and the hook log, but has to look at the workload itself.
 
 **Provenance:** witnessed — code-writer, P5, r1; DockerImages c797d33 track_build.py _JUDGED
+**Disposition:**
+
+### S3 — KubeCoder card-pass: a KubeCoderDeploy push has no Jenkins handoff for track_build.py to follow, and no documented roll check · minor
+
+The card-pass deploy rule for KubeCoderDeploy workers is 'the Argo sync of main to kubecoder-dev' (.claude/skills/card-pass/SKILL.md). KubeCoderDeploy has no main-branch build that prints a handoff line (only Jenkinsfile.architecture and Jenkinsfile.promote), so the tracker has nothing to follow for such a push. P6 removed the kubectl roll check from docs/operations/deploy-operations.md, which checked only the controller image and so never fit a values-only KubeCoderDeploy change anyway. A worker now has no documented way to confirm that sync. One remedy: let track_build.py follow a deploy-repo commit directly (repo, sha, branch), without a Jenkins build.
+
+**Consequence:** A card-pass worker that pushes KubeCoderDeploy main has to work out for itself how to confirm kubecoder-dev synced, or reports the deploy unconfirmed.
+
+**Provenance:** read, code-writer, P6, r1, KubeCoderDeploy tree and card-pass SKILL.md
 **Disposition:**

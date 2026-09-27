@@ -418,6 +418,35 @@ Each one agrees with what the tracker now does. Where the tracker followed the A
 return is the roll. Where it remarked that it had nothing to follow, the repo's own deploy rule
 still decides.
 
+**Done (P6).** KubeCoder `47056e22` on `phase/032-P6`: the four instructions say the tracker
+waits for the roll, and none sends an agent to check it by hand. Where each one now sits:
+
+- `docs/operations/deploy-operations.md:92-132`, "A green build is not a rolled dev, so the tracker
+  waits for the roll". The kubectl check is gone. Exit 0, with the `=== Argo CD follow ===`
+  section reporting `kubecoder-dev` rolled, is the roll. The section lists exits 4 to 7 with each
+  one's remedy, the diagnosis file written on 5 and 6, the precedence, and exits 1 and 3.
+- `docs/operations/slice-test-plan.md:86-92`, step 5 (its title is unchanged). Exit 0 means dev
+  runs the build. Exit 1 or 5 routes per §4. Every other stop points to deploy-operations.
+- `.claude/skills/card-pass/SKILL.md:131-137`: exit 0 is the deploy, and the other stops point to
+  deploy-operations.
+- `.claude/agents/card-runner.md:152-159`, step 6, which covers every repo. A follow section that
+  reports each app rolled is the roll. A stop that needs the operator, or the `.kubecoder/config.yaml`
+  declaration exit 4 asks for, goes under Left undone. With no handoff line, the deploy rule alone
+  decides.
+
+Later phases:
+- Doc phase: `docs/operations/pipeline-dependencies.md:26` still lists `$JENKINS_TOKEN` as the
+  tracker's only need. The tracker now also reads `~/.kube/config` and `/work/<X>Deploy`, which
+  deploy-operations.md:92-97 names.
+
+Record. Build-Main's `Write image pins` stage has no `when` guard, so it prints a handoff line on
+every green build. deploy-operations therefore calls a missing handoff line a pipeline fault to
+report, and gives no hand-check fallback. The card runner may run the tracker's `git clone` line,
+since that clone is read-only. Declaring the repo is outside the card's authorisation. The exit-6
+guidance relies on the diagnosis's `Argo CD reports:` line (Synced at the commit, no sync running)
+and on "Resources not healthy" reading `none: each is healthy`. That section judges only the kinds
+it lists (close-out S2). A KubeCoderDeploy push has no build handoff to follow (close-out S3).
+
 ## Not in scope
 
 - Adding deploy-repo clones or the `iac` sidecar to other environments' `.kubecoder/config.yaml`
