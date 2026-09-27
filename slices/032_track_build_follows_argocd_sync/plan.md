@@ -137,7 +137,7 @@ pipelines and the tracker for every Argo-deployed repo (R1).
 - The promote pipeline's handoff line format and the tracker's parser must agree; land the
   pipeline line no later than the tracker phase that parses it.
 
-### P1 — Promote-PRD hands the tracker the commit prd now names
+### P1 — Promote-PRD hands the tracker the commit prd now names ✅ DONE 2026-09-27
 
 Target: ../KubeCoderDeploy
 
