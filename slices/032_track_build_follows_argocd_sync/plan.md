@@ -153,6 +153,30 @@ record-only re-run (`:77-82`, `:97-98`), where `prd` already named the commit an
 pushed. A green promotion must never look like a pipeline that lacks the line (R5). No
 shared-library change. P4 parses this line: put its exact forms in the done-record.
 
+**Done (P1).** KubeCoderDeploy `35e1f81` on `phase/032-P1`: `Jenkinsfile.promote` prints, once `prd`
+names the commit (after the `Advancing prd` stage, before `Recording the release`), exactly one of:
+
+- `pvginkel/KubeCoderDeploy <40-hex sha> pushed to prd.` — the fast-forward (or first-run create)
+  moved `prd`: a sync to wait for;
+- `pvginkel/KubeCoderDeploy <40-hex sha> already on prd: nothing pushed.` — the record-only re-run:
+  report only.
+
+`kc project test` green.
+
+Later phases:
+- P4's parser: `^(\S+)/(\S+) ([0-9a-f]{40}) (?:pins (.+)|pushed to (\S+)|already on (\S+): nothing
+  pushed)\.$` reads the pin line and both promote forms; the third token (`pins` / `pushed` /
+  `already`) tells them apart. The promote line is printed outside `withCredentials`, so its owner
+  reads `pvginkel`, not `****` — the parser still keys on the repo name alone.
+- The branch is the literal token after `pushed to` / `already on` (`prd`), not a ref path.
+- A red promote run may print the `pushed to` line and then fail at the release tag (`prd` moved,
+  build red); the tracker reads handoffs only from green builds, so it does not follow that one.
+
+Record. The repo name is one `repo` variable that the clone URL also uses, so the line names the
+repo the job pushed. No Groovy test harness exists in KubeCoderDeploy (its gate covers the chart
+and Terraform); the file compiles under Groovy 2.4.21, Jenkins' version
+(`FileSystemCompiler`, java container). The forms are witnessed live by V16.
+
 ### P2 — Ansible drops its copy of the tracker
 
 Target: root
@@ -198,12 +222,13 @@ otherwise have to rediscover:
 
 - **Handoff lines.** Two kinds pushed a new commit, so they bring a sync to wait for:
   - the pin line (`cicd.groovy:133`), whose branch is always `main` (`:79`, `:127`);
-  - P1's fast-forward form (branch `prd`).
+  - P1's fast-forward form, `pvginkel/KubeCoderDeploy <sha> pushed to prd.` (branch `prd`).
 
   Two kinds pushed nothing, so they are only reported (ruling F1):
   - `<owner/repo> already carries these pins: …` (`:114`), which names no commit: report against
     `main`'s current head, read from the clone;
-  - P1's record-only form.
+  - P1's record-only form, `pvginkel/KubeCoderDeploy <sha> already on prd: nothing pushed.`,
+    reported against `<sha>`.
 
   A single build can print several: DockerImages' build pins every deploy repo its images feed
   (`DockerImages/Jenkinsfile:171-186`; DockerImages #2548 printed ten).
