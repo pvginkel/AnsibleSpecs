@@ -396,7 +396,7 @@ written as `could not read: …` in its section, and the exit status stays the r
 `log`. Live, read-only: the judge ran over all 50 apps without error; a synthetic registry-prd
 handoff with `--roll-timeout 1` gave exit 6, with the file named in the summary.
 
-### P6 — KubeCoder's docs stop sending agents to confirm the roll by hand
+### P6 — KubeCoder's docs stop sending agents to confirm the roll by hand ✅ DONE 2026-09-27
 
 Target: ../KubeCoder
 
