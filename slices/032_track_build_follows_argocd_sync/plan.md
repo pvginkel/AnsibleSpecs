@@ -313,6 +313,37 @@ otherwise have to rediscover:
   - an app Synced at a commit that rendered no change, with no new operation (`grafana-prd`:
     Synced at fed8ed0 over a 3bd4dc9 operation).
 
+**Done (P4).** DockerImages `555b1d6` on `phase/032-P4`. The follow runs by default once every tracked
+build is green (`--no-follow-argocd` turns it off), and prints a `=== Argo CD follow ===` section
+after the build summary. It waits on each app until the app ends in a state of its own, then
+returns. New flags are `--pickup-timeout` (default 120 s: Argo CD must see the commit) and
+`--roll-timeout` (default 600 s, counted per app from when Argo CD saw it). The exit statuses are:
+
+- `4`: a clone is missing; every missing repo is named, each with `git clone <repoURL> /work/<Repo>`;
+- `5`: the roll failed. That covers a Failed/Error sync whose `syncResult` revisions are at the commit or
+  later, any condition whose type ends in `Error` once the commit is seen, and `Degraded`/`Missing`
+  health once Synced;
+- `6`: the roll deadline passed;
+- `7`: Argo CD did not see the commit in time, or the app has no automated sync.
+
+When apps end differently, 5 wins over 7 and 7 over 6. A missing R5 line, a handoff that pushed
+nothing, and a handoff no app matches are reported and leave the exit status at 0. Gate green: 52 tests.
+
+Later phases:
+- P5 attaches to `FollowReport.followed`. Each `Followed` has `.state` (`FAILED` / `NOT_DONE`), `.app`
+  (the Application as last read, full status), `.name`, `.sha`, `.indexes`. The per-app summary line is
+  printed in `print_follow`; `run()` holds `args.log_dir`. Nothing is written to disk yet.
+- P6: the exit statuses above, with each stop's remedy as the summary prints it. 4: clone, then
+  declare it in `.kubecoder/config.yaml`. 5: fix and push. 6: check the workload or re-run
+  (Progressing can be stale). 7: the operator refreshes or syncs in Argo CD, or redelivers the webhook.
+
+Record. Kube client: urllib with the `prd` context's bearer token and CA; one LIST, then a GET per
+pending app per poll. Python 3.13's default `VERIFY_X509_STRICT` rejects the microk8s CA (no
+keyUsage), so it is cleared; chain and hostname checks stay. Clone owners for the clone line come
+from the Application's `repoURL`, since the console masks them. Live, read-only: #551 → kubecoder-dev
+rolled at 46e0aa8, exit 0; ElectronicsInventory #255 → exit 4 naming ElectronicsInventoryDeploy;
+DockerImages #2548 → exit 4 naming the nine uncloned repos (all but RegistryDeploy).
+
 ### P5 — A failed or stalled roll leaves its diagnosis on disk
 
 Target: kube-coder-dev-local-home
