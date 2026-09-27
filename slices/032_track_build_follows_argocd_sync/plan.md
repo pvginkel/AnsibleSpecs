@@ -189,6 +189,25 @@ that describe the copy are rewritten to point at DockerImages, per the ruling:
 carries every case of the deleted test; the two files differ only in the import path and the
 "Run:" line (verified by diff).
 
+**Done (P2).** Ansible `eac626e` on `phase/032-P2`: `tools/ai_workflow/` is deleted (the directory
+held only the two files; `tools/` is gone with it). `docs/live-infra-access.md`'s paragraph is now
+"**`track_build.py` lives in DockerImages.**" — built into the dev image from
+`kube-coder-dev-local-home/`, tests included, no copy here — and the "Notifications are not a
+script" paragraph after it no longer says `send_message.py` lived "beside it". `design-philosophy.md`
+says the tracker and its unit tests live in DockerImages `kube-coder-dev-local-home/`. Root gate
+green.
+
+Later phases:
+- No Ansible path names the tracker any more; DockerImages `kube-coder-dev-local-home/` is its only
+  copy.
+- `live-infra-access.md` still describes the tracker as waiting out "a pushed Jenkins build and the
+  pipeline that build triggers" — the Argo CD follow is not mentioned there; the doc pass decides
+  whether it should be.
+
+Record. The script was byte-identical to DockerImages `origin/main`'s at deletion; the tests
+differed only in the "Run:" line and the import path's `.parent` depth, so every deleted case has
+its successor in `kube-coder-dev-local-home/tests/test_track_build.py`.
+
 ### P3 — DockerImages readies the tracker: a gated suite, a declared PyYAML, a 5-minute appear timeout
 
 Target: ../DockerImages

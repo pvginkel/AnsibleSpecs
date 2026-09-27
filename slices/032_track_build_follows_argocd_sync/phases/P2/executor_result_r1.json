@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "Deleted Ansible's tools/ai_workflow/ (track_build.py and its test, identical to DockerImages kube-coder-dev-local-home/ bar the test's import path and Run: line) and rewrote docs/live-infra-access.md and docs/design-philosophy.md to point at DockerImages; root gate green, committed eac626e on phase/032-P2.", "refuted": []}
