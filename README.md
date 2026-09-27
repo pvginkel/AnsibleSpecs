@@ -35,6 +35,10 @@ Triaged 2026-09-26 from the DHCP outage follow-up (the record: `handovers/triage
 
 - **[031](slices/backlog/031_image_pins_by_tag_and_tracking_label/slice.md)** — Image pins by tag, and the tracking-tag label decides what registry-cleanup may delete: per-build tags for every matrix image and no digest pins, the label instead of the tag-name pattern, and the suspended registry-cleanup job (major).
 
+Triaged 2026-09-27 from DockerImages' DI-7 and DI-10 (the record: `handovers/triage_2026-09-27.md` at `6dfe621`):
+
+- **[032](slices/backlog/032_track_build_follows_argocd_sync/slice.md)** — track_build.py follows a green build into its Argo CD sync: the pin commit (and Promote-PRD's prd fast-forward) tracked to a synced, healthy app by default for every Argo-deployed repo, git lookups from the environment's own clone only, and a 5-minute default `--appear-timeout` (feature).
+
 ## Completed
 
 | Slice | Was | Depends on | Consumed by |
