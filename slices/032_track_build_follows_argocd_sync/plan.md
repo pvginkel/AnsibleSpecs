@@ -369,6 +369,33 @@ kubeconfig can read those objects:
   allowed, and `get secrets` is denied;
 - in `argocd-hooks`: `list jobs` and `get pods/log` are allowed.
 
+**Done (P5).** DockerImages `c797d33` on `phase/032-P5`. When a followed app ends `FAILED` (exit 5) or
+`NOT_DONE` (exit 6), the tracker writes `<--log-dir>/argocd_<app>_<sha7>.log`; the default dir is
+`/tmp/track_build`, the same as the build logs. It does so at the moment the app stops, and logs
+`<app>: diagnosis saved to <path>` on stderr. The summary prints `↳ diagnosis: <path>` under the
+app's line. The FAILED and NOT_DONE `Result:` lines now point at that file. Apps that are ROLLED,
+CURRENT, NOT_SEEN or MANUAL get no file. Gate green: 60 tests.
+
+Later phases:
+- P6: a stop at exit 5 or 6 leaves the agent a diagnosis file, which the summary names. The file has
+  the operation, the conditions, the resources the sync failed, the live resources that are not
+  healthy (with their pods and Warning events), and the `tf-presync-<app>` hook Job's args and log.
+  For a NOT_DONE app whose health is stale `Progressing`, the file's "Resources not healthy" says
+  `none: each is healthy`. That is the evidence that separates stale health from a stuck rollout.
+
+Record. Health is judged from the live objects, following Argo's rules, for Deployment,
+StatefulSet, DaemonSet, Job, PersistentVolumeClaim and ExternalSecret; entries marked `hook` are
+skipped (close-out S2 covers the unjudged kinds). A listed object absent from the cluster reads
+`not in the cluster`. Each collection is read with one LIST per namespace. A Deployment's pods are
+matched through `<deploy>-<pod-template-hash>` ownership, so a Deployment whose name merely prefixes
+another's does not collect that one's pods. The hook Job is found by `fieldSelector metadata.name`,
+its pods by the Job's own `matchLabels` (controller-uid), so a previous run's pods are excluded. A
+pod that has not started is reported, and its log is not read. A failed read (`FollowError`) is
+written as `could not read: …` in its section, and the exit status stays the roll's. `Kube` gained
+`items(path, **selectors)` and `log(ns, pod, container)`; `follow_deploys` takes `log_dir` before
+`log`. Live, read-only: the judge ran over all 50 apps without error; a synthetic registry-prd
+handoff with `--roll-timeout 1` gave exit 6, with the file named in the summary.
+
 ### P6 — KubeCoder's docs stop sending agents to confirm the roll by hand
 
 Target: ../KubeCoder
