@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R3 — git only from the environment's clone",
-      "description": "R3: git questions are answered only from the deploy repo's clone in /work. If the clone isn't there, the tracker stops with a message that the repo isn't there and should be added. Per ruling D1, the stop comes with a distinct exit status (the build was green, the deploy is untracked). The message names the missing deploy repo, gives the exact `git clone` line to run now, and says to declare the repo in the environment's `.kubecoder/config.yaml` for next time.",
+      "description": "R3: git questions are answered only from the deploy repo's clone in /work. If the clone isn't there, the tracker stops with a message that the repo isn't there and should be added. Per ruling D1, the stop comes with a distinct exit status (the build was green, the deploy is untracked). The message names every missing deploy repo, each with the exact `git clone` line to run now, and says to declare the repo in the environment's `.kubecoder/config.yaml` for next time.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -27,7 +27,7 @@
     {
       "id": "V04",
       "area": "R4 — prd promotions",
-      "description": "R4: prd promotions are tracked too. Every green Promote-PRD run, the record-only re-run included, prints a handoff line naming pvginkel/KubeCoderDeploy, the commit and the `prd` branch. Today it prints none: KubeCoderDeploy Jenkinsfile.promote:98, :100, :129. The tracker, pointed at that build, follows the Applications that track `prd` (kubecoder-prd) to the promoted commit.",
+      "description": "R4: prd promotions are tracked too. Every green Promote-PRD run, the record-only re-run included, prints a handoff line naming pvginkel/KubeCoderDeploy, the commit and the `prd` branch, in a form that shows whether the run moved `prd`. Today the job prints none: KubeCoderDeploy Jenkinsfile.promote:98, :100, :129. Pointed at a promotion that moved `prd`, the tracker follows the Applications that track `prd` (kubecoder-prd) to the promoted commit.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -51,7 +51,7 @@
     {
       "id": "V07",
       "area": "Matching",
-      "description": "Only the Applications that roll the handoff are waited on: those whose source repoURL and targetRevision match the pushed repo and branch, and, for a pin line, whose helm valueFiles name a pinned file, in either the `../config/<stage>/values.yaml` form or the `$values/config/<stage>/values.yaml` form. A KubeCoder/Build-Main pin commit waits on kubecoder-dev and not on kubecoder-prd, which tracks `prd`. A dev-only pin to a repo whose dev and prd apps share `main` (keycloak's shape) waits on the dev app only. A three-source upstream-chart app is matched through its `ref: values` source. An \"already carries these pins\" line (cicd.groovy:114) follows the branch's current head.",
+      "description": "Only the Applications that roll the handoff are waited on: those whose source repoURL and targetRevision match the pushed repo and branch, and, for a pin line, whose helm valueFiles name a pinned file, in either the `../config/<stage>/values.yaml` form or the `$values/config/<stage>/values.yaml` form. A KubeCoder/Build-Main pin commit waits on kubecoder-dev and not on kubecoder-prd, which tracks `prd`. A dev-only pin to a repo whose dev and prd apps share `main` (keycloak's shape) waits on the dev app only. A three-source upstream-chart app is matched through its `ref: values` source.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,7 +59,7 @@
     {
       "id": "V08",
       "area": "Done means live",
-      "description": "The tracker does not declare an app rolled on the strength of Argo's compared revision alone. An app that is OutOfSync at the new commit, with its previous operation finished, is still waited on. An app that Argo reports Synced at the commit or a descendant, with no operation running and health not Progressing, is done even when the commit rendered no change and so no new operation ran.",
+      "description": "For a handoff that pushed a new commit, the tracker does not declare an app rolled on the strength of Argo's compared revision alone. An app that is OutOfSync at the new commit, with its previous operation finished, is still waited on. An app that Argo reports Synced at the commit or a descendant, with no operation running and health not Progressing, is done even when the commit rendered no change and so no new operation ran.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -67,7 +67,7 @@
     {
       "id": "V09",
       "area": "Stop rather than hang",
-      "description": "The tracker stops, with a message saying what happened, rather than waiting indefinitely when: Argo CD does not pick up the commit within a deadline (push-only sync, a lost webhook); an app carries a SyncError condition; an app has no automated sync policy (today argocd-prd); or a handoff matches no Application. The script's exit-status documentation covers every outcome it can end with.",
+      "description": "The tracker stops, with a message saying what happened, rather than waiting indefinitely when: Argo CD does not pick up the commit within a deadline (push-only sync, a lost webhook); the roll is not done by the roll deadline; an app carries a SyncError condition; an app has no automated sync policy (today argocd-prd); or a handoff matches no Application. The script's exit-status documentation covers every outcome it can end with.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -75,7 +75,7 @@
     {
       "id": "V10",
       "area": "Failed-roll diagnosis",
-      "description": "When a followed app's sync fails, ends unhealthy, or stops on a SyncError, the tracker saves into `--log-dir`, beside failing builds' console logs, the operation message, the conditions, the failed or unhealthy resources, and the app's `tf-presync-<app>` hook Job log from argocd-hooks. The summary names the saved file.",
+      "description": "When a followed app's sync fails, ends unhealthy, stops on a SyncError, or is not done at the roll deadline, the tracker saves into `--log-dir`, beside failing builds' console logs, the operation message, the conditions, the failed or unhealthy resources, and the app's `tf-presync-<app>` hook Job log from argocd-hooks. The summary names the saved file.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -99,7 +99,7 @@
     {
       "id": "V13",
       "area": "Gated suite",
-      "description": "DockerImages' `kc project test` runs the tracker's suite (today it declares only backup-server and architecture: DockerImages .kubecoder/project.yaml:20-22), and the suite is green. It includes the tests for the Argo CD follow, the handoff parsing, the missing-clone stop and the default appear timeout.",
+      "description": "DockerImages' `kc project test` runs the tracker's suite (today it declares only backup-server and architecture: DockerImages .kubecoder/project.yaml:20-22), and the suite is green. It includes the tests for the Argo CD follow, the handoff parsing, the missing-clone stop, the roll deadline, the report on a handoff that pushed nothing and the default appear timeout.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -107,7 +107,7 @@
     {
       "id": "V14",
       "area": "KubeCoder docs",
-      "description": "KubeCoder's docs/operations/deploy-operations.md section \"A green build is not a rolled dev\" (:92-99) no longer has agents confirm the roll by hand. It says the tracker waits for the roll and what its stop exits mean. The card-pass skill's pointer to that roll check (.claude/skills/card-pass/SKILL.md:131-133) agrees with it.",
+      "description": "KubeCoder's docs no longer have agents confirm the roll by hand. docs/operations/deploy-operations.md section \"A green build is not a rolled dev\" (:92-99) says the tracker waits for the roll and what its stop exits mean. Three other instructions agree with it: docs/operations/slice-test-plan.md step 5 \"Wait for the CI build\" (:86-89); the card-pass skill's deploy rule (.claude/skills/card-pass/SKILL.md:130-135); and the card runner's standing rule \"A green build is not a rolled deploy.\" (.claude/agents/card-runner.md:152).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -115,7 +115,7 @@
     {
       "id": "V15",
       "area": "Live check",
-      "description": "Run from the DockerImages checkout against a recent green KubeCoder/Build-Main build (e.g. #551), the script reports kubecoder-dev rolled to that build's pin commit or a descendant. Against a green build whose deploy repo has no clone in this environment's /work, it stops with the missing-clone exit and message: ElectronicsInventory/ElectronicsInventory #255, whose pin line names ElectronicsInventoryDeploy, which is not cloned here.",
+      "description": "Run from the DockerImages checkout against a recent green KubeCoder/Build-Main build (e.g. #551), the script reports kubecoder-dev rolled to that build's pin commit or a descendant. Against a green build whose deploy repo has no clone in this environment's /work, it stops with the missing-clone exit and message: ElectronicsInventory/ElectronicsInventory #255, whose pin line names ElectronicsInventoryDeploy, which is not cloned here. Against DockerImages #2548, which printed ten pin lines, the one stop names every deploy repo not cloned here (all but RegistryDeploy), each with its own `git clone` line.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -125,6 +125,30 @@
       "area": "R4 — live",
       "description": "A real Promote-PRD run prints the handoff line, and track_build.py pointed at that build follows kubecoder-prd to the promoted commit.",
       "owed_after": "the operator's next KubeCoder/Promote-PRD run (promotion is run by hand; no role in the run promotes)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "Roll deadline",
+      "description": "Ruling F1: the roll wait is bounded. It has a roll deadline, default 10 minutes and overridable by a flag. After it, the tracker stops with its own exit status, names every app still Progressing, and saves the same evidence as a failed roll.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "Handoff that pushed nothing",
+      "description": "Ruling F1: a handoff that pushed no new deploy commit has no new sync to wait for. That covers \"already carries these pins\" (JenkinsPipelineUtils vars/cicd.groovy:114) and a Promote-PRD re-run that only records a release tag (KubeCoderDeploy Jenkinsfile.promote:77-82). The tracker reports each matched app's current sync and health state and returns, rather than waiting on health, even when Argo reports the app Progressing. For \"already carries\", the state is read against the branch's current head.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "PyYAML declared",
+      "description": "Ruling A2: the tracker's PyYAML dependency is declared, not incidental. DockerImages kube-coder-dev-base/Dockerfile installs python3-yaml explicitly. Today it is present only as a dependency of apt yq (kube-coder-dev-base/Dockerfile:47), ubuntu-pro-client and netplan.io.",
       "verdict": null,
       "rationale": "",
       "evidence": []
