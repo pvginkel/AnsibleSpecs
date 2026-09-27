@@ -85,3 +85,21 @@ it cannot `patch` Applications); GitHub read on the private deploy repos for the
 **Operator:** I would suggest it only attempts to find the information in Git if the deploy repo is in the current environment. It should be. If it's not, it should stop with a message stating that the repo isn't there, and it should be added. So look in /work for matching environments, and bail if it's not there.
 
 This would deliver DI-7. I was working on a response, but realized it was more involved. Please update the card and start triage.
+
+## DI-10 — track_build.py: default --appear-timeout of 5 minutes
+
+Added to the run 2026-09-27: the operator ruled "Fold DI-10 in" when DI-7's grouping was confirmed.
+
+==== DI-10: track_build.py: default --appear-timeout of 5 minutes ====
+State: New · Type: Task
+Reporter: jeeves · Created: 2026-09-26 · Updated: 2026-09-26
+Relates: DI-7
+
+== Description ==
+Asked: raise track_build.py's default `--appear-timeout` from 30 s to 5 minutes. Straight after a push, `track_build.py KubeCoder/Build-Main --hash <sha>`, as KubeCoder's deploy-operations.md Path 1 writes it, gives up with `error: no build checking out commit <sha> appeared within 30s` when Jenkins is slow to queue the build. Here it was queued about 10 minutes after the push. A longer default costs nothing when the build is already there.
+
+The operator (Pieter van Ginkel) ruled on the Fieldnotes triage of 2026-09-25: "yes, bump the timeout to 5 minutes."
+
+Evidence: one report from KubeCoder, 2026-09-24. The same 30 s give-up shows in ArchitectureSpecs slice 002's code review, for AaC jobs. DI-7 is open on the same script.
+
+Fieldnotes observation: 01M3AV2Y88C40XH0TN2HCZFAAV
