@@ -1,0 +1,133 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — follow into Argo CD",
+      "description": "R1: track_build.py follows a green build into the Argo CD deploy it triggers — \"wait until the deploy the green build triggers has rolled\" — generic for every Argo-deployed repo, not KubeCoder-only. After a green build that printed a pin line (JenkinsPipelineUtils vars/cicd.groovy:133, the pin line of every writeVersionPins caller), the tracker returns only once every Application touched by that handoff has rolled the pinned commit or a descendant, and its summary reports each app. The pin line's owner, masked as `****` in the console (KubeCoder/Build-Main #551), does not stop the follow.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — on by default",
+      "description": "R2: \"By default.\" The follow into Argo CD happens with no flag given. A command line that works today (e.g. `track_build.py KubeCoder/Build-Main --hash <sha>`, KubeCoder docs/operations/deploy-operations.md:84) now waits for the roll.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — git only from the environment's clone",
+      "description": "R3: git questions are answered only from the deploy repo's clone in /work. If the clone isn't there, the tracker stops with a message that the repo isn't there and should be added. Per ruling D1, the stop comes with a distinct exit status (the build was green, the deploy is untracked). The message names the missing deploy repo, gives the exact `git clone` line to run now, and says to declare the repo in the environment's `.kubecoder/config.yaml` for next time.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R4 — prd promotions",
+      "description": "R4: prd promotions are tracked too. Every green Promote-PRD run, the record-only re-run included, prints a handoff line naming pvginkel/KubeCoderDeploy, the commit and the `prd` branch. Today it prints none: KubeCoderDeploy Jenkinsfile.promote:98, :100, :129. The tracker, pointed at that build, follows the Applications that track `prd` (kubecoder-prd) to the promoted commit.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R5 — no handoff line",
+      "description": "R5: when none of the tracked green builds prints a handoff line, the tracker says so, in words that tell the agent it may have to fix a pipeline for the tracker to follow the Argo CD deployment. It then exits with the build's own result, not a failure.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R6 — appear timeout",
+      "description": "R6: the default `--appear-timeout` is 5 minutes, up from 30 s (DockerImages kube-coder-dev-local-home/track_build.py:366-371), and the help text agrees.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "Matching",
+      "description": "Only the Applications that roll the handoff are waited on: those whose source repoURL and targetRevision match the pushed repo and branch, and, for a pin line, whose helm valueFiles name a pinned file, in either the `../config/<stage>/values.yaml` form or the `$values/config/<stage>/values.yaml` form. A KubeCoder/Build-Main pin commit waits on kubecoder-dev and not on kubecoder-prd, which tracks `prd`. A dev-only pin to a repo whose dev and prd apps share `main` (keycloak's shape) waits on the dev app only. A three-source upstream-chart app is matched through its `ref: values` source. An \"already carries these pins\" line (cicd.groovy:114) follows the branch's current head.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "Done means live",
+      "description": "The tracker does not declare an app rolled on the strength of Argo's compared revision alone. An app that is OutOfSync at the new commit, with its previous operation finished, is still waited on. An app that Argo reports Synced at the commit or a descendant, with no operation running and health not Progressing, is done even when the commit rendered no change and so no new operation ran.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "Stop rather than hang",
+      "description": "The tracker stops, with a message saying what happened, rather than waiting indefinitely when: Argo CD does not pick up the commit within a deadline (push-only sync, a lost webhook); an app carries a SyncError condition; an app has no automated sync policy (today argocd-prd); or a handoff matches no Application. The script's exit-status documentation covers every outcome it can end with.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "Failed-roll diagnosis",
+      "description": "When a followed app's sync fails, ends unhealthy, or stops on a SyncError, the tracker saves into `--log-dir`, beside failing builds' console logs, the operation message, the conditions, the failed or unhealthy resources, and the app's `tf-presync-<app>` hook Job log from argocd-hooks. The summary names the saved file.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Read-only, no kubectl",
+      "description": "The tracker reads Argo CD state from the Kubernetes API with the environment's default `~/.kube/config`. It runs under the dev container's system python3, without kubectl or the iac sidecar, and writes nothing to Argo CD or the cluster.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Single source",
+      "description": "Ansible's copy of the script and its test (tools/ai_workflow/) are deleted, and DockerImages kube-coder-dev-local-home/ is the only source. The Ansible paragraphs describing the copy (docs/live-infra-access.md:57-59, docs/design-philosophy.md:62-63) point at DockerImages. No coverage is lost: every case of the deleted Ansible test has its successor in the DockerImages suite.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Gated suite",
+      "description": "DockerImages' `kc project test` runs the tracker's suite (today it declares only backup-server and architecture: DockerImages .kubecoder/project.yaml:20-22), and the suite is green. It includes the tests for the Argo CD follow, the handoff parsing, the missing-clone stop and the default appear timeout.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "KubeCoder docs",
+      "description": "KubeCoder's docs/operations/deploy-operations.md section \"A green build is not a rolled dev\" (:92-99) no longer has agents confirm the roll by hand. It says the tracker waits for the roll and what its stop exits mean. The card-pass skill's pointer to that roll check (.claude/skills/card-pass/SKILL.md:131-133) agrees with it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "Live check",
+      "description": "Run from the DockerImages checkout against a recent green KubeCoder/Build-Main build (e.g. #551), the script reports kubecoder-dev rolled to that build's pin commit or a descendant. Against a green build whose deploy repo has no clone in this environment's /work, it stops with the missing-clone exit and message: ElectronicsInventory/ElectronicsInventory #255, whose pin line names ElectronicsInventoryDeploy, which is not cloned here.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "R4 — live",
+      "description": "A real Promote-PRD run prints the handoff line, and track_build.py pointed at that build follows kubecoder-prd to the promoted commit.",
+      "owed_after": "the operator's next KubeCoder/Promote-PRD run (promotion is run by hand; no role in the run promotes)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
