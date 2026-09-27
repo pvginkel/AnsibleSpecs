@@ -1,0 +1,12 @@
+[13:19:04] Tracking DockerImages #2562
+[13:19:04] DockerImages #2562 SUCCESS (1m56s)
+[13:19:05] no clone in /work of: DnsmasqDeploy
+=== Build tracking summary ===
+DockerImages  #2562  SUCCESS     1m56s  https://jenkins.webathome.org/job/DockerImages/2562/
+
+Result: all 1 tracked build(s) succeeded.
+
+=== Argo CD follow ===
+Result: deploy untracked — the builds are green, but the tracker asks git only of this environment's own clone of a deploy repo, and these have none:
+  DnsmasqDeploy: git clone https://github.com/pvginkel/DnsmasqDeploy.git /work/DnsmasqDeploy
+Clone them now and re-run this command to follow the deploy. So that the next start of this environment clones them, declare each in its .kubecoder/config.yaml.

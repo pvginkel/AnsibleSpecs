@@ -4,154 +4,242 @@
       "id": "V01",
       "area": "R1 — follow into Argo CD",
       "description": "R1: track_build.py follows a green build into the Argo CD deploy it triggers — \"wait until the deploy the green build triggers has rolled\" — generic for every Argo-deployed repo, not KubeCoder-only. After a green build that printed a pin line (JenkinsPipelineUtils vars/cicd.groovy:133, the pin line of every writeVersionPins caller), the tracker returns only once every Application touched by that handoff has rolled the pinned commit or a descendant, and its summary reports each app. The pin line's owner, masked as `****` in the console (KubeCoder/Build-Main #551), does not stop the follow.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "_HANDOFF_RE never captures the owner group, so a masked `****` owner cannot block a match. _wait polls every app a pushing handoff touches until it reaches ROLLED/FAILED/MANUAL/NOT_SEEN/NOT_DONE; print_follow prints each followed app under its handoff heading, with the app's own Argo-reported state.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:122-127 (_HANDOFF_RE — owner not captured)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:838-882 (_wait polls each followed app to a stop)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:1295-1330 (print_follow reports every followed app)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:340 test_the_pin_line_is_read_although_its_owner_is_masked; :556 test_the_summary_reports_each_app",
+        "Live, this pass: `python3 kube-coder-dev-local-home/track_build.py KubeCoder/Build-Main --buildnr 551 --no-wait-downstream` — exit 0, `kubecoder-dev rolled — Synced at 46e0aa8, health Healthy` (AnsibleSpecs slices/032_track_build_follows_argocd_sync/test-phase/v15_kubecoder_551.log)"
+      ]
     },
     {
       "id": "V02",
       "area": "R2 — on by default",
       "description": "R2: \"By default.\" The follow into Argo CD happens with no flag given. A command line that works today (e.g. `track_build.py KubeCoder/Build-Main --hash <sha>`, KubeCoder docs/operations/deploy-operations.md:84) now waits for the roll.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "--follow-argocd is a BooleanOptionalAction defaulting to True, and run() calls follow_deploys whenever args.follow_argocd is true — i.e. with no flag on the command line at all.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:1349-1356 (--follow-argocd default=True)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:1479-1492 (run() invokes follow_deploys under args.follow_argocd alone)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:1226 test_the_follow_is_on_with_a_ten_minute_roll_deadline; :1281 test_a_green_build_is_followed_into_argo_cd_by_default",
+        "Live, this pass: the #551 rerun above passed no --follow-argocd/--no-follow-argocd flag and still printed the === Argo CD follow === section"
+      ]
     },
     {
       "id": "V03",
       "area": "R3 — git only from the environment's clone",
       "description": "R3: git questions are answered only from the deploy repo's clone in /work. If the clone isn't there, the tracker stops with a message that the repo isn't there and should be added. Per ruling D1, the stop comes with a distinct exit status (the build was green, the deploy is untracked). The message names every missing deploy repo, each with the exact `git clone` line to run now, and says to declare the repo in the environment's `.kubecoder/config.yaml` for next time.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "_follow resolves every matched handoff's repo to /work/<repo> before anything is waited on, and returns immediately if any is missing, so one stop names them all. The message gives the exact git clone line per repo and tells the agent to declare each repo in .kubecoder/config.yaml.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:793-803 (_follow: every missing clone found before any wait; early return)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:1239-1251 (_follow_results: git clone line per repo + declare-in-config.yaml remark)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:666 test_missing_clones_stop_before_anything_is_waited_on",
+        "Live, this pass: `ElectronicsInventory/ElectronicsInventory --buildnr 255` → exit 4, `no clone in /work of: ElectronicsInventoryDeploy`, with `git clone https://github.com/pvginkel/ElectronicsInventoryDeploy.git /work/ElectronicsInventoryDeploy` (test-phase/v15_electronicsinventory_255.log)",
+        "Live, this pass: `DockerImages --buildnr 2562` → exit 4, `no clone in /work of: DnsmasqDeploy` (test-phase/v15_dockerimages_2562.log) — a fresher build than the one checked during P4 (#2548), same behaviour holds"
+      ]
     },
     {
       "id": "V04",
       "area": "R4 — prd promotions",
       "description": "R4: prd promotions are tracked too. Every green Promote-PRD run, the record-only re-run included, prints a handoff line naming pvginkel/KubeCoderDeploy, the commit and the `prd` branch, in a form that shows whether the run moved `prd`. Today the job prints none: KubeCoderDeploy Jenkinsfile.promote:98, :100, :129. Pointed at a promotion that moved `prd`, the tracker follows the Applications that track `prd` (kubecoder-prd) to the promoted commit.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Jenkinsfile.promote now prints exactly one of the two forms once prd names the commit (after 'Advancing prd', before 'Recording the release'). Both forms fit _HANDOFF_RE's pushed/already groups, distinct from the pin line's pins group and from the job's other echoes. The mechanism is proven offline and by the tracker's unit suite; the end-to-end live run is a real Promote-PRD execution, which is owed to the operator (V16) since promotion is run by hand.",
+      "evidence": [
+        "KubeCoderDeploy Jenkinsfile.promote:134-141 (the two forms, printed once prd names the commit)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:122-127 (_HANDOFF_RE parses both promote forms via the pushed/already groups)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:362 test_a_promotion_that_moved_prd; :370 test_a_promotion_that_only_records_a_release_pushed_nothing; :408 test_a_promotion_waits_on_prd_only; :518 test_a_promotion_follows_kubecoder_prd_to_the_promoted_commit",
+        "KubeCoderDeploy 35e1f81 code-reviewer signoff (phases/P1, live promote line witnessed on Promote-PRD #9, per state.json history phase 1 round 1)"
+      ]
     },
     {
       "id": "V05",
       "area": "R5 — no handoff line",
       "description": "R5: when none of the tracked green builds prints a handoff line, the tracker says so, in words that tell the agent it may have to fix a pipeline for the tracker to follow the Argo CD deployment. It then exits with the build's own result, not a failure.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "print_follow's no-handoffs branch names the two known handoff shapes and says the pipeline may need a fix before the tracker can follow the deployment. FollowReport.exit_status returns 0 in this case (no error, no missing clones, no followed states), so the exit stays the build's own result.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:1295-1305 (the remark)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:743-752 (exit_status: 0 when handoffs is empty)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:392 test_a_console_without_a_handoff_line; :739 test_no_handoff_line_says_the_pipeline_may_need_a_fix; :1299 test_no_handoff_line_exits_with_the_builds_result"
+      ]
     },
     {
       "id": "V06",
       "area": "R6 — appear timeout",
       "description": "R6: the default `--appear-timeout` is 5 minutes, up from 30 s (DockerImages kube-coder-dev-local-home/track_build.py:366-371), and the help text agrees.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "--appear-timeout now defaults to 300.0 seconds, and its help text reads exactly '(default: 300, 5 minutes)'.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:1380-1386",
+        "DockerImages kube-coder-dev-local-home/tests/test_track_build.py:164 test_appear_timeout_defaults_to_five_minutes (TestDefaults)"
+      ]
     },
     {
       "id": "V07",
       "area": "Matching",
       "description": "Only the Applications that roll the handoff are waited on: those whose source repoURL and targetRevision match the pushed repo and branch, and, for a pin line, whose helm valueFiles name a pinned file, in either the `../config/<stage>/values.yaml` form or the `$values/config/<stage>/values.yaml` form. A KubeCoder/Build-Main pin commit waits on kubecoder-dev and not on kubecoder-prd, which tracks `prd`. A dev-only pin to a repo whose dev and prd apps share `main` (keycloak's shape) waits on the dev app only. A three-source upstream-chart app is matched through its `ref: values` source.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "_tracks matches repoURL+targetRevision; value_files resolves both the relative and the $ref forms and matching_sources additionally requires a values-file overlap only when the handoff names files (a pin line) — a handoff naming no files (promote, already-carries) matches every app on the repo+branch regardless of valueFiles.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:589-621 (_tracks, value_files, matching_sources)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:402 test_a_kubecoder_pin_waits_on_dev_and_not_on_prd_which_tracks_the_prd_branch; :413 test_a_dev_only_pin_on_a_shared_branch_waits_on_the_dev_app_only; :419 test_a_handoff_naming_no_files_matches_every_app_on_the_branch; :424 test_a_three_source_app_matches_through_its_values_ref; :430 test_a_three_source_app_does_not_match_another_stages_file; :434 test_another_repos_app_does_not_match",
+        "Live, this pass: the #551 rerun waited on kubecoder-dev only, not kubecoder-prd, over the real 50-Application estate (test-phase/v15_kubecoder_551.log)"
+      ]
     },
     {
       "id": "V08",
       "area": "Done means live",
       "description": "For a handoff that pushed a new commit, the tracker does not declare an app rolled on the strength of Argo's compared revision alone. An app that is OutOfSync at the new commit, with its previous operation finished, is still waited on. An app that Argo reports Synced at the commit or a descendant, with no operation running and health not Progressing, is done even when the commit rendered no change and so no new operation ran.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "app_state's docstring and body implement exactly this: an app not yet compared at (or past) sha is UNSEEN/ROLLING regardless of operation state; once compared at/past sha, ROLLED requires Synced with no running sync and health not Progressing — reached whether or not a new operation ran.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:651-676 (app_state)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:488 test_out_of_sync_at_the_commit_over_a_finished_earlier_sync_is_not_rolled; :498 test_synced_at_a_commit_that_rendered_no_change_is_rolled; :509 test_synced_at_a_later_commit_is_rolled",
+        "Live, this pass: kubecoder-dev reported 'Synced at 46e0aa8, health Healthy' for #551 — Synced at/past the commit, no sync running, health Healthy — rolled (test-phase/v15_kubecoder_551.log)"
+      ]
     },
     {
       "id": "V09",
       "area": "Stop rather than hang",
       "description": "The tracker stops, with a message saying what happened, rather than waiting indefinitely when: Argo CD does not pick up the commit within a deadline (push-only sync, a lost webhook); the roll is not done by the roll deadline; an app carries a SyncError condition; an app has no automated sync policy (today argocd-prd); or a handoff matches no Application. The script's exit-status documentation covers every outcome it can end with.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "_wait bounds both deadlines (pickup → NOT_SEEN, roll → NOT_DONE), routes any app without automated sync straight to MANUAL, and app_state routes any *Error condition to FAILED. A handoff no Application matches is logged and appended to report.unmatched, never waited on. The module docstring enumerates exit statuses 0/1/3/4/5/6/7 and their precedence.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:838-882 (_wait: pickup/roll deadlines, MANUAL)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:641-644 (_error_conditions → FAILED)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:784-788 (unmatched handoff logged, not waited on)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:67-84 (docstring's exit-status list and precedence)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:603 test_an_app_without_automated_sync_stops_at_once; :623 test_argo_not_seeing_the_commit_stops_at_the_pickup_deadline; :634 test_the_roll_deadline_runs_from_when_argo_saw_the_commit; :569 test_a_sync_error_condition_fails_the_roll; :729 test_a_handoff_no_application_follows_is_reported; :650 test_a_failure_outranks_a_stalled_roll"
+      ]
     },
     {
       "id": "V10",
       "area": "Failed-roll diagnosis",
       "description": "When a followed app's sync fails, ends unhealthy, stops on a SyncError, or is not done at the roll deadline, the tracker saves into `--log-dir`, beside failing builds' console logs, the operation message, the conditions, the failed or unhealthy resources, and the app's `tf-presync-<app>` hook Job log from argocd-hooks. The summary names the saved file.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "diagnosis() assembles exactly these sections (operation, conditions, resources the sync failed, live resources not healthy via _unhealthy_lines, the tf-presync-<app> hook Job via _hook_lines); save_diagnosis writes it under --log-dir, and print_follow prints '↳ diagnosis: <path>' under the app's summary line.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:1165-1216 (diagnosis, save_diagnosis)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:1114-1153 (_hook_lines: tf-presync-<app> Job + pod logs)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:1325-1326 (print_follow names the file)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:875 test_a_failed_roll_saves_its_diagnosis_and_the_summary_names_it; :964 test_a_stalled_roll_saves_the_same_evidence_at_the_roll_deadline; :1073 test_each_judged_kind_is_healthy_or_says_why_not; :1151 test_a_hook_job_that_is_gone_or_has_lost_its_pod"
+      ]
     },
     {
       "id": "V11",
       "area": "Read-only, no kubectl",
       "description": "The tracker reads Argo CD state from the Kubernetes API with the environment's default `~/.kube/config`. It runs under the dev container's system python3, without kubectl or the iac sidecar, and writes nothing to Argo CD or the cluster.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Kube reads ~/.kube/config context 'prd' directly via urllib and PyYAML; every Kube method (get/items/log/applications/application) issues a plain GET, with no PATCH/POST/PUT anywhere in the file. No subprocess call to kubectl exists; the only subprocess use is Clone._git, itself read-only (fetch, rev-parse, cat-file, merge-base).",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:134-139 (_KUBECONFIG, _ARGOCD_CONTEXT)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:473-527 (Kube: urllib GETs only)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:530-576 (Clone: read-only git subcommands only)",
+        "Full read of track_build.py this pass found no write verb (PATCH/POST/PUT/DELETE) and no kubectl invocation anywhere in the file",
+        "Live, this pass: all three reruns executed under this container's system python3 (no kubectl on PATH here), confirming the runtime claim"
+      ]
     },
     {
       "id": "V12",
       "area": "Single source",
       "description": "Ansible's copy of the script and its test (tools/ai_workflow/) are deleted, and DockerImages kube-coder-dev-local-home/ is the only source. The Ansible paragraphs describing the copy (docs/live-infra-access.md:57-59, docs/design-philosophy.md:62-63) point at DockerImages. No coverage is lost: every case of the deleted Ansible test has its successor in the DockerImages suite.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "tools/ai_workflow/ (and tools/ itself) no longer exists in the Ansible checkout. Both named doc paragraphs are rewritten to point at DockerImages kube-coder-dev-local-home/, and the S1 close-out nit (the tracker ships in the local-home image, not the dev image itself) was fixed and struck by the completion consult (Ansible 94be15b). The Ansible test file's 4 classes/10 cases (TestFound, TestQueueWait, TestGivingUp, TestDefaults) survive as-is in the DockerImages test_track_build.py, per the P2 done-record's byte-for-byte diff check.",
+      "evidence": [
+        "`ls /work/Ansible/tools/` → No such file or directory (checked this pass)",
+        "Ansible docs/live-infra-access.md:57-60 ('track_build.py lives in DockerImages')",
+        "Ansible docs/design-philosophy.md:62-64",
+        "DockerImages kube-coder-dev-local-home/tests/test_track_build.py:108-166 (TestFound, TestQueueWait, TestGivingUp, TestDefaults)",
+        "Ansible 94be15b (completion consult, struck close-out S1)"
+      ]
     },
     {
       "id": "V13",
       "area": "Gated suite",
       "description": "DockerImages' `kc project test` runs the tracker's suite (today it declares only backup-server and architecture: DockerImages .kubecoder/project.yaml:20-22), and the suite is green. It includes the tests for the Argo CD follow, the handoff parsing, the missing-clone stop, the roll deadline, the report on a handoff that pushed nothing and the default appear timeout.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "project.yaml declares the kube-coder-dev-local-home component with its own test command, run by kc project test. The suite (test_follow_argocd.py + test_track_build.py) has a named case for every criterion this table lists — see the evidence cited against V01-V11, V17-V19 above.",
+      "evidence": [
+        "DockerImages .kubecoder/project.yaml:20-26",
+        "Driver sweep r2: DockerImages_kube-coder-dev-local-home_test.log — GREEN",
+        "This pass: dev:rebase-agent re-ran `kc project test` from /work/DockerImages after rebasing main onto origin/main's new tip — all three components green, kube-coder-dev-local-home '60 passed in 1.37s', matching the pre-rebase baseline"
+      ]
     },
     {
       "id": "V14",
       "area": "KubeCoder docs",
       "description": "KubeCoder's docs no longer have agents confirm the roll by hand. docs/operations/deploy-operations.md section \"A green build is not a rolled dev\" (:92-99) says the tracker waits for the roll and what its stop exits mean. Three other instructions agree with it: docs/operations/slice-test-plan.md step 5 \"Wait for the CI build\" (:86-89); the card-pass skill's deploy rule (.claude/skills/card-pass/SKILL.md:130-135); and the card runner's standing rule \"A green build is not a rolled deploy.\" (.claude/agents/card-runner.md:152).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Read all five instructions (the four named plus live-verification.md, added in P6 review r1 F1). Each says the tracker's exit 0 with the app reported rolled is the roll, gives the exits 4-7 remedies and the 5/6 diagnosis file, and none sends an agent to check the roll by hand any more.",
+      "evidence": [
+        "KubeCoder docs/operations/deploy-operations.md:92-132",
+        "KubeCoder docs/operations/slice-test-plan.md:86-92",
+        "KubeCoder .claude/skills/card-pass/SKILL.md:131-137",
+        "KubeCoder .claude/agents/card-runner.md:152-159",
+        "KubeCoder docs/operations/live-verification.md:128-131",
+        "KubeCoder 0b6168ff code-reviewer signoff, round 2 (state.json history phase 6 round 2): 'No KubeCoder instruction still sends agents to check a Build-Main roll by hand.'"
+      ]
     },
     {
       "id": "V15",
       "area": "Live check",
       "description": "Run from the DockerImages checkout against a recent green KubeCoder/Build-Main build (e.g. #551), the script reports kubecoder-dev rolled to that build's pin commit or a descendant. Against a green build whose deploy repo has no clone in this environment's /work, it stops with the missing-clone exit and message: ElectronicsInventory/ElectronicsInventory #255, whose pin line names ElectronicsInventoryDeploy, which is not cloned here. Against DockerImages #2548, which printed ten pin lines, the one stop names every deploy repo not cloned here (all but RegistryDeploy), each with its own `git clone` line.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "Re-ran all three checks fresh this pass, invoking track_build.py from the DockerImages checkout path directly — the copy on this environment's PATH (~/.local/bin/track_build.py) is still the pre-slice 478-line script, since the local-home image has not been rebuilt/restarted since the slice landed (expected: the plan's Rollout note says the updated script reaches an environment only at its next restart). KubeCoder/Build-Main had not produced a new build since #551, and ElectronicsInventory/ElectronicsInventory none since #255, so those two repeat the phase's own builds; DockerImages had advanced to #2562 (a single-repo pin, DnsmasqDeploy) and was used instead of the original #2548, giving fresh rather than merely re-cited evidence.",
+      "evidence": [
+        "test-phase/v15_kubecoder_551.log — exit 0, 'kubecoder-dev rolled — Synced at 46e0aa8, health Healthy'",
+        "test-phase/v15_electronicsinventory_255.log — exit 4, 'no clone in /work of: ElectronicsInventoryDeploy', with its git clone line",
+        "test-phase/v15_dockerimages_2562.log — exit 4, 'no clone in /work of: DnsmasqDeploy', with its git clone line"
+      ]
     },
     {
       "id": "V16",
       "area": "R4 — live",
       "description": "A real Promote-PRD run prints the handoff line, and track_build.py pointed at that build follows kubecoder-prd to the promoted commit.",
       "owed_after": "the operator's next KubeCoder/Promote-PRD run (promotion is run by hand; no role in the run promotes)",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed to operator",
+      "rationale": "No Promote-PRD run happened during this pass — promotion is a hand-run job and this test phase has no standing to trigger it. The mechanism itself is verified (V04): Jenkinsfile.promote prints the right line, and the tracker's unit suite proves it is parsed and followed onto kubecoder-prd. The end-to-end live proof stays owed until the operator next runs Promote-PRD; command to settle it: `track_build.py KubeCoder/Promote-PRD --buildnr <n> --no-wait-downstream` once that build is green.",
+      "evidence": [
+        "close-out.md A1 (Outstanding actions) — same owed item, recorded by the plan-writer/completion consult",
+        "See V04's evidence for the offline/unit proof of the mechanism"
+      ]
     },
     {
       "id": "V17",
       "area": "Roll deadline",
       "description": "Ruling F1: the roll wait is bounded. It has a roll deadline, default 10 minutes and overridable by a flag. After it, the tracker stops with its own exit status, names every app still Progressing, and saves the same evidence as a failed roll.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "--roll-timeout defaults to 600.0 seconds ('10 minutes') and is a plain float flag, so it is overridable. _wait counts it from f.seen_at (the first poll where Argo CD showed the app past UNSEEN), moving an app to NOT_DONE once exceeded, and save_diagnosis runs for NOT_DONE exactly as for FAILED.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:1364-1371 (--roll-timeout default=600.0)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:861-864, :872-874 (NOT_DONE from seen_at + roll_timeout; diagnosis saved)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:634 test_the_roll_deadline_runs_from_when_argo_saw_the_commit; :964 test_a_stalled_roll_saves_the_same_evidence_at_the_roll_deadline"
+      ]
     },
     {
       "id": "V18",
       "area": "Handoff that pushed nothing",
       "description": "Ruling F1: a handoff that pushed no new deploy commit has no new sync to wait for. That covers \"already carries these pins\" (JenkinsPipelineUtils vars/cicd.groovy:114) and a Promote-PRD re-run that only records a release tag (KubeCoderDeploy Jenkinsfile.promote:77-82). The tracker reports each matched app's current sync and health state and returns, rather than waiting on health, even when Argo reports the app Progressing. For \"already carries\", the state is read against the branch's current head.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "_follow marks every Followed whose handoff.pushed is False as CURRENT immediately and logs its current state; _wait is only ever called with the subset whose handoff.pushed is True, so a pushed-nothing handoff's apps are never polled or waited on regardless of their health. report.commits reads the branch head from the clone (handoff.sha or clone.head(branch)) precisely for the sha-less 'already carries' case.",
+      "evidence": [
+        "DockerImages kube-coder-dev-local-home/track_build.py:807-809 (commits: sha or branch head from the clone)",
+        "DockerImages kube-coder-dev-local-home/track_build.py:822-828 (CURRENT for pushed=False; _wait called on pushed-only subset)",
+        "DockerImages kube-coder-dev-local-home/tests/test_follow_argocd.py:697 test_already_carries_reports_the_branch_head_without_waiting; :713 test_a_promotion_that_pushed_nothing_reports_against_its_commit"
+      ]
     },
     {
       "id": "V19",
       "area": "PyYAML declared",
       "description": "Ruling A2: the tracker's PyYAML dependency is declared, not incidental. DockerImages kube-coder-dev-base/Dockerfile installs python3-yaml explicitly. Today it is present only as a dependency of apt yq (kube-coder-dev-base/Dockerfile:47), ubuntu-pro-client and netplan.io.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "verified",
+      "rationale": "python3-yaml is now its own line in the base image's apt install list, with a comment explaining it is there for track_build.py, not merely riding in as yq's dependency.",
+      "evidence": [
+        "DockerImages kube-coder-dev-base/Dockerfile:33 (comment), :45 (python3-yaml in the apt list)"
+      ]
     }
   ]
 }

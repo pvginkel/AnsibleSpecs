@@ -1,0 +1,12 @@
+[13:19:03] Tracking ElectronicsInventory/ElectronicsInventory #255
+[13:19:03] ElectronicsInventory/ElectronicsInventory #255 SUCCESS (22m07s)
+[13:19:03] no clone in /work of: ElectronicsInventoryDeploy
+=== Build tracking summary ===
+ElectronicsInventory/ElectronicsInventory  #255  SUCCESS    22m07s  https://jenkins.webathome.org/job/ElectronicsInventory/job/ElectronicsInventory/255/
+
+Result: all 1 tracked build(s) succeeded.
+
+=== Argo CD follow ===
+Result: deploy untracked — the builds are green, but the tracker asks git only of this environment's own clone of a deploy repo, and these have none:
+  ElectronicsInventoryDeploy: git clone https://github.com/pvginkel/ElectronicsInventoryDeploy.git /work/ElectronicsInventoryDeploy
+Clone them now and re-run this command to follow the deploy. So that the next start of this environment clones them, declare each in its .kubecoder/config.yaml.

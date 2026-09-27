@@ -46,6 +46,15 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — DockerImages main had diverged from origin; rebased before push, gate re-confirmed green
+
+Before pushing, DockerImages local main (cbc411b/555b1d6/c797d33, the P3-P5 commits) had diverged from origin/main, which had gained one unrelated commit (9a728ed, dnsmasq-config-generator) after the phases merged locally. dev:rebase-agent rebased main onto origin/main: conflict-free (disjoint file sets — the dnsmasq commit touches only dnsmasq/dnsmasq-config-generator, the slice only kube-coder-dev-local-home/, kube-coder-dev-base/Dockerfile and .kubecoder/project.yaml), commit messages unchanged, new hashes 37e48c9/10adbae0/def3d13. kc project test re-run post-rebase: all three components green, kube-coder-dev-local-home 60 passed in 1.37s, matching the pre-rebase baseline exactly. All four repos' main branches (Ansible, KubeCoderDeploy, DockerImages, KubeCoder) were then pushed. Ansible's iac-on-push (IaC/Build-Main #224) went green post-push.
+
+**Consequence:** none — caught and resolved before push; recorded because a rebase this late, after all six phases' own gates had already run, is the kind of surprise worth the operator's eye.
+
+**Provenance:** witnessed — test-agent, test phase r1; dev:rebase-agent sub-agent run, and IaC/Build-Main #224
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
