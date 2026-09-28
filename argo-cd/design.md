@@ -292,27 +292,24 @@ spec. ArgoCDDeploy's `releases.owner` (`config/prd/values.yaml`) chooses the App
 
 ## Webhooks — push-only, through the relay
 
-Polling is off everywhere, including, until the registry switch, the ApplicationSet generators
-(D6). Argo CD is not published: **every hook
+Polling is off everywhere (D6). Argo CD is not published: **every hook
 registers one URL**, `https://deploy-hooks.webathome.org/api/webhook`, the public endpoint of the
-webhook relay, which verifies GitHub's signature and duplicates each verified delivery to both
-receivers (D49).
+webhook relay, which verifies GitHub's signature and forwards each verified delivery to
+argocd-server (D49).
 
 | Push to | Must reach | Effect |
 | --- | --- | --- |
 | **ArgoCDDeploy** (the registry, D63) | argocd-server, `/api/webhook` | refreshes `releases`, which creates or updates Applications and leaves removed ones requiring pruning (D27) |
-| **HelmCharts** (the registry until the switch, D64) | applicationset-controller, port 7000, `/api/webhook` | register / undeploy / flag flips take effect |
 | **Each deploy repo** | argocd-server, `/api/webhook` | refresh and sync the affected Application |
 
-Both receivers get every delivery, and the one a push does not concern no-ops on it cheaply —
-argocd-server matches the pushed repo against Application sources, the applicationset-controller
-against its generators. That is why the relay carries no routing table and gains no edit per
-migrated app. After the registry switch the applicationset-controller leg serves nothing (D64).
+argocd-server matches the pushed repo against Application sources, so the relay carries no
+routing table and gains no edit per app. Until the registry switch (D64) it had a second leg, the
+applicationset-controller for HelmCharts' pushes; that leg went on 2026-09-28.
 
-Both share the secret at `webhook.github.secret` in `argocd-secret`, and re-verify what the relay
+argocd-server reads the secret at `webhook.github.secret` in `argocd-secret`, and re-verifies what the relay
 already verified. The relay is configured with that same value — one leaf, not a second secret.
-Each registry hook is created manually, once: HelmCharts' at standup, and ArgoCDDeploy's by the
-operator in the registry switch runbook (D64). Each deploy repo's hook is a
+The registry hook is created manually, once: ArgoCDDeploy's, by the operator in the registry
+switch runbook (D64). Each deploy repo's hook is a
 `github_repository_webhook` resource in that repo's own Terraform (D39), so the PreSync apply
 creates it on first sync — bootstrap
 rides the registry hook, needing no polling. It is signed with that same shared secret: the hook's

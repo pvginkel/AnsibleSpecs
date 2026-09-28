@@ -360,8 +360,8 @@ the archive are the operator's steps; each item says what is owed.
   chart, whose `values.yaml` is the registry. **The registry switch (D64)
   ran on 2026-09-28**, from Ansible's registry-switch runbook
   (`/work/Ansible/docs/runbooks/registry-switch.md`): Argo reads ArgoCDDeploy's registry, and
-  HelmCharts' `release.yaml` tree is read by nothing. A follow-up then clears what the switch leaves
-  dead (D64's list).
+  HelmCharts' `release.yaml` tree is read by nothing. What the switch left
+  dead (D64's list) was cleared the same day.
 - **HelmCharts is archived, not deleted** (D60), keeping the three parked apps. Owed to the
   operator, in this order: its Jenkins jobs `IaC/HelmCharts` and `AaC/HelmCharts` are deleted
   once nothing calls or consumes them (ANS-121), and the repository is archived once the

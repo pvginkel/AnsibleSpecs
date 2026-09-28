@@ -326,9 +326,10 @@ operator's to run from Ansible's registry-switch runbook
   path only.
 - *No way back.* A failure past the orphan-delete is fixed forward on `releases`. Before the
   orphan-delete, stopping leaves the guarded ApplicationSets in place.
-- *Dead after the switch,* for a follow-up to clear: the ApplicationSet branch and its setting,
-  `releases.registry`'s HelmCharts pointer, the render test's assertions about that registry,
-  HelmCharts' relay hook and the relay's applicationset-controller leg.
+- *Dead after the switch,* cleared on 2026-09-28 (ArgoCDDeploy `1d6da09` and `a811fa5`, Ansible
+  `92ec266`): the ApplicationSet branch and its setting, `releases.registry`'s HelmCharts pointer,
+  the render test's assertions about that registry, and the relay's applicationset-controller
+  leg. HelmCharts' relay hook is moot: the repo is archived and takes no pushes.
 
 ## Sync, lifecycle and teardown
 
@@ -607,7 +608,8 @@ allowlist and no rate limiting: HMAC is strictly stronger than source IP, and Gi
 hook ranges would need a freshness mechanism. Costs: one more component in every trigger path, and
 the public DNS record and router NAT rule are manual operator actions, like all public DNS here.
 The rejected alternatives are in [`history.md`](history.md); slice 015 ships the image, A.4 deploys
-it.
+it. *Amended 2026-09-28 (D64):* with the ApplicationSets gone, the relay has one receiver,
+argocd-server; the applicationset-controller leg is removed, and "both" above reads as that one.
 
 **D40 — Repository credentials are one ESO-provisioned prefix credential.** Decided (lifecycle;
 shape settled 2026-08-16 at implementation). Argo needs registered credentials for the registry
