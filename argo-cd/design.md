@@ -7,9 +7,8 @@ the goal posts are [`brief.md`](brief.md); sequencing, the migration checklists 
 shape are [`phases.md`](phases.md); how positions moved over time is [`history.md`](history.md).
 
 Argo CD runs on the prd cluster and deploys every app except the three parked ones (D60), and
-HelmCharts deploys nothing. The one place this design runs ahead of the live system is the
-registry: D63's shape is live from the operator's registry switch (D64), which is owed until it
-has run.
+HelmCharts deploys nothing. D63's registry shape, the last place this design ran ahead of the
+live system, is live since the operator's registry switch (D64) ran on 2026-09-28.
 
 ---
 
@@ -147,9 +146,9 @@ outage — and it grows as apps migrate.
 
 The registry is one values file in ArgoCDDeploy, `releases/values.yaml`: the values of the small
 `releases/` chart, which renders one plain `Application` per app-stage (D63), and the inventory of
-what runs (D65). **It is live from the operator's registry switch (D64), and owed until that has
-run**; until then Argo reads HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files through
-two ApplicationSets (below).
+what runs (D65). It is live since the operator's registry switch (D64) ran on 2026-09-28; before
+that, Argo read HelmCharts' `configs/prd/<app>/<stage>/release.yaml` files through two
+ApplicationSets (below).
 
 ```yaml
 apps:

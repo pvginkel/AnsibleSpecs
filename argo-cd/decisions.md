@@ -255,8 +255,7 @@ template; `preserveResourcesOnDeletion` stays off — the cascade is the point (
 into plain Applications.** Decided 2026-09-26 (operator, slice 029 Ruling D2: "I don't want a
 1:1 migration of what is in HelmCharts. That shape was for a migration. Target state can be Argo
 CD native."; ANS-109). Supersedes D20, D21 and D23. Amends D6, D22, D24, D27, D38, D39 and D62.
-It is live from the operator's registry switch (D64) and owed until that has run; until then
-Argo reads HelmCharts' `release.yaml` tree through the two ApplicationSets. This is the target
+It is live since the operator's registry switch (D64) ran on 2026-09-28. This is the target
 shape, not an intermediate one, and from the switch it is the inventory of what runs (D65).
 
 - *Shape.* A small Helm chart in ArgoCDDeploy renders **one plain `Application` per app-stage**
@@ -301,7 +300,7 @@ shape, not an intermediate one, and from the switch it is the inventory of what 
 fix forward.** Decided 2026-09-26 (operator, slice 029 Ruling D2, and the review r1 ruling: "I do
 not have to prove rollback back to HelmCharts. Fix forward please."). The switch is the
 operator's to run from Ansible's registry-switch runbook
-(`/work/Ansible/docs/runbooks/registry-switch.md`), and it is owed until it has run.
+(`/work/Ansible/docs/runbooks/registry-switch.md`), and it ran on 2026-09-28.
 
 - *What changes hands.* The 50 Applications in `argocd-prd` pass from the two ApplicationSets to
   `releases`. On 2026-09-26, 41 were owned by `releases-local` and 9 by `releases-upstream`, and
