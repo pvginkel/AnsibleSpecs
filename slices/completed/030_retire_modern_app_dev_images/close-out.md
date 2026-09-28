@@ -23,19 +23,6 @@ Focus: Run DockerImages' `docs/registry-management/delete-repository.md` once fo
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A2 — Settle V11 after the operator's registry deletion (ruling D3), after the run, following …
-
-V11 — "The registry repos are deleted": neither `modern-app-dev` nor `modern-app-dev-playwright` is in `registry:5000`'s catalog, both removed by the operator through the V10 procedure only after every moved consumer had a green build (V05); no garbage collect was run for it.
-
-`verification.json` marks V11 owed after: the operator's registry deletion (ruling D3), after the run, following the procedure P12 adds. The run cannot take that action; settle the criterion once it has happened.
-
-test phase r1, 2026-09-26 — V11 is marked owed-to-operator in verification.json with the exact commands (DockerImages docs/registry-management/delete-repository.md, steps 1-3, once for modern-app-dev and once for modern-app-dev-playwright). State read from this pod on 2026-09-26: both repositories are still in the catalog (11 tags and 2 tags). Every precondition is met: all seven consumer builds are green (V05), both directories are gone from DockerImages' pushed main (V08), and nothing references either image bar the D2 and N1 exceptions (V07). One thing to know before running it: DesignAssistant's archived Jenkinsfile (ruling D2) hardcodes registry:5000/modern-app-dev-playwright:playwright-<version>, so once the repository is deleted it can no longer run a validation build; its jobs are archived and disabled, so nothing runs today.
-
-**Consequence:** V11 stays unproven until then; the test phase does not settle it.
-
-**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
-
 ### ~~A1 — Before /dev:run-slice: restart the environment so the six consumer repos are checked out as siblings~~ — resolved before the run: the environment was restarted, and every Target of P1–P15 resolved as a ../<Repo> sibling and ran (ModernAppFrontendTemplate stopped being a Target at plan-writer r2 and was dropped from the config, Ansible 7263392); struck by consult 1
 
 <details><summary>struck — body kept for the record</summary>
@@ -48,6 +35,23 @@ plan-writer r2, 2026-09-26 — The repo set moved with review ruling Q1. ModernA
 
 **Provenance:** witnessed — plan-writer r1, run_loop.py run --dry-run output
 **Disposition:**
+
+</details>
+
+### ~~A2 — Settle V11 after the operator's registry deletion (ruling D3), after the run, following …~~ — resolved 2026-09-28 in the close-out session: repository deleted from registry:5000 and gone from the catalog; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
+
+V11 — "The registry repos are deleted": neither `modern-app-dev` nor `modern-app-dev-playwright` is in `registry:5000`'s catalog, both removed by the operator through the V10 procedure only after every moved consumer had a green build (V05); no garbage collect was run for it.
+
+`verification.json` marks V11 owed after: the operator's registry deletion (ruling D3), after the run, following the procedure P12 adds. The run cannot take that action; settle the criterion once it has happened.
+
+test phase r1, 2026-09-26 — V11 is marked owed-to-operator in verification.json with the exact commands (DockerImages docs/registry-management/delete-repository.md, steps 1-3, once for modern-app-dev and once for modern-app-dev-playwright). State read from this pod on 2026-09-26: both repositories are still in the catalog (11 tags and 2 tags). Every precondition is met: all seven consumer builds are green (V05), both directories are gone from DockerImages' pushed main (V08), and nothing references either image bar the D2 and N1 exceptions (V07). One thing to know before running it: DesignAssistant's archived Jenkinsfile (ruling D2) hardcodes registry:5000/modern-app-dev-playwright:playwright-<version>, so once the repository is deleted it can no longer run a validation build; its jobs are archived and disabled, so nothing runs today.
+
+**Consequence:** V11 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:** "Can't you do the outstanding actions also? Of so, do that" — suggested card (Operator Action) — done in session 2026-09-28: delete-repository.md run for modern-app-dev and modern-app-dev-playwright, every DELETE 202, directories removed, gone from the catalog; V11 (and V01) set to pass in verification.json
 
 </details>
 
@@ -115,7 +119,9 @@ Focus: The three blocked stops (N1, N3, N4) all came from this environment lacki
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — Run stopped (blocked) in P3
+### ~~N1 — Run stopped (blocked) in P3~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 The driver's bail (`blocked`), as it recorded it:
 
@@ -126,18 +132,26 @@ Stopped 2026-09-26 18:56; resumed 2026-09-26 19:03.
 **Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
 
 **Provenance:** witnessed — the driver's bail record in state.json
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### N2 — P7: DHCPApp #48 went red on a Docker Hub connection reset in kaniko; the executor re-ran it as #49, which is green
+</details>
+
+### ~~N2 — P7: DHCPApp #48 went red on a Docker Hub connection reset in kaniko; the executor re-ran it as #49, which is green~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 The push of DHCPApp 12947ae built as DHCP/DHCPApp #48. Its validation passed on the new image (62 passed, 4 skipped, the same as #47), then the "Building dhcpapp" kaniko stage failed pulling python:3.13-slim: `error building image: error building stage: failed to get filesystem from image: read tcp 172.16.129.132:43360->18.65.39.59:443: read: connection reset by peer`. Nothing was deployed. The executor triggered a rebuild of the same job (POST .../job/DHCP/job/DHCPApp/build). #49 built the same commit and is green.
 
 **Consequence:** none — the red #48 stays in DHCPApp's build history; #49 is the build P7 is proven by.
 
 **Provenance:** witnessed, code-writer, P7, r1, DHCP/DHCPApp #48 console log
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### N3 — Run stopped (blocked) in P8
+</details>
+
+### ~~N3 — Run stopped (blocked) in P8~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 The driver's bail (`blocked`), as it recorded it:
 
@@ -148,9 +162,13 @@ Stopped 2026-09-26 20:16; resumed 2026-09-26 20:17.
 **Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
 
 **Provenance:** witnessed — the driver's bail record in state.json
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### N4 — Run stopped (blocked) in P8
+</details>
+
+### ~~N4 — Run stopped (blocked) in P8~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 The driver's bail (`blocked`), as it recorded it:
 
@@ -161,16 +179,22 @@ Stopped 2026-09-26 20:43; resumed 2026-09-26 21:11.
 **Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
 
 **Provenance:** witnessed — the driver's bail record in state.json
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### N5 — Test phase r1: DockerImages, ArgoCDTools and Ansible pushed; every push build green · nit
+</details>
+
+### ~~N5 — Test phase r1: DockerImages, ArgoCDTools and Ansible pushed; every push build green · nit~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 Pushed to main: DockerImages 61d79df..a963dfd (P11, P12), ArgoCDTools 6f49577..ce60dbc (P15), and Ansible e95b889..bbe662e. Ansible needed a rebase first: its origin/main had moved one commit (e95b889, slice 230 P4) past the six local slice-030 commits; the dev:rebase-agent rebased with no conflicts and `kc project lint` and `test` were green afterwards. Builds: DockerImages #2557 SUCCESS; IaC/ArgoCDTools #18 SUCCESS; IaC/Build-Main #221 SUCCESS (Lint, Terraform validate, Plan + destroy check, 'No changes'); AaC/Ansible #175 SUCCESS. Side effects of the comment-only edits, which the pipelines do on every Dockerfile change: DockerImages #2557 rebuilt kube-coder-iac-toolchain and moved its :latest (trivy raised a warning, 1 CRITICAL with a fixed version); ArgoCDTools #18 rebuilt argocd-hook:latest; IaC Docker Image #218 rebuilt Ansible's iac image, SUCCESS. Not pushed, deliberately: AnsibleSpecs (the driver leaves the spec repo out of the push check; its commits land at close-out and carry other lanes' unpublished work) and KubeCoder (origin is one commit ahead of local, nothing of the slice's is unpushed). The loop-tail sweep's red ElectronicsInventory backend and frontend test rows were re-run and are still the missing S3 service (backend: 'S3 storage is not reachable at http://localhost:9000'; frontend: Playwright global setup 'Could not connect to the endpoint URL http://localhost:9000/...'), which ruling S1 covers; ElectronicsInventory's HEAD is origin/main (4bbec200) and Jenkins #255 is green, so no push was withheld for them. IoTSupport is not in the sweep (P9 ran outside the loop, ruling S1); its HEAD is origin/main and #145 is green.
 
 **Consequence:** none — the pushes had to happen for A5 and P14/P15 to land; recorded so the operator knows the images they rebuilt.
 
 **Provenance:** witnessed — test-agent, test phase r1; Jenkins DockerImages #2557, IaC/ArgoCDTools #18, IaC/Build-Main #221, IaC/IaC Docker Image #218
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
+
+</details>
 
 ## Bugs
 
@@ -185,7 +209,7 @@ FieldnotesApp's Jenkinsfile calls `cicd.writeVersionPins` (stage 'Write image pi
 **Consequence:** Two FieldnotesApp builds close together (two quick pushes to main) can race on the FieldnotesDeploy push, and the later one fails red after building its image.
 
 **Provenance:** read, code-writer, P4, r1, FieldnotesApp/Jenkinsfile and the job's /api/json
-**Disposition:**
+**Disposition:** "action the rest" — suggested card FN — FN-18
 
 ### B2 — ModernAppTemplate: the v0.1.2 validation Job's tar extraction into the root-owned /work emptyDir fails and exits 2 on every run · minor
 
@@ -198,7 +222,7 @@ consult 1, 2026-09-26 — Priced as a close-out entry, not a phase. The plan doe
 **Consequence:** Every validation.log from an app on v0.1.2 shows a tar failure right after "Code received, extracting...". Someone diagnosing a red validation build meets a spurious error first.
 
 **Provenance:** witnessed, code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
-**Disposition:**
+**Disposition:** "action the rest" — suggested card MAT — MAT-6
 
 ## Open questions and rulings
 
@@ -214,7 +238,9 @@ Focus: None changes a decision. S7 (witnessed) feeds the registry deletion: the 
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — ModernAppFrontendTemplate: bring the scaffold's validation pipeline up to the live apps' suite-runner shape · minor
+### ~~S1 — ModernAppFrontendTemplate: bring the scaffold's validation pipeline up to the live apps' suite-runner shape · minor~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 The scaffold's template/Jenkinsfile.validation.jinja still runs the older scripts/validation-entrypoint.sh pattern, not the 'poetry install && poetry run run-suite' shape DHCPApp, ElectronicsInventory, IoTSupport and ZigbeeControl use. This slice changes its image only (settled at planning); refreshing the rest is a follow-up.
 
@@ -223,58 +249,84 @@ plan-writer r2, 2026-09-26 — Premise gone: ModernAppFrontendTemplate no longer
 **Consequence:** An app generated from the scaffold starts with a validation pipeline unlike the live apps', and has to be reworked by hand to match them.
 
 **Provenance:** read — plan-writer r1, plan.md settled list; ModernAppFrontendTemplate template/Jenkinsfile.validation.jinja at 861a9f1
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### S2 — ModernAppTemplate: project.yaml's reason for having no frontend gate may be stale · nit
+</details>
+
+### ~~S2 — ModernAppTemplate: project.yaml's reason for having no frontend gate may be stale · nit~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 ModernAppTemplate/.kubecoder/project.yaml:11-29 explains why the repo declares no build/test/lint verbs. For frontend/ it cites one eslint error, react-hooks/set-state-in-effect in template-owned debounced-search-input.tsx. Frontend v0.20.0 (ModernAppFrontendTemplate 032f366) says DebouncedSearchInput now syncs the URL term during render because that rule made the template's own check fail, so that half of the reason looks fixed. Whether the frontend gate is green now was not run. The backend half (a revoked S3 key in backend/.env.test) was not checked.
 
 **Consequence:** The template repo keeps running with no gate even if one of its two templates could now carry one, so a template change (like this slice's P5) is proven only by the apps that take it.
 
 **Provenance:** read — plan-writer r2, ModernAppTemplate .kubecoder/project.yaml at acfc588; ModernAppFrontendTemplate 032f366 commit message
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### S3 — FieldnotesApp: the Jenkinsfile's comments still describe the HelmCharts deploy that argo-cd D53 replaced · nit
+</details>
+
+### ~~S3 — FieldnotesApp: the Jenkinsfile's comments still describe the HelmCharts deploy that argo-cd D53 replaced · nit~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 FieldnotesApp/Jenkinsfile:3-4 ('then the HelmCharts target-state deploy that rolls it out') and the 'Write image pins' stage comment's first two lines ('Push-to-deploy: trigger the HelmCharts target-state pipeline … The `fieldnotes` release pins `:latest` and redeploys on the digest move') describe the pre-D53 deploy; the same comment's next lines say HelmCharts no longer deploys the app. Left as is: outside P4's container change.
 
 **Consequence:** A reader of FieldnotesApp's pipeline is told two contradictory stories about how the app deploys.
 
 **Provenance:** read, code-writer, P4, r1, FieldnotesApp/Jenkinsfile
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### S4 — ModernAppTemplate: change_workflow.md's release step says to bump by 0.1, but the repos tag patch releases · nit
+</details>
+
+### ~~S4 — ModernAppTemplate: change_workflow.md's release step says to bump by 0.1, but the repos tag patch releases · nit~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 docs/change_workflow.md, "Tag the Release", says to create the next tag by bumping by 0.1 (`git tag v0.X`). The repos tag patch releases: the root template went v0.1.0 → v0.1.1 → v0.1.2 (this slice's P5), Backend v0.13.1/v0.13.2, Frontend v0.20.1/v0.20.2. The step could say when a patch bump and when a minor bump is right.
 
 **Consequence:** A reader following the doc tags a minor release where the repo's practice is a patch release, so version numbers stop saying how big a change was.
 
 **Provenance:** witnessed, executor, P5, r1, ModernAppTemplate docs/change_workflow.md:271-283
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck
 
-### S5 — AnsibleSpecs decisions.md: the step-ca root-rotation TODOs count nine out-of-repo root copies, but the file's own inventory and the runbook count ten · nit
+</details>
+
+### ~~S5 — AnsibleSpecs decisions.md: the step-ca root-rotation TODOs count nine out-of-repo root copies, but the file's own inventory and the runbook count ten · nit~~ — fixed in AnsibleSpecs 9c9cdc1
+
+<details><summary>struck — body kept for the record</summary>
 
 decisions.md:173 and :176 (the TODOs gating the next root rotation) say "nine out-of-repo copies". decisions.md:168 says "Ten out-of-repo copies of the same file are in use" and lists ten, and Ansible docs/runbooks/step-ca-root-rotation.md:64 counts ten too. The drift predates slice 030. P13 edited the :173 sentence for its terraform.rc count and left this count alone, and P13's done-record (plan.md:597-598) repeats "nine" as unchanged.
 
 **Consequence:** Someone reading the rotation TODOs is told about one copy fewer than a rotation has to update. The runbook's table is the list that actually drives a rotation, so the miscount only misleads a reader who stops at decisions.md.
 
 **Provenance:** read, code-reviewer, P13, r1, phases/P13/code_review_r1.md F1
-**Disposition:**
+**Disposition:** "action the rest" — suggested fix now — fixed in AnsibleSpecs 9c9cdc1
 
-### S6 — Ansible .kubecoder/config.yaml: drop the slice-030 checkouts and tools once the slice closes · minor
+</details>
+
+### ~~S6 — Ansible .kubecoder/config.yaml: drop the slice-030 checkouts and tools once the slice closes · minor~~ — closed by the operator, 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 Slice 030 added seven sibling checkouts to Ansible's .kubecoder/config.yaml, under the comment 'Slice 030 (modern-app-dev retirement): the image's consumer pipelines' (Ansible 8b4e44e, b0d85d8, 7263392): KubeCoder, FieldnotesApp, DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and ModernAppTemplate. It also added the python and frontend tools, for P3's and P4's gates (83b7fe5). Once the slice is closed, no Ansible work needs them. Pod start runs every checkout's project.yaml setup. For ElectronicsInventory, IoTSupport and ModernAppTemplate that setup fails, because this environment has no Postgres (A4). So every start of the environment reports 'The environment's setup failed' in kc env describe. Removing them is a config edit plus kc env restart. Keeping them is also a valid choice if the operator wants the consumer repos at hand.
 
 **Consequence:** Until the entries go, every start of the Ansible environment reports a failed setup for three repos this environment no longer works in, and it clones seven repos it does not need. A real setup failure then hides behind a known one.
 
 **Provenance:** witnessed | consult 1, kc env describe on 2026-09-26 and git log -- .kubecoder/config.yaml
-**Disposition:**
+**Disposition:** "action the rest" — suggested close — struck: the checkouts went in Ansible ca74523; the python/frontend tools stay for the /work/scratch clones of KubeCoder and FieldnotesApp
 
-### S7 — Registry: modern-app-dev-base is a third stale repository from the same family, outside R1 · nit
+</details>
+
+### ~~S7 — Registry: modern-app-dev-base is a third stale repository from the same family, outside R1 · nit~~ — resolved 2026-09-28 in the close-out session: repository deleted from registry:5000 and gone from the catalog; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 R1 names two repositories and the slice deletes those. `modern-app-dev-base` (tags 2085 and latest) is in the catalog as well; DockerImages dropped its directory on 2026-06-17 and only the dated 2026-08-16 registry audit still names it. The same delete-repository.md procedure removes it if the operator wants it gone in the same sitting.
 
 **Consequence:** A repository with two tags (2085, latest) stays in the catalog after A2, though no image directory has built it since DockerImages c43008c (2026-06-17).
 
 **Provenance:** witnessed — test-agent, test phase r1; curl http://registry:5000/v2/modern-app-dev-base/tags/list
-**Disposition:**
+**Disposition:** "Can't you do the outstanding actions also? Of so, do that" — suggested as optional on the A2 card — done in the same sitting: modern-app-dev-base deleted (1 digest, 202), directory removed, gone from the catalog
+
+</details>
