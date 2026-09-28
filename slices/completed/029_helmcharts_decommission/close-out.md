@@ -33,28 +33,6 @@ Until it runs, the new registry deploys nothing, and V15 and V24 stay open. Push
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A1 — Settle V15 after the operator's registry switch, run from P6's runbook (including …
-
-V15 — After the operator's switch, `releases` owns the 50 Applications. Each keeps its uid, creation timestamp and spec. No ApplicationSet remains. A registry push to ArgoCDDeploy refreshes `releases` through its webhook, and nothing polls.
-
-`verification.json` marks V15 owed after: the operator's registry switch, run from P6's runbook (including ArgoCDDeploy's relay webhook). The run cannot take that action; settle the criterion once it has happened.
-
-**Consequence:** V15 stays unproven until then; the test phase does not settle it.
-
-**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
-
-### A2 — Settle V24 after the operator's registry switch, run from P6's runbook through its last …
-
-V24 — After the operator's registry switch, the last step of the switch runbook has run. No doc still says that a procedure is owed until the registry switch has run, and the procedures those notes carried now describe the registry Argo reads.
-
-`verification.json` marks V24 owed after: the operator's registry switch, run from P6's runbook through its last step. The run cannot take that action; settle the criterion once it has happened.
-
-**Consequence:** V24 stays unproven until then; the test phase does not settle it.
-
-**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Disposition:**
-
 ### A3 — P8's proof run left 30 unpushed resource-request commits in /tmp/rr-proof on the dev container · nit
 
 Step two of the proof ran against real clones: 30 deploy repos carry one local commit each on main, from the 2026-09-19..26 Prometheus window. NewsfilterDeploy's patch was deleted and GrafanaDeploy's memory hunk overruled (160Mi -> 192Mi) as a demonstration, so the commits are not a clean recommendation. /tmp is not durable. The operator can discard them and run 'python3 support/recommend-resources/recommend_resources.py report <dir>' fresh when they want the requests applied.
@@ -64,14 +42,48 @@ Step two of the proof ran against real clones: 30 deploy repos carry one local c
 **Provenance:** witnessed, executor, P8 r1
 **Disposition:**
 
-### A4 — AnsibleSpecs is not pushed: it is 37 commits ahead of origin, including slices 030 and 031's planning commits
+### ~~A1 — Settle V15 after the operator's registry switch, run from P6's runbook (including …~~ — settled: V15 verified after the registry switch ran 2026-09-28 (AnsibleSpecs e8a3b9f)
+
+<details><summary>struck — body kept for the record</summary>
+
+V15 — After the operator's switch, `releases` owns the 50 Applications. Each keeps its uid, creation timestamp and spec. No ApplicationSet remains. A registry push to ArgoCDDeploy refreshes `releases` through its webhook, and nothing polls.
+
+`verification.json` marks V15 owed after: the operator's registry switch, run from P6's runbook (including ArgoCDDeploy's relay webhook). The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V15 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:** Yes (the operator, 2026-09-28, to marking it done) — settled: the registry switch ran 2026-09-28; V15 verified in verification.json (AnsibleSpecs e8a3b9f)
+
+</details>
+
+### ~~A2 — Settle V24 after the operator's registry switch, run from P6's runbook through its last …~~ — settled: V24 verified after runbook step 11 ran 2026-09-28 (Ansible d424f8a, AnsibleSpecs 89fab16, e8a3b9f)
+
+<details><summary>struck — body kept for the record</summary>
+
+V24 — After the operator's registry switch, the last step of the switch runbook has run. No doc still says that a procedure is owed until the registry switch has run, and the procedures those notes carried now describe the registry Argo reads.
+
+`verification.json` marks V24 owed after: the operator's registry switch, run from P6's runbook through its last step. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V24 stays unproven until then; the test phase does not settle it.
+
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:** Yes (the operator, 2026-09-28, to marking it done) — settled: runbook step 11 ran 2026-09-28 (Ansible d424f8a, AnsibleSpecs 89fab16); V24 verified (e8a3b9f)
+
+</details>
+
+### ~~A4 — AnsibleSpecs is not pushed: it is 37 commits ahead of origin, including slices 030 and 031's planning commits~~ — done: AnsibleSpecs pushed 2026-09-28
+
+<details><summary>struck — body kept for the record</summary>
 
 The test phase pushed Ansible (ca536a6), Architecture (d73109d), ArgoCDDeploy (4afb8fb) and JenkinsPipelineUtils (6f87d09), the repos in `state.json`'s `bases` that the driver's push check covers. It did not push AnsibleSpecs: the driver excludes the spec repo from that check, the working tree is shared, and the 37 unpushed commits include other slices' planning work (030, 031) that this slice does not own. Push it when the operator wants those records on origin: `cd /work/AnsibleSpecs && git push origin main`. The operator's call, not this slice's.
 
 **Consequence:** The slice's records (decisions, runbook path, close-out, verification) exist only in this pod's /work/AnsibleSpecs until someone pushes; nothing else reads them from origin.
 
 **Provenance:** witnessed, test-agent, phase test, round 1, git -C /work/AnsibleSpecs log origin/main..HEAD
-**Disposition:**
+**Disposition:** Yes (the operator, 2026-09-28, to marking it done) — AnsibleSpecs pushed 2026-09-28
+
+</details>
 
 ## Notable events
 
@@ -201,6 +213,15 @@ revise() (support/recommend-resources/recommend_resources.py:496-515) reads and 
 **Provenance:** witnessed, code-reviewer, P8, r1, phases/P8/code_review_r1.md F6
 **Disposition:**
 
+### B6 — Ansible openbao role: the unconditional writes (Write AppRoles, Write the OIDC config, Write the OIDC admin role) always report ok · minor
+
+ansible/roles/openbao/tasks/approle.yml and oidc.yml issue uri POSTs with no when and no changed_when, so they run on every pass and never report changed, whether or not the state differed. The six gated writes were fixed to report changed in Ansible c94ae95 after a run that rewrote the iac-agent policy recapped changed=0. Reporting these three honestly needs a read-and-compare first.
+
+**Consequence:** A run that changes an AppRole's settings or the OIDC config shows changed=0, so neither the operator nor the drift job can see it happened.
+
+**Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; Ansible c94ae95
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: none are open. The one question the run needed, P3's (N1), was answered mid-run.
@@ -217,24 +238,6 @@ S13, S14, S15 and S25, and most of S9, S20 and S22; the notes say what is left.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — ArgoCDDeploy's test gate reads HelmCharts' _providers/clusters.yaml, so it breaks once the HelmCharts clone is dropped
-
-ArgoCDDeploy's `tests/render-chart.py:76` binds the hook environment's literals in `config/prd/values.yaml` to `../HelmCharts/_providers/clusters.yaml`, which it treats as the source of truth. This slice does not change that. The plan keeps HelmCharts cloned until the archive, and dropping the clone from `.kubecoder/config.yaml` belongs to the archive (ANS-122). Once the clone is gone, `kc project test` in ArgoCDDeploy fails on the missing file. Before the clone goes, the binding needs a new source of truth, most likely ArgoCDDeploy's own values, since the archived file will never change again.
-
-**Consequence:** After ANS-122 drops the HelmCharts checkout, ArgoCDDeploy's gate fails on every run until the binding is changed.
-
-**Provenance:** read — plan-writer, planning r1, tests/render-chart.py:76 and .kubecoder/config.yaml
-**Disposition:**
-
-### S2 — srviac's iac agent still clones HelmCharts and holds the HelmCharts deploy credentials
-
-Ansible's `support/iac-agent/etc/iac/secrets.example.yaml` still describes things that only `IaC/HelmCharts` uses. Its `repos:` list clones HelmCharts on every iac run (:37-42), and its prd kubeconfig and homelab-provider storage credentials are marked for the HelmCharts deploy (:113, :158, :191). `support/iac-image/Dockerfile:55-63` and `support/iac-agent/bin/iac-impl:53` describe the HelmCharts deploy harness too. This slice's asks do not cover them. After ANS-121 deletes the job, they are dead weight on srviac. The credentials in particular are a standing grant that nothing uses. A follow-up could remove them from the agent's config and image, and the operator would converge srviac.
-
-**Consequence:** srviac keeps cloning an archived repo on every iac run and keeps credentials that no job uses.
-
-**Provenance:** read — plan-writer, planning r1, support/iac-agent/etc/iac/secrets.example.yaml
-**Disposition:**
-
 ### S3 — One Helm release Secret remains on prd: argocd-prd's bootstrap install
 
 The D61 pass removed every migrated app's Helm release Secret. A read on 2026-09-26 (secrets of type `helm.sh/release.v1`, names only) finds exactly one left: `sh.helm.release.v1.argocd-prd.v1` in `argocd-prd`, created 2026-09-04 by Argo's own bootstrap `helm install` (D3). Argo has managed that release ever since, but Helm still lists it as deployed. If someone runs `helm upgrade` or `helm uninstall` against it, Helm would act on Argo CD itself. It is not a migrated app's Secret, so D61 did not cover it, and this slice leaves it. Deleting it is the operator's call.
@@ -242,17 +245,6 @@ The D61 pass removed every migrated app's Helm release Secret. A read on 2026-09
 **Consequence:** `helm list -A` shows Argo CD as a Helm release, and a stray Helm command could act on it.
 
 **Provenance:** witnessed — plan-writer, planning r1, kubectl get secrets --field-selector type=helm.sh/release.v1 (prd)
-**Disposition:**
-
-### S4 — After the registry switch, a follow-up removes what the switch leaves dead
-
-The plan gates the hand-over behind one stage-level setting that the operator flips, so that every state of ArgoCDDeploy's `main` during the run is safe to sync. Once the switch is done, these are dead: the ApplicationSet branch and the setting in ArgoCDDeploy's chart; `releases.registry`, which points at HelmCharts; the render test's HelmCharts-registry assertions; HelmCharts' relay webhook; and the relay's applicationset-controller leg. Removing the chart parts changes nothing in the render. P6's runbook ends with this list (attachments/registry-switch.md, 'After the switch'). The slice cannot do the removal, because it has to wait for the operator's switch.
-
-executor P5 r1, 2026-09-26 — P5 names the chart parts. The branch is chart/templates/applicationsets.yaml and the setting is releases.owner (chart/values.yaml, config/prd/values.yaml). The test parts are tests/render-chart.py's S1 position, check_applicationsets and the helpers it calls, and HelmCharts in REPOS and PERMITTED_SOURCES. releases.owner's validation in chart/templates/releases.yaml goes too. releases.autoSync stays, true from the switch. Jenkinsfile.architecture's header also names HelmCharts' configs/prd/argocd/prd/release.yaml as where Argo's branch is set; from the switch that is releases/values.yaml's apps.argocd.
-
-**Consequence:** Until the follow-up lands, ArgoCDDeploy carries a disabled ApplicationSet path next to the live registry, and a reader could take it for a live option.
-
-**Provenance:** read — plan-writer, planning r1, plan.md P5/P6 and attachments/registry-switch.md
 **Disposition:**
 
 ### S5 — AnsibleSpecs README.md still names HelmCharts as the workloads repo · nit
@@ -469,6 +461,74 @@ The viewer's `kc project test` runs `npm test` inside the repo tree, where `../.
 
 **Provenance:** witnessed, test-agent, phase test, round 1, AaC/Architecture #2068
 **Disposition:**
+
+### S30 — OpenBao's jenkins policy still grants the HelmCharts deploy's three leaves: shared/prd/ceph-csi, shared/prd/ceph-rgw/s3 and eso/prd/iac-provisioner/api/token · minor
+
+Ansible ansible/inventories/prd/group_vars/openbao.yml, openbao_jenkins_kv_paths, grants the three leaves its comment attributes to the HelmCharts deploy pipeline's homelab TF provider. IaC/HelmCharts is deleted. The same comment's history (022 P6 code review r1) says artifact-upload pipelines read the RGW admin key too, and no Jenkinsfile in the checked-out repos names these paths, so which pipelines still read them is unsettled. The iac-agent policy's copy of these grants was removed on 2026-09-28 (Ansible 35d9e3e).
+
+**Consequence:** Jenkins keeps read access to the prd cephx user, the RGW admin key and the iac-provisioner token, whether or not any pipeline still needs them.
+
+**Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; ansible/inventories/prd/group_vars/openbao.yml
+**Disposition:**
+
+### S31 — The iac-agent policy still grants eso/prd/postgres-pas/terraform-admin and eso/prd/storage/prd/backup-server, which secrets.example.yaml never references · nit
+
+Added 2026-06-17 (Ansible ca536a6, f8031b6) with no stated consumer, during the HelmCharts deploy harness work; terraform/prd reads the backup-server token from kv/iac/backup-server instead. Whether srviac's live /etc/iac/secrets.yaml references them settles it: sudo grep -n 'postgres-pas\|storage/prd' /etc/iac/secrets.yaml.
+
+**Consequence:** If unused, the iac agent keeps read access to the Terraform PostgreSQL admin credential and the storage backup-server token for no job.
+
+**Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; openbao policy read iac-agent
+**Disposition:**
+
+### S32 — Ansible support/iac-image/Dockerfile: the poetry and uv install comments still justify them by the HelmCharts deploy CLI and pipeline · nit
+
+support/iac-image/Dockerfile around line 55: poetry is kept for 'the HelmCharts deploy CLI' (cd /work/HelmCharts && poetry install), and uv 'because the HelmCharts pipeline ... spins up a fresh container per release'. Left unedited on 2026-09-28 because a comment-only change rebuilds the image; poetry is still used (this repo's own lint runs through it), uv may no longer be.
+
+**Consequence:** A reader of the iac image is told it serves a deploy path that is gone, and the uv install may be dead weight in every image build.
+
+**Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; support/iac-image/Dockerfile
+**Disposition:**
+
+### ~~S1 — ArgoCDDeploy's test gate reads HelmCharts' _providers/clusters.yaml, so it breaks once the HelmCharts clone is dropped~~ — fixed in ArgoCDDeploy fb35a6c
+
+<details><summary>struck — body kept for the record</summary>
+
+ArgoCDDeploy's `tests/render-chart.py:76` binds the hook environment's literals in `config/prd/values.yaml` to `../HelmCharts/_providers/clusters.yaml`, which it treats as the source of truth. This slice does not change that. The plan keeps HelmCharts cloned until the archive, and dropping the clone from `.kubecoder/config.yaml` belongs to the archive (ANS-122). Once the clone is gone, `kc project test` in ArgoCDDeploy fails on the missing file. Before the clone goes, the binding needs a new source of truth, most likely ArgoCDDeploy's own values, since the archived file will never change again.
+
+**Consequence:** After ANS-122 drops the HelmCharts checkout, ArgoCDDeploy's gate fails on every run until the binding is changed.
+
+**Provenance:** read — plan-writer, planning r1, tests/render-chart.py:76 and .kubecoder/config.yaml
+**Disposition:** Yes (the operator, 2026-09-28, to marking it done) — fixed in ArgoCDDeploy fb35a6c: config/prd/values.yaml is the literals' source, the gate checks their shape; green with /work/HelmCharts removed
+
+</details>
+
+### ~~S2 — srviac's iac agent still clones HelmCharts and holds the HelmCharts deploy credentials~~ — done 2026-09-28: srviac secrets.yaml (operator), Ansible 35d9e3e, policy applied, kv/iac/kubeconfig-prd deleted
+
+<details><summary>struck — body kept for the record</summary>
+
+Ansible's `support/iac-agent/etc/iac/secrets.example.yaml` still describes things that only `IaC/HelmCharts` uses. Its `repos:` list clones HelmCharts on every iac run (:37-42), and its prd kubeconfig and homelab-provider storage credentials are marked for the HelmCharts deploy (:113, :158, :191). `support/iac-image/Dockerfile:55-63` and `support/iac-agent/bin/iac-impl:53` describe the HelmCharts deploy harness too. This slice's asks do not cover them. After ANS-121 deletes the job, they are dead weight on srviac. The credentials in particular are a standing grant that nothing uses. A follow-up could remove them from the agent's config and image, and the operator would converge srviac.
+
+**Consequence:** srviac keeps cloning an archived repo on every iac run and keeps credentials that no job uses.
+
+**Provenance:** read — plan-writer, planning r1, support/iac-agent/etc/iac/secrets.example.yaml
+**Disposition:** Yes (the operator, 2026-09-28, to marking it done) — done: the operator cleaned srviac's /etc/iac/secrets.yaml; Ansible 35d9e3e (secrets.example, iac-agent policy, applied); kv/iac/kubeconfig-prd deleted
+
+</details>
+
+### ~~S4 — After the registry switch, a follow-up removes what the switch leaves dead~~ — done in ArgoCDDeploy 1d6da09, a811fa5, fb35a6c and Ansible 92ec266
+
+<details><summary>struck — body kept for the record</summary>
+
+The plan gates the hand-over behind one stage-level setting that the operator flips, so that every state of ArgoCDDeploy's `main` during the run is safe to sync. Once the switch is done, these are dead: the ApplicationSet branch and the setting in ArgoCDDeploy's chart; `releases.registry`, which points at HelmCharts; the render test's HelmCharts-registry assertions; HelmCharts' relay webhook; and the relay's applicationset-controller leg. Removing the chart parts changes nothing in the render. P6's runbook ends with this list (attachments/registry-switch.md, 'After the switch'). The slice cannot do the removal, because it has to wait for the operator's switch.
+
+executor P5 r1, 2026-09-26 — P5 names the chart parts. The branch is chart/templates/applicationsets.yaml and the setting is releases.owner (chart/values.yaml, config/prd/values.yaml). The test parts are tests/render-chart.py's S1 position, check_applicationsets and the helpers it calls, and HelmCharts in REPOS and PERMITTED_SOURCES. releases.owner's validation in chart/templates/releases.yaml goes too. releases.autoSync stays, true from the switch. Jenkinsfile.architecture's header also names HelmCharts' configs/prd/argocd/prd/release.yaml as where Argo's branch is set; from the switch that is releases/values.yaml's apps.argocd.
+
+**Consequence:** Until the follow-up lands, ArgoCDDeploy carries a disabled ApplicationSet path next to the live registry, and a reader could take it for a live option.
+
+**Provenance:** read — plan-writer, planning r1, plan.md P5/P6 and attachments/registry-switch.md
+**Disposition:** Yes (the operator, 2026-09-28, to marking it done) — done: ArgoCDDeploy 1d6da09, a811fa5, fb35a6c; Ansible 92ec266
+
+</details>
 
 ### ~~S6 — The estate register links to seven slice and spec paths that have moved · cosmetic~~ — resolved by consult 1 (AnsibleSpecs 150fb1a): the seven links in decisions.md point at slices/completed/, change_requests/microceph_prod/ and slices/completed/dns-reservation-provider/; a relative-link check over decisions.md finds none broken; struck by consult 1
 
