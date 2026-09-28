@@ -174,11 +174,12 @@
       "area": "R6 — the switch done, no Application recreated",
       "description": "After the operator's switch, `releases` owns the 50 Applications. Each keeps its uid, creation timestamp and spec. No ApplicationSet remains. A registry push to ArgoCDDeploy refreshes `releases` through its webhook, and nothing polls.",
       "owed_after": "the operator's registry switch, run from P6's runbook (including ArgoCDDeploy's relay webhook)",
-      "verdict": "owed-to-operator",
-      "rationale": "The operator's registry switch has not run: `releases` does not exist, both ApplicationSets are live and own the 50 Applications (41/9), argocd-prd is Synced at 307d94f with its owner setting still `applicationsets`. This item is settled by the operator running docs/runbooks/registry-switch.md from step 1 through step 10; steps 5, 9 and 10 give the proofs (uid and creation time unchanged, tracking count equals rendered count, a registry push refreshes releases by webhook). Close-out A1.",
+      "verdict": "verified",
+      "rationale": "The operator's registry switch ran on 2026-09-28 (Ansible docs/runbooks/registry-switch.md steps 1-11, run with Claude). Step 5 orphan-deleted both ApplicationSets; step 9's `apps` diff against the step-3 snapshot added only `releases` itself, so all 50 Applications kept uid and creation time; 50 of 50 carry the tracking id `releases:argoproj.io/Application:argocd-prd/<name>`; registry-equivalence reported only `ONLY LIVE releases` (50 rendered, 51 live, 1 differing), so every spec is unchanged. Pushes 6831e85 and 3d3d466 moved argocd-prd's and releases' sync revision within ~9s with no manual refresh (webhook). Close-out A1.",
       "evidence": [
-        "cd /work/Ansible && the runbook, step 1 (rehearsal) then steps 2-10, in docs/runbooks/registry-switch.md",
-        "state today: cexec iac kubectl get applicationsets.argoproj.io -n argocd-prd -> releases-local, releases-upstream"
+        "kubectl get applicationsets.argoproj.io -n argocd-prd -> No resources found (2026-09-28)",
+        "apps | diff /tmp/registry-switch-apps.before - -> '> releases 84121c7e-... 2026-09-28T18:35:28Z' only",
+        "releases syncPolicy after step 10: automated prune=false selfHeal=false, retry limit 3 backoff 30s x2; releases Synced at 3d3d466"
       ]
     },
     {
@@ -278,10 +279,10 @@
       "area": "R7 — the docs' owed notes gone after the switch",
       "description": "After the operator's registry switch, the last step of the switch runbook has run. No doc still says that a procedure is owed until the registry switch has run, and the procedures those notes carried now describe the registry Argo reads.",
       "owed_after": "the operator's registry switch, run from P6's runbook through its last step",
-      "verdict": "owed-to-operator",
-      "rationale": "Step 11 of the registry-switch runbook has not run, so the six owed notes are still in place (git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md' -> 5 in docs/runbooks/argocd.md, 1 in support/argo-migrate/argo_migrate.py), which is right until the switch. Settled after the operator runs the switch through step 11 and the grep prints nothing. Close-out A2.",
+      "verdict": "verified",
+      "rationale": "Step 11 ran on 2026-09-28: Ansible d424f8a drops the five notes in docs/runbooks/argocd.md and the one in support/argo-migrate/argo_migrate.py, and the grep prints nothing; AnsibleSpecs 89fab16 restates D63, D64, design.md, phases.md and decisions.md as done. Close-out A2.",
       "evidence": [
-        "cd /work/Ansible && git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md'  (must print nothing after step 11)"
+        "git grep -n -i 'owed until the registry switch has run' -- ':!docs/runbooks/registry-switch.md' -> no output (Ansible d424f8a)"
       ]
     }
   ]
