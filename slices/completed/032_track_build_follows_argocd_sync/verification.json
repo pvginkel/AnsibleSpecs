@@ -199,11 +199,10 @@
       "id": "V16",
       "area": "R4 — live",
       "description": "A real Promote-PRD run prints the handoff line, and track_build.py pointed at that build follows kubecoder-prd to the promoted commit.",
-      "owed_after": "the operator's next KubeCoder/Promote-PRD run (promotion is run by hand; no role in the run promotes)",
-      "verdict": "owed to operator",
-      "rationale": "No Promote-PRD run happened during this pass — promotion is a hand-run job and this test phase has no standing to trigger it. The mechanism itself is verified (V04): Jenkinsfile.promote prints the right line, and the tracker's unit suite proves it is parsed and followed onto kubecoder-prd. The end-to-end live proof stays owed until the operator next runs Promote-PRD; command to settle it: `track_build.py KubeCoder/Promote-PRD --buildnr <n> --no-wait-downstream` once that build is green.",
+      "verdict": "verified",
+      "rationale": "Settled at close-out, 2026-09-28, after the operator's Promote-PRD #10 (SUCCESS, 2026-09-28 19:01 UTC). Its console's handoff line was parsed as 'KubeCoderDeploy e050439 pushed to prd', and the follow reported kubecoder-prd rolled, Synced at e050439 and Healthy, exit 0. The installed ~/.local/bin/track_build.py was run with its /work root pointed at /work/scratch, where this environment keeps its KubeCoderDeploy clone; run plain, it stops at exit 4 naming the missing /work/KubeCoderDeploy clone, which is the handoff found and matched, and the clone rule doing its job.",
       "evidence": [
-        "close-out.md A1 (Outstanding actions) — same owed item, recorded by the plan-writer/completion consult",
+        "test-phase/v16_promote_prd_10.log — exit 0, 'kubecoder-prd  rolled  Synced at e050439, health Healthy'",
         "See V04's evidence for the offline/unit proof of the mechanism"
       ]
     },
