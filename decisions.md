@@ -316,10 +316,14 @@ needed no re-mint, no ESO refresh and no pod restart. Reverting is symmetrically
 `edit`.
 
 **The base kubeconfig is deliberately untouched.** `~/.kube/config` remains the separate
-`kubecoder-ro` identity — cluster-wide `view` (excludes Secrets) plus `edit` in `development` — so
-every environment keeps the narrow default and only envs holding the `kubePrdWrite` capability get
-the wide file. `~/.kube/config-dev-write` stays `edit` on the dev cluster; the ruling was scoped to
-prd.
+`kubecoder-ro` identity, which writes only in prd's `development` namespace (`edit`) and reads no
+Secret outside it. Its read grant is ClusterRole `kubecoder-ro-read` on both clusters, widened by
+operator ruling 2026-09-28 (KubeCoder KC-92): get, list and watch on every resource in every API
+group, cluster-scoped resources and RBAC objects included, **except** core `secrets` and the six
+subresources that open a channel into a workload — `nodes/proxy`, `pods/proxy`, `services/proxy`,
+`pods/exec`, `pods/attach`, `pods/portforward`. Every environment keeps that default; only envs
+holding the `kubePrdWrite` capability get the wide file. `~/.kube/config-dev-write` stays `edit` on
+the dev cluster; the cluster-admin ruling was scoped to prd.
 
 **A ServiceAccount bound to `cluster-admin`, never the microk8s admin cert.** The admin cert is
 `O=system:masters`, which the apiserver hard-wires to bypass the authorizer (see "k8s clusters
@@ -337,10 +341,11 @@ general case, and the mitigation is the grant itself — `kubePrdWrite` is opt-i
 defaults off.
 
 **The binding is unmanaged and does not survive a rebuild.** Nothing in the Ansible repo reconciles
-`kubecoder-ro` / `kubecoder-rw`, their bindings, or their tokens; they are hand-minted out-of-band
-per KubeCoder slice 012's K1 recipe. A cluster rebuild drops them silently and every KubeCoder
-environment loses cluster access. Codifying the re-mint is KubeCoder's, tracked on its board — the
-operator ruled it does not belong in `docs/runbooks/k8s-rebuild.md`.
+`kubecoder-ro` / `kubecoder-rw`, their bindings, or their tokens; they are hand-applied out-of-band
+per KubeCoder's `docs/operations/cluster-identity-remint.md`, whose recipe applies the read role
+from the manifest beside it (`docs/operations/kubecoder-ro-read.yaml`). A cluster rebuild drops them
+silently and every KubeCoder environment loses cluster access until that page is run. The re-mint
+is KubeCoder's — the operator ruled it does not belong in `docs/runbooks/k8s-rebuild.md`.
 
 ### Dashboard tooling
 
