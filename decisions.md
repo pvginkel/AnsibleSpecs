@@ -319,9 +319,12 @@ needed no re-mint, no ESO refresh and no pod restart. Reverting is symmetrically
 `kubecoder-ro` identity, which writes only in prd's `development` namespace (`edit`) and reads no
 Secret outside it. Its read grant is ClusterRole `kubecoder-ro-read` on both clusters, widened by
 operator ruling 2026-09-28 (KubeCoder KC-92): get, list and watch on every resource in every API
-group, cluster-scoped resources and RBAC objects included, **except** core `secrets` and the six
-subresources that open a channel into a workload — `nodes/proxy`, `pods/proxy`, `services/proxy`,
-`pods/exec`, `pods/attach`, `pods/portforward`. Every environment keeps that default; only envs
+group the manifest names, cluster-scoped resources and RBAC objects included, **except** core
+`secrets` and the six subresources that open a channel into a workload — `nodes/proxy`,
+`pods/proxy`, `services/proxy`, `pods/exec`, `pods/attach`, `pods/portforward`. The manifest
+(KubeCoder `docs/operations/kubecoder-ro-read.yaml`) lists groups by name, so a microk8s upgrade or
+a newly installed operator's CRDs read Forbidden until it is refreshed and re-applied per KubeCoder's
+`docs/operations/cluster-identity-remint.md`. Every environment keeps that default; only envs
 holding the `kubePrdWrite` capability get the wide file. `~/.kube/config-dev-write` stays `edit` on
 the dev cluster; the cluster-admin ruling was scoped to prd.
 
