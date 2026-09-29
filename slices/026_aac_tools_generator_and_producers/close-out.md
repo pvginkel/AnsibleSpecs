@@ -74,6 +74,15 @@ P12a moved the `lint` gate of Ginbov, NewsFilter, Webathome, ScanToPdfServer and
 **Provenance:** witnessed: executor, P12a, r1, sweep_ledger.md P12a rows
 **Disposition:**
 
+### A6 — Restart the IntercomServer and SSEGateway KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+
+P12b moved the `lint` gate of IntercomServer and SSEGateway from `./scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in each repo's own `.kubecoder/config.yaml`. No other environment config in the estate clones either repo (gitblit search of `.kubecoder/config.yaml`). A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). ScanToPdfClient's and MyDownloadsClient's gates run in the ScanToPdf and MyDownloads environments, which A5 covers. FieldnotesApp and DHCPApp had no local gate that ran the script, and their environments already declared aac-tools.
+
+**Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
+
+**Provenance:** witnessed: executor, P12b, r1, sweep_ledger.md P12b rows
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
