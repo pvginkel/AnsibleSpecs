@@ -514,7 +514,7 @@ Record:
   Both were witnessed before the manual and USAGE.md showed them.
 - Gate: `kc project setup` then `kc project test`, all green.
 
-### P9a — Deploy repos A–F point at `gen-architecture --help`
+### P9a — Deploy repos A–F point at `gen-architecture --help` ✅ DONE 2026-09-29
 
 Target: root
 
