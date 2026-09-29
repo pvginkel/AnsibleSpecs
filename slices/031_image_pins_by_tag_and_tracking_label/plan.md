@@ -435,6 +435,40 @@ Further requirements:
   registry pod. The test phase's hand-started run is the first live run of it (Ordering
   constraints, step 5). The would-delete summary goes in the done-record.
 
+**Done (P4).** DockerImages `9a11863` (`phase/031-P4`, committed, not pushed): registry-cleanup
+classifies by the label with `build_number(tag, label)` (kaniko2's `inBuildSeries`); the
+regex, `is_versioned` and `_family_and_number` are gone. The cap is per series, and every series
+keeps its newest build. `--max-per-prefix` is renamed `--max-per-series`. Dry run is
+`--dry-run` or env `DRY_RUN=true`. It runs GC as `registry garbage-collect --delete-untagged
+--dry-run`. 54 tests green.
+
+Later phases:
+- P5: mirror `build_number` (registry-cleanup `app/main.py`). A tag without an image config is
+  unlabelled.
+- P7: the chart sets env `DRY_RUN` to the string `"true"` or `"false"`. Anything else fails the
+  job at start (exit 2), and unset means `false`. The job's tag lines read `[dry-run] Would
+  delete <tag> (<digest>) — <reason>`. GC's own lines read `manifest eligible for deletion:` and
+  `blob eligible for deletion:`.
+- P8: §10's `--max-per-prefix` is now `--max-per-series`.
+- Test phase: close-out Q2. Four dangling tags make cleanup skip their whole repo.
+
+- Proof: a dry run against `http://registry:5000` without GC. Log:
+  `phases/P4/cleanup-dryrun-new.log`, untracked. It would delete 213 tags in 39 repos. All are
+  over the cap of 10 and none is past the 26-week TTL.
+  - 121 are KubeCoder's `dev-<n>`, across 8 `kubecoder-*` repos; every `dev-<n>` a `prd-<n>`
+    aliases is kept by the digest guard. Next are fieldnotes 17 and dhcpapp 8.
+  - The old code, run minutes apart, would delete 490, a superset. The 277 it adds are:
+    - `prd-<n>` copies it counted;
+    - unlabelled tags it counted;
+    - builds in four repos with a dangling tag (`architecture_viewer`'s 221 among them), which
+      the new code leaves alone (close-out Q2).
+  - None of the not-newest pins in the grounding are on the list: `dhcpapp-ui:45`,
+    `electronics-inventory-ui:251`, `webhook-relay:2539`, `registry-cleanup:2548`,
+    `kube-coder-tunnel-reclaim:2565`.
+  - `ssegateway-validation`'s self-labelled `48`–`56` and `dhcpapp:35` are tracking tags, kept.
+- Warning on `latest`: an unlabelled `latest` is outside every series, and it is still warned
+  about.
+
 ### P5 — version-poller: the same label rule
 
 Target: ../DockerImages
@@ -492,7 +526,7 @@ Target: ../DockerImages
 Target: ../scratch/RegistryDeploy
 
 Ruling D1. The registry-cleanup chart gets a dry-run setting, turned on, which drives P4's
-switch. The CronJob's suspension and its comment go
+switch: the CronJob container's env `DRY_RUN`, the string `"true"` or `"false"`. The CronJob's suspension and its comment go
 (`chart/templates/registry-cleanup-cronjob.yaml:7-10`). The nightly job then runs for real, in
 dry-run mode. This slice never runs cleanup in deleting mode.
 
@@ -519,6 +553,7 @@ Triage overruled the standing tag scheme (R3, R4, Ruling D2). In
 - §4's "Tag scheme (enforced by `kaniko2`)" and its mirror classifier (`:142-165`);
 - every other place the doc states them, such as §8's keep and delete rules (`:405-412`) and
   §14's classification.
+- §10's `--max-per-prefix` row: P4 renamed the flag `--max-per-series`.
 
 What shipped: the label decides, build history is the label's series, each series keeps its
 newest build, a matrix build pushes two tags, and unlabelled tags are left alone.
