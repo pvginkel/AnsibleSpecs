@@ -372,7 +372,7 @@ Record:
   not to the kubecoder producer that the block comment above it names.
 - `kc project test` is green.
 
-### P6 — Argo CD's controllers realize configuration management, and its redis serves them
+### P6 — Argo CD's controllers realize configuration management, and its redis serves them ✅ DONE 2026-09-29
 
 Target: ../ArgoCDDeploy
 
