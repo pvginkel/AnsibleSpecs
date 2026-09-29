@@ -83,7 +83,7 @@ carrier is not cloned yet. Clone it to `/work/scratch/<Repo>`.
 | Repo | Class | Phase | Clone | Change | Pushed sha | Outcome |
 |---|---|---|---|---|---|---|
 | Ansible | no rollout | P10 | `/work/Ansible` | `Jenkinsfile.architecture` and the `architecture` gate run the toolchain's `arch-validate`; `scripts/arch-validate.py` deleted | — | committed `b92d01a` on `phase/026-P10`; the test phase pushes it with the slice's Ansible diff |
-| DockerImages | no rollout (canary) | P11 | `/work/DockerImages` | migrate; `.architecturerc` instructions name the copy | — | pending |
+| DockerImages | no rollout (canary) | P11 | `/work/DockerImages` | migrate: `Jenkinsfile.architecture` and the `architecture` gate run the toolchain's `arch-validate`; `.architecturerc` instructions and `docs/alert-manager/plan.md` B8 name it; `scripts/arch-validate.py` deleted | `df61622` | done (canary): DockerImages #2574 green (no image directory changed); AaC/DockerImages #172 green, ran `arch-validate` in the `aac-tools` container, 23 artifacts OK; AaC/Architecture #2274 green; site pin `06fc9f9` rolled (webathome-org-prd Synced/Healthy) |
 | KubeCoder | no rollout (pins dev only) | P11 | `/work/scratch/KubeCoder` | migrate | — | pending |
 | KitchenDisplay | no rollout (`Firmware/KitchenDisplay` disabled) | P11 | to clone | migrate | — | pending |
 | GitblitMCPServer | redeploys prd (canary) | P12a | to clone | migrate | — | pending |
