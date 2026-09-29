@@ -536,6 +536,41 @@ This phase opens the sweep ledger with all 48 rows and pushes the deploy class's
 first (Ruling F5). ArgoCDDeploy's push carries P6's commit, so it goes from `/work/ArgoCDDeploy`
 (its `main`) rather than from `/work/scratch/sweep031/ArgoCDDeploy`.
 
+**Done (P9a).** All 13 A–F deploy repos name "what gen-architecture --help prints from the
+aac-tools toolchain" as the judgment layer's schema, and each is pushed and done. So does
+ArgoCDDeploy's `architecture.yaml` header. `sweep_ledger.md` holds all 48 deploy rows. The
+Ansible branch carries no commit.
+
+Later phases:
+- P9b–c: `/work/scratch/p9-sweep/push_batch.sh <Repo>…` pushes sweep031 clones and waits for
+  each to be done. For another clone, use `push_one.sh <Repo> <clone>`. Record the result with
+  `ledger_update.py <Repo>…`, then commit the ledger. Batches of four ran about 7 minutes each.
+- P9b–c: 34 of their 35 files end with one uniform line, the PrometheusDeploy and
+  RegistryDeploy clones included. Replace
+  `  repo root, whose schema is the generator's docstring.` with argo-migrate's two lines:
+  `  repo root, whose schema is what gen-architecture --help prints from the aac-tools` and
+  `  toolchain.`. KubeCoderDeploy words it the way ArgoCDDeploy did ("…whose schema is the
+  generator's docstring. An image the render carries…"). Edit it by hand.
+- P9b: KeycloakDeploy feeds `keycloak-dev` and `keycloak-prd`, both on `main`. `kubecoder-prd`
+  tracks `prd`, so `argo_check.py` checks only `kubecoder-dev`.
+- P10–P13b: `track_build.py` does not find `AaC/Architecture`. The attachment now names
+  `collector.py`, which does.
+
+Record:
+- Canary: ArgoCDDeploy `65872b9` (P6 + pointer). AaC #17 and collector #2242 were green. The
+  artifact and the published dataset carry P6's 5 capability Realizations and 3 redis Serving
+  edges. `releases` is Synced at the sha. `argocd-prd` is Healthy and still OutOfSync on
+  `Deployment/argocd-prd-webhook-relay` only, as before the push: it syncs by hand only (D3,
+  the runbook's relay note). The ledger records this rather than a failure.
+- Batches of four (collectors #2244, #2246, #2248; superseded builds followed): every AaC build
+  and collector was green, every app was Synced and Healthy at the sha, and every site pin rolled.
+- Rebase and push found no foreign commits. FieldnotesDeploy was pulled first (1 behind).
+- Commit message in every repo: "architecture: the judgment layer's schema is gen-architecture
+  --help from the aac-tools toolchain (slice 026, ANS-91)". `push_one.sh` refuses any commit
+  ahead of origin whose subject lacks "slice 026".
+- Gate: `kc project test --project root` green. ArgoCDDeploy's own `kc project test` also passed
+  before its push.
+
 ### P9b — Deploy repos G–M point at `gen-architecture --help`
 
 Target: root
