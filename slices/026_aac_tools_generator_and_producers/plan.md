@@ -306,6 +306,34 @@ environment and relaunch the run. The restart brings the published aac-tools sid
 `modern-app` together. The round the relaunch dispatches finds the work done, appends the
 done-record and hands back `done`.
 
+**Done (P4).** ArgoCDTools `main` `eadf4ca` (P1–P3) is pushed, and `IaC/ArgoCDTools` #20 built it
+green on 2026-09-29, so `registry:5000/aac-tools:20` and `:latest` carry the new generator. The
+how-to and argo-migrate's `ARCHITECTURERC` name `gen-architecture --help` from the aac-tools
+toolchain as the judgment layer's schema (Ansible `5ef7adc` on `phase/026-P4`). The run stopped
+here for the operator's restart (Rulings D3, F3). This record was written before the stop, and the
+relaunched round only confirms it and hands back `done`.
+
+Later phases:
+- P9a–c: the pointer's wording in the how-to and in argo-migrate is "edit only the judgment
+  layer, architecture.yaml …, whose schema is what gen-architecture --help prints from the
+  aac-tools toolchain."
+- P10–P13: carrier clones already exist under `/work/scratch`: DHCPApp, ElectronicsInventory,
+  FieldnotesApp, IoTSupport, KubeCoder and ZigbeeControl. They were clean on 2026-09-29, along
+  with `/work/DockerImages`. FieldnotesApp carries `scripts/arch-validate.py` but is in none of
+  the grounding's class lists. HelmCharts was archived on 2026-09-28 and has no clone: leave it
+  alone.
+
+Record:
+- F1 check, 2026-09-29. All 69 git clones under `/work`, `/work/scratch` and
+  `/work/scratch/sweep031` were fetched. `git log --branches --not --remotes` is empty in every
+  one except two. ArgoCDTools holds only P1–P3 (`91b21aa`, `131e2b9`, `14d85ae`, `eadf4ca`), and
+  AnsibleSpecs holds this slice's plan records. Ansible `9021a2b` and `9edef16`, and DockerImages
+  `1c1945a`, are on origin/main.
+- ArgoCDTools origin/main was still `7836cca`, the P3 comparison's baseline, so there was no redo.
+- Both `.architecturerc` templates still parse to exactly `generated`/`sources`/`instructions`,
+  and the app-name warning stands unchanged (Ruling D2). argo-migrate's `architecture.yaml` header
+  template carries no schema pointer, and it stays that way.
+
 ### P5 — KubeCoderDeploy maps kube-coder-tunnel-reclaim
 
 Target: ../scratch/KubeCoderDeploy
