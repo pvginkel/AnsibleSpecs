@@ -236,14 +236,18 @@ S4 was witnessed and the test phase saw it happen. S5 and S7 are doc nits.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S1 — argo-migrate would write registry image digests, and the old comment, into a future migration's values
+### ~~S1 — argo-migrate would write registry image digests, and the old comment, into a future migration's values~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 `compose_values` (`Ansible/support/argo-migrate/argo_migrate.py:466-493`) copies what HelmCharts' deploy CLI passed, including the release's resolved image digests, into `config/<stage>/values.yaml`. It writes them under the comment that P7 and P10a–P10b correct. The only stages left to migrate are the parked ones: design-assistant ×4, open-webui and shell. DesignAssistant's images are in our registry. The plan leaves the tool alone, because R2 names the deploy repos and the comment, and slice 029's P7 is changing the same tool. A fix would have the tool pin the build tag, in the image's label series, that points at the release's digest, and stop when no tag does.
 
 **Consequence:** Migrating a parked app whose images are in our registry creates a digest pin again. Once dry-run is off, the nightly garbage collection can delete the image behind that pin, which is how Keycloak lost its image.
 
 **Provenance:** read — plan-writer, planning, r1, argo_migrate.py:466-493
-**Disposition:** Is this still an issue? Everything's migrated. I don't see a reason to use argo-migrate again. Is this about something else?
+**Disposition:** Is this still an issue? Everything's migrated. I don't see a reason to use argo-migrate again. Is this about something else? — answered: only the parked design-assistant, open-webui and shell stages. Operator: "Close S1" — closed
+
+</details>
 
 ### ~~S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit~~ — resolved by consult 1 (KubeCoderDeploy 20e0f71): the header now claims no default for the chart's eight image pins only; kc project lint and test green; struck by consult 1
 
