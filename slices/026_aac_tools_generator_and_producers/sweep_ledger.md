@@ -22,10 +22,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | CephCsiCephfsDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiCephfsDeploy` | pointer (`.architecturerc`) | `d35fe7e` | done: AaC/CephCsiCephfsDeploy #4 and AaC/Architecture #2244 green; ceph-csi-cephfs-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
 | CephCsiRbdDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiRbdDeploy` | pointer (`.architecturerc`) | `6e7a53b` | done: AaC/CephCsiRbdDeploy #4 and AaC/Architecture #2244 green; ceph-csi-rbd-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
 | ChartsDeploy | deploy | P9a | `/work/scratch/sweep031/ChartsDeploy` | pointer (`.architecturerc`) | `d4013c4` | done: AaC/ChartsDeploy #6 and AaC/Architecture #2244 green; charts-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
-| CloudnativePgDeploy | deploy | P9a | `/work/scratch/sweep031/CloudnativePgDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| CsiDriverSmbDeploy | deploy | P9a | `/work/scratch/sweep031/CsiDriverSmbDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| DnsmasqDeploy | deploy | P9a | `/work/scratch/sweep031/DnsmasqDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| ElasticsearchDeploy | deploy | P9a | `/work/scratch/sweep031/ElasticsearchDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| CloudnativePgDeploy | deploy | P9a | `/work/scratch/sweep031/CloudnativePgDeploy` | pointer (`.architecturerc`) | `fffff4f` | done: AaC/CloudnativePgDeploy #4 and AaC/Architecture #2246 green; cloudnative-pg-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
+| CsiDriverSmbDeploy | deploy | P9a | `/work/scratch/sweep031/CsiDriverSmbDeploy` | pointer (`.architecturerc`) | `c058a98` | done: AaC/CsiDriverSmbDeploy #4 and AaC/Architecture #2246 green; csi-driver-smb-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
+| DnsmasqDeploy | deploy | P9a | `/work/scratch/sweep031/DnsmasqDeploy` | pointer (`.architecturerc`) | `06909d8` | done: AaC/DnsmasqDeploy #29 and AaC/Architecture #2246 green; dnsmasq-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
+| ElasticsearchDeploy | deploy | P9a | `/work/scratch/sweep031/ElasticsearchDeploy` | pointer (`.architecturerc`) | `90ae062` | done: AaC/ElasticsearchDeploy #5 and AaC/Architecture #2246 green; elasticsearch-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
 | ElectronicsInventoryDeploy | deploy | P9a | `/work/scratch/sweep031/ElectronicsInventoryDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | ExternalSecretsDeploy | deploy | P9a | `/work/scratch/sweep031/ExternalSecretsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | FieldnotesDeploy | deploy | P9a | `/work/scratch/sweep031/FieldnotesDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
