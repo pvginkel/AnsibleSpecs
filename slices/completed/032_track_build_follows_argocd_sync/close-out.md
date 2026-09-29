@@ -185,18 +185,7 @@ The card-pass deploy rule for KubeCoderDeploy workers is 'the Argo sync of main 
 **Consequence:** A card-pass worker that pushes KubeCoderDeploy main has to work out for itself how to confirm kubecoder-dev synced, or reports the deploy unconfirmed.
 
 **Provenance:** read, code-writer, P6, r1, KubeCoderDeploy tree and card-pass SKILL.md
-**Disposition:** Don't know, please advise.
-
-### S4 — KubeCoder card-runner step 6 does not say what an exit-0 follow with no app rolled means (a handoff no Application follows, or one that pushed nothing) · minor
-
-card-runner.md:152-159 names two exit-0 outcomes: the follow section reporting each app rolled, and 'no handoff line' (the deploy rule decides). track_build.py also exits 0 with 'Result: nothing to wait for — no handoff pushed a commit an Application follows.' (:1289-1291, remark at :1309-1315), and with apps reported 'current' when a handoff pushed nothing. Step 6 applies to every repo, and it gives neither of these a rule.
-
-doc-writer, doc phase r1, 2026-09-27 — Closed in KubeCoder e.g. card-runner.md step 6: an exit 0 that rolled nothing — no handoff line, or a Result reading 'nothing to wait for' (a handoff that pushed nothing, or one no Application follows) — confirms no deploy, and the deploy rule alone decides. Commit 13ba3adc on KubeCoder main.
-
-**Consequence:** A card worker whose pin line matches no Argo CD Application gets exit 0 with nothing rolled, and may report the deploy confirmed; the tracker's own remark says to compare the Application's source.
-
-**Provenance:** read, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
-**Disposition:** Don't know, please advise.
+**Disposition:** Don't know, please advise. / Please apply your suggestions. — suggested card KC — KC-104
 
 ### S5 — FieldnotesApp docs/slice-test-plan.md §3 tracks its push as if the tracker stopped at the build · minor
 
@@ -205,16 +194,7 @@ Its command, `track_build.py FieldnotesApp --hash … --appear-timeout 120 --dia
 **Consequence:** A FieldnotesApp slice's test phase gets exit 4 after a green build and finds nothing on its page about it; the tracker's own Result line is its only guide.
 
 **Provenance:** read, doc-writer, doc phase, r1: FieldnotesApp docs/slice-test-plan.md:160-175, FieldnotesApp Jenkinsfile:189, FieldnotesApp .kubecoder/config.yaml
-**Disposition:** Don't know, please advise.
-
-### S6 — JenkinsPipelineUtils vars/cicd.groovy: nothing at writeVersionPins' echo says track_build.py parses the pin line · minor
-
-track_build.py reads the two echoes in writeVersionPins (vars/cicd.groovy:114 and :133) with a fixed pattern. Jenkinsfile.promote's handoff carries a comment saying so; the shared library's echoes carry none, and JenkinsPipelineUtils is live in every job on push. A one-line comment beside them would name the contract.
-
-**Consequence:** A reworded pin line leaves every Argo-deployed build with the tracker's 'no handoff line' remark and exit 0, with nothing followed into Argo CD.
-
-**Provenance:** read, doc-writer, doc phase, r1: JenkinsPipelineUtils vars/cicd.groovy:100-136
-**Disposition:** Don't know, please advise.
+**Disposition:** Don't know, please advise. / Please apply your suggestions. — suggested card FN — FN-19
 
 ### ~~S1 — Ansible docs/live-infra-access.md says the tracker is built into the dev image; it ships in the local-home image, without its tests · nit~~ — resolved by consult 1 (Ansible 94be15b): docs/live-infra-access.md now says the tracker ships in the local-home image, built from kube-coder-dev-local-home/ where its tests live, and names the Argo CD follow; kc project lint re-run, green; struck by consult 1
 
@@ -239,5 +219,33 @@ Argo CD v3.5 keeps each resource's health out of the Application (resourceHealth
 
 **Provenance:** witnessed — code-writer, P5, r1; DockerImages c797d33 track_build.py _JUDGED
 **Disposition:** Fix inline or close if not important. — closed: one app (CNPG Cluster) outside the judged kinds, and only the diagnosis of an already-failed roll is affected
+
+</details>
+
+### ~~S4 — KubeCoder card-runner step 6 does not say what an exit-0 follow with no app rolled means (a handoff no Application follows, or one that pushed nothing) · minor~~ — fixed in KubeCoder 13ba3adc (doc phase)
+
+<details><summary>struck — body kept for the record</summary>
+
+card-runner.md:152-159 names two exit-0 outcomes: the follow section reporting each app rolled, and 'no handoff line' (the deploy rule decides). track_build.py also exits 0 with 'Result: nothing to wait for — no handoff pushed a commit an Application follows.' (:1289-1291, remark at :1309-1315), and with apps reported 'current' when a handoff pushed nothing. Step 6 applies to every repo, and it gives neither of these a rule.
+
+doc-writer, doc phase r1, 2026-09-27 — Closed in KubeCoder e.g. card-runner.md step 6: an exit 0 that rolled nothing — no handoff line, or a Result reading 'nothing to wait for' (a handoff that pushed nothing, or one no Application follows) — confirms no deploy, and the deploy rule alone decides. Commit 13ba3adc on KubeCoder main.
+
+**Consequence:** A card worker whose pin line matches no Argo CD Application gets exit 0 with nothing rolled, and may report the deploy confirmed; the tracker's own remark says to compare the Application's source.
+
+**Provenance:** read, code-reviewer, P6, r1, phases/P6/code_review_r1.md F2
+**Disposition:** Don't know, please advise. / Please apply your suggestions. — suggested close — already fixed in KubeCoder 13ba3adc; struck
+
+</details>
+
+### ~~S6 — JenkinsPipelineUtils vars/cicd.groovy: nothing at writeVersionPins' echo says track_build.py parses the pin line · minor~~ — fixed in JenkinsPipelineUtils c95a33c
+
+<details><summary>struck — body kept for the record</summary>
+
+track_build.py reads the two echoes in writeVersionPins (vars/cicd.groovy:114 and :133) with a fixed pattern. Jenkinsfile.promote's handoff carries a comment saying so; the shared library's echoes carry none, and JenkinsPipelineUtils is live in every job on push. A one-line comment beside them would name the contract.
+
+**Consequence:** A reworded pin line leaves every Argo-deployed build with the tracker's 'no handoff line' remark and exit 0, with nothing followed into Argo CD.
+
+**Provenance:** read, doc-writer, doc phase, r1: JenkinsPipelineUtils vars/cicd.groovy:100-136
+**Disposition:** Don't know, please advise. / Please apply your suggestions. — suggested fix now — JenkinsPipelineUtils c95a33c; struck
 
 </details>
