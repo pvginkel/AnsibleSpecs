@@ -571,7 +571,7 @@ Record:
 - Gate: `kc project test --project root` green. ArgoCDDeploy's own `kc project test` also passed
   before its push.
 
-### P9b — Deploy repos G–M point at `gen-architecture --help`
+### P9b — Deploy repos G–M point at `gen-architecture --help` ✅ DONE 2026-09-29
 
 Target: root
 
