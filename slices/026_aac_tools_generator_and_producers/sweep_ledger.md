@@ -17,7 +17,7 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 
 | Repo | Class | Phase | Clone | Change | Pushed sha | Outcome |
 |---|---|---|---|---|---|---|
-| ArgoCDDeploy | deploy | P9a | `/work/ArgoCDDeploy` | pointer (`.architecturerc` + `architecture.yaml` header); carries P6 `6bb4956` | — | not yet pushed |
+| ArgoCDDeploy | deploy | P9a | `/work/ArgoCDDeploy` | pointer (`.architecturerc` + `architecture.yaml` header); carries P6 `6bb4956` | `65872b9` | done (canary): AaC/ArgoCDDeploy #17 and AaC/Architecture #2242 green; `releases` Synced/Healthy at the sha; `argocd-prd` Healthy, OutOfSync on `Deployment/argocd-prd-webhook-relay` only, as before the push (manual sync, D3); site pin `2771461` rolled; published dataset carries P6's 3 redis Serving edges |
 | CalendarSupportDeploy | deploy | P9a | `/work/scratch/sweep031/CalendarSupportDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | CephCsiCephfsDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiCephfsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | CephCsiRbdDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiRbdDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
