@@ -268,7 +268,7 @@ build history).
   KeycloakDeploy and the rest. Clone them under `/tmp` (`GH_TOKEN` has repo scope), never into
   `/work`.
 
-### P1 — kaniko2 takes the tracking tag explicitly, and every tag it pushes is the label or in its build series
+### P1 — kaniko2 takes the tracking tag explicitly, and every tag it pushes is the label or in its build series ✅ DONE 2026-09-29
 
 Target: ../JenkinsPipelineUtils
 
