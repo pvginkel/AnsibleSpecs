@@ -432,6 +432,27 @@ generator work.
 - The repo's own gate proves it with the published generator.
 - The push rides P9c.
 
+**Done (P7).** PrometheusDeploy's `alertmanager` entry takes `product: ss:alertmanager` and
+`served_by: ["svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48"]` (`e761059` on
+`phase/026-P7` in `/work/scratch/PrometheusDeploy`, unpushed).
+
+Later phases:
+- P9c: PrometheusDeploy has two clones. Edit and push `/work/scratch/PrometheusDeploy`, whose
+  branch carries P7's commit on top of origin/main `55a4bce`, not
+  `/work/scratch/sweep031/PrometheusDeploy`. Its `architecture.yaml` header names no schema, so
+  only `.architecturerc` takes the pointer.
+- P9c: after the push, `AaC/PrometheusDeploy`'s artifact carries one new relation,
+  `rel:prometheus-prd-prometheus-prd-alertmanager-alertmanager-servedby-telegram-bot-api`
+  (Serving, `svc:telegram-bot-api,…` → `ss:prometheus-prd-prometheus-prd-alertmanager-alertmanager,…`).
+
+Record:
+- The published sidecar's prd generation gains exactly that relation (31 → 32 relations, 16
+  elements unchanged); `arch-validate` passes; `kc project test` is green.
+- The phase branch was fast-forwarded to origin/main `55a4bce` (slice 031's values comment)
+  before the edit.
+- The header's "copied verbatim from HelmCharts' charts/prometheus/architecture.yaml" clause was
+  dropped: the served_by line makes it untrue.
+
 ### P8 — Architecture points producers at the toolchain and the central update at `--help`
 
 Target: ../Architecture
@@ -497,7 +518,7 @@ carries P5's commit, not in its sweep031 clone.
 Target: root
 
 As P9a, for the deploy repos whose names start N–Z, resuming from the ledger. PrometheusDeploy's
-push carries P7's commit. WebathomeOrgDeploy races its own pin loop (see the attachment).
+push carries P7's commit: edit and push `/work/scratch/PrometheusDeploy`, not its sweep031 clone. WebathomeOrgDeploy races its own pin loop (see the attachment).
 
 ### P10 — The carriers are enumerated and assigned, and Ansible validates with the toolchain
 
