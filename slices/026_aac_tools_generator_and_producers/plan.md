@@ -604,7 +604,7 @@ Record:
 - Commit message as in P9a. KubeCoderDeploy's also names the `architecture.yaml` header.
 - Gate: `kc project test --project root` green.
 
-### P9c — Deploy repos N–Z point at `gen-architecture --help`
+### P9c — Deploy repos N–Z point at `gen-architecture --help` ✅ DONE 2026-09-29
 
 Target: root
 
