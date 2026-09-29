@@ -360,7 +360,7 @@ Record:
 - `cicd.writeVersionPins` patches the quoted `":2565"` line in place (the path resolves through
   the comment above it).
 
-### P3 — ArgoCDDeploy's relay pin moves into its production stage values
+### P3 — ArgoCDDeploy's relay pin moves into its production stage values ✅ DONE 2026-09-29
 
 Target: ../ArgoCDDeploy
 
