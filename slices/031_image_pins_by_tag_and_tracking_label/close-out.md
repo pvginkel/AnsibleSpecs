@@ -52,6 +52,15 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
+### B1 — version-poller warns about only the newest promoted copy per label, so a stale prd env promoted from the same label as a fresher uat env goes unwarned · minor
+
+DockerImages version-poller/app/poller.py:159-170 (P5, 1a69ff9) keeps one promoted copy per tracking-tag label, the one with the newest rebuild-at, and warns only about it. The old code warned about each stale copy on its own. DesignAssistant's uat-* and prd-* copies both carry tst-latest. With uat-latest fresh and prd-latest 60 days stale, the old code warned about prd-latest and the new code is silent (repro witnessed). The live dry run shows the same collapse: the old code warned about design-assistant:prd-latest and :uat-latest, the new code only about :uat-17. KubeCoder, with a single promoted env, is unaffected, and the collapse keeps KubeCoder's accumulating prd-<n> copies from each warning.
+
+**Consequence:** For an app that promotes one build into two environments (today only DesignAssistant, on the archived HelmCharts path), the poller log no longer says when the later environment has gone stale while the earlier one is fresh. Nothing triggers differently.
+
+**Provenance:** witnessed — code-reviewer, P5, round 1, phases/P5/code_review_r1.md F1
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
@@ -69,6 +78,15 @@ After P2 and P6, DockerImages' builds write the tunnel-reclaim pin on KubeCoderD
 **Provenance:** read — plan-writer, planning, r1, KubeCoderDeploy chart/values.yaml:13-18 and the live registry's tag list
 **Disposition:**
 
+### Q2 — Four registry repos hold a dangling tag, and under the label rule it stops every deletion in its repo · minor
+
+tags/list names the tag but its manifest returns 404: architecture_viewer:1540, backup-server:1890, dnsmasq-config-generator:1806, dnsmasq-management-api:1806. A tag with no image config carries no label, so the label rule keeps it, and the fail-closed shared-digest guard (kept for argo-cd D47) then skips every deletion in that repo, because the kept tag's digest does not resolve. The old tag-shape rule read these tags as history and skipped only them. The P4 dry run against the live registry shows it: architecture_viewer has 231 builds in its latest series and 221 over the cap, and none would be deleted. The operator decides: remove the dangling tag links in the registry's storage, or rule that a kept tag whose manifest returns 404 protects nothing and does not stop the repo.
+
+**Consequence:** Once dry-run is off, these four repos are never cleaned: architecture_viewer keeps its 221 over-cap builds and keeps growing. Nothing is deleted wrongly.
+
+**Provenance:** witnessed, code-writer, P4, r1, phases/P4/cleanup-dryrun-new.log
+**Disposition:**
+
 ## Suggestions
 
 Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
@@ -83,4 +101,22 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 **Consequence:** Migrating a parked app whose images are in our registry creates a digest pin again. Once dry-run is off, the nightly garbage collection can delete the image behind that pin, which is how Keycloak lost its image.
 
 **Provenance:** read — plan-writer, planning, r1, argo_migrate.py:466-493
+**Disposition:**
+
+### S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit
+
+chart/values.yaml:7 ('The chart names no default for any image (D47): every image pin lives in config/<stage>/values.yaml') is contradicted by the same file's image defaults at :112 (registry:5000/kube-coder-dev:latest), :164 (postgres:18), :203, :234, :262 and :294. The replaced comment made the claim only for Build-Main's seven pins.
+
+**Consequence:** none — a comment that overstates its scope; no rendered object changes
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### S3 — KeycloakDeploy pulls its image with imagePullPolicy: Always, which a per-build tag no longer needs · minor
+
+KeycloakDeploy chart/templates/keycloak-deployment.yaml:29-30 runs registry:5000/keycloak{{ .Values.images.keycloak }} with imagePullPolicy: Always. Once the keycloak build the test phase starts (step 4) writes the per-build tag 26.7.3-postgres-health-ispn-<build>, the image behind the pin never changes, so Always only makes every pod start ask the registry first. With Always, a registry that is not serving fails the pull even when the image is cached on the node; IfNotPresent would start from the cache. P2 moved KubeCoderDeploy's tunnel-reclaim to IfNotPresent with its tag pin; no phase of this slice touches Keycloak's chart.
+
+**Consequence:** After a power cut, Keycloak cannot start until the registry serves again, even on a node that still holds its image. DHCP depended on Keycloak in the 2026-09-25 outage.
+
+**Provenance:** read, executor, P6, r1, KeycloakDeploy main chart/templates/keycloak-deployment.yaml
 **Disposition:**

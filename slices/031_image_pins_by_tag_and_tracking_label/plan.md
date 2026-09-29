@@ -565,6 +565,36 @@ Target: ../DockerImages
   - Every entry names a path its values file already holds with P2 and P3 merged. The pin stage
     fails on any other path (`JenkinsPipelineUtils/vars/cicd.groovy:16-17`).
 
+**Done (P6).** DockerImages `dd8e7f4` (`phase/031-P6`, committed, not pushed): a matrix build
+pushes `<tag>-<build>` and `<tag>` with `trackingTag: <tag>`, and trivy scans the per-build tag.
+The pin stage takes `builtTags`, which maps each built image to the per-build tag it pushed
+(`<build>`, or `<tag>-<build>` for a matrix image). It pins every built image that has a
+`deploy-pins.json`, matrix images included. The build fails at `Cloning repo`, before any push,
+when a pinned image's `build-matrix.json` lists more than one variant.
+`kube-coder-tunnel-reclaim/deploy-pins.json` is new: KubeCoderDeploy, both stages,
+`images.tunnelReclaim`. `webhook-relay`'s list gains ArgoCDDeploy `config/prd/values.yaml`
+`relay.image`. `kc project test` green.
+
+Later phases:
+- Doc phase: DockerImages `README.md:19-21` still says "a matrix variant is pushed under its own
+  tag".
+- Test phase, step 3: the push rebuilds kube-coder-tunnel-reclaim and webhook-relay, because their
+  pin lists changed. No matrix image builds in step 3. KubeCoderDeploy gets both stage files in
+  one commit.
+- Test phase, step 4: the keycloak build writes `:26.7.3-postgres-health-ispn-<build>` into
+  `images.keycloak` in both KeycloakDeploy stages, one commit. The chart concatenates it onto
+  `registry:5000/keycloak` (`chart/templates/keycloak-deployment.yaml:29`).
+- Test phase: from the push on, every rebuild of the six other matrix images also leaves a
+  `<tag>-<build>` tag in the registry. Nothing pins these tags.
+
+- Seven `*/build-matrix.json` exist, each with one variant. modern-app-dev-playwright's is gone,
+  so the "other seven" in this phase's text are six.
+- DockerImages has no harness for its Jenkinsfile. The Jenkinsfile parses under groovy 2.4. The
+  check ran `collectPins` against the real pin lists, with `fileExists` and `readJSON` stubbed.
+  It pinned KeycloakDeploy's two stages, KubeCoderDeploy's two stages, FieldnotesDeploy and
+  ArgoCDDeploy, and skipped an image that has no list. P2's `3de9ea8` and P3's `0bacce1` hold
+  the paths it writes.
+
 ### P7 — RegistryDeploy: cleanup runs again, nightly, in dry-run
 
 Target: ../scratch/RegistryDeploy
