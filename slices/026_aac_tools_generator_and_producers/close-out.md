@@ -66,6 +66,17 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
+### N1 — R1's generator fix also removes a duplicate service from five other deploy repos' published models
+
+The same bug R1 names for KubeCoder (a pod with two in-house apps each realizing a service makes gen-architecture mint a duplicate service for the host) already hit five other producers. With the fix, each drops its minted svc:<ns>-<service> and its Realization, and the host's interface is assigned to the routed container's own in-house service instead: electronics-inventory-deploy (parts.ginbov.nl -> svc:electronics-inventory-ui-web), fieldnotes-deploy (fieldnotes.home/fieldnotes -> svc:fieldnotes-ui-web; fieldnotes-hooks.webathome.org -> svc:webhook-relay), iot-deploy (iot.ginbov.nl -> svc:iotsupport-ui-web), scantopdf-deploy (scantopdf.home -> svc:scantopdf-api), zigbee2mqtt-deploy (z2m.webathome.org -> svc:zigbee-control-ui-web). They land on each repo's next AaC build after aac-tools is published.
+
+code-writer P1 r1, 2026-09-29 — Checked 2026-09-29: in the live dataset each of the six minted svc: ids appears only in its own producer's element, Realization and Assignment(s), and no file in /work/Architecture names one, so nothing dangles today; the consequence is limited to the ids disappearing.
+
+**Consequence:** The published model loses five minted per-deployment services and their UUIDs; anything hand-authored elsewhere that references one of those svc: ids now dangles.
+
+**Provenance:** witnessed, code-writer, P1, r1, old-vs-new generation of the 26 deploy repos with in-house images (/work/scratch/p1-cmp/out)
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence

@@ -91,6 +91,41 @@ mapped (its product realizes its own service in DockerImages), `kubecoder.home` 
 reference `svc:kubecoder-controller-api` and mint nothing. The mapping itself is P5's. Prove the
 fix here against a scratch copy of the judgment layer. The phase's tests go in aac-tools' suite.
 
+**Done (P1).** `reconcile_exposed_services` resolves the routed container before it picks the
+in-house service, and the pick follows that container (ArgoCDTools `91b21aa` on `phase/026-P1`).
+
+Later phases:
+- P3: the new generator changes exactly five deploy repos' prd output, all P1-intended. Each
+  drops a minted `svc:<ns>-<service>` and its `-provides-` Realization, and assigns the host to
+  the routed container's in-house service: electronics-inventory, fieldnotes (both hosts, and the
+  hooks host → `svc:webhook-relay`), iot, scantopdf, zigbee2mqtt. KubeCoderDeploy unmapped is
+  byte-identical.
+- P3: the contract states the pick: an `exposures:` entry names the container outright; a
+  port-routed container that realizes no in-house service, or no route at all, falls back to the
+  pod's single in-house service (non-init containers only).
+- P3: the deploy repos are not at `/work/<Name>Deploy`. 47 are slice 031's clones in
+  `/work/scratch/sweep031/`, and RegistryDeploy is `/work/scratch/RegistryDeploy`. `/work/scratch/p1-cmp/run.sh`
+  regenerates copies of them with two generator scripts under `cexec iac`.
+
+Record:
+- The pick, settled beyond the plan's text: an `exposures:` container is final, and it mints
+  when that container realizes no in-house service. GitSync names upstream `gitblit-app`, and a
+  pod fallback would take the gitblit-mcp sidecar's service. A port-routed front door with no
+  in-house service of its own falls back to the pod's single one. Strict scoping would have
+  minted new services for jenkins-mcp and trello-mcp (an `auth` proxy in front) and for
+  mydownloads (gluetun holds the pod's ports). No route: the pod's single one, as before.
+- An `exposures:` entry naming a missing container now mints and reports its gap, where it used
+  to reference the pod's single in-house service. No estate repo hits this.
+- Workloads lose `products`, and backing entries carry `product`.
+- Proof on a scratch KubeCoderDeploy with the mapping: the old generator mints
+  `svc:kubecoder-prd-kubecoder-controller`. The new one references `svc:kubecoder-controller-api`,
+  mints nothing and prints no gap. Against today's unmapped output, the only differences are one
+  added Specialization (tunnel-reclaim → `app:kube-coder-tunnel-reclaim`) and the gap line gone.
+- Comparison: the 26 deploy repos whose images map an `app:` product, old `7836cca` against new,
+  with the live dataset and the DockerImages overlay. 21 are byte-identical, 5 differ as listed,
+  and none fails. An `ss:`-only repo cannot change.
+- Tests: `InHouseExposureTests` (6) in `tests/test_gen_architecture.py`. No test deleted.
+
 ### P2 — The judgment layer scopes an image entry to containers, and env values sourced from a ConfigMap resolve
 
 Target: aac-tools
@@ -133,6 +168,8 @@ from `architecture.yaml`, including:
   unresolved, so it takes a composite id, as YoutrackDeploy's and CephCsiRbdDeploy's
   `architecture.yaml` show.
 - P2's container scoping.
+- P1's in-house pick, as its done-record states it. `exposures:` now also decides which
+  in-house service a host references.
 
 Today `--help` prints usage and a one-line description (`parse_args`, `:789-812`), and the
 contract lives in the module docstring (`:2-107`). The contract `--help` prints and the one the
@@ -146,7 +183,8 @@ twice:
 
 That is 48 repos. One of them publishes two stages, which makes 49 `*-deploy` entries in
 Architecture's `pipeline-producers.yaml`. Account for every difference as intended, meaning P1's
-in-house pick or a ConfigMap-sourced value P2 now resolves. No repo that generates today may
+in-house pick (the five repos its done-record lists) or a ConfigMap-sourced value P2 now
+resolves. No repo that generates today may
 fail with the new generator. A value that now resolves but places nowhere is a hard fail, and
 counts as a failure. Record the comparison and its accounting in the done-record. An unintended
 difference is fixed here or stops the phase.
