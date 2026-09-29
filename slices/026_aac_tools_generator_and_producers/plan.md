@@ -484,6 +484,36 @@ setup for it, and the phase runs Architecture's `kc project setup` before its ga
 `cexec modern-app` reports the tool unavailable, the restart has not happened, and the phase is
 blocked rather than landed ungated.
 
+**Done (P8).** Architecture's producer guidance runs `arch-validate` from the aac-tools
+toolchain, and no copy instruction is left. The update-architecture agent reads a generated
+producer's contract from `cexec aac-tools gen-architecture --help` when its sources lack the
+generator. `.kubecoder/config.yaml` declares `- use: aac-tools`. All of it is `ae5107f` on
+`phase/026-P8` in `/work/Architecture`, unpushed.
+
+Later phases:
+- P10–P13b: a migrated carrier runs the Jenkins form the producer manual now shows,
+  `container('aac-tools') { sh 'arch-validate …' }` in a pod that declares
+  `containerTemplates.aac_tools('aac-tools')`. Its KubeCoder form is `cexec aac-tools
+  arch-validate …`.
+- Test phase: the Architecture push runs `AaC/Architecture` and redeploys the site through
+  WebathomeOrgDeploy (close-out B1).
+
+Record:
+- The phase covered more than the manual and the seed skill. These also told producers to copy
+  the script or keep a copy, and now name the toolchain:
+  - `USAGE.md`: the producer-facing CLI section, served at the site root;
+  - `README.md:168`;
+  - `docs/architecture-update.md:199-204`.
+- These stay as they were: the seed skill's in-session `.claude/architecture/arch-validate.py`
+  runs (Step 5 and the "Read first" note), the starter skeleton's header comment, and
+  `Jenkinsfile.ha-fleet`. Each runs the staged or canonical script, so none is a copy.
+- The agent's contract read is a separate item 4 under Inputs. `--help` "renders nothing",
+  so it does not conflict with the rule that the agent never runs the generator. If `--help`
+  fails, the agent stops, and `stopped: <reason>` now lists "the contract missing".
+- `cexec` passes stdin (`cat … | cexec aac-tools arch-validate -`) and `env VAR=…` overrides.
+  Both were witnessed before the manual and USAGE.md showed them.
+- Gate: `kc project setup` then `kc project test`, all green.
+
 ### P9a — Deploy repos A–F point at `gen-architecture --help`
 
 Target: root
