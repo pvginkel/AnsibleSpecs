@@ -454,7 +454,7 @@ Record:
 - The header's "copied verbatim from HelmCharts' charts/prometheus/architecture.yaml" clause was
   dropped: the served_by line makes it untrue.
 
-### P8 — Architecture points producers at the toolchain and the central update at `--help`
+### P8 — Architecture points producers at the toolchain and the central update at `--help` ✅ DONE 2026-09-29
 
 Target: ../Architecture
 
