@@ -70,7 +70,7 @@ cross-cutting — slice.md's asks span ArgoCDTools' generator and its annotation
 
   Every deploy repo is pushed before any carrier whose app build pins into it. P10 enumerates the carriers and assigns them to P11–P13b before any carrier is pushed.
 
-### P1 — The generator takes a Service's in-house service from the container behind it
+### P1 — The generator takes a Service's in-house service from the container behind it ✅ DONE 2026-09-29
 
 Target: aac-tools
 
