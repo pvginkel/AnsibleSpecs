@@ -124,7 +124,7 @@ Record:
 - Comparison: the 26 deploy repos whose images map an `app:` product, old `7836cca` against new,
   with the live dataset and the DockerImages overlay. 21 are byte-identical, 5 differ as listed,
   and none fails. An `ss:`-only repo cannot change.
-- Tests: `InHouseExposureTests` (6) in `tests/test_gen_architecture.py`. No test deleted.
+- Tests: `InHouseExposureTests` (7) in `tests/test_gen_architecture.py`. No test deleted.
 
 ### P2 — The judgment layer scopes an image entry to containers, and env values sourced from a ConfigMap resolve
 
