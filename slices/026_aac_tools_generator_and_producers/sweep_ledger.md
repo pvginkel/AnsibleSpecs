@@ -18,10 +18,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | Repo | Class | Phase | Clone | Change | Pushed sha | Outcome |
 |---|---|---|---|---|---|---|
 | ArgoCDDeploy | deploy | P9a | `/work/ArgoCDDeploy` | pointer (`.architecturerc` + `architecture.yaml` header); carries P6 `6bb4956` | `65872b9` | done (canary): AaC/ArgoCDDeploy #17 and AaC/Architecture #2242 green; `releases` Synced/Healthy at the sha; `argocd-prd` Healthy, OutOfSync on `Deployment/argocd-prd-webhook-relay` only, as before the push (manual sync, D3); site pin `2771461` rolled; published dataset carries P6's 3 redis Serving edges |
-| CalendarSupportDeploy | deploy | P9a | `/work/scratch/sweep031/CalendarSupportDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| CephCsiCephfsDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiCephfsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| CephCsiRbdDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiRbdDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| ChartsDeploy | deploy | P9a | `/work/scratch/sweep031/ChartsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| CalendarSupportDeploy | deploy | P9a | `/work/scratch/sweep031/CalendarSupportDeploy` | pointer (`.architecturerc`) | `7f41678` | done: AaC/CalendarSupportDeploy #7 and AaC/Architecture #2244 green; calendar-support-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
+| CephCsiCephfsDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiCephfsDeploy` | pointer (`.architecturerc`) | `d35fe7e` | done: AaC/CephCsiCephfsDeploy #4 and AaC/Architecture #2244 green; ceph-csi-cephfs-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
+| CephCsiRbdDeploy | deploy | P9a | `/work/scratch/sweep031/CephCsiRbdDeploy` | pointer (`.architecturerc`) | `6e7a53b` | done: AaC/CephCsiRbdDeploy #4 and AaC/Architecture #2244 green; ceph-csi-rbd-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
+| ChartsDeploy | deploy | P9a | `/work/scratch/sweep031/ChartsDeploy` | pointer (`.architecturerc`) | `d4013c4` | done: AaC/ChartsDeploy #6 and AaC/Architecture #2244 green; charts-prd: at=True sync=Synced health=Healthy; site pin `108251a` rolled |
 | CloudnativePgDeploy | deploy | P9a | `/work/scratch/sweep031/CloudnativePgDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | CsiDriverSmbDeploy | deploy | P9a | `/work/scratch/sweep031/CsiDriverSmbDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | DnsmasqDeploy | deploy | P9a | `/work/scratch/sweep031/DnsmasqDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
