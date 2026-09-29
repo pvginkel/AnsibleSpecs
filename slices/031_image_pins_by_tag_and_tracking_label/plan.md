@@ -542,7 +542,7 @@ Later phases:
     - staleness names each label's newest copy (`design-assistant:uat-17`), not each `*-latest`.
   - A poll reads all 1,708 tag configs: 9 s, where it took 1 s.
 
-### P6 — Matrix builds push a per-build tag, and the pin lists reach the unrefreshed pins
+### P6 — Matrix builds push a per-build tag, and the pin lists reach the unrefreshed pins ✅ DONE 2026-09-29
 
 Target: ../DockerImages
 
