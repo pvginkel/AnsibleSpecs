@@ -155,6 +155,33 @@ Constraints the code imposes:
 
 The phase's tests go in aac-tools' suite.
 
+**Done (P2).** An image entry's `containers:` scopes `realizes` and `upstream` to named
+containers, and a `valueFrom.configMapKeyRef` env value resolves against the render's ConfigMap
+(ArgoCDTools `14d85ae` on `phase/026-P2`).
+
+Later phases:
+- P3: P2 changes no deploy repo's output: all 49 stages byte-identical to P1's head, stderr too.
+  The module docstring already carries `containers:` (the `argocd` example) and the
+  ConfigMap-sourced env (boundBy paragraph); `--help` prints them as they are.
+- P3: each `Jenkinsfile.architecture` names one stage (48). The 49th, KeycloakDeploy's
+  `--stage dev --producer keycloak-dev-deploy`, is in none: run it by name.
+  `/work/scratch/p2-cmp/run.sh` covers the other 48, RegistryDeploy included.
+- P6, proven on a scratch ArgoCDDeploy: `argocd: {product: ss:argo-cd, realizes:
+  [cap:configuration-management], containers: {copyutil: {realizes: []}, secret-init:
+  {realizes: []}, server: {upstream: W}, repo-server: {upstream: W}, application-controller:
+  {upstream: W}}}`, `W = {env: REDIS_SERVER, providers: [redis]}`. Five controllers realize the
+  capability (those three, applicationset- and notifications-controller); redis serves the three.
+
+Record:
+- A key a container's entry sets replaces the image's for it; an omitted key, and every unnamed
+  container, takes the image's. Any key but `realizes`/`upstream` fails the run. A scoped name
+  no container of the image has is a `gap:`, not a failure: the layer serves every stage.
+- ConfigMaps are collected before the workload loop, keyed `(ns, name)`; `mcpClients` reads the
+  same map. `envFrom` is not resolved. The upstream unset-var error now reads "is not set on
+  the container to a literal or ConfigMap-sourced value".
+- Tests: `ContainerScopeTests` (5), `ConfigMapEnvTests` (4), running `main()` over a trimmed
+  Argo CD render with `render` and `load_dataset` mocked. No test deleted.
+
 ### P3 — `gen-architecture --help` prints the complete annotation contract, and the new generator is proven on every deploy repo
 
 Target: aac-tools
