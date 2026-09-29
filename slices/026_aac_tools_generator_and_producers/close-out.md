@@ -65,6 +65,15 @@ P11 moved KitchenDisplay's `lint` gate from `./scripts/arch-validate.py` to `cex
 **Provenance:** witnessed: executor, P11, r1, KitchenDisplay 067308b
 **Disposition:**
 
+### A5 — Restart the Ginbov, NewsFilter, Webathome, ScanToPdf and MyDownloads KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+
+P12a moved the `lint` gate of Ginbov, NewsFilter, Webathome, ScanToPdfServer and MyDownloadsServer from `./scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in the environment each gate runs in. For Ginbov, NewsFilter and Webathome that is their own `.kubecoder/config.yaml`. ScanToPdfServer and MyDownloadsServer have no environment of their own. They are worked in the environments of the ScanToPdf and MyDownloads packager repos, whose `.kubecoder/config.yaml` gains the declaration (ScanToPdf `def421e`, MyDownloads `7a66719`). That also covers ScanToPdfClient's and MyDownloadsClient's gates, which move in P12b. A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). GitblitMCPServer's environment already declared aac-tools, and GitblitMCPSupportPlugin is worked in it. YouTrackMCPServer's gates never ran the script.
+
+**Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
+
+**Provenance:** witnessed: executor, P12a, r1, sweep_ledger.md P12a rows
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
