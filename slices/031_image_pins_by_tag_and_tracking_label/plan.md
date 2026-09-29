@@ -595,7 +595,7 @@ Later phases:
   ArgoCDDeploy, and skipped an image that has no list. P2's `3de9ea8` and P3's `0bacce1` hold
   the paths it writes.
 
-### P7 — RegistryDeploy: cleanup runs again, nightly, in dry-run
+### P7 — RegistryDeploy: cleanup runs again, nightly, in dry-run ✅ DONE 2026-09-29
 
 Target: ../scratch/RegistryDeploy
 
@@ -632,6 +632,10 @@ Later phases:
   `registryCleanup:` in `config/prd/values.yaml`. The render gate accepts either value.
 - Test phase, step 6: the old string is the two-line `# Passed by HelmCharts' deploy CLI …
   (argo-cd D53).` comment. Its replacement is those three lines, verbatim.
+- Test phase, step 5 (review r1 F1): the first run does not wait for 03:30. The live CronJob has
+  no `startingDeadlineSeconds` and has missed schedules since 2026-09-25T01:30Z, so the sync that
+  drops `suspend` starts one Job at once, on whatever image is pinned then. With
+  `concurrencyPolicy: Allow`, that Job can overlap the hand-started run.
 - P9: the comment cites argo-cd D53 for "a per-build tag, never … a digest", so D53 must say it.
 
 - Why the new top-level key is safe: `cicd.writeVersionPins` resolves full dotted paths by
