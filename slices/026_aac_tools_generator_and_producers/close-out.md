@@ -56,6 +56,15 @@ V09 — A central architecture update session on a deploy repo runs `gen-archite
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Disposition:**
 
+### A4 — Restart KitchenDisplay's KubeCoder environment so its lint gate finds the aac-tools sidecar (operator)
+
+P11 moved KitchenDisplay's `lint` gate from `./scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml` and declared `- use: aac-tools` in its `.kubecoder/config.yaml` (KitchenDisplay `067308b`, pushed). A running environment picks the new toolchain up only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). DockerImages' and KubeCoder's gates need no restart: DockerImages' gate is guarded and runs in the Ansible environment, which declares aac-tools, and KubeCoder's config already declared it.
+
+**Consequence:** Until that environment restarts, `kc project lint` in it fails at the first statement, because `cexec aac-tools` finds no sidecar.
+
+**Provenance:** witnessed: executor, P11, r1, KitchenDisplay 067308b
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -107,9 +116,20 @@ The Grounding classed KitchenDisplay as restarting a Raspberry Pi service on eve
 
 ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient build no image themselves. But each Jenkinsfile runs `build job:` (`wait: false`) on `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, and MyDownloadsClient also on `Webathome`. Each of those runs kaniko and pins, with no guard, into ScantopdfDeploy, MediaDeploy or WebathomeOrgDeploy. The `scantopdf-prd`, `media-prd` and `webathome-org-prd` Applications auto-sync. Jenkins records the chain on real pushes: ScanToPdf #33 and #34, MyDownloads #98 and #100, and Webathome #236 and #238 were started by these carriers. The four moved from P11 to P12a–b and now go through the prd health gate. Ruling D1's trade-off named twelve prd apps. With FieldnotesApp (P10 r1), the sweep also restarts scantopdf and media.
 
+code-reviewer, P10, r2, 2026-09-30 — Correction: scantopdf-prd and media-prd each restart twice, not once. ScanToPdfServer (P12a) and ScanToPdfClient (P12b) each start a ScanToPdf build that pins ScantopdfDeploy. MyDownloadsServer (P12a) and MyDownloadsClient (P12b) each start a MyDownloads build that pins MediaDeploy. (phases/P10/code_review_r2.md F1)
+
 **Consequence:** scantopdf-prd, media-prd and FieldnotesApp's app restart once on unchanged code during P12a–b, on top of the twelve production apps Ruling D1's trade-off named.
 
 **Provenance:** witnessed, code-writer, P10, fix round r2, Jenkins build causes and the GitHub Jenkinsfiles (phases/P10/code_review_r1.md F1)
+**Disposition:**
+
+### N5 — KubeCoder was pushed without KubeCoder's devlock, which this environment cannot reach
+
+KubeCoder's deploy-operations.md says a hand-driven push that rolls `kubecoder@dev` takes the devlock first. The lease is a flock on the shared KubeCoderSpecs mount (`scripts/devlock.sh`), and this environment has only a scratch clone of KubeCoderSpecs, whose lock file is a different inode. P11 pushed under Ruling D1 after checking proxies instead: the last `KubeCoder/Build-Main` build was #557 on 2026-09-28 19:29 UTC, no build was running, and KubeCoderSpecs' latest commit (2026-09-28 21:28 +0200) closes out slice 236, with no slice in a test or doc phase on origin. The push rebased onto origin/main, so the image it built is a superset of what dev ran.
+
+**Consequence:** none, if no KubeCoder session was validating on dev at the time. Otherwise that session saw its dev pods roll once on unchanged code.
+
+**Provenance:** witnessed: executor, P11, r1, /work/scratch/p9-sweep/logs/carrier-KubeCoder.log
 **Disposition:**
 
 ## Bugs

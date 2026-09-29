@@ -738,6 +738,35 @@ carrier describes. The class canary is pushed alone first, then the rest in smal
      push. If it has been enabled, KitchenDisplay restarts a service on the Pi. Then P11 does not
      push it: move its row to P13b, where it goes last.
 
+**Done (P11).** DockerImages, KubeCoder and KitchenDisplay run the toolchain's `arch-validate`
+wherever they ran the copy, and their copies are deleted. Each is pushed and done: DockerImages
+`df61622` as the canary, then KubeCoder `5bbf14b` and KitchenDisplay `067308b`. KitchenDisplay
+stayed here, because `Firmware/KitchenDisplay` was still disabled. The Ansible branch carries no
+commit.
+
+Later phases:
+- P12a–P13b: `/work/scratch/p9-sweep/push_carrier.sh <Repo> <clone> [<app-job>…]` pushes a
+  carrier and waits for each named job and the builds its console names. Then it waits for every
+  `<Repo> <sha> pins` they print to roll (`argo_check.py`), then for `AaC/<Repo>`, the collector
+  and the site pin. It does not read a flash: grep the firmware console for
+  `Success: Uploaded firmware version`.
+- P12a–P13b: a `SEED-NOTES.md` line recording the seed-time `./scripts/arch-validate.py … → OK`
+  run is history, and it stays. An instruction to run the script names
+  `cexec aac-tools arch-validate`.
+
+Record:
+- Every copy matched the canonical script or differed in lint only. Each Jenkinsfile's `python`
+  container became `containerTemplates.aac_tools('aac-tools')`, DockerImages' copy loop included.
+- Gates: DockerImages' guarded gate runs `cexec aac-tools arch-validate`, green unguarded here.
+  KubeCoder had none that ran the script. KitchenDisplay's `lint` moved, and its config declares
+  `aac-tools` (restart: close-out A4).
+- Instructions moved: DockerImages' `.architecturerc` and `docs/alert-manager/plan.md` B8
+  (unshipped), and KubeCoder's `docs/operations/pipeline-dependencies.md`.
+- KubeCoder's devlock is on a mount this environment lacks. P11 checked for an active dev session
+  instead (close-out N5).
+- GitHub's trees of the three `main`s hold no `arch-validate.py`. Builds and rollouts:
+  `sweep_ledger.md`.
+
 ### P12a — Carriers whose push redeploys production, first part
 
 Target: root
@@ -852,8 +881,6 @@ As P13a, for the carriers P10 assigns here, resuming from the ledger.
 1. CalendarDisplay, about 10 min.
 2. PaperClock, about 12 min.
 3. Intercom, about 8 min.
-4. KitchenDisplay, only if P11 moved it here. It is not a flash: `Firmware/KitchenDisplay`
-   restarts the service on the Pi, and that deploy must succeed.
 
 ## Not in scope
 
