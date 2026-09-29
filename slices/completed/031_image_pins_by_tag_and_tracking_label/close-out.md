@@ -32,7 +32,22 @@ dry-run flip (ANS-156), after reading the test phase's 217-tag would-delete list
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
 
-### A2 — The push chain (Ruling R1-Q2) stops after step 2 — JenkinsPipelineUtils, DockerImages, the keycloak build, RegistryDeploy and the comment sweep are still unpushed, pending confirmed prd authorisation
+### ~~A1 — Check RegistryDeploy out in the environment that will run this slice, before the run~~ — resolved at planning: operator (2026-09-26) 'You dont have to restart to get the repo. Just clone it.' — RegistryDeploy cloned to /work/RegistryDeploy and declared in Ansible .kubecoder/config.yaml (Ansible 7154030); struck by plan-slice session, review r1
+
+<details><summary>struck — body kept for the record</summary>
+
+P7 targets `../RegistryDeploy`, and no environment clones that repo today: it is not in Ansible's `.kubecoder/config.yaml`. Before the run, add `- url: https://github.com/pvginkel/RegistryDeploy` to that file's `repos:` list in the environment that will run the slice, then `kc env restart`. Until then `run_loop.py run … --dry-run` reports P7's Target as "not an existing directory". The plan-writer did not make the edit. The Ansible checkout is per environment, and slice 029's run was active in another environment's checkout at planning time.
+
+**Consequence:** Until this is done the run cannot start. P7 has no Target, so the cleanup job stays suspended and the slice cannot lift the pause.
+
+**Provenance:** witnessed — plan-writer, planning, r1, plan.md P7 and run_loop.py --dry-run
+**Disposition:**
+
+</details>
+
+### ~~A2 — The push chain (Ruling R1-Q2) stops after step 2 — JenkinsPipelineUtils, DockerImages, the keycloak build, RegistryDeploy and the comment sweep are still unpushed, pending confirmed prd authorisation~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 Plan.md's Ordering constraints (Ruling R1-Q2, operator "Agree with the rest", 2026-09-26) assign the test phase — not the operator — the whole push chain, unattended, prd rollouts included (explicitly, the Keycloak prd SSO outage its step 4 causes). This run's own dispatch carries a different deterministic fact from the driver: "the driver holds the devlock. Under that hold, pushing and rolling dev for this slice's verification is pre-authorised — do not ask for permission. prd stays operator-gated; nothing here touches it." The two do not agree: R1-Q2 authorises prd rollouts this run's dispatch does not.
 
@@ -96,18 +111,7 @@ own pass.
 **Consequence:** Until this runs, R1's pause stays lifted only on paper: registry-cleanup is still suspended live, so the registry keeps growing and V01-V04 stay unproven. KeycloakDeploy's two stages stay pinned by digest — the exact failure mode that lost Keycloak's image on 2026-09-25. The ~41-repo comment sweep and the estate-wide kaniko2/registry-cleanup/version-poller behaviour, already shipped in code, stay inert until JenkinsPipelineUtils and DockerImages are pushed.
 
 **Provenance:** witnessed — test-agent, test phase, round 1: this run's live kubectl/git checks, plus plan.md's Ordering constraints and this run's own dispatch text
-**Disposition:**
-
-### ~~A1 — Check RegistryDeploy out in the environment that will run this slice, before the run~~ — resolved at planning: operator (2026-09-26) 'You dont have to restart to get the repo. Just clone it.' — RegistryDeploy cloned to /work/RegistryDeploy and declared in Ansible .kubecoder/config.yaml (Ansible 7154030); struck by plan-slice session, review r1
-
-<details><summary>struck — body kept for the record</summary>
-
-P7 targets `../RegistryDeploy`, and no environment clones that repo today: it is not in Ansible's `.kubecoder/config.yaml`. Before the run, add `- url: https://github.com/pvginkel/RegistryDeploy` to that file's `repos:` list in the environment that will run the slice, then `kc env restart`. Until then `run_loop.py run … --dry-run` reports P7's Target as "not an existing directory". The plan-writer did not make the edit. The Ansible checkout is per environment, and slice 029's run was active in another environment's checkout at planning time.
-
-**Consequence:** Until this is done the run cannot start. P7 has no Target, so the cleanup job stays suspended and the slice cannot lift the pause.
-
-**Provenance:** witnessed — plan-writer, planning, r1, plan.md P7 and run_loop.py --dry-run
-**Disposition:**
+**Disposition:** This has been done already. — checked 2026-09-29: the step-6 comment sweep is on origin/main in all 47 repos (/work/scratch/sweep031) and no stage values carry the old comment; closed
 
 </details>
 
@@ -125,7 +129,9 @@ with one self-healed fieldnotes-prd PreSync retry (N2).
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
 
-### N1 — Test phase round 1 bailed out mid push-chain on a dispatch/plan authorisation conflict, after proving the two safe steps live
+### ~~N1 — Test phase round 1 bailed out mid push-chain on a dispatch/plan authorisation conflict, after proving the two safe steps live~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 All nine phases were merged and confirmed consistent (consult 1, complete). The test phase's own procedure — plan.md's Ordering constraints, driven by Ruling R1-Q2 — calls for the test phase itself to push the entire chain unattended, prd rollouts included. This run's dispatch instead pre-authorised only pushing and rolling dev under the devlock and stated prd stays operator-gated with nothing here touching it. Rather than guess which reading governs a live Keycloak SSO outage and ~46 real repo pushes, this run pushed only the two steps it could independently prove have no live prd effect (KubeCoderDeploy — dev-only rollout, verified Synced/Healthy; ArgoCDDeploy — render-neutral, verified Synced/Healthy with no operation triggered) and stopped before DockerImages. See Outstanding actions for the conflict and the exact remaining command sequence.
 
@@ -134,9 +140,13 @@ Every static/code-level verification item (V07, V08, V10-V16, V18-V20 — twelve
 **Consequence:** none beyond what Outstanding actions A2 already states — this entry is the narrative, A2 is the runbook
 
 **Provenance:** witnessed — test-agent, test phase, round 1
-**Disposition:**
+**Disposition:** Ok — closed
 
-### N2 — Test phase round 2: the driver directed pushing what was owed; the push chain completed through step 5, live, with one self-healed Argo hook blip
+</details>
+
+### ~~N2 — Test phase round 2: the driver directed pushing what was owed; the push chain completed through step 5, live, with one self-healed Argo hook blip~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 Following round 1's bail-out (N1), the driver's next dispatch stated plainly that unpushed,
 reviewed work is owed and directed pushing it, per the procedure doc's push step, waiting for the
@@ -161,7 +171,9 @@ gone.
 **Consequence:** none — every check this round ran came back clean; the open remainder is scoped in Outstanding actions A2
 
 **Provenance:** witnessed — test-agent, test phase, round 2
-**Disposition:**
+**Disposition:** Ok — closed
+
+</details>
 
 ## Bugs
 
@@ -171,14 +183,18 @@ archived path. Nothing triggers differently.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-### B1 — version-poller warns about only the newest promoted copy per label, so a stale prd env promoted from the same label as a fresher uat env goes unwarned · minor
+### ~~B1 — version-poller warns about only the newest promoted copy per label, so a stale prd env promoted from the same label as a fresher uat env goes unwarned · minor~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 DockerImages version-poller/app/poller.py:159-170 (P5, 1a69ff9) keeps one promoted copy per tracking-tag label, the one with the newest rebuild-at, and warns only about it. The old code warned about each stale copy on its own. DesignAssistant's uat-* and prd-* copies both carry tst-latest. With uat-latest fresh and prd-latest 60 days stale, the old code warned about prd-latest and the new code is silent (repro witnessed). The live dry run shows the same collapse: the old code warned about design-assistant:prd-latest and :uat-latest, the new code only about :uat-17. KubeCoder, with a single promoted env, is unaffected, and the collapse keeps KubeCoder's accumulating prd-<n> copies from each warning.
 
 **Consequence:** For an app that promotes one build into two environments (today only DesignAssistant, on the archived HelmCharts path), the poller log no longer says when the later environment has gone stale while the earlier one is fresh. Nothing triggers differently.
 
 **Provenance:** witnessed — code-reviewer, P5, round 1, phases/P5/code_review_r1.md F1
-**Disposition:**
+**Disposition:** Close. — closed
+
+</details>
 
 ## Open questions and rulings
 
@@ -197,16 +213,20 @@ After P2 and P6, DockerImages' builds write the tunnel-reclaim pin on KubeCoderD
 **Consequence:** Once dry-run is off, if KubeCoder prd goes about ten weeks without a promotion, cleanup deletes its tunnel-reclaim image. The kubecoder-prd controller pod then cannot start again after a reschedule; the chart says a missing one takes the controller down.
 
 **Provenance:** read — plan-writer, planning, r1, KubeCoderDeploy chart/values.yaml:13-18 and the live registry's tag list
-**Disposition:**
+**Disposition:** I'm aware. I need to regularly promote. That being said, I think the scheduled image rebuild should be handled special. Can you create an Operator Actions card for KubeCoder to think about this? Can we auto-promote these? I would even accept that we don't allow a promotion to be held for more then x (3 or 4 I think) days. If the build isn't promoted within that interval, it's forced. — KC-109 (Operator Action, KubeCoder)
 
-### Q2 — Four registry repos hold a dangling tag, and under the label rule it stops every deletion in its repo · minor
+### ~~Q2 — Four registry repos hold a dangling tag, and under the label rule it stops every deletion in its repo · minor~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
 
 tags/list names the tag but its manifest returns 404: architecture_viewer:1540, backup-server:1890, dnsmasq-config-generator:1806, dnsmasq-management-api:1806. A tag with no image config carries no label, so the label rule keeps it, and the fail-closed shared-digest guard (kept for argo-cd D47) then skips every deletion in that repo, because the kept tag's digest does not resolve. The old tag-shape rule read these tags as history and skipped only them. The P4 dry run against the live registry shows it: architecture_viewer has 231 builds in its latest series and 221 over the cap, and none would be deleted. The operator decides: remove the dangling tag links in the registry's storage, or rule that a kept tag whose manifest returns 404 protects nothing and does not stop the repo.
 
 **Consequence:** Once dry-run is off, these four repos are never cleaned: architecture_viewer keeps its 221 over-cap builds and keeps growing. Nothing is deleted wrongly.
 
 **Provenance:** witnessed, code-writer, P4, r1, phases/P4/cleanup-dryrun-new.log
-**Disposition:**
+**Disposition:** Don't worry about this. At some point I'll do a full scan of the registry. You can't go off what's there now. I know, it's a mess at the moment. — closed
+
+</details>
 
 ## Suggestions
 
@@ -223,45 +243,7 @@ S4 was witnessed and the test phase saw it happen. S5 and S7 are doc nits.
 **Consequence:** Migrating a parked app whose images are in our registry creates a digest pin again. Once dry-run is off, the nightly garbage collection can delete the image behind that pin, which is how Keycloak lost its image.
 
 **Provenance:** read — plan-writer, planning, r1, argo_migrate.py:466-493
-**Disposition:**
-
-### S3 — KeycloakDeploy pulls its image with imagePullPolicy: Always, which a per-build tag no longer needs · minor
-
-KeycloakDeploy chart/templates/keycloak-deployment.yaml:29-30 runs registry:5000/keycloak{{ .Values.images.keycloak }} with imagePullPolicy: Always. Once the keycloak build the test phase starts (step 4) writes the per-build tag 26.7.3-postgres-health-ispn-<build>, the image behind the pin never changes, so Always only makes every pod start ask the registry first. With Always, a registry that is not serving fails the pull even when the image is cached on the node; IfNotPresent would start from the cache. P2 moved KubeCoderDeploy's tunnel-reclaim to IfNotPresent with its tag pin; no phase of this slice touches Keycloak's chart.
-
-**Consequence:** After a power cut, Keycloak cannot start until the registry serves again, even on a node that still holds its image. DHCP depended on Keycloak in the 2026-09-25 outage.
-
-**Provenance:** read, executor, P6, r1, KeycloakDeploy main chart/templates/keycloak-deployment.yaml
-**Disposition:**
-
-### S4 — RegistryDeploy: unsuspending registry-cleanup starts a Job at Argo sync, not at the next 03:30 — P7's done-record says 03:30Z · nit
-
-The live CronJob has no startingDeadlineSeconds, concurrencyPolicy Allow, and lastScheduleTime 2026-09-25T01:30Z. When suspend flips to false, Kubernetes creates a Job for the most recent missed schedule immediately. So the first unsuspended run starts when Argo applies P7, on whatever registry-cleanup image is pinned at that moment. The plan's P7 'Later phases' now records this for the test phase.
-
-consult 1, 2026-09-29 — P7's done-record already carries the correction as its 'review r1 F1' later-phase note: the sync that drops suspend starts one Job at once, and with concurrencyPolicy Allow it can overlap the hand-started run. The test phase reads it there; nothing more is owed.
-
-**Consequence:** none on the planned path: the ordering puts the P4 pin in place before the push, so the immediate run is a dry run. The test phase will see an automatic dry-run Job next to the one it starts by hand.
-
-**Provenance:** witnessed (kubectl get cronjob), code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
-**Disposition:**
-
-### S5 — DockerImages version-poller-redesign.md states cleanup defaults of 5 builds per series and a 4-week TTL; registry-cleanup's are 10 and 26 weeks · nit
-
-The design doc's §8 ("Per-series cap (N = 5)", "Defaults: TTL = 4 weeks") and §11's defaults table give 5 and 4 weeks. registry-cleanup/app/main.py defaults --max-per-series to 10 and --ttl-weeks to 26, and the RegistryDeploy CronJob passes neither flag, so the live job runs with 10 and 26. P8 renamed the row's flag and knob to the label rule and left the numbers alone: choosing them is DI-5's, out of this slice's scope.
-
-**Consequence:** none on behaviour — a reader sizing the cap or TTL from the design doc reads numbers the job does not use
-
-**Provenance:** read, code-writer, P8, r1, DockerImages docs/registry-management/version-poller-redesign.md
-**Disposition:**
-
-### S7 — DockerImages webhook-relay/README.md's 'Where it is deployed' table is stale: Fieldnotes' relay is deployed by FieldnotesDeploy, not HelmCharts' chart, and argocd-prd's relay no longer forwards to the applicationset-controller · nit
-
-The table (README.md:144-147) names 'HelmCharts, chart fieldnotes' as Fieldnotes' deployer and 'argocd-server and the applicationset-controller' as argocd-prd's receivers; the RECEIVERS example at :103 carries the applicationset-controller leg too. webhook-relay/deploy-pins.json names FieldnotesDeploy config/prd/values.yaml (images.webhookRelay) and ArgoCDDeploy config/prd/values.yaml (relay.image), and ArgoCDDeploy a811fa5 dropped the applicationset-controller leg. Neither staleness comes from this slice, so the doc phase left the page alone; argo-cd design.md points at this README as the relay's contract.
-
-**Consequence:** A reader of the relay's contract page looks for Fieldnotes' relay in the archived HelmCharts and expects argocd-prd to forward to a controller it no longer calls. Nothing runs differently.
-
-**Provenance:** read — doc-writer, doc phase, r1: DockerImages webhook-relay/README.md, webhook-relay/deploy-pins.json, ArgoCDDeploy git log a811fa5
-**Disposition:**
+**Disposition:** Is this still an issue? Everything's migrated. I don't see a reason to use argo-migrate again. Is this about something else?
 
 ### ~~S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit~~ — resolved by consult 1 (KubeCoderDeploy 20e0f71): the header now claims no default for the chart's eight image pins only; kc project lint and test green; struck by consult 1
 
@@ -276,6 +258,47 @@ chart/values.yaml:7 ('The chart names no default for any image (D47): every imag
 
 </details>
 
+### ~~S3 — KeycloakDeploy pulls its image with imagePullPolicy: Always, which a per-build tag no longer needs · minor~~ — fixed in KeycloakDeploy d854bb7; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
+
+KeycloakDeploy chart/templates/keycloak-deployment.yaml:29-30 runs registry:5000/keycloak{{ .Values.images.keycloak }} with imagePullPolicy: Always. Once the keycloak build the test phase starts (step 4) writes the per-build tag 26.7.3-postgres-health-ispn-<build>, the image behind the pin never changes, so Always only makes every pod start ask the registry first. With Always, a registry that is not serving fails the pull even when the image is cached on the node; IfNotPresent would start from the cache. P2 moved KubeCoderDeploy's tunnel-reclaim to IfNotPresent with its tag pin; no phase of this slice touches Keycloak's chart.
+
+**Consequence:** After a power cut, Keycloak cannot start until the registry serves again, even on a node that still holds its image. DHCP depended on Keycloak in the 2026-09-25 outage.
+
+**Provenance:** read, executor, P6, r1, KeycloakDeploy main chart/templates/keycloak-deployment.yaml
+**Disposition:** Fix inline please. — fixed in KeycloakDeploy d854bb7 (imagePullPolicy IfNotPresent; kc project lint and test green); not pushed yet
+
+</details>
+
+### ~~S4 — RegistryDeploy: unsuspending registry-cleanup starts a Job at Argo sync, not at the next 03:30 — P7's done-record says 03:30Z · nit~~ — closed by the operator, 2026-09-29; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
+
+The live CronJob has no startingDeadlineSeconds, concurrencyPolicy Allow, and lastScheduleTime 2026-09-25T01:30Z. When suspend flips to false, Kubernetes creates a Job for the most recent missed schedule immediately. So the first unsuspended run starts when Argo applies P7, on whatever registry-cleanup image is pinned at that moment. The plan's P7 'Later phases' now records this for the test phase.
+
+consult 1, 2026-09-29 — P7's done-record already carries the correction as its 'review r1 F1' later-phase note: the sync that drops suspend starts one Job at once, and with concurrencyPolicy Allow it can overlap the hand-started run. The test phase reads it there; nothing more is owed.
+
+**Consequence:** none on the planned path: the ordering puts the P4 pin in place before the push, so the immediate run is a dry run. The test phase will see an automatic dry-run Job next to the one it starts by hand.
+
+**Provenance:** witnessed (kubectl get cronjob), code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
+**Disposition:** Close. — closed
+
+</details>
+
+### ~~S5 — DockerImages version-poller-redesign.md states cleanup defaults of 5 builds per series and a 4-week TTL; registry-cleanup's are 10 and 26 weeks · nit~~ — fixed in DockerImages 7a6ce6b; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
+
+The design doc's §8 ("Per-series cap (N = 5)", "Defaults: TTL = 4 weeks") and §11's defaults table give 5 and 4 weeks. registry-cleanup/app/main.py defaults --max-per-series to 10 and --ttl-weeks to 26, and the RegistryDeploy CronJob passes neither flag, so the live job runs with 10 and 26. P8 renamed the row's flag and knob to the label rule and left the numbers alone: choosing them is DI-5's, out of this slice's scope.
+
+**Consequence:** none on behaviour — a reader sizing the cap or TTL from the design doc reads numbers the job does not use
+
+**Provenance:** read, code-writer, P8, r1, DockerImages docs/registry-management/version-poller-redesign.md
+**Disposition:** Fix inline. — fixed in DockerImages 7a6ce6b; not pushed yet
+
+</details>
+
 ### ~~S6 — DockerImages version-poller-redesign.md §4 lists a lone version tag such as 1.35.5 among the builds in use; that is k8s's matrix tag, which now pushes 1.35.5 plus 1.35.5-<n> · nit~~ — resolved by consult 1 (DockerImages 18dadc8): the lone-version-tag bullet is gone from §4's builds in use; comment-only, the loop's gate sweep re-runs on it; struck by consult 1
 
 <details><summary>struck — body kept for the record</summary>
@@ -286,5 +309,18 @@ The "builds in use" list in §4's tag scheme (docs/registry-management/version-p
 
 **Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
 **Disposition:**
+
+</details>
+
+### ~~S7 — DockerImages webhook-relay/README.md's 'Where it is deployed' table is stale: Fieldnotes' relay is deployed by FieldnotesDeploy, not HelmCharts' chart, and argocd-prd's relay no longer forwards to the applicationset-controller · nit~~ — fixed in DockerImages 221b012; struck by close-out session
+
+<details><summary>struck — body kept for the record</summary>
+
+The table (README.md:144-147) names 'HelmCharts, chart fieldnotes' as Fieldnotes' deployer and 'argocd-server and the applicationset-controller' as argocd-prd's receivers; the RECEIVERS example at :103 carries the applicationset-controller leg too. webhook-relay/deploy-pins.json names FieldnotesDeploy config/prd/values.yaml (images.webhookRelay) and ArgoCDDeploy config/prd/values.yaml (relay.image), and ArgoCDDeploy a811fa5 dropped the applicationset-controller leg. Neither staleness comes from this slice, so the doc phase left the page alone; argo-cd design.md points at this README as the relay's contract.
+
+**Consequence:** A reader of the relay's contract page looks for Fieldnotes' relay in the archived HelmCharts and expects argocd-prd to forward to a controller it no longer calls. Nothing runs differently.
+
+**Provenance:** read — doc-writer, doc phase, r1: DockerImages webhook-relay/README.md, webhook-relay/deploy-pins.json, ArgoCDDeploy git log a811fa5
+**Disposition:** Fix inline. — fixed in DockerImages 221b012 (table and RECEIVERS example); not pushed yet
 
 </details>
