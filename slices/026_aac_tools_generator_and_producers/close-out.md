@@ -187,6 +187,15 @@ AaC/IoTSupport #38–#41 (2026-09-24 to 2026-09-26, each started by a GitHub pus
 **Provenance:** witnessed | code-writer, P10, r1 — Jenkins AaC/IoTSupport #41 console; sweep_ledger.md § Carriers
 **Disposition:**
 
+### B3 — FieldnotesApp: test_syncs_and_deliveries_are_counted scrapes the board-sync counter before the queued sync increments it · minor
+
+FieldnotesApp #40 (P12b's push of `1ee1929`, 2026-09-30 01:19) failed in its suite on one of 347 tests: `backend/tests/fieldnotes/test_board_sync.py::test_syncs_and_deliveries_are_counted` asserted `fieldnotes_board_syncs_total{result="changed"} == 2` and read 1.0. The test waits with `eventually` for the observation's status to read `closed`, then scrapes. The queued sync runs on a `threading.Timer` in `ObservationService.sync_later`. `board_sync` (`backend/app/fieldnotes/observations.py:214-215`) commits the observation through `self.store.write(...)` first and increments `metrics.board_syncs` only after the write returns. So the test can see `closed` and scrape before the second `changed` is counted. The same job was green seven times on 2026-09-27/28 with the test unchanged (last touched in `e7891ed`). P12b's commit changes only `Jenkinsfile.architecture` and deletes `scripts/arch-validate.py`, which the suite does not read.
+
+**Consequence:** FieldnotesApp builds fail at random on this test, and a red build ships no image. A retry on the same head is the only remedy today.
+
+**Provenance:** witnessed: executor, P12b, r1, https://jenkins.webathome.org/job/FieldnotesApp/40/ (testReport, validation.log)
+**Disposition:**
+
 ## Open questions and rulings
 
 Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
