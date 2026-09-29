@@ -30,10 +30,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | ExternalSecretsDeploy | deploy | P9a | `/work/scratch/sweep031/ExternalSecretsDeploy` | pointer (`.architecturerc`) | `2cd79df` | done: AaC/ExternalSecretsDeploy #4 and AaC/Architecture #2248 green; external-secrets-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
 | FieldnotesDeploy | deploy | P9a | `/work/scratch/sweep031/FieldnotesDeploy` | pointer (`.architecturerc`) | `45bf980` | done: AaC/FieldnotesDeploy #30 and AaC/Architecture #2248 green; fieldnotes-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
 | FilebeatDeploy | deploy | P9a | `/work/scratch/sweep031/FilebeatDeploy` | pointer (`.architecturerc`) | `a9fb5d5` | done: AaC/FilebeatDeploy #6 and AaC/Architecture #2248 green; filebeat-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
-| GinbovNlDeploy | deploy | P9b | `/work/scratch/sweep031/GinbovNlDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| GitSyncDeploy | deploy | P9b | `/work/scratch/sweep031/GitSyncDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| GrafanaDeploy | deploy | P9b | `/work/scratch/sweep031/GrafanaDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| GuacamoleDeploy | deploy | P9b | `/work/scratch/sweep031/GuacamoleDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| GinbovNlDeploy | deploy | P9b | `/work/scratch/sweep031/GinbovNlDeploy` | pointer (`.architecturerc`) | `c871a13` | done: AaC/GinbovNlDeploy #5 and AaC/Architecture #2251 green; ginbov-nl-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
+| GitSyncDeploy | deploy | P9b | `/work/scratch/sweep031/GitSyncDeploy` | pointer (`.architecturerc`) | `8c08306` | done: AaC/GitSyncDeploy #17 and AaC/Architecture #2251 green; git-sync-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
+| GrafanaDeploy | deploy | P9b | `/work/scratch/sweep031/GrafanaDeploy` | pointer (`.architecturerc`) | `122a995` | done: AaC/GrafanaDeploy #4 and AaC/Architecture #2251 green; grafana-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
+| GuacamoleDeploy | deploy | P9b | `/work/scratch/sweep031/GuacamoleDeploy` | pointer (`.architecturerc`) | `ebc7bd6` | done: AaC/GuacamoleDeploy #6 and AaC/Architecture #2251 green; guacamole-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
 | HeadlampDeploy | deploy | P9b | `/work/scratch/sweep031/HeadlampDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | HomeappsDeploy | deploy | P9b | `/work/scratch/sweep031/HomeappsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | HomeassistantMcpDeploy | deploy | P9b | `/work/scratch/sweep031/HomeassistantMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
@@ -43,7 +43,7 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | IotDeploy | deploy | P9b | `/work/scratch/sweep031/IotDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | JenkinsDeploy | deploy | P9b | `/work/scratch/sweep031/JenkinsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | KeycloakDeploy | deploy | P9b | `/work/scratch/sweep031/KeycloakDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| KubeCoderDeploy | deploy | P9b | `/work/scratch/KubeCoderDeploy` | pointer (`.architecturerc` + `architecture.yaml` header); carries P5 `e9a5ca7` | — | not yet pushed |
+| KubeCoderDeploy | deploy | P9b | `/work/scratch/KubeCoderDeploy` | pointer (`.architecturerc` + `architecture.yaml` header); carries P5 `e9a5ca7` | `c776662` | done: a `main` push starts no build (AaC/KubeCoderDeploy polls `*/prd` and publishes prd; last build #10, 2026-09-28); its own `kc project test` green before the push, prd generation prints no `gap:` line; kubecoder-dev: at=True sync=Synced health=Healthy; `kubecoder-prd` tracks `prd`, untouched |
 | MediaDeploy | deploy | P9b | `/work/scratch/sweep031/MediaDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | ModelsDeploy | deploy | P9b | `/work/scratch/sweep031/ModelsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | MosquittoDeploy | deploy | P9b | `/work/scratch/sweep031/MosquittoDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
