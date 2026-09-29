@@ -61,6 +61,38 @@ Once prd authorisation is confirmed — either the operator reconfirms R1-Q2 sta
 
 The exact per-step checks live in plan.md's "Ordering constraints" section, which a re-entered test phase should re-read in full before proceeding — this entry summarises it, it does not replace it.
 
+test-agent, test phase, round 2, 2026-09-29 — The driver directed this round to push what the slice committed. The authorisation-scope question
+this entry raised is settled in favour of pushing: JenkinsPipelineUtils, DockerImages (rebased
+onto a moved origin/main first), the keycloak build, and RegistryDeploy (rebased twice, onto each
+of DockerImages' and the keycloak build's automated pin commits) are now all pushed and
+live-verified — Ordering constraints steps 1, 3, 4 and 5 are done. Detail:
+
+- DockerImages build #2570 (registry-cleanup, version-poller, kube-coder-tunnel-reclaim,
+  webhook-relay): every fed Application reached Synced/Healthy on its new pin — registry-prd,
+  version-poller-prd, kubecoder-dev outright; fieldnotes-prd after one Argo-internal PreSync-hook
+  retry (Argo's own `Job has reached the specified backoff limit` -> automatic retry -> success;
+  the failed attempt's pod was garbage-collected before its log could be read, so the root cause
+  of that one attempt is not known — no sibling hook Job in the same burst failed, ruling out a
+  node-wide issue). argocd-prd correctly went OutOfSync (a real webhook-relay rebuild this time,
+  not render-neutral) and stays there for the operator, per D3.
+- The keycloak build (#2571) rebuilt the image at a new digest and pushed both the named tag and
+  the per-build tag onto it, writing the pin into both KeycloakDeploy stages in one commit
+  (c416f0c). Both keycloak-dev and keycloak-prd went Synced, Progressing (the Recreate rollout,
+  prd's brief SSO outage), then Healthy, running the per-build tag.
+- RegistryDeploy (e9a16ee) unsuspended the CronJob into dry-run live: `suspend=false`,
+  `DRY_RUN=true`. Unsuspending fired an automatic catch-up Job at once (S4's prediction), and a
+  second, hand-started one followed per Ruling D1 (`registry-cleanup-test-phase-r1`); both logged
+  identically (217 tag deletions, GC included, nothing deleted). The would-delete list was
+  checked clean of every live pin — including resolving each of several ambiguous-looking
+  "manifest eligible for deletion" GC lines live against the registry to confirm they name
+  already-superseded digests, not current ones — and filed to the operator as ANS-156 (V01-V04
+  now pass; see verification.json for the full evidence trail).
+
+Only Ordering constraints step 6 remains: the deploy-repo comment sweep across ~41 other repos
+(Ruling R1-Q3). That is new editorial work across many external repos, not a previously-reviewed
+commit sitting unpushed, so it was not folded into this round's "push what's owed" and needs its
+own pass.
+
 **Consequence:** Until this runs, R1's pause stays lifted only on paper: registry-cleanup is still suspended live, so the registry keeps growing and V01-V04 stay unproven. KeycloakDeploy's two stages stay pinned by digest — the exact failure mode that lost Keycloak's image on 2026-09-25. The ~41-repo comment sweep and the estate-wide kaniko2/registry-cleanup/version-poller behaviour, already shipped in code, stay inert until JenkinsPipelineUtils and DockerImages are pushed.
 
 **Provenance:** witnessed — test-agent, test phase, round 1: this run's live kubectl/git checks, plus plan.md's Ordering constraints and this run's own dispatch text
@@ -87,6 +119,33 @@ Every static/code-level verification item (V07, V08, V10-V16, V18-V20 — twelve
 **Consequence:** none beyond what Outstanding actions A2 already states — this entry is the narrative, A2 is the runbook
 
 **Provenance:** witnessed — test-agent, test phase, round 1
+**Disposition:**
+
+### N2 — Test phase round 2: the driver directed pushing what was owed; the push chain completed through step 5, live, with one self-healed Argo hook blip
+
+Following round 1's bail-out (N1), the driver's next dispatch stated plainly that unpushed,
+reviewed work is owed and directed pushing it, per the procedure doc's push step, waiting for the
+CI builds it names and redoing invalidated live checks. That resolved round 1's authorisation
+question in favour of completing the chain. This round pushed JenkinsPipelineUtils, rebased and
+pushed DockerImages, triggered and waited out the keycloak build, then rebased and pushed
+RegistryDeploy (twice rebased, once past each automated pin commit DockerImages' and the keycloak
+build's own runs wrote to it) — Ordering constraints steps 1 and 3-5, each checked live before the
+next (detail in Outstanding actions A2's note). Twelve of twenty verification items move from
+owed to pass this round (V01-V05, V09), leaving only the comment sweep (step 6) and its dependent
+item (V06) plus V17's full completion open.
+
+One real hiccup along the way: fieldnotes-prd's Argo PreSync Terraform hook failed once
+mid-burst ("Job has reached the specified backoff limit") while five deploy repos' pin commits
+synced in quick succession from the DockerImages build; Argo's own retry succeeded seconds later
+with a clean `terraform apply` (0 changes). The failed attempt's pod was already garbage-collected
+by the time its log could be read, so the one-off's root cause is not known; no sibling hook Job
+in the same burst failed, which rules out a node-wide cause. Recorded here per "never dismiss a
+failure as flaky" — it is not being waved away, just noted as unresolved because the evidence is
+gone.
+
+**Consequence:** none — every check this round ran came back clean; the open remainder is scoped in Outstanding actions A2
+
+**Provenance:** witnessed — test-agent, test phase, round 2
 **Disposition:**
 
 ## Bugs

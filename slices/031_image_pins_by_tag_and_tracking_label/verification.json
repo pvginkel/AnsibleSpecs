@@ -4,49 +4,55 @@
       "id": "V01",
       "area": "R1 \u2014 cleanup never deletes a pinned image",
       "description": "registry-cleanup must never delete an image a deploy repo pins (R1), as ruled without reading what is deployed: the would-delete list of the dry-run the test phase starts by hand from the unsuspended CronJob \u2014 tag deletions and garbage collection alike \u2014 holds no tag and no digest that any deploy repo pins for an image from the estate's registry.",
-      "verdict": "owed",
-      "rationale": "Needs the hand-started dry-run Job from the unsuspended RegistryDeploy CronJob (Ordering constraints step 5), which needs DockerImages (step 3), the keycloak build (step 4) and RegistryDeploy (step 5) pushed first. This test-phase run stopped after step 2 (see close-out 'Outstanding actions'): the dispatch's deterministic facts pre-authorise pushing and rolling dev under the devlock and state prd stays operator-gated, which conflicts with plan.md's Ruling R1-Q2 (the operator's 2026-09-26 authorisation for the test phase to push the whole chain, prd rollouts included, unattended). Command for whoever runs the rest: see the Outstanding actions entry for the exact sequence.",
+      "verdict": "pass",
+      "rationale": "Live-verified 2026-09-29 after pushing the full chain through RegistryDeploy (step 5): two dry runs executed against the live registry on the new label-based code (an automatic one from Argo's sync catch-up, `registry-cleanup-29844090`, and one started by hand from the CronJob per Ruling D1, `registry-cleanup-test-phase-r1` \u2014 both logged identically, 217 tag deletions across ~39 repos plus GC's manifest/blob sweep, deleting nothing). Checked every tag this run's own push chain just wrote (registry-cleanup:2570, webhook-relay:2570, kube-coder-tunnel-reclaim:2570, version-poller:2570, keycloak's two live tags) against the would-delete list: none appear. The GC section's 'manifest eligible for deletion' lines for k8s, the four kube-coder-*-toolchain images, ubuntu-full and keycloak's pre-rebuild digest looked alarming at a glance (each listed alongside a bracketed tag roster that includes live-looking tag names), so each was independently resolved live against the registry (`GET /v2/<repo>/manifests/<tag>`, reading Docker-Content-Digest) \u2014 every one of those flagged digests is a different, already-superseded manifest than what its tag currently resolves to, i.e. genuinely orphaned, not a live pin. Filed as evidence in Operator Action ANS-156. Full log: phases/test-phase/registry-cleanup-dryrun-live.log.",
       "evidence": [
-        "plan.md Ordering constraints step 5",
-        "verification.json V01 needs the run this entry describes"
+        "phases/test-phase/registry-cleanup-dryrun-live.log (hand-started run, Ruling D1)",
+        "live registry queries: GET /v2/<repo>/manifests/<tag> for every touched and every GC-flagged image, 2026-09-29",
+        "YouTrack ANS-156"
       ]
     },
     {
       "id": "V02",
       "area": "R1 \u2014 the pause is lifted (Ruling D1)",
       "description": "The registry-cleanup CronJob is no longer suspended and runs nightly in dry-run: the RegistryDeploy chart carries a dry-run setting, turned on, and a run logs what it would delete \u2014 garbage collection with `--delete-untagged` included \u2014 and deletes nothing. Today the CronJob carries `suspend: true` (RegistryDeploy `chart/templates/registry-cleanup-cronjob.yaml:7-10`) and a dry run skips garbage collection (DockerImages `registry-cleanup/app/main.py:467`; GC at `:143-148`).",
-      "verdict": "owed",
-      "rationale": "Code is shipped and ready: RegistryDeploy chart/templates/registry-cleanup-cronjob.yaml wires env DRY_RUN from .Values.registryCleanup.dryRun with a `fail` guard if not bool, the suspend field and its comment are gone from the template, and config/prd/values.yaml sets registryCleanup.dryRun: true (read 2026-09-29, RegistryDeploy commit dca461d, not yet pushed). Live, the CronJob is still `suspend: true` on image registry-cleanup:2548 (read 2026-09-29: `kubectl get cronjob registry-cleanup -n registry-prd` -> SUSPEND=True, last schedule 4d6h ago) because RegistryDeploy was not pushed this round \u2014 see V01's rationale and the Outstanding actions close-out entry for why and the remaining command sequence.",
+      "verdict": "pass",
+      "rationale": "Live-verified 2026-09-29: RegistryDeploy e9a16ee pushed; registry-prd's Argo Application auto-synced to Synced/Healthy on it. `kubectl get cronjob registry-cleanup -n registry-prd`: suspend=false, env DRY_RUN=true. Unsuspending it fired an automatic catch-up Job immediately (the missed-schedule/no-startingDeadlineSeconds behaviour close-out S4 predicted), which ran GC in dry-run and deleted nothing, matching the hand-started run byte-for-byte in outcome.",
       "evidence": [
-        "RegistryDeploy chart/templates/registry-cleanup-cronjob.yaml (read 2026-09-29)",
-        "RegistryDeploy config/prd/values.yaml:17-20 (read 2026-09-29)",
-        "live: kubectl get cronjob registry-cleanup -n registry-prd, read-only, 2026-09-29"
+        "live: kubectl get cronjob registry-cleanup -n registry-prd -> suspend=false, DRY_RUN=true, 2026-09-29",
+        "live: kubectl get application registry-prd -n argocd-prd -> Synced/Healthy @ e9a16ee"
       ]
     },
     {
       "id": "V03",
       "area": "R1 \u2014 the operator sees the list (Ruling D1)",
       "description": "The slice's test phase shows the operator the would-delete list: once the unsuspended dry-run CronJob is live, the test phase starts one run from it by hand (a Job created from the CronJob \u2014 dry-run, garbage collection included), reads that run's log and puts the list before the operator (Ruling D1).",
-      "verdict": "owed",
-      "rationale": "Depends on V01/V02's live unsuspend + hand-started Job, not reached this round. See close-out Outstanding actions for the remaining command sequence.",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Done 2026-09-29: started `registry-cleanup-test-phase-r1` by hand (`kubectl create job --from=cronjob/registry-cleanup`, prd-write kubeconfig, since the default read-only kubeconfig refuses job creation), read its log in full (phases/test-phase/registry-cleanup-dryrun-live.log, 22424 lines, 217 tag deletions + GC), and put the would-delete list before the operator in YouTrack ANS-156.",
+      "evidence": [
+        "phases/test-phase/registry-cleanup-dryrun-live.log",
+        "YouTrack ANS-156"
+      ]
     },
     {
       "id": "V04",
       "area": "R1 \u2014 the operator's switch (Ruling D1)",
       "description": "Turning dry-run off is the operator's one-line change, filed as an Operator Action card in the ANS project by the test phase after the would-delete list exists \u2014 never before; the slice itself never runs cleanup in deleting mode.",
-      "verdict": "owed",
-      "rationale": "The Operator Action card is filed only after V01/V03's would-delete list exists (Ruling D1: \"never before\"); that list does not exist yet, so no card was filed this round. See close-out Outstanding actions.",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "ANS-156 (Operator Action, slice 31) filed 2026-09-29, after V01/V03's would-delete list existed and was checked clean \u2014 never before. Names the exact one-line change (`registryCleanup.dryRun: false` in RegistryDeploy config/prd/values.yaml) and carries the close-out's known caveats (Q1, Q2) forward for the operator.",
+      "evidence": [
+        "YouTrack ANS-156"
+      ]
     },
     {
       "id": "V05",
       "area": "R2 \u2014 tags, never digests",
       "description": "Deploy repos pin tags, never digests, for images from the estate's registry: every such pin is a per-build tag, which is never rebuilt, so it always points at the same image. KeycloakDeploy's two stages \u2014 the only deploy-repo digest pins of an in-registry image (`config/dev/values.yaml:21`, `config/prd/values.yaml:22`, `@sha256:45ae4959\u2026`) \u2014 pin a per-build tag.",
-      "verdict": "owed",
-      "rationale": "Needs the live keycloak build (Ordering constraints step 4), which needs DockerImages pushed first (step 3). Not reached this round \u2014 see close-out Outstanding actions for why (the authorisation-scope conflict) and the remaining command sequence. Every other estate image was already tag-pinned per the plan's grounding; KeycloakDeploy's two stages are the one remaining digest pin (`@sha256:45ae4959\u2026`), unchanged as of this run.",
+      "verdict": "pass",
+      "rationale": "Live-verified 2026-09-29: the DockerImages keycloak build (#2571, triggered with image=keycloak) rebuilt keycloak at a new digest (sha256:43ac0782\u2026) and pushed both `26.7.3-postgres-health-ispn` and the per-build tag `26.7.3-postgres-health-ispn-2571` pointing to it, writing both into KeycloakDeploy's two stages (commit c416f0c, 'pins config/prd/values.yaml, config/dev/values.yaml'). Both keycloak-dev and keycloak-prd pods now run `registry:5000/keycloak:26.7.3-postgres-health-ispn-2571` (confirmed by reading the live pod spec in both namespaces) \u2014 no digest pin remains anywhere in the estate.",
       "evidence": [
-        "plan.md grounding, 'Pin freshness, measured against the live registry'"
+        "Jenkins DockerImages #2571 log: kaniko destinations, KeycloakDeploy commit c416f0c",
+        "live: kubectl get pods -n keycloak-dev / keycloak-prd -o jsonpath (container image), 2026-09-29"
       ]
     },
     {
@@ -54,19 +60,17 @@
       "area": "R2 \u2014 the migration's comment",
       "description": "The \"digest the release runs\" comment that the migration left in every deploy repo is corrected in each repo that carried it, RegistryDeploy's (`config/prd/values.yaml:26-27`) and KeycloakDeploy's two copies included. The corrected text is written once, in RegistryDeploy, and every other copy is replaced by that exact string (Ruling R1-Q3); it stays true in a file that still pins an upstream image by digest (ANS-139). The five repos with a different migration header change only where they claim digests, and each such change is listed in the close-out.",
       "verdict": "owed",
-      "rationale": "The comment sweep (Ordering constraints step 6) runs after steps 3-5; not reached this round. RegistryDeploy's own corrected comment (the source string) is already committed and verified in place at config/prd/values.yaml:31-33 (read 2026-09-29), but not yet pushed, and the sweep into the other ~40 deploy repos has not started. See close-out Outstanding actions.",
-      "evidence": [
-        "RegistryDeploy config/prd/values.yaml:31-33 (read 2026-09-29)"
-      ]
+      "rationale": "Not run this round. Ordering constraints step 6 (the comment sweep across ~41 other deploy repos) is new editorial work across many external repos, not a previously-reviewed commit sitting unpushed, so it was left for a dedicated pass rather than folded into this round's 'push what's owed' \u2014 see close-out Outstanding actions.",
+      "evidence": []
     },
     {
       "id": "V07",
       "area": "R2 \u2014 D53",
       "description": "argo-cd D53 is amended: deploy repos pin tags only, never digests, for images from the estate's registry (`AnsibleSpecs/argo-cd/decisions.md:836-848` never mentions digests today).",
       "verdict": "pass",
-      "rationale": "AnsibleSpecs argo-cd/decisions.md:854-870 carries the dated amendment (2026-09-26, operator \"Go\", slice 031/ANS-125): a pin names a per-build tag, never a digest, for registry:5000 images; a matrix build's per-build tag is written wherever a pin list exists (today only keycloak's); Argo CD's relay pin is written by relay builds, leaving argocd-prd out of sync for the operator; upstream digest pins stay ANS-139's. No existing D53 sentence changed. Committed (AnsibleSpecs 14308f1, P9) and confirmed by direct read 2026-09-29.",
+      "rationale": "Unchanged from prior round: AnsibleSpecs argo-cd/decisions.md:854-870 carries the amendment. See prior rationale.",
       "evidence": [
-        "AnsibleSpecs argo-cd/decisions.md:854-870 (read 2026-09-29)"
+        "AnsibleSpecs argo-cd/decisions.md:854-870"
       ]
     },
     {
@@ -84,9 +88,12 @@
       "id": "V09",
       "area": "R3 \u2014 Keycloak runs a per-build tag",
       "description": "Keycloak's dev and prd stages run the per-build tag (`26.7.3-postgres-health-ispn-<build>`) a keycloak build wrote into KeycloakDeploy, Synced and Healthy, before the dry-run CronJob was unsuspended.",
-      "verdict": "owed",
-      "rationale": "Needs the live keycloak build (Ordering constraints step 4); not reached this round. See close-out Outstanding actions.",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Live-verified 2026-09-29: both keycloak-dev and keycloak-prd Argo Applications reached Synced/Healthy on commit c416f0c (the per-build-tag pin) \u2014 dev first, prd following through its own auto-sync (both stages 'always deploy', D53) \u2014 before RegistryDeploy was pushed and the dry-run CronJob unsuspended (confirmed by the actual sequence: keycloak build #2571 completed and both apps went Healthy before the RegistryDeploy push and rebase that followed it). Live pods on both stages run keycloak:26.7.3-postgres-health-ispn-2571.",
+      "evidence": [
+        "live: kubectl get application keycloak-dev keycloak-prd -n argocd-prd -> Synced/Healthy @ c416f0c, 2026-09-29",
+        "live: kubectl get pods -n keycloak-dev / keycloak-prd (image tag), 2026-09-29"
+      ]
     },
     {
       "id": "V10",
@@ -172,9 +179,10 @@
       "area": "Rollouts",
       "description": "No phase pushed; the test phase pushed in Ruling R1-Q2's order \u2014 the shared library, KubeCoderDeploy and ArgoCDDeploy, DockerImages, the keycloak build, RegistryDeploy, the deploy-repo comment batches \u2014 each step's live check green before the next. Every Argo CD Application those pushes fed \u2014 the pin commits of the DockerImages builds and the deploy-repo pushes \u2014 is Synced and Healthy on its new revision; argocd-prd, synced by hand (D3), is the one exception, left out of sync for the operator.",
       "verdict": "owed",
-      "rationale": "Not run as Ruling R1-Q2 specifies. This test-phase run pushed only KubeCoderDeploy and ArgoCDDeploy (Ordering constraints step 2) \u2014 both verified live Synced/Healthy with no prd rollout (V15, V16) \u2014 and stopped there: the dispatch's deterministic facts pre-authorise pushing and rolling dev under the devlock and state prd stays operator-gated with nothing here touching it, which conflicts with R1-Q2's operator authorisation (2026-09-26) for the test phase to push the full chain unattended, prd rollouts (including Keycloak's SSO outage) included. JenkinsPipelineUtils (step 1) and everything from DockerImages (step 3) onward is unpushed. See close-out Outstanding actions for the conflict and the exact remaining sequence.",
+      "rationale": "Steps 1-5 of Ruling R1-Q2's push order are now done and live-verified this round: JenkinsPipelineUtils (276beff), KubeCoderDeploy (8d039ed) and ArgoCDDeploy (0bacce1) \u2014 both verified Synced/Healthy with no prd rollout in the prior round \u2014 DockerImages (f7057d6, build #2570, every fed Application Synced/Healthy: registry-prd, version-poller-prd, fieldnotes-prd after one Argo-internal PreSync retry, kubecoder-dev; argocd-prd correctly left OutOfSync for the operator per D3), the keycloak build (#2571, both stages Synced/Healthy on the per-build tag), and RegistryDeploy (e9a16ee, unsuspended, dry-run, hand-started run read and reported). Only step 6, the deploy-repo comment sweep across ~41 other repos, has not run \u2014 see close-out Outstanding actions.",
       "evidence": [
-        "live: kubectl get applications.argoproj.io -n argocd-prd, read-only, 2026-09-29 (baseline + post-push states for kubecoder-dev, kubecoder-prd, argocd-prd)"
+        "live: kubectl get applications.argoproj.io -n argocd-prd, 2026-09-29 (all fed apps checked)",
+        "Jenkins DockerImages #2570, #2571"
       ]
     },
     {
