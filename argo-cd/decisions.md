@@ -851,6 +851,24 @@ Decided 2026-09-23 (operator). Every image a deploy repo runs is pinned in its
   development, it does not test releases, so both its stages always deploy.
 - **Argo CD Image Updater is rejected** (operator: "I prefer not to use Argo CD Image Updater").
 
+> **Amended 2026-09-26 (operator: "Go", to "pin tags only, never digests"; slice 031, ANS-125):
+> a pin names a per-build tag, never a digest.** An image from the estate's registry
+> (`registry:5000`) is pinned to a per-build tag, such as `<n>` or a matrix build's `<tag>-<n>`.
+> No build pushes that tag again, so the pin always names the same image, and while the tag
+> exists its manifest is out of reach of a garbage collection that deletes untagged manifests. A
+> digest pin names a manifest no tag has to keep: on 2026-09-25 registry-cleanup's garbage
+> collection deleted the one KeycloakDeploy pinned.
+> - **A matrix build gets a per-build tag too** (operator: "Arguably all matrix builds get this
+>   behavior"). It pushes `<tag>-<n>` next to its named tag, and DockerImages' pin stage writes
+>   the per-build tag wherever the image carries a pin list, today only keycloak's. The other
+>   matrix images are still pulled by their named tag.
+> - **Argo CD's relay pin is written by the relay's builds** (slice 031 Ruling D3). It lives in
+>   ArgoCDDeploy's production stage values, not in a chart default, and every relay build writes
+>   it there as it writes FieldnotesDeploy's. Each such build leaves `argocd-prd`, synced by hand
+>   (D3), out of sync until the operator syncs it.
+>
+> Upstream images still pinned by digest are ANS-139's.
+
 **D54 — The bulk run is Claude's to execute.** Decided 2026-09-23 (operator: "Of course", to a
 standing authorisation for the run). For the migration only, Claude creates the deploy repos,
 Jenkins jobs and GitHub webhooks, pushes to them and to HelmCharts, Architecture, DockerImages
