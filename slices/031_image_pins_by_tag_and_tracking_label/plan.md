@@ -498,6 +498,50 @@ Further requirements:
   would trigger and explains anything the old code would not have triggered. The test phase
   checks the live poller against that list (Ordering constraints, step 3).
 
+**Done (P5).** DockerImages `1a69ff9` (`phase/031-P5`, committed, not pushed): the poller reads
+the label off every tag, and the label decides:
+- a tag named as its label is tracking and may govern;
+- a tag in its label's series is history and is ignored;
+- any other labelled tag is a promoted copy. It never triggers, and only the newest copy of each
+  label is warned about when stale;
+- unlabelled tags are ignored;
+- a tag labelled with its own bare number is a leftover, not tracking.
+
+`tagging.build_number` mirrors cleanup's. The regex, `is_versioned` and
+`_recover_self_tracking_tags` are gone. 78 tests green.
+
+Later phases:
+- P8: §6's walk and its three-way tag handling (`:286-352`), and §14.5 (`:744-752`), still state
+  the name classification. What shipped is listed above.
+- Test phase (step 3): on day D, every pipeline a live poll triggers is on D's list below. Fewer
+  is fine: builds move rebuild-at forward, and the live trigger state suppresses repeats. A
+  `depends` change can add a DockerImages trigger.
+
+- Proof: a live dry run, run twice, once on the new code and once on the old (`HEAD~1`).
+  Jenkins is stubbed as never building. No trigger state, no depends checkers. Logs:
+  `phases/P5/poller-dryrun-*.log` and `dryrun_week.py`, untracked.
+  - At the real time, 2026-09-29, neither triggers anything. With the clock set to each 05:00Z
+    run from 09-30 to 10-08, old and new trigger the same pipelines with the same params. Each
+    pipeline is listed from its first due day:
+    - 09-30: `DockerImages` (llmbox, llmbox-playwright). Its image set grows daily (logs).
+    - 10-01: `Firmware/IntercomServer`, `Ginbov`, `MyDownloads/MyDownloads`, `NewsFilter`,
+      `ScanToPdf/ScanToPdf`, `TrelloMcp`, `Webathome`, `YouTrack/YouTrackMCPServer`.
+    - 10-02: `SSEGateway/SSEGateway` (from `ssegateway:latest`). DockerImages adds keycloak.
+    - 10-04: `ElectronicsInventory/ElectronicsInventory`, `IaC/Charts`, `IaC/IaC Docker Image`,
+      `IaC/TerraformRegistry`, `IoTSupport/IoTSupport`, `ZigbeeControl/ZigbeeControl`.
+    - 10-06: `DHCP/DHCPApp` (from `dhcpapp:latest`), `FieldnotesApp`,
+      `Gitblit/GitblitMCPServer`, `Gitblit/GitblitMCPSupportPlugin`, `IaC/ArgoCDTools`,
+      `KubeCoder/Build-Main`.
+    - 10-07: `AaC/Architecture`, `Home`.
+  - Nothing new to explain. Every `node-24`/`jdk-21` repo holds no other tracking tag, so the old
+    fallback already found it. The nine leftovers are `dhcpapp:35` and
+    `ssegateway-validation:48`–`56`; neither version triggers through them.
+  - Warnings on one poll drop from 75 to 55:
+    - unlabelled extra tags (`ginbov_nl:local`, …) are silent;
+    - an all-unlabelled repo warns once, "no tracking tag";
+    - staleness names each label's newest copy (`design-assistant:uat-17`), not each `*-latest`.
+  - A poll reads all 1,708 tag configs: 9 s, where it took 1 s.
+
 ### P6 — Matrix builds push a per-build tag, and the pin lists reach the unrefreshed pins
 
 Target: ../DockerImages
@@ -554,6 +598,8 @@ Triage overruled the standing tag scheme (R3, R4, Ruling D2). In
 - every other place the doc states them, such as §8's keep and delete rules (`:405-412`) and
   §14's classification.
 - §10's `--max-per-prefix` row: P4 renamed the flag `--max-per-series`.
+- §6's poller walk, its pseudo-code and "Three-way tag handling" (`:286-352`), and §14.5
+  (`:744-752`). P5 moved the poller to the label rule; its done-record lists the classes.
 
 What shipped: the label decides, build history is the label's series, each series keeps its
 newest build, a matrix build pushes two tags, and unlabelled tags are left alone.
