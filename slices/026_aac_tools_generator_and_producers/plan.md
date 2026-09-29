@@ -352,6 +352,26 @@ goes. A prd generation shows no gap line for the image, and `kubecoder.home` sti
   the mapping only after the next promotion, and this slice does not promote.
 - The push rides P9b.
 
+**Done (P5).** The sidecar's `gen-architecture --help` prints the new contract (`served_by`,
+`containers`), so the restart happened. KubeCoderDeploy maps `kube-coder-tunnel-reclaim:
+app:kube-coder-tunnel-reclaim` and the gap comment is gone (`e9a5ca7` on `phase/026-P5` in
+`/work/scratch/KubeCoderDeploy`, unpushed).
+
+Later phases:
+- P9b: KubeCoderDeploy has two clones. Edit and push `/work/scratch/KubeCoderDeploy`, whose `main`
+  carries P5's commit, not `/work/scratch/sweep031/KubeCoderDeploy`. Its `architecture.yaml` line 3
+  still says "gen-architecture's docstring"; P5 left the pointer to P9b.
+
+Record:
+- A prd generation of `main` with the published sidecar prints no `gap:` line. Against the
+  unmapped generation, the artifact's only difference is one added Specialization,
+  `app:kubecoder-prd-kubecoder-controller-tunnel-reclaim` → `app:kube-coder-tunnel-reclaim`
+  (12 elements, 31 → 32 relations). `kubecoder.home` and `kubecoder` are still assigned to
+  `svc:kubecoder-controller-api`, and no service is minted.
+- The mapping line carries a two-line comment: the product belongs to the docker-images producer,
+  not to the kubecoder producer that the block comment above it names.
+- `kc project test` is green.
+
 ### P6 — Argo CD's controllers realize configuration management, and its redis serves them
 
 Target: ../ArgoCDDeploy
@@ -446,7 +466,8 @@ first (Ruling F5). ArgoCDDeploy's push carries P6's commit.
 Target: root
 
 As P9a, for the deploy repos whose names start G–M, resuming from the ledger. KubeCoderDeploy's
-push carries P5's mapping.
+push carries P5's mapping. Edit and push that repo in `/work/scratch/KubeCoderDeploy`, whose `main`
+carries P5's commit, not in its sweep031 clone.
 
 ### P9c — Deploy repos N–Z point at `gen-architecture --help`
 
