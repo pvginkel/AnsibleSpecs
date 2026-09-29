@@ -323,6 +323,24 @@ stuff"). The registry became the inventory of what runs. The `configs/dev` chart
 workflow got no answer: the operator deferred it past the archive ("I will just archive the repo
 and figure this out later.").
 
+## Image pins: digests → per-build tags, and a label decides what cleanup deletes (D47, D53)
+
+D53 pinned every image a deploy repo runs and left the pin's form open. The bulk migration pinned
+each release's digests, and builds replaced a pin with a build number as they wrote it, but
+DockerImages' pin stage skipped matrix images, so KeycloakDeploy stayed on the migration's digest.
+On 2026-09-25 registry-cleanup's garbage collection, which deletes untagged manifests, deleted it,
+and Keycloak did not come back from that day's cold boot. The operator ruled "pin tags only, never
+digests" (D53's amendment) and carried it to matrix builds: "Arguably all matrix builds get this
+behavior." A matrix build pushes `<tag>-<n>` beside its named tag, and the pin names that.
+
+Cleanup and the version-poller told build history from a tracking tag by the tag's name, a pattern
+a matrix tag such as `node-24` also fits. The operator: "I feel the now obvious answer is that we
+just make this explicit using a label." Both read the `tracking-tag` label kaniko2 stamps, and
+only the label's build series is history. That moved D47's cap sizing: `prd-<n>` carries the label
+of the build it copies, so it is in no series; cleanup keeps every one, and rollback reaches back
+through every promotion while the copies accumulate. Reading what is deployed stayed out of scope:
+"If our continuous rebuilds work, there will always be a fresh image."
+
 ## The restructure itself
 
 `plan.md` grew as one document interleaving decision, rationale and phase work per topic; when

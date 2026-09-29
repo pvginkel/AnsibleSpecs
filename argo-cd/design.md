@@ -330,7 +330,9 @@ window. The cap and the timeout are source constants: the whole of the relay's c
 the shared secret and the two receiver URLs, and it holds no credential toward GitHub and none
 toward the cluster. It is stateless, so more than one replica is safe — and with two, a roll of
 `argocd-prd` opens no window in which deliveries are dropped. Its Deployment, Service and public
-annotation are ArgoCDDeploy chart content, pinned to a `registry:5000/webhook-relay:<n>` tag.
+annotation are ArgoCDDeploy chart content. Its image is a `registry:5000/webhook-relay:<n>` build,
+pinned in ArgoCDDeploy's `config/prd/values.yaml`, where every relay build writes it (D53); each
+such build leaves `argocd-prd`, synced by hand (D3), out of sync until the operator syncs it.
 
 **The consequence to respect:** a dropped webhook is not a delay — it is stale-but-green,
 followed by the deploy landing at an arbitrary later moment when an unrelated refresh

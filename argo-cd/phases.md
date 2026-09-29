@@ -224,16 +224,17 @@ pins its own: the tag lives in `config/<stage>/values.yaml`, and the chart names
       each template `required`-guards its key, so a stage that omits one fails to render.
 - [ ] Pin `controllerConfig.images.{worker,vsix}` the same way — the unpinned half D145
       documents; today's digest scraper never reached them.
-- [ ] Leave `images.tunnelReclaim` floating: DockerImages toolchain image, out of scope by
-      operator decision — the boundary is "the seven Build-Main images", not the block.
+- [ ] Leave `images.tunnelReclaim` to DockerImages, out of scope by operator decision — the
+      boundary is "the seven Build-Main images", not the block. DockerImages' builds of
+      `kube-coder-tunnel-reclaim` pin it in both stage files (D53).
 - [ ] Replace the D145 `imagePullPolicy: Always` overrides on the five pinned chart Deployment
       containers — controller, ingress, manual, mcp, bot — with a declared `IfNotPresent`.
       Dropping the field would not remove it: Argo's first sync leaves a field Helm set and the
       new render omits at its Helm value (argocd.md's "What a cutover does not change"), so
-      the chart declares it and takes it over. `tunnel-reclaim` and every
-      controllerConfig container spec keep theirs: those images float. The controller's own
-      worker/vsix ImageVolume `pullPolicy` lines, and D145's update (its sunset checklist is
-      stale), wait until both stages run from pins — B.5's cleanup, after prd.
+      the chart declares it and takes it over. Every controllerConfig container spec keeps
+      its own: those images float. `tunnel-reclaim` declares `IfNotPresent` on its pin. The
+      controller's own worker/vsix ImageVolume `pullPolicy` lines, and D145's update (its sunset
+      checklist is stale), wait until both stages run from pins — B.5's cleanup, after prd.
 
 Everything above that a repository can hold is committed (slices 010 to 012): KubeCoderDeploy —
 the chart on `homelab-shared` 0.2.1 (hook `argocd-hook:10`, Terraform 1.16.3) with the declared pull policy, both stages' values and

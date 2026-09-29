@@ -637,7 +637,7 @@ Amends D35 and D37; mechanics in §14 of
 `DockerImages/docs/registry-management/version-poller-redesign.md`.
 
 *The problem.* D37's stage-agnostic `:<n>` in `chart/values.yaml` makes production's reference a
-**versioned** tag — exactly what `registry-cleanup`'s per-prefix cap deletes — with nothing in
+**versioned** tag — exactly what `registry-cleanup`'s per-series cap deletes — with nothing in
 the registry recording that it is in use. With stage prefixes gone every build lands in one
 bare-numbered family, so an active repo exhausts its cap in days.
 
@@ -673,14 +673,14 @@ to honour, so an app's tag scheme stays its own business (see the scope note).
 and `<n>` are the same manifest, and the registry deletes by digest, so reaping the build tag
 once it ages out of the bare family's cap would destroy production with it. That guard now fails
 closed on an unresolvable digest and is pinned by tests including a negative control. Separately,
-**whatever TTL shape lands must not reap the newest member of a prefix family** — recorded as a
-requirement on that still-open design, not as a decided mechanism.
+**the newest build of every build series is never reaped**, however old: `registry-cleanup`
+keeps it past both the TTL and the cap.
 
-*Cap sizing, which now has two independent meanings.* The bare family governs how stale a build
-can be and still be promotable — promoting the tip of `main` makes this ~1. The `prd-` family
-governs **how many promotions can be rolled back through**, which D36 needs; that is the number
-worth choosing deliberately. `registry-cleanup` caps per family, so the two are independent by
-construction.
+*Cap sizing.* Only a build series is capped. The build tags' series governs how stale a build can
+be and still be promotable — promoting the tip of `main` makes this ~1. `prd-<n>` is a promoted
+copy: it carries the tracking-tag label of the build it copies, so it is in no series, and
+`registry-cleanup` never deletes it. Every promotion can therefore be rolled back through, which
+D36 needs; the copies accumulate, one per promotion, until a retention rule for them is set.
 
 *Rollback needs nothing new.* D36 survives unchanged and was checked against this model: revert
 on `main` then promote works, and the force-move lever works, because the older `prd-<n>` still
