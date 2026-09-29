@@ -640,7 +640,7 @@ Record:
   "docstring", and exactly three keys. Each pushed sha is on `origin/main`.
 - Commit message as in P9a. Gate: `kc project test --project root` green.
 
-### P10 — The carriers are enumerated and assigned, and Ansible validates with the toolchain
+### P10 — The carriers are enumerated and assigned, and Ansible validates with the toolchain ✅ DONE 2026-09-30
 
 Target: architecture
 
