@@ -336,6 +336,30 @@ The container's pull policy follows the other pinned images'. It is `Always` tod
 prd gets the pin through KubeCoder's normal promotion (Settled), never through a commit on
 `prd`.
 
+**Done (P2).** KubeCoderDeploy `3de9ea8` (`phase/031-P2`, committed, not pushed): both stage files
+pin `images.tunnelReclaim: ":2565"` (the newest build; `latest` points at the same digest), a tag
+suffix the chart concatenates onto `registry:5000/kube-coder-tunnel-reclaim`. The chart names no
+default (`images: {}`) and `required`-guards the key; the container pulls `IfNotPresent`. The
+render gate checks each stage's pin is `:<digits>`, both stages name one build, the rendered
+container runs it pulling `IfNotPresent`, and a stage without it fails to render.
+`kc project test` green.
+
+Later phases:
+- P6: `kube-coder-tunnel-reclaim/deploy-pins.json` names `pvginkel/KubeCoderDeploy`, files
+  `config/dev/values.yaml` and `config/prd/values.yaml`, path `images.tunnelReclaim`, default
+  value template (`:{tag}`). Both files, one commit: the render gate refuses stages on different
+  builds.
+- Test phase: pushing KubeCoderDeploy changes kubecoder-dev's controller pod spec (`:latest` →
+  `:2565`, pull policy), so the pod rolls onto the same digest. prd takes it at the next
+  Promote-PRD, whose retag step reads only Build-Main's seven pins and leaves this one alone.
+
+Record:
+- prd's copy of the pin is written on `main` alongside dev's; `Jenkinsfile.promote`'s `prdPins`
+  reads only the seven `kubecoder-*` paths, so the bare build number never reaches its
+  `prd-<n>` check.
+- `cicd.writeVersionPins` patches the quoted `":2565"` line in place (the path resolves through
+  the comment above it).
+
 ### P3 — ArgoCDDeploy's relay pin moves into its production stage values
 
 Target: ../ArgoCDDeploy
@@ -438,7 +462,9 @@ Target: ../DockerImages
   - Keycloak's first per-build pin comes from the keycloak build the test phase starts
     (Ordering constraints, step 4). This phase is what makes that build write the pin.
 - **Pin lists.**
-  - `kube-coder-tunnel-reclaim` gets a pin list naming P2's path.
+  - `kube-coder-tunnel-reclaim` gets a pin list naming P2's path: `pvginkel/KubeCoderDeploy`,
+    `images.tunnelReclaim` in both `config/dev/values.yaml` and `config/prd/values.yaml`, default
+    value template.
   - `webhook-relay`'s list gains P3's ArgoCDDeploy path next to FieldnotesDeploy's (Ruling D3).
   - Every entry names a path its values file already holds with P2 and P3 merged. The pin stage
     fails on any other path (`JenkinsPipelineUtils/vars/cicd.groovy:16-17`).
