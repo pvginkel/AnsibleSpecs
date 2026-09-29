@@ -290,6 +290,34 @@ to trust the label.
   labelled `56`, built 2026-09-24.
 - The doc comment on `kaniko2` states the new contract.
 
+**Done (P1).** JenkinsPipelineUtils `276beff` (`phase/031-P1`, committed, not pushed): `kaniko2`
+takes `trackingTag:`. Without it, the label is the one destination whose build series holds every
+other one, and a lone bare build number is labelled `latest`. It refuses a destination that is
+neither the label nor in its series, and a bare-number label, explicit or derived. The series is
+`inBuildSeries(tag, label)` in `vars/helmCharts.groovy`: `latest` owns `^\d+$`, `<p>-latest`
+owns `<p>-<digits>`, any other label `L` owns `L-<digits>`. New `tests/.../TrackingTagTest.java`;
+`kc project test` green.
+
+Later phases:
+- P4, P5: classify with exactly this series rule — a label ending `-latest` owns `<p>-<digits>`,
+  not `<p>-latest-<digits>`. No image kaniko2 labels from now on carries a bare-number label, so a
+  self-labelled bare number is a leftover.
+- P6: pass `trackingTag: <tag>` with destinations `<tag>` + `<tag>-<build>`. No matrix tag is bare
+  digits or ends in `-latest` (every `*/build-matrix.json` checked).
+- P8: §4's "Tag scheme (enforced by `kaniko2`)" is now the contract in kaniko2's doc comment.
+- Test phase: the one caller whose label changes is SSEGateway's `ssegateway-validation:<n>`
+  (a lone bare number, now labelled `latest`, not `<n>`).
+
+Record:
+- Callers: 30 `Jenkinsfile*` on GitHub (gitblit search) plus the checked-out repos. They push
+  `<n>` + `latest`, `dev-<n>` + `dev-latest` (KubeCoder), `<p>-<n>` + `<p>-latest`
+  (DesignAssistant), one named matrix tag (DockerImages) or a lone `<n>` (SSEGateway). None
+  passes `trackingTag`, and none is refused. Each gets today's label, except the lone `<n>`.
+- The derivation is general. It gives today's label for every set the old check accepted, and it
+  also accepts `<tag>` + `<tag>-<n>`. At most one destination can own all the others.
+- An explicit tracking tag need not be pushed. `LibraryCompileTest.trustedLoader()` is now
+  package-private, for the new test's `@NonCPS` calls.
+
 ### P2 — KubeCoderDeploy pins kube-coder-tunnel-reclaim to a build
 
 Target: ../scratch/KubeCoderDeploy
