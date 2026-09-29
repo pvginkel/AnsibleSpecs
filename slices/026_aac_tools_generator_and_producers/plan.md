@@ -679,6 +679,34 @@ of the slice's Ansible diff.
 
 This phase pushes nothing.
 
+**Done (P10).** The carrier set is 28 repos, and gitblit and GitHub's trees agree on it. Ansible
+runs the toolchain's `arch-validate` in `Jenkinsfile.architecture` and in its `architecture` gate,
+and its copy is deleted (`b92d01a` on `phase/026-P10`, unpushed). The other 27 are assigned in
+P11–P13b's sections and in `sweep_ledger.md` § Carriers.
+
+Later phases:
+- P11: KitchenDisplay moved here from the device class, because its deploy job is disabled.
+- P12b: FieldnotesApp is a carrier the Grounding missed. It redeploys prd.
+- P12c: `AaC/IoTSupport` has been red since 2026-09-24, for a cause the migration does not touch.
+  Its section says what to check before pushing it.
+- P11–P13b: the durations in a section are medians of the job's last eight green builds (read
+  2026-09-29). Builds that ran concurrently on 2026-09-11 took 20–29 min.
+- Test phase: pushes `b92d01a` with the slice's Ansible diff. V13's "KitchenDisplay's deploy"
+  has no build to witness while `Firmware/KitchenDisplay` is disabled.
+
+Record:
+- Gitblit `find_files` `**/arch-validate.py`: 36 files in 33 repos. GitHub: the recursive trees
+  of all 114 non-archived repos' default branches, none truncated or failed, hold it in 30. The
+  sets differ only in the archived DesignAssistant, SomfyRemote and HelmCharts, which only
+  gitblit lists.
+- Classification: the Grounding's lists hold, with two exceptions. FieldnotesApp's `Jenkinsfile`
+  runs kaniko and `cicd.writeVersionPins` into FieldnotesDeploy, with no guard. Jenkins reports
+  `Firmware/KitchenDisplay` disabled. Its last eight builds failed on a key it reads from
+  HelmCharts. Every other job a carrier push starts is buildable.
+- Assignment: the canaries are short builds that ran green recently. Carriers that pin the same
+  deploy repo go in different batches, and the slowest go last. Expected waits: P11 ~45 min,
+  P12a–b ~35, P12c ~60, P13a–b ~35.
+
 ### P11 — The carriers whose push rolls nothing out validate with the toolchain
 
 Target: root
@@ -686,14 +714,28 @@ Target: root
 The carriers P10 assigns here move onto the toolchain (R6) as the attachment's § Migrating a
 carrier describes. The class canary is pushed alone first, then the rest in small batches.
 
-- HelmCharts' copy goes: its `Jenkinsfile.architecture:35` runs it. Its own generator and
-  `.architecturerc` stay, because its sources include its generator. An archived HelmCharts is
-  left alone (Ruling F1).
+- HelmCharts was archived on 2026-09-28, so it is left alone (Ruling F1).
 - DockerImages' `Jenkinsfile.architecture:36` runs the copy, and its `.architecturerc`
   instructions (`:11`) tell the central update to run it.
 - KubeCoder's push rebuilds and pins dev only; prd moves only by promotion.
 
-P10 names this phase's carriers here.
+**Carriers, in push order (P10).** Every push also starts `AaC/<Repo>`, and after it
+`AaC/Architecture`, which takes about 6 min. Expected wait: about 45 min.
+
+1. Canary, alone: DockerImages. `DockerImages` takes about 2 min and builds only the images whose
+   directory changed (`utils.hasChanges`).
+2. Batch: KubeCoder, KitchenDisplay and ScanToPdfServer.
+   - KubeCoder: `KubeCoder/Build-Main` takes about 11 min. It pins dev into KubeCoderDeploy, and
+     `kubecoder-dev` rolls.
+   - KitchenDisplay: the push starts only `AaC/KitchenDisplay`. Its deploy job,
+     `Firmware/KitchenDisplay`, is disabled in Jenkins. Its last build, #71 on 2026-06-06, failed
+     reading its SSH key from HelmCharts. Check that the job is still disabled right before the
+     push. If it has been enabled, KitchenDisplay restarts a service on the Pi. Then P11 does not
+     push it: move its row to P13b, where it goes last.
+   - ScanToPdfServer: `ScanToPdf/ScanToPdfServer` takes about 1 min.
+3. Batch: ScanToPdfClient, MyDownloadsServer and MyDownloadsClient.
+   `ScanToPdf/ScanToPdfClient` takes about 3 min, `MyDownloads/MyDownloadsServer` about 2 min and
+   `MyDownloads/MyDownloadsClient` about 19 min.
 
 ### P12a — Carriers whose push redeploys production, first part
 
@@ -707,7 +749,20 @@ Application they pin into must be Healthy at the new pin. D1 accepts that each o
 restarts once on unchanged code. The class spans P12a–P12c (Ruling F4), and this phase pushes
 its canary alone first (Ruling F5).
 
-P10 names this phase's carriers here.
+**Carriers, in push order (P10).** Each app job pins into the deploy repo after the arrow. Every
+such deploy repo is done in P9a–P9c. Every push also starts `AaC/<Repo>`, and after it
+`AaC/Architecture`, which takes about 6 min. Expected wait: about 35 min.
+
+1. Canary, alone: GitblitMCPServer. `Gitblit/GitblitMCPServer`, about 1 min → GitSyncDeploy.
+2. Batch:
+   - YouTrackMCPServer: `YouTrack/YouTrackMCPServer`, about 1 min → YoutrackMcpDeploy.
+   - Ginbov: `Ginbov`, about 1 min → GinbovNlDeploy.
+   - NewsFilter: `NewsFilter`, about 4 min → NewsfilterDeploy.
+3. Batch:
+   - GitblitMCPSupportPlugin: `Gitblit/GitblitMCPSupportPlugin`, about 1 min → GitSyncDeploy. It
+     pins the same deploy repo as the canary, so it is not in the canary's batch.
+   - Webathome: `Webathome`, about 4 min → WebathomeOrgDeploy, which also takes the site pin
+     after every `AaC/Architecture`.
 
 ### P12b — Carriers whose push redeploys production, second part
 
@@ -715,7 +770,18 @@ Target: root
 
 As P12a, for the carriers P10 assigns here, resuming from the ledger.
 
-P10 names this phase's carriers here.
+**Carriers, in push order (P10).** Expected wait: about 35 min.
+
+1. Batch:
+   - IntercomServer: `Firmware/IntercomServer`, about 5 min → IntercomDeploy.
+   - FieldnotesApp: `FieldnotesApp`, about 7 min including its test suite → FieldnotesDeploy. The
+     Grounding does not list it. Its `Jenkinsfile` runs kaniko and `cicd.writeVersionPins` with
+     no guard.
+   - DHCPApp: `DHCP/DHCPApp`, about 6 min → DnsmasqDeploy. It has two copies, in `backend/` and
+     `frontend/`.
+2. Alone: SSEGateway. `SSEGateway/SSEGateway` takes about 12 min and pins into four deploy repos:
+   Zigbee2mqttDeploy, ElectronicsInventoryDeploy, IotDeploy and DnsmasqDeploy. Every Application
+   of all four must be Healthy at its new pin.
 
 ### P12c — Carriers whose push redeploys production, third part
 
@@ -723,19 +789,47 @@ Target: root
 
 As P12a, for the carriers P10 assigns here, resuming from the ledger.
 
-P10 names this phase's carriers here.
+**Carriers, in push order (P10).** Expected wait: about 60 min.
+
+1. Batch:
+   - ElectronicsInventory: `ElectronicsInventory/ElectronicsInventory`, about 26 min →
+     ElectronicsInventoryDeploy.
+   - ZigbeeControl: `ZigbeeControl/ZigbeeControl`, about 22 min → Zigbee2mqttDeploy. It has two
+     copies, in `backend/` and `frontend/`.
+2. Last, alone: IoTSupport. `IoTSupport/IoTSupport`, about 21 min → IotDeploy. It has two copies,
+   in `backend/` and `frontend/`.
+
+**IoTSupport's architecture build was red before the sweep.** `AaC/IoTSupport` #38–#41
+(2026-09-24 to 2026-09-26) failed in IoTSupport's own generator, with `ERROR: firmware product
+UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset`. In
+`backend/docs/architecture/firmware-products.yaml` that UUID is `somfy_remote`, the firmware
+product of the archived SomfyRemote, which is no longer in the published dataset. IoTSupport still
+registers a device of that model, `somfy-remote-fhwiwoxa`. Its generator fails on any model it
+cannot map, so dropping the mapping line does not fix the build. The remedy is the operator's
+(close-out B2). Before touching IoTSupport, check whether a ruling in Requirements / rulings settles
+it, or whether an `AaC/IoTSupport` build after #41 is green. If neither holds, do not migrate or
+push IoTSupport. Record it in the ledger as stopped, and hand back a `question` that names this
+failure.
 
 ### P13a — Device carriers, one at a time, first part
 
 Target: root
 
 The device carriers come last, one at a time (R6, Ruling D1). They are the firmware repos that
-flash over the air, and KitchenDisplay, which restarts a service on a Raspberry Pi. Each is
+flash over the air. KitchenDisplay is in P11, because its deploy job is disabled (P10). Each is
 migrated as the attachment's § Migrating a carrier describes, then pushed. The next starts only
-once its flash upload (for KitchenDisplay, its deploy) and its own architecture build have
-succeeded. The first is the class canary (Ruling F5). The class spans P13a–P13b (Ruling F4).
+once its flash upload and its own architecture build have succeeded. The first is the class
+canary (Ruling F5). The class spans P13a–P13b (Ruling F4).
 
-P10 names this phase's carriers here.
+**Carriers, in push order (P10).** A push starts `Firmware/<Repo>` and `AaC/<Repo>`, and after
+the latter `AaC/Architecture`, which takes about 6 min. The flash is the firmware job's
+`Deploy …` stage. It runs `scripts/upload.sh https://iot.ginbov.nl`, which prints
+`Success: Uploaded firmware version <sha>`. Expected wait: about 35 min.
+
+1. Canary: InfraStatisticsDisplay, about 2 min. Its #55 ran green on 2026-09-29.
+2. GestureDevice, about 4 min.
+3. UnderfloorHeatingController, about 4 min.
+4. DoorbellReceiver, about 9 min.
 
 ### P13b — Device carriers, one at a time, second part
 
@@ -743,7 +837,13 @@ Target: root
 
 As P13a, for the carriers P10 assigns here, resuming from the ledger.
 
-P10 names this phase's carriers here.
+**Carriers, in push order (P10).** Expected wait: about 35 min.
+
+1. CalendarDisplay, about 10 min.
+2. PaperClock, about 12 min.
+3. Intercom, about 8 min.
+4. KitchenDisplay, only if P11 moved it here. It is not a flash: `Firmware/KitchenDisplay`
+   restarts the service on the Pi, and that deploy must succeed.
 
 ## Not in scope
 

@@ -65,3 +65,51 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | YoutrackDeploy | deploy | P9c | `/work/scratch/sweep031/YoutrackDeploy` | pointer (`.architecturerc`) | `a75e726` | done: AaC/YoutrackDeploy #6 and AaC/Architecture #2262 green; youtrack-prd: at=True sync=Synced health=Healthy; site pin `b582272` rolled |
 | YoutrackMcpDeploy | deploy | P9c | `/work/scratch/sweep031/YoutrackMcpDeploy` | pointer (`.architecturerc`) | `88827a8` | done: AaC/YoutrackMcpDeploy #5 and AaC/Architecture #2262 green; youtrack-mcp-prd: at=True sync=Synced health=Healthy; site pin `b582272` rolled |
 | Zigbee2mqttDeploy | deploy | P9c | `/work/scratch/sweep031/Zigbee2mqttDeploy` | pointer (`.architecturerc`) | `1346a58` | done: AaC/Zigbee2mqttDeploy #14 and AaC/Architecture #2262 green; zigbee2mqtt-prd: at=True sync=Synced health=Healthy; site pin `b582272` rolled |
+
+## Carriers (R6's migration)
+
+Enumerated 2026-09-29 by P10 (Ruling F2). Gitblit's `find_files` `**/arch-validate.py` returned 36
+files in 33 repos. GitHub's recursive tree of every non-archived pvginkel repo (114 repos on their
+default branch, none `truncated`, none failed) holds the file in 30 of them. The two sets are the
+same except for the three archived repos, which only gitblit lists. Two of the 30 are not carriers:
+Architecture's canonical `.claude/architecture/arch-validate.py`, and ArgoCDTools'
+`aac-tools/image/arch-validate.py`. That leaves 28 carriers. Ansible migrates in P10, and the 27
+others are assigned below. DHCPApp, IoTSupport and ZigbeeControl carry two copies each, at
+`backend/scripts/` and `frontend/scripts/`. Every other carrier has one, at `scripts/`.
+
+Done for a carrier: see the attachment's § What "done" means for one repo. "to clone" means the
+carrier is not cloned yet. Clone it to `/work/scratch/<Repo>`.
+
+| Repo | Class | Phase | Clone | Change | Pushed sha | Outcome |
+|---|---|---|---|---|---|---|
+| Ansible | no rollout | P10 | `/work/Ansible` | `Jenkinsfile.architecture` and the `architecture` gate run the toolchain's `arch-validate`; `scripts/arch-validate.py` deleted | — | committed `b92d01a` on `phase/026-P10`; the test phase pushes it with the slice's Ansible diff |
+| DockerImages | no rollout (canary) | P11 | `/work/DockerImages` | migrate; `.architecturerc` instructions name the copy | — | pending |
+| KubeCoder | no rollout (pins dev only) | P11 | `/work/scratch/KubeCoder` | migrate | — | pending |
+| KitchenDisplay | no rollout (`Firmware/KitchenDisplay` disabled) | P11 | to clone | migrate | — | pending |
+| ScanToPdfServer | no rollout | P11 | to clone | migrate | — | pending |
+| ScanToPdfClient | no rollout | P11 | to clone | migrate | — | pending |
+| MyDownloadsServer | no rollout | P11 | to clone | migrate | — | pending |
+| MyDownloadsClient | no rollout | P11 | to clone | migrate | — | pending |
+| GitblitMCPServer | redeploys prd (canary) | P12a | to clone | migrate | — | pending |
+| YouTrackMCPServer | redeploys prd | P12a | to clone | migrate | — | pending |
+| Ginbov | redeploys prd | P12a | to clone | migrate | — | pending |
+| NewsFilter | redeploys prd | P12a | to clone | migrate | — | pending |
+| GitblitMCPSupportPlugin | redeploys prd | P12a | to clone | migrate | — | pending |
+| Webathome | redeploys prd | P12a | to clone | migrate | — | pending |
+| IntercomServer | redeploys prd | P12b | to clone | migrate | — | pending |
+| FieldnotesApp | redeploys prd | P12b | `/work/scratch/FieldnotesApp` | migrate | — | pending |
+| DHCPApp | redeploys prd | P12b | `/work/scratch/DHCPApp` | migrate (two copies) | — | pending |
+| SSEGateway | redeploys prd (pins four deploy repos) | P12b | to clone | migrate | — | pending |
+| ElectronicsInventory | redeploys prd | P12c | `/work/scratch/ElectronicsInventory` | migrate | — | pending |
+| ZigbeeControl | redeploys prd | P12c | `/work/scratch/ZigbeeControl` | migrate (two copies) | — | pending |
+| IoTSupport | redeploys prd (AaC red before the sweep) | P12c | `/work/scratch/IoTSupport` | migrate (two copies) | — | pending |
+| InfraStatisticsDisplay | device (canary) | P13a | to clone | migrate | — | pending |
+| GestureDevice | device | P13a | to clone | migrate | — | pending |
+| UnderfloorHeatingController | device | P13a | to clone | migrate | — | pending |
+| DoorbellReceiver | device | P13a | to clone | migrate | — | pending |
+| CalendarDisplay | device | P13b | to clone | migrate | — | pending |
+| PaperClock | device | P13b | to clone | migrate | — | pending |
+| Intercom | device | P13b | to clone | migrate | — | pending |
+| DesignAssistant | archived | — | — | none | — | left alone: archived on GitHub |
+| SomfyRemote | archived | — | — | none | — | left alone: archived on GitHub |
+| HelmCharts | archived | — | — | none | — | left alone: archived on GitHub 2026-09-28 (Ruling F1) |

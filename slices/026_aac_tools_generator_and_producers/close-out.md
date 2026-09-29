@@ -94,6 +94,15 @@ Stopped 2026-09-29 21:15; resumed 2026-09-29 21:24.
 **Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
+### N3 — KitchenDisplay moved from the device class to P11: its Jenkins deploy job is disabled
+
+The Grounding classed KitchenDisplay as restarting a Raspberry Pi service on every push. Jenkins reports Firmware/KitchenDisplay as disabled (buildable false). Its last eight builds (#64–#71, to 2026-06-06) failed at 'Deploy kitchendisplay': the job checks out HelmCharts for assets/kubernetes-pipeline-key, and the file is not there. HelmCharts is now archived. A push therefore starts only AaC/KitchenDisplay, and P10 put it in P11, the no-rollout class. P11 checks that the job is still disabled right before the push. If it has been enabled, P11 moves KitchenDisplay to the end of P13b.
+
+**Consequence:** The Pi restart Ruling D1 accepted for KitchenDisplay does not happen. KitchenDisplay has no working Jenkins deploy: re-enabling the job as it stands fails at the same missing HelmCharts key.
+
+**Provenance:** witnessed | code-writer, P10, r1 — Jenkins Firmware/KitchenDisplay api/json and #71 console
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -111,6 +120,15 @@ code-writer, P9c r1, 2026-09-29 — Already fixed outside this slice: Architectu
 **Consequence:** Jenkins runs two builds every ~6 minutes forever, the architecture site's pod is replaced each time (35-45 s with no pod until ANS-111's fix lands), and WebathomeOrgDeploy gains ~200 pin commits a day.
 
 **Provenance:** witnessed | plan-writer, planning, r1 — Jenkins API build causes for AaC/Architecture and AaC/WebathomeOrgDeploy, and WebathomeOrgDeploy git log, 2026-09-25
+**Disposition:**
+
+### B2 — IoTSupport: AaC/IoTSupport has been red since 2026-09-24, because its generator cannot map the archived SomfyRemote's firmware product · major
+
+AaC/IoTSupport #38–#41 (2026-09-24 to 2026-09-26, each started by a GitHub push) fail in IoTSupport's own tools/gen-architecture.py with 'ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset'. The last green build is #37 (2026-09-21). In backend/docs/architecture/firmware-products.yaml that UUID is somfy_remote, the product SomfyRemote published. SomfyRemote is archived and its product is no longer in the dataset, but IoTSupport still registers a device of that model: the published dataset still carries IoTSupport's #37 artifact, with device:somfy-remote-fhwiwoxa and a Specialization to ss:somfy-remote,3e684732-…. The generator fails on any registered model it cannot map, so dropping the mapping line alone swaps one error for another. Remedy options: retire the somfy-remote device (and its model) in the IoTSupport service, then drop the mapping line. Or keep SomfyRemote's product in the dataset some other way. P12c checks for a ruling or a later green AaC/IoTSupport build before it touches IoTSupport, and otherwise stops there with a question.
+
+**Consequence:** IoTSupport's published architecture stays frozen at its 2026-09-21 artifact. The sweep stops at IoTSupport, the last P12c carrier, so V12 cannot hold for it until the operator retires the device or rules otherwise.
+
+**Provenance:** witnessed | code-writer, P10, r1 — Jenkins AaC/IoTSupport #41 console; sweep_ledger.md § Carriers
 **Disposition:**
 
 ## Open questions and rulings
@@ -234,4 +252,13 @@ update-architecture.md:49-50 has a central update session run `cexec aac-tools g
 **Consequence:** After a future contract change, central update sessions edit deploy repos' judgment layers against the older contract until someone restarts the Architecture environment. A valid but incomplete edit passes the AaC build unnoticed.
 
 **Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
+**Disposition:**
+
+### S13 — Close-out B1 is still live, though P9c recorded its pin loop fixed by Architecture a2dabd2 (ANS-136) · nit
+
+P9c noted B1 instead of striking it. Its note (and attachments/push-sweep.md:76-79) say Architecture a2dabd2 (2026-09-26) sets trigger: false on webathome-org-deploy, so AaC/WebathomeOrgDeploy no longer starts AaC/Architecture. No pin commit followed WebathomeOrgDeploy 6c83563 on origin/main. The list view shows B1's headline ('endless loop … · major') and its Consequence ('two builds every ~6 minutes forever'), not the note, and counts still counts it.
+
+**Consequence:** The triage view presents a loop fixed on 2026-09-26 as the report's one open major bug.
+
+**Provenance:** read | code-reviewer, P9c, r1 — phases/P9c/code_review_r1.md F1
 **Disposition:**

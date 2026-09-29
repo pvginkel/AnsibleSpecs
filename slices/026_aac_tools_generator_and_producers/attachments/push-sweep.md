@@ -47,7 +47,8 @@ under `/work` are cloned to scratch; `GH_TOKEN` has repo scope.
   - For a deploy repo, and for a carrier that pins into one, every Argo CD Application it
     feeds is Synced and Healthy at the new revision.
   - For a device carrier, the build's over-the-air flash upload succeeded.
-  - For KitchenDisplay, its Raspberry Pi deploy succeeded.
+  - For KitchenDisplay, only if its disabled deploy job has been enabled again (P11), its
+    Raspberry Pi deploy succeeded.
 - **The ledger has its row,** as described below.
 
 ## Canaries, batches and the stop rule
