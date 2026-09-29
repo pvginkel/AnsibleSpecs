@@ -617,6 +617,32 @@ repo's stage values:
   `images.registry` does;
 - others pin only per-build tags.
 
+**Done (P7).** RegistryDeploy `dca461d` (`phase/031-P7`, committed, not pushed): the setting is
+`registryCleanup.dryRun`, a bool. It is `true` in `config/prd/values.yaml`, and the chart names no
+default. The CronJob hands it to the job as env `DRY_RUN` (`"true"`/`"false"`); a stage without a
+bool there fails to render. The suspension and its comment are gone. The corrected comment is the
+three lines above `global:` in `config/prd/values.yaml`. The test gate's bare `helm template` is
+now `tests/render-chart.py`. `kc project lint` and `kc project test` are green.
+
+Later phases:
+- Test phase, step 5: `:2548` ignores `DRY_RUN`. Pushed before the P4 pin, the unsuspended
+  03:30Z run deletes for real. The step 3 pin commit rebases under `dca461d` without conflict.
+  Argo's diff is the CronJob only: `suspend` goes, `DRY_RUN` is added.
+- Test phase, step 5: the Operator Action card's one-line change is `dryRun: false` under
+  `registryCleanup:` in `config/prd/values.yaml`. The render gate accepts either value.
+- Test phase, step 6: the old string is the two-line `# Passed by HelmCharts' deploy CLI …
+  (argo-cd D53).` comment. Its replacement is those three lines, verbatim.
+- P9: the comment cites argo-cd D53 for "a per-build tag, never … a digest", so D53 must say it.
+
+- Why the new top-level key is safe: `cicd.writeVersionPins` resolves full dotted paths by
+  indent (`vars/cicd.groovy` `applyPins`). So `registryCleanup.dryRun` never matches the pin
+  path `images.registryCleanup`.
+- Live, `suspend` belongs to argocd-controller through client-side apply (last-applied holds
+  `suspend: true`). Dropping the field therefore unsuspends the CronJob; `suspend: false` is not
+  needed.
+- Mutation-checked: the gate fails on a re-added `suspend: true` and on a template without the
+  guard. It passes with the stage flipped to `false`.
+
 ### P8 — DockerImages' design doc states the label rule
 
 Target: ../DockerImages
