@@ -103,6 +103,15 @@ The Grounding classed KitchenDisplay as restarting a Raspberry Pi service on eve
 **Provenance:** witnessed | code-writer, P10, r1 — Jenkins Firmware/KitchenDisplay api/json and #71 console
 **Disposition:**
 
+### N4 — The prd class grows to seventeen carriers: four the Grounding classed as no rollout redeploy prd through a job their push starts
+
+ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient build no image themselves. But each Jenkinsfile runs `build job:` (`wait: false`) on `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, and MyDownloadsClient also on `Webathome`. Each of those runs kaniko and pins, with no guard, into ScantopdfDeploy, MediaDeploy or WebathomeOrgDeploy. The `scantopdf-prd`, `media-prd` and `webathome-org-prd` Applications auto-sync. Jenkins records the chain on real pushes: ScanToPdf #33 and #34, MyDownloads #98 and #100, and Webathome #236 and #238 were started by these carriers. The four moved from P11 to P12a–b and now go through the prd health gate. Ruling D1's trade-off named twelve prd apps. With FieldnotesApp (P10 r1), the sweep also restarts scantopdf and media.
+
+**Consequence:** scantopdf-prd, media-prd and FieldnotesApp's app restart once on unchanged code during P12a–b, on top of the twelve production apps Ruling D1's trade-off named.
+
+**Provenance:** witnessed, code-writer, P10, fix round r2, Jenkins build causes and the GitHub Jenkinsfiles (phases/P10/code_review_r1.md F1)
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence

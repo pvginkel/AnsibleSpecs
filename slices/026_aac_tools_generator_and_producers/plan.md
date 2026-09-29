@@ -687,6 +687,8 @@ P11–P13b's sections and in `sweep_ledger.md` § Carriers.
 Later phases:
 - P11: KitchenDisplay moved here from the device class, because its deploy job is disabled.
 - P12b: FieldnotesApp is a carrier the Grounding missed. It redeploys prd.
+- P12a–b: ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient moved here
+  from P11. The job each one's push starts (`ScanToPdf`, `MyDownloads`, `Webathome`) pins prd.
 - P12c: `AaC/IoTSupport` has been red since 2026-09-24, for a cause the migration does not touch.
   Its section says what to check before pushing it.
 - P11–P13b: the durations in a section are medians of the job's last eight green builds (read
@@ -699,13 +701,16 @@ Record:
   of all 114 non-archived repos' default branches, none truncated or failed, hold it in 30. The
   sets differ only in the archived DesignAssistant, SomfyRemote and HelmCharts, which only
   gitblit lists.
-- Classification: the Grounding's lists hold, with two exceptions. FieldnotesApp's `Jenkinsfile`
+- Classification: the Grounding's lists hold, with three exceptions. FieldnotesApp's `Jenkinsfile`
   runs kaniko and `cicd.writeVersionPins` into FieldnotesDeploy, with no guard. Jenkins reports
   `Firmware/KitchenDisplay` disabled. Its last eight builds failed on a key it reads from
-  HelmCharts. Every other job a carrier push starts is buildable.
+  HelmCharts. The four ScanToPdf and MyDownloads carriers `build job:` (`wait: false`)
+  `ScanToPdf/ScanToPdf`, `MyDownloads/MyDownloads` and, from MyDownloadsClient, `Webathome`. Each
+  runs kaniko and pins, unguarded, into ScantopdfDeploy, MediaDeploy or WebathomeOrgDeploy, whose
+  `-prd` Applications auto-sync. Every other job a carrier push starts is buildable.
 - Assignment: the canaries are short builds that ran green recently. Carriers that pin the same
-  deploy repo go in different batches, and the slowest go last. Expected waits: P11 ~45 min,
-  P12a–b ~35, P12c ~60, P13a–b ~35.
+  deploy repo go in different batches, and the slowest go last. Expected waits: P11 ~30 min,
+  P12a ~40, P12b ~65, P12c ~60, P13a–b ~35.
 
 ### P11 — The carriers whose push rolls nothing out validate with the toolchain
 
@@ -720,11 +725,11 @@ carrier describes. The class canary is pushed alone first, then the rest in smal
 - KubeCoder's push rebuilds and pins dev only; prd moves only by promotion.
 
 **Carriers, in push order (P10).** Every push also starts `AaC/<Repo>`, and after it
-`AaC/Architecture`, which takes about 6 min. Expected wait: about 45 min.
+`AaC/Architecture`, which takes about 6 min. Expected wait: about 30 min.
 
 1. Canary, alone: DockerImages. `DockerImages` takes about 2 min and builds only the images whose
    directory changed (`utils.hasChanges`).
-2. Batch: KubeCoder, KitchenDisplay and ScanToPdfServer.
+2. Batch: KubeCoder and KitchenDisplay.
    - KubeCoder: `KubeCoder/Build-Main` takes about 11 min. It pins dev into KubeCoderDeploy, and
      `kubecoder-dev` rolls.
    - KitchenDisplay: the push starts only `AaC/KitchenDisplay`. Its deploy job,
@@ -732,18 +737,14 @@ carrier describes. The class canary is pushed alone first, then the rest in smal
      reading its SSH key from HelmCharts. Check that the job is still disabled right before the
      push. If it has been enabled, KitchenDisplay restarts a service on the Pi. Then P11 does not
      push it: move its row to P13b, where it goes last.
-   - ScanToPdfServer: `ScanToPdf/ScanToPdfServer` takes about 1 min.
-3. Batch: ScanToPdfClient, MyDownloadsServer and MyDownloadsClient.
-   `ScanToPdf/ScanToPdfClient` takes about 3 min, `MyDownloads/MyDownloadsServer` about 2 min and
-   `MyDownloads/MyDownloadsClient` about 19 min.
 
 ### P12a — Carriers whose push redeploys production, first part
 
 Target: root
 
 The carriers P10 classes as redeploying prd move onto the toolchain (R6), as the attachment's
-§ Migrating a carrier describes. Their app build pins an image into an auto-synced deploy repo;
-the Grounding lists twelve of them. Pushes go in small batches. Before the next batch starts,
+§ Migrating a carrier describes. Their app build, or a job their push starts, pins an image into
+an auto-synced deploy repo. Pushes go in small batches. Before the next batch starts,
 each batch's builds must be green, including each carrier's own architecture build, and every
 Application they pin into must be Healthy at the new pin. D1 accepts that each of these apps
 restarts once on unchanged code. The class spans P12a–P12c (Ruling F4), and this phase pushes
@@ -751,18 +752,22 @@ its canary alone first (Ruling F5).
 
 **Carriers, in push order (P10).** Each app job pins into the deploy repo after the arrow. Every
 such deploy repo is done in P9a–P9c. Every push also starts `AaC/<Repo>`, and after it
-`AaC/Architecture`, which takes about 6 min. Expected wait: about 35 min.
+`AaC/Architecture`, which takes about 6 min. Expected wait: about 40 min.
 
 1. Canary, alone: GitblitMCPServer. `Gitblit/GitblitMCPServer`, about 1 min → GitSyncDeploy.
 2. Batch:
    - YouTrackMCPServer: `YouTrack/YouTrackMCPServer`, about 1 min → YoutrackMcpDeploy.
    - Ginbov: `Ginbov`, about 1 min → GinbovNlDeploy.
    - NewsFilter: `NewsFilter`, about 4 min → NewsfilterDeploy.
+   - ScanToPdfServer: `ScanToPdf/ScanToPdfServer`, about 1 min, starts `ScanToPdf/ScanToPdf`,
+     about 1.5 min → ScantopdfDeploy.
 3. Batch:
    - GitblitMCPSupportPlugin: `Gitblit/GitblitMCPSupportPlugin`, about 1 min → GitSyncDeploy. It
      pins the same deploy repo as the canary, so it is not in the canary's batch.
    - Webathome: `Webathome`, about 4 min → WebathomeOrgDeploy, which also takes the site pin
      after every `AaC/Architecture`.
+   - MyDownloadsServer: `MyDownloads/MyDownloadsServer`, about 2 min, starts
+     `MyDownloads/MyDownloads`, about 2 min → MediaDeploy.
 
 ### P12b — Carriers whose push redeploys production, second part
 
@@ -770,7 +775,7 @@ Target: root
 
 As P12a, for the carriers P10 assigns here, resuming from the ledger.
 
-**Carriers, in push order (P10).** Expected wait: about 35 min.
+**Carriers, in push order (P10).** Expected wait: about 65 min.
 
 1. Batch:
    - IntercomServer: `Firmware/IntercomServer`, about 5 min → IntercomDeploy.
@@ -779,9 +784,14 @@ As P12a, for the carriers P10 assigns here, resuming from the ledger.
      no guard.
    - DHCPApp: `DHCP/DHCPApp`, about 6 min → DnsmasqDeploy. It has two copies, in `backend/` and
      `frontend/`.
+   - ScanToPdfClient: `ScanToPdf/ScanToPdfClient`, about 3 min, starts `ScanToPdf/ScanToPdf` →
+     ScantopdfDeploy, as ScanToPdfServer (P12a) does.
 2. Alone: SSEGateway. `SSEGateway/SSEGateway` takes about 12 min and pins into four deploy repos:
    Zigbee2mqttDeploy, ElectronicsInventoryDeploy, IotDeploy and DnsmasqDeploy. Every Application
    of all four must be Healthy at its new pin.
+3. Alone: MyDownloadsClient. `MyDownloads/MyDownloadsClient` takes about 19 min. It starts
+   `MyDownloads/MyDownloads` → MediaDeploy, as MyDownloadsServer (P12a) does, and `Webathome`,
+   about 4 min → WebathomeOrgDeploy, as the Webathome carrier (P12a) does.
 
 ### P12c — Carriers whose push redeploys production, third part
 

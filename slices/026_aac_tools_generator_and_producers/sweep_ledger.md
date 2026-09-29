@@ -86,20 +86,20 @@ carrier is not cloned yet. Clone it to `/work/scratch/<Repo>`.
 | DockerImages | no rollout (canary) | P11 | `/work/DockerImages` | migrate; `.architecturerc` instructions name the copy | — | pending |
 | KubeCoder | no rollout (pins dev only) | P11 | `/work/scratch/KubeCoder` | migrate | — | pending |
 | KitchenDisplay | no rollout (`Firmware/KitchenDisplay` disabled) | P11 | to clone | migrate | — | pending |
-| ScanToPdfServer | no rollout | P11 | to clone | migrate | — | pending |
-| ScanToPdfClient | no rollout | P11 | to clone | migrate | — | pending |
-| MyDownloadsServer | no rollout | P11 | to clone | migrate | — | pending |
-| MyDownloadsClient | no rollout | P11 | to clone | migrate | — | pending |
 | GitblitMCPServer | redeploys prd (canary) | P12a | to clone | migrate | — | pending |
 | YouTrackMCPServer | redeploys prd | P12a | to clone | migrate | — | pending |
 | Ginbov | redeploys prd | P12a | to clone | migrate | — | pending |
 | NewsFilter | redeploys prd | P12a | to clone | migrate | — | pending |
+| ScanToPdfServer | redeploys prd (starts `ScanToPdf/ScanToPdf` → ScantopdfDeploy) | P12a | to clone | migrate | — | pending |
 | GitblitMCPSupportPlugin | redeploys prd | P12a | to clone | migrate | — | pending |
 | Webathome | redeploys prd | P12a | to clone | migrate | — | pending |
+| MyDownloadsServer | redeploys prd (starts `MyDownloads/MyDownloads` → MediaDeploy) | P12a | to clone | migrate | — | pending |
 | IntercomServer | redeploys prd | P12b | to clone | migrate | — | pending |
 | FieldnotesApp | redeploys prd | P12b | `/work/scratch/FieldnotesApp` | migrate | — | pending |
 | DHCPApp | redeploys prd | P12b | `/work/scratch/DHCPApp` | migrate (two copies) | — | pending |
+| ScanToPdfClient | redeploys prd (starts `ScanToPdf/ScanToPdf` → ScantopdfDeploy) | P12b | to clone | migrate | — | pending |
 | SSEGateway | redeploys prd (pins four deploy repos) | P12b | to clone | migrate | — | pending |
+| MyDownloadsClient | redeploys prd (starts `MyDownloads/MyDownloads` → MediaDeploy and `Webathome` → WebathomeOrgDeploy) | P12b | to clone | migrate | — | pending |
 | ElectronicsInventory | redeploys prd | P12c | `/work/scratch/ElectronicsInventory` | migrate | — | pending |
 | ZigbeeControl | redeploys prd | P12c | `/work/scratch/ZigbeeControl` | migrate (two copies) | — | pending |
 | IoTSupport | redeploys prd (AaC red before the sweep) | P12c | `/work/scratch/IoTSupport` | migrate (two copies) | — | pending |
