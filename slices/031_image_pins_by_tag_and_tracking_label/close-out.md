@@ -138,3 +138,12 @@ The design doc's §8 ("Per-series cap (N = 5)", "Defaults: TTL = 4 weeks") and �
 
 **Provenance:** read, code-writer, P8, r1, DockerImages docs/registry-management/version-poller-redesign.md
 **Disposition:**
+
+### S6 — DockerImages version-poller-redesign.md §4 lists a lone version tag such as 1.35.5 among the builds in use; that is k8s's matrix tag, which now pushes 1.35.5 plus 1.35.5-<n> · nit
+
+The "builds in use" list in §4's tag scheme (docs/registry-management/version-poller-redesign.md:166) ends with "a lone version tag such as 1.35.5, labelled as itself". 1.35.5 is k8s/build-matrix.json's tag, and since P6 every matrix build pushes <tag> + <tag>-<n> (Jenkinsfile:159-161). P1's caller survey found no other caller that pushes a lone non-numeric tag. kaniko2 still accepts one, so the line is wrong only in calling it a build in use.
+
+**Consequence:** none on behaviour — a reader of the design doc may take the k8s image to have no per-build tag
+
+**Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
+**Disposition:**
