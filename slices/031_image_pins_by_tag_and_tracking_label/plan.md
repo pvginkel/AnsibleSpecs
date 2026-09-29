@@ -318,7 +318,7 @@ Record:
 - An explicit tracking tag need not be pushed. `LibraryCompileTest.trustedLoader()` is now
   package-private, for the new test's `@NonCPS` calls.
 
-### P2 — KubeCoderDeploy pins kube-coder-tunnel-reclaim to a build
+### P2 — KubeCoderDeploy pins kube-coder-tunnel-reclaim to a build ✅ DONE 2026-09-29
 
 Target: ../scratch/KubeCoderDeploy
 
