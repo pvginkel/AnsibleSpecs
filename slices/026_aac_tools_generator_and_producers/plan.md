@@ -611,6 +611,35 @@ Target: root
 As P9a, for the deploy repos whose names start N–Z, resuming from the ledger. PrometheusDeploy's
 push carries P7's commit: edit and push `/work/scratch/PrometheusDeploy`, not its sweep031 clone. WebathomeOrgDeploy races its own pin loop (see the attachment).
 
+**Done (P9c).** All 18 N–Z deploy repos name "what gen-architecture --help prints from the
+aac-tools toolchain" as the judgment layer's schema. Each is pushed and done, and each file keeps
+exactly its three keys. All 48 `sweep_ledger.md` deploy rows read done. PrometheusDeploy's push
+carried P7's commit. The Ansible branch carries no commit.
+
+Later phases:
+- P10–P13b: the deploy class is closed, and every deploy repo a carrier pins into carries the
+  pointer on `origin/main`.
+- P10–P13b: the pin loop is gone (Architecture `a2dabd2`, ANS-136). `AaC/WebathomeOrgDeploy`
+  starts no `AaC/Architecture` build. The attachment now says so. Close-out B1 carries the note.
+- Test phase: V07 and V11's published edge hold on `origin/main` and in the live dataset. The
+  relation `rel:prometheus-prd-prometheus-prd-alertmanager-alertmanager-servedby-telegram-bot-api`
+  was in the dataset after collector #2262.
+
+Record:
+- TrelloMcpDeploy and WebathomeOrgDeploy were pulled first (1 and 14 behind). Rebase and push
+  found no foreign commits.
+- Batches with `push_batch.sh`: four repos each in three batches (collectors #2257, #2258 and
+  #2259). The fourth held three repos plus PrometheusDeploy through `push_one.sh` (collector
+  #2262). RegistryDeploy ran alone (collector #2263). Every AaC build and collector was green,
+  every Application was Synced and Healthy at the sha, and every site pin rolled.
+  PrometheusDeploy's own `kc project test` was green before its push.
+- WebathomeOrgDeploy `6c83563` was pushed alone, last. It used `push_one.sh`'s rebase and guard
+  but no collector step, which would have waited for a build that never starts.
+  `AaC/WebathomeOrgDeploy` #568 was green, and `webathome-org-prd` was Synced and Healthy.
+- A check after the sweep: all 48 `origin/main` `.architecturerc` files carry the pointer, no
+  "docstring", and exactly three keys. Each pushed sha is on `origin/main`.
+- Commit message as in P9a. Gate: `kc project test --project root` green.
+
 ### P10 — The carriers are enumerated and assigned, and Ansible validates with the toolchain
 
 Target: architecture

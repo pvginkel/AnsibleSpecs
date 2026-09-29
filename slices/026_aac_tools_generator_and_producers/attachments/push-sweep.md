@@ -73,12 +73,10 @@ every push. Push a deploy repo before any carrier whose app build pins into it.
 
 - A carrier's app build pins its image into its deploy repo(s) (`cicd.writeVersionPins`).
   SSEGateway pins into four. KubeCoder's `Build-Main` pins dev into KubeCoderDeploy.
-- **WebathomeOrgDeploy moves every few minutes, on its own.** `AaC/Architecture` pins the site
-  image into it. That pin's push starts `AaC/WebathomeOrgDeploy`, which starts
-  `AaC/Architecture` again, which pins again. This was witnessed on 2026-09-25: every
-  `AaC/Architecture` build in the preceding hour was started by `AaC/WebathomeOrgDeploy`, and
-  that job's builds were started by the pushes of the previous pins. A push there races the
-  next pin, so rebase right before it and retry a rejected push.
+- **WebathomeOrgDeploy takes a pin after every `AaC/Architecture` build.** The site image pin
+  starts `AaC/WebathomeOrgDeploy`, which starts nothing downstream (Architecture `a2dabd2`,
+  ANS-136: `trigger: false`). A push there races the next pin, so rebase right before it and
+  retry a rejected push. Its "done" is its own build and its Argo CD rollout; no collector runs.
 - **Every producer build triggers `AaC/Architecture` downstream.** That is the collector. It
   rebuilds and redeploys the architecture site in about five minutes, and it is part of what a
   batch waits for.
