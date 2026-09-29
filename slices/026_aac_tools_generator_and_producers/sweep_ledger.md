@@ -47,10 +47,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | MediaDeploy | deploy | P9b | `/work/scratch/sweep031/MediaDeploy` | pointer (`.architecturerc`) | `e2bd76a` | done: AaC/MediaDeploy #10 and AaC/Architecture #2255 green; media-prd: at=True sync=Synced health=Healthy; site pin `9dced11` rolled |
 | ModelsDeploy | deploy | P9b | `/work/scratch/sweep031/ModelsDeploy` | pointer (`.architecturerc`) | `f71c926` | done: AaC/ModelsDeploy #4 and AaC/Architecture #2255 green; models-prd: at=True sync=Synced health=Healthy; site pin `9dced11` rolled |
 | MosquittoDeploy | deploy | P9b | `/work/scratch/sweep031/MosquittoDeploy` | pointer (`.architecturerc`) | `8e11213` | done: AaC/MosquittoDeploy #4 and AaC/Architecture #2255 green; mosquitto-prd: at=True sync=Synced health=Healthy; site pin `9dced11` rolled |
-| NewsfilterDeploy | deploy | P9c | `/work/scratch/sweep031/NewsfilterDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| NginxDeploy | deploy | P9c | `/work/scratch/sweep031/NginxDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| PgadminDeploy | deploy | P9c | `/work/scratch/sweep031/PgadminDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| PostgresPasDeploy | deploy | P9c | `/work/scratch/sweep031/PostgresPasDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| NewsfilterDeploy | deploy | P9c | `/work/scratch/sweep031/NewsfilterDeploy` | pointer (`.architecturerc`) | `c4aea59` | done: AaC/NewsfilterDeploy #9 and AaC/Architecture #2257 green; newsfilter-prd: at=True sync=Synced health=Healthy; site pin `fac7282` rolled |
+| NginxDeploy | deploy | P9c | `/work/scratch/sweep031/NginxDeploy` | pointer (`.architecturerc`) | `3188161` | done: AaC/NginxDeploy #6 and AaC/Architecture #2257 green; nginx-prd: at=True sync=Synced health=Healthy; site pin `fac7282` rolled |
+| PgadminDeploy | deploy | P9c | `/work/scratch/sweep031/PgadminDeploy` | pointer (`.architecturerc`) | `19e4ac0` | done: AaC/PgadminDeploy #5 and AaC/Architecture #2257 green; pgadmin-prd: at=True sync=Synced health=Healthy; site pin `fac7282` rolled |
+| PostgresPasDeploy | deploy | P9c | `/work/scratch/sweep031/PostgresPasDeploy` | pointer (`.architecturerc`) | `c58f403` | done: AaC/PostgresPasDeploy #4 and AaC/Architecture #2257 green; postgres-pas-prd: at=True sync=Synced health=Healthy; site pin `fac7282` rolled |
 | PrometheusDeploy | deploy | P9c | `/work/scratch/PrometheusDeploy` | pointer (`.architecturerc`); carries P7 `4aa1ef5` | — | not yet pushed |
 | RegistryDeploy | deploy | P9c | `/work/scratch/RegistryDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | ScantopdfDeploy | deploy | P9c | `/work/scratch/sweep031/ScantopdfDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
