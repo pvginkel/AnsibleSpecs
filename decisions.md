@@ -607,9 +607,7 @@ Each push-triggered pipeline below runs its checks ahead of the step that change
 
 **JenkinsPipelineUtils has no pipeline to check it.** It has no job, and Jenkins jobs load it unpinned from `main`, so a push is live in every job that loads it. Its check is its `kc project test`, the gate slice phases run: every `vars/*.groovy` compiled through the controller's CPS transform. A deploy repo's tests likewise run only from its test verb (argo-cd D61); PrometheusDeploy's test verb checks and unit-tests its alert rules with promtool.
 
-**DockerImages scans what it pushed; it does not gate.** trivy scans each image right after its push and prints the CRITICAL and HIGH findings in the build log; a pushed image with a CRITICAL that has a fixed version raises one `notify.warning` alert, and so does a scan that could not complete. The scan never changes the build result.
-
-**Image pins follow provenance.** Third-party scanner and validator images are pinned by digest — trivy in `DockerImages`' scan stage — because an upstream tag moving under a gate changes what the gate accepts without a commit here. Images we build ourselves are not digest-pinned: we control what the tag points at, so which tag a consumer takes — floating or pinned — is the consuming site's call.
+**Image pins follow provenance.** Third-party scanner and validator images are pinned by digest, because an upstream tag moving under a gate changes what the gate accepts without a commit here. Images we build ourselves are not digest-pinned: we control what the tag points at, so which tag a consumer takes — floating or pinned — is the consuming site's call.
 
 ## Backup
 
