@@ -57,10 +57,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | SourceDeploy | deploy | P9c | `/work/scratch/sweep031/SourceDeploy` | pointer (`.architecturerc`) | `c5587cc` | done: AaC/SourceDeploy #6 and AaC/Architecture #2258 green; source-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
 | StepCaDeploy | deploy | P9c | `/work/scratch/sweep031/StepCaDeploy` | pointer (`.architecturerc`) | `38e0bfc` | done: AaC/StepCaDeploy #4 and AaC/Architecture #2258 green; step-ca-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
 | StorageDeploy | deploy | P9c | `/work/scratch/sweep031/StorageDeploy` | pointer (`.architecturerc`) | `0d26b22` | done: AaC/StorageDeploy #7 and AaC/Architecture #2258 green; storage-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
-| TelegramMcpDeploy | deploy | P9c | `/work/scratch/sweep031/TelegramMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| TfmirrorDeploy | deploy | P9c | `/work/scratch/sweep031/TfmirrorDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| TrelloMcpDeploy | deploy | P9c | `/work/scratch/sweep031/TrelloMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| VersionPollerDeploy | deploy | P9c | `/work/scratch/sweep031/VersionPollerDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| TelegramMcpDeploy | deploy | P9c | `/work/scratch/sweep031/TelegramMcpDeploy` | pointer (`.architecturerc`) | `b6ad12b` | done: AaC/TelegramMcpDeploy #5 and AaC/Architecture #2259 green; telegram-mcp-prd: at=True sync=Synced health=Healthy; site pin `be8feb1` rolled |
+| TfmirrorDeploy | deploy | P9c | `/work/scratch/sweep031/TfmirrorDeploy` | pointer (`.architecturerc`) | `d1a3868` | done: AaC/TfmirrorDeploy #7 and AaC/Architecture #2259 green; tfmirror-prd: at=True sync=Synced health=Healthy; site pin `be8feb1` rolled |
+| TrelloMcpDeploy | deploy | P9c | `/work/scratch/sweep031/TrelloMcpDeploy` | pointer (`.architecturerc`) | `451ae60` | done: AaC/TrelloMcpDeploy #8 and AaC/Architecture #2259 green; trello-mcp-prd: at=True sync=Synced health=Healthy; site pin `be8feb1` rolled |
+| VersionPollerDeploy | deploy | P9c | `/work/scratch/sweep031/VersionPollerDeploy` | pointer (`.architecturerc`) | `4fb5663` | done: AaC/VersionPollerDeploy #10 and AaC/Architecture #2259 green; version-poller-prd: at=True sync=Synced health=Healthy; site pin `be8feb1` rolled |
 | WebathomeOrgDeploy | deploy | P9c | `/work/scratch/sweep031/WebathomeOrgDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | YoutrackDeploy | deploy | P9c | `/work/scratch/sweep031/YoutrackDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | YoutrackMcpDeploy | deploy | P9c | `/work/scratch/sweep031/YoutrackMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
