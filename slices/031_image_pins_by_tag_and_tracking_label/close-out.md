@@ -32,6 +32,40 @@ P7 targets `../RegistryDeploy`, and no environment clones that repo today: it is
 **Provenance:** witnessed — plan-writer, planning, r1, plan.md P7 and run_loop.py --dry-run
 **Disposition:**
 
+### A2 — The push chain (Ruling R1-Q2) stops after step 2 — JenkinsPipelineUtils, DockerImages, the keycloak build, RegistryDeploy and the comment sweep are still unpushed, pending confirmed prd authorisation
+
+Plan.md's Ordering constraints (Ruling R1-Q2, operator "Agree with the rest", 2026-09-26) assign the test phase — not the operator — the whole push chain, unattended, prd rollouts included (explicitly, the Keycloak prd SSO outage its step 4 causes). This run's own dispatch carries a different deterministic fact from the driver: "the driver holds the devlock. Under that hold, pushing and rolling dev for this slice's verification is pre-authorised — do not ask for permission. prd stays operator-gated; nothing here touches it." The two do not agree: R1-Q2 authorises prd rollouts this run's dispatch does not.
+
+Given that conflict and the stakes — a live Keycloak SSO outage, ~46 real GitHub repo pushes, and JenkinsPipelineUtils going live estate-wide the instant it is pushed, none of it reversible — this run treated the dispatch's narrower authorisation as the ceiling and stopped rather than resolve the conflict by guessing. It executed only the part of Ordering constraints step 2 that is provably dev-only or render-neutral in its live effect:
+
+- KubeCoderDeploy pushed (rebased onto origin/main's moved tip by dev:rebase-agent first — origin had moved 6 commits ahead with automated CI pin commits; gate re-run green after the rebase; final commits 850d45d, 8d039ed). Live: kubecoder-dev's Argo Application auto-synced (webhook + PreSync Terraform hook) to Synced/Healthy on the new commit; the controller pod runs kube-coder-tunnel-reclaim:2565 pulling IfNotPresent. kubecoder-prd is untouched — it tracks the separate `prd` branch, unaffected by a `main` push, and was confirmed still on its prior revision.
+- ArgoCDDeploy pushed (0bacce1, no rebase needed). Live: argocd-prd's Application reports Synced/Healthy at the new revision with no operation triggered — the render is unchanged (also confirmed by the phase's own before/after `helm template` diff), so nothing rolled. Argo's own Application never auto-syncs (D3) regardless.
+
+Both are now proven live (verification.json V15, V16 marked pass).
+
+Unpushed, still sitting exactly as each phase left them (committed, not pushed):
+
+- JenkinsPipelineUtils `276beff` (P1) — goes live estate-wide, every Jenkins job everywhere, the moment it is pushed.
+- DockerImages `18dadc8` (P4-P6, P8) — its build rewrites pins into RegistryDeploy, VersionPollerDeploy (goes live), KubeCoderDeploy, FieldnotesDeploy and ArgoCDDeploy; real prd rollouts follow.
+- KeycloakDeploy (not checked out here; clone from GitHub) — the keycloak build (Ordering step 4) writes a per-build tag into both dev and prd stages; Keycloak runs one replica with Recreate, so prd gets a short SSO outage.
+- RegistryDeploy `dca461d` (P7) — unsuspends the live registry-cleanup CronJob into dry-run; confirmed still `suspend: true` on image `:2548` live as of this run.
+- The deploy-repo comment sweep (Ruling R1-Q3) across ~41 repos' `config/prd/values.yaml` plus KeycloakDeploy's `config/dev`.
+
+Once prd authorisation is confirmed — either the operator reconfirms R1-Q2 stands for a resumed test-phase run, or runs the sequence by hand — the remaining work is exactly Ordering constraints steps 1 and 3-6 in plan.md, unchanged:
+
+1. `cd /work/JenkinsPipelineUtils && git push origin main`.
+2. `cd /work/DockerImages && git push origin main` (it was 5 ahead / 1 behind origin as of this run — rebase first if still behind), then wait for the build (`track_build.py`, on PATH), confirm every auto-synced Application it fed is Synced/Healthy on its new pin, and that the live poller's first polls trigger nothing `phases/P5/poller-dryrun-*.log` did not already list.
+3. Start a DockerImages build with `image=keycloak`; confirm both KeycloakDeploy stages Synced/Healthy on the new per-build tag.
+4. `cd /work/scratch/RegistryDeploy && git push origin main` (only once DockerImages' P4 pin and both Keycloak stages are in place); confirm the CronJob is unsuspended, in dry-run, and has run; then, per Ruling D1, start one Job by hand from the CronJob, read its log, put the would-delete list before the operator (V01/V03), and only then file the Operator Action card to turn dry-run off (V04) — never before that list exists.
+5. The comment sweep (Ruling R1-Q3): push RegistryDeploy's corrected comment string into every other deploy repo that carries the old one, a few at a time, checking each batch's builds and Applications stay green before the next.
+
+The exact per-step checks live in plan.md's "Ordering constraints" section, which a re-entered test phase should re-read in full before proceeding — this entry summarises it, it does not replace it.
+
+**Consequence:** Until this runs, R1's pause stays lifted only on paper: registry-cleanup is still suspended live, so the registry keeps growing and V01-V04 stay unproven. KeycloakDeploy's two stages stay pinned by digest — the exact failure mode that lost Keycloak's image on 2026-09-25. The ~41-repo comment sweep and the estate-wide kaniko2/registry-cleanup/version-poller behaviour, already shipped in code, stay inert until JenkinsPipelineUtils and DockerImages are pushed.
+
+**Provenance:** witnessed — test-agent, test phase, round 1: this run's live kubectl/git checks, plus plan.md's Ordering constraints and this run's own dispatch text
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -43,6 +77,17 @@ Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, sur
      refused — is not an event of the run and does not go here: post it to Fieldnotes, as the
      host's CLAUDE.md says. The driver appends refuted findings and funding-consult merges here
      itself. -->
+
+### N1 — Test phase round 1 bailed out mid push-chain on a dispatch/plan authorisation conflict, after proving the two safe steps live
+
+All nine phases were merged and confirmed consistent (consult 1, complete). The test phase's own procedure — plan.md's Ordering constraints, driven by Ruling R1-Q2 — calls for the test phase itself to push the entire chain unattended, prd rollouts included. This run's dispatch instead pre-authorised only pushing and rolling dev under the devlock and stated prd stays operator-gated with nothing here touching it. Rather than guess which reading governs a live Keycloak SSO outage and ~46 real repo pushes, this run pushed only the two steps it could independently prove have no live prd effect (KubeCoderDeploy — dev-only rollout, verified Synced/Healthy; ArgoCDDeploy — render-neutral, verified Synced/Healthy with no operation triggered) and stopped before DockerImages. See Outstanding actions for the conflict and the exact remaining command sequence.
+
+Every static/code-level verification item (V07, V08, V10-V16, V18-V20 — twelve of twenty) independently confirmed pass by dedicated sub-agents reading the actual code, tests and already-executed dry-run logs against the plan's claims, with no discrepancy found anywhere. The eight items needing the unrun part of the push chain (V01-V06, V09, V17) are marked owed, not fail, per this repo's testing-strategy doc §5 — the underlying implementing work is shipped and committed in every case; only the live rollout is outstanding.
+
+**Consequence:** none beyond what Outstanding actions A2 already states — this entry is the narrative, A2 is the runbook
+
+**Provenance:** witnessed — test-agent, test phase, round 1
+**Disposition:**
 
 ## Bugs
 
@@ -103,7 +148,7 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 **Provenance:** read — plan-writer, planning, r1, argo_migrate.py:466-493
 **Disposition:**
 
-### S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit
+### ~~S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit~~ — resolved by consult 1 (KubeCoderDeploy 20e0f71): the header now claims no default for the chart's eight image pins only; kc project lint and test green; struck by consult 1
 
 chart/values.yaml:7 ('The chart names no default for any image (D47): every image pin lives in config/<stage>/values.yaml') is contradicted by the same file's image defaults at :112 (registry:5000/kube-coder-dev:latest), :164 (postgres:18), :203, :234, :262 and :294. The replaced comment made the claim only for Build-Main's seven pins.
 
@@ -125,6 +170,8 @@ KeycloakDeploy chart/templates/keycloak-deployment.yaml:29-30 runs registry:5000
 
 The live CronJob has no startingDeadlineSeconds, concurrencyPolicy Allow, and lastScheduleTime 2026-09-25T01:30Z. When suspend flips to false, Kubernetes creates a Job for the most recent missed schedule immediately. So the first unsuspended run starts when Argo applies P7, on whatever registry-cleanup image is pinned at that moment. The plan's P7 'Later phases' now records this for the test phase.
 
+consult 1, 2026-09-29 — P7's done-record already carries the correction as its 'review r1 F1' later-phase note: the sync that drops suspend starts one Job at once, and with concurrencyPolicy Allow it can overlap the hand-started run. The test phase reads it there; nothing more is owed.
+
 **Consequence:** none on the planned path: the ordering puts the P4 pin in place before the push, so the immediate run is a dry run. The test phase will see an automatic dry-run Job next to the one it starts by hand.
 
 **Provenance:** witnessed (kubectl get cronjob), code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
@@ -139,7 +186,7 @@ The design doc's §8 ("Per-series cap (N = 5)", "Defaults: TTL = 4 weeks") and �
 **Provenance:** read, code-writer, P8, r1, DockerImages docs/registry-management/version-poller-redesign.md
 **Disposition:**
 
-### S6 — DockerImages version-poller-redesign.md §4 lists a lone version tag such as 1.35.5 among the builds in use; that is k8s's matrix tag, which now pushes 1.35.5 plus 1.35.5-<n> · nit
+### ~~S6 — DockerImages version-poller-redesign.md §4 lists a lone version tag such as 1.35.5 among the builds in use; that is k8s's matrix tag, which now pushes 1.35.5 plus 1.35.5-<n> · nit~~ — resolved by consult 1 (DockerImages 18dadc8): the lone-version-tag bullet is gone from §4's builds in use; comment-only, the loop's gate sweep re-runs on it; struck by consult 1
 
 The "builds in use" list in §4's tag scheme (docs/registry-management/version-poller-redesign.md:166) ends with "a lone version tag such as 1.35.5, labelled as itself". 1.35.5 is k8s/build-matrix.json's tag, and since P6 every matrix build pushes <tag> + <tag>-<n> (Jenkinsfile:159-161). P1's caller survey found no other caller that pushes a lone non-numeric tag. kaniko2 still accepts one, so the line is wrong only in calling it a build in use.
 

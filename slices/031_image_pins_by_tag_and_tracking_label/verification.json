@@ -2,163 +2,213 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — cleanup never deletes a pinned image",
-      "description": "registry-cleanup must never delete an image a deploy repo pins (R1), as ruled without reading what is deployed: the would-delete list of the dry-run the test phase starts by hand from the unsuspended CronJob — tag deletions and garbage collection alike — holds no tag and no digest that any deploy repo pins for an image from the estate's registry.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R1 \u2014 cleanup never deletes a pinned image",
+      "description": "registry-cleanup must never delete an image a deploy repo pins (R1), as ruled without reading what is deployed: the would-delete list of the dry-run the test phase starts by hand from the unsuspended CronJob \u2014 tag deletions and garbage collection alike \u2014 holds no tag and no digest that any deploy repo pins for an image from the estate's registry.",
+      "verdict": "owed",
+      "rationale": "Needs the hand-started dry-run Job from the unsuspended RegistryDeploy CronJob (Ordering constraints step 5), which needs DockerImages (step 3), the keycloak build (step 4) and RegistryDeploy (step 5) pushed first. This test-phase run stopped after step 2 (see close-out 'Outstanding actions'): the dispatch's deterministic facts pre-authorise pushing and rolling dev under the devlock and state prd stays operator-gated, which conflicts with plan.md's Ruling R1-Q2 (the operator's 2026-09-26 authorisation for the test phase to push the whole chain, prd rollouts included, unattended). Command for whoever runs the rest: see the Outstanding actions entry for the exact sequence.",
+      "evidence": [
+        "plan.md Ordering constraints step 5",
+        "verification.json V01 needs the run this entry describes"
+      ]
     },
     {
       "id": "V02",
-      "area": "R1 — the pause is lifted (Ruling D1)",
-      "description": "The registry-cleanup CronJob is no longer suspended and runs nightly in dry-run: the RegistryDeploy chart carries a dry-run setting, turned on, and a run logs what it would delete — garbage collection with `--delete-untagged` included — and deletes nothing. Today the CronJob carries `suspend: true` (RegistryDeploy `chart/templates/registry-cleanup-cronjob.yaml:7-10`) and a dry run skips garbage collection (DockerImages `registry-cleanup/app/main.py:467`; GC at `:143-148`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R1 \u2014 the pause is lifted (Ruling D1)",
+      "description": "The registry-cleanup CronJob is no longer suspended and runs nightly in dry-run: the RegistryDeploy chart carries a dry-run setting, turned on, and a run logs what it would delete \u2014 garbage collection with `--delete-untagged` included \u2014 and deletes nothing. Today the CronJob carries `suspend: true` (RegistryDeploy `chart/templates/registry-cleanup-cronjob.yaml:7-10`) and a dry run skips garbage collection (DockerImages `registry-cleanup/app/main.py:467`; GC at `:143-148`).",
+      "verdict": "owed",
+      "rationale": "Code is shipped and ready: RegistryDeploy chart/templates/registry-cleanup-cronjob.yaml wires env DRY_RUN from .Values.registryCleanup.dryRun with a `fail` guard if not bool, the suspend field and its comment are gone from the template, and config/prd/values.yaml sets registryCleanup.dryRun: true (read 2026-09-29, RegistryDeploy commit dca461d, not yet pushed). Live, the CronJob is still `suspend: true` on image registry-cleanup:2548 (read 2026-09-29: `kubectl get cronjob registry-cleanup -n registry-prd` -> SUSPEND=True, last schedule 4d6h ago) because RegistryDeploy was not pushed this round \u2014 see V01's rationale and the Outstanding actions close-out entry for why and the remaining command sequence.",
+      "evidence": [
+        "RegistryDeploy chart/templates/registry-cleanup-cronjob.yaml (read 2026-09-29)",
+        "RegistryDeploy config/prd/values.yaml:17-20 (read 2026-09-29)",
+        "live: kubectl get cronjob registry-cleanup -n registry-prd, read-only, 2026-09-29"
+      ]
     },
     {
       "id": "V03",
-      "area": "R1 — the operator sees the list (Ruling D1)",
-      "description": "The slice's test phase shows the operator the would-delete list: once the unsuspended dry-run CronJob is live, the test phase starts one run from it by hand (a Job created from the CronJob — dry-run, garbage collection included), reads that run's log and puts the list before the operator (Ruling D1).",
-      "verdict": null,
-      "rationale": "",
+      "area": "R1 \u2014 the operator sees the list (Ruling D1)",
+      "description": "The slice's test phase shows the operator the would-delete list: once the unsuspended dry-run CronJob is live, the test phase starts one run from it by hand (a Job created from the CronJob \u2014 dry-run, garbage collection included), reads that run's log and puts the list before the operator (Ruling D1).",
+      "verdict": "owed",
+      "rationale": "Depends on V01/V02's live unsuspend + hand-started Job, not reached this round. See close-out Outstanding actions for the remaining command sequence.",
       "evidence": []
     },
     {
       "id": "V04",
-      "area": "R1 — the operator's switch (Ruling D1)",
-      "description": "Turning dry-run off is the operator's one-line change, filed as an Operator Action card in the ANS project by the test phase after the would-delete list exists — never before; the slice itself never runs cleanup in deleting mode.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R1 \u2014 the operator's switch (Ruling D1)",
+      "description": "Turning dry-run off is the operator's one-line change, filed as an Operator Action card in the ANS project by the test phase after the would-delete list exists \u2014 never before; the slice itself never runs cleanup in deleting mode.",
+      "verdict": "owed",
+      "rationale": "The Operator Action card is filed only after V01/V03's would-delete list exists (Ruling D1: \"never before\"); that list does not exist yet, so no card was filed this round. See close-out Outstanding actions.",
       "evidence": []
     },
     {
       "id": "V05",
-      "area": "R2 — tags, never digests",
-      "description": "Deploy repos pin tags, never digests, for images from the estate's registry: every such pin is a per-build tag, which is never rebuilt, so it always points at the same image. KeycloakDeploy's two stages — the only deploy-repo digest pins of an in-registry image (`config/dev/values.yaml:21`, `config/prd/values.yaml:22`, `@sha256:45ae4959…`) — pin a per-build tag.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R2 \u2014 tags, never digests",
+      "description": "Deploy repos pin tags, never digests, for images from the estate's registry: every such pin is a per-build tag, which is never rebuilt, so it always points at the same image. KeycloakDeploy's two stages \u2014 the only deploy-repo digest pins of an in-registry image (`config/dev/values.yaml:21`, `config/prd/values.yaml:22`, `@sha256:45ae4959\u2026`) \u2014 pin a per-build tag.",
+      "verdict": "owed",
+      "rationale": "Needs the live keycloak build (Ordering constraints step 4), which needs DockerImages pushed first (step 3). Not reached this round \u2014 see close-out Outstanding actions for why (the authorisation-scope conflict) and the remaining command sequence. Every other estate image was already tag-pinned per the plan's grounding; KeycloakDeploy's two stages are the one remaining digest pin (`@sha256:45ae4959\u2026`), unchanged as of this run.",
+      "evidence": [
+        "plan.md grounding, 'Pin freshness, measured against the live registry'"
+      ]
     },
     {
       "id": "V06",
-      "area": "R2 — the migration's comment",
+      "area": "R2 \u2014 the migration's comment",
       "description": "The \"digest the release runs\" comment that the migration left in every deploy repo is corrected in each repo that carried it, RegistryDeploy's (`config/prd/values.yaml:26-27`) and KeycloakDeploy's two copies included. The corrected text is written once, in RegistryDeploy, and every other copy is replaced by that exact string (Ruling R1-Q3); it stays true in a file that still pins an upstream image by digest (ANS-139). The five repos with a different migration header change only where they claim digests, and each such change is listed in the close-out.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "The comment sweep (Ordering constraints step 6) runs after steps 3-5; not reached this round. RegistryDeploy's own corrected comment (the source string) is already committed and verified in place at config/prd/values.yaml:31-33 (read 2026-09-29), but not yet pushed, and the sweep into the other ~40 deploy repos has not started. See close-out Outstanding actions.",
+      "evidence": [
+        "RegistryDeploy config/prd/values.yaml:31-33 (read 2026-09-29)"
+      ]
     },
     {
       "id": "V07",
-      "area": "R2 — D53",
+      "area": "R2 \u2014 D53",
       "description": "argo-cd D53 is amended: deploy repos pin tags only, never digests, for images from the estate's registry (`AnsibleSpecs/argo-cd/decisions.md:836-848` never mentions digests today).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "AnsibleSpecs argo-cd/decisions.md:854-870 carries the dated amendment (2026-09-26, operator \"Go\", slice 031/ANS-125): a pin names a per-build tag, never a digest, for registry:5000 images; a matrix build's per-build tag is written wherever a pin list exists (today only keycloak's); Argo CD's relay pin is written by relay builds, leaving argocd-prd out of sync for the operator; upstream digest pins stay ANS-139's. No existing D53 sentence changed. Committed (AnsibleSpecs 14308f1, P9) and confirmed by direct read 2026-09-29.",
+      "evidence": [
+        "AnsibleSpecs argo-cd/decisions.md:854-870 (read 2026-09-29)"
+      ]
     },
     {
       "id": "V08",
-      "area": "R3 — matrix per-build tags",
+      "area": "R3 \u2014 matrix per-build tags",
       "description": "Every matrix build pushes `<tag>-<build>` next to the named tag, and the pin stage writes the per-build tag wherever a `deploy-pins.json` exists, which today is only Keycloak; the other seven keep pulling their named tag. Today a matrix build pushes its named tag only and is left out of the pin stage (DockerImages `Jenkinsfile:120-121`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by independent code read (sub-agent, 2026-09-29) against DockerImages dd8e7f4: Jenkinsfile:131 computes `<tag>-<build>` for a matrix build; the matrix branch (:158-165) pushes it next to the named tag and passes the named tag as `trackingTag`; `collectPins` (:39-55) now iterates every built image's tag map (matrix included), where the pre-P6 code explicitly excluded matrix images. kube-coder-tunnel-reclaim/deploy-pins.json is new, naming KubeCoderDeploy's two stage files at images.tunnelReclaim; webhook-relay/deploy-pins.json gained ArgoCDDeploy's config/prd/values.yaml at relay.image next to FieldnotesDeploy's entry. Of the 7 build-matrix.json files, the 6 non-keycloak ones have no deploy-pins.json, so they keep pulling their named tag.",
+      "evidence": [
+        "DockerImages Jenkinsfile:39-55,131,158-165 (dd8e7f4, read 2026-09-29)",
+        "DockerImages kube-coder-tunnel-reclaim/deploy-pins.json, webhook-relay/deploy-pins.json"
+      ]
     },
     {
       "id": "V09",
-      "area": "R3 — Keycloak runs a per-build tag",
+      "area": "R3 \u2014 Keycloak runs a per-build tag",
       "description": "Keycloak's dev and prd stages run the per-build tag (`26.7.3-postgres-health-ispn-<build>`) a keycloak build wrote into KeycloakDeploy, Synced and Healthy, before the dry-run CronJob was unsuspended.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Needs the live keycloak build (Ordering constraints step 4); not reached this round. See close-out Outstanding actions.",
       "evidence": []
     },
     {
       "id": "V10",
-      "area": "R4 — the label decides (registry-cleanup)",
-      "description": "The image's label, not the tag's name, decides what is build history: registry-cleanup treats a tag as tracking only if its name equals the `org.webathome.poller.tracking-tag` label on the image it points to, deletes only tags in that label's build series (Ruling D2: `latest` owns the bare build numbers, `dev-latest` owns `dev-<n>`, a matrix label such as `26.7.3-postgres-health-ispn` owns `26.7.3-postgres-health-ispn-<n>`), and keeps every other tag without counting it toward the keep-newest cap — unlabelled tags and promoted `prd-<n>` copies included. `node-24` and `jdk-21` are no longer treated as build 24 and build 21 (today's regex: `registry-cleanup/app/main.py:29`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R4 \u2014 the label decides (registry-cleanup)",
+      "description": "The image's label, not the tag's name, decides what is build history: registry-cleanup treats a tag as tracking only if its name equals the `org.webathome.poller.tracking-tag` label on the image it points to, deletes only tags in that label's build series (Ruling D2: `latest` owns the bare build numbers, `dev-latest` owns `dev-<n>`, a matrix label such as `26.7.3-postgres-health-ispn` owns `26.7.3-postgres-health-ispn-<n>`), and keeps every other tag without counting it toward the keep-newest cap \u2014 unlabelled tags and promoted `prd-<n>` copies included. `node-24` and `jdk-21` are no longer treated as build 24 and build 21 (today's regex: `registry-cleanup/app/main.py:29`).",
+      "verdict": "pass",
+      "rationale": "Verified by independent code read (sub-agent, 2026-09-29) against DockerImages 9a11863: registry-cleanup/app/main.py's old regex machinery (_VERSIONED, is_versioned, _family_and_number) is gone (grep clean); classification is build_number(tag, label) reading the image's tracking-tag label (main.py:36,49-64), applied per-tag in cleanup_repo (:266-275); --max-per-series cap (:296-305) and per-series floor (:320-332) match D2/R1-A1; the shared-digest guard (:354-380, fails closed) and GC with --delete-untagged and --dry-run (:132-171) both still exist.",
+      "evidence": [
+        "DockerImages registry-cleanup/app/main.py:36,49-64,132-171,266-275,296-332,354-380 (9a11863)"
+      ]
     },
     {
       "id": "V11",
-      "area": "R4 — kaniko2",
+      "area": "R4 \u2014 kaniko2",
       "description": "`kaniko2` takes an explicit `trackingTag:` with the current derivation from tag shapes as the default; a build that pushes only a build number is labelled so that number falls in the label's series; a matrix build's named tag plus its per-build tag is accepted, where today the check refuses it (JenkinsPipelineUtils `vars/helmCharts.groovy:144-165`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by independent code read (sub-agent, 2026-09-29) against JenkinsPipelineUtils 276beff: vars/helmCharts.groovy:108 passes an explicit trackingTag into resolveTrackingTag (:158); without one, a lone bare-number destination is labelled `latest` (:162-163), otherwise the one destination whose build series (inBuildSeries, :190-198) covers every other is the label (:165) \u2014 which accepts a matrix build's `<tag>`+`<tag>-<build>` pair, refused by the old code (confirmed by diff: the pre-P1 check only handled 1-2 destinations via a `^(.*-)?latest$` regex). Lines 173-183 refuse a bare-number label and any destination outside the label's series. New tests/src/test/java/.../TrackingTagTest.java, 23/23 passing (surefire report read). Gate log phases/P1/gate_r1.log confirms the whole Maven suite green.",
+      "evidence": [
+        "JenkinsPipelineUtils vars/helmCharts.groovy:108,158-198 (276beff, read 2026-09-29)",
+        "JenkinsPipelineUtils tests/.../TrackingTagTest.java, surefire report",
+        "phases/P1/gate_r1.log"
+      ]
     },
     {
       "id": "V12",
-      "area": "R4 — version-poller",
+      "area": "R4 \u2014 version-poller",
       "description": "The version-poller classifies tags by the same label rule, so its fallback to the label (`version-poller/app/poller.py:125-132`, `:220-238`) stops being a fallback, and neither the poller nor registry-cleanup carries the tag-shape regex any more (`version-poller/app/tagging.py:20`, `registry-cleanup/app/main.py:29`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by independent code read (sub-agent, 2026-09-29) against DockerImages 1a69ff9: version-poller/app/tagging.py's build_number (tagging.py:21-37) mirrors cleanup's exactly, with no regex/is_versioned/fallback remnants (grep clean); poller.py:139-151 classifies each tag directly by label (tag==label -> tracking; build_number match -> history/ignored; self-labelled bare number -> explicit leftover skip); no _recover_self_tracking_tags exists anywhere in the repo.",
+      "evidence": [
+        "DockerImages version-poller/app/tagging.py:21-37, app/poller.py:139-151 (1a69ff9)"
+      ]
     },
     {
       "id": "V13",
-      "area": "R4 — no rebuilds through leftover labels",
+      "area": "R4 \u2014 no rebuilds through leftover labels",
       "description": "Moving the poller to the label rule starts no rebuild through a legacy build-number tag whose label names the tag itself (live example: `dhcpapp:35`, labelled `35`, pipeline `DHCP/DHCPApp`, rebuild-at 2026-07-18); the only new rebuild targets are tracking tags the name heuristic misread, such as `node-24`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by independent read (sub-agent, 2026-09-29) of the already-executed live dry-run logs from P5 (phases/P5/poller-dryrun-week-{old,new}.log): dhcpapp-validation and ssegateway-validation log 'no tracking tag' identically on every one of 9 daily polls, old and new code alike. The P4 cleanup dry-run (phases/P4/cleanup-dryrun-new.log) confirms the leftover shape: dhcpapp holds tracking tags {35, latest} and ssegateway-validation holds 8 self-labelled bare numbers (48-52,54-56) \u2014 matching the claimed 9 leftovers exactly. DHCP/DHCPApp does fire in both logs, but only via its legitimate `latest` tag, never through `35`. New unit test test_leftover_self_labelled_build_numbers_never_trigger (version-poller/tests/test_timer_poller.py:245-264) reproduces the scenario synthetically.",
+      "evidence": [
+        "phases/P5/poller-dryrun-week-old.log, poller-dryrun-week-new.log",
+        "phases/P4/cleanup-dryrun-new.log",
+        "DockerImages version-poller/tests/test_timer_poller.py:245-264"
+      ]
     },
     {
       "id": "V14",
-      "area": "R4 — the design doc",
-      "description": "DockerImages' `docs/registry-management/version-poller-redesign.md` §4 (\"Tag scheme (enforced by `kaniko2`)\" and the mirror classifier, `:142-165`) and §8's keep/delete rules state the label rule, per the triage ruling that overruled the one-tag scheme.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R4 \u2014 the design doc",
+      "description": "DockerImages' `docs/registry-management/version-poller-redesign.md` \u00a74 (\"Tag scheme (enforced by `kaniko2`)\" and the mirror classifier, `:142-165`) and \u00a78's keep/delete rules state the label rule, per the triage ruling that overruled the one-tag scheme.",
+      "verdict": "pass",
+      "rationale": "Verified by independent read (sub-agent, 2026-09-29) against DockerImages docs/registry-management/version-poller-redesign.md at 2748608/18dadc8: \u00a74 heading is now 'Tag scheme and build series (enforced by kaniko2)' with the shared classifier (tracking / build history / promoted copy / unlabelled / self-labelled bare-number leftover) at :172-190, replacing the old regex scheme and 'No exotic schemes' language (confirmed absent by diff against the pre-P8 version). \u00a78's keep/delete rules (:457-524) are fully label-based; \u00a711's defaults table reads '--max-per-series'. A full-file grep found no leftover old-scheme material.",
+      "evidence": [
+        "DockerImages docs/registry-management/version-poller-redesign.md:144,172-190,457-524,660"
+      ]
     },
     {
       "id": "V15",
-      "area": "R5 — kube-coder-tunnel-reclaim",
+      "area": "R5 \u2014 kube-coder-tunnel-reclaim",
       "description": "KubeCoderDeploy no longer runs `kube-coder-tunnel-reclaim:latest`, a moving tag that nothing pins: it pins a build-number tag that every tunnel-reclaim build rewrites through the pin stage; the chart's \"deliberate float\" comment and the render test's `:latest` assertion are gone (`chart/values.yaml:16-18`, `tests/render-chart.py:82-83`); kubecoder-dev runs the pinned tag, and prd follows by KubeCoder's normal promotion.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Code verified by independent read (sub-agent, 2026-09-29) against KubeCoderDeploy 850d45d (rebased from 3de9ea8 onto a moved origin/main by this test-phase run, gate re-run green): both config/dev and config/prd values.yaml pin tunnelReclaim to :2565 (no :latest); chart/values.yaml names no default, controller-deployment.yaml:228-229 `required`-guards the key and pulls IfNotPresent (was Always); the 'deliberate float' comment and the render test's old :latest assertions are gone, replaced by a same-build-across-stages check and a negative case for a stage missing the key. LIVE, pushed by this test-phase run (KubeCoderDeploy 8d039ed, within the devlock's dev-push/roll pre-authorisation): kubecoder-dev's Argo Application auto-synced (webhook-triggered, PreSync Terraform hook ran clean) to Synced/Healthy at 8d039ed, and the live controller pod (kubecoder-controller-54dd98bbcc-n7qfl) runs container `tunnel-reclaim` as registry:5000/kube-coder-tunnel-reclaim:2565, imagePullPolicy=IfNotPresent (read 2026-09-29). prd is untouched: kubecoder-prd's Application still reports its pre-existing revision e050439 (Promote-PRD not run), per design.",
+      "evidence": [
+        "KubeCoderDeploy config/dev/values.yaml:38, config/prd/values.yaml:59, chart/templates/controller-deployment.yaml:228-229 (850d45d, read 2026-09-29)",
+        "live: kubectl get application kubecoder-dev -n argocd-prd -> Synced/Healthy @ 8d039ed",
+        "live: kubectl get pod kubecoder-controller-54dd98bbcc-n7qfl -n kubecoder-dev -o jsonpath (container tunnel-reclaim image :2565, IfNotPresent), read-only, 2026-09-29",
+        "live: kubectl get application kubecoder-prd -> unchanged @ e050439, read-only, 2026-09-29"
+      ]
     },
     {
       "id": "V16",
-      "area": "Ruling D3 — Argo CD's relay pin",
+      "area": "Ruling D3 \u2014 Argo CD's relay pin",
       "description": "ArgoCDDeploy's webhook-relay pin lives in its production stage values and every relay build writes it there, as it does FieldnotesDeploy's. Today the pin is a hand-bumped chart default (`ArgoCDDeploy/chart/values.yaml:58`) and `DockerImages/webhook-relay/deploy-pins.json` names only FieldnotesDeploy.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Code verified by independent read (sub-agent, 2026-09-29) against ArgoCDDeploy 0bacce1: relay.image now at config/prd/values.yaml:319 (':2539'); chart/values.yaml names no default, webhook-relay.yaml:45 `required`-guards it; the chart-level-pin argument comment is gone; render-chart.py's relay assertions (including a negative case for a missing pin) are intact. LIVE, pushed by this test-phase run: argocd-prd's Application reports Synced/Healthy at 0bacce1 (read 2026-09-29) with no operation triggered \u2014 the render is unchanged from before the push (also independently corroborated by phases/P3/code_review_r1.md's logged `helm template` cmp across 34,715 identical lines), so the move is confirmed render-neutral and nothing rolled. Per D3, argocd-prd never auto-syncs on its own trigger; here there was simply nothing to sync.",
+      "evidence": [
+        "ArgoCDDeploy config/prd/values.yaml:319, chart/templates/webhook-relay.yaml:45 (0bacce1, read 2026-09-29)",
+        "live: kubectl get application argocd-prd -n argocd-prd -> Synced/Healthy @ 0bacce1, read-only, 2026-09-29",
+        "phases/P3/code_review_r1.md:8 (helm template cmp, 34,715 lines identical)"
+      ]
     },
     {
       "id": "V17",
       "area": "Rollouts",
-      "description": "No phase pushed; the test phase pushed in Ruling R1-Q2's order — the shared library, KubeCoderDeploy and ArgoCDDeploy, DockerImages, the keycloak build, RegistryDeploy, the deploy-repo comment batches — each step's live check green before the next. Every Argo CD Application those pushes fed — the pin commits of the DockerImages builds and the deploy-repo pushes — is Synced and Healthy on its new revision; argocd-prd, synced by hand (D3), is the one exception, left out of sync for the operator.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "No phase pushed; the test phase pushed in Ruling R1-Q2's order \u2014 the shared library, KubeCoderDeploy and ArgoCDDeploy, DockerImages, the keycloak build, RegistryDeploy, the deploy-repo comment batches \u2014 each step's live check green before the next. Every Argo CD Application those pushes fed \u2014 the pin commits of the DockerImages builds and the deploy-repo pushes \u2014 is Synced and Healthy on its new revision; argocd-prd, synced by hand (D3), is the one exception, left out of sync for the operator.",
+      "verdict": "owed",
+      "rationale": "Not run as Ruling R1-Q2 specifies. This test-phase run pushed only KubeCoderDeploy and ArgoCDDeploy (Ordering constraints step 2) \u2014 both verified live Synced/Healthy with no prd rollout (V15, V16) \u2014 and stopped there: the dispatch's deterministic facts pre-authorise pushing and rolling dev under the devlock and state prd stays operator-gated with nothing here touching it, which conflicts with R1-Q2's operator authorisation (2026-09-26) for the test phase to push the full chain unattended, prd rollouts (including Keycloak's SSO outage) included. JenkinsPipelineUtils (step 1) and everything from DockerImages (step 3) onward is unpushed. See close-out Outstanding actions for the conflict and the exact remaining sequence.",
+      "evidence": [
+        "live: kubectl get applications.argoproj.io -n argocd-prd, read-only, 2026-09-29 (baseline + post-push states for kubecoder-dev, kubecoder-prd, argocd-prd)"
+      ]
     },
     {
       "id": "V18",
       "area": "Callers of kaniko2",
       "description": "Every existing `helmCharts.kaniko` / `kaniko2` caller in the estate still builds after the kaniko2 change: no caller's destination set is refused and no caller had to change.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by independent code read (sub-agent, 2026-09-29): traced every known caller shape (plain `<n>`+`latest`, KubeCoder `dev-<n>`+`dev-latest`, DesignAssistant `<p>-<n>`+`<p>-latest`, SSEGateway's lone `<n>`, DockerImages' pre-P6 single matrix tag) through the new inBuildSeries/resolveTrackingTag logic by hand against real Jenkinsfiles (checked-out repos plus GitHub-fetched copies) \u2014 every shape still resolves, none is refused.",
+      "evidence": [
+        "JenkinsPipelineUtils vars/helmCharts.groovy (276beff)",
+        "cross-checked Jenkinsfiles: CanonApp, KubeCoder, DesignAssistant, SSEGateway, DockerImages"
+      ]
     },
     {
       "id": "V19",
       "area": "Test coverage",
-      "description": "registry-cleanup's and version-poller's test suites cover the label rule — Ruling D2's series, matrix per-build tags, promoted copies, unlabelled tags — cleanup's per-series floor (Ruling R1-A1) and its dry-run garbage collection, and pass; no coverage is lost: every deleted test has a named successor.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "description": "registry-cleanup's and version-poller's test suites cover the label rule \u2014 Ruling D2's series, matrix per-build tags, promoted copies, unlabelled tags \u2014 cleanup's per-series floor (Ruling R1-A1) and its dry-run garbage collection, and pass; no coverage is lost: every deleted test has a named successor.",
+      "verdict": "pass",
+      "rationale": "Verified by independent read (sub-agent, 2026-09-29): registry-cleanup/tests/test_cleanup.py covers all three D2 series shapes (:70-95), matrix per-build tags (:109-114), self-labelled tracking tags (:117-127), promoted copies (:130-140), unlabelled tags (:143-151), the per-series floor with and without the label's own tag and next to a self-labelled bare number (:216-253), and dry-run GC (:309-346,373-407). Diffing test names old (9a11863~1) vs new shows every prior test has a named successor, none dropped silently. version-poller's test_timer_poller.py (37 test functions) separately covers the mirrored rules, including the dhcpapp/ssegateway leftover case and only-newest promoted-copy staleness warnings (:282-305).",
+      "evidence": [
+        "DockerImages registry-cleanup/tests/test_cleanup.py:70-151,216-253,309-407",
+        "DockerImages version-poller/tests/test_timer_poller.py (37 tests)"
+      ]
     },
     {
       "id": "V20",
-      "area": "Ruling R1-A1 — every label series keeps its newest build",
+      "area": "Ruling R1-A1 \u2014 every label series keeps its newest build",
       "description": "registry-cleanup's floor keeps the newest build of each label series whether or not the label's own tag exists in the repo, so an old self-labelled bare number (live example: `ssegateway-validation:56`, labelled `56`, built 2026-09-24) counting as a tracking tag cannot switch the floor off. Today the floor fires only in a repo with no tracking tag (`registry-cleanup/app/main.py:319`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Verified by independent code read (sub-agent, 2026-09-29): main.py:320-322 pops the series' highest build number out of the delete set unconditionally, keyed by the label string itself -- never requiring a tag actually named after that label to exist. Confirmed by test_floor_keeps_the_newest_build_without_the_label_tag (test_cleanup.py:222-227) and, matching the live ssegateway-validation shape exactly, test_floor_holds_next_to_a_self_labelled_bare_number (test_cleanup.py:230-237): a self-labelled '56' tracking tag sits beside a labelless `latest` series (57,58,59), and 59 is still kept by the floor.",
+      "evidence": [
+        "DockerImages registry-cleanup/app/main.py:320-332",
+        "DockerImages registry-cleanup/tests/test_cleanup.py:222-237"
+      ]
     }
   ]
 }
