@@ -53,10 +53,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | PostgresPasDeploy | deploy | P9c | `/work/scratch/sweep031/PostgresPasDeploy` | pointer (`.architecturerc`) | `c58f403` | done: AaC/PostgresPasDeploy #4 and AaC/Architecture #2257 green; postgres-pas-prd: at=True sync=Synced health=Healthy; site pin `fac7282` rolled |
 | PrometheusDeploy | deploy | P9c | `/work/scratch/PrometheusDeploy` | pointer (`.architecturerc`); carries P7 `4aa1ef5` | — | not yet pushed |
 | RegistryDeploy | deploy | P9c | `/work/scratch/RegistryDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| ScantopdfDeploy | deploy | P9c | `/work/scratch/sweep031/ScantopdfDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| SourceDeploy | deploy | P9c | `/work/scratch/sweep031/SourceDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| StepCaDeploy | deploy | P9c | `/work/scratch/sweep031/StepCaDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| StorageDeploy | deploy | P9c | `/work/scratch/sweep031/StorageDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| ScantopdfDeploy | deploy | P9c | `/work/scratch/sweep031/ScantopdfDeploy` | pointer (`.architecturerc`) | `58fca28` | done: AaC/ScantopdfDeploy #9 and AaC/Architecture #2258 green; scantopdf-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
+| SourceDeploy | deploy | P9c | `/work/scratch/sweep031/SourceDeploy` | pointer (`.architecturerc`) | `c5587cc` | done: AaC/SourceDeploy #6 and AaC/Architecture #2258 green; source-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
+| StepCaDeploy | deploy | P9c | `/work/scratch/sweep031/StepCaDeploy` | pointer (`.architecturerc`) | `38e0bfc` | done: AaC/StepCaDeploy #4 and AaC/Architecture #2258 green; step-ca-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
+| StorageDeploy | deploy | P9c | `/work/scratch/sweep031/StorageDeploy` | pointer (`.architecturerc`) | `0d26b22` | done: AaC/StorageDeploy #7 and AaC/Architecture #2258 green; storage-prd: at=True sync=Synced health=Healthy; site pin `501db64` rolled |
 | TelegramMcpDeploy | deploy | P9c | `/work/scratch/sweep031/TelegramMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | TfmirrorDeploy | deploy | P9c | `/work/scratch/sweep031/TfmirrorDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | TrelloMcpDeploy | deploy | P9c | `/work/scratch/sweep031/TrelloMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
