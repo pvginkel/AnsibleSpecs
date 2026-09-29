@@ -38,6 +38,8 @@ V02 — The published architecture shows kube-coder-tunnel-reclaim mapped, with 
 
 `verification.json` marks V02 owed after: the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; not done by this slice). The run cannot take that action; settle the criterion once it has happened.
 
+executor P9b r1, 2026-09-29 — KubeCoderDeploy main now carries the mapping on origin: P9b pushed `c776662` (P5's `e9a5ca7` plus the --help pointer). The push started no AaC/KubeCoderDeploy build: the job polls `*/prd`, and its last build is still #10. A prd generation from that main prints no `gap:` line. The promotion is the only step left.
+
 **Consequence:** V02 stays unproven until then; the test phase does not settle it.
 
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
@@ -72,9 +74,24 @@ The same bug R1 names for KubeCoder (a pod with two in-house apps each realizing
 
 code-writer P1 r1, 2026-09-29 — Checked 2026-09-29: in the live dataset each of the six minted svc: ids appears only in its own producer's element, Realization and Assignment(s), and no file in /work/Architecture names one, so nothing dangles today; the consequence is limited to the ids disappearing.
 
+code-reviewer P1 r1, 2026-09-29 — Checked 2026-09-29: the five dropped ids (svc:electronics-inventory-prd-electronics-inventory, svc:fieldnotes-prd-fieldnotes, svc:fieldnotes-prd-fieldnotes-hooks, svc:iot-prd-iotsupport, svc:scantopdf-prd-scantopdf, svc:zigbee2mqtt-prd-zigbee-control) appear in the live dataset only in their own producer's Assignment and Realization relations. No file in /work/Architecture or /work/DockerImages references them, so nothing hand-authored dangles.
+
 **Consequence:** The published model loses five minted per-deployment services and their UUIDs; anything hand-authored elsewhere that references one of those svc: ids now dangles.
 
 **Provenance:** witnessed, code-writer, P1, r1, old-vs-new generation of the 26 deploy repos with in-house images (/work/scratch/p1-cmp/out)
+**Disposition:**
+
+### N2 — Run paused for an operator question in P4
+
+The question, as the driver recorded it:
+
+> Planned stop (Rulings D3, F3): ArgoCDTools main eadf4ca (P1–P3) is published, and IaC/ArgoCDTools #20 built it green, so registry:5000/aac-tools:20 and :latest carry the new generator. The how-to diff is committed (Ansible 5ef7adc on phase/026-P4, gate green) and so is the done-record. Please restart this environment (kc env restart) to bring the published aac-tools sidecar and modern-app together, then relaunch the run; the relaunched round only confirms and hands back done.
+
+Stopped 2026-09-29 21:15; resumed 2026-09-29 21:24.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
 ## Bugs
@@ -125,4 +142,94 @@ KubeCoderDeploy chart/values.yaml:594-596, the KubeCoder catalog description of 
 **Consequence:** An agent that reads the environment's tool description is told to keep a copied validator, which the slice has just removed estate-wide, until someone edits the catalog entry and promotes KubeCoder.
 
 **Provenance:** read | plan-writer, r3, KubeCoderDeploy chart/values.yaml:594-596 (also shown by kc env describe)
+**Disposition:**
+
+### S3 — aac-tools gen-architecture: confirm R1's front-door fallback, which keeps jenkins-mcp's and trello-mcp's hosts on the shared svc:mcp-filter
+
+P1 reads R1 ("consider only the container behind the Service") with a fallback the executor settled, not the operator. When the routed container realizes no in-house service, the pod's single in-house service is referenced (gen_architecture.py:1302). Across the 26 in-house deploy repos it fires for four Services, all with the same output as before the phase. mydownloads (routed to gluetun) gets svc:mydownloads-api, which is right. jenkins-mcp, trello-mcp and trello-mcp-public (routed to the auth nginx) get svc:mcp-filter, although trello-mcp's pod also runs the upstream server ss:trello-mcp. Strict scoping would instead mint services realized by the proxy. An `exposures:` entry naming `server` would now mint a Trello MCP service realized by that container.
+
+**Consequence:** The published model keeps assigning the Trello MCP and Jenkins MCP hosts to the one mcp-filter service every filter deployment shares, until someone rules on the reading or adds an exposures: entry.
+
+**Provenance:** witnessed, code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
+**Disposition:**
+
+### S4 — aac-tools gen-architecture: no test catches it if two parts of container scoping regress · minor
+
+The suite still passes after either of two mutations. One makes the instance record carry the image-level realizes instead of the scoped one (gen_architecture.py:1035). The boundBy capability filter, the loopback pick and the secret-store match read that record, so a boundBy onto a container-scoped capability would then hard-fail. The other makes the scope gap compare against every rendered container instead of the image's own (:1096). Worth a test each. P6's layer relies on neither path.
+
+**Consequence:** A later change could break a boundBy that resolves onto a container-scoped capability without any test failing. Nothing in the estate relies on that path today.
+
+**Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+### S5 — aac-tools gen-architecture: resolve_boundby's comment still calls the container env literal-valued · cosmetic
+
+gen_architecture.py:1572-1573 says the value is expanded against the container's other literal-valued env. Since P2 that env also holds ConfigMap-sourced values (container_env).
+
+**Consequence:** none
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:**
+
+### S6 — aac-tools gen-architecture: the --help contract test does not notice when the image entry's served_by definition is removed · minor
+
+HelpContractTests' key check (ArgoCDTools aac-tools/tests/test_gen_architecture.py:1492-1497) only requires each key to appear somewhere in --help. The JUDGMENT_KEYS section labels are subtest names, not the section searched. Deleting the served_by bullet from the image-entry keys (gen_architecture.py:133-136) leaves all three HelpContractTests green, because the cnpg paragraph still names served_by. The same holds for any key named in two paragraphs (product, realizes, upstream). The contract is complete at eadf4ca: this is only a regression guard. A check that looks for each key in its own paragraph would close it.
+
+**Consequence:** A later docstring edit could drop served_by's (or realizes', product's) image-entry definition from --help without any test failing.
+
+**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F1 (mutation run)
+**Disposition:**
+
+### S7 — aac-tools gen-architecture: --help says product entries are copied as written, but lifecycle and stereotype are overwritten · nit
+
+The products paragraph of the contract (ArgoCDTools aac-tools/image/gen_architecture.py:163) says "The generator copies the fields as written". The code (:1026-1032) sets stereotype to SoftwareProduct and lifecycle to active whatever the entry says. lifecycle is a schema field (Architecture schema/v0.1/generated/systemsoftware.schema.yaml:30). No estate layer sets it today.
+
+**Consequence:** A judgment layer that sets lifecycle on a product it owns, for example to retire it, publishes the product as active, with no gap and no error.
+
+**Provenance:** read | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
+**Disposition:**
+
+### S8 — P3's old-vs-new comparison harness regenerates KubeCoderDeploy from main, not the prd branch its architecture job publishes · nit
+
+/work/scratch/p3-cmp/run.sh copies every deploy repo's origin/main. KubeCoderDeploy's Jenkinsfile.architecture clones branch prd, whose chart and values differ from main. The reviewer regenerated origin/prd e050439 with both generators: both exit 0, the artifacts are byte-identical, and the gap line is the same. So P3's conclusion holds. P4 redoes the comparison only if origin moves the generator. The plan's P3 Later phases now tells it to include prd.
+
+**Consequence:** none — witnessed identical at eadf4ca; a P4 redo that skips prd would leave the published KubeCoderDeploy stage unchecked.
+
+**Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F3
+**Disposition:**
+
+### S9 — ArgoCDDeploy architecture.yaml: the argocd comment says an unset upstream var hard-fails on every other container of the image, but init containers are exempt · nit
+
+architecture.yaml:25-26 says 'on any other container of the image an upstream wire whose var is unset is a hard fail'. The generator skips upstream on init containers (ArgoCDTools aac-tools/image/gen_architecture.py:1774, 'if not upstream or inst["is_init"]: continue'). An image-level REDIS_SERVER wire fails on applicationset-controller, notifications-controller and secret-init, and leaves the copyutil init container alone. The reason given for scoping the wire still holds; only 'any other container' is too broad. Could be narrowed to the image's non-init containers when P9a edits this file's header.
+
+**Consequence:** none — a reader who follows the comment still writes a correct layer
+
+**Provenance:** witnessed, code-reviewer, P6, r1, phases/P6/code_review_r1.md (F1)
+**Disposition:**
+
+### S10 — Deploy repos' architecture.yaml still name HelmCharts configs/prd/<app>/<stage>/release.yaml as the registry entry that pins the upstream chart version · nit
+
+PrometheusDeploy's architecture.yaml:7-8 says the upstream chart version is the one 'this app's registry entry pins (HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both'. HelmCharts was archived on 2026-09-28, and the pin now lives in ArgoCDDeploy releases/values.yaml (prometheus: stages.prd.version "29.33.0", line 210). The same HelmCharts wording appears in 9 more deploy repos' architecture.yaml (grep 'HelmCharts configs' over /work/scratch/sweep031/*/architecture.yaml). P7 left it alone because it is outside R5.
+
+**Consequence:** A maintainer bumping an upstream chart version is sent to an archived repo for the second pin; the header does not name ArgoCDDeploy's releases/values.yaml, where the version actually is.
+
+**Provenance:** witnessed, code-writer, P7, r1, /work/scratch/PrometheusDeploy/architecture.yaml
+**Disposition:**
+
+### S11 — P7's done-record cited the pre-amend PrometheusDeploy sha e761059; the branch head is 4aa1ef5 · nit
+
+The executor amended its commit (reflog: 4aa1ef5 is 'commit (amend)' of e761059) after writing the done-record. The review corrected the sha in plan.md in place.
+
+**Consequence:** none — plan.md now names 4aa1ef5
+
+**Provenance:** witnessed, code-reviewer, P7, r1, phases/P7/code_review_r1.md
+**Disposition:**
+
+### S12 — Architecture update-architecture agent: the contract it reads from the sidecar's gen-architecture --help can be older than the generator the deploy repos build with · minor
+
+update-architecture.md:49-50 has a central update session run `cexec aac-tools gen-architecture --help` for a deploy repo's contract, and says it is the contract of the generator the deploy repos build with. Jenkins pulls registry:5000/aac-tools untagged with alwaysPullImage on every AaC build (JenkinsPipelineUtils containerTemplates.groovy:34). The Architecture environment's sidecar carries whatever image its pod last started with, and the sessions run in that pod (tooling/fleet.py:827). So after an ArgoCDTools publication that changes the judgment-layer contract, the agent reads the older contract until the environment restarts. Idea: restart the Architecture environment as part of publishing a contract change, or have the fleet check the sidecar's image digest against registry latest before it runs sessions.
+
+**Consequence:** After a future contract change, central update sessions edit deploy repos' judgment layers against the older contract until someone restarts the Architecture environment. A valid but incomplete edit passes the AaC build unnoticed.
+
+**Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
 **Disposition:**

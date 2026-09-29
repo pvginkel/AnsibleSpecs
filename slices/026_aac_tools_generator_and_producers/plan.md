@@ -579,6 +579,31 @@ As P9a, for the deploy repos whose names start G–M, resuming from the ledger. 
 push carries P5's mapping. Edit and push that repo in `/work/scratch/KubeCoderDeploy`, whose `main`
 carries P5's commit, not in its sweep031 clone.
 
+**Done (P9b).** All 17 G–M deploy repos name "what gen-architecture --help prints from the
+aac-tools toolchain" as the judgment layer's schema. Each is pushed and done, and each file keeps
+exactly its three keys. KubeCoderDeploy's `architecture.yaml` header names it too, and its push
+carried P5's mapping. The Ansible branch carries no commit.
+
+Later phases:
+- P9c: nothing changes from P9a's instructions. The rows for all 17 G–M repos read done in
+  `sweep_ledger.md`.
+- Test phase: KubeCoderDeploy `main` `c776662` carries P5's mapping and the pointer. No
+  `AaC/KubeCoderDeploy` build ran on it, because the job polls `*/prd`. V02 waits on the
+  promotion (close-out A2).
+
+Record:
+- KubeCoderDeploy `c776662` was pushed by hand, with `push_one.sh`'s rebase and foreign-commit
+  guard. `track_build.py` would have waited for a build that never starts. Its own
+  `kc project test` was green before the push, and a prd generation from its `main` prints no
+  `gap:` line. `kubecoder-dev` was Synced and Healthy at the sha. `AaC/KubeCoderDeploy`'s last
+  build is still #10.
+- Four `push_batch.sh` batches of four ran green (collectors #2251, #2252, #2253 and #2255). Every AaC
+  build and collector was green, every Application was Synced and Healthy at the sha
+  (`keycloak-dev` and `keycloak-prd` both), and every site pin rolled. JenkinsDeploy was pulled
+  first (1 behind). Rebase and push found no foreign commits.
+- Commit message as in P9a. KubeCoderDeploy's also names the `architecture.yaml` header.
+- Gate: `kc project test --project root` green.
+
 ### P9c — Deploy repos N–Z point at `gen-architecture --help`
 
 Target: root
