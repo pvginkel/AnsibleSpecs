@@ -26,10 +26,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | CsiDriverSmbDeploy | deploy | P9a | `/work/scratch/sweep031/CsiDriverSmbDeploy` | pointer (`.architecturerc`) | `c058a98` | done: AaC/CsiDriverSmbDeploy #4 and AaC/Architecture #2246 green; csi-driver-smb-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
 | DnsmasqDeploy | deploy | P9a | `/work/scratch/sweep031/DnsmasqDeploy` | pointer (`.architecturerc`) | `06909d8` | done: AaC/DnsmasqDeploy #29 and AaC/Architecture #2246 green; dnsmasq-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
 | ElasticsearchDeploy | deploy | P9a | `/work/scratch/sweep031/ElasticsearchDeploy` | pointer (`.architecturerc`) | `90ae062` | done: AaC/ElasticsearchDeploy #5 and AaC/Architecture #2246 green; elasticsearch-prd: at=True sync=Synced health=Healthy; site pin `4c8fee7` rolled |
-| ElectronicsInventoryDeploy | deploy | P9a | `/work/scratch/sweep031/ElectronicsInventoryDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| ExternalSecretsDeploy | deploy | P9a | `/work/scratch/sweep031/ExternalSecretsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| FieldnotesDeploy | deploy | P9a | `/work/scratch/sweep031/FieldnotesDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| FilebeatDeploy | deploy | P9a | `/work/scratch/sweep031/FilebeatDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| ElectronicsInventoryDeploy | deploy | P9a | `/work/scratch/sweep031/ElectronicsInventoryDeploy` | pointer (`.architecturerc`) | `fdcf55d` | done: AaC/ElectronicsInventoryDeploy #13 and AaC/Architecture #2248 green; electronics-inventory-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
+| ExternalSecretsDeploy | deploy | P9a | `/work/scratch/sweep031/ExternalSecretsDeploy` | pointer (`.architecturerc`) | `2cd79df` | done: AaC/ExternalSecretsDeploy #4 and AaC/Architecture #2248 green; external-secrets-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
+| FieldnotesDeploy | deploy | P9a | `/work/scratch/sweep031/FieldnotesDeploy` | pointer (`.architecturerc`) | `45bf980` | done: AaC/FieldnotesDeploy #30 and AaC/Architecture #2248 green; fieldnotes-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
+| FilebeatDeploy | deploy | P9a | `/work/scratch/sweep031/FilebeatDeploy` | pointer (`.architecturerc`) | `a9fb5d5` | done: AaC/FilebeatDeploy #6 and AaC/Architecture #2248 green; filebeat-prd: at=True sync=Synced health=Healthy; site pin `72c422d` rolled |
 | GinbovNlDeploy | deploy | P9b | `/work/scratch/sweep031/GinbovNlDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | GitSyncDeploy | deploy | P9b | `/work/scratch/sweep031/GitSyncDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | GrafanaDeploy | deploy | P9b | `/work/scratch/sweep031/GrafanaDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
