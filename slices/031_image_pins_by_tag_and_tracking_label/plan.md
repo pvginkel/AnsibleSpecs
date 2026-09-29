@@ -689,7 +689,7 @@ Later phases:
 - The doc's cap and TTL numbers (5, 4 weeks) differ from the code's defaults (10, 26 weeks). They
   are left alone as DI-5's (close-out S5).
 
-### P9 — argo-cd D53: deploy repos pin tags, never digests
+### P9 — argo-cd D53: deploy repos pin tags, never digests ✅ DONE 2026-09-29
 
 Target: ../AnsibleSpecs
 
