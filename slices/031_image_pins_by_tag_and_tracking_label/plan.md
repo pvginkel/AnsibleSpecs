@@ -469,7 +469,7 @@ Later phases:
 - Warning on `latest`: an unlabelled `latest` is outside every series, and it is still warned
   about.
 
-### P5 — version-poller: the same label rule
+### P5 — version-poller: the same label rule ✅ DONE 2026-09-29
 
 Target: ../DockerImages
 
