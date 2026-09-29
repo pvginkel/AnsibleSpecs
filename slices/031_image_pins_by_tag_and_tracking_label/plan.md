@@ -372,6 +372,23 @@ with it. The render gate's relay assertions (`tests/render-chart.py:183-190`) ke
 The move is render-neutral: it keeps today's build (`2539`), so argocd-prd gets nothing new to
 sync. The sync of Argo CD's own application stays the operator's (D3).
 
+**Done (P3).** ArgoCDDeploy `0bacce1` (`phase/031-P3`, committed, not pushed): the pin is
+`relay.image: ':2539'` in `config/prd/values.yaml` — a tag suffix the template concatenates onto
+`registry:5000/webhook-relay`, the shape FieldnotesDeploy's `images.webhookRelay` has. The chart
+names no default (`relay.image:` empty) and `required`-guards it. The rendered chart is
+byte-identical to before. The render gate checks the stage pin is `:<digits>`, the relay runs
+exactly that build, and a stage without the pin fails to render. `kc project test` green.
+
+Later phases:
+- P6: `webhook-relay/deploy-pins.json` gains `pvginkel/ArgoCDDeploy`, file
+  `config/prd/values.yaml`, path `relay.image`, default value template (`:{tag}`).
+- Test phase: step 2's push leaves argocd-prd Synced (render unchanged). The first relay build
+  after step 3 moves the pin, which leaves argocd-prd out of sync for the operator (D3).
+
+Record:
+- Kept under the chart's own `relay:` block beside `serverName`, not a new top-level `images:`
+  map: this chart groups each component's values under its own key.
+
 ### P4 — registry-cleanup: the label decides what is build history, and a dry run covers garbage collection
 
 Target: ../DockerImages
@@ -465,7 +482,8 @@ Target: ../DockerImages
   - `kube-coder-tunnel-reclaim` gets a pin list naming P2's path: `pvginkel/KubeCoderDeploy`,
     `images.tunnelReclaim` in both `config/dev/values.yaml` and `config/prd/values.yaml`, default
     value template.
-  - `webhook-relay`'s list gains P3's ArgoCDDeploy path next to FieldnotesDeploy's (Ruling D3).
+  - `webhook-relay`'s list gains P3's ArgoCDDeploy path next to FieldnotesDeploy's (Ruling D3):
+    `pvginkel/ArgoCDDeploy`, `config/prd/values.yaml`, `relay.image`, default value template.
   - Every entry names a path its values file already holds with P2 and P3 merged. The pin stage
     fails on any other path (`JenkinsPipelineUtils/vars/cicd.groovy:16-17`).
 
