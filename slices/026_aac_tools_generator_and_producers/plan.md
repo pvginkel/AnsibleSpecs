@@ -416,7 +416,7 @@ Record:
 - Gate: `kc project test` is green with the published sidecar, and prd generation prints no
   `gap:` line (21 elements, 41 relations).
 
-### P7 — Alertmanager is served by the Telegram Bot API
+### P7 — Alertmanager is served by the Telegram Bot API ✅ DONE 2026-09-29
 
 Target: ../scratch/PrometheusDeploy
 
@@ -433,8 +433,9 @@ generator work.
 - The push rides P9c.
 
 **Done (P7).** PrometheusDeploy's `alertmanager` entry takes `product: ss:alertmanager` and
-`served_by: ["svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48"]` (`e761059` on
-`phase/026-P7` in `/work/scratch/PrometheusDeploy`, unpushed).
+`served_by: ["svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48"]` (`4aa1ef5` on
+`phase/026-P7` in `/work/scratch/PrometheusDeploy`, unpushed; review r1 corrected the sha from
+`e761059`, the commit before its amend).
 
 Later phases:
 - P9c: PrometheusDeploy has two clones. Edit and push `/work/scratch/PrometheusDeploy`, whose
