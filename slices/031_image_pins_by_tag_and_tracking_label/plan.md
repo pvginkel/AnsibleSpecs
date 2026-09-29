@@ -389,7 +389,7 @@ Record:
 - Kept under the chart's own `relay:` block beside `serverName`, not a new top-level `images:`
   map: this chart groups each component's values under its own key.
 
-### P4 — registry-cleanup: the label decides what is build history, and a dry run covers garbage collection
+### P4 — registry-cleanup: the label decides what is build history, and a dry run covers garbage collection ✅ DONE 2026-09-29
 
 Target: ../DockerImages
 
