@@ -126,7 +126,7 @@ Record:
   and none fails. An `ss:`-only repo cannot change.
 - Tests: `InHouseExposureTests` (7) in `tests/test_gen_architecture.py`. No test deleted.
 
-### P2 — The judgment layer scopes an image entry to containers, and env values sourced from a ConfigMap resolve
+### P2 — The judgment layer scopes an image entry to containers, and env values sourced from a ConfigMap resolve ✅ DONE 2026-09-29
 
 Target: aac-tools
 
