@@ -394,6 +394,28 @@ Architecture's `views/delivery.yaml:10` selects on it, and nothing in the estate
 today. Once P9a pushes this repo, `AaC/ArgoCDDeploy` publishes the result and Argo CD enters the
 Delivery view.
 
+**Done (P6).** ArgoCDDeploy's `argocd` entry realizes `cap:configuration-management` and scopes
+per container: copyutil and secret-init realize nothing, and the `REDIS_SERVER` upstream wire
+sits on server, repo-server and application-controller (`6bb4956` on `phase/026-P6` in
+`/work/ArgoCDDeploy`, unpushed).
+
+Later phases:
+- P9a: ArgoCDDeploy has two clones. Edit and push `/work/ArgoCDDeploy`, whose `main` carries
+  P6's commit, not `/work/scratch/sweep031/ArgoCDDeploy`. Its `architecture.yaml` line 3 still
+  says "gen-architecture's docstring"; P6 left the pointer to P9a.
+- P9a: after the push, `AaC/ArgoCDDeploy`'s artifact carries five Realizations of
+  `cap:configuration-management` and three redis Serving edges. The live dataset has neither
+  until that build publishes.
+
+Record:
+- Five controllers realize the capability: server, repo-server, application-controller,
+  notifications-controller, and applicationset-controller, which is scaled to zero but still
+  rendered. The Job's container is named `secret-init`.
+- The wire is scoped because an image-level one hard-fails on the non-init containers that do
+  not set `REDIS_SERVER`: notifications-controller, applicationset-controller and secret-init.
+- Gate: `kc project test` is green with the published sidecar, and prd generation prints no
+  `gap:` line (21 elements, 41 relations).
+
 ### P7 — Alertmanager is served by the Telegram Bot API
 
 Target: ../scratch/PrometheusDeploy
@@ -459,7 +481,8 @@ that each phase stays well within the session cap (Ruling F4):
 - P9c: N–Z (18).
 
 This phase opens the sweep ledger with all 48 rows and pushes the deploy class's canary alone
-first (Ruling F5). ArgoCDDeploy's push carries P6's commit.
+first (Ruling F5). ArgoCDDeploy's push carries P6's commit, so it goes from `/work/ArgoCDDeploy`
+(its `main`) rather than from `/work/scratch/sweep031/ArgoCDDeploy`.
 
 ### P9b — Deploy repos G–M point at `gen-architecture --help`
 
