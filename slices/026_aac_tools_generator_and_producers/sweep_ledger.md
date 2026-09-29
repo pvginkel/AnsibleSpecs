@@ -34,10 +34,10 @@ aac-tools toolchain" as the judgment layer's schema, in place of "the generator'
 | GitSyncDeploy | deploy | P9b | `/work/scratch/sweep031/GitSyncDeploy` | pointer (`.architecturerc`) | `8c08306` | done: AaC/GitSyncDeploy #17 and AaC/Architecture #2251 green; git-sync-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
 | GrafanaDeploy | deploy | P9b | `/work/scratch/sweep031/GrafanaDeploy` | pointer (`.architecturerc`) | `122a995` | done: AaC/GrafanaDeploy #4 and AaC/Architecture #2251 green; grafana-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
 | GuacamoleDeploy | deploy | P9b | `/work/scratch/sweep031/GuacamoleDeploy` | pointer (`.architecturerc`) | `ebc7bd6` | done: AaC/GuacamoleDeploy #6 and AaC/Architecture #2251 green; guacamole-prd: at=True sync=Synced health=Healthy; site pin `75a3380` rolled |
-| HeadlampDeploy | deploy | P9b | `/work/scratch/sweep031/HeadlampDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| HomeappsDeploy | deploy | P9b | `/work/scratch/sweep031/HomeappsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| HomeassistantMcpDeploy | deploy | P9b | `/work/scratch/sweep031/HomeassistantMcpDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
-| IacProvisionerDeploy | deploy | P9b | `/work/scratch/sweep031/IacProvisionerDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
+| HeadlampDeploy | deploy | P9b | `/work/scratch/sweep031/HeadlampDeploy` | pointer (`.architecturerc`) | `7fa743f` | done: AaC/HeadlampDeploy #4 and AaC/Architecture #2252 green; headlamp-prd: at=True sync=Synced health=Healthy; site pin `f5b2491` rolled |
+| HomeappsDeploy | deploy | P9b | `/work/scratch/sweep031/HomeappsDeploy` | pointer (`.architecturerc`) | `eaf112c` | done: AaC/HomeappsDeploy #11 and AaC/Architecture #2252 green; homeapps-prd: at=True sync=Synced health=Healthy; site pin `f5b2491` rolled |
+| HomeassistantMcpDeploy | deploy | P9b | `/work/scratch/sweep031/HomeassistantMcpDeploy` | pointer (`.architecturerc`) | `a64a293` | done: AaC/HomeassistantMcpDeploy #4 and AaC/Architecture #2252 green; homeassistant-mcp-prd: at=True sync=Synced health=Healthy; site pin `f5b2491` rolled |
+| IacProvisionerDeploy | deploy | P9b | `/work/scratch/sweep031/IacProvisionerDeploy` | pointer (`.architecturerc`) | `32dd452` | done: AaC/IacProvisionerDeploy #6 and AaC/Architecture #2252 green; iac-provisioner-prd: at=True sync=Synced health=Healthy; site pin `f5b2491` rolled |
 | InfraStatisticsDeploy | deploy | P9b | `/work/scratch/sweep031/InfraStatisticsDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | IntercomDeploy | deploy | P9b | `/work/scratch/sweep031/IntercomDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
 | IotDeploy | deploy | P9b | `/work/scratch/sweep031/IotDeploy` | pointer (`.architecturerc`) | — | not yet pushed |
