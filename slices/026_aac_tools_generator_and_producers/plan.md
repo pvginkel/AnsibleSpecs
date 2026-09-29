@@ -767,7 +767,7 @@ Record:
 - GitHub's trees of the three `main`s hold no `arch-validate.py`. Builds and rollouts:
   `sweep_ledger.md`.
 
-### P12a — Carriers whose push redeploys production, first part
+### P12a — Carriers whose push redeploys production, first part ✅ DONE 2026-09-30
 
 Target: root
 
