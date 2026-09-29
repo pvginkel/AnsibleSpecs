@@ -242,29 +242,26 @@ Later phases:
 Record:
 - `parse_args` passes `__doc__` with `RawDescriptionHelpFormatter`, and argparse prints it
   verbatim. The docstring's `Usage:` line is gone, because argparse prints the real one.
-- The judgment-layer section is a YAML sketch plus a reference for each key. It covers
-  `introduced`, `upstream` (repo/chart/version) and `images`. An `images` entry is null, a
-  product id, or a mapping of `product`, `kind`, `realizes`, `served_by` (composite, drawn
-  unresolved), `upstream` (env/providers/entry, or a list) and `containers`. It also covers
-  `cnpg` (Cluster/Pooler with product/realizes/served_by), `products` (id, label, summary,
-  homepage, logo, introduced), `exposures` (P1's pick), `webUi` and `mcpClients` (configMap,
-  key, hostField, providers), and says which outcomes are hard fails and which are gaps.
-  `served_by`, `kind`, null entries, `logo` and `hostField` were read before but undocumented.
-- Tests: `HelpContractTests` (3). The script's `--help` contains the docstring whole. It names
-  every key in a `JUDGMENT_KEYS` table, which is tied to `UPSTREAM_KEYS`, `SCOPED_KEYS` and
-  `CNPG_KINDS`. The sketch parses, passes `upstream_of`, scopes exactly `SCOPED_KEYS`, and its
-  `served_by` ids are composite. No test was deleted.
+- The judgment layer is a YAML sketch followed by a paragraph for each key the generator reads,
+  down to image entries (null, a product id, or `product`/`kind`/`realizes`/`served_by`/
+  `upstream`/`containers`), wires, cnpg, products and mcpClients entries. It also says which
+  outcomes are hard fails and which are gaps. Newly documented: `served_by`, `kind`, null
+  entries, `logo`, `hostField` and P1's pick.
+- Tests: `HelpContractTests` (3). `--help` holds the docstring whole. It names every key in a
+  `JUDGMENT_KEYS` table, which is tied to `UPSTREAM_KEYS`, `SCOPED_KEYS` and `CNPG_KINDS`. The
+  sketch parses, passes `upstream_of`, scopes exactly `SCOPED_KEYS`, and its `served_by` ids
+  are composite. No test was deleted.
 - Comparison, 2026-09-29. It covered the 49 `*-deploy` producers of Architecture's
-  pipeline-producers.yaml: the Jenkinsfile stages plus KeycloakDeploy dev. Each repo's
-  origin/main was checked out clean, with one pinned dataset (sha256 `5c2f3908…`) and no
-  overlay. Both scripts ran under the aac-tools sidecar's `python3`: old `7836cca` against new
-  `eadf4ca`. Both exited 0 on all 49. Stderr was identical everywhere, including the gaps
-  (dnsmasq `dhcp-app`, homeapps' image, `kube-coder-tunnel-reclaim`). The artifact differs
-  only in electronics-inventory, fieldnotes, iot, scantopdf and zigbee2mqtt. Each drops its
-  minted `svc:<ns>-<service>` and that service's Realization, and its host Assignment moves to
-  the routed container's in-house service. Fieldnotes' UI hosts move to `svc:fieldnotes-ui-web`
-  and its hooks host to `svc:webhook-relay`. No output changes because of a ConfigMap-sourced
-  value, since no layer declares a wire on one yet.
+  pipeline-producers.yaml, each repo's origin/main checked out clean, with one pinned dataset
+  (sha256 `5c2f3908…`) and no overlay. Both scripts ran under the aac-tools sidecar's
+  `python3`: `7836cca` against `eadf4ca`. Both exited 0 on all 49, and stderr was identical
+  everywhere, including the gaps (dnsmasq `dhcp-app`, homeapps' image,
+  `kube-coder-tunnel-reclaim`). The artifact differs only in electronics-inventory, fieldnotes,
+  iot, scantopdf and zigbee2mqtt. Each drops its minted `svc:<ns>-<service>` and that service's
+  Realization, and its host Assignment moves to the routed container's in-house service.
+  Fieldnotes' UI hosts move to `svc:fieldnotes-ui-web` and its hooks host to
+  `svc:webhook-relay`. No output changes because of a ConfigMap-sourced value, since no layer
+  wires one yet.
 
 ### P4 — Publish aac-tools, point the how-to at its `--help`, and stop for the restart
 
