@@ -196,15 +196,6 @@ in Architecture and predate the slice. Four of the five are witnessed.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-### B1 — ChartsDeploy: the chart that deploys charts.home takes homelab-shared from charts.home itself (D17's trap) · major
-
-ChartsDeploy `chart/Chart.yaml` names `homelab-shared` 0.3.1 from `https://charts.home` as a dependency, and the repo vendors no tarball (`chart/` holds only `Chart.lock`, `Chart.yaml`, `templates/`, `values.yaml`; read with `gh api` 2026-09-26). Argo's repo-server has to fetch the library from charts.home to render the app that serves charts.home. argo-cd D17 names this trap and phases.md A.1 asked for a library-free chart; the move to ChartsDeploy did not keep it. Found while bringing argo-cd `design.md`'s charts.home paragraph current in P1, which now states it; not fixed here (out of scope).
-
-**Consequence:** On a rebuilt cluster, or whenever charts.home is down, Argo cannot render charts.home, so it cannot bring it back, and every app that uses the library stays unrenderable until someone starts charts.home by hand.
-
-**Provenance:** read — code-writer, P1, r1; gh api repos/pvginkel/ChartsDeploy (chart/Chart.yaml, tree)
-**Disposition:** What do you propose as a solution?
-
 ### B2 — Architecture: the HA fleet's Zigbee bridge map still targets the pre-migration Z2M instance ids · minor
 
 tools/ha-fleet/annotations.yaml's zigbee_bridges maps both bridges to ss:zigbee2mqtt-zigbee2mqtt1-zigbee2mqtt,30978e51-… and ss:zigbee2mqtt-zigbee2mqtt2-zigbee2mqtt,43ac1818-…, the ids HelmCharts' generator minted. zigbee2mqtt-deploy now publishes ss:zigbee2mqtt-prd-zigbee2mqtt1-zigbee2mqtt,3b3dcf7a-9bbc-5a29-9120-5e7d552e2d39 and ss:zigbee2mqtt-prd-zigbee2mqtt2-zigbee2mqtt,a2c8ea0b-84f7-5a8d-adc9-3c1f169df12e. The collector reports 66 dangling-reference warnings from home-automation-fleet, all of them these two ids, tolerated only by --relaxed. The fix is replacing the two ids. P2 left it alone: it is data, not the producer text P2 brought current.
@@ -214,15 +205,6 @@ tools/ha-fleet/annotations.yaml's zigbee_bridges maps both bridges to ss:zigbee2
 **Provenance:** witnessed | code-writer, P2, r1, collector over AaC/Architecture #2048 producer-artifacts
 **Disposition:** Raise — ANS-159
 
-### B4 — Ansible recommend-resources: a Deployment pod whose ReplicaSet hash is under 8 characters is not matched to its workload · minor
-
-infer_workload's suffix pattern, carried over unchanged from HelmCharts' recommend_resources.py under the 'policy unchanged' rule, strips a Deployment pod's '-<hash>-<id>' only when the pod-template-hash is 8-10 characters. The hash is a variable-length encoding, and live pods carry shorter ones. In P8's live run on 2026-09-26, 'architecture-viewer-8cb446d-…' (webathome-org-prd) and 'keycloak-d8cb679-…' (keycloak-prd) resolved to workloads 'architecture-viewer-8cb446d' and 'keycloak-d8cb679', and landed in not-placed.txt instead of their chart's resources.<workload>.<container>. The pattern also makes an 8-10 character last word of a DaemonSet name read as a hash (prometheus-node-exporter -> prometheus-prd-prometheus-node); the maps' keys already rely on that, so a fix has to re-key them.
-
-**Consequence:** Containers of a Deployment whose current ReplicaSet hash is short get no recommendation until a rollout happens to produce a longer hash.
-
-**Provenance:** witnessed, executor, P8 r1, /tmp/rr-proof/not-placed.txt
-**Disposition:** Please advise.
-
 ### B6 — Ansible openbao role: the unconditional writes (Write AppRoles, Write the OIDC config, Write the OIDC admin role) always report ok · minor
 
 ansible/roles/openbao/tasks/approle.yml and oidc.yml issue uri POSTs with no when and no changed_when, so they run on every pass and never report changed, whether or not the state differed. The six gated writes were fixed to report changed in Ansible c94ae95 after a run that rewrote the iac-agent policy recapped changed=0. Reporting these three honestly needs a read-and-compare first.
@@ -230,7 +212,20 @@ ansible/roles/openbao/tasks/approle.yml and oidc.yml issue uri POSTs with no whe
 **Consequence:** A run that changes an AppRole's settings or the OIDC config shows changed=0, so neither the operator nor the drift job can see it happened.
 
 **Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; Ansible c94ae95
-**Disposition:** Please advise.
+**Disposition:** Please advise. — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested card — ANS-160
+
+### ~~B1 — ChartsDeploy: the chart that deploys charts.home takes homelab-shared from charts.home itself (D17's trap) · major~~ — fixed in ChartsDeploy f46677b, RegistryDeploy 458ca4c; the rest carded as ANS-162
+
+<details><summary>struck — body kept for the record</summary>
+
+ChartsDeploy `chart/Chart.yaml` names `homelab-shared` 0.3.1 from `https://charts.home` as a dependency, and the repo vendors no tarball (`chart/` holds only `Chart.lock`, `Chart.yaml`, `templates/`, `values.yaml`; read with `gh api` 2026-09-26). Argo's repo-server has to fetch the library from charts.home to render the app that serves charts.home. argo-cd D17 names this trap and phases.md A.1 asked for a library-free chart; the move to ChartsDeploy did not keep it. Found while bringing argo-cd `design.md`'s charts.home paragraph current in P1, which now states it; not fixed here (out of scope).
+
+**Consequence:** On a rebuilt cluster, or whenever charts.home is down, Argo cannot render charts.home, so it cannot bring it back, and every app that uses the library stays unrenderable until someone starts charts.home by hand.
+
+**Provenance:** read — code-writer, P1, r1; gh api repos/pvginkel/ChartsDeploy (chart/Chart.yaml, tree)
+**Disposition:** What do you propose as a solution? — on the advice (vendor the library tarball): "How do we ensure that the tarball is automatically updated? Does this need a pipeline change? If so, please create a card." — no pipeline change: the pin is exact and moves only on a deliberate commit, and tests/check-deps.sh fails a bump without its tarball. Done in ChartsDeploy f46677b and RegistryDeploy 458ca4c (Charts 3608684, AnsibleSpecs b3cb2fc for the docs); the rest of the cold-boot chain carded as ANS-162
+
+</details>
 
 ### ~~B3 — Architecture: the Infrastructure view lets in the deploy repos' 94 release instances · minor~~ — fixed in Architecture 5538aed
 
@@ -242,6 +237,19 @@ views/infrastructure.yaml's excludeProducers is meant to keep release instances 
 
 **Provenance:** witnessed | code-writer, P2, r1, merged dataset from the collector run
 **Disposition:** Fix inline or raise. I'm looking at the view and it's a mess. It contains far too much, so you're right to raise this. — fixed inline: Architecture 5538aed (the view's predicate admits only the ansible and architecture producers; 185 → 77 elements on the live dataset)
+
+</details>
+
+### ~~B4 — Ansible recommend-resources: a Deployment pod whose ReplicaSet hash is under 8 characters is not matched to its workload · minor~~ — fixed in Ansible f3b40af
+
+<details><summary>struck — body kept for the record</summary>
+
+infer_workload's suffix pattern, carried over unchanged from HelmCharts' recommend_resources.py under the 'policy unchanged' rule, strips a Deployment pod's '-<hash>-<id>' only when the pod-template-hash is 8-10 characters. The hash is a variable-length encoding, and live pods carry shorter ones. In P8's live run on 2026-09-26, 'architecture-viewer-8cb446d-…' (webathome-org-prd) and 'keycloak-d8cb679-…' (keycloak-prd) resolved to workloads 'architecture-viewer-8cb446d' and 'keycloak-d8cb679', and landed in not-placed.txt instead of their chart's resources.<workload>.<container>. The pattern also makes an 8-10 character last word of a DaemonSet name read as a hash (prometheus-node-exporter -> prometheus-prd-prometheus-node); the maps' keys already rely on that, so a fix has to re-key them.
+
+**Consequence:** Containers of a Deployment whose current ReplicaSet hash is short get no recommendation until a rollout happens to produce a longer hash.
+
+**Provenance:** witnessed, executor, P8 r1, /tmp/rr-proof/not-placed.txt
+**Disposition:** Please advise. — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested fix now — Ansible f3b40af
 
 </details>
 
@@ -274,26 +282,6 @@ S13, S14, S15 and S25, and most of S9, S20 and S22; the notes say what is left.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
-### S3 — One Helm release Secret remains on prd: argocd-prd's bootstrap install
-
-The D61 pass removed every migrated app's Helm release Secret. A read on 2026-09-26 (secrets of type `helm.sh/release.v1`, names only) finds exactly one left: `sh.helm.release.v1.argocd-prd.v1` in `argocd-prd`, created 2026-09-04 by Argo's own bootstrap `helm install` (D3). Argo has managed that release ever since, but Helm still lists it as deployed. If someone runs `helm upgrade` or `helm uninstall` against it, Helm would act on Argo CD itself. It is not a migrated app's Secret, so D61 did not cover it, and this slice leaves it. Deleting it is the operator's call.
-
-**Consequence:** `helm list -A` shows Argo CD as a Helm release, and a stray Helm command could act on it.
-
-**Provenance:** witnessed — plan-writer, planning r1, kubectl get secrets --field-selector type=helm.sh/release.v1 (prd)
-**Disposition:** Please advise
-
-### S7 — The estate register's k8s-upgrade pin list still names HelmCharts' deploy tooling as a consumer to bump and redeploy · minor
-
-AnsibleSpecs `decisions.md:279` lists "the Helm deploy tooling in `HelmCharts/tools/requirements.txt`" among the `kubernetes` Python client pins that a cluster upgrade must bump and redeploy first. After this slice HelmCharts deploys nothing (argo-cd `design.md:10`). P1 left the list as it is on purpose. ArgoCDTools does not use the client, so no live consumer is missing from the list.
-
-doc-writer, doc phase r1, 2026-09-26 — Addressed in AnsibleSpecs 91a4d96: decisions.md's pin list no longer names HelmCharts/tools/requirements.txt; the DockerImages images and ZigbeeControl remain.
-
-**Consequence:** The next k8s upgrade run from the doctrine tries to commit a pin bump to HelmCharts, which is archived after ANS-122 and not to be added to before it (D43).
-
-**Provenance:** read — code-reviewer, P1, r1; phases/P1/code_review_r1.md F1
-**Disposition:** Please advise
-
 ### S23 — No deploy repo validates its render against prd's Kubernetes minor: HelmCharts' kubeconform gate has no successor · minor
 
 k8s-upgrade.md's 'Move the HelmCharts chart gate to prd's new minor' set KUBE_VERSION in HelmCharts' Jenkinsfile, whose 'Gate releases' stage rendered every prd release and ran kubeconform against that minor's schemas. HelmCharts deploys nothing now, so P9 deleted the section. A read-only search on 2026-09-26 found no successor: no KUBE_VERSION, kubeconform or --kube-version in Charts, ArgoCDTools, JenkinsPipelineUtils or ArgoCDDeploy, and the deploy repos checked (StorageDeploy, IotDeploy, StepCaDeploy) carry only Jenkinsfile.architecture.
@@ -301,38 +289,7 @@ k8s-upgrade.md's 'Move the HelmCharts chart gate to prd's new minor' set KUBE_VE
 **Consequence:** A channel bump that removes an API version a deploy repo's chart still uses is caught only when Argo's sync of that app fails.
 
 **Provenance:** read, code-writer, P9, r1, research subagent report (repo trees via gh api)
-**Disposition:** Please advise
-
-### S25 — Ansible step-ca-bootstrap.md: day-zero step 7 no longer says to write the ceremony's new material into StepCaDeploy · minor
-
-P9 turned step 7 (docs/runbooks/step-ca-bootstrap.md:243-263) from a kubectl create secret command into a description: which Secrets the chart reads, that StepCaDeploy's chart/templates/stage-manifests.yaml renders them today, and a check once Argo has synced. It never says to base64 this ceremony's root, intermediate, key, passphrase and ca.json/defaults.json into stage-manifests.yaml and push. The intermediate rotation's step 3 (:540-549) says exactly that for its three values.
-
-consult 1, 2026-09-26 — Not a mechanical fix, so it stays open. Two facts for whoever writes step 7's instruction, read from StepCaDeploy main's chart/templates/stage-manifests.yaml (Secret names, data keys and ca.json's path fields only; no values printed). (1) The manifest renders five Secrets, not four: step-ca-ssh-host-ca-password (key password) is missing from step 7's table. It belongs to 'Enabling the SSH host CA' step 2, not to this ceremony. (2) The chart's ca.json uses the pod's paths (root /home/step/certs/root_ca.crt, key /home/step/secrets/intermediate_ca_key, db /home/step/db) and carries an ssh.hostKey block. The ceremony's local .step/config/ca.json has neither, so it cannot be base64'd in as it is. The instruction has to say what carries over (the new certs, the key, the passphrase, and the provisioner the init minted) and what stays (the pod paths and the ssh block).
-
-doc-writer, doc phase r1, 2026-09-26 — Addressed in Ansible 43b88c5: step 7 lists all five Secrets (step-ca-ssh-host-ca-password included, marked as the SSH host CA's), says which values the ceremony replaces in stage-manifests.yaml (the certs, the key, the passphrase, and in ca.json/defaults.json the authority block's provisioners and claims and the root fingerprint, keeping the chart's /home/step paths and ssh block), then restarts the StatefulSet and diffs step-ca-certs' root_ca.crt against .step/certs/root_ca.crt. Grounded in StepCaDeploy main's Secret names, data keys and ca.json/defaults.json paths (values not read); the procedure has not been run.
-
-**Consequence:** An operator re-running the ceremony after a CA loss can pass step 7's check on the old material Argo keeps serving. Step 9 then shreds the new intermediate key, and it has to be re-issued from the root key in Roboform.
-
-**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F1
-**Disposition:** Please advise
-
-### S29 — Architecture's kc project test does not reproduce the Docker image build's file layout, so a test can pass locally and fail the CI build · minor
-
-The viewer's `kc project test` runs `npm test` inside the repo tree, where `../../../` from `viewer/src/` is the repo root. The Dockerfile's `build-viewer` stage runs the same suite in a tree with only what it COPYs. The two layouts diverged for P2's test, and only the push showed it. A gate step `kaniko --context . --no-push --target build-viewer` (about 90 seconds) in Architecture's root component would catch that class before a push; `--target build-service` does the same for the service stage.
-
-**Consequence:** The next test that reads a repo file from viewer/ or service/ repeats the P2 failure: green gate, red CI build after the push.
-
-**Provenance:** witnessed, test-agent, phase test, round 1, AaC/Architecture #2068
-**Disposition:** Please advise
-
-### S30 — OpenBao's jenkins policy still grants the HelmCharts deploy's three leaves: shared/prd/ceph-csi, shared/prd/ceph-rgw/s3 and eso/prd/iac-provisioner/api/token · minor
-
-Ansible ansible/inventories/prd/group_vars/openbao.yml, openbao_jenkins_kv_paths, grants the three leaves its comment attributes to the HelmCharts deploy pipeline's homelab TF provider. IaC/HelmCharts is deleted. The same comment's history (022 P6 code review r1) says artifact-upload pipelines read the RGW admin key too, and no Jenkinsfile in the checked-out repos names these paths, so which pipelines still read them is unsettled. The iac-agent policy's copy of these grants was removed on 2026-09-28 (Ansible 35d9e3e).
-
-**Consequence:** Jenkins keeps read access to the prd cephx user, the RGW admin key and the iac-provisioner token, whether or not any pipeline still needs them.
-
-**Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; ansible/inventories/prd/group_vars/openbao.yml
-**Disposition:** PLease advise
+**Disposition:** Please advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested card (a pre-bump check on apiserver_requested_deprecated_apis) — ANS-161
 
 ### ~~S1 — ArgoCDDeploy's test gate reads HelmCharts' _providers/clusters.yaml, so it breaks once the HelmCharts clone is dropped~~ — fixed in ArgoCDDeploy fb35a6c
 
@@ -357,6 +314,19 @@ Ansible's `support/iac-agent/etc/iac/secrets.example.yaml` still describes thing
 
 **Provenance:** read — plan-writer, planning r1, support/iac-agent/etc/iac/secrets.example.yaml
 **Disposition:** Yes (the operator, 2026-09-28, to marking it done) — done: the operator cleaned srviac's /etc/iac/secrets.yaml; Ansible 35d9e3e (secrets.example, iac-agent policy, applied); kv/iac/kubeconfig-prd deleted
+
+</details>
+
+### ~~S3 — One Helm release Secret remains on prd: argocd-prd's bootstrap install~~ — done 2026-09-29: Secret deleted on prd; Ansible 4fb51c0
+
+<details><summary>struck — body kept for the record</summary>
+
+The D61 pass removed every migrated app's Helm release Secret. A read on 2026-09-26 (secrets of type `helm.sh/release.v1`, names only) finds exactly one left: `sh.helm.release.v1.argocd-prd.v1` in `argocd-prd`, created 2026-09-04 by Argo's own bootstrap `helm install` (D3). Argo has managed that release ever since, but Helm still lists it as deployed. If someone runs `helm upgrade` or `helm uninstall` against it, Helm would act on Argo CD itself. It is not a migrated app's Secret, so D61 did not cover it, and this slice leaves it. Deleting it is the operator's call.
+
+**Consequence:** `helm list -A` shows Argo CD as a Helm release, and a stray Helm command could act on it.
+
+**Provenance:** witnessed — plan-writer, planning r1, kubectl get secrets --field-selector type=helm.sh/release.v1 (prd)
+**Disposition:** Please advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested delete + runbook step — deleted on prd 2026-09-29; argocd.md cold-boot step 7 in Ansible 4fb51c0
 
 </details>
 
@@ -402,6 +372,21 @@ code-writer P1 r1, 2026-09-26 — The targets now sit at `slices/completed/runti
 
 **Provenance:** witnessed — code-writer, P1, r1; a relative-link check over decisions.md
 **Disposition:**
+
+</details>
+
+### ~~S7 — The estate register's k8s-upgrade pin list still names HelmCharts' deploy tooling as a consumer to bump and redeploy · minor~~ — closed by the operator, 2026-09-29 (fixed in AnsibleSpecs 91a4d96)
+
+<details><summary>struck — body kept for the record</summary>
+
+AnsibleSpecs `decisions.md:279` lists "the Helm deploy tooling in `HelmCharts/tools/requirements.txt`" among the `kubernetes` Python client pins that a cluster upgrade must bump and redeploy first. After this slice HelmCharts deploys nothing (argo-cd `design.md:10`). P1 left the list as it is on purpose. ArgoCDTools does not use the client, so no live consumer is missing from the list.
+
+doc-writer, doc phase r1, 2026-09-26 — Addressed in AnsibleSpecs 91a4d96: decisions.md's pin list no longer names HelmCharts/tools/requirements.txt; the DockerImages images and ZigbeeControl remain.
+
+**Consequence:** The next k8s upgrade run from the doctrine tries to commit a pin bump to HelmCharts, which is archived after ANS-122 and not to be added to before it (D43).
+
+**Provenance:** read — code-reviewer, P1, r1; phases/P1/code_review_r1.md F1
+**Disposition:** Please advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested close (already fixed in AnsibleSpecs 91a4d96)
 
 </details>
 
@@ -631,6 +616,23 @@ DockerImages certbot/scripts/args.sh:18 mounts $(pwd)/../../HelmCharts/charts/ng
 
 </details>
 
+### ~~S25 — Ansible step-ca-bootstrap.md: day-zero step 7 no longer says to write the ceremony's new material into StepCaDeploy · minor~~ — closed by the operator, 2026-09-29
+
+<details><summary>struck — body kept for the record</summary>
+
+P9 turned step 7 (docs/runbooks/step-ca-bootstrap.md:243-263) from a kubectl create secret command into a description: which Secrets the chart reads, that StepCaDeploy's chart/templates/stage-manifests.yaml renders them today, and a check once Argo has synced. It never says to base64 this ceremony's root, intermediate, key, passphrase and ca.json/defaults.json into stage-manifests.yaml and push. The intermediate rotation's step 3 (:540-549) says exactly that for its three values.
+
+consult 1, 2026-09-26 — Not a mechanical fix, so it stays open. Two facts for whoever writes step 7's instruction, read from StepCaDeploy main's chart/templates/stage-manifests.yaml (Secret names, data keys and ca.json's path fields only; no values printed). (1) The manifest renders five Secrets, not four: step-ca-ssh-host-ca-password (key password) is missing from step 7's table. It belongs to 'Enabling the SSH host CA' step 2, not to this ceremony. (2) The chart's ca.json uses the pod's paths (root /home/step/certs/root_ca.crt, key /home/step/secrets/intermediate_ca_key, db /home/step/db) and carries an ssh.hostKey block. The ceremony's local .step/config/ca.json has neither, so it cannot be base64'd in as it is. The instruction has to say what carries over (the new certs, the key, the passphrase, and the provisioner the init minted) and what stays (the pod paths and the ssh block).
+
+doc-writer, doc phase r1, 2026-09-26 — Addressed in Ansible 43b88c5: step 7 lists all five Secrets (step-ca-ssh-host-ca-password included, marked as the SSH host CA's), says which values the ceremony replaces in stage-manifests.yaml (the certs, the key, the passphrase, and in ca.json/defaults.json the authority block's provisioners and claims and the root fingerprint, keeping the chart's /home/step paths and ssh block), then restarts the StatefulSet and diffs step-ca-certs' root_ca.crt against .step/certs/root_ca.crt. Grounded in StepCaDeploy main's Secret names, data keys and ca.json/defaults.json paths (values not read); the procedure has not been run.
+
+**Consequence:** An operator re-running the ceremony after a CA loss can pass step 7's check on the old material Argo keeps serving. Step 9 then shreds the new intermediate key, and it has to be re-issued from the root key in Roboform.
+
+**Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F1
+**Disposition:** Please advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested close (rewritten in Ansible 43b88c5; only unrun)
+
+</details>
+
 ### ~~S26 — Ansible design-philosophy.md: 'only the Python tools under support/ carry unit tests' misses tools/ai_workflow/test_track_build.py · nit~~ — resolved by consult 1 (Ansible ca536a6): design-philosophy.md says the support/ tools' unit tests are root's, and that tools/ai_workflow/test_track_build.py is a unit test no gate runs (checked against .kubecoder/project.yaml's test: keys); kc project lint green; struck by consult 1
 
 <details><summary>struck — body kept for the record</summary>
@@ -667,6 +669,32 @@ docs/runbooks/k8s-rebuild.md:258 says 'since HelmCharts' configs/dev tree went i
 
 **Provenance:** read, code-reviewer, P9, r1, phases/P9/code_review_r1.md F4
 **Disposition:**
+
+</details>
+
+### ~~S29 — Architecture's kc project test does not reproduce the Docker image build's file layout, so a test can pass locally and fail the CI build · minor~~ — closed by the operator, 2026-09-29
+
+<details><summary>struck — body kept for the record</summary>
+
+The viewer's `kc project test` runs `npm test` inside the repo tree, where `../../../` from `viewer/src/` is the repo root. The Dockerfile's `build-viewer` stage runs the same suite in a tree with only what it COPYs. The two layouts diverged for P2's test, and only the push showed it. A gate step `kaniko --context . --no-push --target build-viewer` (about 90 seconds) in Architecture's root component would catch that class before a push; `--target build-service` does the same for the service stage.
+
+**Consequence:** The next test that reads a repo file from viewer/ or service/ repeats the P2 failure: green gate, red CI build after the push.
+
+**Provenance:** witnessed, test-agent, phase test, round 1, AaC/Architecture #2068
+**Disposition:** Please advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested close
+
+</details>
+
+### ~~S30 — OpenBao's jenkins policy still grants the HelmCharts deploy's three leaves: shared/prd/ceph-csi, shared/prd/ceph-rgw/s3 and eso/prd/iac-provisioner/api/token · minor~~ — fixed in Ansible 687a80e (applies on the operator's site-openbao.yml run)
+
+<details><summary>struck — body kept for the record</summary>
+
+Ansible ansible/inventories/prd/group_vars/openbao.yml, openbao_jenkins_kv_paths, grants the three leaves its comment attributes to the HelmCharts deploy pipeline's homelab TF provider. IaC/HelmCharts is deleted. The same comment's history (022 P6 code review r1) says artifact-upload pipelines read the RGW admin key too, and no Jenkinsfile in the checked-out repos names these paths, so which pipelines still read them is unsettled. The iac-agent policy's copy of these grants was removed on 2026-09-28 (Ansible 35d9e3e).
+
+**Consequence:** Jenkins keeps read access to the prd cephx user, the RGW admin key and the iac-provisioner token, whether or not any pipeline still needs them.
+
+**Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; ansible/inventories/prd/group_vars/openbao.yml
+**Disposition:** PLease advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested fix now — Ansible 687a80e, AnsibleSpecs 4ae5126; takes effect on the operator's site-openbao.yml run
 
 </details>
 
