@@ -664,6 +664,28 @@ Triage overruled the standing tag scheme (R3, R4, Ruling D2). In
 What shipped: the label decides, build history is the label's series, each series keeps its
 newest build, a matrix build pushes two tags, and unlabelled tags are left alone.
 
+**Done (P8).** DockerImages `2748608` (`phase/031-P8`, committed, not pushed), one file:
+`docs/registry-management/version-poller-redesign.md`. §4's tag scheme is now "Tag scheme and
+build series": the series table, the builds in use, and the shared classifier. Its classes are
+tracking, build history, promoted copy and unlabelled, plus the self-labelled bare-number
+leftover. §8 keeps every tag outside a series and caps per series; its floor is per series. §6's
+pseudo-code and tag handling mirror `poller.py`; §14.3–14.5 treat `prd-<n>` as a promoted copy.
+`kc project test` green.
+
+Later phases:
+- Doc phase: the design doc still says nothing about cleanup's dry run (P4/P7); §8 still reads
+  "run registry garbage-collection as today".
+- Test phase (V14): §4's tag scheme is at `:144-196`; §8's keep and delete rules are its first
+  five bullets.
+
+- The `--max-per-prefix` row the plan placed in §10 is §11's defaults table. It is now "max builds
+  per series … `--max-per-series`".
+- Also moved, since they stated the old scheme: §3's one-paragraph model, §5's `kaniko2` sketch
+  (`trackingTag:`, `resolveTrackingTag`, `inBuildSeries`, the two-tag matrix call site), §11's
+  Model A and non-conforming notes, and §14.1's "versioned tag".
+- The doc's cap and TTL numbers (5, 4 weeks) differ from the code's defaults (10, 26 weeks). They
+  are left alone as DI-5's (close-out S5).
+
 ### P9 — argo-cd D53: deploy repos pin tags, never digests
 
 Target: ../AnsibleSpecs

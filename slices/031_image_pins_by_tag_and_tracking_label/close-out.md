@@ -120,3 +120,21 @@ KeycloakDeploy chart/templates/keycloak-deployment.yaml:29-30 runs registry:5000
 
 **Provenance:** read, executor, P6, r1, KeycloakDeploy main chart/templates/keycloak-deployment.yaml
 **Disposition:**
+
+### S4 — RegistryDeploy: unsuspending registry-cleanup starts a Job at Argo sync, not at the next 03:30 — P7's done-record says 03:30Z · nit
+
+The live CronJob has no startingDeadlineSeconds, concurrencyPolicy Allow, and lastScheduleTime 2026-09-25T01:30Z. When suspend flips to false, Kubernetes creates a Job for the most recent missed schedule immediately. So the first unsuspended run starts when Argo applies P7, on whatever registry-cleanup image is pinned at that moment. The plan's P7 'Later phases' now records this for the test phase.
+
+**Consequence:** none on the planned path: the ordering puts the P4 pin in place before the push, so the immediate run is a dry run. The test phase will see an automatic dry-run Job next to the one it starts by hand.
+
+**Provenance:** witnessed (kubectl get cronjob), code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
+**Disposition:**
+
+### S5 — DockerImages version-poller-redesign.md states cleanup defaults of 5 builds per series and a 4-week TTL; registry-cleanup's are 10 and 26 weeks · nit
+
+The design doc's §8 ("Per-series cap (N = 5)", "Defaults: TTL = 4 weeks") and §11's defaults table give 5 and 4 weeks. registry-cleanup/app/main.py defaults --max-per-series to 10 and --ttl-weeks to 26, and the RegistryDeploy CronJob passes neither flag, so the live job runs with 10 and 26. P8 renamed the row's flag and knob to the label rule and left the numbers alone: choosing them is DI-5's, out of this slice's scope.
+
+**Consequence:** none on behaviour — a reader sizing the cap or TTL from the design doc reads numbers the job does not use
+
+**Provenance:** read, code-writer, P8, r1, DockerImages docs/registry-management/version-poller-redesign.md
+**Disposition:**
