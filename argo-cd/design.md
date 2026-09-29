@@ -128,8 +128,13 @@ A plain NGINX container serving `index.yaml` and chart tarballs over HTTP at
 migrated charts consume it through `Chart.yaml` `dependencies:` — a version pin against
 `repository: https://charts.home` — and Argo's repo-server runs `helm dependency build` at
 render time. It deploys from its own `ChartsDeploy`. charts.home is a render-time prerequisite
-for every migrated app, so it must not depend on anything that depends on it (D17's trap) —
-which ChartsDeploy's chart does today, through its `homelab-shared` dependency on charts.home.
+for every migrated app, so it must not depend on anything that depends on it (D17's trap).
+ChartsDeploy and RegistryDeploy (charts.home's image comes from the registry) therefore commit
+the library tarball in `chart/charts/`: the repo-server builds a dependency only when it is
+missing, so both render with charts.home down. Their `tests/check-deps.sh` fails when the
+committed tarball is not the version `Chart.lock` pins, so a library bump there carries the new
+tarball in the same commit. The rest of charts.home's cold-boot path (the nginx layer in front
+of it, DNS, the registry's storage) still takes the library from charts.home.
 
 The library chart carries the shared `_helpers.tpl` content (D16), prefixed `homelab-shared.*`,
 **and the hook Job template** (below), so a migrated chart gets both from a single dependency
