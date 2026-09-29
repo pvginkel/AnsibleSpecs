@@ -266,7 +266,7 @@ Record:
   `svc:webhook-relay`. No output changes because of a ConfigMap-sourced value, since no layer
   wires one yet.
 
-### P4 — Publish aac-tools, point the how-to at its `--help`, and stop for the restart
+### P4 — Publish aac-tools, point the how-to at its `--help`, and stop for the restart ✅ DONE 2026-09-29
 
 Target: root
 
