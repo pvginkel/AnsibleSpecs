@@ -712,7 +712,7 @@ Record:
   deploy repo go in different batches, and the slowest go last. Expected waits: P11 ~30 min,
   P12a ~40, P12b ~65, P12c ~60, P13a–b ~35.
 
-### P11 — The carriers whose push rolls nothing out validate with the toolchain
+### P11 — The carriers whose push rolls nothing out validate with the toolchain ✅ DONE 2026-09-30
 
 Target: root
 
