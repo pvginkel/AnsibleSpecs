@@ -647,7 +647,7 @@ Later phases:
 - Mutation-checked: the gate fails on a re-added `suspend: true` and on a template without the
   guard. It passes with the stage flipped to `false`.
 
-### P8 — DockerImages' design doc states the label rule
+### P8 — DockerImages' design doc states the label rule ✅ DONE 2026-09-29
 
 Target: ../DockerImages
 
@@ -675,6 +675,9 @@ pseudo-code and tag handling mirror `poller.py`; §14.3–14.5 treat `prd-<n>` a
 Later phases:
 - Doc phase: the design doc still says nothing about cleanup's dry run (P4/P7); §8 still reads
   "run registry garbage-collection as today".
+- Doc phase (P8 review r1): DockerImages `registry-cleanup/architecture.yaml:7-10`'s summary
+  still states the old scheme ("deletes versioned (numbered) image tags … keeping tracking tags
+  (latest, <prefix>-latest, semver pins)").
 - Test phase (V14): §4's tag scheme is at `:144-196`; §8's keep and delete rules are its first
   five bullets.
 
