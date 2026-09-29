@@ -703,6 +703,23 @@ in the operator's words from R2. D53 gains:
 D53 never mentions digests today, so the amendment adds the rule; it corrects no sentence.
 Upstream images are ANS-139's.
 
+**Done (P9).** AnsibleSpecs `14308f1` (`phase/031-P9`, committed, not pushed): D53 gains one
+dated blockquote amendment right after its last bullet, headlined "a pin names a per-build tag,
+never a digest" (operator: "Go"; slice 031, ANS-125). It gives the rule for `registry:5000`
+images and its cause, the 2026-09-25 GC deletion of Keycloak's pinned digest. It adds matrix
+per-build tags written wherever a pin list exists, today only keycloak's (R3), and the relay pin
+written by relay builds, which leaves argocd-prd out of sync (D3). Upstream digest pins are left
+to ANS-139. No D53 sentence changed.
+
+Later phases:
+- Test phase (V07): the amendment is `argo-cd/decisions.md:854-870`.
+- Test phase, step 6: RegistryDeploy's corrected comment cites D53 for "a per-build tag, never …
+  a digest"; D53 now says it.
+
+- Dated 2026-09-26, the ruling's date, as the register dates amendments by decision.
+- Homelab `decisions.md:610` ("Images we build ourselves are not digest-pinned") already agrees;
+  unchanged.
+
 ## Not in scope
 
 - Reading what is deployed (running pods, ReplicaSets, deploy-repo pins) in cleanup (R1 ruling).
