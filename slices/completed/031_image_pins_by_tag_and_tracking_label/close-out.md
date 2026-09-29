@@ -1,7 +1,8 @@
 # Close-out — slice 031 image_pins_by_tag_and_tracking_label
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-29 08:07 → 10:40 · 9 phases · 0 bail-outs · 1 test round · doc phase done · $67.66
+(planner 20 %, research 19 %, rework 0 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold
@@ -13,24 +14,23 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Deploy repos pin images from `registry:5000` to per-build tags, never digests, and the image's
+`tracking-tag` label, not the tag's name, decides what registry-cleanup may delete. kaniko2 takes
+an explicit `trackingTag:` and refuses any tag outside the label's build series; every matrix
+build pushes `<tag>-<build>`, which the pin stage writes (both KeycloakDeploy stages run one now);
+kube-coder-tunnel-reclaim and Argo CD's webhook-relay pins are written by their builds.
+registry-cleanup and the version-poller classify by the label, and cleanup runs nightly again in
+dry-run, garbage collection included. argo-cd D53 carries the rule; the doc phase brought D47,
+the runbooks and the repos' READMEs and design doc into line.
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A2's headline and Consequence predate round 2: steps 1–5 are pushed and live, and only
+step 6, the ~41-repo digest-comment sweep, is still owed. The operator's own keystroke is the
+dry-run flip (ANS-156), after reading the test phase's 217-tag would-delete list.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
-
-### ~~A1 — Check RegistryDeploy out in the environment that will run this slice, before the run~~ — resolved at planning: operator (2026-09-26) 'You dont have to restart to get the repo. Just clone it.' — RegistryDeploy cloned to /work/RegistryDeploy and declared in Ansible .kubecoder/config.yaml (Ansible 7154030); struck by plan-slice session, review r1
-
-P7 targets `../RegistryDeploy`, and no environment clones that repo today: it is not in Ansible's `.kubecoder/config.yaml`. Before the run, add `- url: https://github.com/pvginkel/RegistryDeploy` to that file's `repos:` list in the environment that will run the slice, then `kc env restart`. Until then `run_loop.py run … --dry-run` reports P7's Target as "not an existing directory". The plan-writer did not make the edit. The Ansible checkout is per environment, and slice 029's run was active in another environment's checkout at planning time.
-
-**Consequence:** Until this is done the run cannot start. P7 has no Target, so the cleanup job stays suspended and the slice cannot lift the pause.
-
-**Provenance:** witnessed — plan-writer, planning, r1, plan.md P7 and run_loop.py --dry-run
-**Disposition:**
 
 ### A2 — The push chain (Ruling R1-Q2) stops after step 2 — JenkinsPipelineUtils, DockerImages, the keycloak build, RegistryDeploy and the comment sweep are still unpushed, pending confirmed prd authorisation
 
@@ -98,9 +98,24 @@ own pass.
 **Provenance:** witnessed — test-agent, test phase, round 1: this run's live kubectl/git checks, plus plan.md's Ordering constraints and this run's own dispatch text
 **Disposition:**
 
+### ~~A1 — Check RegistryDeploy out in the environment that will run this slice, before the run~~ — resolved at planning: operator (2026-09-26) 'You dont have to restart to get the repo. Just clone it.' — RegistryDeploy cloned to /work/RegistryDeploy and declared in Ansible .kubecoder/config.yaml (Ansible 7154030); struck by plan-slice session, review r1
+
+<details><summary>struck — body kept for the record</summary>
+
+P7 targets `../RegistryDeploy`, and no environment clones that repo today: it is not in Ansible's `.kubecoder/config.yaml`. Before the run, add `- url: https://github.com/pvginkel/RegistryDeploy` to that file's `repos:` list in the environment that will run the slice, then `kc env restart`. Until then `run_loop.py run … --dry-run` reports P7's Target as "not an existing directory". The plan-writer did not make the edit. The Ansible checkout is per environment, and slice 029's run was active in another environment's checkout at planning time.
+
+**Consequence:** Until this is done the run cannot start. P7 has no Target, so the cleanup job stays suspended and the slice cannot lift the pause.
+
+**Provenance:** witnessed — plan-writer, planning, r1, plan.md P7 and run_loop.py --dry-run
+**Disposition:**
+
+</details>
+
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: the test phase bailed out after push step 2 on a conflict between Ruling R1-Q2 and its
+dispatch (N1); round 2 pushed the rest on the driver's direction, Keycloak's prd roll included,
+with one self-healed fieldnotes-prd PreSync retry (N2).
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -150,9 +165,9 @@ gone.
 
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: one bug, B1, witnessed in review and in this slice's own version-poller: a stale
+environment can go unwarned when one build is promoted into two, today only DesignAssistant's
+archived path. Nothing triggers differently.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
@@ -167,7 +182,9 @@ DockerImages version-poller/app/poller.py:159-170 (P5, 1a69ff9) keeps one promot
 
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: Q1 first. Once dry-run is off, about ten weeks without a KubeCoder promotion lets the cap
+delete the tunnel-reclaim image kubecoder-prd's controller pod needs. Q2 only leaves four repos
+uncleaned.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -193,8 +210,9 @@ tags/list names the tag but its manifest returns 404: architecture_viewer:1540, 
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S1 and S3 are read, and they sit on the failure this slice closed: argo-migrate would
+recreate a digest pin, and Keycloak's `Always` pull blocks its start while the registry is down.
+S4 was witnessed and the test phase saw it happen. S5 and S7 are doc nits.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -205,15 +223,6 @@ Focus: <!-- doc-writer: which change a decision or another slice, from the Conse
 **Consequence:** Migrating a parked app whose images are in our registry creates a digest pin again. Once dry-run is off, the nightly garbage collection can delete the image behind that pin, which is how Keycloak lost its image.
 
 **Provenance:** read — plan-writer, planning, r1, argo_migrate.py:466-493
-**Disposition:**
-
-### ~~S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit~~ — resolved by consult 1 (KubeCoderDeploy 20e0f71): the header now claims no default for the chart's eight image pins only; kc project lint and test green; struck by consult 1
-
-chart/values.yaml:7 ('The chart names no default for any image (D47): every image pin lives in config/<stage>/values.yaml') is contradicted by the same file's image defaults at :112 (registry:5000/kube-coder-dev:latest), :164 (postgres:18), :203, :234, :262 and :294. The replaced comment made the claim only for Build-Main's seven pins.
-
-**Consequence:** none — a comment that overstates its scope; no rendered object changes
-
-**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
 ### S3 — KeycloakDeploy pulls its image with imagePullPolicy: Always, which a per-build tag no longer needs · minor
@@ -245,7 +254,31 @@ The design doc's §8 ("Per-series cap (N = 5)", "Defaults: TTL = 4 weeks") and �
 **Provenance:** read, code-writer, P8, r1, DockerImages docs/registry-management/version-poller-redesign.md
 **Disposition:**
 
+### S7 — DockerImages webhook-relay/README.md's 'Where it is deployed' table is stale: Fieldnotes' relay is deployed by FieldnotesDeploy, not HelmCharts' chart, and argocd-prd's relay no longer forwards to the applicationset-controller · nit
+
+The table (README.md:144-147) names 'HelmCharts, chart fieldnotes' as Fieldnotes' deployer and 'argocd-server and the applicationset-controller' as argocd-prd's receivers; the RECEIVERS example at :103 carries the applicationset-controller leg too. webhook-relay/deploy-pins.json names FieldnotesDeploy config/prd/values.yaml (images.webhookRelay) and ArgoCDDeploy config/prd/values.yaml (relay.image), and ArgoCDDeploy a811fa5 dropped the applicationset-controller leg. Neither staleness comes from this slice, so the doc phase left the page alone; argo-cd design.md points at this README as the relay's contract.
+
+**Consequence:** A reader of the relay's contract page looks for Fieldnotes' relay in the archived HelmCharts and expects argocd-prd to forward to a controller it no longer calls. Nothing runs differently.
+
+**Provenance:** read — doc-writer, doc phase, r1: DockerImages webhook-relay/README.md, webhook-relay/deploy-pins.json, ArgoCDDeploy git log a811fa5
+**Disposition:**
+
+### ~~S2 — KubeCoderDeploy chart/values.yaml's new header says the chart names no default for any image, yet the file defaults env-pod images · nit~~ — resolved by consult 1 (KubeCoderDeploy 20e0f71): the header now claims no default for the chart's eight image pins only; kc project lint and test green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+chart/values.yaml:7 ('The chart names no default for any image (D47): every image pin lives in config/<stage>/values.yaml') is contradicted by the same file's image defaults at :112 (registry:5000/kube-coder-dev:latest), :164 (postgres:18), :203, :234, :262 and :294. The replaced comment made the claim only for Build-Main's seven pins.
+
+**Consequence:** none — a comment that overstates its scope; no rendered object changes
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:**
+
+</details>
+
 ### ~~S6 — DockerImages version-poller-redesign.md §4 lists a lone version tag such as 1.35.5 among the builds in use; that is k8s's matrix tag, which now pushes 1.35.5 plus 1.35.5-<n> · nit~~ — resolved by consult 1 (DockerImages 18dadc8): the lone-version-tag bullet is gone from §4's builds in use; comment-only, the loop's gate sweep re-runs on it; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 The "builds in use" list in §4's tag scheme (docs/registry-management/version-poller-redesign.md:166) ends with "a lone version tag such as 1.35.5, labelled as itself". 1.35.5 is k8s/build-matrix.json's tag, and since P6 every matrix build pushes <tag> + <tag>-<n> (Jenkinsfile:159-161). P1's caller survey found no other caller that pushes a lone non-numeric tag. kaniko2 still accepts one, so the line is wrong only in calling it a build in use.
 
@@ -253,3 +286,5 @@ The "builds in use" list in §4's tag scheme (docs/registry-management/version-p
 
 **Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
 **Disposition:**
+
+</details>

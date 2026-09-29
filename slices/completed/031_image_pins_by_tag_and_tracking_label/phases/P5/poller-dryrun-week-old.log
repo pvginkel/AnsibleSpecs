@@ -1,0 +1,825 @@
+INFO === poll at 2026-09-30T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 36 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 33 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 36 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 33 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 36 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 86 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 86 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 86 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 86 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 86 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'llmbox,llmbox-playwright'}
+INFO === 2026-09-30 would trigger ['DockerImages']
+INFO === poll at 2026-10-01T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 37 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 34 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 37 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 34 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 37 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 87 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 87 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 87 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 87 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 87 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'code-server,llmbox,llmbox-playwright,telegram-mcp-server'}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO === 2026-10-01 would trigger ['DockerImages', 'Firmware/IntercomServer', 'Ginbov', 'MyDownloads/MyDownloads', 'NewsFilter', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer']
+INFO === poll at 2026-10-02T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 38 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 35 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 38 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 35 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 38 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 88 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 88 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 88 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 88 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 88 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'code-server,keycloak,llmbox,llmbox-playwright,mcp-filter,registry-cleanup,telegram-mcp-server'}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO === 2026-10-02 would trigger ['DockerImages', 'Firmware/IntercomServer', 'Ginbov', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer']
+INFO === poll at 2026-10-03T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 39 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 36 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 39 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 36 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 39 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 89 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 89 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 89 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 89 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 89 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'code-server,keycloak,llmbox,llmbox-playwright,mcp-filter,registry-cleanup,telegram-mcp-server'}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO === 2026-10-03 would trigger ['DockerImages', 'Firmware/IntercomServer', 'Ginbov', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer']
+INFO === poll at 2026-10-04T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 40 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 37 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 40 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 37 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 40 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 90 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 90 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 90 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 90 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 90 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'IaC/Charts' with params {}
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'code-server,keycloak,kube-coder-arm64-cross-toolchain,kube-coder-esp-idf-toolchain,llmbox,llmbox-playwright,mcp-filter,registry-cleanup,telegram-mcp-server,webhook-relay'}
+INFO [dry-run] would trigger 'ElectronicsInventory/ElectronicsInventory' with params {}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'IaC/IaC Docker Image' with params {'image': 'iac'}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'IoTSupport/IoTSupport' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'IaC/TerraformRegistry' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO [dry-run] would trigger 'ZigbeeControl/ZigbeeControl' with params {}
+INFO === 2026-10-04 would trigger ['DockerImages', 'ElectronicsInventory/ElectronicsInventory', 'Firmware/IntercomServer', 'Ginbov', 'IaC/Charts', 'IaC/IaC Docker Image', 'IaC/TerraformRegistry', 'IoTSupport/IoTSupport', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer', 'ZigbeeControl/ZigbeeControl']
+INFO === poll at 2026-10-05T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 41 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 38 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 41 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 38 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 41 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 91 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 91 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 91 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 91 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 91 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'android-35,backup-server,calendar-support,certbot,code-server,debian,dnsmasq,dnsmasq-config-generator,dnsmasq-management-api,document-conversion,elasticsearch-setup,esp32-coredump-parser,git-sync,guacamole-init,iac-provisioner,infra-statistics,jenkins-telegram-bot,keycloak,kube-coder-arm64-cross-toolchain,kube-coder-esp-idf-toolchain,kube-coder-tunnel-reclaim,llmbox,llmbox-playwright,mcp-filter,nginx-configurator,rclone-backup,registry-cleanup,samba,scan-server,scanned-image-processing,telegram-mcp-server,version-poller,webhook-relay'}
+INFO [dry-run] would trigger 'IaC/Charts' with params {}
+INFO [dry-run] would trigger 'ElectronicsInventory/ElectronicsInventory' with params {}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'IaC/IaC Docker Image' with params {'image': 'iac'}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'IoTSupport/IoTSupport' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'IaC/TerraformRegistry' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO [dry-run] would trigger 'ZigbeeControl/ZigbeeControl' with params {}
+INFO === 2026-10-05 would trigger ['DockerImages', 'ElectronicsInventory/ElectronicsInventory', 'Firmware/IntercomServer', 'Ginbov', 'IaC/Charts', 'IaC/IaC Docker Image', 'IaC/TerraformRegistry', 'IoTSupport/IoTSupport', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer', 'ZigbeeControl/ZigbeeControl']
+INFO === poll at 2026-10-06T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 42 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 39 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 42 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 39 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 42 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 92 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 92 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 92 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 92 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 92 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'IaC/ArgoCDTools' with params {}
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'android-35,backup-server,calendar-support,certbot,code-server,debian,dnsmasq,dnsmasq-config-generator,dnsmasq-management-api,document-conversion,elasticsearch-setup,esp32-coredump-parser,git-sync,guacamole-init,iac-provisioner,infra-statistics,jenkins-telegram-bot,k8s,keycloak,kube-coder-android-toolchain,kube-coder-arm64-cross-toolchain,kube-coder-dev,kube-coder-dev-base,kube-coder-dotnet-toolchain,kube-coder-esp-idf-toolchain,kube-coder-frontend-toolchain,kube-coder-go-toolchain,kube-coder-iac-toolchain,kube-coder-java-toolchain,kube-coder-modern-app-toolchain,kube-coder-native-toolchain,kube-coder-python-toolchain,kube-coder-tunnel-reclaim,llmbox,llmbox-playwright,mcp-filter,nginx-configurator,rclone-backup,registry-cleanup,samba,scan-server,scanned-image-processing,telegram-mcp-server,ubuntu-full,version-poller,webhook-relay'}
+INFO [dry-run] would trigger 'IaC/Charts' with params {}
+INFO [dry-run] would trigger 'DHCP/DHCPApp' with params {}
+INFO [dry-run] would trigger 'ElectronicsInventory/ElectronicsInventory' with params {}
+INFO [dry-run] would trigger 'FieldnotesApp' with params {}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'Gitblit/GitblitMCPSupportPlugin' with params {}
+INFO [dry-run] would trigger 'Gitblit/GitblitMCPServer' with params {}
+INFO [dry-run] would trigger 'IaC/IaC Docker Image' with params {'image': 'iac'}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'IoTSupport/IoTSupport' with params {}
+INFO [dry-run] would trigger 'KubeCoder/Build-Main' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'IaC/TerraformRegistry' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO [dry-run] would trigger 'ZigbeeControl/ZigbeeControl' with params {}
+INFO === 2026-10-06 would trigger ['DHCP/DHCPApp', 'DockerImages', 'ElectronicsInventory/ElectronicsInventory', 'FieldnotesApp', 'Firmware/IntercomServer', 'Ginbov', 'Gitblit/GitblitMCPServer', 'Gitblit/GitblitMCPSupportPlugin', 'IaC/ArgoCDTools', 'IaC/Charts', 'IaC/IaC Docker Image', 'IaC/TerraformRegistry', 'IoTSupport/IoTSupport', 'KubeCoder/Build-Main', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer', 'ZigbeeControl/ZigbeeControl']
+INFO === poll at 2026-10-07T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 43 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 40 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 43 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 40 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 43 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 93 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 93 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 93 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 93 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 93 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'IaC/ArgoCDTools' with params {}
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'android-35,backup-server,calendar-support,certbot,code-server,debian,dnsmasq,dnsmasq-config-generator,dnsmasq-management-api,document-conversion,elasticsearch-setup,esp32-coredump-parser,git-sync,guacamole-init,iac-provisioner,infra-statistics,jenkins-telegram-bot,k8s,keycloak,kube-coder-android-toolchain,kube-coder-arm64-cross-toolchain,kube-coder-dev,kube-coder-dev-base,kube-coder-dev-local-home,kube-coder-dotnet-toolchain,kube-coder-esp-idf-toolchain,kube-coder-frontend-toolchain,kube-coder-go-toolchain,kube-coder-iac-toolchain,kube-coder-java-toolchain,kube-coder-modern-app-toolchain,kube-coder-native-toolchain,kube-coder-python-toolchain,kube-coder-tunnel-reclaim,llmbox,llmbox-playwright,mcp-filter,nginx-configurator,rclone-backup,registry-cleanup,samba,scan-server,scanned-image-processing,telegram-mcp-server,ubuntu-full,version-poller,webhook-relay'}
+INFO [dry-run] would trigger 'AaC/Architecture' with params {}
+INFO [dry-run] would trigger 'IaC/Charts' with params {}
+INFO [dry-run] would trigger 'DHCP/DHCPApp' with params {}
+INFO [dry-run] would trigger 'ElectronicsInventory/ElectronicsInventory' with params {}
+INFO [dry-run] would trigger 'FieldnotesApp' with params {}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'Gitblit/GitblitMCPSupportPlugin' with params {}
+INFO [dry-run] would trigger 'Gitblit/GitblitMCPServer' with params {}
+INFO [dry-run] would trigger 'Home' with params {}
+INFO [dry-run] would trigger 'IaC/IaC Docker Image' with params {'image': 'iac'}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'IoTSupport/IoTSupport' with params {}
+INFO [dry-run] would trigger 'KubeCoder/Build-Main' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'IaC/TerraformRegistry' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO [dry-run] would trigger 'ZigbeeControl/ZigbeeControl' with params {}
+INFO === 2026-10-07 would trigger ['AaC/Architecture', 'DHCP/DHCPApp', 'DockerImages', 'ElectronicsInventory/ElectronicsInventory', 'FieldnotesApp', 'Firmware/IntercomServer', 'Ginbov', 'Gitblit/GitblitMCPServer', 'Gitblit/GitblitMCPSupportPlugin', 'Home', 'IaC/ArgoCDTools', 'IaC/Charts', 'IaC/IaC Docker Image', 'IaC/TerraformRegistry', 'IoTSupport/IoTSupport', 'KubeCoder/Build-Main', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer', 'ZigbeeControl/ZigbeeControl']
+INFO === poll at 2026-10-08T05:00:00+00:00
+WARNING canon:latest non-conforming (no rebuild-at)
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 44 days, 1:39:21 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 41 days, 1:58:31 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 44 days, 1:38:16 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 41 days, 1:56:34 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:prd-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:uat-latest past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 44 days, 1:36:38 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui:latest non-conforming (no rebuild-at)
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper:test non-conforming (no rebuild-at)
+WARNING docker-image-test:latest non-conforming (no rebuild-at)
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 94 days, 17:55:32 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING ginbov_nl:local non-conforming (no rebuild-at)
+WARNING gitblit-mcp-server:dev non-conforming (no rebuild-at)
+WARNING go-toolchain:latest rebuild-at stale by 94 days, 17:54:11 — likely orphaned/renamed/dead job
+WARNING guacamole-db:latest non-conforming (no rebuild-at)
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 94 days, 17:52:48 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING iotsupport-app:dev non-conforming (no rebuild-at)
+WARNING iotsupport-app:onboarding-check non-conforming (no rebuild-at)
+WARNING iotsupport-ui:dev non-conforming (no rebuild-at)
+WARNING iotsupport-ui:onboarding-check non-conforming (no rebuild-at)
+WARNING java-toolchain:jdk-21 rebuild-at stale by 94 days, 17:51:45 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko:latest non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:a2 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:b1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c1 non-conforming (no rebuild-at)
+WARNING kaniko-livetest:c2 non-conforming (no rebuild-at)
+WARNING keycloak:26.5.1-postgres-health-ispn non-conforming (no rebuild-at)
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe:slice139 non-conforming (no rebuild-at)
+WARNING kubecoder-claude-shim:local non-conforming (no rebuild-at)
+WARNING kubecoder-kaniko-livetest:latest non-conforming (no rebuild-at)
+WARNING kubecoder-worker:local non-conforming (no rebuild-at)
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.58.2 non-conforming (no rebuild-at)
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend:latest non-conforming (no rebuild-at)
+WARNING modern-app-backend-build:latest non-conforming (no rebuild-at)
+WARNING modern-app-frontend-build:latest non-conforming (no rebuild-at)
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python:latest non-conforming (no rebuild-at)
+WARNING python-toolchain:latest rebuild-at stale by 94 days, 17:53:32 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway:local non-conforming (no rebuild-at)
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org:local non-conforming (no rebuild-at)
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db:latest non-conforming (no rebuild-at)
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO [dry-run] would trigger 'IaC/ArgoCDTools' with params {}
+INFO [dry-run] would trigger 'DockerImages' with params {'image': 'android-35,backup-server,calendar-support,certbot,code-server,debian,dnsmasq,dnsmasq-config-generator,dnsmasq-management-api,document-conversion,elasticsearch-setup,esp32-coredump-parser,git-sync,guacamole-init,iac-provisioner,infra-statistics,jenkins-telegram-bot,k8s,keycloak,kube-coder-android-toolchain,kube-coder-arm64-cross-toolchain,kube-coder-dev,kube-coder-dev-base,kube-coder-dev-local-home,kube-coder-dotnet-toolchain,kube-coder-esp-idf-toolchain,kube-coder-frontend-toolchain,kube-coder-go-toolchain,kube-coder-iac-toolchain,kube-coder-java-toolchain,kube-coder-modern-app-toolchain,kube-coder-native-toolchain,kube-coder-python-toolchain,kube-coder-tunnel-reclaim,llmbox,llmbox-playwright,mcp-filter,nginx-configurator,rclone-backup,registry-cleanup,samba,scan-server,scanned-image-processing,telegram-mcp-server,ubuntu-full,version-poller,webhook-relay'}
+INFO [dry-run] would trigger 'AaC/Architecture' with params {}
+INFO [dry-run] would trigger 'IaC/Charts' with params {}
+INFO [dry-run] would trigger 'DHCP/DHCPApp' with params {}
+INFO [dry-run] would trigger 'ElectronicsInventory/ElectronicsInventory' with params {}
+INFO [dry-run] would trigger 'FieldnotesApp' with params {}
+INFO [dry-run] would trigger 'Ginbov' with params {}
+INFO [dry-run] would trigger 'Gitblit/GitblitMCPSupportPlugin' with params {}
+INFO [dry-run] would trigger 'Gitblit/GitblitMCPServer' with params {}
+INFO [dry-run] would trigger 'Home' with params {}
+INFO [dry-run] would trigger 'IaC/IaC Docker Image' with params {'image': 'iac'}
+INFO [dry-run] would trigger 'Firmware/IntercomServer' with params {}
+INFO [dry-run] would trigger 'IoTSupport/IoTSupport' with params {}
+INFO [dry-run] would trigger 'KubeCoder/Build-Main' with params {}
+INFO [dry-run] would trigger 'MyDownloads/MyDownloads' with params {}
+INFO [dry-run] would trigger 'NewsFilter' with params {}
+INFO [dry-run] would trigger 'ScanToPdf/ScanToPdf' with params {}
+INFO [dry-run] would trigger 'SSEGateway/SSEGateway' with params {}
+INFO [dry-run] would trigger 'IaC/TerraformRegistry' with params {}
+INFO [dry-run] would trigger 'TrelloMcp' with params {}
+INFO [dry-run] would trigger 'Webathome' with params {}
+INFO [dry-run] would trigger 'YouTrack/YouTrackMCPServer' with params {}
+INFO [dry-run] would trigger 'ZigbeeControl/ZigbeeControl' with params {}
+INFO === 2026-10-08 would trigger ['AaC/Architecture', 'DHCP/DHCPApp', 'DockerImages', 'ElectronicsInventory/ElectronicsInventory', 'FieldnotesApp', 'Firmware/IntercomServer', 'Ginbov', 'Gitblit/GitblitMCPServer', 'Gitblit/GitblitMCPSupportPlugin', 'Home', 'IaC/ArgoCDTools', 'IaC/Charts', 'IaC/IaC Docker Image', 'IaC/TerraformRegistry', 'IoTSupport/IoTSupport', 'KubeCoder/Build-Main', 'MyDownloads/MyDownloads', 'NewsFilter', 'SSEGateway/SSEGateway', 'ScanToPdf/ScanToPdf', 'TrelloMcp', 'Webathome', 'YouTrack/YouTrackMCPServer', 'ZigbeeControl/ZigbeeControl']

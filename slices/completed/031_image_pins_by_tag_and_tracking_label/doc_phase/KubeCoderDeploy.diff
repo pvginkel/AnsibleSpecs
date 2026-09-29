@@ -1,0 +1,235 @@
+/work/scratch/KubeCoderDeploy — P2: git diff 21438b1650bd..3de9ea8fac3f
+
+chart/templates/controller-deployment.yaml |  4 ++--
+ chart/values.yaml                          | 22 ++++++++++------------
+ config/dev/values.yaml                     | 10 +++++++---
+ config/prd/values.yaml                     | 10 +++++++---
+ tests/render-chart.py                      | 47 +++++++++++++++++++++++++++++++++++------------
+ 5 files changed, 61 insertions(+), 32 deletions(-)
+
+diff --git a/chart/templates/controller-deployment.yaml b/chart/templates/controller-deployment.yaml
+index 74a0a83..5c8cdbb 100644
+--- a/chart/templates/controller-deployment.yaml
++++ b/chart/templates/controller-deployment.yaml
+@@ -225,8 +225,8 @@ spec:
+         # (every env's code_tunnel.json arrives in the POST body). The mountPath is the image's default
+         # SHARED_TOKEN_PATH.
+         - name: tunnel-reclaim
+-          image: registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }}
+-          imagePullPolicy: Always
++          image: registry:5000/kube-coder-tunnel-reclaim{{ required "images.tunnelReclaim is not set: config/<stage>/values.yaml carries the pin DockerImages' builds write (argo-cd D53)" .Values.images.tunnelReclaim }}
++          imagePullPolicy: IfNotPresent
+           ports:
+             - containerPort: 8092
+           volumeMounts:
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 95a2fd8..2be71b4 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -4,18 +4,16 @@
+ # It does NOT template per-env objects — the controller creates those at runtime (D022).
+ # See KubeCoderSpecs/slices/helm-chart.md.
+ 
+-images:
+-  # controller, bot, mcp, ingress, manual and controllerConfig.images.{worker,vsix} are Build-Main's
+-  # seven pins: CI writes them per stage into config/<stage>/values.yaml and this chart names no
+-  # default for them (D47), so each template `required`-guards its key and a stage that omits one
+-  # fails to render. The five containers declare imagePullPolicy IfNotPresent; env pods mount
+-  # worker/vsix with no policy, which Kubernetes defaults to IfNotPresent for a pinned tag (D274),
+-  # and never by digest. ingress and manual (slice 084, the pod's nginx front door and the operator
+-  # manual it serves at /help/) ride IN the controller's pod, as tunnelReclaim below does, so their
+-  # images must be in the registry before this chart rolls — a missing one takes the controller down.
+-  # The controller pod's dev-tunnel reclaim actuator (slice 105): a loopback-only sidecar that runs
+-  # `code tunnel unregister`. A DockerImages image on its tracking tag, not a Build-Main pin.
+-  tunnelReclaim: :latest # registry:5000/kube-coder-tunnel-reclaim{{ .Values.images.tunnelReclaim }}
++# The chart names no default for any image (D47): every image pin lives in config/<stage>/values.yaml,
++# and each template `required`-guards its key, so a stage that omits one fails to render. Build-Main
++# writes seven — controller, bot, mcp, ingress, manual and controllerConfig.images.{worker,vsix} — and
++# DockerImages' builds of kube-coder-tunnel-reclaim write tunnelReclaim (argo-cd D53). The six
++# containers declare imagePullPolicy IfNotPresent; env pods mount worker/vsix with no policy, which
++# Kubernetes defaults to IfNotPresent for a pinned tag (D274), and never by digest. ingress, manual
++# (slice 084, the pod's nginx front door and the operator manual it serves at /help/) and
++# tunnelReclaim (slice 105, the dev-tunnel reclaim actuator) ride IN the controller's pod, so their
++# images must be in the registry before this chart rolls — a missing one takes the controller down.
++images: {}
+ 
+ controller:
+   replicas: 1
+diff --git a/config/dev/values.yaml b/config/dev/values.yaml
+index 0213d71..625c087 100644
+--- a/config/dev/values.yaml
++++ b/config/dev/values.yaml
+@@ -23,15 +23,19 @@ bot:
+ # Build-Main's seven image pins (D47), written here by CI on every build: dev names the `dev-<n>`
+ # tag Build-Main pushes, prd the `prd-<n>` retag of the same build, and both stages move in one
+ # commit. Build-Main picks that call up at the Argo cutover; until then these values are hand-set.
+-# The chart names no default and fails to render a stage that omits one. The five keys below are tag
+-# suffixes the chart concatenates onto `registry:5000/kubecoder-<name>`; `controllerConfig.images`
+-# holds the other two as whole references.
++# The chart names no default and fails to render a stage that omits one. controller, bot, mcp, ingress
++# and manual are tag suffixes the chart concatenates onto `registry:5000/kubecoder-<name>`;
++# `controllerConfig.images` holds the other two as whole references.
+ images:
+   controller: ":dev-552"
+   bot: ":dev-552"
+   mcp: ":dev-552"
+   ingress: ":dev-552"
+   manual: ":dev-552"
++  # Not Build-Main's: every DockerImages build of kube-coder-tunnel-reclaim writes its build number
++  # into both stage files in one commit (argo-cd D53), a tag suffix onto
++  # `registry:5000/kube-coder-tunnel-reclaim`. prd runs it once that commit is promoted.
++  tunnelReclaim: ":2565"
+ 
+ # Controller-owned config (D058).
+ controllerConfig:
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 81c946b..6b0e913 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -44,15 +44,19 @@ mcp:
+ # Build-Main's seven image pins (D47), written here by CI on every build: dev names the `dev-<n>`
+ # tag Build-Main pushes, prd the `prd-<n>` retag of the same build, and both stages move in one
+ # commit. Build-Main picks that call up at the Argo cutover; until then these values are hand-set.
+-# The chart names no default and fails to render a stage that omits one. The five keys below are tag
+-# suffixes the chart concatenates onto `registry:5000/kubecoder-<name>`; `controllerConfig.images`
+-# holds the other two as whole references.
++# The chart names no default and fails to render a stage that omits one. controller, bot, mcp, ingress
++# and manual are tag suffixes the chart concatenates onto `registry:5000/kubecoder-<name>`;
++# `controllerConfig.images` holds the other two as whole references.
+ images:
+   controller: ":prd-552"
+   bot: ":prd-552"
+   mcp: ":prd-552"
+   ingress: ":prd-552"
+   manual: ":prd-552"
++  # Not Build-Main's: every DockerImages build of kube-coder-tunnel-reclaim writes its build number
++  # into both stage files in one commit (argo-cd D53), a tag suffix onto
++  # `registry:5000/kube-coder-tunnel-reclaim`. prd runs it once that commit is promoted.
++  tunnelReclaim: ":2565"
+ 
+ # Controller-owned config (D058). The Headlamp deep link moved here from bot.headlampLogsUrl in
+ # slice 085: the controller resolves it behind its own short `GET /logs/{envId}` redirect (D171),
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 0e093c2..845a8b6 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -69,18 +69,21 @@ PINNED_CONTAINERS = {
+     "mcp": ("kubecoder-mcp", "kubecoder-mcp"),
+ }
+ PINNED_VOLUMES = ("worker", "vsix")
++# kube-coder-tunnel-reclaim, a DockerImages image Build-Main never writes: every build of it writes
++# its build number into both stage files in one commit (argo-cd D53).
++RECLAIM_SETTING = "images.tunnelReclaim"
++RECLAIM_PIN = re.compile(r"registry:5000/kube-coder-tunnel-reclaim:[0-9]+")
+ # Each pin's values path: what a stage file names it, and what `--set <path>=null` unsets.
+ PIN_SETTINGS = {
+     **{key: f"images.{key}" for key in PINNED_CONTAINERS},
+     **{key: f"controllerConfig.images.{key}" for key in PINNED_VOLUMES},
++    "tunnelReclaim": RECLAIM_SETTING,
+ }
+ PIN = re.compile(r"registry:5000/kubecoder-(?P<name>[a-z]+):(?P<tag>(?:dev-|prd-)(?P<build>[0-9]+))")
+ # dev runs the `dev-<n>` tag Build-Main pushes, prd the `prd-<n>` retag of that same build. The
+ # gate never resolves either against the registry: this repo carries the pins ahead of the CI that
+ # writes them, and nothing syncs from it until the cutover.
+ TAG_PREFIX = {"dev": "dev-", "prd": "prd-"}
+-# A DockerImages image, floating as copied from HelmCharts (R13). It stays in chart/values.yaml.
+-TUNNEL_RECLAIM = "registry:5000/kube-coder-tunnel-reclaim:latest"
+ # The registry both stages resolve environment-facility images on, by digest (D274).
+ DIGEST_REGISTRIES = [{"host": "registry:5000", "plainHttp": True}]
+ # The controllerConfig keys holding a raw container spec, whose pull policy the controller composes
+@@ -197,6 +200,12 @@ def stage_pins(stage):
+     return references
+ 
+ 
++def reclaim_pin(stage):
++    """The whole reference the stage file pins tunnel-reclaim to, None where it names none."""
++    tag = (stage_values(stage).get("images") or {}).get("tunnelReclaim")
++    return None if tag is None else f"registry:5000/kube-coder-tunnel-reclaim{tag}"
++
++
+ def check_library():
+     chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
+     check(
+@@ -220,13 +229,8 @@ def check_chart_values():
+     named = sorted(image_settings(values) & set(PIN_SETTINGS.values()))
+     check(
+         not named,
+-        f"chart/values.yaml names {named}; Build-Main's seven pins live in the stage values files "
+-        "alone, with no chart default behind them (D47)",
+-    )
+-    reclaim = f"registry:5000/kube-coder-tunnel-reclaim{values['images'].get('tunnelReclaim')}"
+-    check(
+-        reclaim == TUNNEL_RECLAIM,
+-        f"images.tunnelReclaim names {reclaim}, not the floating {TUNNEL_RECLAIM} (R13)",
++        f"chart/values.yaml names {named}; the image pins live in the stage values files alone, "
++        "with no chart default behind them (D47, D53)",
+     )
+ 
+ 
+@@ -253,6 +257,17 @@ def check_pins(stage):
+     return builds
+ 
+ 
++def check_reclaim_pin(stage):
++    """The stage's tunnel-reclaim pin, on a build number. Returns the reference it names."""
++    reference = reclaim_pin(stage)
++    check(
++        reference is not None and RECLAIM_PIN.fullmatch(reference) is not None,
++        f"config/{stage}/values.yaml pins {RECLAIM_SETTING} to {reference!r}, not "
++        "registry:5000/kube-coder-tunnel-reclaim:<build> (D53)",
++    )
++    return reference
++
++
+ def check_missing_pin(stage):
+     """The chart itself refuses a stage that omits a pin: `kc project test` does not run at sync
+     time, so this render failure is what protects a hand-edited stage file (D47)."""
+@@ -274,7 +289,7 @@ def check_stage_values(stage):
+     check(
+         named == set(PIN_SETTINGS.values()),
+         f"config/{stage}/values.yaml names images {sorted(named)}, not exactly Build-Main's seven "
+-        f"pins {sorted(PIN_SETTINGS.values())} (D47)",
++        f"pins and tunnel-reclaim's, {sorted(PIN_SETTINGS.values())} (D47, D53)",
+     )
+ 
+ 
+@@ -383,9 +398,10 @@ def check_images(stage, docs):
+         )
+     reclaim = container(docs, "kubecoder-controller", "tunnel-reclaim") or {}
+     check(
+-        reclaim.get("image") == TUNNEL_RECLAIM and reclaim.get("imagePullPolicy") == "Always",
++        reclaim.get("image") == reclaim_pin(stage) and reclaim.get("imagePullPolicy") == "IfNotPresent",
+         f"{stage}: the tunnel-reclaim container runs {reclaim.get('image')} pulling "
+-        f"{reclaim.get('imagePullPolicy')}, not {TUNNEL_RECLAIM} pulling Always (R13, R14)",
++        f"{reclaim.get('imagePullPolicy')}, not the stage file's pin {reclaim_pin(stage)} pulling "
++        "IfNotPresent (D53, R14)",
+     )
+ 
+     config = yaml.safe_load(
+@@ -506,12 +522,14 @@ def main():
+     check_library()
+     check_chart_values()
+     builds = set()
++    reclaims = {}
+     first = {}
+     for stage in STAGES:
+         first[stage] = render(stage)
+         docs = objects(first[stage])
+         check_stage_values(stage)
+         builds |= check_pins(stage)
++        reclaims[stage] = check_reclaim_pin(stage)
+         check_missing_pin(stage)
+         check_namespace_manifest(stage, docs)
+         check_stage_identity(stage, docs)
+@@ -524,6 +542,11 @@ def main():
+         f"the stages pin builds {sorted(builds)}, not one; CI writes both stage files in the same "
+         "commit (D47)",
+     )
++    check(
++        len(set(reclaims.values())) == 1,
++        f"the stages pin tunnel-reclaim to {reclaims}, not one build; its build writes both stage "
++        "files in the same commit (D53)",
++    )
+     check_render_stable(first)
+ 
+     if failures:

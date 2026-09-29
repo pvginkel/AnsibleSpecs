@@ -1,0 +1,1 @@
+dnsmasq-tests: ! cexec iac true 2>/dev/null || cexec iac uv run --no-project --with-requirements requirements.txt pytest -q tests/test_service_watch.py    [  OK  ]

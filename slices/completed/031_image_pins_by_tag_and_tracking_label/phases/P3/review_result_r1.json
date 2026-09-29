@@ -1,0 +1,1 @@
+{"outcome": "signoff", "summary": "The webhook-relay pin moves into config/prd/values.yaml as relay.image ':2539'. The render is byte-identical at base and HEAD, and the pin stage's applyPins resolves the path to exactly one line. Mutations show the new render checks catch a missing required guard and a non-build pin. No findings.", "details": "code_review_r1.md", "findings": []}

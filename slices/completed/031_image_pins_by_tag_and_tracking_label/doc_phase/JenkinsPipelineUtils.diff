@@ -1,0 +1,240 @@
+/work/JenkinsPipelineUtils — P1: git diff c95a33c2295a..276beff5eaa4
+
+.../org/webathome/jenkinspipelineutils/LibraryCompileTest.java  |  2 +-
+ .../org/webathome/jenkinspipelineutils/TrackingTagTest.java     | 98 +++++++++++++++++++++++++++++
+ vars/helmCharts.groovy                                          | 84 +++++++++++++++++--------
+ 3 files changed, 158 insertions(+), 26 deletions(-)
+
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java
+index 59fdad4..3deb3e6 100644
+--- a/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java
+@@ -34,7 +34,7 @@ class LibraryCompileTest {
+      * workflow-cps plugin classes, not groovy-cps ones, so their groovy-cps superclasses and a
+      * no-op safepoint take their place.
+      */
+-    private static GroovyClassLoader trustedLoader() throws IOException {
++    static GroovyClassLoader trustedLoader() throws IOException {
+         ImportCustomizer imports = new ImportCustomizer();
+         imports.addStarImports("com.cloudbees.groovy.cps", "hudson.model", "jenkins.model");
+ 
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/TrackingTagTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/TrackingTagTest.java
+new file mode 100644
+index 0000000..767e926
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/TrackingTagTest.java
+@@ -0,0 +1,98 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.Arrays;
++import java.util.List;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.CsvSource;
++
++/**
++ * The tracking tag kaniko2 stamps, and the destination sets it refuses. resolveTrackingTag is
++ * {@code @NonCPS}, so the CPS transform leaves its body to run as plain Groovy here.
++ */
++class TrackingTagTest {
++
++    private static GroovyClassLoader loader;
++    private static Object helmCharts;
++    private static Method resolveTrackingTag;
++
++    @BeforeAll
++    static void loadHelmCharts() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("helmCharts");
++        helmCharts = type.getDeclaredConstructor().newInstance();
++        resolveTrackingTag = type.getMethod("resolveTrackingTag", List.class, String.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    /** Destination tags are space-separated; an empty trackingTag column passes none. */
++    private static String resolve(String trackingTag, String tags) throws Exception {
++        List<String> destinations = Arrays.stream(tags.split(" "))
++                .map(tag -> "registry:5000/app:" + tag)
++                .toList();
++        try {
++            return (String) resolveTrackingTag.invoke(helmCharts, destinations, trackingTag);
++        } catch (InvocationTargetException e) {
++            if (e.getCause() instanceof IllegalArgumentException refused) {
++                throw refused;
++            }
++            throw e;
++        }
++    }
++
++    @ParameterizedTest(name = "trackingTag={0} destinations=[{1}] -> {2}")
++    @CsvSource({
++        // The destination sets the estate's callers push today.
++        ", 57 latest, latest",
++        ", latest 57, latest",
++        ", dev-57 dev-latest, dev-latest",
++        ", uat-57 uat-latest, uat-latest",
++        ", 26.7.3-postgres-health-ispn, 26.7.3-postgres-health-ispn",
++        ", node-24, node-24",
++        // A lone bare build number falls in the series of `latest`.
++        ", 57, latest",
++        // A matrix build's named tag and its per-build tag.
++        ", 26.7.3-postgres-health-ispn 26.7.3-postgres-health-ispn-57, 26.7.3-postgres-health-ispn",
++        "26.7.3-postgres-health-ispn, 26.7.3-postgres-health-ispn 26.7.3-postgres-health-ispn-57,"
++                + " 26.7.3-postgres-health-ispn",
++        "node-24, node-24-57 node-24, node-24",
++        // An explicit tracking tag need not be pushed itself.
++        "latest, 57, latest",
++        "dev-latest, dev-57, dev-latest",
++    })
++    void resolvesTheTrackingTag(String trackingTag, String tags, String expected) throws Exception {
++        assertEquals(expected, resolve(trackingTag, tags));
++    }
++
++    @ParameterizedTest(name = "trackingTag={0} destinations=[{1}] is refused")
++    @CsvSource({
++        // No destination holds every other one in its build series.
++        ", 57 58",
++        ", latest dev-57",
++        ", dev-latest 57",
++        ", node-24 24",
++        ", 26.7.3-postgres-health-ispn 26.7.3-57",
++        // A destination outside the explicit tracking tag's series.
++        "latest, latest dev-57",
++        "dev-latest, dev-latest 57",
++        "26.7.3-postgres-health-ispn, 26.7.3-postgres-health-ispn 57",
++        "26.7.3-postgres-health-ispn, 26.7.3-postgres-health-ispn-rc1",
++        // A bare build number is never the tracking tag.
++        "57, 57",
++        ", 57 57-1",
++    })
++    void refusesTheDestinations(String trackingTag, String tags) {
++        assertThrows(IllegalArgumentException.class, () -> resolve(trackingTag, tags));
++    }
++}
+diff --git a/vars/helmCharts.groovy b/vars/helmCharts.groovy
+index b4a017b..ad4b75b 100644
+--- a/vars/helmCharts.groovy
++++ b/vars/helmCharts.groovy
+@@ -63,12 +63,24 @@ def kaniko(String dockerfile = 'Dockerfile', String context = '.', List<String>
+  * stamps the version-poller labels (rebuild-at, tracking-tag, pipeline, and
+  * optionally params). Must be called inside a container('kaniko') block.
+  *
++ * The tracking-tag label names the tag the image tracks. registry-cleanup and
++ * the version-poller read it, not the tag names, to tell the tracking tag from
++ * build history, which is the label's build series:
++ *   label `latest`           owns the bare build numbers    (`57`)
++ *   label `<prefix>-latest`  owns `<prefix>-<digits>`       (`dev-57`)
++ *   any other label `<tag>`  owns `<tag>-<digits>`          (`26.7.3-postgres-health-ispn-57`)
++ * Every tag a build pushes is the tracking tag or in its build series, and the
++ * tracking tag is never a bare build number; kaniko2 refuses anything else.
++ *
+  * Named args:
+- *   destinations  (required) 1 or 2 full image refs.
+- *                   1 ref  -> that tag is the tracking tag (matrix/version tag).
+- *                   2 refs -> `latest`/`<digits>` or
+- *                             `<prefix>-latest`/`<prefix>-<digits>`; the `*latest`
+- *                             tag is the tracking tag.
++ *   destinations  (required) full image refs.
++ *   trackingTag   (optional) the tracking tag. It need not be pushed itself.
++ *                   Default: derived from the destinations, as the one
++ *                   destination whose build series holds every other one:
++ *                   `latest` for `<digits>` + `latest`, `<prefix>-latest` for
++ *                   `<prefix>-<digits>` + `<prefix>-latest`, `<tag>` for
++ *                   `<tag>` + `<tag>-<digits>`, and a lone tag for itself. A
++ *                   lone bare build number is labelled `latest`.
+  *   params        (optional) Map stamped as the `params` label and replayed by
+  *                   the poller when it rebuilds (e.g. [image: 'ginbov_nl']).
+  *   depends       (optional) List of `<type>:<name>` upstream dependency specs
+@@ -93,7 +105,7 @@ def kaniko2(Map args) {
+         error('kaniko2: destinations is required')
+     }
+ 
+-    String trackingTag = resolveTrackingTag(destinations)
++    String trackingTag = resolveTrackingTag(destinations, args.trackingTag as String)
+ 
+     def labels = [
+         "org.webathome.poller.rebuild-at=${rebuildAtIso(rebuildDays)}",
+@@ -137,31 +149,53 @@ def kaniko2(Map args) {
+ }
+ 
+ /**
+- * Derives the tracking tag from the destination list and enforces the tag
+- * scheme (see kaniko2). Returns the tracking tag name; throws on a bad scheme.
++ * Returns the tracking tag of a build that pushes these destinations: the given
++ * one, or the one derived from the destinations (see kaniko2). Throws when a
++ * destination is neither the tracking tag nor in its build series, or when the
++ * tracking tag is a bare build number.
+  */
+ @NonCPS
+-String resolveTrackingTag(List<String> destinations) {
++String resolveTrackingTag(List<String> destinations, String trackingTag) {
+     def tags = destinations.collect { it.substring(it.lastIndexOf(':') + 1) }
+-    if (tags.size() == 1) {
+-        return tags[0]
+-    }
+-    if (tags.size() == 2) {
+-        for (candidate in tags) {
+-            def m = (candidate =~ /^(.*-)?latest$/)
+-            if (!m.find()) {
+-                continue
+-            }
+-            def prefix = m.group(1) ?: ''
+-            def other = tags.find { it != candidate }
+-            if (other ==~ /\Q${prefix}\E\d+/) {
+-                return candidate
++    String label = trackingTag
++    if (!label) {
++        if (tags.size() == 1 && tags[0] ==~ /\d+/) {
++            label = 'latest'
++        } else {
++            label = tags.find { t -> tags.every { it == t || inBuildSeries(it, t) } }
++            if (!label) {
++                throw new IllegalArgumentException(
++                    "kaniko2: no destination is the tracking tag with every other one in its " +
++                    "build series, so pass trackingTag; got ${tags}")
+             }
+         }
+     }
+-    throw new IllegalArgumentException(
+-        "kaniko2: destinations must be a single tag, or latest/<digits> or " +
+-        "<prefix>-latest/<prefix>-<digits>; got ${tags}")
++    if (label ==~ /\d+/) {
++        throw new IllegalArgumentException(
++            "kaniko2: tracking tag ${label} is a bare build number, which is build history in " +
++            "the series of `latest`; got ${tags}")
++    }
++    def stray = tags.findAll { it != label && !inBuildSeries(it, label) }
++    if (stray) {
++        throw new IllegalArgumentException(
++            "kaniko2: destination tags ${stray} are neither the tracking tag ${label} nor in its " +
++            "build series; got ${tags}")
++    }
++    return label
++}
++
++/**
++ * Whether tag is in the build series of the tracking tag label (see kaniko2).
++ */
++@NonCPS
++boolean inBuildSeries(String tag, String label) {
++    String prefix
++    if (label == 'latest' || label.endsWith('-latest')) {
++        prefix = label.substring(0, label.length() - 'latest'.length())
++    } else {
++        prefix = label + '-'
++    }
++    return tag.startsWith(prefix) && tag.substring(prefix.length()) ==~ /\d+/
+ }
+ 
+ /** rebuild-at = now + days, ISO-8601 UTC (e.g. 2026-06-27T12:00:00Z). */

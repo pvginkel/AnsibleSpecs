@@ -1,0 +1,102 @@
+/work/ArgoCDDeploy — P3: git diff fb35a6c09692..0bacce1a06c5
+
+chart/templates/webhook-relay.yaml |  2 +-
+ chart/values.yaml                  |  9 ++++-----
+ config/prd/values.yaml             |  2 ++
+ tests/render-chart.py              | 23 +++++++++++++++++++++++
+ 4 files changed, 30 insertions(+), 6 deletions(-)
+
+diff --git a/chart/templates/webhook-relay.yaml b/chart/templates/webhook-relay.yaml
+index f1f7954..8bbe26c 100644
+--- a/chart/templates/webhook-relay.yaml
++++ b/chart/templates/webhook-relay.yaml
+@@ -42,7 +42,7 @@ spec:
+     spec:
+       containers:
+         - name: webhook-relay
+-          image: {{ required "relay.image pins the published webhook-relay build: set it in chart/values.yaml" $relay.image | quote }}
++          image: {{ printf "registry:5000/webhook-relay%s" (required "relay.image is the webhook-relay build the relay's builds pin: set it in config/{stage}/values.yaml" $relay.image) | quote }}
+           ports:
+             - name: http
+               # LISTEN_ADDR is unset, so the binary listens on its own `:8080`
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 9435a48..f3d8c82 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -52,11 +52,10 @@ hooks:
+ # Slice 015's webhook relay, deployed beside Argo because it serves nothing when
+ # Argo is absent (015 attachments/webhook-relay-consult.md §4).
+ relay:
+-  # A build number the DockerImages pipeline published, never `latest`: this
+-  # chart syncs manually forever (D3), so a mutable tag would make the next
+-  # unrelated sync a silent relay upgrade. Pinned here beside the argo-cd
+-  # dependency rather than per stage — the relay's version is not a stage fact.
+-  image: registry:5000/webhook-relay:2539
++  # The build the relay runs, as `:<build>` after registry:5000/webhook-relay.
++  # Every relay build writes it into config/{stage}/values.yaml (DockerImages
++  # webhook-relay/deploy-pins.json), so the chart names none.
++  image:
+   # Stateless, so a roll needs no drain and two replicas keep the public endpoint
+   # answering through one.
+   replicas: 2
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 7a0a3f2..c6a25b5 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -315,6 +315,8 @@ hooks:
+ # https://deploy-hooks.webathome.org/api/webhook, never at a receiver directly.
+ relay:
+   serverName: deploy-hooks.webathome.org
++  # Written by every webhook-relay build (DockerImages webhook-relay/deploy-pins.json).
++  image: ':2539'
+ 
+ # The prd leaves, all inside the `eso` AppRole's existing `eso/prd/*` grant, so
+ # no OpenBao policy changes with them. Each is an operator `bao kv put`.
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 47e44b3..61d704e 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -291,6 +291,10 @@ RELAY = f"{RELEASE}-webhook-relay"
+ # forever (D3), so a mutable tag would make the next unrelated sync a silent
+ # relay upgrade.
+ RELAY_IMAGE = re.compile(r"^registry:5000/webhook-relay:\d+$")
++# Where the build is pinned: the stage file's relay.image, the path DockerImages
++# webhook-relay/deploy-pins.json names, which every relay build writes as
++# `:<build>`.
++RELAY_PIN = re.compile(r"^:\d+$")
+ # The image's own contract (DockerImages webhook-relay/README.md): it listens on
+ # 8080 unless LISTEN_ADDR says otherwise, serves the fan-out on /api/webhook and
+ # answers /healthz.
+@@ -1320,6 +1324,7 @@ def check_relay(docs, materialised):
+         RELAY_IMAGE.fullmatch(container["image"]) is not None,
+         f"the relay image {container['image']!r} is not a pinned webhook-relay build number",
+     )
++    check_relay_pin(container["image"])
+     ports = {p.get("name"): p.get("containerPort") for p in container.get("ports", [])}
+     check(
+         ports.get("http") == RELAY_PORT,
+@@ -1373,6 +1378,24 @@ def check_relay(docs, materialised):
+     )
+ 
+ 
++def check_relay_pin(image):
++    """The relay runs the build its builds pin in the stage file, and no other."""
++    pin = yaml.safe_load((REPO / CONFIG).read_text()).get("relay", {}).get("image")
++    check(
++        isinstance(pin, str) and RELAY_PIN.fullmatch(pin) is not None,
++        f"{CONFIG} pins relay.image as {pin!r}, not the `:<build>` every relay build writes there",
++    )
++    check(
++        image == f"registry:5000/webhook-relay{pin}",
++        f"the relay runs {image!r}, not the build {CONFIG} pins at relay.image",
++    )
++    result = helm_template(RELEASE, "chart", CONFIG, overlay={"relay": {"image": None}})
++    check(
++        result.returncode != 0 and "relay.image" in result.stderr,
++        "chart/ renders a relay for a stage that pins no build instead of refusing on relay.image",
++    )
++
++
+ def check_relay_secret(docs, materialised, entry):
+     """One leaf, two readers: the relay verifies what the receiver verifies."""
+     check("value" not in entry, "the relay carries the webhook secret as a committed value")

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "registry-cleanup now decides by the tracking-tag label, with the same build series as kaniko2's inBuildSeries. Each series keeps its newest build, the fail-closed digest guard is intact, and a dry run (DRY_RUN or --dry-run) runs GC with --dry-run and deletes nothing. The suite caught all 11 targeted mutations; there are no findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

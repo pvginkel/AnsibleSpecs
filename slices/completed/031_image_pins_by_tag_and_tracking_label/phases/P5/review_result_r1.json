@@ -1,0 +1,8 @@
+{"outcome": "signoff",
+ "summary": "version-poller classifies by the tracking-tag label with cleanup's series rule; regex and label fallback are gone; live governing-tag choice is identical old vs new in all 94 repos, and mutations confirm the new tests bite. One advisory finding on stale-copy warnings.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional",
+   "anchor": "repro-trace",
+   "summary": "Stale-copy warning keyed by label: a stale prd-latest is silent when a uat copy of the same label is fresher (old code warned)"}
+ ]}

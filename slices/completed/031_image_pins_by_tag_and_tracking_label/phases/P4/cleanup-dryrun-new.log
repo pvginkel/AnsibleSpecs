@@ -1,0 +1,737 @@
+Installed 5 packages in 2ms
+2026-09-29 08:36:11,952 INFO Registry cleanup: http://registry:5000 (ttl=26 weeks, max=10/series, dry_run=True)
+2026-09-29 08:36:12,153 INFO Found 129 repositories
+2026-09-29 08:36:12,153 INFO --- aac-tools ---
+2026-09-29 08:36:12,662 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:12,662 INFO   14 builds in 1 series, removing 4 (4 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:12,706 INFO   [dry-run] Would delete 6 (sha256:38fb1b2bd7ae48042ee273117021a00bde846853e75d2d0b3ddde4512caf582d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:12,710 INFO   [dry-run] Would delete 7 (sha256:cc9b9b88b37258c76601d4df2fa29e1bccab4a06744e8d0e5933f9a07813d0a8) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:12,713 INFO   [dry-run] Would delete 8 (sha256:8b9e11504abeaccbe975436d3bf06318685087b9811db92fa63644b05e71d5a3) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:12,717 INFO   [dry-run] Would delete 9 (sha256:fe5650d21f8f52910e7d269dcea8e580098fa3ef021827532f02c491704a85ba) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:12,717 INFO --- android-35 ---
+2026-09-29 08:36:13,130 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:13,130 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:13,180 INFO   [dry-run] Would delete 2353 (sha256:3dcccf4a01b0654ab58c93ec88fccff661c41cbcfdc652bbfb702abfd82607da) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:13,180 INFO --- architecture_viewer ---
+2026-09-29 08:36:22,589 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:22,589 INFO   Outside any build series (kept): 1540
+2026-09-29 08:36:22,589 INFO   231 builds in 1 series, removing 221 (221 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:22,594 WARNING   architecture_viewer: could not resolve the digest of kept tag 1540 — skipping every deletion in this repo (incomplete protection set)
+2026-09-29 08:36:22,594 INFO --- argocd-hook ---
+2026-09-29 08:36:23,064 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:23,065 INFO   15 builds in 1 series, removing 5 (5 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:23,117 INFO   [dry-run] Would delete 5 (sha256:69d666587c12232c7a5c2ee47527636bb22af11dcfdd520cc9450e141f106e24) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:23,122 INFO   [dry-run] Would delete 6 (sha256:af843a7b343954defef79b709818229c04191fe136da10b29c0c88b1aab916e2) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:23,126 INFO   [dry-run] Would delete 7 (sha256:9d334a5ed5fef5414e87235852fa5f0e44be0a893abd6c6875e02dedcf51fc03) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:23,130 INFO   [dry-run] Would delete 8 (sha256:cdadb7f4488e740a738115740d06af996537eb5041f73b24af40067a676011f3) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:23,135 INFO   [dry-run] Would delete 9 (sha256:1f6c01b63bf0a18c3e009ffb9897ec9d0b92b0ac5cd69b69214c9b71b8e745e9) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:23,135 INFO --- backup-server ---
+2026-09-29 08:36:23,502 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:23,502 INFO   Outside any build series (kept): 1890
+2026-09-29 08:36:23,502 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:23,506 WARNING   backup-server: could not resolve the digest of kept tag 1890 — skipping every deletion in this repo (incomplete protection set)
+2026-09-29 08:36:23,506 INFO --- calendar-support ---
+2026-09-29 08:36:24,180 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:24,180 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:24,245 INFO   [dry-run] Would delete 2425 (sha256:8a4c6803cf5cd8cdccb02cfbe5a63116aefa96b1d5282431570667389d656f30) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:24,246 INFO --- canon ---
+2026-09-29 08:36:24,282 INFO   Outside any build series (kept): 49, latest
+2026-09-29 08:36:24,282 WARNING   canon:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:24,282 INFO   No build history
+2026-09-29 08:36:24,282 INFO --- certbot ---
+2026-09-29 08:36:24,626 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:24,626 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:24,671 INFO   [dry-run] Would delete 2442 (sha256:c3fc37b3cd68443f66b4aaffea03c3a63338852407dc2c859429e1dedd38f97a) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:24,671 INFO --- certificate-renewer ---
+2026-09-29 08:36:24,675 INFO   No tags
+2026-09-29 08:36:24,675 INFO --- charts-home ---
+2026-09-29 08:36:25,025 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:25,025 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:25,068 INFO   [dry-run] Would delete 1 (sha256:ca165770bb76c9d0966474baf0cc55402e7e37ab01697285921d5ba467e4f8f7) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:25,069 INFO --- code-server ---
+2026-09-29 08:36:25,288 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:25,288 INFO   Outside any build series (kept): 2095, 2096, 2100, 2102, 2103
+2026-09-29 08:36:25,288 INFO   2 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:25,288 INFO --- debian ---
+2026-09-29 08:36:25,536 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:25,536 INFO   Outside any build series (kept): 2026, 2045, 2066, 2068, 2070
+2026-09-29 08:36:25,536 INFO   2 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:25,536 INFO --- design-assistant ---
+2026-09-29 08:36:26,254 INFO   Tracking tags (kept): dev-latest, tst-latest
+2026-09-29 08:36:26,254 INFO   Outside any build series (kept): dev-41, dev-43, dev-44, dev-45, dev-46, prd-6, prd-latest, tst-467, tst-474, uat-13, uat-14, uat-15, uat-16, uat-17, uat-18, uat-19, uat-20, uat-21, uat-latest
+2026-09-29 08:36:26,255 INFO   10 builds in 2 series, none over cap or past TTL
+2026-09-29 08:36:26,255 INFO --- design-assistant-canon-docs ---
+2026-09-29 08:36:26,589 INFO   Tracking tags (kept): uat-latest
+2026-09-29 08:36:26,589 INFO   Outside any build series (kept): prd-6, prd-latest
+2026-09-29 08:36:26,589 INFO   9 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:26,589 INFO --- design-assistant-frontend ---
+2026-09-29 08:36:27,411 INFO   Tracking tags (kept): dev-latest, tst-latest
+2026-09-29 08:36:27,411 INFO   Outside any build series (kept): dev-32, dev-37, dev-41, dev-45, dev-46, prd-6, prd-latest, tst-467, tst-474, uat-13, uat-14, uat-15, uat-16, uat-17, uat-18, uat-19, uat-20, uat-21, uat-latest
+2026-09-29 08:36:27,411 INFO   10 builds in 2 series, none over cap or past TTL
+2026-09-29 08:36:27,411 INFO --- design-assistant-frontend-docs ---
+2026-09-29 08:36:27,420 INFO   No tags
+2026-09-29 08:36:27,420 INFO --- design-assistant-manuals ---
+2026-09-29 08:36:27,749 INFO   Tracking tags (kept): uat-latest
+2026-09-29 08:36:27,749 INFO   Outside any build series (kept): prd-6, prd-latest
+2026-09-29 08:36:27,749 INFO   9 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:27,749 INFO --- design-assistant-portal ---
+2026-09-29 08:36:28,463 INFO   Tracking tags (kept): dev-latest, tst-latest
+2026-09-29 08:36:28,463 INFO   Outside any build series (kept): dev-32, dev-37, dev-41, dev-45, dev-46, prd-6, prd-latest, tst-467, tst-474, uat-13, uat-14, uat-15, uat-16, uat-17, uat-18, uat-19, uat-20, uat-21, uat-latest
+2026-09-29 08:36:28,464 INFO   10 builds in 2 series, none over cap or past TTL
+2026-09-29 08:36:28,464 INFO --- design-assistant-portal-docs ---
+2026-09-29 08:36:28,468 INFO   No tags
+2026-09-29 08:36:28,468 INFO --- design-assistant-ui ---
+2026-09-29 08:36:28,491 INFO   Outside any build series (kept): latest
+2026-09-29 08:36:28,491 WARNING   design-assistant-ui:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:28,492 WARNING   design-assistant-ui:latest is 188d old (> 182d TTL) — not being rebuilt?
+2026-09-29 08:36:28,492 INFO   No build history
+2026-09-29 08:36:28,492 INFO --- design-assistant-validation ---
+2026-09-29 08:36:28,545 INFO   Outside any build series (kept): 171
+2026-09-29 08:36:28,545 INFO   No build history
+2026-09-29 08:36:28,545 INFO --- dhcpapp ---
+2026-09-29 08:36:29,056 INFO   Tracking tags (kept): 35, latest
+2026-09-29 08:36:29,056 INFO   18 builds in 1 series, removing 8 (8 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:29,104 INFO   [dry-run] Would delete 36 (sha256:378825569c5622bdd6861a2de2d03b26424d6aaafb38bdb95cf9e3b6ecadc4a0) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,108 INFO   [dry-run] Would delete 38 (sha256:65d48d075c9fbef9f5ceab0c1d9985e623fa8532669d22a8df3f6c81e8a967ca) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,111 INFO   [dry-run] Would delete 39 (sha256:debda0857406e8ba26db1c40717f234907297af9b99a85b8a302df26ad152d24) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,115 INFO   [dry-run] Would delete 40 (sha256:9872c54c568589d727cfb3a864fe4dfa882629c7b2ca991a73e048e875a60840) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,118 INFO   [dry-run] Would delete 41 (sha256:b5861dcdb35fe461e1ce41237bec6f58c7c85fcb50e1d7bfce990be98ebb4e64) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,121 INFO   [dry-run] Would delete 42 (sha256:629afb2caafe486923126c5c706e81396432126aa1c57c4eb8c55b6b9efb7547) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,125 INFO   [dry-run] Would delete 43 (sha256:e444851588816e049e5b204c55adc235867ddc2c43bd41a1e18f933dfe02961d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,130 INFO   [dry-run] Would delete 44 (sha256:86488e876e0a8d7521bd08ba552009030e74743def3702a10b3078d71bd62e57) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,130 INFO --- dhcpapp-ui ---
+2026-09-29 08:36:29,551 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:29,551 INFO   14 builds in 1 series, removing 4 (4 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:29,595 INFO   [dry-run] Would delete 41 (sha256:6440fdddddf54b78bcca2dacda61c6699c142ce9f3dd6943c56d3633bad2df38) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,599 INFO   [dry-run] Would delete 42 (sha256:ec21e09c3d204c676ce91ad5466a10a779a60be627073a732888ba321bd3b19e) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,603 INFO   [dry-run] Would delete 43 (sha256:932205a47616ab7fe1ae8bad137c42f93730469ca3470f80b9be872c1289e20e) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,607 INFO   [dry-run] Would delete 44 (sha256:0bf1ea690eba5e5d73c1b30403fc412abe32aa7e5cf3678aa2e743366f150b66) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:29,607 INFO --- dhcpapp-validation ---
+2026-09-29 08:36:29,766 INFO   Outside any build series (kept): 30, 31, 32, 34, 35
+2026-09-29 08:36:29,766 INFO   No build history
+2026-09-29 08:36:29,766 INFO --- dnsmapper ---
+2026-09-29 08:36:29,804 INFO   Outside any build series (kept): 1806, test
+2026-09-29 08:36:29,804 INFO   No build history
+2026-09-29 08:36:29,804 INFO --- dnsmasq ---
+2026-09-29 08:36:30,058 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:30,058 INFO   Outside any build series (kept): 1806, 2049, 2050, 2051, 2053, 2095
+2026-09-29 08:36:30,058 INFO   3 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:30,058 INFO --- dnsmasq-config-generator ---
+2026-09-29 08:36:30,454 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:30,454 INFO   Outside any build series (kept): 1806
+2026-09-29 08:36:30,454 INFO   13 builds in 1 series, removing 3 (3 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:30,458 WARNING   dnsmasq-config-generator: could not resolve the digest of kept tag 1806 — skipping every deletion in this repo (incomplete protection set)
+2026-09-29 08:36:30,458 INFO --- dnsmasq-management-api ---
+2026-09-29 08:36:30,901 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:30,901 INFO   Outside any build series (kept): 1806
+2026-09-29 08:36:30,901 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:30,905 WARNING   dnsmasq-management-api: could not resolve the digest of kept tag 1806 — skipping every deletion in this repo (incomplete protection set)
+2026-09-29 08:36:30,905 INFO --- docker-image-test ---
+2026-09-29 08:36:30,933 INFO   Outside any build series (kept): latest
+2026-09-29 08:36:30,933 WARNING   docker-image-test:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:30,933 WARNING   docker-image-test:latest is 764d old (> 182d TTL) — not being rebuilt?
+2026-09-29 08:36:30,933 INFO   No build history
+2026-09-29 08:36:30,933 INFO --- document-conversion ---
+2026-09-29 08:36:31,114 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:31,114 INFO   Outside any build series (kept): 1985, 2064, 2068, 2070, 2095
+2026-09-29 08:36:31,114 INFO   1 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:31,114 INFO --- elasticsearch-setup ---
+2026-09-29 08:36:31,451 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:31,451 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:31,495 INFO   [dry-run] Would delete 2383 (sha256:67a0f02911d80288ed97be2119b3b9dc3638cb63fa7804730acd974ddffc360a) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:31,495 INFO --- electronics-inventory ---
+2026-09-29 08:36:31,998 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:31,998 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:32,064 INFO   [dry-run] Would delete 238 (sha256:4244ca9d7a606b48e3184b9322669584a27da23b836d93575d1bca7a8158a246) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:32,069 INFO   [dry-run] Would delete 239 (sha256:4551f8db26f12d808c912b692f30bc5446de69628869c8b8adf1f64db2f12d18) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:32,069 INFO --- electronics-inventory-docs ---
+2026-09-29 08:36:32,602 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:32,602 INFO   Outside any build series (kept): 308, 313, 314, 315, 316
+2026-09-29 08:36:32,602 INFO   7 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:32,602 INFO --- electronics-inventory-ui ---
+2026-09-29 08:36:32,989 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:32,989 INFO   Outside any build series (kept): 308, 313, 314, 315, 316
+2026-09-29 08:36:32,989 INFO   7 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:32,989 INFO --- electronics-inventory-validation ---
+2026-09-29 08:36:33,176 INFO   Outside any build series (kept): 14, 15, 16, 17, 19
+2026-09-29 08:36:33,176 INFO   No build history
+2026-09-29 08:36:33,176 INFO --- esp32-coredump-parser ---
+2026-09-29 08:36:33,452 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:33,452 INFO   Outside any build series (kept): 2064, 2070, 2072, 2074, 2095
+2026-09-29 08:36:33,452 INFO   2 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:33,452 INFO --- fieldnotes ---
+2026-09-29 08:36:34,186 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:34,186 INFO   27 builds in 1 series, removing 17 (17 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:34,253 INFO   [dry-run] Would delete 10 (sha256:6181cb44f80ded1b89cfb92ba1637785233c81d282fd1e770b496674b05d50e3) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,257 INFO   [dry-run] Would delete 11 (sha256:274892d8a05cc3922e3b5e5533c95fa91b4342fe91d23f6aa36215b00b568ed7) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,261 INFO   [dry-run] Would delete 12 (sha256:a43dc0c130ed9c3d1ba03ed74e742494669028fed8f0e9c68de22d30bca6aa4d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,264 INFO   [dry-run] Would delete 13 (sha256:fc9f42f9d1be9f9c18161ba75958c3f992ca6f7471a291ce516e454d2c402358) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,268 INFO   [dry-run] Would delete 14 (sha256:c7d3f1f2e9b3f44c027b0bb9721a6d2004650125ecea876dab9fe29389e5817d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,271 INFO   [dry-run] Would delete 15 (sha256:8ed65e4a8ecd88ea5e5f0b620b95271424d21262d4c76d2600f5d8fb48db4095) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,275 INFO   [dry-run] Would delete 16 (sha256:821021e1b39d02b8d7426e14c7ab1d4adf378e5766b271405084972431749941) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,278 INFO   [dry-run] Would delete 22 (sha256:90db78671f756b1f85e09d12990672e94920f3db515e0baffe714c0932af257f) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,282 INFO   [dry-run] Would delete 23 (sha256:5fcba74a73bfd5650843b3458f54535e0fa78a5125c25a9cd7500f8ec7418d1a) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,286 INFO   [dry-run] Would delete 25 (sha256:a797724b5a218cfb7fb581b0bda99683e96312933114c1c72ad9fa0fee51288a) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,290 INFO   [dry-run] Would delete 26 (sha256:5f3f077201d0a2b7cc7f703dc613dcbf1fc2b020d4907945ce8bb7007d23b77d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,293 INFO   [dry-run] Would delete 28 (sha256:e01172128ddfad5f009a42df6e4468281368e1a3d842aa0f3f54f3d1f6c6d5ff) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,297 INFO   [dry-run] Would delete 5 (sha256:d9703ddf3f0d5a3c7ebd1dd9db019f587bb928d8984638fbc20e670e5d8d2de6) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,301 INFO   [dry-run] Would delete 6 (sha256:5fbe941c18d493be97d8a72343feb65c449b796bb18ddd257e718a0194f60fa8) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,305 INFO   [dry-run] Would delete 7 (sha256:3c8943716a749a299197cafcf50de32ca910b0f572ad6897d898ef8818b173b2) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,308 INFO   [dry-run] Would delete 8 (sha256:7ab69397e1b003c8bea2c1e6fdf9b1780d4e65f0f80c4c32b293ded7de3f13e4) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,313 INFO   [dry-run] Would delete 9 (sha256:fa2375e94fff8c6f17b4c8348e04cc0aa0562a7564a96cbac5249acf65a1462e) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,313 INFO --- fieldnotes-ui ---
+2026-09-29 08:36:34,682 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:34,682 INFO   15 builds in 1 series, removing 5 (5 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:34,740 INFO   [dry-run] Would delete 22 (sha256:ee14f482fec7b4589f89634ecb1778453a501fafb045fad55042ffb13859e323) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,744 INFO   [dry-run] Would delete 23 (sha256:ea0b5a0dcc433b2ccbc2847f2906d1c86646afad30d85f418cf4522711323f2c) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,747 INFO   [dry-run] Would delete 25 (sha256:5153f5cbd8af9703a9db318e6402d34174c0cabd52822560a6a6ccdecda0c0db) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,751 INFO   [dry-run] Would delete 26 (sha256:c5a06b9b6385fd1719c636c6c842fceda51bbe158c87cc6ad14f710400fdbb1c) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,755 INFO   [dry-run] Would delete 28 (sha256:41170a14f189343debf8831bea24cc1a5ccf106b08024c1d8f66377bbe11dc74) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:34,755 INFO --- frontend-toolchain ---
+2026-09-29 08:36:34,778 INFO   Tracking tags (kept): node-24
+2026-09-29 08:36:34,778 INFO   No build history
+2026-09-29 08:36:34,778 INFO --- fundachecker ---
+2026-09-29 08:36:34,782 INFO   No tags
+2026-09-29 08:36:34,782 INFO --- gdrive-backup ---
+2026-09-29 08:36:34,787 INFO   No tags
+2026-09-29 08:36:34,787 INFO --- ginbov_nl ---
+2026-09-29 08:36:35,117 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:35,118 INFO   Outside any build series (kept): local
+2026-09-29 08:36:35,118 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:35,118 INFO --- git-sync ---
+2026-09-29 08:36:35,445 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:35,445 INFO   Outside any build series (kept): 1985, 2086
+2026-09-29 08:36:35,445 INFO   7 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:35,445 INFO --- gitblit-initializer ---
+2026-09-29 08:36:35,836 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:35,836 INFO   Outside any build series (kept): 14, 8, 9
+2026-09-29 08:36:35,836 INFO   9 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:35,836 INFO --- gitblit-mcp-server ---
+2026-09-29 08:36:36,210 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:36,210 INFO   Outside any build series (kept): dev
+2026-09-29 08:36:36,210 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:36,270 INFO   [dry-run] Would delete 28 (sha256:58b0db0d89b0812018575f236af5c0b61e8a9fea856b3ed6cd60331e60a505aa) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:36,275 INFO   [dry-run] Would delete 29 (sha256:ef7e3ad4f15901ef0f05a0128ebe3770fc2eeed978fa4554656a08dc944cb135) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:36,278 INFO --- go-toolchain ---
+2026-09-29 08:36:36,324 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:36,324 INFO   1 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:36,324 INFO --- guacamole-db ---
+2026-09-29 08:36:36,502 INFO   Outside any build series (kept): 1962, 2044, 2052, 2065, 2076, 2079, latest
+2026-09-29 08:36:36,502 WARNING   guacamole-db:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:36,502 INFO   No build history
+2026-09-29 08:36:36,502 INFO --- guacamole-init ---
+2026-09-29 08:36:36,862 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:36,862 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:36,912 INFO   [dry-run] Would delete 2383 (sha256:8d2276497e49a2d3de2555190be6b3e9b1efd587dafc7a7e8395fe048276a624) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:36,912 INFO --- home ---
+2026-09-29 08:36:36,917 INFO   No tags
+2026-09-29 08:36:36,918 INFO --- homeapps ---
+2026-09-29 08:36:37,388 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:37,388 INFO   15 builds in 1 series, removing 5 (5 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:37,433 INFO   [dry-run] Would delete 17 (sha256:ec2c8b2bb166718fffbf40acfdd4b364730d5e49496cb8aa664608eae36ef40b) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:37,437 INFO   [dry-run] Would delete 18 (sha256:6846203232e81d1b3598511a8efa941ddbe8d2b8f382c394560ade2d973056a8) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:37,441 INFO   [dry-run] Would delete 19 (sha256:08b604e5e1d10c1e4b2784d6b1700368c846b18b51c9090fa303275bee7c4a11) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:37,444 INFO   [dry-run] Would delete 20 (sha256:af5f4c238e106f85225e596c67052beade2e1e72b4666c2b00c48bb50a91723d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:37,448 INFO   [dry-run] Would delete 21 (sha256:a65d59202890be7041855a9dbf00044e1b480e350854323e99fbc0e94d7de703) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:37,448 INFO --- iac ---
+2026-09-29 08:36:37,844 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:37,844 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:37,891 INFO   [dry-run] Would delete 119 (sha256:8a048acca9e4d69a2065210ba2740ec8a26c0426f207d2b3817e707373bc814e) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:37,891 INFO --- iac-provisioner ---
+2026-09-29 08:36:38,105 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:38,105 INFO   Outside any build series (kept): 2067, 2069, 2070, 2073, 2077
+2026-09-29 08:36:38,105 INFO   2 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:38,105 INFO --- iac-toolchain ---
+2026-09-29 08:36:38,143 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:38,144 INFO   1 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:38,144 INFO --- infra-statistics ---
+2026-09-29 08:36:38,475 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:38,476 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:38,526 INFO   [dry-run] Would delete 2423 (sha256:f55d88cca73703ef1829dfb83392e44fac39b0ac47473c9141b43d2030dac181) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:38,526 INFO --- intercom-server ---
+2026-09-29 08:36:38,848 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:38,848 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:38,848 INFO --- iot-support-validation ---
+2026-09-29 08:36:39,013 INFO   Outside any build series (kept): 26, 28, 29, 31, 32
+2026-09-29 08:36:39,013 INFO   No build history
+2026-09-29 08:36:39,013 INFO --- iotsupport ---
+2026-09-29 08:36:39,018 INFO   No tags
+2026-09-29 08:36:39,018 INFO --- iotsupport-app ---
+2026-09-29 08:36:39,420 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:39,420 INFO   Outside any build series (kept): dev, onboarding-check
+2026-09-29 08:36:39,420 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:39,483 INFO   [dry-run] Would delete 131 (sha256:fdb2c769268b912f92a611d5a08acb8ade5ffe2add68c84f8ef6be5e6a343f6d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:39,488 INFO   [dry-run] Would delete 132 (sha256:56c96df972e8a291f105b12e2fd468ae693e1e7f5b3616983d2384f03186de79) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:39,489 INFO --- iotsupport-ui ---
+2026-09-29 08:36:39,935 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:39,935 INFO   Outside any build series (kept): dev, onboarding-check
+2026-09-29 08:36:39,935 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:39,994 INFO   [dry-run] Would delete 131 (sha256:67083aecb6752fd3e4ec0443b82e76e2580c01dc9dfffc661adbf51bff77c4d3) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:39,998 INFO   [dry-run] Would delete 132 (sha256:5f16d6bdd0f8c270da9f0e4b8d8b1f9691a0c23b885f332896c63ed76c3390f7) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:39,998 INFO --- java-toolchain ---
+2026-09-29 08:36:40,023 INFO   Tracking tags (kept): jdk-21
+2026-09-29 08:36:40,023 INFO   No build history
+2026-09-29 08:36:40,023 INFO --- jenkins-telegram-bot ---
+2026-09-29 08:36:40,319 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:40,319 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:40,361 INFO   [dry-run] Would delete 2421 (sha256:91530f6c56c7b401e1cfa962651d61f3dd535426f40d21f3de1c783ce7a5b10a) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:40,361 INFO --- k8s ---
+2026-09-29 08:36:40,384 INFO   Tracking tags (kept): 1.35.5
+2026-09-29 08:36:40,384 INFO   No build history
+2026-09-29 08:36:40,384 INFO --- k8s-1.30.3 ---
+2026-09-29 08:36:40,389 INFO   No tags
+2026-09-29 08:36:40,389 INFO --- kaniko ---
+2026-09-29 08:36:40,414 INFO   Outside any build series (kept): latest
+2026-09-29 08:36:40,414 WARNING   kaniko:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:40,414 WARNING   kaniko:latest is 766d old (> 182d TTL) — not being rebuilt?
+2026-09-29 08:36:40,414 INFO   No build history
+2026-09-29 08:36:40,414 INFO --- kaniko-livetest ---
+2026-09-29 08:36:40,521 INFO   Outside any build series (kept): a1, a2, b1, c1, c2
+2026-09-29 08:36:40,521 INFO   No build history
+2026-09-29 08:36:40,521 INFO --- keycloak ---
+2026-09-29 08:36:40,577 INFO   Tracking tags (kept): 26.7.3-postgres-health-ispn
+2026-09-29 08:36:40,577 INFO   Outside any build series (kept): 26.5.1-postgres-health-ispn
+2026-09-29 08:36:40,577 INFO   No build history
+2026-09-29 08:36:40,577 INFO --- kube-coder-android-toolchain ---
+2026-09-29 08:36:40,853 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:40,853 INFO   7 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:40,854 INFO --- kube-coder-arm64-cross-toolchain ---
+2026-09-29 08:36:40,981 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:40,981 INFO   4 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:40,981 INFO --- kube-coder-dev ---
+2026-09-29 08:36:41,340 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:41,340 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:41,384 INFO   [dry-run] Would delete 2468 (sha256:6a480c17c5f90a120c72e4da00954ad6286a5faf8a5bd9c366f7a9f262087d1d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:41,388 INFO   [dry-run] Would delete 2484 (sha256:c3319842e2b0e7b05049c9dcb85b98f53e04931c6332542a6da22284966685f0) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:41,388 INFO --- kube-coder-dev-base ---
+2026-09-29 08:36:41,785 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:41,785 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:41,835 INFO   [dry-run] Would delete 2443 (sha256:4213b98f3c9376357c672bb4611c45afeb5dac28c3d1e6ee5ff3a111c9e5d729) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:41,840 INFO   [dry-run] Would delete 2456 (sha256:e2e3ca5ce302dafe80edfdd60d596cc516e362c0e2a3f18173c52648c5c8932d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:41,840 INFO --- kube-coder-dev-local-home ---
+2026-09-29 08:36:42,288 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:42,289 INFO   15 builds in 1 series, removing 5 (5 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:42,331 INFO   [dry-run] Would delete 2507 (sha256:b5ddc7f3baa28109e2c58f451bd92b6b3bd111f76360dd63e4e0dacbcdceef0c) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:42,336 INFO   [dry-run] Would delete 2517 (sha256:9cc19d165ea16c806da27a69b7f1dfca855b42addce6e8f6bc9af72eeae6aacf) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:42,339 INFO   [dry-run] Would delete 2518 (sha256:fe3fa2e5cce962840d6a4622c013fabb6b7b1c5d40480cf04e29d164594c2c4f) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:42,342 INFO   [dry-run] Would delete 2519 (sha256:aa584c2b8ab87717eb455ef28921122032d47de4c36f1fa1ae7b3323aaf1d461) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:42,345 INFO   [dry-run] Would delete 2521 (sha256:da723e7d86c33c088023c8cfa0898491f048ca8675d22de100bed7864cfd98d4) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:42,346 INFO --- kube-coder-dotnet-toolchain ---
+2026-09-29 08:36:42,550 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:42,550 INFO   7 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:42,550 INFO --- kube-coder-esp-idf-toolchain ---
+2026-09-29 08:36:42,574 INFO   Tracking tags (kept): idf-5.5.3
+2026-09-29 08:36:42,574 INFO   No build history
+2026-09-29 08:36:42,574 INFO --- kube-coder-frontend-toolchain ---
+2026-09-29 08:36:42,589 INFO   Tracking tags (kept): node-24
+2026-09-29 08:36:42,589 INFO   No build history
+2026-09-29 08:36:42,589 INFO --- kube-coder-go-toolchain ---
+2026-09-29 08:36:42,975 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:42,975 INFO   Outside any build series (kept): cgo-test
+2026-09-29 08:36:42,975 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:43,030 INFO   [dry-run] Would delete 2468 (sha256:55e8c9217147ad045a83e05dd7a1116a4fa804fb999b31e2e5069d7f203934c1) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:43,036 INFO   [dry-run] Would delete 2469 (sha256:5fcd37508c9e3d970d441460844ad1d01cfbadb069df030b3f5defec44b7b0f6) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:43,036 INFO --- kube-coder-iac-toolchain ---
+2026-09-29 08:36:43,451 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:43,451 INFO   Outside any build series (kept): librados-test
+2026-09-29 08:36:43,451 INFO   14 builds in 1 series, removing 4 (4 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:43,497 INFO   [dry-run] Would delete 2482 (sha256:e72630a2bf53ad6b0c6eccb682afc6462f15a8c7b3fa2ce7c43246e1223d5999) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:43,501 INFO   [dry-run] Would delete 2484 (sha256:b79255ebf1f962e16868b9d8bc69fc9cddb4f9686df1baa219c226b5ca763cf4) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:43,504 INFO   [dry-run] Would delete 2495 (sha256:a0290493eed8b238d0e0a354ff039e3ecef5d048b4fe77e8f0acfab60e29510f) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:43,507 INFO   [dry-run] Would delete 2502 (sha256:9d09448f14a6fd61681f4410e2be6aa21c0e2d4294e46b6380fdc3554471a06d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:43,507 INFO --- kube-coder-java-toolchain ---
+2026-09-29 08:36:43,520 INFO   Tracking tags (kept): jdk-21
+2026-09-29 08:36:43,521 INFO   No build history
+2026-09-29 08:36:43,521 INFO --- kube-coder-modern-app-toolchain ---
+2026-09-29 08:36:43,532 INFO   Tracking tags (kept): node-24
+2026-09-29 08:36:43,532 INFO   No build history
+2026-09-29 08:36:43,532 INFO --- kube-coder-native-toolchain ---
+2026-09-29 08:36:43,720 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:43,720 INFO   6 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:43,720 INFO --- kube-coder-python-toolchain ---
+2026-09-29 08:36:44,128 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:44,128 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:44,201 INFO   [dry-run] Would delete 2468 (sha256:c68e0d31b146d8e5df79d654bb7a1f1d4b45e01794a6c493efeed86c1813e07d) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:44,204 INFO   [dry-run] Would delete 2482 (sha256:320a0618405fd5a87a36941f844f2e679488571250dc018863242d58062d2ef2) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:36:44,205 INFO --- kube-coder-scratch-probe ---
+2026-09-29 08:36:44,232 INFO   Outside any build series (kept): slice139
+2026-09-29 08:36:44,232 INFO   No build history
+2026-09-29 08:36:44,232 INFO --- kube-coder-tunnel-reclaim ---
+2026-09-29 08:36:44,492 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:44,492 INFO   9 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:44,492 INFO --- kubecoder-bot ---
+2026-09-29 08:36:46,145 INFO   Tracking tags (kept): dev-latest, latest
+2026-09-29 08:36:46,145 INFO   Outside any build series (kept): prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:46,145 INFO   46 builds in 2 series, removing 26 (26 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:46,274 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:46,278 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:46,287 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:46,291 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:46,294 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:46,298 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:46,301 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:46,305 INFO   [dry-run] Would delete dev-527 (sha256:8a7af9ec4f4d5bfc2ef4882f98ef74b07921602785556139d6774d886db186c7) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,308 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:46,312 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:46,316 INFO   [dry-run] Would delete dev-530 (sha256:278dc8a25b204609c80a96ff1f354f7e59b1fc2b9d1635f904b9c8b10b7e74cc) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,320 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:46,324 INFO   [dry-run] Would delete dev-532 (sha256:f7c9a052caad308eff82a6691343974b40de7d6a9f29561af73149d3e213f0d9) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,327 INFO   [dry-run] Would delete dev-534 (sha256:f780c03b46cfc87b2949d89d2ee5fe2329e2afb86abcff78d8301c4caadc3f8a) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,331 INFO   [dry-run] Would delete dev-535 (sha256:2ec21677d2a6554f097d32177e7b42639872987f5ff5f4fca549958670ddec32) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,335 INFO   [dry-run] Would delete dev-536 (sha256:138eebe081f45c314681b898ee45d194fb5cbd5ae801243ae50a727a74ef9b68) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,339 INFO   [dry-run] Would delete dev-537 (sha256:e5eb411d3340e0093e2200c89b71c5386b5fefd3da2fcc8a8ac571175012a16e) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,344 INFO   [dry-run] Would delete dev-538 (sha256:c9ab2dac934f62ccffd670b5ab43573f530f8b8d53487e01a8ecfe2a1d18e8b2) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,349 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:46,353 INFO   [dry-run] Would delete dev-541 (sha256:c218c0bf7556f5aca88b9aca9a19bc46e40aeee6f6b47ae3aca72e38bd7620c3) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,361 INFO   [dry-run] Would delete dev-542 (sha256:8851a0c87b345b2ccebb2d0e804aed28c39fbe64f68b1f66d4e3ab6232aedaf4) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,366 INFO   [dry-run] Would delete dev-543 (sha256:0095451b26f8f627824bb7f84226c51e1ffc0889c2f9a78efbdfef78c0cc1d33) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,373 INFO   [dry-run] Would delete dev-544 (sha256:e6491dd2fdc98685a2c1855a1eed3639a0fc041940a5ec5ad61483ba24d90953) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,378 INFO   [dry-run] Would delete dev-545 (sha256:e24a1c055a7b5c8be49ba0a0632858d31daa2a43926f8be93b195d15a0d9bfb9) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,385 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:46,390 INFO   [dry-run] Would delete dev-547 (sha256:92dd365812db453a2c772c66cb1328ad98a50db8ac460f2d9eb2dc28645b58e2) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:46,390 INFO --- kubecoder-claude-shim ---
+2026-09-29 08:36:47,412 INFO   Tracking tags (kept): dev-latest
+2026-09-29 08:36:47,412 INFO   Outside any build series (kept): local
+2026-09-29 08:36:47,413 INFO   30 builds in 1 series, removing 20 (20 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:47,459 INFO   [dry-run] Would delete dev-527 (sha256:a8e15170a4e1a64087919c78e46ffa85437d136af8c0e6d2d0252dfe3ae50f99) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,462 INFO   [dry-run] Would delete dev-528 (sha256:ed2d15e3289992bbc73d5e7dc12e0b039576dbf775f656f40e6519f703d8d806) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,466 INFO   [dry-run] Would delete dev-529 (sha256:cff99682b033a560a75f8581b0cf5d3cf7063e24085a7985037f9631fcfd14b6) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,469 INFO   [dry-run] Would delete dev-530 (sha256:bada929f735bda92f5142f43209136826298838cef2046808f5480e37bae16cb) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,473 INFO   [dry-run] Would delete dev-531 (sha256:41be716bdcd3dd2b3c6b3dd701ec09ba4c95a595803fcc434ca6718d713ff04b) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,476 INFO   [dry-run] Would delete dev-532 (sha256:19dcd344a353b251d3ca05ce3eb9355c615e824cfd69c28fdff0d9873c399909) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,479 INFO   [dry-run] Would delete dev-534 (sha256:3274a44d0a1278b6d35c26ba322bd5755f1c5c0c22b390441b0387c46bfc48fa) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,483 INFO   [dry-run] Would delete dev-535 (sha256:469558bdfa234330878fd2b18331351927c64d27239a8b30af5d8390933d9bcd) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,487 INFO   [dry-run] Would delete dev-536 (sha256:b30af86d6006a78229340072d82f0724cd90ff643b981812fb307ebc29dc6f05) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,490 INFO   [dry-run] Would delete dev-537 (sha256:90a029e7fce7e72d83c2afd5cc413057f3a58b01bb5aefbd99eba331380b5295) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,493 INFO   [dry-run] Would delete dev-538 (sha256:bc8aa8eb2682bc41aae424edec228c34e182a980e7302f88b92672c76dabc7ec) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,497 INFO   [dry-run] Would delete dev-539 (sha256:213578c4c0e8c4b90aa9f8afec01372465a5422916114f293be358a042d9673f) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,500 INFO   [dry-run] Would delete dev-540 (sha256:fa664eed3c5dcf78f58fdd44250b777924c8f3dad52d1228aeb096f4854b9ac5) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,504 INFO   [dry-run] Would delete dev-541 (sha256:4d8b2a6946bc908efc6e2e696ca4a12e35b25a50ab0c0a66ef6c53f34eebc01c) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,507 INFO   [dry-run] Would delete dev-542 (sha256:77d62468fd40785fe03dffaf22b28326b2d5e0852e403088ebd5e748288cb620) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,511 INFO   [dry-run] Would delete dev-543 (sha256:7db54d2cf2370e3fb7408fe792340fe584b60ff3d0eac638b8d8329f0dd4a07a) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,514 INFO   [dry-run] Would delete dev-544 (sha256:5d5f1c29f86481f2206b62fc69fbeef5ad35a64501425e532973c5393b94b308) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,517 INFO   [dry-run] Would delete dev-545 (sha256:668fe07578d809f8b4e0acbafbfbc827e76da30dbd81c5888fa87f3238303b4c) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,521 INFO   [dry-run] Would delete dev-546 (sha256:564eb66e11d9507d8428c670fc65943a4e00403a50f047374a266525fafc1845) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,525 INFO   [dry-run] Would delete dev-547 (sha256:f2cc943089d0e3911d7913d30bbf30bc0dcba42ce5fa2e1c04e8f1a306975bd6) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:47,525 INFO --- kubecoder-controller ---
+2026-09-29 08:36:49,128 INFO   Tracking tags (kept): dev-latest, latest
+2026-09-29 08:36:49,128 INFO   Outside any build series (kept): prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:49,128 INFO   47 builds in 2 series, removing 27 (27 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:49,265 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:49,268 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:49,271 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:49,275 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:49,278 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:49,281 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:49,284 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:49,288 INFO   [dry-run] Would delete dev-527 (sha256:71cd5dfc9fa56f816f93dfb35aa759818e688c72913defcbebb67ab67308fe9f) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,291 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:49,294 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:49,298 INFO   [dry-run] Would delete dev-530 (sha256:c87cd95aa9edf214ca1d227c7c4adbdd995c2bdff093e780517e9328f1d42889) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,301 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:49,305 INFO   [dry-run] Would delete dev-532 (sha256:2dce73d3885929644e45cc6431e9642c2c81b3e0139cb30a0350bebdb23957ff) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,308 INFO   [dry-run] Would delete dev-534 (sha256:7d76c67f83f1d4deb77e24cd43ff4e5b1a47b5290fc3ca1c068316c799b107ff) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,312 INFO   [dry-run] Would delete dev-535 (sha256:1d5e546f54ac0d50c4e51c0476c1960facce8c25a247dad1fd0cfdbdf719b535) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,316 INFO   [dry-run] Would delete dev-536 (sha256:77c9d1ca489bfe93270f394432e6c19f5972fdfc1e0cd8030ff7319de889f846) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,320 INFO   [dry-run] Would delete dev-537 (sha256:f4740840d9daac0466a67aa7a44f40743d4ee75e7a4fdd7584f2c485ea6cce91) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,324 INFO   [dry-run] Would delete dev-538 (sha256:1fbf5cf44e51e1a534b93a97d6000055fd2c3fd4214de3c9a6d26cdbc476be70) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,328 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:49,331 INFO   [dry-run] Would delete dev-540 (sha256:060a2584b3b087044ac228baf95631a5e0167aa55bf58c63d1ad458e59326cab) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,335 INFO   [dry-run] Would delete dev-541 (sha256:73515a11d119c28fc4fac36ceb7f844ad440ea126dba92f84df70947b9c903f7) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,338 INFO   [dry-run] Would delete dev-542 (sha256:7f249f6ef1df40eef67db7c15aae77c0cebe9eb33eb440a8c44bfccdac054c2d) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,342 INFO   [dry-run] Would delete dev-543 (sha256:6fd8d5353dff31d88efdb270e69fa5324c2da12b3e90d746e4d6ff12c2d1f23e) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,346 INFO   [dry-run] Would delete dev-544 (sha256:48477b8df8f0987ec0fd0225dc19e9e6f18878e6a011021115baaca54448b1e7) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,350 INFO   [dry-run] Would delete dev-545 (sha256:633d12aadd1f0c704e4f7170bb883a5f7e23edb54762ce7e5b409511b0f1a443) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,353 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:49,357 INFO   [dry-run] Would delete dev-547 (sha256:2ac685a8e69d81ceb80219ae26746b9b4eecfe2de31313a111866dacb28ab018) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:49,357 INFO --- kubecoder-ingress ---
+2026-09-29 08:36:51,069 INFO   Tracking tags (kept): dev-latest, latest
+2026-09-29 08:36:51,069 INFO   Outside any build series (kept): prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:51,069 INFO   46 builds in 2 series, removing 26 (26 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:51,198 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:51,202 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:51,206 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:51,209 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:51,213 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:51,217 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:51,220 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:51,224 INFO   [dry-run] Would delete dev-527 (sha256:d02f8e4536cf1c21e76e49e8e270f394619695c96dd461e19e4b81b4c0b7c99e) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,228 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:51,231 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:51,235 INFO   [dry-run] Would delete dev-530 (sha256:98ec341c74594913bf2391d3753ec13743ab264d815a7ea82ef3bcc72fd449b7) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,238 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:51,242 INFO   [dry-run] Would delete dev-532 (sha256:7553c3b02cdc9dca6eb1a0452d25c7daaaa4d43e28cac028880b8a2bb8874898) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,245 INFO   [dry-run] Would delete dev-534 (sha256:e81043fb306ff0f2ef6aac7db16283afd8db98f3758295f1e4743ddca8f04065) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,248 INFO   [dry-run] Would delete dev-535 (sha256:18bab34f05366b2a889345508a1f3fe95d9029fa984e4e349ded8e17a20230e6) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,252 INFO   [dry-run] Would delete dev-536 (sha256:4c4c12163b9466824636d8721fc5d011460cfbb608360bdcb35e3d26304555c5) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,255 INFO   [dry-run] Would delete dev-537 (sha256:f2b3c0e57b4127dd0da87b3812dbb9aa49fb989e11e32ac99fefaacff33be663) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,258 INFO   [dry-run] Would delete dev-538 (sha256:f4b6baaa36c61055bfbaff136f70b46c8290dc23bb6001864ca56f6e263879d0) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,262 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:51,265 INFO   [dry-run] Would delete dev-541 (sha256:0003c0e797238f6320419ff8942e50aa5a1bb4382eaf80a25f9534323a17cdf0) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,269 INFO   [dry-run] Would delete dev-542 (sha256:8309a14da505d91a8c7ab8d6e712403da74806589de3fe9dda636673fd93abbe) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,273 INFO   [dry-run] Would delete dev-543 (sha256:16ba985986799fa6b1c0312ac2d688485635c5c20c0230ad66505531623914e3) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,276 INFO   [dry-run] Would delete dev-544 (sha256:f28c254bdb06e682338d96ea962ea94aceb495069806b000993a949d5b6f71c2) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,280 INFO   [dry-run] Would delete dev-545 (sha256:15a6d964fa550e66b70ba9d432f4f5829aafb991b4029dc50952b04ac89898a8) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,283 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:51,287 INFO   [dry-run] Would delete dev-547 (sha256:8190fad6c41188b3c6a44796178d04d6c71380b7ace690a8b70d14dad6582739) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:51,287 INFO --- kubecoder-kaniko-livetest ---
+2026-09-29 08:36:51,308 INFO   Outside any build series (kept): latest
+2026-09-29 08:36:51,308 WARNING   kubecoder-kaniko-livetest:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:51,308 INFO   No build history
+2026-09-29 08:36:51,308 INFO --- kubecoder-manual ---
+2026-09-29 08:36:53,263 INFO   Tracking tags (kept): dev-latest, latest
+2026-09-29 08:36:53,263 INFO   Outside any build series (kept): prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:53,263 INFO   46 builds in 2 series, removing 26 (26 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:53,413 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:53,417 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:53,420 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:53,424 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:53,428 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:53,431 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:53,435 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:53,439 INFO   [dry-run] Would delete dev-527 (sha256:202f410023ba217c356eb91acb0fcff5d7fdc14b0458b2b60ae1927ae51ad32a) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,443 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:53,447 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:53,450 INFO   [dry-run] Would delete dev-530 (sha256:0595caefd3efb8cd31590edac0f55a7d1e684edc25e2ea88f0b1c76c143411b7) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,454 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:53,457 INFO   [dry-run] Would delete dev-532 (sha256:cd8d10cc870cda43fd97b758488c5cfb87563c918421f35f93a6cfbd4f9dc552) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,461 INFO   [dry-run] Would delete dev-534 (sha256:e39ff8f5d5786a96eef7540eac954b23b305ee12c76cdd65cdd3bca486054231) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,465 INFO   [dry-run] Would delete dev-535 (sha256:5781314e9c4f7e0184312dc8bdaeedf8be81f43df8943d43b20b32e9100516ea) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,469 INFO   [dry-run] Would delete dev-536 (sha256:c0078750a5b043e9d1257bfa055fade06b6804f5fbc9900016e8f147c5302e59) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,473 INFO   [dry-run] Would delete dev-537 (sha256:8115d62f307e15b656e91139f9b3e8d182e7ea674369e5e5de150539a596ef8c) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,477 INFO   [dry-run] Would delete dev-538 (sha256:7482f91eddeeebf25fbc7dadc516d6cc4296b604e5f3f2a3ffd908a0da83eaa9) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,481 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:53,484 INFO   [dry-run] Would delete dev-541 (sha256:09c056d112259b67edb8790ffb5fd9643237a4124e7afefc4718545696340aa6) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,488 INFO   [dry-run] Would delete dev-542 (sha256:e666c7ee411c3efd43153b9260ca158db5f34d6ad613918dfcc7a23a3f0f884d) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,492 INFO   [dry-run] Would delete dev-543 (sha256:8574c7d674e4b0507d11e68605fdaa1db8becb04a70eb0a3cc671144cadc89e5) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,496 INFO   [dry-run] Would delete dev-544 (sha256:b3c8d201029c35e26e940812162b3fda1fa06e2b88206c9625ebf77a7f5aa9c5) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,500 INFO   [dry-run] Would delete dev-545 (sha256:778eff150ff31c2aac9c08e7785121a273ee3034188d575eadd978a82d3d5cd6) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,503 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:53,507 INFO   [dry-run] Would delete dev-547 (sha256:2b9f2e8ee3bfd4ca8f83e965ee9d3c934836946dce6937c7ce04bcb1726958ae) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:53,508 INFO --- kubecoder-mcp ---
+2026-09-29 08:36:55,171 INFO   Tracking tags (kept): dev-latest, latest
+2026-09-29 08:36:55,171 INFO   Outside any build series (kept): prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:55,171 INFO   46 builds in 2 series, removing 26 (26 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:55,327 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:55,331 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:55,337 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:55,342 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:55,346 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:55,353 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:55,360 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:55,366 INFO   [dry-run] Would delete dev-527 (sha256:ccb47ea626ea2092802ce48eddeb976f3d22d7a79b8a8a487be2e78a5892dc94) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,371 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:55,379 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:55,385 INFO   [dry-run] Would delete dev-530 (sha256:0013d04721e362592d56255106f12e0e43e82a844634ece2af48965577c319b0) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,389 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:55,394 INFO   [dry-run] Would delete dev-532 (sha256:87e113b8b4d6a1500c713128e7f6683bfead6ac547340a588568ce47f0ccd1e0) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,398 INFO   [dry-run] Would delete dev-534 (sha256:95c953290d394bbc9eeb59338f8cbac69ebb38e7fc9d66c57f9c81bdc003f7e2) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,402 INFO   [dry-run] Would delete dev-535 (sha256:4704c2253aa1eb7607388c2467617fd7938b599a680dd401dbeb340cad350095) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,406 INFO   [dry-run] Would delete dev-536 (sha256:0176480bd01ace55ad6b11692c938525deb8383bc731ba6da2cb6503776d822b) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,411 INFO   [dry-run] Would delete dev-537 (sha256:1a8bddc8919a0b9a5a1ab102f207f9895da968ae3eb1ad232d0d74ee22522590) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,416 INFO   [dry-run] Would delete dev-538 (sha256:cfa58e601b300a2a0a3d92e6cf647f6a64eedeb36ffbad2860a6626be48db326) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,420 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:55,425 INFO   [dry-run] Would delete dev-541 (sha256:d81e53b577bf5643b2401f56ed4c5e91e613fcef1fe466435f226c26c0f595d3) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,429 INFO   [dry-run] Would delete dev-542 (sha256:a9052c3801299785eea7d080fdc4b9c88fd2b6f4c377a57a9debc76870080e03) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,432 INFO   [dry-run] Would delete dev-543 (sha256:093ff932a3a7807bc888201c1f6e2b830c0a3735482ffb4cdea1ff414e5a6746) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,437 INFO   [dry-run] Would delete dev-544 (sha256:e9b158abeb9533d68df572adf1fcaac75bdc47b3fa286fd67907495a53bffaff) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,443 INFO   [dry-run] Would delete dev-545 (sha256:6b92a2b29246071a027a9ada7d5f4f444b52a1c200f604672eeabb3bcb5b2652) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,447 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:55,450 INFO   [dry-run] Would delete dev-547 (sha256:fccfcf30eec315455f61111b9bba6ef5d3d45108ebb09e529d6db0ea79cba679) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:55,451 INFO --- kubecoder-vsix ---
+2026-09-29 08:36:56,863 INFO   Tracking tags (kept): dev-latest
+2026-09-29 08:36:56,863 INFO   Outside any build series (kept): prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:56,864 INFO   37 builds in 1 series, removing 27 (27 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:56,968 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:56,972 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:56,975 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:56,979 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:56,982 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:56,986 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:56,990 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:56,994 INFO   [dry-run] Would delete dev-527 (sha256:798384d1606902eeb12932994461422dbaffb6d1d2a15e009b009a0b490b835d) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:56,998 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:57,002 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:57,006 INFO   [dry-run] Would delete dev-530 (sha256:b9fd5e90fd6f557e85de35c93bb0a5e60977c46a3a09c334c961453c1cf4404c) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,011 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:57,015 INFO   [dry-run] Would delete dev-532 (sha256:f43011b404f062cb7dce67100a7be4dc4dad3b972f6baa8642196be50395a7dd) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,021 INFO   [dry-run] Would delete dev-534 (sha256:cc8966bc794c1b5753aff9ae73ee33c34c403666778f7082bccd17204712483e) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,025 INFO   [dry-run] Would delete dev-535 (sha256:1f61e1ae265de83f320b06f5d9c307676094bffc81c6d6237ce568e98204f433) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,029 INFO   [dry-run] Would delete dev-536 (sha256:485f1900e42d81ded0202b6f8ace45147154fd3ca156a1355502fcb889905cfa) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,033 INFO   [dry-run] Would delete dev-537 (sha256:1abfc809cfdd8abd5c3c17713be60d45ae44bc549380df92c5df133661ea696e) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,037 INFO   [dry-run] Would delete dev-538 (sha256:1ecdd84f16efaa45a008e0e1991e8f62c1fba58c9569c27f4cf0b824b9fb819f) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,041 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:57,045 INFO   [dry-run] Would delete dev-540 (sha256:4e5ba58a7a00e3f11df06f0cd5bcd6ea6ae572887e7bd24a9fad67ed60ac815b) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,049 INFO   [dry-run] Would delete dev-541 (sha256:9d02d1f8236c7f2e8848c9bfdefcd9fbb769d7f2034241a5bcda8d6b36759c0f) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,053 INFO   [dry-run] Would delete dev-542 (sha256:6511a7cb74207bf7b50cdd02c86e3f9f8f16ed73b192a917ea4d05d5e129d6cb) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,057 INFO   [dry-run] Would delete dev-543 (sha256:5e266beca6201525352dbd0c4777e4cc8efafb44134503fd1c8e799393a25906) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,060 INFO   [dry-run] Would delete dev-544 (sha256:bba22d8de204c91680faa59f19a7b58f21a6a73136b21383741327a4b418a98f) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,063 INFO   [dry-run] Would delete dev-545 (sha256:2902b65baaa7c68b38c781f1ca72253ebbada5238d35f51ef8509b042c37b660) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,067 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:57,071 INFO   [dry-run] Would delete dev-547 (sha256:b38934aa9a2b66789dd341ad38dd3c5de3fd573f687ee5b7fa93e1170a1f3958) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:57,071 INFO --- kubecoder-worker ---
+2026-09-29 08:36:58,705 INFO   Tracking tags (kept): dev-latest, latest
+2026-09-29 08:36:58,706 INFO   Outside any build series (kept): local, prd-31, prd-32, prd-33, prd-34, prd-35, prd-36, prd-37, prd-528, prd-529, prd-531, prd-539, prd-546, prd-556, prd-latest
+2026-09-29 08:36:58,706 INFO   47 builds in 2 series, removing 27 (27 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:36:58,849 INFO   Kept dev-479 — manifest still referenced by prd-31
+2026-09-29 08:36:58,854 INFO   Kept dev-482 — manifest still referenced by prd-32
+2026-09-29 08:36:58,858 INFO   Kept dev-495 — manifest still referenced by prd-33
+2026-09-29 08:36:58,861 INFO   Kept dev-509 — manifest still referenced by prd-34
+2026-09-29 08:36:58,865 INFO   Kept dev-518 — manifest still referenced by prd-35
+2026-09-29 08:36:58,869 INFO   Kept dev-523 — manifest still referenced by prd-36
+2026-09-29 08:36:58,873 INFO   Kept dev-524 — manifest still referenced by prd-37
+2026-09-29 08:36:58,877 INFO   [dry-run] Would delete dev-527 (sha256:34f25070bf450bcea4a9f4fc9c140cf39aac0905d0836ddbec6c2334e72be5f2) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,880 INFO   Kept dev-528 — manifest still referenced by prd-528
+2026-09-29 08:36:58,884 INFO   Kept dev-529 — manifest still referenced by prd-529
+2026-09-29 08:36:58,888 INFO   [dry-run] Would delete dev-530 (sha256:53d8637d1f2e0093da04e2258d5c3a627f97fab830386cfbd2de9bb26c7512aa) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,893 INFO   Kept dev-531 — manifest still referenced by prd-531
+2026-09-29 08:36:58,897 INFO   [dry-run] Would delete dev-532 (sha256:846686e46d3ecf483e3f4751c7fed559823e6df24fe3b5225eeab5c41ecf4eb9) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,901 INFO   [dry-run] Would delete dev-534 (sha256:926165fd297ce194fb88609eb864768a6cc90ece90ab8efe0ea1e47b4aaf574c) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,904 INFO   [dry-run] Would delete dev-535 (sha256:c852af5f4ecd913de5b20e5452a286c57881b62949e2541b30802b12c4e0764e) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,908 INFO   [dry-run] Would delete dev-536 (sha256:d7f6c64cbce1dbec6dae3afa82696186de3e4b6d19318f73aaa5f4cfc7b8e458) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,911 INFO   [dry-run] Would delete dev-537 (sha256:d8879d7079ab0f0668ae42d826fd382f8e293ecefdb956c34f041c17241d6704) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,915 INFO   [dry-run] Would delete dev-538 (sha256:588d019b2a9316f2f2260d771eda677f984f59b60e14bb16648e853e1fd59f68) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,918 INFO   Kept dev-539 — manifest still referenced by prd-539
+2026-09-29 08:36:58,922 INFO   [dry-run] Would delete dev-540 (sha256:9c0cb9fec4f7fa792964bb210d84bd026d1f07aae1da39f6974037d197aad482) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,925 INFO   [dry-run] Would delete dev-541 (sha256:f8bf2dd32c232dca550d3e65f9c3ed01b4d8f6b45a62b31564d6ccd366dd6a56) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,929 INFO   [dry-run] Would delete dev-542 (sha256:c26876bd633523627201a949334b84f99e33f4298cc13cdb1959e4e51a310c46) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,933 INFO   [dry-run] Would delete dev-543 (sha256:2d494e89bbd67e4a8ac133bcc6358efc112b9ee8275ef5a81f563363873ebb40) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,937 INFO   [dry-run] Would delete dev-544 (sha256:0861aaad1428b6c7aed7b6d62b912ced8b106858b5f966e359a92791c36b8024) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,941 INFO   [dry-run] Would delete dev-545 (sha256:3543570cea3a188457b9a7c08f41f2b417607516c835eccf1fd56e9db84e5715) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,944 INFO   Kept dev-546 — manifest still referenced by prd-546
+2026-09-29 08:36:58,949 INFO   [dry-run] Would delete dev-547 (sha256:9c1a63a2263f9fbdf2c33fee236c09978d34eae133f07a33e247742c69bfc8d2) — over cap (kept newest 10 of series 'dev-latest')
+2026-09-29 08:36:58,949 INFO --- kubecoder-worker-p12probe ---
+2026-09-29 08:36:58,954 INFO   No tags
+2026-09-29 08:36:58,954 INFO --- llmbox ---
+2026-09-29 08:36:59,280 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:59,280 INFO   Outside any build series (kept): playwright-1.58.2
+2026-09-29 08:36:59,280 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:59,280 INFO --- llmbox-playwright ---
+2026-09-29 08:36:59,319 INFO   Tracking tags (kept): playwright-1.60.0
+2026-09-29 08:36:59,319 INFO   Outside any build series (kept): playwright-1.58.2
+2026-09-29 08:36:59,319 INFO   No build history
+2026-09-29 08:36:59,319 INFO --- lv125-test ---
+2026-09-29 08:36:59,324 INFO   No tags
+2026-09-29 08:36:59,324 INFO --- mcp-filter ---
+2026-09-29 08:36:59,645 INFO   Tracking tags (kept): latest
+2026-09-29 08:36:59,645 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:36:59,646 INFO --- modern-app-backend ---
+2026-09-29 08:36:59,725 INFO   Outside any build series (kept): 2032, 2095, latest
+2026-09-29 08:36:59,725 WARNING   modern-app-backend:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:59,725 INFO   No build history
+2026-09-29 08:36:59,725 INFO --- modern-app-backend-build ---
+2026-09-29 08:36:59,824 INFO   Outside any build series (kept): 2032, 2095, latest
+2026-09-29 08:36:59,824 WARNING   modern-app-backend-build:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:59,824 INFO   No build history
+2026-09-29 08:36:59,824 INFO --- modern-app-frontend-build ---
+2026-09-29 08:36:59,933 INFO   Outside any build series (kept): 2032, 2095, latest
+2026-09-29 08:36:59,933 WARNING   modern-app-frontend-build:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:36:59,934 INFO   No build history
+2026-09-29 08:36:59,934 INFO --- mydownloads ---
+2026-09-29 08:37:00,227 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:00,227 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:00,227 INFO --- newsfilter ---
+2026-09-29 08:37:00,591 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:00,591 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:00,591 INFO --- nginx-configurator ---
+2026-09-29 08:37:01,037 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:01,037 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:37:01,088 INFO   [dry-run] Would delete 2429 (sha256:28c17cad079a1a66ca06d56c204a48483770a6e9dfe0909a26c55b606fb01f8a) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:01,088 INFO --- p12-probe3 ---
+2026-09-29 08:37:01,093 INFO   No tags
+2026-09-29 08:37:01,093 INFO --- p12-symlink-probe ---
+2026-09-29 08:37:01,099 INFO   No tags
+2026-09-29 08:37:01,099 INFO --- python ---
+2026-09-29 08:37:01,176 INFO   Outside any build series (kept): 2081, 2095, latest
+2026-09-29 08:37:01,176 WARNING   python:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:37:01,176 INFO   No build history
+2026-09-29 08:37:01,176 INFO --- python-toolchain ---
+2026-09-29 08:37:01,214 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:01,214 INFO   1 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:01,214 INFO --- rclone-backup ---
+2026-09-29 08:37:01,590 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:01,590 INFO   11 builds in 1 series, removing 1 (1 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:37:01,637 INFO   [dry-run] Would delete 2383 (sha256:46be63b2e042114415e4668b4a214fc86637d1f33dd1b168afe1192bda1aa17e) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:01,637 INFO --- registry-cleanup ---
+2026-09-29 08:37:02,142 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:02,142 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:02,142 INFO --- samba ---
+2026-09-29 08:37:02,487 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:02,487 INFO   Outside any build series (kept): 2049, 2050, 2051, 2053, 2095
+2026-09-29 08:37:02,487 INFO   4 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:02,487 INFO --- scan-server ---
+2026-09-29 08:37:02,751 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:02,751 INFO   Outside any build series (kept): 2064, 2070, 2072, 2074, 2095
+2026-09-29 08:37:02,751 INFO   2 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:02,751 INFO --- scanned-image-processing ---
+2026-09-29 08:37:03,092 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:03,092 INFO   Outside any build series (kept): 2064, 2070, 2072, 2074, 2095
+2026-09-29 08:37:03,092 INFO   2 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:03,092 INFO --- scantopdf-server ---
+2026-09-29 08:37:03,437 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:03,438 INFO   Outside any build series (kept): 26
+2026-09-29 08:37:03,438 INFO   9 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:03,438 INFO --- scratch-slice231-probe ---
+2026-09-29 08:37:03,444 INFO   No tags
+2026-09-29 08:37:03,444 INFO --- slice104-test ---
+2026-09-29 08:37:03,465 INFO   Outside any build series (kept): verify-104
+2026-09-29 08:37:03,465 INFO   No build history
+2026-09-29 08:37:03,465 INFO --- ssegateway ---
+2026-09-29 08:37:03,880 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:03,880 INFO   Outside any build series (kept): 42, 47, local
+2026-09-29 08:37:03,880 INFO   8 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:03,880 INFO --- ssegateway-validation ---
+2026-09-29 08:37:04,256 INFO   Tracking tags (kept): 48, 49, 50, 51, 52, 54, 55, 56
+2026-09-29 08:37:04,256 INFO   Outside any build series (kept): 42, 47
+2026-09-29 08:37:04,256 INFO   No build history
+2026-09-29 08:37:04,256 INFO --- telegram-mcp-server ---
+2026-09-29 08:37:04,592 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:04,592 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:04,592 INFO --- tfmirror ---
+2026-09-29 08:37:05,010 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:05,010 INFO   Outside any build series (kept): 1
+2026-09-29 08:37:05,010 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:05,010 INFO --- trello-mcp ---
+2026-09-29 08:37:05,427 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:05,428 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:05,428 INFO --- ubuntu-full ---
+2026-09-29 08:37:05,489 INFO   Tracking tags (kept): 24.04, 25.10, 26.04
+2026-09-29 08:37:05,489 INFO   No build history
+2026-09-29 08:37:05,489 INFO --- version-poller ---
+2026-09-29 08:37:05,971 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:05,971 INFO   12 builds in 1 series, removing 2 (2 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:37:06,014 INFO   [dry-run] Would delete 2413 (sha256:48bf2bf5dcb974aac4786680acc4049503303b584562febfdb18e5ed55a01616) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:06,017 INFO   [dry-run] Would delete 2483 (sha256:9324bf9774e5a6609fec326f114a266884bc39a12972e9c3f71e847e7cda9eeb) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:06,017 INFO --- webathome_org ---
+2026-09-29 08:37:06,426 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:06,426 INFO   Outside any build series (kept): 226, 232, 233, local
+2026-09-29 08:37:06,426 INFO   7 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:06,427 INFO --- webathome_org-db ---
+2026-09-29 08:37:06,432 INFO   No tags
+2026-09-29 08:37:06,432 INFO --- webathome_org_db ---
+2026-09-29 08:37:06,461 INFO   Outside any build series (kept): latest
+2026-09-29 08:37:06,461 WARNING   webathome_org_db:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?
+2026-09-29 08:37:06,461 WARNING   webathome_org_db:latest is 792d old (> 182d TTL) — not being rebuilt?
+2026-09-29 08:37:06,461 INFO   No build history
+2026-09-29 08:37:06,461 INFO --- webhook-relay ---
+2026-09-29 08:37:06,824 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:06,824 INFO   8 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:06,824 INFO --- youtrack-mcp-server ---
+2026-09-29 08:37:07,241 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:07,241 INFO   10 builds in 1 series, none over cap or past TTL
+2026-09-29 08:37:07,241 INFO --- zigbee-control ---
+2026-09-29 08:37:07,750 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:07,750 INFO   13 builds in 1 series, removing 3 (3 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:37:07,800 INFO   [dry-run] Would delete 45 (sha256:facfdfb98ad4c6dc464d0b5e198915678b6153b53b133a93023418a2bafcc9e0) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:07,804 INFO   [dry-run] Would delete 46 (sha256:c24f1a24c1dc2e262130b40edbd07f1360f9c5d89fe21c8e6d48e94d0e015d78) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:07,809 INFO   [dry-run] Would delete 47 (sha256:68c0a48a7e6b68258296093cd40c236fc5847d80d06840c929c3838e8243c850) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:07,809 INFO --- zigbee-control-ui ---
+2026-09-29 08:37:08,242 INFO   Tracking tags (kept): latest
+2026-09-29 08:37:08,242 INFO   13 builds in 1 series, removing 3 (3 over cap, 0 past TTL; cap 10/series, TTL 182 days)
+2026-09-29 08:37:08,287 INFO   [dry-run] Would delete 45 (sha256:14dbd52fb4ffb60eb8e9cde80c8dd5da7cf8afb873fbc4e28574898280d3aa67) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:08,291 INFO   [dry-run] Would delete 46 (sha256:3d45f1cbd222132d37d3c054cdd94b991a654f5c608a3ed772de63402e1a38fe) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:08,294 INFO   [dry-run] Would delete 47 (sha256:0b5698de6b0b53bb7c16c5f7010cb8159b32bc5b607fb61af801263d8264e0ab) — over cap (kept newest 10 of series 'latest')
+2026-09-29 08:37:08,294 INFO --- zigbee-control-validation ---
+2026-09-29 08:37:08,468 INFO   Outside any build series (kept): 16, 18, 22, 23, 24
+2026-09-29 08:37:08,468 INFO   No build history
+2026-09-29 08:37:08,469 INFO [dry-run] Would delete 213 tags total

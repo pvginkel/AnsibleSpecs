@@ -1,0 +1,1 @@
+nginx-configurator: ! cexec iac true 2>/dev/null || cexec iac uv run --no-project --with kubernetes --with jinja2 --with requests --with cryptography --with pytest pytest -q    [  OK  ]

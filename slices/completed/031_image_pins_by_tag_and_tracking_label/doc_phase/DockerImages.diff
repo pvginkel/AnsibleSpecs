@@ -1,0 +1,2185 @@
+/work/DockerImages — P4: git diff 14c4721cca71..9a11863668a7
+
+registry-cleanup/app/main.py           | 268 ++++++++++++++-------------
+ registry-cleanup/tests/test_cleanup.py | 519 +++++++++++++++++++++++++++++++++++++----------------
+ 2 files changed, 508 insertions(+), 279 deletions(-)
+
+diff --git a/registry-cleanup/app/main.py b/registry-cleanup/app/main.py
+index ace4e46..23bf36c 100644
+--- a/registry-cleanup/app/main.py
++++ b/registry-cleanup/app/main.py
+@@ -1,20 +1,27 @@
+ #!/usr/bin/env python3
+-"""Delete numbered history tags, keeping tracking tags.
+-
+-New model (see docs/registry-management/version-poller-redesign.md §8): tracking tags (`latest`,
+-`<prefix>-latest`, and semver pins like `1.35.5`) are never deleted — they hold
+-the digests live deployments run, which HelmCharts resolves at deploy time.
+-Versioned (numbered) tags (`7`, `prd-4`) are deleted once their image is older
+-than the TTL **or** once they fall outside the newest N per prefix family (so a
+-fast-building repo doesn't accumulate history before the TTL), then registry
+-garbage-collection reaps the now-untagged blobs.
+-
+-A repo is never fully emptied: if it has no tracking tag (a non-conforming
+-straggler), its newest tag is kept as a safety floor.
++"""Delete build-history tags, keeping tracking tags.
++
++The `tracking-tag` label helmCharts.kaniko2 stamps on an image, not the tag's
++name, decides what a tag is (docs/registry-management/version-poller-redesign.md):
++
++- a tag whose name equals the label on the image it points to is a tracking tag;
++- a tag in that label's build series is build history: label `latest` owns the
++  bare build numbers (`57`), `<prefix>-latest` owns `<prefix>-<digits>`
++  (`dev-57`), any other label `<tag>` owns `<tag>-<digits>`;
++- every other tag is kept and not counted: unlabelled tags, and promoted copies
++  such as `prd-57`, which carry the label of the build they copy.
++
++Build history is deleted once its image is older than the TTL or once it falls
++outside the newest N of its series. Each series keeps its newest build. Registry
++garbage collection then reaps the untagged manifests and unreferenced blobs.
++
++A dry run deletes nothing: it logs the tags it would delete and runs garbage
++collection in its own dry-run mode, which logs what it would delete.
+ """
+ 
+ import argparse
+ import logging
++import os
+ import re
+ import subprocess
+ import sys
+@@ -24,12 +31,9 @@ import requests
+ 
+ log = logging.getLogger(__name__)
+ 
+-# A versioned (numbered history) tag is `7` or `<prefix>-7`. Keep in sync with
+-# version-poller/app/tagging.py.
+-_VERSIONED = re.compile(r"^(?:\d+|.+-\d+)$")
+-
+ # Stamped on conforming images by helmCharts.kaniko2 (see version-poller).
+ REBUILD_AT_LABEL = "org.webathome.poller.rebuild-at"
++TRACKING_TAG_LABEL = "org.webathome.poller.tracking-tag"
+ 
+ # Per-request timeout (seconds) for registry HTTP calls, so a stalled registry
+ # can never hang the cleanup job indefinitely.
+@@ -39,9 +43,25 @@ HTTP_TIMEOUT = 30
+ # asked for; a short page is what ends the walk.
+ CATALOG_PAGE_SIZE = 100
+ 
++_BUILD_NUMBER = re.compile(r"[0-9]+")
+ 
+-def is_versioned(tag: str) -> bool:
+-    return bool(_VERSIONED.match(tag))
++
++def build_number(tag: str, label: str) -> int | None:
++    """The build number of `tag` if it is in the build series of the tracking
++    tag `label`, else None.
++
++    The series rule is kaniko2's `inBuildSeries` (JenkinsPipelineUtils
++    vars/helmCharts.groovy): `latest` owns `<digits>`, `<prefix>-latest` owns
++    `<prefix>-<digits>`, any other label owns `<label>-<digits>`.
++    """
++    if label == "latest" or label.endswith("-latest"):
++        prefix = label[: -len("latest")]
++    else:
++        prefix = label + "-"
++    if not tag.startswith(prefix):
++        return None
++    number = tag[len(prefix) :]
++    return int(number) if _BUILD_NUMBER.fullmatch(number) else None
+ 
+ 
+ def get_repos(base_url: str) -> list[str]:
+@@ -109,7 +129,7 @@ def delete_manifest(base_url: str, repo: str, digest: str) -> bool:
+     return resp.status_code == 202
+ 
+ 
+-def garbage_collect(namespace: str, pod_label: str) -> bool:
++def garbage_collect(namespace: str, pod_label: str, dry_run: bool) -> bool:
+     try:
+         result = subprocess.run(
+             [
+@@ -133,20 +153,14 @@ def garbage_collect(namespace: str, pod_label: str) -> bool:
+             log.warning("No registry pod found for garbage collection")
+             return False
+ 
+-        log.info("Running GC on pod %s", pod_name)
++        command = ["registry", "garbage-collect", "--delete-untagged"]
++        if dry_run:
++            command.append("--dry-run")
++        command.append("/etc/distribution/config.yml")
++
++        log.info("Running GC%s on pod %s", " (dry run)" if dry_run else "", pod_name)
+         subprocess.run(
+-            [
+-                "kubectl",
+-                "exec",
+-                "-n",
+-                namespace,
+-                pod_name,
+-                "--",
+-                "registry",
+-                "garbage-collect",
+-                "--delete-untagged",
+-                "/etc/distribution/config.yml",
+-            ],
++            ["kubectl", "exec", "-n", namespace, pod_name, "--", *command],
+             stdout=sys.stdout,
+             stderr=sys.stderr,
+             check=True,
+@@ -199,28 +213,15 @@ def _parse_created(created_str: str | None) -> datetime | None:
+         return None
+ 
+ 
+-def get_manifest_created(base_url: str, repo: str, tag: str) -> datetime | None:
+-    """Get the creation timestamp from an image manifest's config blob."""
+-    config = get_image_config(base_url, repo, tag)
++def _labels(config: dict | None) -> dict:
+     if config is None:
+-        return None
+-    return _parse_created(config.get("created"))
+-
+-
+-def _family_and_number(tag: str) -> tuple[str, int]:
+-    """Split a versioned tag into its prefix family and build number.
+-
+-    `7` -> ("", 7); `tst-7` -> ("tst", 7). Only valid for versioned tags.
+-    """
+-    m = re.fullmatch(r"(?:(.+)-)?(\d+)", tag)
+-    assert m is not None, f"not a versioned tag: {tag}"
+-    return (m.group(1) or "", int(m.group(2)))
++        return {}
++    return (config.get("config") or {}).get("Labels") or {}
+ 
+ 
+ def warn_on_latest(
+-    base_url: str,
+     repo: str,
+-    tracking: list[str],
++    config: dict | None,
+     now: datetime,
+     cutoff: datetime,
+     ttl_days: int,
+@@ -229,15 +230,10 @@ def warn_on_latest(
+     its image is older than the TTL (not being rebuilt) or carries no rebuild-at
+     label (non-conforming). Warnings only — never affects what gets deleted.
+     """
+-    if "latest" not in tracking:
+-        return
+-
+-    config = get_image_config(base_url, repo, "latest")
+     if config is None:
+         return
+ 
+-    labels = (config.get("config") or {}).get("Labels") or {}
+-    if REBUILD_AT_LABEL not in labels:
++    if REBUILD_AT_LABEL not in _labels(config):
+         log.warning(
+             "  %s:latest has no rebuild-at label — not built via kaniko2 (non-conforming)?",
+             repo,
+@@ -254,98 +250,112 @@ def warn_on_latest(
+ 
+ 
+ def cleanup_repo(
+-    base_url: str, repo: str, ttl_days: int, max_per_prefix: int, dry_run: bool
++    base_url: str, repo: str, ttl_days: int, max_per_series: int, dry_run: bool
+ ) -> int:
+     tags = get_tags(base_url, repo)
+     if not tags:
+         log.info("  No tags")
+         return 0
+ 
+-    tracking = [t for t in tags if not is_versioned(t)]
+-    versioned = [t for t in tags if is_versioned(t)]
++    configs = {tag: get_image_config(base_url, repo, tag) for tag in tags}
++
++    tracking: list[str] = []
++    others: list[str] = []
++    # tracking-tag label -> [(build number, tag)]
++    series: dict[str, list[tuple[int, str]]] = {}
++    for tag in tags:
++        label = _labels(configs[tag]).get(TRACKING_TAG_LABEL)
++        if not label:
++            others.append(tag)
++        elif tag == label:
++            tracking.append(tag)
++        elif (number := build_number(tag, label)) is not None:
++            series.setdefault(label, []).append((number, tag))
++        else:
++            others.append(tag)
+ 
+     if tracking:
+         log.info("  Tracking tags (kept): %s", ", ".join(sorted(tracking)))
++    if others:
++        log.info("  Outside any build series (kept): %s", ", ".join(sorted(others)))
+ 
+     now = datetime.now(timezone.utc)
+     cutoff = now - timedelta(days=ttl_days)
+ 
+-    warn_on_latest(base_url, repo, tracking, now, cutoff, ttl_days)
++    if "latest" in configs:
++        warn_on_latest(repo, configs["latest"], now, cutoff, ttl_days)
+ 
+-    if not versioned:
+-        log.info("  No versioned tags")
++    if not series:
++        log.info("  No build history")
+         return 0
+ 
+     # tag -> (category, human-readable detail). category ("cap"/"ttl") drives
+     # the summary; detail explains the decision per tag.
+     to_delete: dict[str, tuple[str, str]] = {}
+ 
+-    # Cap: per prefix family, keep the newest `max_per_prefix` build numbers;
+-    # anything older than that in its family is deleted regardless of age.
+-    families: dict[str, list[tuple[int, str]]] = {}
+-    for tag in versioned:
+-        prefix, number = _family_and_number(tag)
+-        families.setdefault(prefix, []).append((number, tag))
+-
+-    capped_keep: list[str] = []
+-    for prefix, items in families.items():
+-        items.sort(reverse=True)
+-        capped_keep.extend(tag for _, tag in items[:max_per_prefix])
+-        family_desc = f"prefix '{prefix}'" if prefix else "bare-numbered"
+-        for _, tag in items[max_per_prefix:]:
+-            to_delete[tag] = (
+-                "cap",
+-                f"over cap (kept newest {max_per_prefix} of {family_desc})",
+-            )
++    for label, builds in series.items():
++        builds.sort(reverse=True)
+ 
+-    # TTL: among the tags that survived the cap, delete those whose image's
+-    # creation age exceeds the TTL. This is the image/tag age, not a label.
+-    created: dict[str, datetime] = {}
+-    for tag in capped_keep:
+-        ts = get_manifest_created(base_url, repo, tag)
+-        if ts is None:
+-            log.warning("  Could not determine age of %s; keeping", tag)
+-            continue
+-        created[tag] = ts
+-        if ts < cutoff:
+-            age_days = (now - ts).days
++        # Cap: keep the newest `max_per_series` builds of the series; anything
++        # older is deleted regardless of age.
++        for _, tag in builds[max_per_series:]:
+             to_delete[tag] = (
+-                "ttl",
+-                f"image age {age_days}d > {ttl_days}d TTL (built {ts.date().isoformat()})",
+-            )
+-
+-    # Safety floor: never empty a repo. A repo with no tracking tag keeps its
+-    # newest tag (and we warn if even that one is past the TTL — likely orphaned).
+-    if not tracking and capped_keep and not (set(versioned) - set(to_delete)):
+-        newest = max(capped_keep, key=lambda t: _family_and_number(t)[1])
+-        to_delete.pop(newest, None)
+-        log.info("  Keeping newest tag %s (repo has no tracking tag)", newest)
+-        if newest in created and created[newest] < cutoff:
+-            log.warning(
+-                "  %s: newest tag %s is older than the TTL — orphaned?", repo, newest
++                "cap",
++                f"over cap (kept newest {max_per_series} of series '{label}')",
+             )
+ 
++        # TTL: among the builds within the cap, delete those whose image's
++        # creation age exceeds the TTL.
++        for _, tag in builds[:max_per_series]:
++            ts = _parse_created(configs[tag].get("created"))
++            if ts is None:
++                log.warning("  Could not determine age of %s; keeping", tag)
++                continue
++            if ts < cutoff:
++                to_delete[tag] = (
++                    "ttl",
++                    f"image age {(now - ts).days}d > {ttl_days}d TTL (built {ts.date().isoformat()})",
++                )
++
++        # Floor: every series keeps its newest build, whether or not the
++        # label's own tag exists in the repo.
++        _, newest = builds[0]
++        if to_delete.pop(newest, None) is not None:
++            log.info("  Keeping %s, the newest build of series '%s'", newest, label)
++            ts = _parse_created(configs[newest].get("created"))
++            if ts is not None and ts < cutoff:
++                log.warning(
++                    "  %s: %s, the newest build of series '%s', is older than the TTL — no longer built?",
++                    repo,
++                    newest,
++                    label,
++                )
++
++    n_builds = sum(len(builds) for builds in series.values())
+     if not to_delete:
+-        log.info("  %d versioned tags, none over cap or past TTL", len(versioned))
++        log.info(
++            "  %d builds in %d series, none over cap or past TTL", n_builds, len(series)
++        )
+         return 0
+ 
+     n_cap = sum(1 for category, _ in to_delete.values() if category == "cap")
+     n_ttl = sum(1 for category, _ in to_delete.values() if category == "ttl")
+     log.info(
+-        "  %d versioned tags, removing %d (%d over cap, %d past TTL; cap %d/prefix, TTL %d days)",
+-        len(versioned),
++        "  %d builds in %d series, removing %d (%d over cap, %d past TTL; cap %d/series, TTL %d days)",
++        n_builds,
++        len(series),
+         len(to_delete),
+         n_cap,
+         n_ttl,
+-        max_per_prefix,
++        max_per_series,
+         ttl_days,
+     )
+ 
+     # The registry's only delete primitive removes a manifest by digest, which
+     # unlinks EVERY tag pointing at it. A tracking tag (e.g. prd-latest) is a
+-    # moving pointer that shares a digest with the versioned build it was
+-    # promoted from, so deleting that versioned tag would destroy the tracking
+-    # tag too. Map each kept tag's digest to its name and never delete those.
++    # moving pointer that shares a digest with the build it was promoted from,
++    # so deleting that build's tag would destroy the tracking tag too. Map each
++    # kept tag's digest to its name and never delete those.
+     #
+     # Under the promotion-marker model (see the redesign doc §14) this set is
+     # what keeps *in-use* images alive, not merely what avoids collateral
+@@ -384,12 +394,12 @@ def cleanup_repo(
+             continue
+ 
+         if dry_run:
+-            log.info("  [dry-run] Would delete %s — %s", tag, detail)
++            log.info("  [dry-run] Would delete %s (%s) — %s", tag, digest, detail)
+             deleted += 1
+             continue
+ 
+         if delete_manifest(base_url, repo, digest):
+-            log.info("  Deleted %s — %s", tag, detail)
++            log.info("  Deleted %s (%s) — %s", tag, digest, detail)
+             deleted += 1
+         else:
+             log.warning("  Failed to delete %s", tag)
+@@ -398,7 +408,9 @@ def cleanup_repo(
+ 
+ 
+ def main():
+-    parser = argparse.ArgumentParser(description=__doc__)
++    parser = argparse.ArgumentParser(
++        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
++    )
+     parser.add_argument(
+         "--registry-url",
+         default="http://registry:5000",
+@@ -408,13 +420,13 @@ def main():
+         "--ttl-weeks",
+         type=int,
+         default=26,
+-        help="Delete versioned tags whose image is older than this (default: %(default)s)",
++        help="Delete builds whose image is older than this (default: %(default)s)",
+     )
+     parser.add_argument(
+-        "--max-per-prefix",
++        "--max-per-series",
+         type=int,
+         default=10,
+-        help="Keep at most this many versioned tags per prefix family (default: %(default)s)",
++        help="Keep at most this many builds per build series (default: %(default)s)",
+     )
+     parser.add_argument(
+         "--namespace",
+@@ -434,10 +446,17 @@ def main():
+     parser.add_argument(
+         "--dry-run",
+         action="store_true",
+-        help="Show what would be deleted without actually deleting",
++        help="Log what would be deleted, garbage collection included, and delete "
++        "nothing. Also set by the environment variable DRY_RUN=true "
++        "(DRY_RUN is `true` or `false`; unset is `false`).",
+     )
+     args = parser.parse_args()
+ 
++    dry_run_env = os.environ.get("DRY_RUN", "false")
++    if dry_run_env not in ("true", "false"):
++        parser.error(f"DRY_RUN must be `true` or `false`, got {dry_run_env!r}")
++    dry_run = args.dry_run or dry_run_env == "true"
++
+     logging.basicConfig(
+         level=logging.INFO,
+         format="%(asctime)s %(levelname)s %(message)s",
+@@ -445,11 +464,11 @@ def main():
+ 
+     ttl_days = args.ttl_weeks * 7
+     log.info(
+-        "Registry cleanup: %s (ttl=%d weeks, max=%d/prefix, dry_run=%s)",
++        "Registry cleanup: %s (ttl=%d weeks, max=%d/series, dry_run=%s)",
+         args.registry_url,
+         args.ttl_weeks,
+-        args.max_per_prefix,
+-        args.dry_run,
++        args.max_per_series,
++        dry_run,
+     )
+ 
+     repos = get_repos(args.registry_url)
+@@ -459,13 +478,16 @@ def main():
+     for repo in sorted(repos):
+         log.info("--- %s ---", repo)
+         total_deleted += cleanup_repo(
+-            args.registry_url, repo, ttl_days, args.max_per_prefix, args.dry_run
++            args.registry_url, repo, ttl_days, args.max_per_series, dry_run
+         )
+ 
+-    log.info("Deleted %d tags total", total_deleted)
++    if dry_run:
++        log.info("[dry-run] Would delete %d tags total", total_deleted)
++    else:
++        log.info("Deleted %d tags total", total_deleted)
+ 
+-    if not args.no_gc and not args.dry_run:
+-        garbage_collect(args.namespace, args.pod_label)
++    if not args.no_gc:
++        garbage_collect(args.namespace, args.pod_label, dry_run)
+ 
+     sys.exit(0)
+ 
+diff --git a/registry-cleanup/tests/test_cleanup.py b/registry-cleanup/tests/test_cleanup.py
+index 2944f70..b4a99d9 100644
+--- a/registry-cleanup/tests/test_cleanup.py
++++ b/registry-cleanup/tests/test_cleanup.py
+@@ -1,4 +1,6 @@
+ import logging
++import subprocess
++import sys
+ from datetime import datetime, timedelta, timezone
+ 
+ import pytest
+@@ -11,95 +13,247 @@ FRESH = NOW - timedelta(days=1)
+ STALE = NOW - timedelta(weeks=6)
+ 
+ 
+-def _setup(monkeypatch, tags, created=None):
+-    created = created or {}
++def _cfg(label=None, created=FRESH, rebuild_at=True):
++    """An image config: created at `created`, labelled with tracking tag `label`
++    (None: unlabelled)."""
++    labels = {}
++    if rebuild_at:
++        labels[main.REBUILD_AT_LABEL] = "2026-01-01T00:00:00Z"
++    if label is not None:
++        labels[main.TRACKING_TAG_LABEL] = label
++    cfg = {"config": {"Labels": labels}}
++    if created is not None:
++        cfg["created"] = created.strftime("%Y-%m-%dT%H:%M:%SZ")
++    return cfg
++
++
++def _builds(label, tags, created=FRESH):
++    """Configs for `tags`, every one labelled `label` and created at `created`."""
++    return {tag: _cfg(label, created) for tag in tags}
++
++
++def _registry(monkeypatch, configs, digests=None):
++    """Serve one repo whose tags are the keys of `configs`, each tag's image
++    config its value (None: no config). `digests` maps tag -> digest; default
++    `sha256:<tag>`, so no two tags alias. Returns the list of deleted digests."""
++    tags = list(configs)
++    if digests is None:
++        digests = {tag: "sha256:" + tag for tag in tags}
+     monkeypatch.setattr(main, "get_tags", lambda b, r: list(tags))
+-    monkeypatch.setattr(main, "get_manifest_created", lambda b, r, t: created.get(t))
++    monkeypatch.setattr(main, "get_image_config", lambda b, r, t: configs[t])
++    monkeypatch.setattr(main, "get_digest", lambda b, r, t: digests.get(t))
+     deleted = []
+-    monkeypatch.setattr(main, "get_digest", lambda b, r, t: "sha256:" + t)
+-    monkeypatch.setattr(main, "delete_manifest", lambda b, r, d: deleted.append(d) or True)
+-    # No config by default -> the latest-pointer health warnings stay quiet.
+-    monkeypatch.setattr(main, "get_image_config", lambda b, r, t: None)
++    monkeypatch.setattr(
++        main, "delete_manifest", lambda b, r, d: deleted.append(d) or True
++    )
+     return deleted
+ 
+ 
+-def _config(created_dt, has_rebuild_at):
+-    labels = {main.REBUILD_AT_LABEL: "2026-01-01T00:00:00Z"} if has_rebuild_at else {}
+-    return {
+-        "created": created_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+-        "config": {"Labels": labels},
+-    }
++def _run(monkeypatch, configs, digests=None, max_per_series=5, dry_run=False):
++    deleted = _registry(monkeypatch, configs, digests)
++    n = main.cleanup_repo("http://x", "demo", TTL_DAYS, max_per_series, dry_run)
++    return deleted, n
+ 
+ 
+-def _run(monkeypatch, tags, created=None, max_per_prefix=5, dry_run=False):
+-    deleted = _setup(monkeypatch, tags, created)
+-    n = main.cleanup_repo("http://x", "demo", TTL_DAYS, max_per_prefix, dry_run)
+-    return deleted, n
++def _alias(tags, aliases):
++    """Digests for `tags`, where `aliases` maps tag -> the tag whose manifest it
++    shares."""
++    digests = {tag: "sha256:" + tag for tag in tags}
++    for alias, target in aliases.items():
++        digests[alias] = "sha256:" + target
++    return digests
++
++
++# --- the label decides what a tag is --------------------------------------
+ 
+ 
+ @pytest.mark.parametrize(
+-    "tag,versioned",
++    "tag,label,number",
+     [
+-        ("7", True),
+-        ("prd-4", True),
+-        ("latest", False),
+-        ("prd-latest", False),
+-        ("1.35.5", False),
+-        ("26.5.1-postgres-health-ispn", False),
++        # Ruling D2's three series shapes.
++        ("57", "latest", 57),
++        ("dev-57", "dev-latest", 57),
++        ("26.7.3-postgres-health-ispn-57", "26.7.3-postgres-health-ispn", 57),
++        # The tracking tag is not a build of its own series.
++        ("latest", "latest", None),
++        ("26.7.3-postgres-health-ispn", "26.7.3-postgres-health-ispn", None),
++        # `<prefix>-latest` owns `<prefix>-<digits>`, not `<prefix>-latest-<digits>`.
++        ("dev-latest-57", "dev-latest", None),
++        # Another series' shape.
++        ("dev-57", "latest", None),
++        ("57", "dev-latest", None),
++        ("prd-57", "dev-latest", None),
++        ("26.7.3-57", "26.7.3-postgres-health-ispn", None),
++        # Not a build number.
++        ("57a", "latest", None),
++        ("1.35.5", "latest", None),
++        ("26.7.3-postgres-health-ispn-x", "26.7.3-postgres-health-ispn", None),
+     ],
+ )
+-def test_is_versioned(tag, versioned):
+-    assert main.is_versioned(tag) is versioned
++def test_build_number(tag, label, number):
++    assert main.build_number(tag, label) == number
+ 
+ 
+-@pytest.mark.parametrize(
+-    "tag,expected",
+-    [("7", ("", 7)), ("tst-7", ("tst", 7)), ("prd-4", ("prd", 4)), ("a-b-3", ("a-b", 3))],
+-)
+-def test_family_and_number(tag, expected):
+-    assert main._family_and_number(tag) == expected
++def test_bare_build_numbers_are_the_history_of_latest(monkeypatch):
++    configs = _builds("latest", ["latest"] + [str(i) for i in range(1, 8)])
++    deleted, _ = _run(monkeypatch, configs)
++    assert deleted == ["sha256:1", "sha256:2"]  # newest 5 of 7 kept
+ 
+ 
+-def test_ttl_deletes_old_keeps_fresh_and_tracking(monkeypatch):
+-    deleted, _ = _run(
+-        monkeypatch,
+-        tags=["latest", "prd-latest", "7", "8"],
+-        created={"7": STALE, "8": FRESH},
++def test_prefixed_builds_are_the_history_of_their_prefix_latest(monkeypatch):
++    configs = _builds("dev-latest", ["dev-latest"] + [f"dev-{i}" for i in range(1, 8)])
++    deleted, _ = _run(monkeypatch, configs)
++    assert deleted == ["sha256:dev-1", "sha256:dev-2"]
++
++
++def test_matrix_per_build_tags_are_the_history_of_their_named_tag(monkeypatch):
++    named = "26.7.3-postgres-health-ispn"
++    configs = _builds(named, [named] + [f"{named}-{i}" for i in range(1, 8)])
++    deleted, _ = _run(monkeypatch, configs)
++    assert deleted == [f"sha256:{named}-1", f"sha256:{named}-2"]
++    assert f"sha256:{named}" not in deleted
++
++
++def test_self_labelled_tags_are_tracking_tags_not_builds(monkeypatch):
++    # `node-24` and `jdk-21` name themselves: they are tracking tags, never
++    # builds 24 and 21 of anything, however old.
++    configs = {
++        "node-24": _cfg("node-24", STALE),
++        "jdk-21": _cfg("jdk-21", STALE),
++        "node-22": _cfg("node-22", STALE),
++    }
++    deleted, n = _run(monkeypatch, configs, max_per_series=1)
++    assert deleted == []
++    assert n == 0
++
++
++def test_promoted_copies_are_kept_and_not_counted(monkeypatch):
++    # `crane tag dev-<n> prd-<n>` copies the image, label included, so prd-<n>
++    # and prd-latest carry `dev-latest`: outside its series, kept, and not
++    # counted toward the dev series' cap.
++    configs = _builds("dev-latest", ["dev-latest"] + [f"dev-{i}" for i in range(1, 8)])
++    configs.update(
++        _builds("dev-latest", ["prd-latest"] + [f"prd-{i}" for i in range(1, 8)], STALE)
+     )
++    digests = _alias(configs, {"prd-latest": "dev-7"})
++    deleted, _ = _run(monkeypatch, configs, digests)
++    assert deleted == ["sha256:dev-1", "sha256:dev-2"]
++
++
++def test_unlabelled_tags_are_kept_and_not_counted(monkeypatch):
++    # Live case: dhcpapp-ui:45 is the pinned newest labelled build, with five
++    # higher-numbered unlabelled tags beside it. They are neither deleted nor
++    # allowed to crowd the labelled builds out of the cap.
++    configs = _builds("latest", ["latest"] + [str(i) for i in range(41, 46)])
++    configs.update({t: _cfg(None, STALE) for t in ["46", "50", "51", "52", "53"]})
++    deleted, n = _run(monkeypatch, configs)
++    assert deleted == []
++    assert n == 0
++
++
++def test_a_tag_without_an_image_config_is_kept(monkeypatch):
++    configs = _builds("latest", ["latest", "8"])
++    configs["7"] = None
++    deleted, _ = _run(monkeypatch, configs, max_per_series=0)
++    assert deleted == []
++
++
++def test_a_build_labelled_for_another_series_is_kept(monkeypatch):
++    # `dev-57` labelled `latest` is not in `latest`'s series (bare numbers).
++    configs = _builds("latest", ["latest", "57"])
++    configs["dev-57"] = _cfg("latest", STALE)
++    deleted, _ = _run(monkeypatch, configs)
++    assert deleted == []
++
++
++# --- cap and TTL -----------------------------------------------------------
++
++
++def test_ttl_deletes_old_keeps_fresh_and_tracking(monkeypatch):
++    configs = {
++        "latest": _cfg("latest", FRESH),
++        "prd-latest": _cfg("prd-latest", STALE),
++        "7": _cfg("latest", STALE),
++        "8": _cfg("latest", FRESH),
++    }
++    deleted, _ = _run(monkeypatch, configs)
+     assert deleted == ["sha256:7"]  # tracking kept, 8 fresh, 7 past TTL
+ 
+ 
+ def test_cap_deletes_beyond_newest_n_regardless_of_age(monkeypatch):
+-    # Seven fresh builds in one family; cap=5 trims the two oldest anyway.
+-    fresh = {str(i): FRESH for i in range(3, 8)}  # only capped_keep ages are read
+-    deleted, _ = _run(
+-        monkeypatch,
+-        tags=["latest", "1", "2", "3", "4", "5", "6", "7"],
+-        created=fresh,
+-    )
++    # Seven fresh builds in one series; cap=5 trims the two oldest anyway.
++    configs = _builds("latest", ["latest", "1", "2", "3", "4", "5", "6", "7"])
++    deleted, _ = _run(monkeypatch, configs)
+     assert deleted == ["sha256:1", "sha256:2"]  # over cap
+ 
+ 
+-def test_cap_is_per_prefix_family(monkeypatch):
+-    fresh = {f"tst-{i}": FRESH for i in range(3, 8)}
+-    fresh.update({"prd-1": FRESH, "prd-2": FRESH})
+-    deleted, _ = _run(
+-        monkeypatch,
+-        tags=["tst-latest", "prd-latest", "prd-1", "prd-2"]
+-        + [f"tst-{i}" for i in range(1, 8)],
+-        created=fresh,
+-    )
++def test_cap_orders_builds_by_number_not_name(monkeypatch):
++    configs = _builds("latest", ["latest", "9", "10", "11"])
++    deleted, _ = _run(monkeypatch, configs, max_per_series=2)
++    assert deleted == ["sha256:9"]
++
++
++def test_cap_is_per_series(monkeypatch):
++    configs = _builds("tst-latest", ["tst-latest"] + [f"tst-{i}" for i in range(1, 8)])
++    configs.update(_builds("prd-latest", ["prd-latest", "prd-1", "prd-2"]))
++    deleted, _ = _run(monkeypatch, configs)
+     # tst trims to newest 5 (tst-7..tst-3); prd (only 2) is untouched.
+     assert deleted == ["sha256:tst-1", "sha256:tst-2"]
+ 
+ 
+-def test_never_empty_floor_keeps_newest_when_no_tracking_tag(monkeypatch):
+-    deleted, _ = _run(
+-        monkeypatch,
+-        tags=["7", "8"],  # no tracking tag
+-        created={"7": STALE, "8": STALE},  # both past TTL
++def test_a_build_of_unknown_age_is_kept(monkeypatch, caplog):
++    configs = _builds("latest", ["latest", "7", "8"], STALE)
++    configs["7"] = _cfg("latest", created=None)
++    with caplog.at_level(logging.WARNING):
++        deleted, _ = _run(monkeypatch, configs)
++    assert deleted == []
++    assert "Could not determine age of 7" in caplog.text
++
++
++# --- the floor: every series keeps its newest build ------------------------
++
++
++def test_floor_keeps_the_newest_build_when_the_label_tag_exists(monkeypatch):
++    configs = _builds("latest", ["latest", "7", "8"], STALE)
++    deleted, _ = _run(monkeypatch, configs)
++    assert deleted == ["sha256:7"]
++
++
++def test_floor_keeps_the_newest_build_without_the_label_tag(monkeypatch, caplog):
++    configs = _builds("latest", ["7", "8"], STALE)  # no `latest` tag
++    with caplog.at_level(logging.INFO):
++        deleted, _ = _run(monkeypatch, configs)
++    assert deleted == ["sha256:7"]  # 8 (newest) kept so the series never empties
++    assert "older than the TTL" in caplog.text
++
++
++def test_floor_holds_next_to_a_self_labelled_bare_number(monkeypatch):
++    # Live case: ssegateway-validation:56 is labelled `56` — a tracking tag
++    # under the label rule — and later builds are labelled `latest` with no
++    # `latest` tag. A tracking tag in the repo must not switch the floor off.
++    configs = {"56": _cfg("56", STALE)}
++    configs.update(_builds("latest", ["57", "58", "59"], STALE))
++    deleted, _ = _run(monkeypatch, configs)
++    assert deleted == ["sha256:57", "sha256:58"]  # 59 kept by the floor, 56 tracking
++
++
++def test_floor_is_per_series(monkeypatch):
++    configs = _builds("latest", ["3", "4"], STALE)
++    configs.update(_builds("dev-latest", ["dev-3", "dev-4"], STALE))
++    configs.update(
++        _builds("26.7.3-postgres-health-ispn", ["26.7.3-postgres-health-ispn-3"], STALE)
+     )
+-    assert deleted == ["sha256:7"]  # 8 (newest) kept so the repo never empties
++    deleted, _ = _run(monkeypatch, configs)
++    assert sorted(deleted) == ["sha256:3", "sha256:dev-3"]
++
++
++def test_floor_holds_against_the_cap(monkeypatch):
++    configs = _builds("latest", ["latest", "7", "8"])
++    deleted, _ = _run(monkeypatch, configs, max_per_series=0)
++    assert deleted == ["sha256:7"]
++
++
++# --- a kept tag's manifest is never deleted --------------------------------
+ 
+ 
+ def test_keeps_manifest_shared_with_tracking_tag(monkeypatch):
+@@ -108,28 +262,22 @@ def test_keeps_manifest_shared_with_tracking_tag(monkeypatch):
+     # the manifest by digest, which would unlink prd-latest too — so prd-5's
+     # shared manifest must survive even though it (and all of prd-1..5) is past
+     # the TTL. This is the data-loss bug a digest-blind delete caused.
+-    deleted = _setup(
+-        monkeypatch,
+-        tags=["prd-latest", "prd-1", "prd-2", "prd-3", "prd-4", "prd-5"],
+-        created={f"prd-{i}": STALE for i in range(1, 6)},
+-    )
+-    shared = "sha256:prd-shared"
+-    monkeypatch.setattr(
+-        main,
+-        "get_digest",
+-        lambda b, r, t: shared if t in ("prd-5", "prd-latest") else "sha256:" + t,
+-    )
+-    n = main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=False)
+-    # prd-1..4 deleted; prd-5's manifest kept because prd-latest still points at it.
++    configs = {"prd-latest": _cfg("prd-latest", STALE)}
++    configs.update(_builds("prd-latest", [f"prd-{i}" for i in range(1, 7)], STALE))
++    # prd-6 is the series' newest, held by the floor; prd-5 shares prd-latest's
++    # manifest.
++    digests = _alias(configs, {"prd-latest": "prd-5"})
++    deleted, n = _run(monkeypatch, configs, digests)
+     assert deleted == ["sha256:prd-1", "sha256:prd-2", "sha256:prd-3", "sha256:prd-4"]
+-    assert shared not in deleted
+     assert n == 4
+ 
+ 
++# --- the latest pointer's health warnings ----------------------------------
++
++
+ def test_warns_when_latest_is_stale(monkeypatch, caplog):
+-    _setup(monkeypatch, tags=["latest", "8"], created={"8": FRESH})
+-    cfg = _config(STALE, has_rebuild_at=True)  # old, but conforming
+-    monkeypatch.setattr(main, "get_image_config", lambda b, r, t: cfg if t == "latest" else None)
++    configs = {"latest": _cfg("latest", STALE), "8": _cfg("latest", FRESH)}
++    _registry(monkeypatch, configs)
+     with caplog.at_level(logging.WARNING):
+         main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=True)
+     assert "not being rebuilt" in caplog.text
+@@ -137,9 +285,9 @@ def test_warns_when_latest_is_stale(monkeypatch, caplog):
+ 
+ 
+ def test_warns_when_latest_has_no_rebuild_at(monkeypatch, caplog):
+-    _setup(monkeypatch, tags=["latest", "8"], created={"8": FRESH})
+-    cfg = _config(FRESH, has_rebuild_at=False)  # fresh, but non-conforming
+-    monkeypatch.setattr(main, "get_image_config", lambda b, r, t: cfg if t == "latest" else None)
++    # Unlabelled: not built via kaniko2 at all, so outside every series.
++    configs = {"latest": _cfg(None, FRESH, rebuild_at=False), "8": _cfg(None, FRESH)}
++    _registry(monkeypatch, configs)
+     with caplog.at_level(logging.WARNING):
+         main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=True)
+     assert "no rebuild-at label" in caplog.text
+@@ -147,75 +295,148 @@ def test_warns_when_latest_has_no_rebuild_at(monkeypatch, caplog):
+ 
+ 
+ def test_no_warning_for_healthy_latest(monkeypatch, caplog):
+-    _setup(monkeypatch, tags=["latest", "8"], created={"8": FRESH})
+-    cfg = _config(FRESH, has_rebuild_at=True)
+-    monkeypatch.setattr(main, "get_image_config", lambda b, r, t: cfg if t == "latest" else None)
++    configs = {"latest": _cfg("latest", FRESH), "8": _cfg("latest", FRESH)}
++    _registry(monkeypatch, configs)
+     with caplog.at_level(logging.WARNING):
+         main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=True)
+     assert "not being rebuilt" not in caplog.text
+     assert "no rebuild-at label" not in caplog.text
+ 
+ 
+-def test_dry_run_deletes_nothing(monkeypatch):
+-    deleted, n = _run(
+-        monkeypatch,
+-        tags=["latest", "7"],
+-        created={"7": STALE},
+-        dry_run=True,
+-    )
++# --- dry run --------------------------------------------------------------
++
++
++def test_dry_run_deletes_nothing(monkeypatch, caplog):
++    configs = {
++        "latest": _cfg("latest"),
++        "7": _cfg("latest", STALE),
++        "8": _cfg("latest"),
++    }
++    with caplog.at_level(logging.INFO):
++        deleted, n = _run(monkeypatch, configs, dry_run=True)
+     assert deleted == []  # nothing actually deleted
+     assert n == 1  # but reported as would-delete
++    assert "[dry-run] Would delete 7 (sha256:7)" in caplog.text
+ 
+ 
+-# --- a stage tag keeps its build tag alive --------------------------------
+-#
+-# Under Argo CD (redesign doc §14) a stage deploys `prd-<n>`, which the promote
+-# job creates by re-tagging the build `<n>` — the same manifest under a second
+-# name. The registry deletes by digest, unlinking every tag at that digest, so
+-# reaping `<n>` once it ages out of the bare family's cap would destroy the tag
+-# production is running. These tests pin that, rather than leaving it implied by
+-# the guard's original purpose (avoiding collateral damage when reaping history).
++class _Runs:
++    """Records subprocess.run calls; `kubectl get pods` answers with a pod."""
+ 
++    def __init__(self):
++        self.commands = []
+ 
+-def _setup_shared(monkeypatch, tags, digests, created=None):
+-    """Like _setup, but `digests` maps tag -> digest so tags can alias."""
+-    created = created or {}
+-    monkeypatch.setattr(main, "get_tags", lambda b, r: list(tags))
+-    monkeypatch.setattr(main, "get_manifest_created", lambda b, r, t: created.get(t))
+-    deleted = []
+-    monkeypatch.setattr(main, "get_digest", lambda b, r, t: digests.get(t))
++    def __call__(self, command, **kwargs):
++        self.commands.append(command)
++        stdout = "registry-0" if command[:3] == ["kubectl", "get", "pods"] else ""
++        return subprocess.CompletedProcess(command, 0, stdout=stdout)
++
++    @property
++    def gc(self):
++        [gc] = [c for c in self.commands if c[:2] == ["kubectl", "exec"]]
++        return gc[gc.index("--") + 1 :]
++
++
++@pytest.mark.parametrize("dry_run", [False, True])
++def test_garbage_collect_deletes_untagged_and_honours_dry_run(monkeypatch, dry_run):
++    runs = _Runs()
++    monkeypatch.setattr(main.subprocess, "run", runs)
++    assert main.garbage_collect("registry-prd", "app=registry", dry_run)
++    expected = ["registry", "garbage-collect", "--delete-untagged"]
++    expected += ["--dry-run"] if dry_run else []
++    assert runs.gc == expected + ["/etc/distribution/config.yml"]
++
++
++def _main(monkeypatch, argv, env=None):
++    """Run main() over one repo with one stale build over the floor; returns
++    (deleted digests, garbage_collect's dry_run argument or None if not run)."""
++    configs = {
++        "latest": _cfg("latest"),
++        "7": _cfg("latest", STALE),
++        "8": _cfg("latest"),
++    }
++    deleted = _registry(monkeypatch, configs)
++    monkeypatch.setattr(main, "get_repos", lambda b: ["demo"])
++    gc = []
+     monkeypatch.setattr(
+-        main, "delete_manifest", lambda b, r, d: deleted.append(d) or True
++        main, "garbage_collect", lambda ns, label, dry_run: gc.append(dry_run)
+     )
+-    monkeypatch.setattr(main, "get_image_config", lambda b, r, t: None)
+-    return deleted
++    monkeypatch.delenv("DRY_RUN", raising=False)
++    for key, value in (env or {}).items():
++        monkeypatch.setenv(key, value)
++    monkeypatch.setattr(sys, "argv", ["main.py", "--ttl-weeks", "4", *argv])
++    with pytest.raises(SystemExit) as exit_:
++        main.main()
++    assert exit_.value.code == 0
++    return deleted, (gc[0] if gc else None)
++
++
++def test_main_deletes_then_collects_garbage(monkeypatch):
++    assert _main(monkeypatch, []) == (["sha256:7"], False)
++
++
++@pytest.mark.parametrize(
++    "argv,env",
++    [
++        (["--dry-run"], None),
++        ([], {"DRY_RUN": "true"}),
++        (["--dry-run"], {"DRY_RUN": "false"}),
++    ],
++)
++def test_main_dry_run_deletes_nothing_and_collects_garbage_in_dry_run(
++    monkeypatch, argv, env
++):
++    assert _main(monkeypatch, argv, env) == ([], True)
++
++
++def test_main_dry_run_env_false_deletes(monkeypatch):
++    assert _main(monkeypatch, [], {"DRY_RUN": "false"}) == (["sha256:7"], False)
++
++
++def test_main_no_gc_skips_garbage_collection(monkeypatch):
++    assert _main(monkeypatch, ["--dry-run", "--no-gc"]) == ([], None)
++
++
++def test_main_refuses_a_dry_run_env_that_is_not_true_or_false(monkeypatch):
++    monkeypatch.setattr(
++        main, "get_repos", lambda b: pytest.fail("ran with DRY_RUN=yes")
++    )
++    monkeypatch.setenv("DRY_RUN", "yes")
++    monkeypatch.setattr(sys, "argv", ["main.py"])
++    with pytest.raises(SystemExit) as exit_:
++        main.main()
++    assert exit_.value.code == 2
++
++
++# --- a stage tag keeps its build tag alive --------------------------------
++#
++# Under Argo CD (redesign doc §14) a stage deploys `prd-<n>`, which the promote
++# job creates by re-tagging the build `<n>` — the same manifest under a second
++# name, carrying the build's label, so outside the build's series. The registry
++# deletes by digest, unlinking every tag at that digest, so reaping `<n>` once
++# it ages out of the series' cap would destroy the tag production is running.
++# These tests pin that, rather than leaving it implied by the guard's original
++# purpose (avoiding collateral damage when reaping history).
+ 
+ 
+ # Twelve builds against a cap of five: 1..7 are selected for deletion by the
+ # cap alone, and every image is old enough that the TTL would take them too.
+ _BUILDS = [str(i) for i in range(1, 13)]
+-_ALL_STALE = {t: STALE for t in _BUILDS}
+ 
+ 
+-def _digests(tags, aliases=None):
+-    d = {t: "sha256:" + t for t in tags}
+-    for alias, target in (aliases or {}).items():
+-        d[alias] = "sha256:" + target
+-    return d
++def _stage_repo(stage_tags):
++    configs = {"latest": _cfg("latest", STALE)}
++    configs.update(_builds("latest", _BUILDS, STALE))
++    configs.update(_builds("latest", stage_tags, STALE))
++    return configs
+ 
+ 
+ def test_stage_tag_keeps_an_aged_out_build_tag_alive(monkeypatch):
+-    # prd runs prd-3, an alias of build 3. Build 3 is well over the bare
+-    # family's cap; the stage tag is the only thing standing between the
+-    # cap and production.
+-    tags = ["latest", "prd-3"] + _BUILDS
+-    deleted = _setup_shared(
+-        monkeypatch,
+-        tags,
+-        _digests(tags, {"prd-3": "3", "latest": "12"}),
+-        created=_ALL_STALE,
+-    )
+-    main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=False)
++    # prd runs prd-3, an alias of build 3. Build 3 is well over the series'
++    # cap; the stage tag is the only thing standing between the cap and
++    # production.
++    configs = _stage_repo(["prd-3"])
++    digests = _alias(configs, {"prd-3": "3", "latest": "12"})
++    deleted, _ = _run(monkeypatch, configs, digests)
+ 
+     assert "sha256:3" not in deleted
+     # ...and the protection is specific, not blanket: unpromoted neighbours go.
+@@ -223,17 +444,12 @@ def test_stage_tag_keeps_an_aged_out_build_tag_alive(monkeypatch):
+ 
+ 
+ def test_older_stage_tags_hold_their_builds_too(monkeypatch):
+-    # Rollback depth (D36/D47): every prd-<n> still inside the prd family's cap
+-    # protects the build it aliases, which is what makes a revert-and-promote or
+-    # a force-move to an earlier promotion land on an image that still exists.
+-    tags = ["latest", "prd-3", "prd-9"] + _BUILDS
+-    deleted = _setup_shared(
+-        monkeypatch,
+-        tags,
+-        _digests(tags, {"prd-3": "3", "prd-9": "9", "latest": "12"}),
+-        created=_ALL_STALE,
+-    )
+-    main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=False)
++    # Rollback depth (D36/D47): every prd-<n> still in the registry protects
++    # the build it aliases, which is what makes a revert-and-promote or a
++    # force-move to an earlier promotion land on an image that still exists.
++    configs = _stage_repo(["prd-3", "prd-9"])
++    digests = _alias(configs, {"prd-3": "3", "prd-9": "9", "latest": "12"})
++    deleted, _ = _run(monkeypatch, configs, digests)
+ 
+     assert "sha256:3" not in deleted
+     assert "sha256:9" not in deleted
+@@ -241,18 +457,12 @@ def test_older_stage_tags_hold_their_builds_too(monkeypatch):
+ 
+ 
+ def test_build_tag_dies_once_no_stage_tag_aliases_it(monkeypatch):
+-    # The counterpart: protection follows the stage tag. Once prd has moved on
+-    # and the old one has capped out, the build tag is deletable like any other.
+-    # Without this the suite would still pass if the guard became blanket
+-    # immunity for every versioned tag.
+-    tags = ["latest", "prd-12"] + _BUILDS
+-    deleted = _setup_shared(
+-        monkeypatch,
+-        tags,
+-        _digests(tags, {"prd-12": "12", "latest": "12"}),
+-        created=_ALL_STALE,
+-    )
+-    main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=False)
++    # The counterpart: protection follows the stage tag. Once prd has moved on,
++    # the old build tag is deletable like any other. Without this the suite
++    # would still pass if the guard became blanket immunity for every build.
++    configs = _stage_repo(["prd-12"])
++    digests = _alias(configs, {"prd-12": "12", "latest": "12"})
++    deleted, _ = _run(monkeypatch, configs, digests)
+ 
+     assert "sha256:3" in deleted
+ 
+@@ -261,25 +471,22 @@ def test_unresolvable_kept_tag_digest_stops_every_deletion_in_the_repo(monkeypat
+     # A kept tag whose digest will not resolve means the protection set is
+     # incomplete — and the entry that is missing may be the stage tag holding an
+     # in-use image. Fail closed rather than delete against a partial set.
+-    tags = ["latest", "prd-3"] + _BUILDS
+-    digests = _digests(tags, {"prd-3": "3", "latest": "12"})
++    configs = _stage_repo(["prd-3"])
++    digests = _alias(configs, {"prd-3": "3", "latest": "12"})
+     digests["prd-3"] = None
+-    deleted = _setup_shared(monkeypatch, tags, digests, created=_ALL_STALE)
+-
+-    n = main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=False)
++    deleted, n = _run(monkeypatch, configs, digests)
+ 
+     assert deleted == []
+     assert n == 0
+ 
+ 
+ def test_unresolvable_kept_tag_digest_warns(monkeypatch, caplog):
+-    tags = ["latest", "prd-3"] + _BUILDS
+-    digests = _digests(tags, {"latest": "12"})
++    configs = _stage_repo(["prd-3"])
++    digests = _alias(configs, {"latest": "12"})
+     digests["prd-3"] = None
+-    _setup_shared(monkeypatch, tags, digests, created=_ALL_STALE)
+ 
+     with caplog.at_level(logging.WARNING):
+-        main.cleanup_repo("http://x", "demo", TTL_DAYS, 5, dry_run=False)
++        _run(monkeypatch, configs, digests)
+ 
+     assert "incomplete protection set" in caplog.text
+
+/work/DockerImages — P5: git diff 9a11863668a7..1a69ff9824c7
+
+version-poller/app/poller.py              | 101 ++++++++++++++++++++---------------------
+ version-poller/app/registry.py            |   4 +-
+ version-poller/app/tagging.py             |  25 +++++++---
+ version-poller/tests/test_poller.py       |  47 ++++++++++++-------
+ version-poller/tests/test_timer_poller.py | 123 +++++++++++++++++++++++++++++++++++++++++++-------
+ 5 files changed, 207 insertions(+), 93 deletions(-)
+
+diff --git a/version-poller/app/poller.py b/version-poller/app/poller.py
+index dcb6c07..e77cc35 100644
+--- a/version-poller/app/poller.py
++++ b/version-poller/app/poller.py
+@@ -1,10 +1,21 @@
+ """The registry-driven time-based poll walk (§6 of the redesign).
+ 
+-Per repo, read the version-poller labels off the tracking tags and trigger the
+-governing tag's pipeline when it is due. Numbered history tags are ignored here
+-(registry-cleanup owns them). Promotion copies (a tracking tag whose name does
+-not match its own `tracking-tag` label) are never triggered — only warned about
+-when they go stale.
++Per repo, read the version-poller labels off every tag and trigger the governing
++tag's pipeline when it is due. The `tracking-tag` label on the image a tag points
++to, not the tag's name, decides what the tag is — the rule registry-cleanup
++applies:
++
++- a tag named as its label is a tracking tag, and may govern;
++- a tag in its label's build series (`tagging.build_number`) is build history,
++  ignored here (registry-cleanup owns it);
++- any other labelled tag is a promoted copy (`prd-556` carrying `dev-latest`),
++  never triggered; the newest copy of each label is warned about when it goes
++  stale;
++- an unlabelled tag is ignored.
++
++A tag labelled with its own bare build number (`dhcpapp:35`, labelled `35`) was
++built before kaniko2 refused a bare-number label. It is a leftover, not a
++tracking tag, so its long-past rebuild-at never triggers a rebuild.
+ 
+ On top of the timer, an image may declare upstream `depends` (a JSON label of
+ `<type>:<name>` specs). When any declared dependency publishes a newer version
+@@ -121,41 +132,45 @@ class RegistryTimerPoller:
+         trigger_groups: dict[str, list[dict]],
+         timer_marks: dict[str, list[tuple[str, str]]],
+     ) -> None:
+-        all_tags = self.registry.tags(repo)
+-        tracking_tags = [t for t in all_tags if not tagging.is_versioned(t)]
+-        if not tracking_tags:
+-            # The name heuristic flags anything shaped `\d+` / `<prefix>-\d+` as
+-            # numbered history — but a single-tag matrix build's tracking tag can
+-            # take that exact shape (e.g. `node-24`, `jdk-21`). kaniko2 still
+-            # stamps `tracking-tag=<itself>` on it, so fall back to that
+-            # authoritative signal before giving up.
+-            tracking_tags = self._recover_self_tracking_tags(repo, all_tags)
+-        if not tracking_tags:
+-            self.logger.warning("%s: no tracking tag — non-conforming or orphaned", repo)
+-            return
+-
+         governing: list[tuple[str, dict]] = []
+-        for tag in tracking_tags:
+-            labels = self.registry.config_labels(repo, tag)
+-            if not labels or tagging.REBUILD_AT not in labels:
++        # label -> (rebuild-at, tag) of the label's newest promoted copy
++        newest_copies: dict[str, tuple[datetime, str]] = {}
++        for tag in self.registry.tags(repo):
++            labels = self.registry.config_labels(repo, tag) or {}
++            label = labels.get(tagging.TRACKING_TAG)
++            if not label or tagging.build_number(tag, label) is not None:
++                continue
++            # A bare build number is a build of `latest`'s series.
++            if tag == label and tagging.build_number(label, "latest") is not None:
++                self.logger.debug(
++                    "%s:%s labelled with its own bare build number — a leftover, "
++                    "not a tracking tag",
++                    repo,
++                    tag,
++                )
++                continue
++            if tagging.REBUILD_AT not in labels:
+                 self.logger.warning("%s:%s non-conforming (no rebuild-at)", repo, tag)
+                 continue
+ 
+-            if labels.get(tagging.TRACKING_TAG) == tag:
++            if tag == label:
+                 governing.append((tag, labels))
+-            else:
+-                # Inherited promotion copy (e.g. prd-latest crane-tagged from a
+-                # tst build). Never trigger; warn only when it goes stale.
+-                rebuild_at = _parse_iso(labels[tagging.REBUILD_AT])
+-                if now - rebuild_at > self.stale_grace:
+-                    self.logger.warning(
+-                        "%s:%s past its rebuild window — consider promoting a "
+-                        "fresh build to this environment",
+-                        repo,
+-                        tag,
+-                    )
++                continue
++            rebuild_at = _parse_iso(labels[tagging.REBUILD_AT])
++            if label not in newest_copies or rebuild_at > newest_copies[label][0]:
++                newest_copies[label] = (rebuild_at, tag)
++
++        for rebuild_at, tag in newest_copies.values():
++            if now - rebuild_at > self.stale_grace:
++                self.logger.warning(
++                    "%s:%s past its rebuild window — consider promoting a "
++                    "fresh build to this environment",
++                    repo,
++                    tag,
++                )
+ 
+         if not governing:
++            self.logger.warning("%s: no tracking tag — non-conforming or orphaned", repo)
+             return
+ 
+         # A matrix repo can carry several governing tags (superseded versions
+@@ -217,26 +232,6 @@ class RegistryTimerPoller:
+ 
+         trigger_groups.setdefault(pipeline, []).append(params)
+ 
+-    def _recover_self_tracking_tags(self, repo: str, tags: list[str]) -> list[str]:
+-        """Tags that name themselves in their `tracking-tag` label.
+-
+-        Only consulted when the cheap name filter found no tracking tag, so a
+-        matrix tracking tag the regex misreads as history (e.g. `node-24`) is
+-        recovered from the label kaniko2 stamped on it. Bare-integer build
+-        numbers can never be a tracking tag, so they're skipped — an orphaned
+-        repo carrying only numbered history then stays a single warning instead
+-        of a label read per tag, every poll. A genuine history tag whose label
+-        names a *different* tracking tag is likewise left out.
+-        """
+-        recovered: list[str] = []
+-        for tag in tags:
+-            if tag.isdigit():
+-                continue
+-            labels = self.registry.config_labels(repo, tag)
+-            if labels and labels.get(tagging.TRACKING_TAG) == tag:
+-                recovered.append(tag)
+-        return recovered
+-
+     def _depends_changed(self, repo: str, tag: str, labels: dict) -> bool:
+         """True if any declared dependency advanced since last seen.
+ 
+diff --git a/version-poller/app/registry.py b/version-poller/app/registry.py
+index 12fd1dd..d714797 100644
+--- a/version-poller/app/registry.py
++++ b/version-poller/app/registry.py
+@@ -1,7 +1,7 @@
+ """Minimal client for the internal (insecure, no-auth) registry.
+ 
+ Used by the time-based poller to enumerate repos and read the version-poller
+-labels off tracking tags.
++labels off their tags.
+ """
+ 
+ import logging
+@@ -68,7 +68,7 @@ class Registry:
+         """Return the Labels map from an image's config blob, or None.
+ 
+         None means the tag could not be resolved to a single-image config
+-        (missing, or a manifest list) — treated as non-conforming by the poller.
++        (missing, or a manifest list) — treated as unlabelled by the poller.
+         """
+         try:
+             r = self.session.get(
+diff --git a/version-poller/app/tagging.py b/version-poller/app/tagging.py
+index 1c84553..2c73930 100644
+--- a/version-poller/app/tagging.py
++++ b/version-poller/app/tagging.py
+@@ -1,4 +1,4 @@
+-"""Pure helpers for the registry tag taxonomy and parameter merging.
++"""Pure helpers for the tracking-tag label rule and parameter merging.
+ 
+ Kept free of `settings` so the logic is unit-testable without environment.
+ """
+@@ -15,13 +15,26 @@ PARAMS = "org.webathome.poller.params"
+ # multiple dependencies are carried as one JSON blob rather than repeated keys.
+ DEPENDS = "org.webathome.poller.depends"
+ 
+-# A versioned (numbered history) tag is `7` or `<prefix>-7`. Everything else
+-# is a tracking tag (`latest`, `tst-latest`, semver pins like `1.35.5`).
+-_VERSIONED = re.compile(r"^(?:\d+|.+-\d+)$")
++_BUILD_NUMBER = re.compile(r"[0-9]+")
+ 
+ 
+-def is_versioned(tag: str) -> bool:
+-    return bool(_VERSIONED.match(tag))
++def build_number(tag: str, label: str) -> int | None:
++    """The build number of `tag` if it is in the build series of the tracking
++    tag `label`, else None.
++
++    The series rule is kaniko2's `inBuildSeries` (JenkinsPipelineUtils
++    vars/helmCharts.groovy), and registry-cleanup's `build_number` applies the
++    same one: `latest` owns `<digits>`, `<prefix>-latest` owns
++    `<prefix>-<digits>`, any other label owns `<label>-<digits>`.
++    """
++    if label == "latest" or label.endswith("-latest"):
++        prefix = label[: -len("latest")]
++    else:
++        prefix = label + "-"
++    if not tag.startswith(prefix):
++        return None
++    number = tag[len(prefix) :]
++    return int(number) if _BUILD_NUMBER.fullmatch(number) else None
+ 
+ 
+ def merge_params(param_maps: list[dict]) -> dict[str, str]:
+diff --git a/version-poller/tests/test_poller.py b/version-poller/tests/test_poller.py
+index b8f2800..3c8e1f2 100644
+--- a/version-poller/tests/test_poller.py
++++ b/version-poller/tests/test_poller.py
+@@ -5,25 +5,40 @@ from jenkins_client import Jenkins
+ 
+ 
+ @pytest.mark.parametrize(
+-    "tag,versioned",
++    "tag,label,number",
+     [
+-        ("7", True),
+-        ("12", True),
+-        ("tst-7", True),
+-        ("prd-4", True),
+-        ("dev-12", True),
+-        ("latest", False),
+-        ("tst-latest", False),
+-        ("prd-latest", False),
+-        ("1.35.5", False),
+-        ("v26.0", False),
+-        ("26.5.1-postgres-health-ispn", False),
+-        ("playwright-1.60.0", False),
+-        ("latest-7", True),
++        # The three series shapes.
++        ("7", "latest", 7),
++        ("12", "latest", 12),
++        ("tst-7", "tst-latest", 7),
++        ("dev-12", "dev-latest", 12),
++        ("26.5.1-postgres-health-ispn-12", "26.5.1-postgres-health-ispn", 12),
++        # A matrix tracking tag shaped like a build, and its own per-build tag.
++        ("node-24", "node-24", None),
++        ("node-24-5", "node-24", 5),
++        # A tracking tag is not a build of its own series.
++        ("latest", "latest", None),
++        ("tst-latest", "tst-latest", None),
++        ("1.35.5", "1.35.5", None),
++        ("v26.0", "v26.0", None),
++        ("26.5.1-postgres-health-ispn", "26.5.1-postgres-health-ispn", None),
++        ("playwright-1.60.0", "playwright-1.60.0", None),
++        # Promoted copies carry the label of the build they copy.
++        ("prd-4", "tst-latest", None),
++        ("prd-latest", "tst-latest", None),
++        # `latest` owns bare digits only; `<prefix>-latest` owns `<prefix>-<digits>`.
++        ("latest-7", "latest", None),
++        ("dev-latest-7", "dev-latest", None),
++        # Another series' shape.
++        ("dev-7", "latest", None),
++        ("7", "dev-latest", None),
++        ("26.7.3-57", "26.7.3-postgres-health-ispn", None),
++        # Not a build number.
++        ("57a", "latest", None),
+     ],
+ )
+-def test_is_versioned(tag, versioned):
+-    assert tagging.is_versioned(tag) is versioned
++def test_build_number(tag, label, number):
++    assert tagging.build_number(tag, label) == number
+ 
+ 
+ @pytest.mark.parametrize(
+diff --git a/version-poller/tests/test_timer_poller.py b/version-poller/tests/test_timer_poller.py
+index f510079..63340e8 100644
+--- a/version-poller/tests/test_timer_poller.py
++++ b/version-poller/tests/test_timer_poller.py
+@@ -1,10 +1,11 @@
+ """Component tests for the §6 timer walk: a fake registry + a recording Jenkins
+-exercise the real decision logic (governing-tag selection, due/stale handling,
+-promotion-copy skipping, per-pipeline coalescing, the in-flight guard) with no
+-network.
++exercise the real decision logic (the tracking-tag label rule, governing-tag
++selection, due/stale handling, promotion-copy skipping, per-pipeline coalescing,
++the in-flight guard) with no network.
+ """
+ 
+ import json
++import logging
+ from datetime import datetime, timedelta, timezone
+ 
+ import tagging
+@@ -112,7 +113,8 @@ def test_due_governing_tag_triggers_with_params():
+     repos = {
+         "ginbov_nl": {
+             "latest": _labels("latest", "IaC/Ginbov", now - timedelta(days=1)),
+-            "7": None,  # versioned -> never read
++            # Build history: its old rebuild-at neither triggers nor warns.
++            "7": _labels("latest", "IaC/Ginbov", now - timedelta(days=30)),
+         }
+     }
+     jenkins, triggered = _run(repos)
+@@ -142,8 +144,8 @@ def test_promotion_copy_never_triggers():
+         "design-assistant": {
+             "tst-latest": _labels("tst-latest", "DA/Build", now - timedelta(days=1)),
+             "prd-latest": _labels("tst-latest", "DA/Build", now - timedelta(days=30)),
+-            "tst-7": None,
+-            "prd-4": None,
++            "tst-7": _labels("tst-latest", "DA/Build", now - timedelta(days=1)),
++            "prd-4": _labels("tst-latest", "DA/Build", now - timedelta(days=30)),
+         }
+     }
+     jenkins, _ = _run(repos)
+@@ -182,11 +184,10 @@ def test_matrix_acts_on_freshest_governing_tag():
+     assert jenkins.triggers == [("DockerImages", {"image": "k8s"})]
+ 
+ 
+-def test_matrix_tracking_tag_recovered_when_name_looks_versioned():
++def test_matrix_tracking_tag_named_like_a_build_governs():
+     now = datetime.now(timezone.utc)
+-    # `node-24` matches the numbered-history regex (`.+-\d+`), so the name filter
+-    # drops it; kaniko2's tracking-tag label (node-24 names itself) rescues it as
+-    # the governing tag instead of warning "no tracking tag".
++    # `node-24` is named as its label, so it is the tracking tag, however much
++    # its name looks like build 24; `node-24-5` is build 5 of its series.
+     repos = {
+         "kube-coder-frontend-toolchain": {
+             "node-24": _labels(
+@@ -195,6 +196,13 @@ def test_matrix_tracking_tag_recovered_when_name_looks_versioned():
+                 now - timedelta(days=1),
+                 {"image": "kube-coder-frontend-toolchain"},
+             ),
++            # Fresher than node-24, so it would govern if it were tracking.
++            "node-24-5": _labels(
++                "node-24",
++                "Other",
++                now - timedelta(hours=12),
++                {"image": "kube-coder-frontend-toolchain"},
++            ),
+         }
+     }
+     jenkins, _ = _run(repos)
+@@ -203,22 +211,105 @@ def test_matrix_tracking_tag_recovered_when_name_looks_versioned():
+     ]
+ 
+ 
+-def test_recovery_ignores_history_tag_with_foreign_tracking_label():
++def test_matrix_per_build_tags_never_trigger_or_warn(caplog):
++    now = datetime.now(timezone.utc)
++    # The named tag is not due. Its per-build tags carry the stale rebuild-ats
++    # of older builds; they are build history, so they neither trigger nor warn
++    # the way a stale promoted copy does.
++    keycloak = "26.7.3-postgres-health-ispn"
++    repos = {
++        "keycloak": {
++            keycloak: _labels(keycloak, "DockerImages", now + timedelta(days=5)),
++            f"{keycloak}-11": _labels(keycloak, "DockerImages", now - timedelta(days=20)),
++            f"{keycloak}-10": _labels(keycloak, "DockerImages", now - timedelta(days=30)),
++        }
++    }
++    with caplog.at_level(logging.WARNING):
++        jenkins, triggered = _run(repos)
++    assert jenkins.triggers == []
++    assert triggered == set()
++    assert caplog.records == []
++
++
++def test_history_tag_whose_tracking_tag_is_gone_never_triggers():
+     now = datetime.now(timezone.utc)
+-    # A stray env-history tag (`tst-7`) whose tracking-tag label names a DIFFERENT
+-    # tag (`tst-latest`, since deleted). It looks versioned and does not
+-    # self-identify, so recovery must not promote it into a phantom rebuild.
++    # A stray env-history tag (`tst-7`) whose tracking-tag label names a tag
++    # since deleted (`tst-latest`). It is build history of that label, so it
++    # never becomes a phantom rebuild.
+     repos = {"app": {"tst-7": _labels("tst-latest", "App", now - timedelta(days=1))}}
+     jenkins, triggered = _run(repos)
+     assert jenkins.triggers == []
+     assert triggered == set()
+ 
+ 
++def test_leftover_self_labelled_build_numbers_never_trigger():
++    now = datetime.now(timezone.utc)
++    due = now - timedelta(days=1)
++    # Builds from before kaniko2 refused a bare-number label: each names itself
++    # (`dhcpapp:35`, labelled `35`), and rebuilding through one redeploys the
++    # app. Due but within the stale grace, so only the leftover rule stops them.
++    repos = {
++        "dhcpapp": {
++            "latest": _labels("latest", "DHCP/DHCPApp", now + timedelta(days=5)),
++            "36": _labels("latest", "DHCP/DHCPApp", now + timedelta(days=5)),
++            "35": _labels("35", "DHCP/DHCPApp", due),
++        },
++        "ssegateway-validation": {
++            "55": _labels("55", "SSEGateway/SSEGateway", due),
++            "56": _labels("56", "SSEGateway/SSEGateway", due),
++        },
++    }
++    jenkins, triggered = _run(repos)
++    assert jenkins.triggers == []
++    assert triggered == set()
++
++
++def test_unlabelled_tags_are_not_tracking_tags():
++    now = datetime.now(timezone.utc)
++    # An unlabelled `latest` next to labelled builds: no tag is named as its
++    # label, so the repo has no tracking tag and nothing triggers.
++    repos = {
++        "app": {
++            "latest": None,
++            "7": _labels("latest", "App", now - timedelta(days=1)),
++        }
++    }
++    jenkins, triggered = _run(repos)
++    assert jenkins.triggers == []
++    assert triggered == set()
++
++
++def test_only_the_newest_promoted_copy_of_a_label_is_warned_about(caplog):
++    now = datetime.now(timezone.utc)
++    # Every promotion leaves a `prd-<n>` copy carrying `dev-latest`. Old copies
++    # are past their rebuild window by nature; only the newest one says whether
++    # the promoted environment is.
++    repos = {
++        "kubecoder-bot": {
++            "dev-latest": _labels("dev-latest", "KC/Build", now + timedelta(days=5)),
++            "prd-500": _labels("dev-latest", "KC/Build", now - timedelta(days=60)),
++            "prd-556": _labels("dev-latest", "KC/Build", now + timedelta(days=2)),
++        },
++        "design-assistant": {
++            "tst-latest": _labels("tst-latest", "DA/Build", now + timedelta(days=5)),
++            "uat-20": _labels("tst-latest", "DA/Build", now - timedelta(days=60)),
++            "uat-21": _labels("tst-latest", "DA/Build", now - timedelta(days=30)),
++        },
++    }
++    with caplog.at_level(logging.WARNING):
++        jenkins, _ = _run(repos)
++    assert jenkins.triggers == []
++    assert [r.getMessage() for r in caplog.records] == [
++        "design-assistant:uat-21 past its rebuild window — consider promoting a "
++        "fresh build to this environment"
++    ]
++
++
+ def test_non_conforming_and_no_tracking_tag_skipped():
+     now = datetime.now(timezone.utc)
+     repos = {
+-        "no-rebuild-at": {"latest": {"some.other.label": "x"}},  # missing rebuild-at
+-        "only-versioned": {"7": None, "8": None},  # no tracking tag at all
++        "no-rebuild-at": {"latest": {tagging.TRACKING_TAG: "latest"}},
++        "only-unlabelled": {"latest": None, "7": None, "8": None},
+     }
+     jenkins, triggered = _run(repos)
+     assert jenkins.triggers == []
+
+/work/DockerImages — P6: git diff 1a69ff9824c7..dd8e7f4bbddb
+
+Jenkinsfile                                | 37 +++++++++++++++++++++++++------------
+ kube-coder-tunnel-reclaim/deploy-pins.json | 12 ++++++++++++
+ webhook-relay/deploy-pins.json             |  5 +++++
+ 3 files changed, 42 insertions(+), 12 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 6d11f1d..1289fce 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -32,19 +32,20 @@ def scanImage(String ref) {
+ 
+ // Pins for deploy repos (argo-cd D53): an image folder's deploy-pins.json lists every place a
+ // deploy repo pins the image, each {"repo": "owner/name", "file": "<values file>", "path":
+-// "<dotted YAML path>"}, with an optional "value" template ("{tag}" is the pushed tag; the
+-// default ":{tag}" suits the estate's `image: registry:5000/<name>{{ .Values.<path> }}`
+-// charts). After the build, each deploy repo gets one commit carrying every image this run
+-// built, which Argo CD then syncs.
+-def collectPins(List<String> images, String tag) {
++// "<dotted YAML path>"}, with an optional "value" template ("{tag}" is the per-build tag the
++// run pushed, which builtTags maps each built image to; the default ":{tag}" suits the
++// estate's `image: registry:5000/<name>{{ .Values.<path> }}` charts). After the build, each
++// deploy repo gets one commit carrying every image this run built, which Argo CD then syncs.
++def collectPins(Map<String, String> builtTags) {
+     Map<String, Map<String, Map<String, String>>> byRepo = [:]
++    List<String> images = builtTags.keySet() as List
+     for (int i = 0; i < images.size(); i++) {
+         String file = "${images[i]}/deploy-pins.json"
+         if (!fileExists(file)) continue
+         def entries = readJSON(file: file)
+         for (int j = 0; j < entries.size(); j++) {
+             def e = entries[j]
+-            String value = (e.value ?: ':{tag}').replace('{tag}', tag)
++            String value = (e.value ?: ':{tag}').replace('{tag}', builtTags[images[i]])
+             if (!byRepo.containsKey(e.repo)) byRepo[e.repo] = [:]
+             if (!byRepo[e.repo].containsKey(e.file)) byRepo[e.repo][e.file] = [:]
+             byRepo[e.repo][e.file][e.path] = value
+@@ -69,7 +70,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+     node(POD_LABEL) {
+         def variants
+         def descendants
+-        List<String> builtImages = []
++        Map<String, String> builtTags = [:]
+ 
+         stage('Cloning repo') {
+             git branch: 'main',
+@@ -83,6 +84,15 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+             def deps = readJSON(file: '.deps.json')
+             variants = deps.variants
+             descendants = deps.descendants
++
++            // A deploy-pins.json pins the one per-build tag a build of its image pushes.
++            List<String> seen = []
++            for (v in variants) {
++                if (v.image in seen && fileExists("${v.image}/deploy-pins.json")) {
++                    error("${v.image}: deploy-pins.json pins one tag per build, but build-matrix.json lists more than one variant")
++                }
++                seen << v.image
++            }
+         }
+ 
+         def force = []
+@@ -117,8 +127,10 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+ 
+             stage(stageName) {
+                 if (image in closure) {
+-                    if (!isMatrix) builtImages << image
+-                    def pushed = isMatrix ? "registry:5000/${image}:${tag}" : "registry:5000/${image}:${currentBuild.number}"
++                    // Only this build pushes it, so it is the tag deploy repos pin.
++                    String buildTag = isMatrix ? "${tag}-${currentBuild.number}" : "${currentBuild.number}"
++                    builtTags[image] = buildTag
++                    def pushed = "registry:5000/${image}:${buildTag}"
+ 
+                     dir(image) {
+                         if (fileExists('required-artifacts.json')) {
+@@ -145,7 +157,8 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+                             container('kaniko') {
+                                 if (isMatrix) {
+                                     helmCharts.kaniko2(
+-                                        destinations: [pushed],
++                                        destinations: [pushed, "registry:5000/${image}:${tag}"],
++                                        trackingTag: tag,
+                                         buildArgs: v.args,
+                                         params: [image: image],
+                                         depends: depends
+@@ -169,7 +182,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         }
+ 
+         stage('Write image pins') {
+-            def byRepo = collectPins(builtImages, "${currentBuild.number}")
++            def byRepo = collectPins(builtTags)
+             if (byRepo) {
+                 List<String> repos = byRepo.keySet() as List
+                 for (int i = 0; i < repos.size(); i++) {
+@@ -177,7 +190,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+                         cicd.writeVersionPins(
+                             repo: repos[i],
+                             pins: byRepo[repos[i]],
+-                            message: "ci: image pins from DockerImages #${currentBuild.number} (${builtImages.join(', ')})"
++                            message: "ci: image pins from DockerImages #${currentBuild.number} (${builtTags.keySet().join(', ')})"
+                         )
+                     }
+                 }
+diff --git a/kube-coder-tunnel-reclaim/deploy-pins.json b/kube-coder-tunnel-reclaim/deploy-pins.json
+new file mode 100644
+index 0000000..8d0fa8a
+--- /dev/null
++++ b/kube-coder-tunnel-reclaim/deploy-pins.json
+@@ -0,0 +1,12 @@
++[
++  {
++    "repo": "pvginkel/KubeCoderDeploy",
++    "file": "config/dev/values.yaml",
++    "path": "images.tunnelReclaim"
++  },
++  {
++    "repo": "pvginkel/KubeCoderDeploy",
++    "file": "config/prd/values.yaml",
++    "path": "images.tunnelReclaim"
++  }
++]
+diff --git a/webhook-relay/deploy-pins.json b/webhook-relay/deploy-pins.json
+index afbbac7..405094c 100644
+--- a/webhook-relay/deploy-pins.json
++++ b/webhook-relay/deploy-pins.json
+@@ -3,5 +3,10 @@
+     "repo": "pvginkel/FieldnotesDeploy",
+     "file": "config/prd/values.yaml",
+     "path": "images.webhookRelay"
++  },
++  {
++    "repo": "pvginkel/ArgoCDDeploy",
++    "file": "config/prd/values.yaml",
++    "path": "relay.image"
+   }
+ ]
+
+/work/DockerImages — P8: git diff dd8e7f4bbddb..274860828a31
+
+docs/registry-management/version-poller-redesign.md | 349 ++++++++++++++++++++++++----------------
+ 1 file changed, 207 insertions(+), 142 deletions(-)
+
+diff --git a/docs/registry-management/version-poller-redesign.md b/docs/registry-management/version-poller-redesign.md
+index 7eceed8..5dc44e4 100644
+--- a/docs/registry-management/version-poller-redesign.md
++++ b/docs/registry-management/version-poller-redesign.md
+@@ -87,16 +87,18 @@ Dependabot style), which is a different tool and **explicitly out of scope**
+ 
+ At build time, `kaniko2` stamps each image with a `rebuild-at` timestamp, the
+ **name of the tracking tag** the schedule governs, and the Jenkins job +
+-parameters that produce it. `version-poller` periodically walks the registry,
+-reads the labels off each repo's **tracking tags** (the mutable, non-numbered
+-pointers — `latest`, `tst-latest`, or a version tag like `1.35.5`), and when a
+-tag's own name matches the `tracking-tag` label and `now ≥ rebuild-at`, it
+-triggers that job — coalescing all images due for the same job into a single
+-parameterised build. Numbered history tags (`7`, `prd-4`) carry no scheduling
+-role; they are deleted by `registry-cleanup` once older than a TTL. Tracking
+-tags are **never** TTL-deleted (they hold the digests live deployments run);
+-instead a `rebuild-at` that has gone stale is the signal that a repo is
+-orphaned/renamed.
++parameters that produce it. That label, not a tag's name, says what every tag
++pointing at the image is: the tag named as the label is the **tracking tag**
++(`latest`, `tst-latest`, or a version tag like `1.35.5`); the label's **build
++series** (`7` for `latest`, `dev-7` for `dev-latest`) is build history; any
++other labelled tag is a **promoted copy** (`prd-4`). `version-poller`
++periodically walks the registry, reads the labels off each repo's tags, and
++when a tracking tag is due (`now ≥ rebuild-at`), it triggers that job —
++coalescing all images due for the same job into a single parameterised build.
++Build history carries no scheduling role; `registry-cleanup` deletes it once
++older than a TTL or past a per-series cap. Tracking tags and promoted copies
++are **never** deleted; instead a `rebuild-at` that has gone stale is the signal
++that a repo is orphaned/renamed.
+ 
+ ---
+ 
+@@ -109,7 +111,7 @@ arbitrary labels.
+ | Label | Required | Meaning |
+ |-------|----------|---------|
+ | `org.webathome.poller.rebuild-at` | yes | ISO-8601 UTC instant. The image is **due** when `now ≥ rebuild-at`. Computed at build time as `now + rebuild_interval`. |
+-| `org.webathome.poller.tracking-tag` | yes | The **name** of the tag this schedule governs, e.g. `latest`, `tst-latest`, `1.35.5`. The poller acts on `rebuild-at` only for the tag whose own name equals this value (see below). |
++| `org.webathome.poller.tracking-tag` | yes | The **name** of the tag this schedule governs, e.g. `latest`, `tst-latest`, `1.35.5`. The poller acts on `rebuild-at` only for the tag whose own name equals this value (see below). It also decides what every other tag on the image is: build history or a promoted copy (see the tag scheme below). |
+ | `org.webathome.poller.pipeline` | yes | Folder-qualified Jenkins job to trigger, e.g. `IaC/Ginbov`. From `env.JOB_NAME`. |
+ | `org.webathome.poller.params` | no | JSON object of build parameters, e.g. `{"image":"ginbov_nl"}`. Absent ⇒ trigger with no parameters. |
+ 
+@@ -139,30 +141,59 @@ build actually re-stamps" from "is this an inherited copy" is to compare the
+ That comparison is what makes the whole scheme work; it is the central new idea
+ versus the earlier drafts.
+ 
+-### Tag scheme (enforced by `kaniko2`)
+-
+-Builds push exactly one of:
+-
+-- **two tags** — `latest` + `<digits>`, or `<prefix>-latest` + `<prefix>-<digits>`
+-  (e.g. `tst-latest` + `tst-7`). The `*latest` tag is the **tracking tag**; the
+-  numbered one is deletable history.
+-- **one tag** — a version/matrix tag such as `1.35.5` or
+-  `26.5.1-postgres-health-ispn`. A single tag is **by definition** the tracking
+-  tag.
+-
+-Anything else is an error. **No exotic schemes.**
+-
+-The mirror classifier used by both tools: a tag is **versioned** (numbered
+-history) iff it matches `^\d+$` or `^.+-\d+$`; everything else is a **tracking
+-tag** (covers `latest`, `*-latest`, and semver pins like `1.35.5`, `v26.0`,
+-`26.5.1-postgres-health-ispn`).
+-
+-**Argo CD adds no category here.** A migrated app's stage tag (`prd-<n>`) is
+-written by the promote job rather than by a build, and carries no labels of its
+-own — it is a second name for a manifest a build already pushed. The classifier
+-above sorts it as versioned history without modification, which is correct: it
+-is not a rebuild target. What changes is only that a versioned tag can now be
+-something a stage deploys. See §14.
++### Tag scheme and build series (enforced by `kaniko2`)
++
++The `tracking-tag` label names the tracking tag. **Build history is the label's
++build series:**
++
++| Label | Its build series | Example build |
++|-------|------------------|---------------|
++| `latest` | the bare build numbers | `57` |
++| `<prefix>-latest` | `<prefix>-<digits>` | `dev-57` (label `dev-latest`) |
++| any other `<tag>` | `<tag>-<digits>` | `26.7.3-postgres-health-ispn-57` |
++
++Every tag a build pushes is the tracking tag or in its series, and the tracking
++tag is never a bare build number; `kaniko2` refuses anything else. The builds in
++use:
++
++- `latest` + `<n>`, or `<prefix>-latest` + `<prefix>-<n>` (e.g. `tst-latest` +
++  `tst-7`);
++- a DockerImages **matrix** build: its named tag + `<tag>-<n>` (e.g.
++  `26.7.3-postgres-health-ispn` + `26.7.3-postgres-health-ispn-57`), labelled
++  `<tag>`. The per-build tag is the one a deploy repo pins;
++- a lone build number `<n>`, labelled `latest`, so the number falls in
++  `latest`'s series (e.g. `ssegateway-validation`);
++- a lone version tag such as `1.35.5`, labelled as itself.
++
++`kaniko2` takes the tracking tag as `trackingTag:`. Without it, the label is the
++one destination whose series holds every other one, and a lone bare build number
++is labelled `latest`. The contract is `kaniko2`'s doc comment
++(JenkinsPipelineUtils `vars/helmCharts.groovy`); §5 sketches it.
++
++**The classifier both tools share** reads the label off the image a tag points
++to — registry-cleanup's `build_number` and version-poller's
++`tagging.build_number`, both mirroring `kaniko2`'s `inBuildSeries`:
++
++- **tracking tag** — the tag's name equals the label;
++- **build history** — the tag is in the label's build series;
++- **promoted copy** — labelled, but neither: a `crane tag` copy carries the
++  labels of the build it copies (`prd-57` carries `dev-latest`, `prd-latest`
++  carries `tst-latest`);
++- **unlabelled** — the image carries no label (built before `kaniko2`, or
++  bypassing it). Neither tool acts on it: cleanup never deletes it nor counts it,
++  and the poller ignores it. The migration to labelled images is gradual, by
++  rebuild.
++
++A tag's name never decides: `node-24` and `jdk-21` are tracking tags labelled as
++themselves, not builds 24 and 21. A tag labelled with its own bare build number
++(`dhcpapp:35`, `ssegateway-validation:56`) was built before `kaniko2` refused a
++bare-number label. It is a leftover: cleanup keeps it as a tracking tag, and the
++poller does not govern with it, so its long-past `rebuild-at` triggers nothing.
++
++**Argo CD.** A migrated app's stage tag (`prd-<n>`) is written by the promote
++job with `crane tag`, not by a build: a second name for a manifest a build
++already pushed, carrying that build's labels. It is a promoted copy: cleanup
++keeps it without counting it, and the poller never triggers it. See §14.
+ 
+ ---
+ 
+@@ -182,7 +213,10 @@ import groovy.json.JsonOutput
+  * Builds an image with Kaniko and stamps the version-poller labels.
+  *
+  * Named args:
+- *   destinations  (required) 1 or 2 full image refs (see §4 tag scheme).
++ *   destinations  (required) full image refs; each tag is the tracking tag or
++ *                   in its build series (see §4 tag scheme).
++ *   trackingTag   (optional) the tracking tag; derived from the destinations
++ *                   when absent (§4).
+  *   params        (optional) Map stamped as the `params` label and replayed by
+  *                   the poller when it rebuilds, e.g. [image: 'ginbov_nl'].
+  *   dockerfile    (optional) default 'Dockerfile'
+@@ -200,7 +234,7 @@ def kaniko2(Map args) {
+ 
+     if (!destinations) error('kaniko2: destinations is required')
+ 
+-    String trackingTag = resolveTrackingTag(destinations)
++    String trackingTag = resolveTrackingTag(destinations, args.trackingTag as String)
+     String rebuildAt   = (new Date() + rebuildDays)
+         .format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+ 
+@@ -224,24 +258,34 @@ def kaniko2(Map args) {
+ }
+ 
+ /**
+- * 1 dest  -> that tag is the tracking tag (matrix/version tag).
+- * 2 dests -> `latest`/`<digits>` or `<prefix>-latest`/`<prefix>-<digits>`;
+- *            returns the `*latest` tag. Anything else errors.
++ * The given tracking tag, or else the one destination whose build series holds
++ * every other one; a lone bare build number is labelled `latest`. Errors when a
++ * destination is neither the tracking tag nor in its series, or when the
++ * tracking tag is a bare build number.
+  */
+-private String resolveTrackingTag(List<String> destinations) {
++private String resolveTrackingTag(List<String> destinations, String trackingTag) {
+     def tags = destinations.collect { it.substring(it.lastIndexOf(':') + 1) }
+-    if (tags.size() == 1) return tags[0]
+-    if (tags.size() == 2) {
+-        for (candidate in tags) {
+-            def m = (candidate =~ /^(.*-)?latest$/)   // 'latest' or '<prefix>-latest'
+-            if (!m) continue
+-            def prefix = m[0][1] ?: ''                // 'tst-' or ''
+-            def other = tags.find { it != candidate }
+-            if (other ==~ /\Q${prefix}\E\d+/) return candidate
+-        }
++    String label = trackingTag
++    if (!label) {
++        label = (tags.size() == 1 && tags[0] ==~ /\d+/) ? 'latest'
++            : tags.find { t -> tags.every { it == t || inBuildSeries(it, t) } }
++        if (!label) error("kaniko2: pass trackingTag; got ${tags}")
+     }
+-    error("kaniko2: destinations must be a single tag, or latest/<digits> or " +
+-          "<prefix>-latest/<prefix>-<digits>; got ${tags}")
++    if (label ==~ /\d+/) error("kaniko2: tracking tag ${label} is a bare build number")
++    def stray = tags.findAll { it != label && !inBuildSeries(it, label) }
++    if (stray) error("kaniko2: ${stray} are neither ${label} nor in its build series")
++    return label
++}
++
++/**
++ * `latest` owns `<digits>`, `<prefix>-latest` owns `<prefix>-<digits>`, any
++ * other label `<tag>` owns `<tag>-<digits>`.
++ */
++private boolean inBuildSeries(String tag, String label) {
++    String prefix = (label == 'latest' || label.endsWith('-latest'))
++        ? label.substring(0, label.length() - 'latest'.length())
++        : label + '-'
++    return tag.startsWith(prefix) && tag.substring(prefix.length()) ==~ /\d+/
+ }
+ ```
+ 
+@@ -261,9 +305,11 @@ helmCharts.kaniko2(
+     params: [image: image],
+ )
+ 
+-// DockerImages, matrix image — single (version) tag, with build args
++// DockerImages, matrix image — the named tag plus a per-build tag, with build args
+ helmCharts.kaniko2(
+-    destinations: ["registry:5000/${image}:${tag}"],
++    destinations: ["registry:5000/${image}:${tag}-${currentBuild.number}",
++                   "registry:5000/${image}:${tag}"],
++    trackingTag: tag,
+     buildArgs: v.args,
+     params: [image: image],
+ )
+@@ -285,34 +331,41 @@ Notes:
+ 
+ ## 6. `version-poller` runtime
+ 
+-The timer path collapses to a registry walk. The poller reads labels only off
+-**tracking tags** (cheap — it skips the numbered history entirely). Per poll
+-cycle:
++The timer path collapses to a registry walk. The label, not the tag's name,
++says what a tag is (§4), so the poller reads the labels off every tag — one
++image-config read per tag. Per poll cycle:
+ 
+ ```
+ trigger_groups = {}                         # pipeline -> list[ params-map ]
+ 
+ for repo in registry.catalog():
+-    tracking_tags = [t for t in registry.tags(repo) if not is_versioned(t)]
+-    if not tracking_tags:
+-        warn("%s: no tracking tag — non-conforming or orphaned", repo)
+-        continue
+-
+     governing = []                          # (tag, labels) where tag == tracking-tag label
+-    for t in tracking_tags:
++    newest_copies = {}                      # label -> (rebuild-at, tag) of its newest promoted copy
++    for t in registry.tags(repo):
+         labels = registry.labels(repo, t)   # config-blob Labels
+-        if not labels or "org.webathome.poller.rebuild-at" not in labels:
++        label = labels.get("org.webathome.poller.tracking-tag")
++        if not label or build_number(t, label) is not None:
++            continue                        # unlabelled, or build history (§4)
++        if t == label and build_number(t, "latest") is not None:
++            continue                        # leftover labelled with its own bare build number
++        if "org.webathome.poller.rebuild-at" not in labels:
+             warn("%s:%s non-conforming (no rebuild-at)", repo, t)
+             continue
+-        if labels["org.webathome.poller.tracking-tag"] == t:
++        if t == label:
+             governing.append((t, labels))   # the tag the build re-stamps
+-        else:
+-            # inherited copy (e.g. prd-latest promoted from a tst build)
+-            if now - parse(labels["...rebuild-at"]) > STALE_GRACE:
+-                warn("%s:%s past its rebuild window — consider promoting a "
+-                     "fresh build to this environment", repo, t)
++            continue
++        # promoted copy (e.g. prd-556 carrying dev-latest)
++        rebuild_at = parse(labels["...rebuild-at"])
++        if label not in newest_copies or rebuild_at > newest_copies[label][0]:
++            newest_copies[label] = (rebuild_at, t)
++
++    for rebuild_at, t in newest_copies.values():
++        if now - rebuild_at > STALE_GRACE:
++            warn("%s:%s past its rebuild window — consider promoting a "
++                 "fresh build to this environment", repo, t)
+ 
+     if not governing:
++        warn("%s: no tracking tag — non-conforming or orphaned", repo)
+         continue
+ 
+     # Normal images have exactly one governing tag. Matrix repos can have
+@@ -337,17 +390,21 @@ for pipeline, param_maps in trigger_groups.items():
+     jenkins.trigger(pipeline, merge_params(param_maps))   # §7
+ ```
+ 
+-**Three-way tag handling** (the heart of the loop):
+-
+-- **`tag == tracking-tag` label** → the build's own tracking tag. Honor
+-  `rebuild-at`; trigger if due; never delete.
+-- **non-versioned but `tag != tracking-tag` label** (e.g. `prd-latest`,
+-  `uat-latest`) → an inherited promotion copy. **Never trigger** (its named
+-  pipeline rebuilds the *build* tag, not this one — this is Model A, §11). Warn
+-  if its `rebuild-at` is stale: prod/uat is running an image past its rebuild
+-  window — consider promoting a fresh build. Never delete.
+-- **versioned** (`7`, `prd-4`) → the poller ignores it; `registry-cleanup` owns
+-  it.
++**Tag handling** (the heart of the loop), by §4's classes:
++
++- **tracking tag** (`tag == tracking-tag` label) → the build's own tracking tag.
++  Honor `rebuild-at`; trigger if due; never delete.
++- **promoted copy** (labelled, neither the label nor in its series: `prd-556`,
++  `uat-latest`) → **never trigger** (its named pipeline rebuilds the *build*
++  tag, not this one — this is Model A, §11). Of each label's copies, the newest
++  (by `rebuild-at`) is warned about once its `rebuild-at` is stale: that
++  environment is running an image past its rebuild window — consider promoting
++  a fresh build. Never delete.
++- **build history** (in the label's series: `7`, `dev-4`,
++  `26.7.3-postgres-health-ispn-12`) → the poller ignores it; `registry-cleanup`
++  owns it.
++- **unlabelled**, and a **leftover** labelled with its own bare build number
++  (`dhcpapp:35`) → ignored. A repo left with no tracking tag is warned about.
+ 
+ **State.** Effectively none for the timer path — the schedule lives on the
+ images. (The HelmCharts island, §9, keeps its own small state.)
+@@ -403,23 +460,29 @@ single `DockerImages` build with `image=ginbov_nl,webathome`.
+ `registry-cleanup` switches from "keep last N numeric tags" to a TTL, and
+ becomes dead simple. Per repo:
+ 
+-- **Keep** every **tracking tag** (anything not matching `^\d+$` / `^.+-\d+$`):
+-  `latest`, `*-latest`, and semver pins (`1.30.3`, `v26.0`, …). These hold the
+-  digests live deployments run.
+-- **Delete** every **versioned** tag (`7`, `8`, `dev-7`, `prd-4`, …) once its
+-  **creation age > TTL** *or* it falls outside its prefix family's newest **N**
+-  (the cap below), then run registry garbage-collection as today.
+-- **Per-prefix cap (N = 5):** independently of age, keep at most the newest 5
+-  versioned tags per prefix family (`tst-*`, `prd-*`, bare-numbered, …), ranked
+-  by build number; older ones are deleted. This bounds history on fast-building
+-  repos so old tags disappear without waiting out the TTL. It is per *family*,
+-  not per repo, so a busy environment can't evict another environment's recent
+-  tags. Net: a versioned tag survives only if it is within the TTL **and** within
+-  its family's newest N.
+-- **Safety floor:** a repo is never fully emptied. A conforming repo always has
+-  a tracking tag (kept), so this never bites; a non-conforming straggler with
+-  only versioned tags keeps its newest tag (and the tool warns if even that is
+-  past the TTL — likely orphaned).
++- **Classify by the label** (§4): only **build history** — a tag in the build
++  series of the `tracking-tag` label on the image it points to — is ever
++  deleted. Every other tag is **kept and not counted** toward the cap: tracking
++  tags (`latest`, `*-latest`, `1.30.3`, `node-24`, …), promoted copies
++  (`prd-4`), leftovers labelled with their own bare build number (`dhcpapp:35`),
++  and unlabelled tags.
++- **Delete** build history (`7`, `8`, `dev-7`, `26.7.3-postgres-health-ispn-7`,
++  …) once its image's **creation age > TTL** *or* it falls outside its series'
++  newest **N** (the cap below), then run registry garbage-collection as today.
++- **Per-series cap (N = 5):** independently of age, keep at most the newest 5
++  builds of each label's series, ranked by build number; older ones are
++  deleted. This bounds history on fast-building repos so old tags disappear
++  without waiting out the TTL. It is per *series*, not per repo, so a busy
++  series (an environment, a matrix variant) can't evict another series' recent
++  builds. Net: a build survives only if it is within the TTL **and** within its
++  series' newest N.
++- **Floor:** every series keeps its newest build, whether or not the label's
++  own tag exists in the repo — a build that pushes only `<n>` has none, and a
++  leftover self-labelled number (`ssegateway-validation:56`) counting as a
++  tracking tag does not switch the floor off. The tool warns when that newest
++  build is past the TTL (no longer built?).
++- **Shared digests:** a build whose manifest a kept tag also points at is kept,
++  since deleting a manifest unlinks every tag on it (§14.3).
+ - **`latest` health warnings (diagnostics, not deletion):** for the `latest`
+   tag (the auto-rebuilt build pointer), warn if its image is older than the TTL
+   (not being rebuilt) or carries no `rebuild-at` label (non-conforming / not
+@@ -442,16 +505,17 @@ keep-last-N-per-prefix floor, a cluster in-use scan, and any RBAC change are all
+ **unnecessary** — see §11 for the one operational assumption it rests on.
+ 
+ > **Superseded for Argo-migrated apps (§14).** The paragraph above holds only
+-> while deployment resolves a *tracking tag*. Under GitOps a stage deploys an
+-> immutable `prd-<n>` — a **versioned** tag, which both rules above select for
+-> deletion. Two consequences: the shared-digest guard below stops being a
+-> courtesy to tracking tags and becomes what keeps production alive when its
+-> build tag ages out of the bare family's cap, and whatever TTL shape lands must
+-> exempt the newest member of each prefix family. §14 specifies both.
++> while deployment resolves a *tracking tag*. Under GitOps a stage deploys a
++> per-build tag: either a build in its label's series (`<n>`, `dev-<n>`,
++> `<tag>-<n>`), which the rules above delete once it ages out of the cap or the
++> TTL, or a promoted `prd-<n>`, which they keep. Cleanup does not read what is
++> deployed. The newest build of each series is kept (the floor above), and the
++> shared-digest guard keeps a build whose manifest a promoted copy shares
++> (§14.3).
+ 
+ Removed from the current tool:
+ - the old per-repo "keep last N numeric tags" policy (superseded by the TTL plus
+-  the per-prefix cap above — a delete-beyond-N cap, not a keep-N floor);
++  the per-series cap above — a delete-beyond-N cap, not a keep-N floor);
+ - the Kaniko **cache-repo** cleanup (`--cache-repo`, `cleanup_cache_repo`) — the
+   kaniko cache experiment is retired.
+ 
+@@ -567,8 +631,9 @@ assumed away.
+ > governs any release not yet migrated.
+ 
+ **Model A — the timer patches builds, not prod.** The poller acts only on a
+-repo's **build** tracking tag; promotion tags (`prd-latest`, `uat-latest`) are
+-inherited copies it never triggers (it only warns when they go stale). A freshly
++repo's **build** tracking tag; promotion tags (`prd-latest`, `uat-latest`,
++`prd-<n>`) are promoted copies it never triggers (it only warns when a label's
++newest copy goes stale). A freshly
+ patched build reaches prod when you **promote**, exactly as today — the timer
+ does not autonomously redeploy production. Autonomous prod patching would require
+ reworking promotion (which is a `crane` re-tag and can't re-stamp labels) and is
+@@ -582,17 +647,18 @@ updater is a real follow-up (out of scope regardless).
+ **Pipeline parameter contract (§7).** Every parameterised pipeline must accept
+ comma-separated parameter values. Verify per pipeline during rollout.
+ 
+-**Non-conforming builds.** Any image not yet built through `kaniko2` has no
+-`rebuild-at` and is flagged. Expected during migration; converges to zero after
+-§13's build-everything pass.
++**Non-conforming builds.** Any image not yet built through `kaniko2` carries no
++labels: both tools leave its tags alone (§4), and a repo with no tracking tag is
++flagged. Expected during migration; converges to zero after §13's
++build-everything pass.
+ 
+ **Defaults:**
+ 
+ | Knob | Default | Where it lives |
+ |------|---------|----------------|
+ | rebuild interval | 1 week | build side (`kaniko2 rebuildDays`), per-build overridable |
+-| TTL (versioned tags) | 4 weeks | `registry-cleanup` (`--ttl-weeks`) |
+-| max versioned tags per prefix | 5 | `registry-cleanup` (`--max-per-prefix`) |
++| TTL (build history) | 4 weeks | `registry-cleanup` (`--ttl-weeks`) |
++| max builds per series | 5 | `registry-cleanup` (`--max-per-series`) |
+ | `STALE_GRACE` | 2× rebuild interval | `version-poller` |
+ 
+ ---
+@@ -648,7 +714,7 @@ deploy repo and promotion is a fast-forward of `prd` to `main` (D34–D35).
+ 
+ The first cut of that had CI write one stage-agnostic `:<n>` into
+ `chart/values.yaml`, deployed by every stage. That makes production's reference a
+-**versioned** tag — precisely what §8's per-prefix cap deletes — with no record
++**build** tag — build history, precisely what §8's per-series cap deletes — with no record
+ in the registry that it is in use. The fix considered here was a *marker*: a
+ `prd-*` tag aliasing the manifest, written from git, deployed by nothing, whose
+ only job was to tell garbage collection the digest was spoken for.
+@@ -664,7 +730,8 @@ reasons nobody connects back to the promotion that didn't happen.
+ > **Amended 2026-09-22 (ANS-99; Argo CD D47 as amended).** For KubeCoder the
+ > build tag is `dev-<n>`, not a bare `<n>`: dev pins `dev-<n>`, and the promote
+ > job runs `crane tag <app>:dev-<n> <app>:prd-<n>`. Read `<n>` below as the build
+-> tag; the model and the guard are unchanged, with `dev-<n>` as the build family.
++> tag; the model and the guard are unchanged, with `dev-<n>` as the build series
++> (of label `dev-latest`, §4).
+ 
+ Stage tags return as ordinary deployment references:
+ 
+@@ -706,48 +773,46 @@ Two things still hold, one of them load-bearing:
+ **The shared-digest guard is still required.** `prd-<n>` and `<n>` are the same
+ manifest, and the registry's only delete primitive removes a manifest by digest,
+ unlinking *every* tag pointing at it. So deleting the build tag `<n>` once it
+-ages out of the bare family's cap would destroy `prd-<n>` — production — with
+-it. `cleanup_repo` already guards this, and now **fails closed**: a kept tag
++ages out of its series' cap would destroy `prd-<n>` — production, a promoted
++copy cleanup otherwise keeps (§4) — with it. `cleanup_repo` guards this, and
++**fails closed**: a kept tag
+ whose digest will not resolve (a 404 race, a missing `Docker-Content-Digest`
+ header, a manifest type outside the request's `Accept` set) aborts every
+ deletion in that repo rather than leaving a silent hole in the protection set.
+ Pinned by tests, including a negative control that the build tag *is* deleted
+ once nothing aliases it, so the protection cannot drift into blanket immunity.
+ 
+-**Whatever TTL shape lands must not reap the newest member of a prefix family.**
+-An age-based rule would otherwise delete production's tag for the crime of not
+-having been promoted recently — which is exactly what a slow-moving stage looks
+-like. The suggested form is a single rule, *the newest tag in each prefix family
+-is never deleted*: no per-stage configuration, nothing for an app to forget, and
+-it covers stage prefixes nobody anticipated. It also generalises the "never empty
+-a repo" floor already in the tool. Recorded as a **requirement on the TTL
+-design, not as a decided mechanism** — the shape of TTL-based reaping is still
+-open (see the audit doc), and this is a constraint it must satisfy.
++**The newest build of each series is never deleted.** An age-based rule would
++otherwise delete a stage's build for the crime of not having been rebuilt
++recently — which is exactly what a slow-moving image looks like. It is a single
++rule, §8's floor: *every series keeps its newest build*, whether or not the
++label's own tag exists. No per-stage configuration, nothing for an app to
++forget, and it covers series nobody anticipated. Production's `prd-<n>` needs no
++floor: it is a promoted copy, which cleanup never deletes.
+ 
+-Accepted cost of that shape: every family retains one image indefinitely,
+-including retired stages. One image per family per repo, failing safe.
++Accepted costs of that shape, both failing safe: every series retains one image
++indefinitely, including retired matrix variants; and promoted copies are never
++cleaned, so they accumulate, one per promotion, until a retention rule for them
++is set.
+ 
+-### 14.4 Sizing the caps
++### 14.4 Sizing the cap
+ 
+-The per-family cap now has two independent meanings, which is convenient because
+-§8 caps per family anyway:
++Only a build series is capped (§8); a promoted copy is not:
+ 
+-| Family | Governs | Note |
++| Tag | Governs | Note |
+ | --- | --- | --- |
+-| bare (`52`) | how stale a build can be and still be promotable — only `<n>` holds the digest between build and promotion | promoting the tip of `main` makes this ~1; it only grows for a promote-an-older-validated-build workflow |
+-| `prd-` (`prd-52`) | **how many promotions can be rolled back through** — D36's revert-and-promote and its force-move lever both need the previous `prd-<n>` to still exist | the number worth choosing deliberately |
++| build (`52`, or KubeCoder's `dev-52`) — capped with its series | how stale a build can be and still be promotable — only the build tag holds the digest between build and promotion | promoting the tip of `main` makes this ~1; it only grows for a promote-an-older-validated-build workflow |
++| promoted copy (`prd-52`) — never cleaned | **how many promotions can be rolled back through** — D36's revert-and-promote and its force-move lever both need the previous `prd-<n>` to still exist | unbounded: every earlier `prd-<n>` is still there |
+ 
+-If the bare family's cap is undersized for the workflow, the promote job fails at
++If the series' cap is undersized for the workflow, the promote job fails at
+ `crane tag` with "manifest unknown" — loud, and at the right moment — but it is
+ better sized than discovered.
+ 
+ ### 14.5 What the poller sees
+ 
+-Nothing new. `prd-<n>` is a versioned tag under §4's classifier, so §6's walk
+-ignores it exactly as it ignores `7` or `dev-4`. No poller change, and no
+-promotion copy to reason about now that `*-latest` promotion tags are gone.
+-
+-The promotion-staleness signal the old `prd-latest` provided — "production is
+-running an image this old" — becomes a report rather than a tag: the newest
+-member of each stage family, and the age of the image behind it. If §14.3's
+-newest-per-family rule lands, that set is already computed for it.
++`prd-<n>` is a promoted copy under §4's classifier: it carries the label of the
++build it copies (`dev-latest`), so §6's walk never triggers it. Of each label's
++promoted copies, the walk warns about the newest (by `rebuild-at`) once it is
++past its rebuild window. That is the promotion-staleness signal the old
++`prd-latest` provided — "production is running an image this old" — now read
++off the newest `prd-<n>`.

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "D53 gains one dated amendment covering all three points P9 requires: registry:5000 images pinned to per-build tags, never digests; matrix per-build tags written wherever a pin list exists; and the relay pin written by relay builds. Upstream images are left to ANS-139. Its claims are grounded and it backs RegistryDeploy's corrected comment. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The design doc now states the shipped label rule wherever it stated the old tag-shape scheme, and its claims match kaniko2, registry-cleanup and version-poller as shipped. One advisory: §4 lists a lone version tag (1.35.5) as a build in use, but that is k8s's matrix tag, which now pushes two tags.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "§4 'builds in use' names a lone version tag 1.35.5; that is k8s's matrix tag, which since P6 pushes 1.35.5 + 1.35.5-<n>"}]}

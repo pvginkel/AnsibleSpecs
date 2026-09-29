@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Matrix builds push <tag>-<build> beside <tag> with trackingTag <tag>, which P1's kaniko2 accepts for all seven live matrix tags. The pin stage writes each built image's per-build tag, and every pin-list path resolves to exactly one line in the P2/P3/KeycloakDeploy values files. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

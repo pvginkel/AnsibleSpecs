@@ -1,0 +1,56 @@
+WARNING canon: no tracking tag — non-conforming or orphaned
+WARNING certificate-renewer: no tracking tag — non-conforming or orphaned
+WARNING design-assistant:uat-17 past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant:dev-latest rebuild-at stale by 35 days, 3:30:47.748774 — likely orphaned/renamed/dead job
+WARNING design-assistant-canon-docs:prd-6 past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-canon-docs:uat-latest rebuild-at stale by 32 days, 3:49:57.748774 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend:uat-17 past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-frontend:dev-latest rebuild-at stale by 35 days, 3:29:42.748774 — likely orphaned/renamed/dead job
+WARNING design-assistant-frontend-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-manuals:prd-6 past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-manuals:uat-latest rebuild-at stale by 32 days, 3:48:00.748774 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal:uat-17 past its rebuild window — consider promoting a fresh build to this environment
+WARNING design-assistant-portal:dev-latest rebuild-at stale by 35 days, 3:28:04.748774 — likely orphaned/renamed/dead job
+WARNING design-assistant-portal-docs: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-ui: no tracking tag — non-conforming or orphaned
+WARNING design-assistant-validation: no tracking tag — non-conforming or orphaned
+WARNING dhcpapp-validation: no tracking tag — non-conforming or orphaned
+WARNING dnsmapper: no tracking tag — non-conforming or orphaned
+WARNING docker-image-test: no tracking tag — non-conforming or orphaned
+WARNING electronics-inventory-validation: no tracking tag — non-conforming or orphaned
+WARNING frontend-toolchain:node-24 rebuild-at stale by 85 days, 19:46:58.748774 — likely orphaned/renamed/dead job
+WARNING fundachecker: no tracking tag — non-conforming or orphaned
+WARNING gdrive-backup: no tracking tag — non-conforming or orphaned
+WARNING go-toolchain:latest rebuild-at stale by 85 days, 19:45:37.748774 — likely orphaned/renamed/dead job
+WARNING guacamole-db: no tracking tag — non-conforming or orphaned
+WARNING home: no tracking tag — non-conforming or orphaned
+WARNING iac-toolchain:latest rebuild-at stale by 85 days, 19:44:14.748774 — likely orphaned/renamed/dead job
+WARNING iot-support-validation: no tracking tag — non-conforming or orphaned
+WARNING iotsupport: no tracking tag — non-conforming or orphaned
+WARNING java-toolchain:jdk-21 rebuild-at stale by 85 days, 19:43:11.748774 — likely orphaned/renamed/dead job
+WARNING k8s-1.30.3: no tracking tag — non-conforming or orphaned
+WARNING kaniko: no tracking tag — non-conforming or orphaned
+WARNING kaniko-livetest: no tracking tag — non-conforming or orphaned
+WARNING kube-coder-dev-local-home:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING kube-coder-go-toolchain:cgo-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-iac-toolchain:librados-test past its rebuild window — consider promoting a fresh build to this environment
+WARNING kube-coder-scratch-probe: no tracking tag — non-conforming or orphaned
+WARNING kubecoder-kaniko-livetest: no tracking tag — non-conforming or orphaned
+WARNING kubecoder-worker-p12probe: no tracking tag — non-conforming or orphaned
+WARNING llmbox:latest declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING llmbox-playwright:playwright-1.60.0 declares unknown dependency type 'npm:@anthropic-ai/claude-code'; skipping
+WARNING lv125-test: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend: no tracking tag — non-conforming or orphaned
+WARNING modern-app-backend-build: no tracking tag — non-conforming or orphaned
+WARNING modern-app-frontend-build: no tracking tag — non-conforming or orphaned
+WARNING p12-probe3: no tracking tag — non-conforming or orphaned
+WARNING p12-symlink-probe: no tracking tag — non-conforming or orphaned
+WARNING python: no tracking tag — non-conforming or orphaned
+WARNING python-toolchain:latest rebuild-at stale by 85 days, 19:44:58.748774 — likely orphaned/renamed/dead job
+WARNING scratch-slice231-probe: no tracking tag — non-conforming or orphaned
+WARNING slice104-test: no tracking tag — non-conforming or orphaned
+WARNING ssegateway-validation: no tracking tag — non-conforming or orphaned
+WARNING webathome_org-db: no tracking tag — non-conforming or orphaned
+WARNING webathome_org_db: no tracking tag — non-conforming or orphaned
+WARNING zigbee-control-validation: no tracking tag — non-conforming or orphaned
+INFO would trigger 0 pipelines: [] (9s)

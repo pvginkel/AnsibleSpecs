@@ -1,0 +1,1 @@
+backup-server: ! cexec go true 2>/dev/null || cexec go go test ./...    [  OK  ]

@@ -1,0 +1,187 @@
+/work/scratch/RegistryDeploy — P7: git diff 689dff07175e..dca461d00985
+
+.kubecoder/project.yaml                       |  4 +--
+ chart/templates/registry-cleanup-cronjob.yaml | 10 +++---
+ chart/values.yaml                             |  3 ++
+ config/prd/values.yaml                        | 10 ++++--
+ tests/render-chart.py                         | 84 +++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 102 insertions(+), 9 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 0bc2798..7a39499 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -15,9 +15,7 @@ projects:
+       - cexec iac terraform fmt -check -diff -recursive
+     test:
+       - cexec iac tests/build-deps.sh
+-      - >-
+-        cexec iac helm template registry-prd chart --namespace registry-prd --values config/prd/values.yaml
+-        --set hook.repo=https://github.com/pvginkel/RegistryDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=registry-prd
++      - cexec iac tests/render-chart.py
+       - cexec iac tests/terraform.sh
+       - cexec aac-tools gen-architecture --stage prd --producer registry-deploy
+       - cexec aac-tools arch-validate docs/architecture/registry-deploy.yaml
+diff --git a/chart/templates/registry-cleanup-cronjob.yaml b/chart/templates/registry-cleanup-cronjob.yaml
+index eff7e80..d55f01d 100644
+--- a/chart/templates/registry-cleanup-cronjob.yaml
++++ b/chart/templates/registry-cleanup-cronjob.yaml
+@@ -1,13 +1,13 @@
++{{- $dryRun := .Values.registryCleanup.dryRun }}
++{{- if not (kindIs "bool" $dryRun) }}
++{{- fail "registryCleanup.dryRun must be true or false" }}
++{{- end }}
+ apiVersion: batch/v1
+ kind: CronJob
+ metadata:
+   name: registry-cleanup
+ spec:
+   schedule: "30 3 * * *" # 3:30 AM every day
+-  # Paused after the 2026-09-25 outage. The GC's --delete-untagged removed the
+-  # digest Keycloak was pinned to, and the keep-newest cap ignores deploy pins.
+-  # Resume once cleanup can no longer delete an image a deploy repo pins.
+-  suspend: true
+   jobTemplate:
+     spec:
+       backoffLimit: 0
+@@ -22,6 +22,8 @@ spec:
+               env:
+                 - name: REGISTRY_URL
+                   value: http://registry:5000
++                - name: DRY_RUN
++                  value: {{ $dryRun | quote }}
+ {{ if (index .Values.resources "registry-cleanup" "registry-cleanup") }}
+               resources:
+                 {{- toYaml (index .Values.resources "registry-cleanup" "registry-cleanup") | nindent 16 }}
+diff --git a/chart/values.yaml b/chart/values.yaml
+index 7e80968..be3eaef 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -15,6 +15,9 @@ images:
+   registry: :latest
+   registryCleanup: :latest
+ 
++registryCleanup:
++  dryRun:
++
+ resources:
+   registry:
+     registry-app:
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index ca75016..ce7d5e9 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -14,6 +14,11 @@ resources:
+       requests:
+         memory: 96Mi
+ 
++registryCleanup:
++  # true: each nightly run logs what it would delete, garbage collection included, and
++  # deletes nothing.
++  dryRun: true
++
+ externalSecrets:
+   secrets:
+     http-signing:
+@@ -23,8 +28,9 @@ externalSecrets:
+           path: eso/prd/registry/prd/http-signing
+           property: secret
+ 
+-# Passed by HelmCharts' deploy CLI on top of the file, now pinned here: the stage
+-# name, and each image at the digest the release runs (argo-cd D53).
++# The stage name, and each image the release runs (argo-cd D53). An image from
++# registry:5000 is pinned to a per-build tag, never to a digest: no build pushes that
++# tag again, so it always names the same image.
+ global:
+   environment: prd
+ images:
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+new file mode 100755
+index 0000000..1d9b876
+--- /dev/null
++++ b/tests/render-chart.py
+@@ -0,0 +1,84 @@
++#!/usr/bin/env python3
++"""The gate: the chart renders registry-prd the way Argo CD renders it, and the
++registry-cleanup CronJob runs nightly in the mode the stage's dry-run setting names.
++
++The stage is templated under the Application's own name, into that namespace, with
++config/prd/values.yaml and the four `hook.*` helm parameters as `--set`. The library
++dependency is built from chart/Chart.lock, as the repo-server builds it.
++
++Run tests/build-deps.sh first; the render needs chart/charts/ populated.
++"""
++
++import pathlib
++import subprocess
++import sys
++
++import yaml
++
++REPO = pathlib.Path(__file__).resolve().parent.parent
++RELEASE = "registry-prd"
++STAGE_VALUES = REPO / "config" / "prd" / "values.yaml"
++HOOK = (
++    "hook.repo=https://github.com/pvginkel/RegistryDeploy.git,"
++    "hook.revision=0123456789abcdef0123456789abcdef01234567,"
++    f"hook.stage=prd,hook.namespace={RELEASE}"
++)
++CRONJOB = "registry-cleanup"
++SETTING = "registryCleanup.dryRun"
++GUARD = f"{SETTING} must be true or false"
++# registry-cleanup accepts exactly "true" or "false" here and exits 2 on anything else
++# (DockerImages registry-cleanup/app/main.py).
++DRY_RUN_ENV = "DRY_RUN"
++
++
++def check(condition, message):
++    if not condition:
++        sys.exit(f"FAIL: {message}")
++
++
++def template(*extra):
++    return subprocess.run(
++        ["helm", "template", RELEASE, "chart", "--namespace", RELEASE,
++         "--values", str(STAGE_VALUES), "--set", HOOK, *extra],
++        cwd=REPO, capture_output=True, text=True,
++    )
++
++
++def cronjob(*extra):
++    result = template(*extra)
++    check(result.returncode == 0, f"helm template {' '.join(extra)} failed:\n{result.stderr}")
++    docs = [d for d in yaml.safe_load_all(result.stdout) if d]
++    found = [d for d in docs if d["kind"] == "CronJob" and d["metadata"]["name"] == CRONJOB]
++    check(len(found) == 1, f"{len(found)} CronJobs named {CRONJOB}")
++    return found[0]
++
++
++def dry_run_env(job):
++    containers = job["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"]
++    (container,) = [c for c in containers if c["name"] == CRONJOB]
++    values = [e["value"] for e in container["env"] if e["name"] == DRY_RUN_ENV]
++    check(len(values) == 1, f"{CRONJOB} sets {DRY_RUN_ENV} {len(values)} times")
++    return values[0]
++
++
++def main():
++    job = cronjob()
++    check(not job["spec"].get("suspend"), f"{CRONJOB} is suspended")
++    setting = yaml.safe_load(STAGE_VALUES.read_text())["registryCleanup"]["dryRun"]
++    check(dry_run_env(job) == str(setting).lower(),
++          f"{DRY_RUN_ENV} is {dry_run_env(job)!r}, the stage sets {SETTING}: {setting}")
++
++    for value in ("true", "false"):
++        rendered = dry_run_env(cronjob("--set", f"{SETTING}={value}"))
++        check(rendered == value, f"{SETTING}={value} renders {DRY_RUN_ENV} {rendered!r}")
++
++    for flag, value, what in (("--set", "null", "unset"), ("--set-string", "yes", "a string")):
++        result = template(flag, f"{SETTING}={value}")
++        check(result.returncode != 0 and GUARD in result.stderr,
++              f"a stage with {SETTING} {what} renders")
++
++    print("ok: registry-prd renders; registry-cleanup runs nightly with the stage's dry-run setting")
++
++
++if __name__ == "__main__":
++    main()
