@@ -38,7 +38,11 @@ under `/work` are cloned to scratch; `GH_TOKEN` has repo scope.
   that has appeared since stops the sweep, under the stop rule below. Never force-push.
 - **Its builds are green on the pushed head, downstream builds included.** For a carrier that
   includes its own architecture build, which runs the migrated `arch-validate` (Ruling F5).
-  `track_build.py <job> --hash <sha>` (on PATH) waits for a build and for what it triggers.
+  `track_build.py <job> --hash <sha>` (on PATH) waits for a build and for the builds its
+  console names. It misses `AaC/Architecture`, which an upstream trigger starts, so
+  `/work/scratch/p9-sweep/collector.py <Repo> <build-nr>` finds that build by its upstream
+  cause, follows "Superseded by #N" and prints the site pin. That directory holds P9a's whole
+  deploy-repo harness: `push_one.sh`, `push_batch.sh`, `argo_check.py`, `ledger_update.py`.
 - **What it rolls out is healthy:**
   - For a deploy repo, and for a carrier that pins into one, every Argo CD Application it
     feeds is Synced and Healthy at the new revision.
