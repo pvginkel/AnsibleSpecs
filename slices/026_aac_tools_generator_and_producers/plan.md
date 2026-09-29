@@ -334,7 +334,7 @@ Record:
   and the app-name warning stands unchanged (Ruling D2). argo-migrate's `architecture.yaml` header
   template carries no schema pointer, and it stays that way.
 
-### P5 — KubeCoderDeploy maps kube-coder-tunnel-reclaim
+### P5 — KubeCoderDeploy maps kube-coder-tunnel-reclaim ✅ DONE 2026-09-29
 
 Target: ../scratch/KubeCoderDeploy
 
