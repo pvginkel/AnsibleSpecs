@@ -798,6 +798,37 @@ such deploy repo is done in P9a–P9c. Every push also starts `AaC/<Repo>`, and 
    - MyDownloadsServer: `MyDownloads/MyDownloadsServer`, about 2 min, starts
      `MyDownloads/MyDownloads`, about 2 min → MediaDeploy.
 
+**Done (P12a).** The eight P12a carriers run the toolchain's `arch-validate` wherever they ran
+the copy, and their copies are deleted. Each is pushed and done: GitblitMCPServer `94dd03c` as the
+canary, then YouTrackMCPServer, Ginbov, NewsFilter and ScanToPdfServer, then GitblitMCPSupportPlugin,
+Webathome and MyDownloadsServer. The ScanToPdf and MyDownloads packager repos, whose environments
+host the server and client repos, declare aac-tools and are pushed and done too. The Ansible branch
+carries no commit.
+
+Later phases:
+- P12b: ScanToPdfClient and MyDownloadsClient are worked in the ScanToPdf and MyDownloads
+  environments, which already declare aac-tools. Move only their own files, and leave the
+  packagers alone.
+- P12b–P13b: `push_carrier.sh` pushes the clone's default branch (both ScanToPdf and MyDownloads
+  source repos are on `master`), and it skips the AaC wait for a repo that has no `AaC/<Repo>` job.
+  `push_carrier_batch.sh <prefix> <Repo>=<job>[,<job>…]…` pushes `/work/scratch/<Repo>` for each
+  repo concurrently, logging to `logs/<prefix>-<Repo>.log`. `carrier_ledger.py <prefix> <Repo>…`
+  writes their ledger rows. A row records whether the AaC console ran `arch-validate` in the
+  aac-tools container.
+
+Record:
+- Every copy matched the canonical script or differed in lint only.
+- Gates: seven `lint` gates now run `cexec aac-tools arch-validate docs/architecture/*.yaml`, each
+  green here. YouTrackMCPServer had no gate that ran the script. The Ginbov, NewsFilter, Webathome,
+  ScanToPdf and MyDownloads environments gained aac-tools (restart: close-out A5).
+  GitblitMCPServer's environment already declared it, and GitblitMCPSupportPlugin is worked there.
+- Instructions moved: YouTrackMCPServer's `docs/deployment.md`, NewsFilter's `CLAUDE.md` and
+  `README.md`, Webathome's `README.md`, and the gate comments that called the script stdlib-only.
+- The packager pushes (ScanToPdf `def421e`, MyDownloads `7a66719`) restart scantopdf-prd and
+  media-prd once more (close-out N6).
+- GitHub's trees of the eight default branches hold no `arch-validate.py` at the pushed heads.
+  Builds and rollouts: `sweep_ledger.md`.
+
 ### P12b — Carriers whose push redeploys production, second part
 
 Target: root
@@ -814,13 +845,16 @@ As P12a, for the carriers P10 assigns here, resuming from the ledger.
    - DHCPApp: `DHCP/DHCPApp`, about 6 min → DnsmasqDeploy. It has two copies, in `backend/` and
      `frontend/`.
    - ScanToPdfClient: `ScanToPdf/ScanToPdfClient`, about 3 min, starts `ScanToPdf/ScanToPdf` →
-     ScantopdfDeploy, as ScanToPdfServer (P12a) does.
+     ScantopdfDeploy, as ScanToPdfServer (P12a) does. Its `lint` runs in the ScanToPdf packager's
+     environment, which declares aac-tools since P12a. Leave the packager alone.
 2. Alone: SSEGateway. `SSEGateway/SSEGateway` takes about 12 min and pins into four deploy repos:
    Zigbee2mqttDeploy, ElectronicsInventoryDeploy, IotDeploy and DnsmasqDeploy. Every Application
    of all four must be Healthy at its new pin.
 3. Alone: MyDownloadsClient. `MyDownloads/MyDownloadsClient` takes about 19 min. It starts
    `MyDownloads/MyDownloads` → MediaDeploy, as MyDownloadsServer (P12a) does, and `Webathome`,
-   about 4 min → WebathomeOrgDeploy, as the Webathome carrier (P12a) does.
+   about 4 min → WebathomeOrgDeploy, as the Webathome carrier (P12a) does. Its `lint` runs in the
+   MyDownloads packager's environment, which declares aac-tools since P12a. Leave the packager
+   alone.
 
 ### P12c — Carriers whose push redeploys production, third part
 

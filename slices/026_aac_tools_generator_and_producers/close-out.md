@@ -141,6 +141,15 @@ KubeCoder's deploy-operations.md says a hand-driven push that rolls `kubecoder@d
 **Provenance:** witnessed: executor, P11, r1, /work/scratch/p9-sweep/logs/carrier-KubeCoder.log
 **Disposition:**
 
+### N6 — P12a pushed the ScanToPdf and MyDownloads packager repos, which no phase listed, for one environment config line each
+
+ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient carry no `.kubecoder/config.yaml`. Each is worked in the environment of its packager repo (ScanToPdf or MyDownloads), whose config clones it. Their `lint` gates now run `cexec aac-tools arch-validate`, so the attachment's § Migrating a carrier gives those two environments the aac-tools declaration: ScanToPdf `def421e` and MyDownloads `7a66719`, config only. Ruling D1 authorises pushing every repo the sweep touches, but a packager push runs its job, `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, with no guard. That job rebuilds the image and pins it. P12a pushed each packager in a batch apart from the carrier that pins the same deploy repo. ScanToPdf #38 pinned ScantopdfDeploy `45f0087`, and MyDownloads #105 pinned MediaDeploy `17171dc`. scantopdf-prd and media-prd were Synced and Healthy at each pin. Neither packager has an `AaC/` job. P12b's clients use the same two environments and leave the packagers alone.
+
+**Consequence:** scantopdf-prd and media-prd each restart once more on unchanged code: three times across P12a–b, where N4's correction counted two.
+
+**Provenance:** witnessed: executor, P12a, r1, sweep_ledger.md rows ScanToPdf and MyDownloads
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
