@@ -182,7 +182,7 @@ Record:
 - Tests: `ContainerScopeTests` (5), `ConfigMapEnvTests` (4), running `main()` over a trimmed
   Argo CD render with `render` and `load_dataset` mocked. No test deleted.
 
-### P3 — `gen-architecture --help` prints the complete annotation contract, and the new generator is proven on every deploy repo
+### P3 — `gen-architecture --help` prints the complete annotation contract, and the new generator is proven on every deploy repo ✅ DONE 2026-09-29
 
 Target: aac-tools
 
@@ -234,6 +234,9 @@ Later phases:
   changes the generator past `7836cca`. `/work/scratch/p3-cmp/` redoes it: refresh `gen_old.py`,
   `gen_new.py` and `dataset.yaml`, run `run.sh old|new` under `cexec aac-tools` and
   `compare.py` under `cexec iac`.
+- P4: KubeCoderDeploy's architecture job builds its `prd` branch, but `p3-cmp` regenerates
+  main. Review r1 regenerated `origin/prd` `e050439` with both scripts: byte-identical, same
+  gap line. A redo covers `prd` as well.
 - P5: the published sidecar's `--help` contains `` `served_by` `` and `` `containers` ``. The
   image from before publication prints only the usage line, one sentence and the options.
 - P9a–c: three sweep031 clones were behind origin/main on 2026-09-29 (ArgoCDDeploy by 1 commit,
