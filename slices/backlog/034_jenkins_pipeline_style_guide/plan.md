@@ -73,8 +73,8 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
 #### Rulings (refinement, 2026-09-30 — `refinement.md`)
 
 - **Ruling D1:** the site is served as its own small app, copying how charts.home is served, and
-  hosting stays in this slice, at the end, after the guide; the operator does the first Argo
-  sync, and the "site is live" check waits on it. Operator: "Agree".
+  hosting stays in this slice, at the end, after the guide. Operator: "Agree". (Who syncs first
+  is D6.)
 - **Ruling D2:** the site is built with **MkDocs + Material**, not Zensical, with KubeCoder's
   manual as the basis, including its LLM support. Operator: "Stick with MkDocs still. Why? I have
   a different MkDocs site running already: the manual for KubeCoder. Plus, I'm thinking of
@@ -89,10 +89,24 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
 - **Ruling D4:** the run's GitHub and Jenkins writes are pre-authorized: create the private
   throwaway repo `pvginkel/jenkins-trigger-test` and a throwaway job for it, push commits to it,
   start its first build by hand, delete the throwaway **job**; create the site's new deploy repo;
-  create the site-build job and the deploy repo's architecture job through the Jenkins API. The
-  first Argo sync is not authorized — it is the operator's. **Deleting the throwaway GitHub repo
+  create the site-build job and the deploy repo's architecture job through the Jenkins API. **Deleting the throwaway GitHub repo
   is not done by the run**: operator, "Agree, but, your GitHub key does not have delete repo
   permission. Leave that as an A in the close out report."
+- **Ruling D5 (plan questions r1, Q1):** the run accepts KubeCoderConfig's red lint row (its
+  `kc project lint` needs a `frontend` tool container this environment lacks); the skill phase's
+  executor runs the same Prettier check through `modern-app` (same Node 24) and records the
+  output in its done-record. Operator: "D5 and D7 are fine."
+- **Ruling D6 (plan questions r1, Q2):** the `pipelines` app registers with **auto-sync from the
+  start**, the way charts is registered — no `autoSync: false`, no manual first sync. The
+  ArgoCDDeploy push deploys the site to prd with nobody involved, and the run itself checks that
+  the site is live; no Argo action goes to the operator. Grounds: the runbook's
+  `autoSync: false` + manual first sync is the HelmCharts→Argo cutover procedure (slices 008/012:
+  "register with `autoSync: false`, review the live diff, sync"), a safety step for taking over
+  resources already running; a new app has nothing live to diff. Operator: "Agree".
+- **Ruling D7 (plan questions r1, Q3):** the plan's fix pass commits and pushes a placeholder
+  `.kubecoder/project.yaml` (one file, no verbs) to `pvginkel/PipelinesDeploy`, so the driver
+  resolves a gate for it; the deploy-repo phase replaces it with the real manifest and the repo
+  is gated like any other. Operator: "D5 and D7 are fine."
 - **Settled in refinement (the operator did not object):** the rulings page lives in the slice
   folder, and the run pauses once, after the inventory, for the operator's rulings on it — the
   guide is written only after them, and those rulings are recorded in this section. The webhook
@@ -144,9 +158,9 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
   `architecture.yaml`, `.kubecoder/project.yaml`). DNS and TLS need no new records: the Service
   annotations `nginx.webathome.org/server-name`, `is-public: "no"`, `enable-ssl: "yes"` make the
   DNS generator publish the name and the nginx layer issue a step-ca cert. Registering the app is
-  an entry in ArgoCDDeploy `releases/values.yaml` with `autoSync: false`; its push creates the
-  Application OutOfSync, and the first sync is manual (`docs/runbooks/argocd.md`, "Registering,
-  undeploying and unregistering an app"). A new producer also needs its `AaC/<Repo>` job and a
+  an entry in ArgoCDDeploy `releases/values.yaml` (`docs/runbooks/argocd.md`, "Registering,
+  undeploying and unregistering an app"); an entry without `autoSync` gets an automated sync
+  policy and Argo syncs it on its own once `releases` syncs the push (D6). A new producer also needs its `AaC/<Repo>` job and a
   `pipeline-producers.yaml` entry in Architecture (same runbook, "Giving an app its own
   architecture producer").
 - **KubeCoderConfig** (not cloned here; the pod's token can push it): skills under
@@ -162,6 +176,12 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
 cross-cutting — the work lands in five repos (JenkinsPipelineUtils' docs and first Jenkinsfile, a
 new deploy repo, ArgoCDDeploy, Architecture's producer registry, KubeCoderConfig: R6, R8, rulings
 D1–D3) and sets a new pattern: the estate's first docs site built from a library repo.
+
+## Driver rulings
+
+- prd ../ArgoCDDeploy — the pipelines app's registration, auto-synced, deploys the new site to prd (ruling D6)
+- prd github:pvginkel/PipelinesDeploy — the site's deploy repo; its pins reach prd through Argo's auto-sync (ruling D6)
+- accept github:pvginkel/KubeCoderConfig lint — no `frontend` tool container here; the P7 executor runs the same Prettier check through `modern-app` (ruling D5)
 
 ## Ordering constraints
 
@@ -180,8 +200,8 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
   4. Then push Architecture and ArgoCDDeploy:
      - A push to Architecture's main also rebuilds the architecture viewer and redeploys it in
        prd (Architecture `CLAUDE.md:40-42`).
-     - The ArgoCDDeploy push creates the Application OutOfSync. Its first sync is the operator's
-       (D1).
+     - The ArgoCDDeploy push creates the Application, and Argo syncs it on its own (D6); the
+       site-live check follows.
 
   KubeCoderConfig can be pushed at any point.
 
@@ -467,5 +487,4 @@ locally.
 - The library helpers themselves (J14–J17, J21), J22's self-test job, and ANS-84's
   job-configuration move.
 - Zensical (ruled D2). The operator migrates the MkDocs sites in one go later.
-- The first Argo sync of the site, and deleting the throwaway GitHub repo. Both are operator
-  actions.
+- Deleting the throwaway GitHub repo — an operator action in the close-out report (D4).

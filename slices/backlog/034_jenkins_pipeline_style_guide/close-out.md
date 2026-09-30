@@ -4,3 +4,20 @@
      lines are yours to write; everything else is overwritten by the next render. -->
 
 Run: <not yet stamped>
+
+## For the wrap-up
+
+### P1 — Ansible argocd runbook: a new producer is registered 'with a PR' against Architecture, but that repo is worked by direct commits to main · nit
+
+<details><summary>body</summary>
+
+docs/runbooks/argocd.md § 'Giving an app its own architecture producer', step 4, says to register the producer 'with a PR against pipeline-producers.yaml in pvginkel/Architecture'. Architecture's CLAUDE.md:40-42 says to work directly on main, with no topic branches, and to push as you go. The last registration there, charts-deploy (Architecture 3b97700), was a direct commit with a single parent. Slice 034's P11 registers pipelines-deploy by the repo's own convention.
+
+</details>
+
+**Consequence:** Whoever follows the runbook opens a pull request that the repo's own convention doesn't use; the registration itself works either way.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
+**Provenance:** read — plan-writer, planning r1, Ansible docs/runbooks/argocd.md and Architecture CLAUDE.md
+**Route:** the wrap-up — fix
+**Disposition:**

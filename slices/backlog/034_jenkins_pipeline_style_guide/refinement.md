@@ -37,7 +37,7 @@ cycle.
 
 **If this is wrong.** Extra work only; a split later is easy.
 
-**Operator.** Agree
+**Operator.** Agree. The first-sync part is superseded by D6: the app registers with auto-sync and nobody syncs by hand.
 
 ## D2 — Build the site with Zensical, pinned to one version, though it is still alpha
 
@@ -125,6 +125,110 @@ already pauses once for the rulings.
 **If this is wrong.** A stray throwaway repo or job to delete by hand.
 
 **Operator.** Agree, but, your GitHub key does not have delete repo permission. Leave that as an A in the close out report.
+
+## D5 — The run accepts KubeCoderConfig's red lint row and checks Prettier through another container
+
+**Context.** The plan is written: eleven phases from the webhook test through the site's source
+(built strict with the KubeCoder manual's MkDocs tooling, per your ruling on the generator), the
+reference pages, the inventory pause for your rulings, the guide, the reference Jenkinsfiles, the
+skill in KubeCoderConfig, the deploy repo, the site image and build job, and the Argo and
+Architecture registrations. Three things need your word before it is final; this is the first.
+KubeCoderConfig's lint is a Prettier format check that its manifest runs through a `frontend` tool
+container. This environment has no such container — its tools are aac-tools, go, iac, java and
+modern-app — so the check cannot run here as the repo declares it. The repo has no tests, so the
+skill phase's own gate is simply "nothing ran".
+
+**The ask.** The run ends with a lint, build and test sweep over every repo the slice touched, and
+a branch whose gates are red is not pushed. KubeCoderConfig's lint row will be red here, which
+holds up the skill's push you agreed to. Decide how the run treats that row.
+
+**Background.** You ruled the same way for the previous slice on KubeCoder (033): its lint and
+build rows were accepted because this environment lacks the python and frontend containers and the
+same checks were green in modern-app. The change here is one skill folder plus the version bump,
+and Prettier is its only check; modern-app carries the same Node 24 the frontend container would.
+
+**Why yours.** Accepting a red gate is a ruling only you give the run, and the alternative changes
+this environment's configuration.
+
+**Recommendation.** Accept the lint row. The skill phase's executor runs the same Prettier check
+through modern-app and records the output in its done-record, so the check is made, just not by the
+repo's own manifest. The trade-off: one repo's declared gate is set aside for this run on the
+strength of an equivalent run elsewhere — accepted because it is the same Prettier on the same
+Node, and you accepted the same for the previous slice.
+
+**The other way.** Add the frontend toolchain to this environment before the run — a config entry
+and an environment restart, yours to do — so the repo's lint runs unchanged; it leaves a sidecar in
+every session here for one run's sake.
+
+**If this is wrong.** Nothing breaks; a Prettier slip in one skill file is caught at
+KubeCoderConfig's next lint.
+
+**Operator.** D5 and D7 are fine.
+
+## D6 — After your first sync, the site's Argo entry switches to auto-sync, the way charts.home's is
+
+**Context.** The plan stands at eleven phases; its last ones fill the site's deploy repo
+`PipelinesDeploy`, then register the site in Argo CD's app registry and in the Architecture producer
+registry. You ruled that the site is served the way charts.home is and that the first Argo sync is
+yours; the runbook's registration recipe, and that ruling, have the entry start with auto-sync off
+so the first sync is manual. The run ends before your first sync, so it cannot switch the entry
+afterwards.
+
+**The ask.** Settle what the registry entry for the pipelines app looks like once your first sync
+is done: whether the site then follows each library push by itself.
+
+**Background.** charts' entry auto-syncs, and every app in the registry does except Argo CD itself.
+With auto-sync left off, each library push still builds the site image and writes its tag pin, but
+the site keeps serving the old build until somebody syncs by hand — so the guide the skill points
+every session at goes stale between syncs, and the migration slice works from that guide.
+
+**Why yours.** It is a publishing procedure you run: whether each guide change goes live on its own
+or on your sync.
+
+**Recommendation.** The Argo registration phase writes the entry with auto-sync off, as ruled.
+After your first sync, you or a session you ask flips it to auto-sync — a one-line edit in
+ArgoCDDeploy — listed as an operator action in the close-out report, with a check owed after that
+edit that a library push republishes the site. The trade-off: the site's "follows the library"
+state finishes outside the run, on an action of yours — accepted because the first sync is already
+yours and the edit is one line.
+
+**The other way.** Leave auto-sync off for good and publish every guide change by a manual sync —
+one more step per publish, and a stale site whenever it is forgotten.
+
+**If this is wrong.** A stale site, or one more manual step per publish.
+
+**Operator.** Agree — and the manual first sync is dropped: it was the HelmCharts cutover procedure, and a new app registers with auto-sync from the start.
+
+## D7 — A placeholder manifest is pushed to the new deploy repo now, so the run can gate it
+
+**Context.** The plan is complete at eleven phases. Planning already created the site's deploy repo
+`PipelinesDeploy` on GitHub under your pre-authorization — private, a README and nothing else —
+because the run resolves every phase's target before it starts, so the repo had to exist. The
+deploy-repo phase writes its real contents, the project manifest included.
+
+**The ask.** Give the deploy-repo phase a test gate the run will accept.
+
+**Background.** The run refuses a phase on a repo whose clone has no project manifest unless there
+is a gate ruling for it — nothing would verify the phase otherwise — and it looks for the manifest
+when it resolves the target, before the phase writes one. The gate itself runs after the phase has
+finished, so a manifest that exists at the start and is replaced during the phase is enough: the
+gate then runs the real manifest, which renders the chart, checks the Terraform and validates the
+producer artifact.
+
+**Why yours.** It is one more push to a repo of yours that the pre-authorization did not name.
+
+**Recommendation.** The plan's fix pass commits and pushes a placeholder manifest to PipelinesDeploy
+now — one file, no commands. The deploy-repo phase then writes the real one, the run gates the repo
+like any other, and its test rows stay in the end-of-run sweep. The trade-off: one push to an
+otherwise empty repo, outside the run — accepted because the placeholder is overwritten in the same
+run and it keeps the one repo this slice creates from scratch under the run's own gate.
+
+**The other way.** A gate waiver for the repo: nothing pushed now, but the waiver covers the whole
+repo, so the run never gates PipelinesDeploy and its test rows drop out of the end-of-run sweep.
+
+**If this is wrong.** Nothing lasting — the placeholder is replaced in the same run.
+
+**Operator.** D5 and D7 are fine.
 
 ## Open facts — questions only you can answer
 
