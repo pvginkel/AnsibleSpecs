@@ -356,7 +356,7 @@ Later phases:
 - The manifest header names the docs site and both sidecars. "No Jenkins job builds this repo" is
   still true; P9 rewrites it.
 
-### P3 — One reference page per library global var, and a test that holds it there
+### P3 — One reference page per library global var, and a test that holds it there ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
