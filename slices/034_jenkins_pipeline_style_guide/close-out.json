@@ -215,6 +215,75 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P6",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "AnsibleSpecs slice 034 rulings.md §3 (stage granularity): no option lists the inventory variants it would retire",
+      "body": [
+        "P4 asks each rulings-page topic for the variants its rule would retire, taken from the inventory (plan.md:432). §3 (rulings.md:130-168) gives options A, B and C with trade-offs but no retire list for any of them; only its opening line points at the inventory's 'Stage granularity' section (rulings.md:133-134), which holds the coarse and fine variants."
+      ],
+      "consequence": "The operator rules on granularity without the page saying which files each option rewrites; the list is one link away in the inventory.",
+      "evidence": "read",
+      "author": "code-reviewer, P4, r1, phases/P4/code_review_r1.md (F4)",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P7",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "AnsibleSpecs slice 034 rulings.md shows two unruled items as settled: J08's 'conditional stages use when {}' and Theme E's registry-host constant",
+      "body": [
+        "The settled table's J08 row adds 'Conditional stages use when {}' (rulings.md:22). J08's ruling is 'migrate all' (report.md:490-496); when {} appears only in J08's 'What it buys', and §13 then allows Utils.markStageSkippedForConditional for DockerImages (rulings.md:628-629). §11 lists Theme E's registry-host constant under 'Ruled against' (rulings.md:534), which was the report's own judgement (report.md:980-985) with no operator response."
+      ],
+      "consequence": "The operator is told two points are settled that were never put to him, so neither gets a ruling, and the when {} row contradicts the page's own §13.",
+      "evidence": "read",
+      "author": "code-reviewer, P4, r1, phases/P4/code_review_r1.md (F5)",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P8",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "AnsibleSpecs slice 034 plan.md Grounding: the J19 nuance 'a repo may carry its own helpers via load' is the option the operator did not pick",
+      "body": [
+        "Grounding's 'Rulings nuances' (plan.md:145, :151-152) says the guide must carry exactly 'J19: a repo may carry its own helpers via load support/jenkins/iac.groovy'. That was option (1) of report.md's J19 C-note (report.md:862-864, :876-878); the operator chose (2), no helper and the duplication documented as deliberate (report.md:880-881). rulings.md's J19 row carries (2) and silently leaves the nuance out. Code review r1 added this fact to P4's 'Later phases' for P5; the Grounding line itself is unchanged."
+      ],
+      "consequence": "A guide phase that follows the plan's 'carry exactly' list could write a load-helper allowance into the style guide that the operator declined.",
+      "evidence": "read",
+      "author": "code-reviewer, P4, r1, phases/P4/code_review_r1.md (F6)",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

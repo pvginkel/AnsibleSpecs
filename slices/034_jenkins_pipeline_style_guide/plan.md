@@ -467,6 +467,9 @@ Later phases:
   plugin source hold proposals up. A pipeline-level `options { timeout }` runs inside the
   top-level agent (`ModelInterpreter.groovy`, `call()`), so it excludes the pod wait (J11). And
   `Utils.updateJobProperties` keeps triggers the file did not declare (Architecture's shape).
+- P5 (code review r1): Grounding's J19 nuance, "a repo may carry its own helpers via `load`",
+  is option (1) of report.md's J19 C-note. The operator chose (2), no helper
+  (`report.md:880-881`), and `rulings.md`'s J19 row carries (2).
 - P6: the types are the inventory's T1–T13, with their member lists. The page proposes no
   reference file for T13 (KitchenDisplay). Intercom's two versions share one `build/`, so its
   stages stay build, deploy, build, deploy.
