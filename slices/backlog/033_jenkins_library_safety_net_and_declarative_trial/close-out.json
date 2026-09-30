@@ -2,5 +2,29 @@
   "store": 1,
   "slice": "033_jenkins_library_safety_net_and_declarative_trial",
   "closed": null,
-  "entries": []
+  "entries": [
+    {
+      "id": "P1",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ansible CLAUDE.md still tells slices to target an undeclared repo as ../scratch/<Repo>; the dev plugin's github:<owner>/<repo> Target now clones it",
+      "body": [
+        "Ansible/CLAUDE.md § Related repos: a repo a slice changes but the environment does not declare goes under /work/scratch/<Repo>, and 'its phases say Target: ../scratch/<Repo>, and the environment that runs the slice clones it there first'. The dev plugin (0.9.60, docs/plan-template.md and docs/run-loop.md § The plan is the queue) has a Target: github:<owner>/<repo> form for exactly this case: the driver clones or adopts /work/scratch/<repo> itself, and the dry run does it at planning time. Slice 033's plan uses github:pvginkel/KubeCoder, so it departs from the project's written convention while following the plugin's. The CLAUDE.md sentence does not mention the github: form, so the next plan writer reading it first is steered to the manual-clone form."
+      ],
+      "consequence": "A plan writer following CLAUDE.md writes ../scratch/<Repo> and the run depends on someone having cloned the repo by hand first",
+      "evidence": "read",
+      "author": "plan-reviewer, planning, r1, plan_review_r1.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
 }
