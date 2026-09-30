@@ -65,6 +65,10 @@ The standing rules quoted below come from that plan.
   declarative linter check on the converted Jenkinsfile, not KubeCoder's `kc project test`; the
   operator's Replay runs KubeCoder's suites in Jenkins. Operator: "Sure, skip the test. It's
   fine."
+- **Ruling D3 (2026-09-30):** the conversion is faithful. The converted Jenkinsfile gets no
+  `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or
+  cleanup handling. R1's shape list and its acceptance criterion drop those two words. Operator:
+  "Agree".
 
 #### Grounding (verified 2026-09-30, library HEAD `276beff`, KubeCoder HEAD `5bbf14bf`)
 

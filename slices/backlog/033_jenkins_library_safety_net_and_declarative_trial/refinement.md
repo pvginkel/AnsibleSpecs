@@ -20,6 +20,16 @@
 **If this is wrong.** A library regression that got past the gate breaks consumer builds until it is reverted.
 **Operator.** "But even the removing dead code stuff has a limited risk. We'll see red pipelines quickly enough, and the revert is trivial. I was worried you were gutting the thing, but nothing of the kind. In that case, by al means, just push to main."
 
+## D3 — The converted Jenkinsfile gets no when block and no post block, because the scripted file has nothing they would express
+**Context.** The plan is drafted in four phases — the library's gate at the controller's version with behaviour tests, the change-set check going non-CPS with the dead helpers removed, a library helper that renders the pod as YAML for a declarative agent, and KubeCoder's Build-Main Jenkinsfile converted — and your round-one rulings stand: tests in the pre-push Maven gate and no library job; the run pushes the library and KubeCoder is held for your Replay and push; the KubeCoder gate is the controller's full declarative linter check. The trial wording you adopted lists the converted file's shape as an agent from YAML built by a library helper, options and triggers for its job config, a when block and a post block, and the acceptance criterion carries that word for word.
+**The ask.** Convert KubeCoder's Build-Main Jenkinsfile to declarative without changing what the build does. As the criterion stands, the trial cannot pass unless the converted file gains both a when block and a post block.
+**Background.** The scripted file has no conditional stage and no failure or cleanup handling: every stage runs on every build, and there is no branch, no try, no catch and no finally anywhere in it. The review named when and post as what declarative buys in general — a conditional stage instead of the skip-marker hack, post handlers — not as something this file needs.
+**Why yours.** The two constructs are in your own adopted wording, and dropping them rewords an acceptance criterion.
+**Recommendation.** Convert faithfully: the file gets neither block, and the criterion drops those two words. Trade-off: the trial never shows those two constructs in use, so your verdict on declarative is judged on agent, options, triggers and stages only. The estate's real conditional-stage case is the Ansible iac-image pipeline's stage-skip marker — a pod pipeline that a "migrate all" slice converts anyway.
+**The other way.** Add a real use of each so the trial shows them: it changes what the build does, there is no credible conditional stage (every image stage feeds the pin write, so skipping one would pin an image never built), and the only post candidate is a failure alert the Jenkins Telegram bot already sends on any failure.
+**If this is wrong.** You judge declarative without having seen when or post; the iac-image case shows the former, or you ask for one more file converted.
+**Operator.** "Agree"
+
 ## Open facts — questions only you can answer
 None: nothing in this slice rests on something only you know.
 
