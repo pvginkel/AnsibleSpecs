@@ -716,6 +716,29 @@ the online docs (R8).
 - **The guide stays the only source.** The skill stays short. For each rule it carries, it says
   where the guide details it, rather than restating the guide.
 
+**Done (P7).** The skill is `jenkins-pipelines`, `kubecoder/skills/jenkins-pipelines/SKILL.md` in
+KubeCoderConfig (`45612e9` on `phase/034-P7`, plugin `0.8.4` → `0.9.0` in the same commit). It
+fires on writing, editing or reviewing a Jenkinsfile, creating a Jenkins job, or deciding whether
+code goes into the library. It carries every MUST of the eleven rule pages as a one-line summary
+tagged with its id (FILE-1 … NEW-3), under a heading per page that links the page's Markdown copy
+(`https://pipelines.home/docs/guide/<page>/index.md`). It points at `llms.txt`/`llms-full.txt`, the
+var pages (`…/reference/<var>/index.md`) and the types overview (`…/types/index.md`), whose
+`types/<stem>/` pages a new pipeline starts from.
+
+Later phases:
+- Test phase: V16's skill is that file, committed on `phase/034-P7` and not pushed by P7. Once the
+  site is live, every URL in it resolves: all are pages in `llms.txt` or `llms.txt` itself.
+
+- Prettier, through `modern-app` (Node v24.21.0, D5): `npm ci --no-audit`, then
+  `npx prettier --write` on the file, then `npm run format:check` → "All matched files use Prettier
+  code style!". `kc project test`: "root: no test statements — skipped", exit 3.
+- 167 lines against `kubecoder-env`'s 93: the rules are grouped per page, several ids to a bullet,
+  no reasons or recipes (those stay on the pages).
+- CHK-3's line is phrased as the push rule ("a push never goes from the `Checkout` stage's clone"),
+  not the page's MUST line, which contradicts CHK-1 for a job pushing to its own repo (close-out
+  P11).
+- Nothing holds the skill's summaries and ids to the guide across the two repos (close-out I1).
+
 ### P8 — PipelinesDeploy: the site's deploy repo, in ChartsDeploy's shape
 
 Target: github:pvginkel/PipelinesDeploy

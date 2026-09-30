@@ -562,6 +562,55 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A2",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.",
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "I1",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "KubeCoderConfig jenkins-pipelines skill: nothing holds its one-line rule summaries and rule ids to the style guide in JenkinsPipelineUtils",
+      "body": [
+        "The skill (kubecoder/skills/jenkins-pipelines/SKILL.md, plugin 0.9.0) names every guide rule by id with a one-line summary and links each topic page's Markdown copy on pipelines.home. The guide lives in JenkinsPipelineUtils/docs/pages/guide/, a different repo, and neither repo's gate compares the two. A rule reworded, renumbered or added in the guide leaves the skill summarising the old rule, and every session that writes a Jenkinsfile reads the stale line first. A check could live on the library side (a test that the ids in the skill are exactly the guide's rule anchors), or a line in the library's CLAUDE.md could name the skill as a file a guide change also edits."
+      ],
+      "consequence": "After a guide rule changes, sessions writing Jenkinsfiles are handed the old rule by the skill until somebody edits KubeCoderConfig by hand; the guide page stays right.",
+      "evidence": "witnessed",
+      "author": "code-writer, P7, r1, kubecoder/skills/jenkins-pipelines/SKILL.md",
+      "labels": {
+        "benefit": "code",
+        "felt": "after-change",
+        "change": "add",
+        "size": "several-places",
+        "product-call": "no",
+        "prevents": "degraded",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
