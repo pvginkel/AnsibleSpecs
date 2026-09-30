@@ -177,7 +177,7 @@ declarative `agent { kubernetes { yaml … } }`, the shape a "migrate all" verdi
 
 - gate github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile — ruling 2026-09-30: the change is the Jenkinsfile only, this environment cannot run KubeCoder's suites, and the operator's Replay runs them in Jenkins
 
-### P1 — The library's gate runs at the controller's workflow-cps and asserts the pure functions
+### P1 — The library's gate runs at the controller's workflow-cps and asserts the pure functions ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
