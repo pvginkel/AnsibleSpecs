@@ -611,6 +611,32 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "I2",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "KubeCoderConfig jenkins-pipelines skill: it gives no guidance for a Jenkinsfile that predates the guide, though every existing file does until the migration",
+      "body": [
+        "SKILL.md:11-16 tells every session that each Jenkinsfile in the estate follows the style guide strictly, and that a file breaking a rule is wrong. The skill fires on editing a Jenkinsfile. Until the migration slice converts them, none of the estate's existing files follows the guide (plan.md:850-851), and the skill goes live in every environment at slice 034's test-phase push. A session asked for a narrow edit to an unconverted file, such as a stage added to Home's scripted Jenkinsfile, is told the file breaks FILE-1, PROP-* and CHK-1, with no rule on whether to convert it or leave it. The guide's overview says the same (guide/index.md:3-4), so the skill is faithful to it. How a session should treat an unconverted file is the operator's call."
+      ],
+      "consequence": "Until the migration lands, a session editing an unconverted Jenkinsfile guesses whether to convert it. One guess turns a small requested change into an unrequested rewrite of a live pipeline for the operator to review.",
+      "evidence": "read",
+      "author": "code-reviewer, P7, r1, phases/P7/code_review_r1.md F1",
+      "labels": {
+        "benefit": "user",
+        "felt": "in-use",
+        "change": "add",
+        "size": "one-edit",
+        "product-call": "yes",
+        "prevents": "degraded",
+        "area": "plain",
+        "repo": "KubeCoderConfig"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
