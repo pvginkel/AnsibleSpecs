@@ -7,6 +7,21 @@ Run: <not yet stamped>
 
 ## For the wrap-up
 
+### P2 — Ansible argocd runbook: the registration recipe gives every new app autoSync: false and a manual first sync, a step that belongs to taking over running resources · minor
+
+<details><summary>body</summary>
+
+docs/runbooks/argocd.md § 'Registering, undeploying and unregistering an app' (lines 209-232) shows the registry entry with `autoSync: false` and ends 'The first sync is manual.' It gives no condition. Ruling D6 of slice 034 grounds that step in the HelmCharts-to-Argo cutover procedure (slices 008/012: 'register with `autoSync: false`, review the live diff, sync'), a safety step for taking over resources already running. A new app has nothing live to diff. Charts, the app most recently registered new, is `prd: {}` (ArgoCDDeploy releases/values.yaml:51-54). Slice 034's P10 registers `pipelines` auto-synced, by D6, against the runbook's letter.
+
+</details>
+
+**Consequence:** The next session that registers a brand-new app follows the recipe: it adds a manual sync the app does not need, and unless somebody later removes autoSync: false, the app stops following its own pin writes.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
+**Provenance:** read — plan-writer, planning r2, Ansible docs/runbooks/argocd.md:209-232 and slice 034 plan.md ruling D6
+**Route:** the wrap-up — fix
+**Disposition:**
+
 ### P1 — Ansible argocd runbook: a new producer is registered 'with a PR' against Architecture, but that repo is worked by direct commits to main · nit
 
 <details><summary>body</summary>

@@ -195,11 +195,12 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
   the library's build job (P9), which pins into it. The two registrations (P10, P11) follow.
 - **The test phase goes live in this order, each step needing the one before:**
   1. Push PipelinesDeploy and JenkinsPipelineUtils.
-  2. Run the site-build job's first build. It writes the first image pin into PipelinesDeploy.
+  2. Run the site-build job's first build. It writes the first image pin into PipelinesDeploy
+     and pushes it from Jenkins, so the local clone is behind origin from then on.
   3. Get a first green build of `AaC/PipelinesDeploy`.
   4. Then push Architecture and ArgoCDDeploy:
      - A push to Architecture's main also rebuilds the architecture viewer and redeploys it in
-       prd (Architecture `CLAUDE.md:40-42`).
+       prd. That repo's standing rule is to push as you go (Architecture `CLAUDE.md:40-42`).
      - The ArgoCDDeploy push creates the Application, and Argo syncs it on its own (D6); the
        site-live check follows.
 
@@ -382,13 +383,13 @@ the online docs (R8).
 - **KubeCoderConfig's conventions apply:**
   - a minor `version` bump in `kubecoder/.claude-plugin/plugin.json` in the same commit, because
     this is a new skill (`CLAUDE.md:19-36`);
-  - Prettier-formatted Markdown (`CLAUDE.md:38-43`).
+  - Prettier-formatted Markdown (`CLAUDE.md:37-43`).
 - **Lint.** The repo's lint runs through a `frontend` sidecar that this environment does not
   have. `modern-app` carries the same Node, so the executor runs the repo's own Prettier check
   there. Its manifest has no `test:` verb, so the driver's gate runs nothing.
 - **Links.** The links go to `https://pipelines.home/docs/`, in the form a session reads best:
-  the site's `llms.txt` and per-page Markdown copies exist for that. The site goes live only
-  after the operator's first sync, but the links are right from the start.
+  the site's `llms.txt` and per-page Markdown copies exist for that. The site goes live only in
+  the test phase, but the links are right from the start.
 - **The guide stays the only source.** The skill stays short. For each rule it carries, it says
   where the guide details it, rather than restating the guide.
 
@@ -418,8 +419,11 @@ calls for.
   - the producer id is the chart's name plus `-deploy`, and the chart's name must equal the
     registry entry that P10 writes;
   - an owned product is minted only once, so search the published dataset first.
-- **Starting state.** The repo was created at planning under D4 and holds only a README.
-- **Nothing deploys yet.** Nothing deploys from this repo until the operator's first sync (D1).
+- **Starting state.** The repo was created at planning under D4. It holds a README and a
+  placeholder `.kubecoder/project.yaml` with no verbs (D7, PipelinesDeploy `d3b112a`); this
+  phase replaces the placeholder with the real manifest.
+- **When it deploys.** Nothing deploys from this repo until P10's registration reaches
+  ArgoCDDeploy's main in the test phase. From then on, Argo syncs every pin on its own (D6).
   Until the first site build writes the pin, the values file only needs to render.
 - **Operator-only steps.** If the new-repo recipe needs a step only the operator can take, enter
   it as an `action` in the close-out report. Until the hook exists, the job's builds are started
@@ -460,10 +464,14 @@ becomes a true statement about the new job. The image build is reachable through
 Target: ../ArgoCDDeploy
 
 ArgoCDDeploy's registry, `releases/values.yaml`, carries the `pipelines` app: its prd stage from
-PipelinesDeploy, with `autoSync: false`. The procedure is the argocd runbook's § "Registering,
-undeploying and unregistering an app", and D1 makes the first sync the operator's. Entries are
-alphabetical, and the schema, lint and render test stay green. Nothing syncs until the operator
-does it. For comparison, charts' own entry is at `releases/values.yaml:51-54`.
+PipelinesDeploy, auto-synced from the start, registered the way charts is
+(`releases/values.yaml:51-54`; a stage without `autoSync` syncs automatically,
+`releases/values.yaml:10-11`). That is D6. The runbook's § "Registering, undeploying and
+unregistering an app" is the procedure, except that its `autoSync: false` and manual first sync
+do not apply: they are for taking over resources that already run, and this app has none.
+Entries are alphabetical, and the schema, lint and render test stay green. The phase commits
+locally. The push, and with it Argo's first sync, belongs to the test phase (Ordering
+constraints).
 
 ### P11 — The producer registered in Architecture
 

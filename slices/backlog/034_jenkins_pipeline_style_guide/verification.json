@@ -101,12 +101,13 @@
     },
     {
       "id": "V12",
-      "area": "R6 / D1 — The site is live",
-      "description": "After the operator's first Argo sync, `https://pipelines.home/` answers with the landing page, and `https://pipelines.home/docs/` and its `llms.txt` answer with the guide, when fetched from a KubeCoder environment.",
-      "owed_after": "the operator's first Argo sync of the pipelines app's prd stage (ruling D1)",
+      "area": "R6 / D6 — The site is live",
+      "description": "Once the ArgoCDDeploy push lands, Argo syncs the `pipelines` app on its own, with no Argo action by anyone (ruling D6). `https://pipelines.home/` then answers with the landing page, and `https://pipelines.home/docs/` and its `llms.txt` answer with the guide, when fetched from a KubeCoder environment. The site is served from the image tag that the latest site build pinned in PipelinesDeploy.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "/work/ArgoCDDeploy/releases/values.yaml:10-11 (autoSync defaults to true)"
+      ]
     },
     {
       "id": "V13",
@@ -121,13 +122,14 @@
     },
     {
       "id": "V14",
-      "area": "R6 / D1 — Deploy repo and registrations",
-      "description": "PipelinesDeploy is shaped like ChartsDeploy, and its `kc project test` is green. `AaC/PipelinesDeploy`'s first build is green and archives the producer's artifact. ArgoCDDeploy's registry carries the app's prd stage with `autoSync: false`, whose push creates the Application OutOfSync. The producer is registered in Architecture's `pipeline-producers.yaml`, and that commit reaches `main` only after the AaC job's first green build.",
+      "area": "R6 / D1 / D6 — Deploy repo and registrations",
+      "description": "PipelinesDeploy is shaped like ChartsDeploy, and its `kc project test` is green, with the placeholder manifest replaced by the real one. `AaC/PipelinesDeploy`'s first build is green and archives the producer's artifact. ArgoCDDeploy's registry carries the app's prd stage, auto-synced from the start, the way charts is registered (ruling D6). The producer is registered in Architecture's `pipeline-producers.yaml`, and that commit reaches `main` only after the AaC job's first green build.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/ArgoCDDeploy/releases/values.yaml:51-54 (charts' registry entry)",
-        "/work/Architecture/pipeline-producers.yaml:222-224 (charts-deploy producer entry)"
+        "/work/ArgoCDDeploy/releases/values.yaml:51-54 (charts' registry entry, `prd: {}`)",
+        "/work/Architecture/pipeline-producers.yaml:222-224 (charts-deploy producer entry)",
+        "PipelinesDeploy d3b112a: the placeholder `.kubecoder/project.yaml` (ruling D7)"
       ]
     },
     {
@@ -143,7 +145,7 @@
     {
       "id": "V16",
       "area": "R8 — The skill",
-      "description": "The skill (\"Instead I want a skill.\") is in KubeCoderConfig's `kubecoder` plugin (ruling D3). \"The skill is itself still a reference to the online docs\": it carries the guide's hard rules and links to the site. It follows that repo's conventions — the plugin `version` is bumped in the same commit and the Markdown is Prettier-formatted — and it is pushed to KubeCoderConfig's main.",
+      "description": "The skill (\"Instead I want a skill.\") is in KubeCoderConfig's `kubecoder` plugin (ruling D3). \"The skill is itself still a reference to the online docs\": it carries the guide's hard rules and links to the site. It follows that repo's conventions — the plugin `version` is bumped in the same commit and the Markdown passes the repo's Prettier check, run through `modern-app` (ruling D5) — and it is pushed to KubeCoderConfig's main.",
       "verdict": null,
       "rationale": "",
       "evidence": [
