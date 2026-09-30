@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — J08 declarative trial on KubeCoder",
-      "description": "`KubeCoder/Jenkinsfile` (Build-Main) is converted to declarative: `agent { kubernetes { yaml … } }` built from a library `containerTemplates.podYaml(...)`, `options{}`/`triggers{}` for its job config. The file must pass the full linter check (POST `/pipeline-model-converter/validate` on the controller). The conversion is faithful (ruling D3): the converted file gets no `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or cleanup handling.",
+      "description": "`KubeCoder/Jenkinsfile` (Build-Main) is converted to declarative: `agent { kubernetes { yaml … } }` built from the library's pod-YAML helper — per ruling F1 a standalone `podYaml`, called as `podYaml templates: […], images: […]`, not `containerTemplates.podYaml(...)` — with `yamlMergeStrategy merge()` so the inherited `kaniko` template's YAML survives (ruling F2), and `options{}`/`triggers{}` for its job config. The file must pass the full linter check (POST `/pipeline-model-converter/validate` on the controller). The conversion is faithful (ruling D3): the converted file gets no `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or cleanup handling.",
       "verdict": null,
       "rationale": "",
       "evidence": [
@@ -24,7 +24,7 @@
     {
       "id": "V03",
       "area": "R1 — J08 declarative trial on KubeCoder",
-      "description": "The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin prints it at the top of the console, matches a scripted Build-Main build's (containers, images, pull policies, users, resources, the inherited `kaniko` container, init container and volumes), and the same stages run in the same order, ending in the KubeCoderDeploy pin write.",
+      "description": "The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin prints it at the top of the console, matches a scripted Build-Main build's (containers, images, pull policies, users, resources, the inherited `kaniko` container, `busybox-share-init` init container and volumes), except for what ruling F1 brings — `node` pulls `Always`, and `golang` and `node` are kept alive by `sleep infinity` rather than `cat` with a tty — and the same stages run in the same order, ending in the KubeCoderDeploy pin write.",
       "owed_after": "github:pvginkel/KubeCoder",
       "verdict": null,
       "rationale": "",
@@ -44,11 +44,12 @@
     {
       "id": "V05",
       "area": "R1 — the library's podYaml helper",
-      "description": "`containerTemplates.podYaml(...)` is on JenkinsPipelineUtils' main: it renders the library sidecars a caller names, under the caller's container names, plus the caller's own containers, as one pod spec a declarative Kubernetes agent takes. Each sidecar's settings are written once, so the scripted describable and the YAML form cannot drift, and scripted consumers of `containerTemplates.*` see no change. `kc project test` proves the rendered output.",
+      "description": "The library's `podYaml` helper is on JenkinsPipelineUtils' main, in a file of its own (ruling F1): `podYaml templates: […], images: […]` returns one pod spec a declarative Kubernetes agent takes, holding the library's `k8s` and `modern-app-toolchain` sidecars with the settings their `containerTemplates` describables carry, plus any container the pipeline names by image — a string, or a map overriding name, resources, `runAsUser` and env — kept alive and pulled `Always` like the sidecars, with no library change. `containerTemplates.*` is untouched. The helper is `@NonCPS` string building, and `kc project test` asserts its output in full.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "JenkinsPipelineUtils/vars/containerTemplates.groovy:19,62 — `k8s` and `modern_app_toolchain` return `containerTemplate(...)` describables, which an `agent` block cannot take (library HEAD 276beff)"
+        "JenkinsPipelineUtils/vars/containerTemplates.groovy:19-21,62-64 — `k8s` (`registry:5000/k8s:1.35.5`) and `modern_app_toolchain` (`registry:5000/kube-coder-modern-app-toolchain:node-24`, `runAsUser: '1000'`) return `containerTemplate(...)` describables kept alive by `sleep infinity` with `alwaysPullImage: true`, which an `agent` block cannot take (library HEAD 276beff)",
+        "KubeCoder/Jenkinsfile:25-29 — `golang` (`registry:5000/kube-coder-go-toolchain:latest`, CPU 2/4, memory 2Gi/4Gi) and `node` (`node:24-bookworm`) are the pipeline's own containers, which `images:` carries (KubeCoder HEAD 5bbf14bf)"
       ]
     },
     {

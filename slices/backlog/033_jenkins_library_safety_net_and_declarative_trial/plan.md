@@ -212,34 +212,39 @@ R4 and R5. When this lands:
   (`KitchenDisplay/Jenkinsfile:41-45` still calls both), `containerTemplates.rsync`/`dockbuild`,
   `gitUtils`, `kubectl.waitForJob`/`readFileFromPod`.
 
-### P3 — `containerTemplates.podYaml(...)`: the library's sidecars as a declarative agent's pod YAML
+### P3 — `podYaml`: a declarative agent's pod YAML from library templates and pipeline-chosen images
 
 Target: ../JenkinsPipelineUtils
 
-R1's library half. A declarative `agent { kubernetes { … } }` takes its pod as a YAML string,
-while `containerTemplates.*` return `containerTemplate(...)` describables that only a scripted
-`podTemplate(containers: …)` takes (`vars/containerTemplates.groovy:1-7`). When this lands:
+R1's library half, shaped by ruling F1. A declarative `agent { kubernetes { … } }` takes its pod
+as a YAML string, while `containerTemplates.*` return `containerTemplate(...)` describables that
+only a scripted `podTemplate(containers: …)` takes (`vars/containerTemplates.groovy:1-7`). When
+this lands:
 
-- `containerTemplates.podYaml(...)` returns a pod spec, as a string the controller's `kubernetes`
-  plugin (4557) takes as an agent's `yaml`, holding the library sidecars the caller names — at
-  least `k8s` and `modern_app_toolchain`, which KubeCoder uses — each under the container name the
-  caller chooses, as the describable methods' `name` argument does today (KubeCoder addresses
-  `k8s` and `modern-app-toolchain`).
-- A caller's own containers join the same pod without the caller hand-merging YAML. KubeCoder's
-  `golang` and `node` (`KubeCoder/Jenkinsfile:25-29`) stay KubeCoder's, not library templates,
-  and keep their resources, pull policy, command and tty.
-- Each library sidecar's settings (image, command, pull policy, user, env) are written once in
-  the library, and both the describable a scripted pipeline gets and the entry `podYaml` renders
-  derive from that, so the two forms cannot drift. The scripted consumers see no change;
-  KitchenDisplay's `rsync`/`dockbuild` are not touched.
-- A sidecar renders to what the plugin builds from its describable today. The pod spec the
-  plugin prints at the top of a scripted build's console is the reference —
-  `$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText` (user `admin`, `$JENKINS_TOKEN`)
-  shows `k8s` and `modern-app-toolchain` among the rest.
-- It runs where Declarative evaluates the `agent` block, before any agent exists, so it calls
-  no step that needs a node.
-- `kc project test` proves the output: it parses as a pod whose containers carry what the
-  sidecars' settings say, and a caller's own container comes through intact.
+- A new global var in a file of its own is called as `podYaml templates: [...], images: [...]`
+  and returns a pod spec, as a string the controller's `kubernetes` plugin (4557) takes as an
+  agent's `yaml`. `vars/containerTemplates.groovy` is not touched (ruling F1).
+- `templates:` names the library sidecars the new file knows — `k8s` and `modern-app-toolchain`
+  in this slice — each rendered as a container of that name, the names KubeCoder's stages
+  address. Their image pins, pull policy, keep-alive and uid are written in the new file and
+  match what their describables carry today (`vars/containerTemplates.groovy:19-21,62-64`:
+  `sleep infinity`, `alwaysPullImage`, and uid 1000 for `modern_app_toolchain`). What the plugin
+  builds from those describables is the reference: the pod spec printed at the top of
+  `$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText` (user `admin`, `$JENKINS_TOKEN`).
+- `images:` runs any other container with no library change. The key spelling, which F1 leaves
+  to the plan: an entry is an image reference string, or a map with `image` and any of `name`,
+  `resources` (Kubernetes-shaped `requests`/`limits`), `runAsUser` and `env` (name → value).
+  A string entry, and a map for what it does not override, gets the library sidecars' defaults:
+  kept alive by `sleep infinity`, pulled `Always`, and named after the image's last path segment
+  without its tag (`node:24-bookworm` → `node`, `registry:5000/kube-coder-go-toolchain:latest`
+  → `kube-coder-go-toolchain`).
+- A template name the file does not know, a map key it does not take, and two containers under
+  one name are refused, not rendered around.
+- It is `@NonCPS` string building that calls no step: it runs where Declarative evaluates the
+  agent's parameters, on the controller, before any agent exists.
+- `kc project test` asserts the rendered output in full (ruling F1): both templates, a string and
+  a map `images:` entry, an `env` value YAML would otherwise read as something other than the
+  string given (empty, `true`, a number), and each refusal. The tests reach the var as P1's do.
 
 ### P4 — KubeCoder's Build-Main Jenkinsfile, declarative
 
@@ -253,12 +258,25 @@ syntax, not what the build does:
 
 - The agent is `agent { kubernetes { … } }`, inheriting the controller's `jenkins-agent kaniko`
   templates as today's `podTemplate(inheritFrom: …)` does (`Jenkinsfile:9`), its `yaml` from
-  P3's `containerTemplates.podYaml(...)`: `k8s`, `modern-app-toolchain`, and `golang`/`node`
-  as they are (`Jenkinsfile:12-29`, their why-comment with them). The pod equals the scripted
-  build's — containers, images, pull policies, users, resources, and what the inherited
-  templates add (the `kaniko` container, the init container, the volumes, the node selector);
-  Build-Main #558's console (P3) is the reference. Steps that ran in the default `jnlp`
-  container (the checkout, the CLI-reference gate's `git` steps, `Jenkinsfile:218-219`) still do.
+  P3's `podYaml`: templates `k8s` and `modern-app-toolchain` (`Jenkinsfile:10-11`), and `golang`
+  and `node` as `images:` entries (`Jenkinsfile:25-29`). `golang` takes the map form, named
+  `golang` with its CPU and memory requests and limits (ruling F1); its why-comment
+  (`Jenkinsfile:12-24`) goes with it.
+- The agent sets `yamlMergeStrategy merge()` (ruling F2). The controller's `kaniko` template is
+  YAML only, and without the merge the plugin keeps only the last YAML, the agent's: the pod
+  loses the `kaniko` container, the `busybox-share-init` init container and the `busybox` volume,
+  and the Replay fails at the first `container('kaniko')` stage. The linter cannot see this; the
+  operator's Replay is the proof.
+- The pod equals the scripted build's — containers, images, pull policies, users, resources, and
+  what the inherited templates add (the `kaniko` container, the init container, the volumes, the
+  node selector), with Build-Main #558's console (P3) the reference — except for what ruling F1
+  brings: `node` pulls `Always`, and `golang` and `node` are kept alive by `sleep infinity`
+  instead of `cat` with a tty. Both images carry GNU `sleep`: `node:24-bookworm` is Debian, and
+  `kube-coder-go-toolchain` builds on `kube-coder-dev-base`, which builds on `ubuntu-full:25.10`
+  (`DockerImages/kube-coder-go-toolchain/Dockerfile:1`,
+  `DockerImages/kube-coder-dev-base/Dockerfile:1`).
+  Steps that ran in the default `jnlp` container (the checkout, the CLI-reference gate's `git`
+  steps, `Jenkinsfile:218-219`) still do.
 - `options{}`/`triggers{}` carry the job config today's `properties([...])` sets
   (`Jenkinsfile:7`): `disableConcurrentBuilds(abortPrevious: true)` and the GitHub push trigger.
 - The same work in the same order: every stage, container, `sh` step and kaniko destination,
@@ -285,5 +303,9 @@ syntax, not what the build does:
 - Migrating any pipeline other than KubeCoder's Build-Main, whatever the verdict.
 - KitchenDisplay-only library code (`helmCharts.ssh`/`rsync`, `containerTemplates.rsync`/
   `dockbuild`, `gitUtils`) and `kubectl.waitForJob`/`readFileFromPod`.
+- Changing `containerTemplates.*`, and `podYaml` templates beyond `k8s` and
+  `modern-app-toolchain`: whether the describable helpers stay is the operator's verdict after
+  the trial (ruling F1).
+- The controller's `kaniko` pod template: it stays as it is (ruling F2).
 - Triggering the Replay or a `hasChanges` caller's build from the run: both are operator
   actions.
