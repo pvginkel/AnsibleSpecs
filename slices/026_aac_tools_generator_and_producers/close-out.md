@@ -159,6 +159,28 @@ ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient carry 
 **Provenance:** witnessed: executor, P12a, r1, sweep_ledger.md rows ScanToPdf and MyDownloads
 **Disposition:**
 
+### N7 — Run paused for an operator question in P12b
+
+The question, as the driver recorded it:
+
+> D1 stop rule: FieldnotesApp #40, the build of the pushed head 1ee1929, is red. One of 347 tests failed, backend test_board_sync::test_syncs_and_deliveries_are_counted (board_syncs_total{changed} read 1.0, expected 2). It is a race between the observation write and the counter increment, in code the migration does not touch (close-out B3). The build stopped before kaniko: no image, no pin, and fieldnotes-prd stays Healthy at 45bf980. AaC/FieldnotesApp #5 is green on the head. IntercomServer, DHCPApp and ScanToPdfClient are pushed and done. SSEGateway (41cf1b5) and MyDownloadsClient (fc6c74b) a…
+
+Stopped 2026-09-30 01:34; resumed 2026-09-30 08:29.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
+
+### N8 — Ruling D5's FieldnotesApp rebuild did not run: an operator push had already built the migrated code green
+
+Ruling D5 said to rebuild FieldnotesApp once on 1ee1929 after #40 went red. When P12b resumed, FieldnotesApp's main was at 97777d7 (FN-18, 2026-09-30 03:05), a descendant of 1ee1929 that no phase of this slice made. FieldnotesApp #41 had built it green and pinned FieldnotesDeploy b7daf6f, and fieldnotes-prd was Synced/Healthy there. AaC/FieldnotesApp #6 was green on it and ran arch-validate in the aac-tools container. A rebuild of the job builds main's head, so it would only have restarted fieldnotes-prd again on the same code. The run counted #41 as D5's green build and went on to SSEGateway.
+
+**Consequence:** none — fieldnotes-prd runs an image built from a head that carries the migration; the B3 race is unchanged and can still redden a later FieldnotesApp build
+
+**Provenance:** witnessed, code-writer, P12b r2, sweep_ledger.md FieldnotesApp row
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence

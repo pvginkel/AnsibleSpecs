@@ -857,6 +857,35 @@ As P12a, for the carriers P10 assigns here, resuming from the ledger.
    MyDownloads packager's environment, which declares aac-tools since P12a. Leave the packager
    alone.
 
+**Done (P12b).** The six P12b carriers run the toolchain's `arch-validate` wherever they ran the
+copy, and their copies are deleted. Each is pushed and done: IntercomServer, FieldnotesApp, DHCPApp
+and ScanToPdfClient, then SSEGateway `41cf1b5` alone, then MyDownloadsClient `fc6c74b` alone.
+FieldnotesApp's own build of `1ee1929` was red (B3), and Ruling D5 was answered. The Ansible
+branch carries no commit.
+
+Later phases:
+- P12c–P13b: a carrier's `main` can move past the sweep's push before the run resumes: FieldnotesApp
+  gained the operator's `97777d7`. `push_carrier.sh` rebases onto origin and refuses only unpushed
+  commits that are not this slice's, so an already-pushed foreign commit does not stop it.
+- P12c: SSEGateway's pins moved ElectronicsInventoryDeploy, Zigbee2mqttDeploy and IotDeploy. All
+  three were Healthy at those pins, the deploy repos P12c's carriers pin into.
+
+Record:
+- IntercomServer `4a08ad1`, DHCPApp `9bae8d6` (both copies) and ScanToPdfClient `215e107`
+  (`master`, with `ScanToPdf/ScanToPdf` #39) were done in round 1. The ledger has their builds.
+- FieldnotesApp `1ee1929`: #40 failed one suite test (B3) before kaniko, so the run stopped
+  (question → Ruling D5). By the resume, the operator's `97777d7` (FN-18), a descendant, had built
+  green as #41 and pinned FieldnotesDeploy `b7daf6f`, which fieldnotes-prd rolled. D5's rebuild
+  did not run, because rebuilding `main` would only restart prd on the same code (close-out N8).
+  AaC/FieldnotesApp #5 and #6 are green.
+- SSEGateway: #57 green. It pinned four deploy repos, each Synced/Healthy at its pin. AaC #19 is
+  green, and Architecture #2307 and the site pin rolled.
+- MyDownloadsClient: #69, `MyDownloads/MyDownloads` #106 and `Webathome` #242 are green, and
+  media-prd and webathome-org-prd rolled. AaC #12 is green, and Architecture #2309 and the site pin
+  rolled.
+- Every AaC console ran `arch-validate` in the `aac-tools` container. The rows are in
+  `sweep_ledger.md` § Carriers, and the logs are `/work/scratch/p9-sweep/logs/p12b-<Repo>.log`.
+
 ### P12c — Carriers whose push redeploys production, third part
 
 Target: root
