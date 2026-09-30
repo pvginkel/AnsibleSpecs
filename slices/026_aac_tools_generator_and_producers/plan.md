@@ -962,6 +962,30 @@ the latter `AaC/Architecture`, which takes about 6 min. The flash is the firmwar
 3. UnderfloorHeatingController, about 4 min.
 4. DoorbellReceiver, about 9 min.
 
+**Done (P13a).** The four P13a device carriers run the toolchain's `arch-validate` wherever they
+ran the copy, and their copies are deleted. Each was pushed alone and is done, flash included:
+InfraStatisticsDisplay `e8cca70` as the class canary, then GestureDevice `e4fa9e3`,
+UnderfloorHeatingController `fda0c21` and DoorbellReceiver `ff0094e`. The Ansible branch carries
+no commit.
+
+Later phases:
+- P13b: `/work/scratch/p9-sweep/device_ledger.py <prefix> <Repo> '<change>'` runs after
+  `carrier_ledger.py`. It fills the row's clone and change cells and adds the firmware console's
+  `Success: Uploaded firmware version <sha>`. A console without that line gets STOPPED.
+- P13b: close-out A8 names the four P13a environments that now declare aac-tools. A P13b carrier
+  whose environment gains it needs its own entry.
+
+Record:
+- Each carrier moved `Jenkinsfile.architecture` onto `containerTemplates.aac_tools` and its `lint`
+  gate onto `cexec aac-tools arch-validate`. Each `.kubecoder/config.yaml` declares aac-tools
+  (close-out A8), and the comments that called the script stdlib-only are gone.
+  InfraStatisticsDisplay's `CLAUDE.md` follows. `SEED-NOTES.md` stays as history.
+- Before each push, `cexec aac-tools arch-validate docs/architecture/*.yaml` passed in each clone.
+- Firmware #57, #28, #52 and #24 were green in 1m13s–1m24s, and each printed its upload success
+  line. AaC #24, #12, #12 and #13 ran `arch-validate` in the `aac-tools` container. Architecture
+  #2316–#2319 were green, and each site pin rolled. The rows are in `sweep_ledger.md` § Carriers,
+  and the logs are `/work/scratch/p9-sweep/logs/p13a-<Repo>.log`.
+
 ### P13b — Device carriers, one at a time, second part
 
 Target: root
