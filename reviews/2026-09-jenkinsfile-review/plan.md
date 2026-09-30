@@ -22,12 +22,18 @@ subagent.
   the proposed groups A (style guide), C (library helpers) and D (ANS-84's move), each item with
   its ruling. The next cut is made from there, not from scratch. ANS-84 stays open until the
   slice that moves the job configuration absorbs it.
-- **Where things stand (2026-09-30).** Slice **033** (ANS-166, in `slices/backlog/`) holds the
-  declarative trial (§3, J08) and the library safety net (§6: J22's self-test, the compile
-  gate's pin bump, J18, J20). **Next step: `/dev:plan-slice 033`.** After 033 the operator
-  gives the declarative verdict (migrate all, or keep the J08 rule), and that shapes the next
-  cut. The style guide (§4) most likely comes next, because it depends on the verdict. The
-  small-changes runbook (§1a: J07, Q7, Q6's four globals) waits for the operator's go.
+- **Where things stand (2026-09-30, after 033).** Slice **033** (ANS-166) is complete, in
+  `slices/completed/`. The library safety net is live, and the declarative trial ran:
+  `KubeCoder/Build-Main` #559, a Replay of #558 with the converted file, went green with the same
+  pod and the same 16 stages, and Argo synced its pin commit to `kubecoder-dev`. The converted
+  file is not pushed yet (033 close-out A1). **The operator's verdict is "migrate all"** (§3), so
+  the next cut is the declarative migration, which folds in J14/J15, together with the style
+  guide (§4), which now has one form to describe. The operator chooses the cut. The small-changes
+  runbook (§1a: J07, Q7, Q6's four globals) still waits for the operator's go.
+- **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
+  Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
+  the result is fine." Push the converted file and check the build it triggers. Each push still
+  needs the operator's OK.
 - **State does not survive an environment.** `/work/scratch` (clones, the `jenkins-config`
   dump) can be gone in a new session. When a step needs current Jenkins or file state, rebuild
   it: `python3 refresh.py /work/scratch/jenkins-config` (needs `JENKINS_TOKEN`), clone the repos
@@ -221,7 +227,7 @@ that day.
 Goes early, because the outcome changes §4 (the style guide's rule), §7 (whether helpers are
 written as declarative templates) and §9 (`options{}` versus `properties([...])`).
 
-- [ ] **C** Convert `KubeCoder/Jenkinsfile` (Build-Main, 341 lines) to declarative:
+- [x] **C** Convert `KubeCoder/Jenkinsfile` (Build-Main, 341 lines) to declarative:
   `agent { kubernetes { yaml … } }` built from a library `containerTemplates.podYaml(...)`,
   `options{}`/`triggers{}` for its job config, `when{}`, `post{}`. The file must pass the full
   linter check. *(refresh)* The file already declares both properties
@@ -229,10 +235,25 @@ written as declarative templates) and §9 (`options{}` versus `properties([...])
   and ends in `cicd.writeVersionPins()` to KubeCoderDeploy; the conversion carries the former
   into `options{}`/`triggers{}` and the latter into a `script {}` step.
 - [ ] **op** Replay `KubeCoder/Build-Main` with the converted script (a real build and, through
-  the pin commit, a dev rollout by Argo), then push.
-- [ ] **op** Verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`,
+  the pin commit, a dev rollout by Argo), then push. *(09-30)* Slice 033 did the conversion
+  (KubeCoder `30df8e2d`). Build #559, the Replay of #558 on the same commit (`5bbf14bf`) with
+  library `d9ff168`, went SUCCESS. Its pod matches #558's container for container. The only
+  differences are ruling F1's (`node` pulls `Always`; `golang`/`node` run `sleep infinity`
+  instead of `cat` with a tty) and the default-valued fields #558 printed and #559 leaves out
+  (`resources: {}`, `tty: false`, `privileged: false`). The 16 stages ran in the same order.
+  The pin commit `e705c1f` to KubeCoderDeploy synced to `kubecoder-dev`. The push was still
+  owed when this was written (033 close-out A1).
+- [x] **op** Verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`,
   scripted for pod pipelines). If "migrate all", the migration is a slice of its own, and it
   folds in J14/J15, which get written declaratively.
+  *(09-30)* **Migrate all.** Operator: "I have no problem all pipelines being rewritten. [...] I
+  do think it's worth the migration. I think the only pipeline generating stages is the
+  DockerImages one, so we'll live. And yes, the pipelines that can become a few lines, of
+  course, migrate those so that they are a few lines. It doeesn't exclude this rewrite."
+  Two more files need design as well as DockerImages's stage per image variant:
+  `Intercom/Jenkinsfile` generates a stage pair per hardware version (a `matrix` or a
+  `script {}` fits it), and `Architecture/Jenkinsfile` computes its triggers from YAML
+  (`properties([pipelineTriggers(triggers)])`), which `triggers {}` cannot express.
 - Note: the KubeCoder repo isn't cloned in this environment's `/work`; work from
   `/work/scratch/KubeCoder` or from the KubeCoder environment. ~~Slice 012 (backlog) also edits
   this file's `helmCharts.kaniko(...)` calls. Whichever lands second rebases onto the other.~~

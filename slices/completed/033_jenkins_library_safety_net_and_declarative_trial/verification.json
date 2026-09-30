@@ -18,18 +18,21 @@
       "description": "The operator replays `KubeCoder/Build-Main` with the converted script \u2014 a real build and, through the pin commit, a dev rollout by Argo \u2014 then pushes it.",
       "owed_after": "github:pvginkel/KubeCoder",
       "verdict": "owed",
-      "rationale": "Operator replays KubeCoder/Build-Main with the converted Jenkinsfile, then pushes it (ruling D2).",
-      "evidence": []
+      "rationale": "Replay done (#559, green, dev rollout synced); the verdict stays owed until the operator pushes KubeCoder (close-out A1).",
+      "evidence": [
+        "$JENKINS_URL/job/KubeCoder/job/Build-Main/559/ \u2014 the Replay of #558 with the converted Jenkinsfile (KubeCoder 30df8e2d) on the same commit 5bbf14bf and library d9ff168: SUCCESS; its pin commit KubeCoderDeploy e705c1f synced to kubecoder-dev (Argo operation Succeeded 2026-09-30T12:34:15Z). The push is still owed (read 2026-09-30)"
+      ]
     },
     {
       "id": "V03",
       "area": "R1 \u2014 J08 declarative trial on KubeCoder",
       "description": "The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin prints it at the top of the console, matches a scripted Build-Main build's (containers, images, pull policies, users, resources, the inherited `kaniko` container, `busybox-share-init` init container and volumes), except for what ruling F1 brings \u2014 `node` pulls `Always`, and `golang` and `node` are kept alive by `sleep infinity` rather than `cat` with a tty \u2014 and the same stages run in the same order, ending in the KubeCoderDeploy pin write.",
       "owed_after": "github:pvginkel/KubeCoder",
-      "verdict": "owed",
-      "rationale": "Settled by comparing the Replay console pod spec to build 558 after the operator replays Build-Main.",
+      "verdict": "pass",
+      "rationale": "#559's printed pod matches #558's per container: jnlp, kaniko, k8s, modern-app-toolchain, golang, node and the busybox-share-init init container, with the same images, users, resources and pod-level spec. The only differences are ruling F1's (node imagePullPolicy IfNotPresent -> Always; golang and node run sleep infinity instead of cat with tty) and default-valued fields #558 printed and #559 leaves out (resources: {}, tty: false, privileged: false). The 16 stages ran in the same order, ending in the KubeCoderDeploy pin write.",
       "evidence": [
-        "$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText \u2014 a scripted build (SUCCESS) whose printed pod spec holds jnlp, kaniko, k8s, modern-app-toolchain, golang, node, the busybox-share-init init container, nodeSelector and the busybox/workspace-volume emptyDirs (read 2026-09-30)"
+        "$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText \u2014 a scripted build (SUCCESS) whose printed pod spec holds jnlp, kaniko, k8s, modern-app-toolchain, golang, node, the busybox-share-init init container, nodeSelector and the busybox/workspace-volume emptyDirs (read 2026-09-30)",
+        "$JENKINS_URL/job/KubeCoder/job/Build-Main/559/consoleText \u2014 the pod spec compared container by container with #558's, and the stage sequences diffed (identical, 16) (read 2026-09-30)"
       ]
     },
     {
@@ -37,9 +40,11 @@
       "area": "R1 \u2014 J08 declarative trial on KubeCoder",
       "description": "The operator gives the verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`, scripted for pod pipelines). If \"migrate all\", the migration is a slice of its own.",
       "owed_after": "the operator's verdict after the Build-Main Replay",
-      "verdict": "owed",
-      "rationale": "Operator verdict after the Replay.",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Operator's verdict 2026-09-30: migrate all. The migration is a slice of its own, not yet filed; recorded in reviews/2026-09-jenkinsfile-review/plan.md \u00a73 and report.md J08.",
+      "evidence": [
+        "Operator, 2026-09-30: \"I have no problem all pipelines being rewritten. [...] I do think it's worth the migration.\""
+      ]
     },
     {
       "id": "V05",

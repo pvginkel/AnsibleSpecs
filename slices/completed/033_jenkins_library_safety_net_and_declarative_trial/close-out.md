@@ -24,7 +24,7 @@ driver, push check, 2026-09-30 — held as planned. The slice's commits sit on `
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:**
+**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Push awaits the operator's go; V02 settles on it.
 
 ### A2 — Settle V04 after the operator's verdict after the Build-Main Replay
 
@@ -41,7 +41,7 @@ code-writer P4 r1, 2026-09-30 — Count in the note above corrected: nine librar
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:**
+**Disposition:** 2026-09-30 — verdict given: migrate all (V04 pass). Recorded in reviews/2026-09-jenkinsfile-review/plan.md §3 and report.md J08; the migration is the next cut's, not yet filed.
 
 ### A3 — Settle V09 after the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac- …
 

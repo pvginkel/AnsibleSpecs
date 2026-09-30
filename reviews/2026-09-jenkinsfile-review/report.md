@@ -225,7 +225,7 @@ M (a day or two, including verification), L (more). Risk is what a wrong move co
 | J25 | Dead `Utils` imports, trailing whitespace, stale comments and dead cache paths | Hygiene | low | S | none | do |
 | J23 | One library load line everywhere; keep floating on `main` (stance on pinning) | Library | low | S | low | do |
 | J04 | JCasC for controller-level config only (cloud, pod templates, library, node, global env, executors) | ANS-84 | med | M | med | consider |
-| J08 | Declarative migration: adopt a rule, do not migrate the pod pipelines | ANS-84 | med | — | — | adopt rule; no migration |
+| J08 | Declarative migration: adopt a rule, do not migrate the pod pipelines | ANS-84 | med | — | — | adopt rule; no migration — *overruled 09-30: migrate all* |
 | J10 | `Firmware/KitchenDisplay`: retire or rebuild — the deploy path is gone | Stale | low | S | low | discuss |
 | J07 | Built-in node executors → 0 | ANS-84 | low | S | low | consider |
 | J21 | One kaniko API (Map args), retire the positional `kaniko` | Library | low | M | low | consider |
@@ -487,7 +487,13 @@ accept
   under J14–J16, the same values move into `options{}`/`triggers{}` of the template.
 - **Recommendation** — adopt the rule; no migration.
 
-**Operator response:** <!-- accept | modify | reject | discuss -->
+**Operator response:** modify. The trial went first (slice 033). After it, on 2026-09-30:
+**migrate all.** *"I have no problem all pipelines being rewritten. And it's not necessary to do
+the replay like this. Pushing a new version, and checking the result is fine. I do think it's
+worth the migration. I think the only pipeline generating stages is the DockerImages one, so
+we'll live. And yes, the pipelines that can become a few lines, of course, migrate those so that
+they are a few lines. It doeesn't exclude this rewrite."* The trial's evidence is in
+[plan.md §3](plan.md).
 
 > modify (2026-09-21, in conversation): "I would prefer to migrate to declarative pipelines, at least trying one. Let's do KubeCoder. If I think it has value, I'll migrate them all." → plan §3.
 
