@@ -226,7 +226,7 @@ Record:
 - Close-out: `applyPins` writes a pin into a sequence entry's second key (`env.value` under
   `env: - name: …\n    value: …`) instead of refusing it — witnessed, left as is.
 
-### P2 — `utils.hasChanges` goes `@NonCPS` under test, and the dead helpers go
+### P2 — `utils.hasChanges` goes `@NonCPS` under test, and the dead helpers go ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
