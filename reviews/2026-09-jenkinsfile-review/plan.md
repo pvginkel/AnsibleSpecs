@@ -42,6 +42,17 @@ subagent.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
   needs the operator's OK.
+- **The migration pushes everything at once and checks once (operator, 2026-09-30).** "I would
+  very much suggest that we don't track all repos. We're basically going to push everything,
+  right? I would suggest you just change everything and push it all out in one go, and then
+  stop. Let the system churn through the whole thing, and when everything's quiet (i.e. the
+  Jenkins build queue goes empty), check the results. That's one pull, instead of 124
+  track_build.py calls." For the migration's planning to carry: "quiet" is an empty queue **and**
+  no running builds, with any item waiting past a bound on "nodes offline" treated as the
+  Kubernetes-cloud slot leak (reset from the Script Console), not as churn; the check is one
+  Jenkins API pull of every job's `lastBuild` against the push time. The churn is more than the
+  pipelines themselves: the 22 pin writers roll a fresh image of every app through Argo, and
+  deploy-repo pushes start their `AaC/*` jobs and the Architecture rebuilds.
 - **State does not survive an environment.** `/work/scratch` (clones, the `jenkins-config`
   dump) can be gone in a new session. When a step needs current Jenkins or file state, rebuild
   it: `python3 refresh.py /work/scratch/jenkins-config` (needs `JENKINS_TOKEN`), clone the repos
