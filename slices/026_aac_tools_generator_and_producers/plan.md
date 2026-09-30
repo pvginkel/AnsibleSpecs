@@ -887,7 +887,7 @@ Record:
 - Every AaC console ran `arch-validate` in the `aac-tools` container. The rows are in
   `sweep_ledger.md` § Carriers, and the logs are `/work/scratch/p9-sweep/logs/p12b-<Repo>.log`.
 
-### P12c — Carriers whose push redeploys production, third part
+### P12c — Carriers whose push redeploys production, third part ✅ DONE 2026-09-30
 
 Target: root
 
