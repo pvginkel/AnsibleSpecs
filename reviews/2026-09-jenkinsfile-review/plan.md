@@ -60,8 +60,8 @@ Standing rules for every step:
   cards (2026-09-21). ~~Confirm the routing (handover vs slice) of the accepted ones~~ — that
   is triage's call now. Cards: ANS-84 is your original ask (§9); ANS-94, a pointer card filed
   on a misreading, is closed; ANS-92 (J03) and ANS-93 (J10) are Later; ANS-19
-  (JCasC/Job DSL) closed as Won't Do on the J04/J05 rulings; ANS-20 (crons in the UI) closes
-  when J02 lands. Rejected and struck below: J04, J05, J13, J27. J06 stays skipped, Q3 is left
+  (JCasC/Job DSL) closed as Won't Do on the J04/J05 rulings; ANS-20 (crons in the UI) was
+  folded into ANS-84 on 2026-09-30, as its subtask. Rejected and struck below: J04, J05, J13, J27. J06 stays skipped, Q3 is left
   alone, Q2 keeps TrelloMcp on `test`.
 - [x] **op** Four rulings the fold-in turned up, ruled 2026-09-21 (recorded under your
   responses in `report.md`):
