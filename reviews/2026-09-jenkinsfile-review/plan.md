@@ -379,12 +379,16 @@ through the GitHub API, including the three repos whose trigger is already file-
 open question is a **new** job on a repo without a hook. Must be answered before the §4 guide is
 written; it does not gate §9.
 
-- [ ] **op** OK to create a throwaway private repo (`pvginkel/jenkins-trigger-test`) and a
-  throwaway job for it
-- [ ] **C** Repo with a three-line Jenkinsfile declaring `pipelineTriggers([githubPush()])`; job
+- [x] **op** OK to create a throwaway private repo (`pvginkel/jenkins-trigger-test`) and a
+  throwaway job for it *(2026-09-30: slice 034's ruling D4)*
+- [x] **C** Repo with a three-line Jenkinsfile declaring `pipelineTriggers([githubPush()])`; job
   created through the API with no trigger in its `config.xml`; start build #1 by hand; check
   `gh api repos/pvginkel/jenkins-trigger-test/hooks`; push a commit and see whether build #2
   starts on its own. Record the result in the report, then delete the job and the repo.
+  *(2026-09-30, slice 034 P1)* The test used the declarative form, `triggers { githubPush() }`. The
+  file declaration does not install the hook. A job whose `config.xml` carries the trigger at
+  creation, or on a re-post, does. The result and the new-repo recipe are in the report, under
+  Appendix A R1. The job is deleted; the repo's deletion is the operator's (slice 034 close-out).
 
 ## 7. Library helpers — one slice (`/dev:triage` → `/dev:plan-slice` → `/dev:run-slice`)
 

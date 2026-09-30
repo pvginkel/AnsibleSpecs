@@ -213,9 +213,12 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
   it is authorized: PipelinesDeploy and ArgoCDDeploy by D6, JenkinsPipelineUtils and
   Architecture by F1, and KubeCoderConfig by D3.
   1. Push PipelinesDeploy and JenkinsPipelineUtils.
-  2. Run the site-build job's first build. It writes the first image pin into PipelinesDeploy
-     and pushes it from Jenkins, so the local clone is behind origin from then on.
-  3. Get a first green build of `AaC/PipelinesDeploy`.
+  2. Get the site-build job's first build. The step-1 push starts it: the job carries the push
+     trigger from creation (P1's recipe), and the library already has the hook. Start it by hand
+     only if the push did not. It writes the first image pin into PipelinesDeploy and pushes it
+     from Jenkins, so the local clone is behind origin from then on.
+  3. Get a first green build of `AaC/PipelinesDeploy`. The pushes of steps 1 and 2 start its
+     builds.
   4. Then push Architecture and ArgoCDDeploy:
      - A push to Architecture's main also rebuilds the architecture viewer and redeploys it in
        prd (Architecture `CLAUDE.md:40-42`). F1 accepts that redeploy.
@@ -252,6 +255,40 @@ over as the guide's new-repo recipe.
 - **Authority.** Every write here is pre-authorized (D4). The standing rule still applies: save
   the job's `config.xml` before deleting it (`xml-deleted/`). The run cannot delete the GitHub
   repo (D4), so enter an `action` in the close-out report for the operator to delete it.
+
+**Done (P1).** On `pvginkel/jenkins-trigger-test`, a declarative `triggers { githubPush() }` put
+the trigger on the job at build #1. It did **not** install the hook, and a push built nothing.
+Jenkins did install the hook, within seconds, for a job whose `config.xml` carried
+`GitHubPushTrigger`, both at `createItem` and on a re-post. The next push then built. The
+new-repo recipe is in report.md, Appendix A R1, the `C (2026-09-30, the §6a result …)` note:
+every step is Claude's and none is the operator's. Review plan §6a is ticked.
+
+Later phases:
+- P5: take the recipe from that report.md note. Create the job through the API with
+  `GitHubPushTrigger` in its `config.xml`; the file's `triggers {}` alone never installs a hook.
+  The recipe depends on the controller's "Manage hooks" box being on.
+- P8, P9 and the test phase's Ordering steps 2–3 are edited in place. Both jobs are created with
+  the trigger, there is no operator step, and the test phase's pushes start the first builds.
+  JenkinsPipelineUtils already carries the Jenkins hook; PipelinesDeploy has none (both checked
+  2026-09-30).
+
+- Controller, read 2026-09-30 from `/manage/configure`: one GitHub server (api.github.com,
+  credential `GitHub API token`), Manage hooks on, hook URL
+  `https://jenkins.webathome.org/github-webhook/`, shared secret set.
+- Timeline, 2026-09-30 UTC. The job was created with no trigger at 15:50:46. Build #1 (by hand)
+  was green and the repo still had 0 hooks at 15:53. The push of `9004f50` built nothing through
+  15:55:52. After the `config.xml` re-post at 15:56:07, hook 689752664 appeared at 15:56:09. The
+  push of `d064fd7` started build #2 by push at 15:56:35, green. The job was recreated with the
+  trigger at 15:58:02 and hook 689753852 appeared by 15:58:13. The push of `765d474` started
+  build #1 by push at 15:58:30, green.
+- The throwaway Jenkinsfile passed the full linter. Both job versions' `config.xml` are in
+  `jenkins-config/xml-deleted/` (`jenkins-trigger-test.first.xml`, `jenkins-trigger-test.xml`),
+  and the job is deleted. Its hook stayed on the repo; deleting the repo is close-out A1.
+- The pod's token created a hook (201) and deleted two (204), so the argocd runbook is wrong
+  (close-out P5). A hand-made Jenkins hook needs the plugin's shared secret, which makes it the
+  operator's.
+- Not tested: a pipeline without `checkout scm`, `createItem` inside a folder, and why the UI
+  takes three applies.
 
 ### P2 — The docs site's source in the library, built strict with the KubeCoder manual's tooling
 
@@ -439,9 +476,11 @@ name follows). It is shaped like ChartsDeploy (`/work/scratch/ChartsDeploy`) and
 - a README and a manifest.
 
 Its `kc project test` renders the chart, checks the Terraform, and generates and validates the
-producer's artifact. The `AaC/PipelinesDeploy` job exists: it is created through the API (D4),
-with its `config.xml` saved. The repo gets the Jenkins push hook that the guide's new-repo recipe
-calls for; F1 authorizes creating it.
+producer's artifact. The `AaC/PipelinesDeploy` job exists. It is created through the API (D4)
+with `GitHubPushTrigger` in its `config.xml`, which is saved. That is P1's new-repo recipe
+(report.md, Appendix A R1), and it makes Jenkins install the repo's push hook at creation; F1
+authorizes the hook. Check it with `gh api repos/pvginkel/PipelinesDeploy/hooks`. This is the
+Jenkins hook only; the Argo relay webhook comes from this stage's Terraform.
 
 - **The checklist** is the argocd runbook's § "Giving an app its own architecture producer":
   - `introduced:` takes the date of the first commit that adds `chart/`;
@@ -454,9 +493,9 @@ calls for; F1 authorizes creating it.
 - **When it deploys.** Nothing deploys from this repo until P10's registration reaches
   ArgoCDDeploy's main in the test phase. From then on, Argo syncs every pin on its own (D6).
   Until the first site build writes the pin, the values file only needs to render.
-- **Operator-only steps.** If the new-repo recipe needs a step only the operator can take, enter
-  it as an `action` in the close-out report. Until the hook exists, the job's builds are started
-  by hand.
+- **No operator step.** The new-repo recipe needs none (P1). The job's first build comes from the
+  test phase's push (Ordering constraints). A build started by hand before that push would build
+  the placeholder `main`.
 
 ### P9 — The site image, and the library's own build job
 
@@ -475,9 +514,11 @@ each push to main it builds the image with kaniko into `registry:5000`, tagged w
 number, and writes that pin into PipelinesDeploy's prd values. Charts does the same
 (`/work/Charts/Jenkinsfile:31-52`).
 
-**The job** that runs the Jenkinsfile exists: it is created through the API (D4), with its
-`config.xml` saved, and it is triggered as the new-repo recipe says. It builds and publishes the
-site and nothing else. Slice 033's ruling stands: the library's tests get no Jenkins job.
+**The job** that runs the Jenkinsfile exists. It is created through the API (D4) with
+`GitHubPushTrigger` in its `config.xml`, which is saved: P1's new-repo recipe. JenkinsPipelineUtils
+already carries the Jenkins hook (checked 2026-09-30), so the recipe has no hook step here, and
+the test phase's push starts the first build. The job builds and publishes the site and nothing
+else. Slice 033's ruling stands: the library's tests get no Jenkins job.
 
 **The manifest.** Its statement that no Jenkins job builds the repo (`.kubecoder/project.yaml:3`)
 becomes a true statement about the new job. The image build is reachable through the repo's

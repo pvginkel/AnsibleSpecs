@@ -1365,6 +1365,67 @@ Rules for the executor (no judgement needed beyond these):
   > through the API with no trigger in its `config.xml`, one hand-started build, then look for
   > the hook and push a commit. If it does not install, the style guide says "new repo: add the
   > hook by hand (or `gh api`)", and nothing else in the plan changes.
+
+  > **C (2026-09-30, the §6a result — slice 034 P1):** Your worry holds for a new repo:
+  > **declaring the trigger in the file does not install the hook.** But no hand-made hook is
+  > needed either. Jenkins installs the hook itself when the job's *configuration* arrives with
+  > the trigger in it.
+  >
+  > *The test.* It ran on the private throwaway repo `pvginkel/jenkins-trigger-test`, which had
+  > no hook. Its Jenkinsfile was declarative, the form the guide prescribes: `triggers {
+  > githubPush() }`, `options { disableConcurrentBuilds(); skipDefaultCheckout() }`, a
+  > `checkout scm` stage on a `jenkins-agent` pod, and it passed the full linter. The job was
+  > created through the API with no trigger in its `config.xml`.
+  > - Build #1, started by hand, went green and put `GitHubPushTrigger` on the job's
+  >   configuration. The repo still had no hook: the controller log shows no registration
+  >   attempt, and the plugin's *GitHub Hooks Problems* page lists nothing. A push then started
+  >   no build (watched for two minutes).
+  > - Re-posting that job's `config.xml`, which now carried the trigger, through the API
+  >   installed the hook within two seconds (log: `GitHub webhooks activated for job
+  >   jenkins-trigger-test … (events: [PUSH])`). The next push started build #2 nine seconds
+  >   later (`Started by GitHub push by pvginkel`).
+  > - The hook was then removed, and the job deleted and recreated through `createItem` with
+  >   `GitHubPushTrigger` already in its `config.xml`. The hook arrived at creation, and the first
+  >   push started that job's build #1, with no hand-started build before it.
+  >
+  > Jenkins makes the hook as `web`, push event only, JSON, signed with the plugin's shared
+  > secret, to `https://jenkins.webathome.org/github-webhook/` — the same shape every existing
+  > repo's hook has. It can because of the GitHub server entry in `/manage/configure`, read
+  > 2026-09-30: **Manage hooks** is on, its credential is `GitHub API token`, the hook URL is
+  > overridden to that address, and a shared secret is set. The recipe below depends on that
+  > box.
+  >
+  > **The new-repo recipe.** Claude can take every step; none needs you.
+  > 1. Create the repo (the pod's `GH_TOKEN` has `repo`). Push the Jenkinsfile with
+  >    `triggers { githubPush() }` and `checkout scm`.
+  > 2. Create the job through the Jenkins API: `POST /createItem?name=<job>`, or
+  >    `/job/<Folder>/createItem` for a job in a folder (the folder form was not exercised
+  >    here). Its `config.xml` carries the Jenkinsfile's SCM definition *and* a
+  >    `PipelineTriggersJobProperty` holding `GitHubPushTrigger`. Save it under
+  >    `jenkins-config/xml/`. Check the hook with `gh api repos/pvginkel/<repo>/hooks`; it is
+  >    there within seconds. Creating the job starts no build.
+  > 3. Push to the job's branch. The push starts the first build. From then on the file's
+  >    `triggers {}` owns the trigger: after that build, the job's declarative property tracker
+  >    lists `GitHubPushTrigger`.
+  >
+  > Two variations. A job that already exists without the trigger in its configuration gets its
+  > hook from a `GET` then `POST` of `/job/<job>/config.xml`, once a first build has put the
+  > trigger on it. A repo that already has the hook (every repo with a job today, and
+  > JenkinsPipelineUtils) needs no hook step. There, a job created without the trigger needs its
+  > first build started by hand; a job created with it builds on the first push.
+  >
+  > *Your checkbox sequence* is a UI route to the same registration. Why it takes three applies
+  > was not investigated. The file declaration by itself never registers the hook; the API
+  > routes above worked on the first call each time.
+  >
+  > *A hand-made hook* is only yours. The pod's token can create hooks: a disabled test hook
+  > went onto the throwaway repo with `201` and was removed again, although the argocd
+  > runbook's § Webhooks says the token cannot. But a Jenkins hook must be signed with the
+  > plugin's shared secret, a credential Claude does not read without your permission.
+  >
+  > Deleting the job left its hook on the repo. The throwaway job is deleted; both versions of
+  > its `config.xml` are in `jenkins-config/xml-deleted/`. Deleting the repo is yours (slice
+  > 034's close-out report).
 - **R2 Placement.** Insert the snippet as a top-level statement immediately after the
   `library …` line (and its blank line), before the first `podTemplate(`, `withVault(` or
   `timestamps {`. Where the file already has a `properties([...])` call, edit that call as the

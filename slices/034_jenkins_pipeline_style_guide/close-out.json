@@ -93,6 +93,79 @@
       "notes": [],
       "wrap_up": null,
       "strike": null,
+      "ruling": {
+        "words": "fixed during planning — report.md Q11 marked superseded, its migration paragraph and the five Appendix A rows updated.",
+        "did": null,
+        "date": "2026-09-30"
+      }
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (plugin_version) outside any phase",
+      "body": [
+        "The driver's bail (`plugin_version`), as it recorded it:",
+        "",
+        "> this loop runs plugin 0.9.60 from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.60/tools; the installed plugin is 0.9.61, which the agents it dispatches load, so driver and agents disagree on what they hand each other. Relaunch from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.61/tools/run_loop.py with the same arguments plus --resume (a run loop resumes from state.json).",
+        "",
+        "Stopped 2026-09-30 17:47; resumed 2026-09-30 17:47."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the throwaway GitHub repo pvginkel/jenkins-trigger-test (slice 034 P1's §6a webhook test)",
+      "body": [
+        "The §6a test is recorded (AnsibleSpecs reviews/2026-09-jenkinsfile-review/report.md, Appendix A R1, the 2026-09-30 note) and its Jenkins job is deleted. The private repo remains, with four commits and the Jenkins push hook the second job incarnation installed (deleting the job left the hook in place). The pod's GH_TOKEN carries repo and workflow, not delete_repo (ruling D4). In this pod, gh auth status also shows a second, inactive login from ~/.config/gh/hosts.yml whose token carries delete_repo; the run did not use it. Command: gh repo delete pvginkel/jenkins-trigger-test --yes (with a delete_repo token, e.g. env -u GH_TOKEN from this pod)."
+      ],
+      "consequence": "none beyond clutter: a private throwaway repo stays on the account, its hook pointing at a Jenkins job that no longer exists.",
+      "evidence": "witnessed",
+      "author": "code-writer, P1, r1, report.md Appendix A R1 note (C 2026-09-30)",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P5",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ansible argocd runbook § Webhooks: says the pod's GitHub token can list hooks but not create them; it can create and delete them",
+      "body": [
+        "docs/runbooks/argocd.md § Webhooks: 'The pod's GitHub token can list hooks (cexec iac gh api repos/pvginkel/<repo>/hooks) but not create them, so creation is a GitHub UI keystroke.' On 2026-09-30 the pod's GH_TOKEN (classic PAT, scopes repo and workflow; GitHub documents that repo covers repository hooks) created a disabled hook on pvginkel/jenkins-trigger-test (201, id 689753633) and deleted it and a second hook (204 each). What still keeps a hand-made hook from Claude is its secret: an Argo relay hook needs eso/prd/argocd/prd/webhook#github_secret, and a Jenkins hook the GitHub plugin's shared secret, both values Claude reads only with the operator's permission. The sentence should say that instead of blaming the token."
+      ],
+      "consequence": "A session that needs a hook made by hand concludes the token cannot do it and hands the operator a UI keystroke, where granting the one secret read would let it run gh api itself.",
+      "evidence": "witnessed",
+      "author": "code-writer, P1, r1, report.md Appendix A R1 note (C 2026-09-30)",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
       "ruling": null
     }
   ]
