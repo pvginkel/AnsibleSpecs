@@ -626,7 +626,7 @@ Later phases:
   `stages {}` examples, podYaml's and cicd's, open with `Checkout` (CHK-1; review r1 F1,
   `d21017c`); each, in a complete file, "Jenkinsfile successfully validated.".
 
-### P6 — One complete reference Jenkinsfile per pipeline type
+### P6 — One complete reference Jenkinsfile per pipeline type ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
