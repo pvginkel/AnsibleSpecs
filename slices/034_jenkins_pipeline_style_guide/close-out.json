@@ -195,15 +195,40 @@
       "evidence": "witnessed",
       "author": "code-writer, P3, r1; vars/gitUtils.md",
       "labels": {
-        "trigger": "ordinary-condition",
+        "trigger": "future-change",
         "impact": "broken",
         "signal": "silent",
-        "fix": "one-edit",
+        "fix": "several-places",
         "area": "plain",
         "repo": "JenkinsPipelineUtils"
       },
-      "notes": [],
-      "wrap_up": null,
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: ordinary-condition → future-change, fix: one-edit → several-places): Read the code and its one caller. getTreeHashFile's only caller is Firmware/KitchenDisplay's Jenkinsfile (no other hit in gitblit's index or the library), which passes a fixed '-2'; with that value the cache-key file carries the submodule's id, so the cache is still dropped when the submodule moves. The miss needs a change to that argument, in a job that is disabled and cannot run as it stands (it clones the decommissioned HelmCharts for an SSH key that no longer exists; inventory T13, J10). The fix is two places: the awk line in vars/gitUtils.groovy, and vars/gitUtils.md, whose paragraph documents the behaviour as it is and would become false."
+          ],
+          "relabel": {
+            "trigger": [
+              "ordinary-condition",
+              "future-change"
+            ],
+            "fix": [
+              "one-edit",
+              "several-places"
+            ]
+          }
+        }
+      ],
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "Beyond my bar, and unlikely. The library's gate (root: the vars compiled through the CPS transform, and the @NonCPS functions the test classes call) does not run getTreeHashFile's sh step, so what the change turns on (Groovy GString escaping of $3 and '$version' inside an sh string) is shown only by a Jenkins build of KitchenDisplay, which is disabled and broken for other reasons. The change would also make a var do something other than it does, which slice 034's V19 records did not happen ('no library var changes what it does'). The problem shows only if someone revives KitchenDisplay as it is and bumps the version argument; the review plan keeps gitUtils.groovy until ANS-93 decides whether KitchenDisplay is deleted or rebuilt (reviews/2026-09-jenkinsfile-review/plan.md J20), and that is where the fix belongs."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -250,7 +275,14 @@
         "repo": "AnsibleSpecs"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "The operator has already ruled §3, without the lists: 'A is fine … I suggest it's followed strictly' (rulings.md, §3 Operator response), and the guide's stage-granularity page carries A. So the Consequence, a ruling taken without the retire lists, has already happened, and nobody rules from this page again. The fix also isn't one decided edit: the entry does not give the lists, and writing one for each of A, B and C means working out from the inventory's 'Stage granularity' section which files each option would rewrite. Doing that now would also add to a page the operator ruled on something he was never shown. Nothing is left that a fix would change for anyone."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -281,7 +313,16 @@
           ]
         }
       ],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "card",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "How it is reached, as deployed: the published style guide at https://pipelines.home/docs/ states two rules that no operator response carries, and every future Jenkinsfile and the jenkins-pipelines skill follow them. (1) GRAN-8 (docs/pages/guide/stage-granularity.md, JenkinsPipelineUtils) makes it a MUST that a stage that runs only under a condition says so in `when {}`, and that a file does not mark a stage skipped itself, except DockerImages' generator. Its source is rulings.md's \"Already settled\" J08 row (\"Conditional stages use `when {}`\"). J08's ruling was \"migrate all\", and `when {}` appears only in J08's \"What it buys\" in report.md. (2) library.md's decision-test table (library.md:67) records \"A constant for the registry host, `registry:5000`\" as \"ruled against\". Its source is rulings.md §11 \"Ruled against\" (rulings.md:552), which quotes report.md's own Theme E judgement (report.md:980-985); the operator never answered that judgement. Neither was put to the operator as a question, so the guide's strict MUST reaches the estate's files unruled.",
+          "",
+          "What the fix takes: the operator's ruling on both points, which is not mine to give. Accept both and nothing in the guide moves; only rulings.md gets a line recording the ruling. Reject or modify either and GRAN-8 or library.md's row changes, possibly with the skill's GRAN-8 line (KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md) and the reference files that follow it. Correcting rulings.md alone, taking the two items out of \"settled\", would make that page a true record and leave the guide stating both as rules, so I left the page as it is."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -313,7 +354,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in AnsibleSpecs ebc819b: plan.md Grounding's 'Rulings nuances' now carries J19 as the operator's option (2), no helper in the library or loaded from the repo, the T7 duplication deliberate (report.md:880-881), as rulings.md's J19 row and LIB-7 have it; spec prose, no gate named for it — read back in the diff",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "ebc819b"
+      },
       "ruling": null
     },
     {
@@ -344,7 +390,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in AnsibleSpecs b820450: rulings.md §14 step 4 now gives /job/<Folder>/job/<job>/build for a job in a folder beside POST /job/<job>/build, as the guide's new-repo page (JenkinsPipelineUtils b37b8ba) already does; spec prose, no gate named for it — read back in the diff",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "b820450"
+      },
       "ruling": null
     },
     {
@@ -458,7 +509,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in JenkinsPipelineUtils 36de472 (branch phase/034-wrap-up): guide/index.md's 'How the rules read' now names NEW-1 to NEW-3 and LIB-1 to LIB-5 as the exceptions, rules on how a job is created and what goes into the library, not on what a Jenkinsfile says; re-ran kc project test --project docs (mkdocs build --strict, check_site.py): green",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "36de472"
+      },
       "ruling": null
     },
     {
@@ -544,7 +600,14 @@
         "repo": "MyDownloadsClient"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "Checked the trigger on the live controller (read-only API, 2026-09-30); the label holds, and the mechanism is not the one the Consequence line names. The Copy Artifact plugin (795.ve8e151429b_27) is already in Production mode, not Migration mode (Configure Global Security, Copy Artifact, Compatibility mode). No Authorize Project plugin is installed, so builds run as SYSTEM, and for a SYSTEM build the plugin accepts a copy when the source job's property names the copier, or when an authenticated user can read the source job (CopyArtifact.canReadFrom tests AUTHENTICATED_ANONYMOUS for Item.READ). The authorization strategy is 'Logged-in users can do anything' (anonymous read is off: the job's API answers 403 without a login), so every authenticated user can read MyDownloads/MyDownloadsClient, and Webathome's copy passes whatever the property lists. The job's stored property is copyArtifactPermission ['MyDownloads'] as the Jenkinsfile sets it. The failure needs a change to the controller's security setup, a matrix strategy or Authorize Project that takes read on that job away from the copying build: a future change. Then the step aborts with 'Unable to find project for artifact copy' and fails Webathome's build, as loud as the label says."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -568,7 +631,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in JenkinsPipelineUtils 2449878 (branch phase/034-wrap-up): CHK-3's MUST line now excepts the job's own repo, which CHK-1 clones in Checkout, and keeps 'a push MUST NOT go from the Checkout stage's clone' for every push, as the rule's bullet, the page's recipe and the reference files already had it (the jenkins-pipelines skill's CHK-3 line already reads so); re-ran kc project test --project docs (mkdocs build --strict, check_site.py): green",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "2449878"
+      },
       "ruling": null
     },
     {
@@ -591,7 +659,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in JenkinsPipelineUtils b6aa936 (branch phase/034-wrap-up): types/index.md's opening now excepts the jobs at the end of the page, its section is 'Jobs without a reference file', and KitchenDisplay is 'the one job of its type', a type with no reference file, as rulings §1 has it; no page linked the old anchor; re-ran kc project test --project docs (mkdocs build --strict, check_site.py): green",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "b6aa936"
+      },
       "ruling": null
     },
     {
@@ -782,11 +855,33 @@
       "evidence": "witnessed",
       "author": "the driver's sweep, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the run's record: the KubeCoderConfig lint row is red only because its lint is 'cexec frontend npm run format:check' and this environment has no frontend tool container (cexec: tool \"frontend\" is not available in this environment; the tools it has are: aac-tools, go, iac, java, modern-app). The check itself ran and passed: P7's executor ran the same Prettier check through modern-app, 'All matched files use Prettier code style!' (phases/P7 gate_r2.log, V16 pass). The event describes no problem with what the slice hands over."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -803,11 +898,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: it pushed ArgoCDDeploy a854420 after the site build was green; within about a minute, with no Argo action by anyone, https://pipelines.home/, /docs/ and /docs/llms.txt answered 200 (V12 pass). Outcome clean, V01-V20 pass, no deploy-owed operator step. The authorization was used as ruled (D6), and nothing went wrong."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -824,11 +941,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: PipelinesDeploy was pushed with JenkinsPipelineUtils; IaC/JenkinsPipelineUtils #1 wrote its pin (302b1a0), AaC/PipelinesDeploy #1 and #2 succeeded with the pipelines-deploy.yaml artifact, and Argo's auto-sync rolled the site to prd (V13, V14 pass). Outcome clean, no deploy-owed operator step. The authorization was used as ruled (D6), and nothing went wrong."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -845,11 +984,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: the Architecture registration 574b7fe ('Registry: the pipelines-deploy producer') was pushed after AaC/PipelinesDeploy's builds were green (V14 pass). Outcome clean, V01-V20 pass, no deploy-owed operator step. The authorization was used as ruled (F1), and nothing went wrong."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -866,11 +1027,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: the library push 973257a started IaC/JenkinsPipelineUtils #1 by its hook, which succeeded, pushed the image and wrote pin commit 302b1a0 into PipelinesDeploy; pipelines.home and /docs/ are live and all 14 examples appear verbatim in the served llms-full.txt (V11, V13 pass). Outcome clean, no deploy-owed operator step. The authorization was used as ruled (F1), and nothing went wrong."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -920,7 +1103,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in Architecture 2d06907 (branch phase/034-wrap-up): the producer manual's § Registration in the federation pipeline and checklist step 6 now say a producer is registered by a commit to pipeline-producers.yaml on main, the repo's convention (its CLAUDE.md: work directly on main); the capability-enum PR mentions are not this entry's and are unchanged; re-ran kc project test --project root: green",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "2d06907"
+      },
       "ruling": null
     }
   ]
