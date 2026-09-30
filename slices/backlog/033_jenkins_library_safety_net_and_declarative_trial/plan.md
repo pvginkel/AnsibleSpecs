@@ -70,6 +70,37 @@ The standing rules quoted below come from that plan.
   cleanup handling. R1's shape list and its acceptance criterion drop those two words. Operator:
   "Agree".
 
+- **Ruling F1 (2026-09-30, plan review r1):** the pod-YAML helper is a new, standalone Groovy
+  file, not a rewrite of `containerTemplates.*`. The existing describable helpers stay untouched
+  in this slice. Whether they stay at all is for the operator's verdict after the trial. The
+  helper is `@NonCPS` string building, fully asserted by the Maven gate. Its call shape is named
+  arguments: `podYaml templates: ['k8s', 'modern-app-toolchain'], images: [...]`.
+  `templates:` names the library's own sidecars, known to the new file (for this slice only
+  `k8s` and `modern-app-toolchain`), with their pins and uid/env settings written there.
+  `images:` lets a pipeline run any other container without a library extension. Operator:
+  "we do need some way to be able to call "other" containers. We shouldn't have to require an
+  extension to the util library to do this. E.g. for the ESP-IDF build container, the version
+  very much is specified by the pipeline, not the library. It's the version the app needs. What
+  we can do is that we have a template and image variant, so what, something like this?
+  `podYaml templates: ['k8s'], images: ['esp-idf:v5.3.1']`". Agreed refinement: an `images:`
+  entry is a string (the container is named after the image's last path segment without the
+  tag, kept alive like the library sidecars, `alwaysPullImage`) or a map with the same defaults
+  plus overrides for name, resources, `runAsUser` and env. KubeCoder's `golang` needs the map
+  form: name `golang`, and its CPU/memory requests and limits, which are load-bearing. `node`
+  gains `alwaysPullImage`; that is accepted. The key spelling is the planner's. No fluent
+  builder: named arguments are the Jenkins idiom. Operator: "Yes, fine."
+- **Ruling F2 (2026-09-30, plan review r1):** KubeCoder's declarative agent sets
+  `yamlMergeStrategy merge()`, so the inherited `kaniko` template's YAML (the `kaniko` container,
+  the `busybox-share-init` init container, the `busybox` volume) survives next to the agent's
+  own YAML. The controller's `kaniko` pod template stays as it is (merge strategy Override,
+  "inherit yaml merge strategy" unchecked). Operator: "I hear you: it's in the pipeline. That's
+  fine." Grounding (the review's, from kubernetes-plugin 4557 source):
+  `PodTemplateUtils.combine` concatenates the parents' YAMLs and then the child's, and the
+  child's merge strategy wins (`PodTemplateUtils.java:484-487,511-513`). `Overrides.merge` keeps
+  only the last YAML. With the child's YAML last and no strategy set, `kaniko` would vanish, and
+  the linter cannot see this. The operator's Replay is the proof; the phase builds for it
+  explicitly.
+
 #### Grounding (verified 2026-09-30, library HEAD `276beff`, KubeCoder HEAD `5bbf14bf`)
 
 - **Behaviour tests have started.** `tests/src/test/java/org/webathome/jenkinspipelineutils/`
@@ -114,9 +145,9 @@ The standing rules quoted below come from that plan.
 - **Build-Main job.** Its `config.xml` holds only what the Jenkinsfile's `properties` sets
   (concurrency, GitHub push trigger), SCM `pvginkel/KubeCoder` `*/main`, script `Jenkinsfile`.
   Installed on the controller: `kubernetes` 4557.ve746270f672f and `pipeline-model-definition`
-  2.2293.v6e7193cec599. Not verified: that this plugin version takes
-  `agent { kubernetes { yaml; inheritFrom; defaultContainer; yamlMergeStrategy } }` exactly as
-  the report says. The full linter check settles it.
+  2.2293.v6e7193cec599. The full linter check settles only syntax and parameter names of
+  `agent { kubernetes { yaml; inheritFrom; defaultContainer; yamlMergeStrategy } }`, not how the
+  plugin merges the pod: see the F2 ruling and grounding below.
 - **Replay needs the helper on main.** A Replay swaps only the Jenkinsfile, and the library
   loads from main. So the `podYaml` helper must be pushed (D2: the run pushes the library)
   before the operator's Replay can work.
