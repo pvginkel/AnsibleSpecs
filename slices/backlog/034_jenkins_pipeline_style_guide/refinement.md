@@ -242,9 +242,9 @@ None — nothing here waits on something only you know.
   they are new pages and nothing is deleted.
 - The review's job inventory has 124 rows, not 125 — one job was deleted since; nothing changes.
 - The accepted "monorepo validation" helper is mostly overtaken: five apps now render their
-  Jenkinsfile from the app template repo, so the guide's reference file for that pipeline type
-  describes what the template renders, and changing the template is the migration's job, not this
-  slice's.
+  Jenkinsfile from the app template repo. Plan review: the five template-rendered apps are skipped
+  completely. Operator: "Please completely skip the moderapptemplate repos. I'll get them fixed
+  when we do the next sync."
 - The rulings page lives in the slice folder; the run pauses once, after the inventory phase, for
   your rulings on it, and the guide is written only after them.
 - The webhook test runs before the guide phases, and its result is also recorded in the review's

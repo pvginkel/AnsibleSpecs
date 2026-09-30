@@ -107,6 +107,20 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
   `.kubecoder/project.yaml` (one file, no verbs) to `pvginkel/PipelinesDeploy`, so the driver
   resolves a gate for it; the deploy-repo phase replaces it with the real manifest and the repo
   is gated like any other. Operator: "D5 and D7 are fine."
+- **Ruling F1 (plan review r1):** the run is authorized to push JenkinsPipelineUtils to main
+  (as slice 033's D2), to push Architecture (the producer registration; the push also redeploys
+  the architecture viewer in prd), and to create the Jenkins push hook on PipelinesDeploy.
+  Operator: "The rest is agreed."
+- **Ruling F2 (plan review r1):** the ModernAppTemplate-rendered repos are skipped completely.
+  Operator: "Please completely skip the moderapptemplate repos. I'll get them fixed when we do the
+  next sync." The five (DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl, FieldnotesApp)
+  get no reference file and no pipeline type of their own in the guide; the inventory lists them
+  as skipped, with that reason, and no criterion covers them. The template itself is untouched.
+- **Ruling F3–F5 (plan review r1):** P1 reads the GitHub plugin's hook-management setting from
+  the controller, not from the `jenkins-config` dump (which does not carry it); each phase adds
+  its own pages' nav rows with the pages (KubeCoder manual's rule), so P2 ships no guide page
+  ahead of the rulings; J11's 90/180-minute timeouts are exception *candidates* — the guide
+  carries only the exceptions the rulings page settles. Operator: "The rest is agreed."
 - **Settled in refinement (the operator did not object):** the rulings page lives in the slice
   folder, and the run pauses once, after the inventory, for the operator's rulings on it — the
   guide is written only after them, and those rulings are recorded in this section. The webhook
@@ -125,9 +139,9 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
   `vars/*.txt`, no README, no `docs/`, no `Jenkinsfile` and no job (`origin/main` `d9ff168`;
   vars: `cicd`, `containerTemplates`, `gitUtils`, `helmCharts`, `kubectl`, `notify`, `podYaml`,
   `utils`); the reference pages are new and nothing is deleted. Appendix A has 124 rows (125 jobs
-  before `CanonApp` was deleted, Q12). J15 is mostly overtaken: five monorepo apps render their
-  `Jenkinsfile` from ModernAppTemplate's root template (Q11) — the guide's reference file for
-  that type describes what the template renders; changing the template is the migration's job.
+  before `CanonApp` was deleted, Q12). J15 is mostly overtaken: five monorepo apps (DHCPApp,
+  ElectronicsInventory, IoTSupport, ZigbeeControl, FieldnotesApp) render their `Jenkinsfile`
+  from ModernAppTemplate's root template, which is scripted — this slice skips them (Ruling F2).
 - **Rulings nuances from `report.md`** the guide must carry exactly: J23 keeps floating on
   `main` (no pin; two odd load lines remain, in `Home` and `Architecture/Jenkinsfile.ha-fleet`).
   J01 is `properties([...])` with `disableConcurrentBuilds()` and the trigger — in declarative,
@@ -181,6 +195,8 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
 
 - prd ../ArgoCDDeploy — the pipelines app's registration, auto-synced, deploys the new site to prd (ruling D6)
 - prd github:pvginkel/PipelinesDeploy — the site's deploy repo; its pins reach prd through Argo's auto-sync (ruling D6)
+- prd ../Architecture — the producer registration's push redeploys the architecture viewer in prd (ruling F1)
+- prd ../JenkinsPipelineUtils — the library push starts the site build, whose pin reaches prd through PipelinesDeploy (ruling F1)
 - accept github:pvginkel/KubeCoderConfig lint — no `frontend` tool container here; the P7 executor runs the same Prettier check through `modern-app` (ruling D5)
 
 ## Ordering constraints

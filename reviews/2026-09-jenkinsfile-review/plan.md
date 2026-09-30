@@ -42,6 +42,11 @@ subagent.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
   needs the operator's OK.
+- **The ModernAppTemplate repos are skipped (operator, 2026-09-30, slice 034's plan review).**
+  "Please completely skip the moderapptemplate repos. I'll get them fixed when we do the next
+  sync." DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and FieldnotesApp render their
+  `Jenkinsfile` from the template; the guide gives them no reference file and the migration
+  leaves them alone. This replaces Q11's "edited in place".
 - **The migration pushes everything at once and checks once (operator, 2026-09-30).** "I would
   very much suggest that we don't track all repos. We're basically going to push everything,
   right? I would suggest you just change everything and push it all out in one go, and then

@@ -36,3 +36,18 @@ docs/runbooks/argocd.md § 'Giving an app its own architecture producer', step 4
 **Provenance:** read — plan-writer, planning r1, Ansible docs/runbooks/argocd.md and Architecture CLAUDE.md
 **Route:** the wrap-up — fix
 **Disposition:**
+
+### P3 — Ansible .aiworkflowrc: its header says 'the driver pushes', but with the test phase enabled the test agent pushes and the driver only checks · nit
+
+<details><summary>body</summary>
+
+Ansible .aiworkflowrc lines 4-7: 'Same values, so the loop behaves exactly as before: both phases run, the driver pushes, and no devlock is taken'. The same file sets [test_phase] strategy, so the test phase runs. The dev plugin's docs/project-contract.md:75-77 says 'With a test phase, that phase's procedure doc pushes and the driver checks it happened; with no test phase the driver pushes'. run-loop.md § The push check says the same. The comment describes the no-test-phase mode.
+
+</details>
+
+**Consequence:** A session reading the project's workflow config expects the driver to push a slice's repos, while the test agent actually owns the push and the driver only checks it and bails 'unpushed'.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
+**Provenance:** read — plan-reviewer, planning r1, Ansible .aiworkflowrc:4-7 and dev 0.9.61 docs/project-contract.md:75-77
+**Route:** the wrap-up — fix
+**Disposition:**
