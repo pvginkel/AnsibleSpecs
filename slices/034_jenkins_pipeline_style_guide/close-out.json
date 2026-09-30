@@ -23,7 +23,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by Ansible 7ba6d6f (argocd runbook, CLAUDE.md: a new app auto-syncs …): step 4 of 'Giving an app its own architecture producer' now commits the entry to pipeline-producers.yaml on Architecture's main; no PR",
+        "by": "doc-writer, doc phase",
+        "date": "2026-09-30",
+        "commit": "7ba6d6f"
+      },
       "ruling": null
     },
     {
@@ -46,7 +51,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by Ansible 7ba6d6f: the registration example is 'prd: {}', Argo syncs a new app on its own, and autoSync: false with a manual first sync is stated for a stage taking over running resources (D5)",
+        "by": "doc-writer, doc phase",
+        "date": "2026-09-30",
+        "commit": "7ba6d6f"
+      },
       "ruling": null
     },
     {
@@ -165,7 +175,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by Ansible 7ba6d6f: § Webhooks says the pod's token lists, creates and deletes hooks, and that the shared secret, readable only with the operator's permission, is what a session lacks",
+        "by": "doc-writer, doc phase",
+        "date": "2026-09-30",
+        "commit": "7ba6d6f"
+      },
       "ruling": null
     },
     {
@@ -854,6 +869,54 @@
         "trigger": "unknown",
         "impact": "unknown",
         "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E8",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (blocked) in the doc phase",
+      "body": [
+        "The driver's bail (`blocked`), as it recorded it:",
+        "",
+        "> The session ended mid-survey: no doc edit was made or committed, and no gate ran. Still owed, all grounded but not written: (1) Ansible docs/runbooks/argocd.md — the new-app registration entry needs no autoSync (manual first sync only when taking over running resources; close-out P2); the producer section's Jenkinsfile.architecture follows the guide's deploy-architecture reference file (podYaml aac-tools, checkout scm, archive in Generate, then Validate); AaC/<Repo> is created through the Jenkins API with GitHubPushTrigger (NEW-1/2), and registration is a direct commit, not a PR (close-out P1…",
+        "",
+        "Stopped 2026-09-30 22:05; resumed 2026-09-30 22:05."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P13",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Architecture producer manual: a producer is registered with 'a PR' against pipeline-producers.yaml, but the repo has never had a pull request",
+      "body": [
+        "Architecture .claude/architecture/producer-manual.md, § Registration in the federation pipeline ('One PR against pipeline-producers.yaml in pvginkel/Architecture adds this repo') and its checklist step 6 ('Register: PR pipeline-producers.yaml'). pvginkel/Architecture has no pull request in any state (gh pr list --state all is empty); registrations are direct commits to main, as 574b7fe 'Registry: the pipelines-deploy producer' and 8090ad5 'Registry: the fieldnotes-app producer'. The Ansible argocd runbook said the same and was corrected in 7ba6d6f (close-out P1); the manual is the producer contract every producer repo's session reads, and this slice left it as it was."
+      ],
+      "consequence": "A session that registers a producer from the manual opens a pull request that the repo's convention does not use; the registration itself works either way.",
+      "evidence": "witnessed",
+      "author": "doc-writer, doc phase, r1, gh pr list -R pvginkel/Architecture --state all; git -C /work/Architecture log --first-parent main",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "Architecture"
       },
       "notes": [],
       "wrap_up": null,
