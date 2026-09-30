@@ -257,7 +257,15 @@
         "fix": "several-places",
         "repo": "AnsibleSpecs"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "consult 2",
+          "date": "2026-09-30",
+          "text": [
+            "Both items made it into the published guide without an operator ruling. GRAN-8 (docs/pages/guide/stage-granularity.md:69-73) makes when {} a MUST and carves out §13's DockerImages exception (Utils.markStageSkippedForConditional), which removes the contradiction with §13 on the guide side. library.md:67 lists the registry-host constant as 'ruled against'. So the guide states both as rules while the operator was only shown them as settled."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -280,7 +288,15 @@
         "fix": "one-edit",
         "repo": "AnsibleSpecs"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "consult 2",
+          "date": "2026-09-30",
+          "text": [
+            "The risk the consequence names did not happen in this run. P5 carried the operator's option (2), and LIB-7 (JenkinsPipelineUtils b37b8ba, docs/pages/guide/library.md:85-89) says 'No helper holds them, in the library or loaded from the repo.' No later phase reads Grounding. What is left is the Grounding line in plan.md, which still names option (1)."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -733,6 +749,27 @@
         "prevents": "degraded",
         "area": "plain",
         "repo": "KubeCoder"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "Red row accepted by ruling: github:pvginkel/KubeCoderConfig lint",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoderConfig lint — no `frontend` tool container here; the P7 executor runs the same Prettier check through `modern-app` (ruling D5)`"
+      ],
+      "consequence": "`kc project lint` is red for github:pvginkel/KubeCoderConfig in the tree this slice leaves; the driver let it through on the ruling.",
+      "evidence": "witnessed",
+      "author": "the driver's sweep, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
       },
       "notes": [],
       "wrap_up": null,
