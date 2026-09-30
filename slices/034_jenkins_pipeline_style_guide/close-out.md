@@ -22,6 +22,22 @@ docs/runbooks/argocd.md § 'Registering, undeploying and unregistering an app' (
 **Route:** the wrap-up — fix
 **Disposition:**
 
+### P4 — AnsibleSpecs Jenkins review report.md still says the five ModernAppTemplate repos are edited in place (Q11), against the skip ruled in slice 034's plan review · minor
+
+<details><summary>body</summary>
+
+Slice 034's plan review ruling F2 skips the five ModernAppTemplate repos completely: DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and FieldnotesApp. Operator: "Please completely skip the moderapptemplate repos. I'll get them fixed when we do the next sync." The review's work plan (reviews/2026-09-jenkinsfile-review/plan.md) records this and says it replaces Q11's "edited in place". report.md does not: its migration section says the five template-generated files "are edited in place (Q11 ruling)" (report.md:1392-1393), and the Appendix A rows of the five root jobs say "(Q11: edit in place)" (report.md:1487, :1489, :1490, :1516, :1531). Slice 034's plan does not edit those lines. Its P1 touches only the R1 note, and its P4 inventory lists the ten jobs of the five repos as skipped.
+
+</details>
+
+**Consequence:** A session that plans the migration from report.md alone reads that the five template-rendered Jenkinsfiles get converted in place, against the operator's ruling. Only the review plan and slice 034's inventory say they are skipped.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in AnsibleSpecs
+**Provenance:** read — plan-writer, planning, r3, plan.md Ruling F2 and reviews/2026-09-jenkinsfile-review/report.md:1392-1393
+**Route:** the wrap-up — fix
+**Disposition:** fixed during planning — report.md Q11 marked superseded, its migration paragraph and the five Appendix A rows updated.
+
 ### P1 — Ansible argocd runbook: a new producer is registered 'with a PR' against Architecture, but that repo is worked by direct commits to main · nit
 
 <details><summary>body</summary>

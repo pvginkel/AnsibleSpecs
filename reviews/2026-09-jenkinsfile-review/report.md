@@ -1278,6 +1278,10 @@ new app gets whatever the template carries. Two choices follow.
 > *C (2026-09-30):* So the five files are edited in place, like any other app file, and the
 > template catches up at the next `copier update`. J15 stays in the inventory for triage, re-read
 > against the five template-shaped files.
+>
+> *Superseded (2026-09-30, slice 034's plan review):* "Please completely skip the
+> moderapptemplate repos. I'll get them fixed when we do the next sync." The five get no
+> reference file in the guide, and the migration leaves them alone.
 
 **Q12 — `CanonApp` now that `Archived/` is gone (2026-09-30).** J09 said "move to `Archived/`
 and disable". The folder no longer exists, and the job still has a live push trigger on an
@@ -1390,7 +1394,8 @@ Rules for the executor (no judgement needed beyond these):
   while slice 026 was still rewriting app and firmware `Jenkinsfile.architecture` files. Re-run
   `analyse.py` once 026 has closed and correct any row whose library line moved. The five
   template-generated files (DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl,
-  FieldnotesApp) are edited in place (Q11 ruling); the template catches up later. R6 runs after
+  FieldnotesApp) are skipped (Q11, superseded 2026-09-30: the operator fixes them at the next
+  template sync). R6 runs after
   the job's **second** build following the edit, because the first appends beside the UI copies
   and the second removes them (Q13). It then checks that the job holds exactly one property of
   each kind.
@@ -1484,10 +1489,10 @@ half, so the plain standard fits better. No job is a candidate for allowing conc
 | AaC/YouTrackMCPServer | YouTrackMCPServer/Jenkinsfile.architecture | push (no DCB) | P1 after line 5 | — | gains a concurrency guard |
 | AaC/Zigbee2mqttDeploy | Zigbee2mqttDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/ZigbeeControl | ZigbeeControl/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — |  |
-| DHCP/DHCPApp | DHCPApp/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (validate 6 min median, then kaniko + pin write); rebuild rolls prd through Argo (pins into DnsmasqDeploy); generated from ModernAppTemplate root v0.1.2 (Q11: edit in place); drop the unused import on line 1 (J25) |
+| DHCP/DHCPApp | DHCPApp/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (validate 6 min median, then kaniko + pin write); rebuild rolls prd through Argo (pins into DnsmasqDeploy); generated from ModernAppTemplate root v0.1.2 (Q11: skipped — fixed at the next template sync); drop the unused import on line 1 (J25) |
 | DockerImages | DockerImages/Jenkinsfile | DCB(queue) [file]; push; param `image` [file] | add `pipelineTriggers([githubPush()]),` to the `properties([...])` at lines 29–35 | — | already on the standard, declared in the file since 2026-09-23; rebuild rolls prd through Argo (per-image pins, per-build tags since slice 031); no Helm deploy (`6041476`) and no trivy scan (`6a1e87b`, DI-13) since 09-26/09-29 |
-| ElectronicsInventory/ElectronicsInventory | ElectronicsInventory/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (21.5 min median, busiest validation job); rebuild rolls prd through Argo (pin write); generated from ModernAppTemplate root v0.1.2 (Q11: edit in place); drop the unused import on line 1 (J25) |
-| FieldnotesApp | FieldnotesApp/Jenkinsfile | DCB(abort) [file]; push [file] **and** a second, UI-set push trigger | nothing in the file — declared at lines 9–12 since 2026-09-30 (`97777d7`, FN-18) with `abortPrevious: true`; the UI-set duplicate trigger clears itself on the next build (Q13) | — | generated from ModernAppTemplate root v0.1.2, the properties block a local addition the template lacks (Q11: edit in place); rebuild rolls prd through Argo; drop the unused import on line 1 (J25) |
+| ElectronicsInventory/ElectronicsInventory | ElectronicsInventory/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (21.5 min median, busiest validation job); rebuild rolls prd through Argo (pin write); generated from ModernAppTemplate root v0.1.2 (Q11: skipped — fixed at the next template sync); drop the unused import on line 1 (J25) |
+| FieldnotesApp | FieldnotesApp/Jenkinsfile | DCB(abort) [file]; push [file] **and** a second, UI-set push trigger | nothing in the file — declared at lines 9–12 since 2026-09-30 (`97777d7`, FN-18) with `abortPrevious: true`; the UI-set duplicate trigger clears itself on the next build (Q13) | — | generated from ModernAppTemplate root v0.1.2, the properties block a local addition the template lacks (Q11: skipped — fixed at the next template sync); rebuild rolls prd through Argo; drop the unused import on line 1 (J25) |
 | Firmware/CalendarDisplay | CalendarDisplay/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S** (OTA upload in the deploy stage); J14 rewrites the file |
 | Firmware/DoorbellReceiver | DoorbellReceiver/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
 | Firmware/GestureDevice | GestureDevice/Jenkinsfile | DCB(abort); push | P1 after line 1, before `withVault(` | — | candidate **S**; J14 |
@@ -1513,7 +1518,7 @@ half, so the plain standard fits better. No job is a candidate for allowing conc
 | IaC/Scheduled Drift | Ansible/Jenkinsfile.iac-scheduled-drift | DCB(queue) [file]; discarder 50 [file]; cron `H 11 * * *` [file] | nothing | — | declarative |
 | IaC/Scheduled Update | Ansible/Jenkinsfile.iac-scheduled-update | DCB(queue) [file]; discarder 50 [file]; cron `H 4 * * 0` [file] | nothing | — | declarative |
 | IaC/TerraformRegistry | TerraformRegistry/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pins into TfmirrorDeploy, `11b0a76`) |
-| IoTSupport/IoTSupport | IoTSupport/Jenkinsfile | DCB(abort); push | P1 after line 3 | `KEYCLOAK_TEST_*` global env vars | candidate **A** (10 min median validation); rebuild rolls prd through Argo (pins into IotDeploy, since `96c7bb1`); generated from ModernAppTemplate root v0.1.2 with local Keycloak/Elasticsearch additions (Q11: edit in place); drop the unused import on line 1 (J25) |
+| IoTSupport/IoTSupport | IoTSupport/Jenkinsfile | DCB(abort); push | P1 after line 3 | `KEYCLOAK_TEST_*` global env vars | candidate **A** (10 min median validation); rebuild rolls prd through Argo (pins into IotDeploy, since `96c7bb1`); generated from ModernAppTemplate root v0.1.2 with local Keycloak/Elasticsearch additions (Q11: skipped — fixed at the next template sync); drop the unused import on line 1 (J25) |
 | KubeCoder/Build-Main | KubeCoder/Jenkinsfile | DCB(abort) [file]; push [file] | nothing | — | declared in the file 2026-09-23 with `abortPrevious: true` — the **A** candidate, applied; rebuild rolls dev through Argo (pins into KubeCoderDeploy `main`), prd only via Promote-PRD |
 | KubeCoder/Promote-PRD | KubeCoderDeploy/Jenkinsfile.promote | DCB(queue) [file]; param `commit` [file]; no trigger | nothing | — | hand-started by design; replaced `Deploy-PRD` (deleted 2026-09-23 with its Jenkinsfile); the retag → fast-forward → tag sequence is one an abort must not cut, and the file already declares the queueing standard |
 | MyDownloads/MyDownloads | MyDownloads/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
@@ -1528,7 +1533,7 @@ half, so the plain standard fits better. No job is a candidate for allowing conc
 | Webathome | Webathome/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
 | YouTrack/YouTrackConfiguration | YouTrackConfiguration/Jenkinsfile | DCB(abort); push; param `ROTATE_TOKEN` [file] | change lines 6–12 to `properties([disableConcurrentBuilds(), pipelineTriggers([githubPush()]), parameters([booleanParam(name: 'ROTATE_TOKEN', defaultValue: false, description: 'Also rewrite the webhook token into every project that has webhook URLs. YouTrack masks the token it holds, so a rotation cannot be detected, only asked for.')])])` | — | candidate **S** (every build applies to YouTrack) |
 | YouTrack/YouTrackMCPServer | YouTrackMCPServer/Jenkinsfile | DCB(abort); push | P1 after line 1 | — | rebuild rolls prd through Argo (pin write) |
-| ZigbeeControl/ZigbeeControl | ZigbeeControl/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (5.5 min median validation); drop the unused import (J25); rebuild rolls prd through Argo (pin write); generated from ModernAppTemplate root v0.1.2 (Q11: edit in place) |
+| ZigbeeControl/ZigbeeControl | ZigbeeControl/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (5.5 min median validation); drop the unused import (J25); rebuild rolls prd through Argo (pin write); generated from ModernAppTemplate root v0.1.2 (Q11: skipped — fixed at the next template sync) |
 
 Counts (refreshed 2026-09-30): 124 rows (`CanonApp` deleted, Q12); 105 files gain a new
 `properties([...])` (one of them, `Firmware/KitchenDisplay`, only if J10 keeps the job; 49 of them
