@@ -382,6 +382,53 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils docs/check_site.py: its typed-Groovy guard catches only a plain ```groovy fence",
+      "body": [
+        "GROOVY_BLOCK (docs/check_site.py:32-34) requires the fence line to be exactly ```groovy plus blanks. Probed in the reviewer's run: ```groovy title=\"Jenkinsfile\", ``` groovy, ~~~groovy and ```Groovy are not matched, while SuperFences renders each as highlighted Groovy. A Groovy example typed into a guide page under one of them is published unchecked, and lint_examples.py never sees it. Every guide block today is a plain ```groovy include, so nothing is wrong yet."
+      ],
+      "consequence": "Once a page edit uses a titled or tilde fence for a Groovy recipe, the site publishes an example the linter never checked while kc project test stays green, and the guide's 'every example passes the linter' is quietly false.",
+      "evidence": "witnessed",
+      "author": "code-reviewer, P5, r1, phases/P5/code_review_r1.md F2",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P10",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils style guide overview: 'each rule is verifiable from the Jenkinsfile alone' does not hold for NEW-1–3 and LIB-1–5",
+      "body": [
+        "docs/pages/guide/index.md:8-10 says every rule is stated as a fact about a Jenkinsfile that a reader or checker can verify from the file alone. NEW-1–3 (new-repo.md) rule job creation and folders, and LIB-1–5 (library.md) rule what goes into the library. None of them is a fact about a Jenkinsfile."
+      ],
+      "consequence": "Whoever writes the later conformance checker from that sentence expects every rule to be testable from a file and finds eight that are not.",
+      "evidence": "read",
+      "author": "code-reviewer, P5, r1, phases/P5/code_review_r1.md F3",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
