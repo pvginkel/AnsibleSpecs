@@ -472,6 +472,9 @@ Later phases:
 - P5 (code review r1): Grounding's J19 nuance, "a repo may carry its own helpers via `load`",
   is option (1) of report.md's J19 C-note. The operator chose (2), no helper
   (`report.md:880-881`), and `rulings.md`'s J19 row carries (2).
+- P8: its `Jenkinsfile.architecture` needs `aac_tools`, which `podYaml` refuses today. §5's
+  ruling says how it gets it: (a1) this slice adds the template first, (a2) or (b) an `images:`
+  entry.
 - P6: the types are the inventory's T1–T13, with their member lists. The page proposes no
   reference file for T13 (KitchenDisplay). Intercom's two versions share one `build/`, so its
   stages stay build, deploy, build, deploy.
@@ -493,6 +496,8 @@ Later phases:
   (`PodYamlTest`'s refusal case, 26 green), hence §5's sub-choice. §14 step 4 starts a non-push
   job's first build by hand, because a file's `triggers {}` reach the job only through a build
   (P1's build #1).
+- Code review r2: §5's (a) now states its cost to P8's producer and V14, split into (a1)/(a2).
+  `podYaml` refuses `aac_tools`: a scratch copy of `PodYamlTest` with that refusal case, 27 green.
 
 ### P5 — The guide's rules: one strict section per topic, stage labels on their own
 

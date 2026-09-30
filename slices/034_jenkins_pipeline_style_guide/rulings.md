@@ -243,8 +243,12 @@ webhook test both used this form.
   HomelabTerraformProvider). T13's `dockbuild` and `rsync` need no template: T13 gets no
   reference file (section 1). Choose one:
   - (a) `podYaml` gains a template for each, as `containerTemplates` declares it. That changes a
-    library var, so the migration slice does it, before the first file that names one. Until
-    then the guide's reference files name templates that do not exist.
+    library var, which this slice does not do, so the migration slice does it. Until then a file
+    that names one fails its build, the failure section 12 holds against its (b). This slice
+    runs one such file: PipelinesDeploy's `Jenkinsfile.architecture`, a T2 file that needs
+    `aac_tools`, and its first build must be green. So (a) also asks which gives way: (a1) this
+    slice adds `aac_tools` to `podYaml` after all, or (a2) that file names it as an `images:`
+    entry, apart from the guide.
   - (b) The files name them as `images:` map entries. No library change, but each image and its
     settings repeat in every file that uses it: `registry:5000/aac-tools` in 72 files, and
     `iac_toolchain`'s uid and environment in two.
@@ -280,7 +284,7 @@ agent {
 - `kaniko` inherited by a build that runs no kaniko step: AaC/Ansible.
 - A declared container no step uses: Home's `helm`.
 
-**Operator response:** <!-- accept | modify | reject | discuss; for the sidecars: a | b -->
+**Operator response:** <!-- accept | modify | reject | discuss; for the sidecars: a1 | a2 | b -->
 
 >
 
