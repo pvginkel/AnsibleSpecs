@@ -92,7 +92,7 @@ Ansible/CLAUDE.md § Related repos: a repo a slice changes but the environment d
 **Triage:** prose · shows in normal use · degrades · loud · fix is one edit · in Ansible
 **Provenance:** read — plan-reviewer, planning, r1, plan_review_r1.md
 **Route:** card request — the fix lives in Ansible, which the slice did not touch
-**Disposition:**
+**Disposition:** 2026-09-30 — raised as ANS-169 (operator's go).
 
 ## Closed
 
