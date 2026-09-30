@@ -97,6 +97,54 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils cicd.applyPins writes a pin into a sequence entry's mapping instead of refusing the path",
+      "body": [
+        "applyPins skips a sequence entry's own line (`  - name: LOG_LEVEL`), but the entry's later keys (`    value: info`) match its `key: ...` pattern and take the enclosing mapping's path. So in `env:\\n  - name: LOG_LEVEL\\n    value: info\\n` the pin `env.value` resolves and is written (`value: debug`) where its doc comment promises a throw: 'A path that does not resolve to exactly one scalar line throws … neither may reach a commit.' With two such entries the pin is refused as 'on both line …', which names the wrong cause. VersionPinsTest asserts only the entry's first key (`env.name`) is refused and pins nothing about later keys. A fix tracks an open sequence entry like the open block scalar (`literal`), so keys under it carry no path."
+      ],
+      "consequence": "A Jenkinsfile that names a pin path running through a YAML list gets that list entry's value overwritten in the deploy repo and committed, with no error, instead of a refused build",
+      "evidence": "witnessed",
+      "author": "code-writer, P1, r1: a throwaway JUnit probe calling applyPins('f', 'env:\\n - name: LOG_LEVEL\\n value: info\\n', [env.value: debug]) returned the file with 'value: debug'",
+      "labels": {
+        "trigger": "fault",
+        "impact": "broken",
+        "signal": "silent",
+        "fix": "design",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils cicd.normalizePins is not asserted: its String keys and its refusal of a values file named twice",
+      "body": [
+        "normalizePins (vars/cicd.groovy) is @NonCPS and pure, like the three functions VersionPinsTest covers, but R2's list did not name it and P1 left it out. It turns GString keys and values into Strings (a GString key is unreadable by subscript) and throws 'pins names <file> twice' when a String and a GString spell the same values file. A test in VersionPinsTest, reached the same way, would pin both."
+      ],
+      "consequence": "A change that drops the refusal or the String conversion keeps the gate green; the build then writes only one of the two pin sets for that file, or none, and deploys the previous image without an error",
+      "evidence": "read",
+      "author": "code-writer, P1, r1: vars/cicd.groovy normalizePins against tests/…/VersionPinsTest.java",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "silent",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

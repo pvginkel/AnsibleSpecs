@@ -195,6 +195,37 @@ R3, and R2 except `utils.hasChanges`, which only P2 makes callable. When this la
 - The tests reach the vars the way the grounding's prototype did ("How to call vars from JUnit"
   above) and `TrackingTagTest` does. No new dependency.
 
+**Done (P1).** The gate compiles at groovy-cps `4383.v04fa_a_3d67b_d9` and asserts
+`cicd.applyPins`/`replacePin`/`plainSafe` (`VersionPinsTest`) and `notify.escape`
+(`AlertEscapeTest`). JenkinsPipelineUtils `9cbbad9` on `phase/033-P1`; `kc project test` green,
+139 tests (Compile 10, TrackingTag 23, VersionPins 96, AlertEscape 10).
+
+Later phases:
+- A test class reaches its var as `VersionPinsTest` does: `LibraryCompileTest.trustedLoader()`,
+  `loadClass`, a fresh instance, `getMethod`, and a private `call` that rethrows an
+  `IllegalArgumentException` cause out of `InvocationTargetException`. Each class carries its own;
+  there is no shared helper.
+- The gate's comments (`tests/pom.xml` header, `.kubecoder/project.yaml`) now say it asserts
+  the `@NonCPS` functions' behaviour; nothing further to update there for P2/P3.
+
+Record:
+- Pin: only `groovy-cps.version` moved. The 4383 groovy-cps pom declares the same `groovy`
+  (2.4.21), `groovy-sandbox` (1.34.1) and `guava` (33.4.8-jre) as 4376's, so the pom's other
+  versions stand. Controller re-read 2026-09-30: `workflow-cps` `4383.v04fa_a_3d67b_d9`.
+- `VersionPinsTest`: one hand-curated values file (comments, a blank line, `|` and `>` block
+  scalars whose bodies read like YAML, a sequence, same-named keys under two parents) pinned in
+  full and compared byte for byte, plus re-pinning its own values returns it unchanged (the
+  `after != before` no-op of `writeVersionPins`). Refusals assert the exact message: missing,
+  mapping, beneath a scalar, block scalar and its body, sequence and its entry's key, several
+  missing named together, a path on two lines with both line numbers. `replacePin` over plain,
+  double- and single-quoted lines (spacing, trailing comment and whitespace, escaped quotes in
+  the old value, `''`, requoting a retyping value). `plainSafe` over each leading indicator,
+  number/date/null shapes, the YAML 1.1 booleans in mixed case, `: `, ` #`, a trailing `:`.
+- Mutation check (reverted): escaping the backslash last, dropping block-scalar skipping,
+  dropping `on`/`off`, and ignoring `\` in double-quoted scanning each turned the gate red.
+- Close-out: `applyPins` writes a pin into a sequence entry's second key (`env.value` under
+  `env: - name: …\n    value: …`) instead of refusing it — witnessed, left as is.
+
 ### P2 — `utils.hasChanges` goes `@NonCPS` under test, and the dead helpers go
 
 Target: ../JenkinsPipelineUtils
