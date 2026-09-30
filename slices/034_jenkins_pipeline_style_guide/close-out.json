@@ -712,6 +712,32 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "I4",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "KubeCoder manual image: the pages' .md copies are served as application/octet-stream, and llms.txt without a charset",
+      "body": [
+        "The manual's nginx.conf (manual/nginx.conf) includes mime.types, which has no .md entry, so every per-page Markdown copy that llms.txt links goes out as application/octet-stream; llms.txt goes out as text/plain with no charset (curl -sI https://kubecoder.home/help/index.md and …/llms.txt, 2026-09-30). A browser downloads a page's copy instead of showing it, and a client that decodes text/plain without a charset can garble the em dashes. pipelines.home's docs/nginx.conf (JenkinsPipelineUtils, slice 034 P9) serves the same surfaces as text/markdown; charset=utf-8 and text/plain; charset=utf-8 with a location ~ \\.md$ { types { } default_type text/markdown; } block and charset utf-8 + charset_types; the same lines would carry over."
+      ],
+      "consequence": "Opening a KubeCoder manual page's .md copy in a browser downloads a file instead of showing it; agents fetching it get an untyped body.",
+      "evidence": "witnessed",
+      "author": "code-writer, P9 r1, curl -sI against kubecoder.home/help and the P9 test build of the pipelines-home image",
+      "labels": {
+        "benefit": "user",
+        "felt": "in-use",
+        "change": "adjust",
+        "size": "one-edit",
+        "product-call": "yes",
+        "prevents": "degraded",
+        "area": "plain",
+        "repo": "KubeCoder"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

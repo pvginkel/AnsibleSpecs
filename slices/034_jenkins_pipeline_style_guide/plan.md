@@ -256,9 +256,9 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
      build loads the library from `main` and needs its `aac-tools` template (`c4de566`). The
      site build that the library push starts writes its pin into PipelinesDeploy's
      `config/prd/values.yaml`, which has to be on `main` when that build reaches its pin stage.
-  2. Get the site-build job's first build. The step-1 push starts it: the job carries the push
-     trigger from creation (P1's recipe), and the library already has the hook. Start it by hand
-     only if the push did not. It writes the first image pin into PipelinesDeploy and pushes it
+  2. Get the first build of the site-build job, `IaC/JenkinsPipelineUtils`. The step-1 push
+     starts it: the job carries the push trigger from creation (P1's recipe), and the library
+     already has the hook. Start it by hand only if the push did not. It writes the first image pin into PipelinesDeploy and pushes it
      from Jenkins, so the local clone is behind origin from then on.
   3. Get a first green build of `AaC/PipelinesDeploy`. The pushes of steps 1 and 2 start its
      builds; the pin push's build aborts one still running (`abortPrevious: true`).
@@ -853,6 +853,33 @@ becomes a true statement about the new job. The image build is reachable through
 - **First build.** It waits for the push (Ordering constraints).
 - **Job name and folder** follow Charts' precedent (`IaC/Charts`) unless the guide rules
   otherwise.
+
+**Done (P9).** JenkinsPipelineUtils `04d0198` and `973257a` on `phase/034-P9`. `docs/Dockerfile`
+(context: the repo root; the root `.dockerignore` keeps it to `docs/` and `vars/`) builds with
+`python:3.13-slim` + uv `0.12.20`: `uv sync --locked`, then `mkdocs build --strict` and
+`check_site.py`. It serves the result from `nginx:alpine` on port 80, `docs/landing/` at `/` and the
+build at `/docs/`, and runs `nginx -t` at build time. The root `Jenkinsfile` is `image-build.groovy`'s
+shape: stages `Checkout`, `Build pipelines-home image` (`kaniko2(dockerfile: 'docs/Dockerfile')`),
+`Write image pins` (`images.pipelines` into PipelinesDeploy `config/prd/values.yaml`). The job
+`IaC/JenkinsPipelineUtils` exists. It was created through the API from the guide's `config.xml`
+template (byte-identical, `REPO` replaced) with `GitHubPushTrigger`, its `config.xml` is in
+`jenkins-config/xml/IaC/`, and it has had no build.
+
+Later phases:
+- Test phase: the site-build job is `IaC/JenkinsPipelineUtils` (Ordering step 2, edited in place).
+  `kc project lint` (V05) now also lints the root `Jenkinsfile`; `kc project build docs` builds the
+  image with `--no-push`.
+
+- Linter: "Jenkinsfile successfully validated.", held in `kc project lint` (`lint_examples.py`
+  adds `../Jenkinsfile`); a broken option witnessed failing it.
+- A throwaway test stage (not committed) ran nginx inside the image: `/` served the landing page;
+  `/docs` and `/docs/guide/pod` 301 relatively (`absolute_redirect off`); missing paths 404; all 34
+  `llms.txt` links resolved; the `reference/` symlink survived the COPY (`check_site.py` passed).
+- Beyond the precedents: `.md` copies go out as `text/markdown; charset=utf-8`, `.txt` with
+  `charset=utf-8` (the manual serves octet-stream: close-out I4). Python 3.13 and uv 0.12.20 match
+  the `iac` sidecar that runs the same gate.
+- Manifest: root `jenkins: IaC/JenkinsPipelineUtils`, the header names the job, `docs` gains
+  `build:`. `kc project test` green. The library's hook was unchanged by the job's creation.
 
 ### P10 — The app registered with Argo CD
 
