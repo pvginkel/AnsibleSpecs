@@ -463,10 +463,12 @@ job-properties block, the helper-type form, the three generators, and the new-re
 
 Later phases:
 - P5: its rulings check reads `rulings.md`'s 14 slots. §3 (granularity) and §11 (library) are
-  the operator's pick among options, and §8 carries a sub-choice for aborts. Two facts from the
-  plugin source hold proposals up. A pipeline-level `options { timeout }` runs inside the
-  top-level agent (`ModelInterpreter.groovy`, `call()`), so it excludes the pod wait (J11). And
-  `Utils.updateJobProperties` keeps triggers the file did not declare (Architecture's shape).
+  the operator's pick among options. §5 carries a sub-choice for the sidecars `podYaml` has no
+  template for (a ruling for (a) directs P5 to name templates that do not exist yet), and §8 one
+  for aborts. Two facts from the plugin source hold proposals up. A pipeline-level
+  `options { timeout }` runs inside the top-level agent (`ModelInterpreter.groovy`, `call()`), so
+  it excludes the pod wait (J11). And `Utils.updateJobProperties` keeps triggers the file did not
+  declare (Architecture's shape).
 - P5 (code review r1): Grounding's J19 nuance, "a repo may carry its own helpers via `load`",
   is option (1) of report.md's J19 C-note. The operator chose (2), no helper
   (`report.md:880-881`), and `rulings.md`'s J19 row carries (2).
@@ -486,6 +488,11 @@ Later phases:
   stages, 7 of them matrix variants.
 - P4's `report.md:1418`…`:1531` row citations predate P1's insertion into report.md; the
   inventory names the ten skipped rows by job.
+- Code review r1: §2 rule 6 now lets any generated stage compute its label, and §13's
+  DockerImages is the one generator. `podYaml` refuses a template it lacks
+  (`PodYamlTest`'s refusal case, 26 green), hence §5's sub-choice. §14 step 4 starts a non-push
+  job's first build by hand, because a file's `triggers {}` reach the job only through a build
+  (P1's build #1).
 
 ### P5 — The guide's rules: one strict section per topic, stage labels on their own
 

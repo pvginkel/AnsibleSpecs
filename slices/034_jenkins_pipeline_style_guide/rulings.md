@@ -93,7 +93,7 @@ Image: their files are T3's without the last stage.
 5. **Nothing that is not the stage.** A label never names the repo or the job (the stage view
    already shows them), and never names something the stage does not do.
 6. **Unique and constant.** Labels are unique within a file and fixed. Only a generated stage
-   computes its label, and then only the parenthesised part.
+   computes its label (section 13).
 
 ```groovy
 stage('Checkout') { … }
@@ -121,7 +121,7 @@ stage did. Each part of the rule is a string check, so a later conformance check
   `Build kitchendisplay`.
 - `Build MyDownloads`, `Build Webathome` and `Build ScanToPdf`, which only start another job.
 - Joins with `+` or `and`: `Plan + destroy check`, `Lint and test`, `Test + package …`.
-- A variable inside the object: `Build intercom v${hardwareVersion}`.
+- A computed label outside section 13's generator: `Build intercom v${hardwareVersion}`.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
@@ -236,6 +236,21 @@ webhook test both used this form.
 - **Every other container comes from `podYaml`.** `templates:` holds the library's sidecars.
   Every `images:` entry is a map with an explicit `name:`, the name `container('<name>')` uses.
   A pod declares no container that no step uses.
+- **The sidecars `podYaml` has no template for.** It has two, `k8s` and `modern-app-toolchain`.
+  Any other name throws when the build evaluates the agent, which the linter does not do. The
+  files use four more of `containerTemplates`' sidecars: `aac_tools` (all 72 of T1 and T2),
+  `python` (T8, T10, T11), `helm` (IaC/Charts) and `iac_toolchain` (IaC/ArgoCDTools,
+  HomelabTerraformProvider). T13's `dockbuild` and `rsync` need no template: T13 gets no
+  reference file (section 1). Choose one:
+  - (a) `podYaml` gains a template for each, as `containerTemplates` declares it. That changes a
+    library var, so the migration slice does it, before the first file that names one. Until
+    then the guide's reference files name templates that do not exist.
+  - (b) The files name them as `images:` map entries. No library change, but each image and its
+    settings repeat in every file that uses it: `registry:5000/aac-tools` in 72 files, and
+    `iac_toolchain`'s uid and environment in two.
+
+  Claude's lean: (a). It is how `podYaml` took `k8s` and `modern-app-toolchain` from
+  `containerTemplates`, and each image stays declared in one place.
 - **iac-controller jobs** declare `agent { label 'iac-controller' }`.
 
 ```groovy
@@ -253,7 +268,6 @@ agent {
   agent is a second pod, and a stage's `options` run before its agent is up (section 7).
 - With an explicit `name:`, the container's name stands next to its image in the file. A derived
   name can be invalid, and then the build fails when the pod is created (033 close-out B3).
-- Each sidecar image is declared in one place: the library's template or the file.
 
 **Retires** (inventory, "Pod definition"):
 
@@ -266,7 +280,7 @@ agent {
 - `kaniko` inherited by a build that runs no kaniko step: AaC/Ansible.
 - A declared container no step uses: Home's `helm`.
 
-**Operator response:** <!-- accept | modify | reject | discuss -->
+**Operator response:** <!-- accept | modify | reject | discuss; for the sidecars: a | b -->
 
 >
 
@@ -698,8 +712,9 @@ and the guide says so.
    push-built job, a `PipelineTriggersJobProperty` holding `GitHubPushTrigger`. A hand-started
    or scheduled job gets no push trigger and needs no hook.
 3. Check the hook with `gh api repos/pvginkel/<repo>/hooks`.
-4. Push to the job's branch. The push starts the first build, and from then on the file's
-   `triggers {}` owns the trigger.
+4. Start the first build: push to a push-built job's branch, or `POST /job/<job>/build` for any
+   other job. That build puts the file's `triggers {}` on the job, a cron included, and from then
+   on the file owns the trigger.
 5. Write the header's `Controller config:` block (section 10) from the job just created.
 6. **Where the job goes.** A new job goes into the folder of the product it belongs to when that
    folder exists: `AaC/` for an architecture producer, `Firmware/`, `IaC/`. Otherwise it goes at
