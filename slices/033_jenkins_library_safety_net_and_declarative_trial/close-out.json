@@ -181,7 +181,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 1 (JenkinsPipelineUtils caf6b75): tests/pom.xml and .kubecoder/project.yaml now say the gate asserts the @NonCPS functions its test classes call, which is not every one; kc project test re-run green",
+        "by": "consult 1",
+        "date": "2026-09-30",
+        "commit": null
+      },
       "ruling": null
     },
     {
@@ -324,6 +329,58 @@
         "trigger": "none",
         "impact": "none",
         "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E2",
+      "kind": "event",
+      "grade": null,
+      "headline": "Gate waived by ruling: github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- gate github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile — ruling 2026-09-30: the change is the Jenkinsfile only, this environment cannot run KubeCoder's suites, and the operator's Replay runs them in Jenkins`"
+      ],
+      "consequence": "the driver never verified github:pvginkel/KubeCoder's tests in this run; the substitute's result is the only evidence.",
+      "evidence": "witnessed",
+      "author": "the driver's phase gate, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [
+        {
+          "by": "consult 1",
+          "date": "2026-09-30",
+          "text": [
+            "The ruling covers KubeCoder's tests only. Sweep r1 at 30df8e2d also went RED on KubeCoder root lint, vscode-extension build and vscode-desktop build. All three fail with 'cexec: tool \"python\"/\"frontend\" is not available in this environment', not on the tree. Consult 1 ran the same commands at 30df8e2d in the modern-app container (node 24, uv, ruff): ruff check 'All checks passed!', ruff format --check '200 files already formatted', and worker/scripts/package-extension.sh and vscode-desktop/scripts/package-extension.sh each packaged their vsix (rc 0, npm audit off). That is substitute evidence, not the gate."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P3",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "KubeCoder docs/operations/pipeline-dependencies.md still describes Build-Main's pod as the scripted podTemplate with golang/node containerTemplates",
+      "body": [
+        "The Build and deploy table (lines 16-17) cites `Jenkinsfile`'s `podTemplate` (`containerTemplates.k8s`, `containerTemplates.modern_app_toolchain`) and the `golang` `containerTemplate`, and the Pinned toolchains table (line 40) cites the `node` `containerTemplate`. After P4 (KubeCoder 30df8e2d) the Jenkinsfile is declarative: `agent { kubernetes { inheritFrom 'jenkins-agent kaniko'; yamlMergeStrategy merge(); yaml podYaml(templates: ['k8s', 'modern-app-toolchain'], images: [[image: …go-toolchain…, name: 'golang', …], 'node:24-bookworm']) } }`. P4's done-record left this for the doc phase. The file is not in the slice's diff, and the KubeCoder change is under a push hold until the operator's Replay."
+      ],
+      "consequence": "A reader looking for where Build-Main's sidecars and toolchain images are pinned is sent to podTemplate/containerTemplate calls the Jenkinsfile no longer has",
+      "evidence": "read",
+      "author": "consult 1, generation 1, plan.md P4 done-record (Later phases) and KubeCoder docs/operations/pipeline-dependencies.md at 30df8e2d",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "KubeCoder"
       },
       "notes": [],
       "wrap_up": null,
