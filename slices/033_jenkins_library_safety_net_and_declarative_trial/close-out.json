@@ -145,6 +145,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P2",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils test-gate comments (tests/pom.xml, .kubecoder/project.yaml) say every @NonCPS function has behaviour tests; normalizePins and rebuildAtIso have none",
+      "body": [
+        "tests/pom.xml:5-6 says the gate 'asserts the behaviour of its @NonCPS functions', and .kubecoder/project.yaml:13 says 'asserts the behaviour of the @NonCPS functions'. cicd.normalizePins (vars/cicd.groovy:155) and helmCharts.rebuildAtIso (vars/helmCharts.groovy:202) are @NonCPS, and no test under tests/src calls either one. The normalizePins gap itself is T1."
+      ],
+      "consequence": "A maintainer who trusts the comment can change normalizePins or rebuildAtIso, see the gate stay green, and take the change as covered when no test checks it",
+      "evidence": "read",
+      "author": "code-reviewer, P1, r1, phases/P1/code_review_r1.md F1",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
