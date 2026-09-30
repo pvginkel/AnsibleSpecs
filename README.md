@@ -36,6 +36,9 @@ Triaged 2026-09-26 from the DHCP outage follow-up (the record: `handovers/triage
 
 Triaged 2026-09-27 from DockerImages' DI-7 and DI-10 (the record: `handovers/triage_2026-09-27.md` at `6dfe621`):
 
+Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handovers/triage_2026-09-30.md`, open — the rest of the review waits on this slice):
+
+- **[033](slices/backlog/033_jenkins_library_safety_net_and_declarative_trial/slice.md)** — Jenkins library safety net and the declarative trial: behaviour tests for JenkinsPipelineUtils (J22, the compile gate's pin), `@NonCPS` on `hasChanges` (J18), dead library code out (J20), and `KubeCoder/Jenkinsfile` converted to declarative for the operator's migrate-all verdict (J08) (improvement).
 
 ## Completed
 
