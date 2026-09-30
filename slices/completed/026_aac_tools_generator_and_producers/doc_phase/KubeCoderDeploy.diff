@@ -1,0 +1,21 @@
+/work/scratch/KubeCoderDeploy — P5: git diff 3d68c082bff6..e9a5ca7ccc40
+
+architecture.yaml | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/architecture.yaml b/architecture.yaml
+index d004e6c..ca5dddf 100644
+--- a/architecture.yaml
++++ b/architecture.yaml
+@@ -18,8 +18,6 @@ images:
+   kubecoder-manual: app:kubecoder-manual
+   # The controller pod's front door is stock nginx with a baked routing config.
+   kubecoder-ingress: ss:nginx
+-  # kube-coder-tunnel-reclaim stays unmapped (a reported gap) until the generator
+-  # resolves a Service's in-house product from its own container.
+-  # Mapped now, the controller workload carries two in-house services and the
+-  # generator mints a duplicate kubecoder.home service instead of referencing
+-  # svc:kubecoder-controller-api.
++  # The controller pod's tunnel-reclaim sidecar; its product belongs to the
++  # docker-images producer (pvginkel/DockerImages).
++  kube-coder-tunnel-reclaim: app:kube-coder-tunnel-reclaim

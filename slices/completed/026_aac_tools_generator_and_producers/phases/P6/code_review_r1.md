@@ -1,0 +1,11 @@
+# P6 code review — round 1
+
+**Range:** `caaa27a..6bb4956` on `phase/026-P6` in `/work/ArgoCDDeploy` (one file, `architecture.yaml`).
+
+**Readiness.** The phase delivers its outcome. I regenerated prd with the published sidecar (`eadf4ca`): 21 elements, 41 relations, no `gap:` line. Five Realizations of `cap:configuration-management` land on server, repo-server, application-controller, notifications-controller and applicationset-controller. copyutil and secret-init realize nothing. Three redis Serving edges `-upstream` target server, repo-server and application-controller, and the webhook-relay → server wire is unchanged. I rendered the chart independently and checked the scoping against the render. Exactly those three containers set `REDIS_SERVER`, as a `configMapKeyRef` on `argocd-cmd-params-cm` `redis.server`, which renders `argocd-prd-redis:6379`. The only one-shots on the image are the repo-server init container `copyutil` and the Job container `secret-init`. So the scoped wire satisfies Ruling D4 on every container that reads the var, and on no other. I also ran a mutation that moved the wire to image level. It hard-fails on applicationset-controller, notifications-controller and secret-init ("3 unresolved edge(s); no output written"), so declaring the wire per container is required, not a style choice. Nothing I found blocks the merge. The one finding is an advisory note on the rewritten comment.
+
+## Findings
+
+### F1 — The comment says an unset upstream var hard-fails on every other container of the image, but init containers are exempt · Minor · advisory · anchor: none · confidence: high
+
+`architecture.yaml:25-26` says that "on any other container of the image an upstream wire whose var is unset is a hard fail". The generator skips `upstream` on init containers: `if not upstream or inst["is_init"]: continue` (ArgoCDTools `aac-tools/image/gen_architecture.py:1774`, identical in the sidecar's `/usr/local/bin/gen-architecture`). The mutation above confirms it: the image-level wire fails on the three non-init non-readers and leaves the `copyutil` init container alone. The comment's reason for scoping the wire still holds. Only its "any other container" is too broad, and a reader who follows it gets a correct layer anyway. No product consequence.

@@ -1,0 +1,5 @@
+root: cexec iac tests/build-deps.sh    [  OK  ]
+root: cexec iac tests/render-chart.py    [  OK  ]
+root: cexec iac tests/terraform.sh    [  OK  ]
+root: cexec aac-tools gen-architecture --stage prd --producer kubecoder-deploy    [  OK  ]
+root: cexec aac-tools arch-validate docs/architecture/kubecoder-deploy.yaml    [  OK  ]

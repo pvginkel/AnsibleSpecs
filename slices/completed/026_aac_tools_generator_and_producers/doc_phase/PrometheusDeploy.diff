@@ -1,0 +1,44 @@
+/work/scratch/PrometheusDeploy — P7: git diff f4106cbb8755..4aa1ef51ef33
+
+architecture.yaml      | 8 +++++---
+ config/prd/values.yaml | 5 +++--
+ 2 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/architecture.yaml b/architecture.yaml
+index 5eaf585..bcdc3ad 100644
+--- a/architecture.yaml
++++ b/architecture.yaml
+@@ -1,5 +1,4 @@
+-# The judgment layer the aac-tools generator reads (Jenkinsfile.architecture); copied
+-# verbatim from HelmCharts' charts/prometheus/architecture.yaml.
++# The judgment layer the aac-tools generator reads (Jenkinsfile.architecture).
+ 
+ # The date HelmCharts derives from the first commit adding the chart, which every
+ # published element carries.
+@@ -16,7 +15,10 @@ images:
+   prometheus:
+     product: ss:prometheus
+     realizes: [cap:metrics]
+-  alertmanager: ss:alertmanager
++  alertmanager:
++    product: ss:alertmanager
++    # Its receivers send through telegram_configs (config/prd/values.yaml).
++    served_by: ["svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48"]
+   pushgateway: ss:pushgateway
+   kube-state-metrics: ss:kube-state-metrics
+   prometheus-config-reloader: ss:prometheus-config-reloader
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 36c0160..700fcde 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -503,7 +503,8 @@ kube-state-metrics:
+     requests:
+       memory: 48Mi
+ 
+-# Passed by HelmCharts' deploy CLI on top of the file, now pinned here: the stage
+-# name, and each image at the digest the release runs (argo-cd D53).
++# The stage name, and each image the release runs (argo-cd D53). An image from
++# registry:5000 is pinned to a per-build tag, never to a digest: no build pushes that
++# tag again, so it always names the same image.
+ global:
+   environment: prd

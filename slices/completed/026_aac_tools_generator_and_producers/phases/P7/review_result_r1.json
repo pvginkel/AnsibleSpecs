@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "PrometheusDeploy's alertmanager entry declares the composite svc:telegram-bot-api id in served_by; regenerating prd with the published sidecar adds exactly the one intended Serving edge (31 -> 32 relations) and nothing else. One advisory finding: the done-record cited the pre-amend sha, corrected in the plan by the reviewer.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+               "summary": "P7's done-record cited e761059, the pre-amend commit; the branch head is 4aa1ef5 (corrected in plan.md by the reviewer)"}]}

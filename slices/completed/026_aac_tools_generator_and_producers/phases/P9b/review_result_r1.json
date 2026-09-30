@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "All 17 G–M deploy repos carry the gen-architecture --help pointer on origin/main, keep exactly three .architecturerc keys, and were pushed with only this slice's commits. Each AaC build and collector was green, and every Argo Application they feed is Synced/Healthy at the pushed sha. KubeCoderDeploy c776662 carries P5's mapping and generates prd with no gap line.",
+ "details": "code_review_r1.md",
+ "findings": []}

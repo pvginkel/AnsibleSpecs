@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "aac-tools is published (ArgoCDTools origin/main eadf4ca, P1–P3 only; registry :20 == :latest; the sidecar's --help prints the new contract), and the runbook and argo-migrate's .architecturerc template now point at gen-architecture --help while keeping exactly three keys and the D2 warning. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

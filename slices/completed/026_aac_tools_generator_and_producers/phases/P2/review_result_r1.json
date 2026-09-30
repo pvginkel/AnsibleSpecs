@@ -1,0 +1,23 @@
+{
+  "outcome": "signoff",
+  "summary": "Container scoping of realizes/upstream and ConfigMap-sourced env values meet P2's outcome and Ruling D4. The executor's 49-stage output is byte-identical to P1's head, and the new tests catch the core behaviours. Two advisory findings: two scoping sub-paths survive mutation, and one comment is stale.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "coverage-gap",
+      "summary": "No test catches it if the scoped realizes stops reaching the instance record the boundBy and secret-store resolvers read, or if the scope gap stops being per-image (both mutations pass)."
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "comment-prose",
+      "anchor": "none",
+      "summary": "The resolve_boundby comment at gen_architecture.py:1572-1573 still calls the container env literal-valued; it now includes ConfigMap-sourced values."
+    }
+  ]
+}

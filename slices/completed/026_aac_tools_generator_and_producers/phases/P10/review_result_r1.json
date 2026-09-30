@@ -1,0 +1,7 @@
+{"outcome": "issues",
+ "summary": "Ansible's migration to the toolchain arch-validate is correct, and the 28-carrier enumeration reproduces against both gitblit and GitHub's trees. But four carriers classed 'no rollout' (ScanToPdfServer, ScanToPdfClient, MyDownloadsServer, MyDownloadsClient) start downstream jobs that pin into auto-synced prd deploy repos, so P11 would push them without D1's rollout-health gate.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "ScanToPdfServer/Client and MyDownloadsServer/Client are classed 'no rollout' in P11, but their pushes start ScanToPdf, MyDownloads and Webathome, which pin into ScantopdfDeploy, MediaDeploy and WebathomeOrgDeploy (all auto-sync prd). P11 has no health gate for these rollouts, and batch 3 has two builds pinning MediaDeploy."}
+ ]}

@@ -1,0 +1,8 @@
+root: cexec iac tests/build-deps.sh    [  OK  ]
+root: cexec iac helm template prometheus-prd prometheus --repo https://prometheus-community.github.io/helm-charts --version 29.33.0 --namespace prometheus-prd --values config/prd/values.yaml    [  OK  ]
+root: cexec iac tests/alert-rules.sh    [  OK  ]
+root: cexec iac tests/alert-routing.py    [  OK  ]
+root: cexec iac helm template prometheus-prd chart --namespace prometheus-prd --set hook.repo=https://github.com/pvginkel/PrometheusDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=prometheus-prd    [  OK  ]
+root: cexec iac tests/terraform.sh    [  OK  ]
+root: cexec aac-tools gen-architecture --stage prd --producer prometheus-deploy    [  OK  ]
+root: cexec aac-tools arch-validate docs/architecture/prometheus-deploy.yaml    [  OK  ]

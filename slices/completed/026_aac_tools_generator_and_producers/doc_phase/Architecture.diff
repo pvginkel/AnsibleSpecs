@@ -1,0 +1,288 @@
+/work/Architecture — P8: git diff 843d79a30f83..ae5107f72469
+
+.claude/agents/update-architecture.md     | 11 ++++++----
+ .claude/architecture/producer-manual.md   | 61 +++++++++++++++++++++++++++++++++++----------------
+ .claude/skills/seed-architecture/SKILL.md |  9 ++++----
+ .kubecoder/config.yaml                    |  3 +++
+ README.md                                 |  2 +-
+ USAGE.md                                  | 35 +++++++++++++++--------------
+ docs/architecture-update.md               | 10 +++++----
+ 7 files changed, 83 insertions(+), 48 deletions(-)
+
+diff --git a/.claude/agents/update-architecture.md b/.claude/agents/update-architecture.md
+index a85915d..40afdc0 100644
+--- a/.claude/agents/update-architecture.md
++++ b/.claude/agents/update-architecture.md
+@@ -44,8 +44,11 @@ Before you start, read:
+    missing, stop. You need the vocabulary to make correct edits.
+ 2. `CLAUDE.md` at repo root: repo conventions, commit cadence, what's in scope.
+ 3. Every file the sources list. In hand-authored mode they all declare the same `producer:`
+-   envelope key, the producer id. In generated mode, if the sources include the generator, read its
+-   header docstring: it is the annotation contract.
++   envelope key, the producer id.
++4. In generated mode, the annotation contract. If the sources include the generator, its header
++   docstring is the contract. Otherwise run `cexec aac-tools gen-architecture --help`: it prints
++   the contract of the aac-tools toolchain's generator, which the deploy repos build with, and
++   renders nothing. If it fails, stop: you need the contract to make correct edits.
+ 
+ ## The range
+ 
+@@ -245,8 +248,8 @@ Skipped: <short list, or "none">
+ ```
+ 
+ `<validation>` is `validator clean` in hand-authored mode, `validation by the AaC build` in
+-generated mode, or `stopped: <reason>` when you stopped early (the manual missing, the validator
+-unreachable, the sources listing no files). That's the handoff.
++generated mode, or `stopped: <reason>` when you stopped early (the manual or the contract missing,
++the validator unreachable, the sources listing no files). That's the handoff.
+ 
+ ## Constraints
+ 
+diff --git a/.claude/architecture/producer-manual.md b/.claude/architecture/producer-manual.md
+index 29b86f4..10b88c5 100644
+--- a/.claude/architecture/producer-manual.md
++++ b/.claude/architecture/producer-manual.md
+@@ -6,9 +6,9 @@ federated architecture system. It lives in the Architecture repo at
+ and `arch-validate.py`; the central architecture update stages that
+ directory into each producer clone it works in. The `seed-architecture`
+ skill (first-version authoring) and the `triage-architecture` and
+-`update-architecture` agents read it on startup. Producer repos copy
+-`arch-validate.py` into `scripts/arch-validate.py` for their
+-Jenkinsfile to call.
++`update-architecture` agents read it on startup. Producer repos keep no
++copy of `arch-validate.py`: they run `arch-validate` from the aac-tools
++toolchain (see Validation).
+ 
+ ## What you're producing and why
+ 
+@@ -651,27 +651,33 @@ No conditional rules between lifecycle and other fields. No
+ 
+ ## Validation
+ 
+-Use the `arch-validate.py` script shipped alongside this manual. Copy it
+-to `scripts/arch-validate.py` in this repo and `chmod +x` it.
++Validate with `arch-validate` from the **aac-tools toolchain**, the
++`registry:5000/aac-tools` image ArgoCDTools publishes. It ships the
++`arch-validate.py` beside this manual byte for byte, so this repo keeps
++no copy of the script:
++
++- **Jenkins:** run it in the container `containerTemplates.aac_tools`
++  declares (see Jenkins integration).
++- **KubeCoder:** declare the toolchain in `.kubecoder/config.yaml`
++  (`- use: aac-tools` under `tools:`) and run it through
++  `cexec aac-tools`.
+ 
+ ```bash
+-./scripts/arch-validate.py architecture.yaml
+-./scripts/arch-validate.py architecture/prd.yaml architecture/dev.yaml
+-cat architecture.yaml | ./scripts/arch-validate.py -
+-./scripts/arch-validate.py --json architecture.yaml      # raw response on stdout
+-./scripts/arch-validate.py --quiet architecture.yaml     # suppress OK lines
++cexec aac-tools arch-validate architecture.yaml
++cexec aac-tools arch-validate architecture/prd.yaml architecture/dev.yaml
++cat architecture.yaml | cexec aac-tools arch-validate -
++cexec aac-tools arch-validate --json architecture.yaml      # raw response on stdout
++cexec aac-tools arch-validate --quiet architecture.yaml     # suppress OK lines
+ ```
+ 
+-The script POSTs to `https://architecture.webathome.org/api/validate`
+-and exits `0` valid, `1` invalid, `2` transport/server error. It's a
+-single-file Python script that uses only the standard library, so any
+-`python:slim` (or system `python3`) is enough — no `pip install` step.
++`arch-validate` POSTs to `https://architecture.webathome.org/api/validate`
++and exits `0` valid, `1` invalid, `2` transport/server error.
+ 
+ Override the endpoint for local testing:
+ 
+ ```bash
+-ARCHITECTURE_VALIDATE_URL=http://localhost:8080/api/validate \
+-  ./scripts/arch-validate.py architecture.yaml
++cexec aac-tools env ARCHITECTURE_VALIDATE_URL=http://localhost:8080/api/validate \
++  arch-validate architecture.yaml
+ ```
+ 
+ The validation service checks: schema conformance, id format,
+@@ -682,6 +688,21 @@ merge time in the Architecture pipeline.
+ 
+ ## Jenkins integration
+ 
++The validator runs in the aac-tools container, which the pod template
++declares through the JenkinsPipelineUtils shared library:
++
++```groovy
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++podTemplate(inheritFrom: 'jenkins-agent', containers: [
++    containerTemplates.aac_tools('aac-tools')
++]) {
++    node(POD_LABEL) {
++        // clone this repo, then the steps below
++    }
++}
++```
++
+ Two steps in this repo's `Jenkinsfile`. Both use a directory glob so
+ they work whether this repo emits one YAML or several:
+ 
+@@ -689,7 +710,9 @@ they work whether this repo emits one YAML or several:
+ 
+    ```groovy
+    stage('Validate architecture artifacts') {
+-       sh './scripts/arch-validate.py docs/architecture/*.yaml'
++       container('aac-tools') {
++           sh 'arch-validate docs/architecture/*.yaml'
++       }
+    }
+    ```
+ 
+@@ -717,7 +740,7 @@ commit the YAML — regenerate, validate, archive:
+ 
+ ```groovy
+ stage('Generate') { sh 'python tools/gen-architecture.py' }   // may need helm/etc. on the agent
+-stage('Validate') { sh './scripts/arch-validate.py docs/architecture/*.yaml' }
++stage('Validate') { container('aac-tools') { sh 'arch-validate docs/architecture/*.yaml' } }
+ stage('Archive')  { archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true }
+ ```
+ 
+@@ -903,7 +926,7 @@ up.
+    generate a UUID. The composite IDs in the architecture YAML(s) are
+    the single source of truth; no separate id table.
+ 3. **Author** the architecture YAML(s) under `docs/architecture/`.
+-   Iterate against `./scripts/arch-validate.py docs/architecture/*.yaml`
++   Iterate against `cexec aac-tools arch-validate docs/architecture/*.yaml`
+    until clean.
+ 4. **Wire CI**: add the validate + archive steps to this repo's
+    Jenkinsfile.
+diff --git a/.claude/skills/seed-architecture/SKILL.md b/.claude/skills/seed-architecture/SKILL.md
+index 469466d..5189620 100644
+--- a/.claude/skills/seed-architecture/SKILL.md
++++ b/.claude/skills/seed-architecture/SKILL.md
+@@ -145,10 +145,11 @@ diff** — a clean producer is byte-identical (catches non-deterministic ids).
+ Per the manual's **Jenkins integration** and **Registration** sections: add
+ validate + archive steps (generated producers add a generate step first and
+ don't commit the YAML, ideally in a dedicated `Jenkinsfile.architecture`
+-isolated from the deploy pipeline), with the validator copied from
+-`.claude/architecture/arch-validate.py` to the repo's own
+-`scripts/arch-validate.py` for CI to call. Push the seeded commits once the
+-operator approves: the central update refuses a clone with unpushed commits.
++isolated from the deploy pipeline), with the validate step running
++`arch-validate` in the aac-tools toolchain's container
++(`containerTemplates.aac_tools`); the repo keeps no copy of the validator.
++Push the seeded commits once the operator approves: the central update
++refuses a clone with unpushed commits.
+ Confirm one build archives + validates, then PR `pipeline-producers.yaml` in
+ pvginkel/Architecture with the producer's `id`, `jenkinsJob` and `repo`
+ (GitHub `owner/name`; without it the central update does not manage the
+diff --git a/.kubecoder/config.yaml b/.kubecoder/config.yaml
+index 09a19ce..cc87547 100644
+--- a/.kubecoder/config.yaml
++++ b/.kubecoder/config.yaml
+@@ -14,6 +14,9 @@ tools:
+   # Node and Python in one sidecar: the merge pipeline (tooling/) is Python under
+   # poetry, the viewer and the service are npm.
+   - use: modern-app
++  # The architecture-as-code toolchain: a central update session reads a deploy
++  # repo's annotation contract from its `gen-architecture --help`.
++  - use: aac-tools
+ 
+ # The deliverable is a container image that is not built locally otherwise —
+ # Jenkins builds it with helmCharts.kaniko. This is here so a Dockerfile change
+diff --git a/README.md b/README.md
+index 4a53f98..5a396be 100644
+--- a/README.md
++++ b/README.md
+@@ -165,7 +165,7 @@ Origin is locked to `https://webathome.org`.
+ The runtime side of the metaschema. Hosts the schemas, validates artifacts via
+ `POST /api/validate`, serves the merged dataset and the viewer, and renders
+ `USAGE.md` at the container root. The full API — request/response shape, schema and
+-dataset URLs, the `arch-validate.py` CLI producers drop into their own `scripts/`,
++dataset URLs, the `arch-validate` CLI producers run from the aac-tools toolchain,
+ the `$schema` editor pragma, and how to file schema-change requests — is documented
+ in [`USAGE.md`](./USAGE.md), which is also served live at
+ `architecture.webathome.org/`.
+diff --git a/USAGE.md b/USAGE.md
+index 08010d0..09df33e 100644
+--- a/USAGE.md
++++ b/USAGE.md
+@@ -5,7 +5,7 @@ metaschema. It hosts the v0.1 JSON Schemas, validates submitted architecture
+ artifacts via `POST /api/validate`, and serves the diagram viewer at `/viewer/`.
+ 
+ Producers (Ansible, the deploy repos, EI, IoT, …) emit one `architecture.yaml` per
+-build. Each producer's CI runs `arch-validate.py` against this service, fails the
++build. Each producer's CI runs `arch-validate` against this service, fails the
+ build on non-zero exit, and archives the artifact for the Architecture
+ pipeline's collector to pick up.
+ 
+@@ -132,18 +132,21 @@ curl -sS \
+   | jq .
+ ```
+ 
+-## `arch-validate.py` CLI
++## `arch-validate` CLI
+ 
+-The dev-facing artifact. A producer repo drops the file into its own
+-`scripts/` directory and runs it in CI.
++The dev-facing artifact. Producers run it from the aac-tools toolchain, the
++`registry:5000/aac-tools` image ArgoCDTools publishes: in Jenkins in the
++container `containerTemplates.aac_tools` declares, in a KubeCoder environment
++that declares the toolchain through `cexec aac-tools`. A producer repo keeps no
++copy of the script.
+ 
+ ```bash
+-# from a producer repo
+-./scripts/arch-validate.py architecture.yaml
+-./scripts/arch-validate.py dev.architecture.yaml prd.architecture.yaml
+-cat architecture.yaml | ./scripts/arch-validate.py -      # stdin
+-./scripts/arch-validate.py --json architecture.yaml       # raw endpoint JSON
+-./scripts/arch-validate.py --quiet architecture.yaml      # suppress OK lines
++# from a producer repo's KubeCoder environment
++cexec aac-tools arch-validate architecture.yaml
++cexec aac-tools arch-validate dev.architecture.yaml prd.architecture.yaml
++cat architecture.yaml | cexec aac-tools arch-validate -      # stdin
++cexec aac-tools arch-validate --json architecture.yaml       # raw endpoint JSON
++cexec aac-tools arch-validate --quiet architecture.yaml      # suppress OK lines
+ ```
+ 
+ Exit codes: `0` valid, `1` invalid, `2` transport/server error.
+@@ -151,14 +154,14 @@ Exit codes: `0` valid, `1` invalid, `2` transport/server error.
+ Override the endpoint for local testing:
+ 
+ ```bash
+-ARCHITECTURE_VALIDATE_URL=http://localhost:8080/api/validate \
+-  ./scripts/arch-validate.py artifact.yaml
++cexec aac-tools env ARCHITECTURE_VALIDATE_URL=http://localhost:8080/api/validate \
++  arch-validate artifact.yaml
+ ```
+ 
+-The script is a single-file Python 3 program that uses only the standard
+-library — runs on any `python:slim` image or system `python3`, no `pip
+-install` step. Updates are coordinated by re-copying from this repo
+-(`.claude/architecture/arch-validate.py`).
++The toolchain ships this repo's `.claude/architecture/arch-validate.py` byte for
++byte: ArgoCDTools vendors it as `aac-tools/image/arch-validate.py`, and a test
++there pins its md5. A change here reaches producers when ArgoCDTools takes the
++new copy and republishes the image.
+ 
+ ## `$schema` pragma
+ 
+diff --git a/docs/architecture-update.md b/docs/architecture-update.md
+index 40de001..34eeb56 100644
+--- a/docs/architecture-update.md
++++ b/docs/architecture-update.md
+@@ -196,10 +196,12 @@ it together:
+ 
+ - The agents and the skill reference the manual and the validator as `.claude/architecture/…`, which
+   is where they sit in a clone as well as here.
+-- `arch-validate.py` exists once, at `.claude/architecture/arch-validate.py`. The image's
+-  `build-service` stage copies it from there for `service/test/arch-validate.test.ts`, and
+-  `Jenkinsfile.ha-fleet` calls it; producer repos keep their own copy at `scripts/arch-validate.py`
+-  for their CI to call, re-copied from here when it changes.
++- `arch-validate.py` exists once in this repo, at `.claude/architecture/arch-validate.py`. The
++  image's `build-service` stage copies it from there for `service/test/arch-validate.test.ts`, and
++  `Jenkinsfile.ha-fleet` calls it. Producers keep no copy: they run `arch-validate` from the
++  aac-tools toolchain, whose image ships ArgoCDTools' byte-for-byte copy
++  (`aac-tools/image/arch-validate.py`, md5-pinned by a test there). A change here reaches them when
++  that copy is refreshed and the image republished.
+ 
+ A change to the schema, the enums or what a valid `architecture.yaml` looks like changes what
+ producers must write, and so what the manual and the skeleton say —

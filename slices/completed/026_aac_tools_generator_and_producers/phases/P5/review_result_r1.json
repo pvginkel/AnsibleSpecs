@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The one-line mapping meets P5's outcome, which I checked with my own generations using the published sidecar: the gap line is gone, the only artifact change is one Specialization to DockerImages' app:kube-coder-tunnel-reclaim, kubecoder.home still has an Assignment to svc:kubecoder-controller-api, and nothing is minted. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

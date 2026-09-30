@@ -1,0 +1,34 @@
+/work/ArgoCDDeploy — P6: git diff caaa27af5caa..6bb495677f37
+
+architecture.yaml | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/architecture.yaml b/architecture.yaml
+index 6d8497c..bdee843 100644
+--- a/architecture.yaml
++++ b/architecture.yaml
+@@ -20,10 +20,20 @@ products:
+     logo: redis
+ 
+ images:
+-  # One image runs every Argo CD component, the copyutil init container and the
+-  # redis-secret-init Job included. No capability: `realizes` applies to every
+-  # container of the image, and the one-shots realize none.
+-  argocd: ss:argo-cd
++  # One image runs every Argo CD component. The controllers realize configuration
++  # management; the one-shots, the copyutil init container and the redis-secret-init
++  # Job's secret-init, realize nothing. The redis wire sits only on the containers
++  # that set REDIS_SERVER (argocd-cmd-params-cm's redis.server): on any other
++  # container of the image an upstream wire whose var is unset is a hard fail.
++  argocd:
++    product: ss:argo-cd
++    realizes: [cap:configuration-management]
++    containers:
++      copyutil: {realizes: []}
++      secret-init: {realizes: []}
++      server: {upstream: {env: REDIS_SERVER, providers: [redis]}}
++      repo-server: {upstream: {env: REDIS_SERVER, providers: [redis]}}
++      application-controller: {upstream: {env: REDIS_SERVER, providers: [redis]}}
+   # Argo CD's own cache, reached by name at the argocd-prd-redis Service.
+   redis:
+     product: ss:redis

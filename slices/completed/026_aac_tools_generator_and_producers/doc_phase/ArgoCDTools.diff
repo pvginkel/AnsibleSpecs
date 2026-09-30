@@ -1,0 +1,1296 @@
+/work/ArgoCDTools — P1: git diff 7836ccad6bfe..131e2b970562
+
+aac-tools/image/gen_architecture.py      |  77 +++++++++----------
+ aac-tools/tests/test_gen_architecture.py | 212 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 245 insertions(+), 44 deletions(-)
+
+diff --git a/aac-tools/image/gen_architecture.py b/aac-tools/image/gen_architecture.py
+index 1502f0f..3a374c6 100644
+--- a/aac-tools/image/gen_architecture.py
++++ b/aac-tools/image/gen_architecture.py
+@@ -922,7 +922,6 @@ def main():
+         pspec = pod_spec(doc)
+         wl_backing = []  # the containers that back an exposed Service (dicts)
+         wl_all = []  # every container instance id (for Service backing)
+-        wl_products = set()  # bare product refs of this workload's containers
+         vol_claim = {
+             v["name"]: v["persistentVolumeClaim"]["claimName"]
+             for v in pspec.get("volumes") or []
+@@ -982,8 +981,6 @@ def main():
+                 }
+             )
+             wl_all.append(inst_id)
+-            if product:
+-                wl_products.add(product)
+             # A non-init container backs an exposed Service. Both layers
+             # count: an upstream app's serving container is SystemSoftware
+             # (Keycloak/Jenkins), not an ApplicationComponent. Its declared
+@@ -996,6 +993,7 @@ def main():
+                         "hint": hint,
+                         "id": inst_id,
+                         "container": c["name"],
++                        "product": product,
+                         "port_nums": nums,
+                         "port_names": names,
+                     }
+@@ -1035,7 +1033,6 @@ def main():
+                 "labels": pod_labels(doc),
+                 "backing": wl_backing,
+                 "all": wl_all,
+-                "products": wl_products,
+             }
+         )
+ 
+@@ -1256,19 +1253,24 @@ def emit_cnpg_substrate(
+ def reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds, gaps):
+     """Mint ApplicationService + ApplicationInterface(s) for an exposed Service.
+ 
+-    For an **in-house** app (a backing product DockerImages owns, that realizes
+-    its own `svc:`), reference that service's UUID and attach the public host as
+-    an ApplicationInterface — we do not mint a second service or an instance
+-    Realization (DockerImages already owns app->svc). For an **upstream** app we
+-    own the whole exposure, so we mint our own service.
+-
+     A workload pod is often several containers (app + UI + sidecars) behind one
+-    Service, so the minted service is realized by the single container the host
+-    actually routes to — the one on the Service's HTTP target port
+-    (resolve_exposed_realizers). An `exposures:` entry overrides that when the
+-    front door is a reverse proxy whose port can't name the product (e.g.
+-    git-sync's nginx fronting Gitblit). When neither resolves a container, every
+-    backer realizes the service and a gap is reported.
++    Service, so the exposure belongs to the container the host actually routes
++    to — the one on the Service's HTTP target port (resolve_exposed_realizers).
++    An `exposures:` entry overrides that when the front door is a reverse proxy
++    whose port can't name the product (e.g. git-sync's nginx fronting Gitblit).
++
++    When that container is an **in-house** app (a product DockerImages owns,
++    that realizes its own `svc:`), reference that service's UUID and attach the
++    public host as an ApplicationInterface — we do not mint a second service or
++    an instance Realization (DockerImages already owns app->svc). Any other
++    in-house app in the pod has no say. A container the port routes to that
++    realizes no in-house service is an upstream front door (an auth proxy, a VPN
++    gateway holding the pod's ports): then, and when nothing resolves, the pod's
++    in-house service is referenced if it has exactly one. An `exposures:` entry
++    names the product outright, so no other container stands in for it.
++    Otherwise we own the whole exposure, so we mint our own service, realized by
++    that container — or, when none resolves, by every backer, with a gap
++    reported.
+     """
+     for entry in exposed:
+         doc, ns, env, introduced = entry["doc"], entry["ns"], entry["env"], entry["introduced"]
+@@ -1290,9 +1292,14 @@ def reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds,
+             if selector and all(w["labels"].get(k) == v for k, v in selector.items())
+         ]
+ 
+-        # If exactly one in-house app (DockerImages-owned, realizing its own
+-        # svc:) backs this Service, reference that service instead of minting.
+-        inhouse_svc = _inhouse_service_for(matched, ds)
++        all_backing = [b for w in matched for b in w["backing"]]
++        identity = entry["exposures"].get(svcname)
++        if identity:
++            routed = [b for b in all_backing if b["container"] == identity]
++            inhouse_svc = _inhouse_service_for(routed, ds)
++        else:
++            routed = resolve_exposed_realizers(doc, all_backing) or []
++            inhouse_svc = _inhouse_service_for(routed, ds) or _inhouse_service_for(all_backing, ds)
+ 
+         if inhouse_svc is not None:
+             asvc_id = inhouse_svc
+@@ -1332,18 +1339,12 @@ def reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds,
+         if inhouse_svc is not None:
+             continue
+ 
+-        all_backing = [b for w in matched for b in w["backing"]]
+-        identity = entry["exposures"].get(svcname)
+-        if identity:
+-            realizers = [b for b in all_backing if b["container"] == identity]
+-            if not realizers:
+-                gaps.append(
+-                    f"{release}: exposures[{svcname}] names container "
+-                    f"'{identity}', which no backing workload has"
+-                )
+-        else:
+-            realizers = resolve_exposed_realizers(doc, all_backing)
+-        if not realizers:
++        if identity and not routed:
++            gaps.append(
++                f"{release}: exposures[{svcname}] names container "
++                f"'{identity}', which no backing workload has"
++            )
++        if not routed:
+             # A real port-match failure (backers exist, none on the HTTP port) is
+             # worth a gap; an empty backing set is a headless / per-pod-selector
+             # or unannotated-image service, reported elsewhere.
+@@ -1353,8 +1354,8 @@ def reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds,
+                     f"port matches no backing container; realized by all "
+                     f"(set exposures[{svcname}] or declare the containerPort)"
+                 )
+-            realizers = all_backing
+-        for b in realizers:
++            routed = all_backing
++        for b in routed:
+             add_rel(f"rel:{b['hint']}-provides-{kebab(svcname)}", b["id"], asvc_id, "Realization")
+ 
+ 
+@@ -1398,13 +1399,9 @@ def resolve_exposed_realizers(doc, all_backing):
+     return (http and port_match(http)) or None
+ 
+ 
+-def _inhouse_service_for(matched, ds):
+-    """The DockerImages svc UUID if exactly one in-house app backs the Service."""
+-    svcs = set()
+-    for w in matched:
+-        for prod in w.get("products", []):
+-            for svc in ds.app_provides_svc.get(prod, []):
+-                svcs.add(svc)
++def _inhouse_service_for(backers, ds):
++    """The DockerImages svc UUID if the backers' products realize exactly one."""
++    svcs = {svc for b in backers for svc in ds.app_provides_svc.get(b["product"], [])}
+     if len(svcs) == 1:
+         return next(iter(svcs))
+     return None
+diff --git a/aac-tools/tests/test_gen_architecture.py b/aac-tools/tests/test_gen_architecture.py
+index 41066e5..f7f8984 100644
+--- a/aac-tools/tests/test_gen_architecture.py
++++ b/aac-tools/tests/test_gen_architecture.py
+@@ -3,9 +3,11 @@
+ The successors of HelmCharts' `tests/test_gen_architecture.py` — the same eleven
+ behaviours, under the same names, over the same synthetic in-memory fixtures — plus
+ the list form of `upstream`, which only this port accepts. They exercise the
+-post-render passes, which the port carries across whole. Last, the interfaces every
+-render publishes for its Services, and the resolution of a provider another render
+-deploys through them: it draws the edge one render drawing both sides draws.
++post-render passes, which the port carries across whole. Then the in-house service an
++exposed host references, taken from the container its Service routes to. Last, the
++interfaces every render publishes for its Services, and the resolution of a provider
++another render deploys through them: it draws the edge one render drawing both sides
++draws.
+ """
+ 
+ from __future__ import annotations
+@@ -39,12 +41,12 @@ def _workload(ns, name, product):
+                 "hint": f"{ns}-{name}-{name}",
+                 "id": inst_id,
+                 "container": name,
++                "product": product,
+                 "port_nums": {8080},
+                 "port_names": set(),
+             }
+         ],
+         "all": [inst_id],
+-        "products": {product},
+     }
+ 
+ 
+@@ -128,6 +130,208 @@ class ExposedServiceTests(unittest.TestCase):
+                     self.assertEqual(assignment["target"], svc["id"])
+ 
+ 
++# KubeCoder's controller pod: four containers behind one Service, two of them in-house
++# apps realizing their own service. The Service's port lands on the nginx `ingress`
++# sidecar; only its target-port annotation names the controller.
++KUBECODER_NS = "kubecoder-prd"
++KUBECODER_API = "svc:kubecoder-controller-api,00000000-0000-0000-0000-00000000000a"
++RECLAIM_API = "svc:kube-coder-tunnel-reclaim,00000000-0000-0000-0000-00000000000b"
++KUBECODER_CONTAINERS = (
++    ("ingress", "ss:nginx", 8090),
++    ("kubecoder-controller", "app:kubecoder-controller", 8080),
++    ("manual", "app:kubecoder-manual", 8081),
++    ("tunnel-reclaim", "app:kube-coder-tunnel-reclaim", 8092),
++)
++
++
++def _kubecoder_dataset():
++    ds = ga.Dataset()
++    ds.add_envelope(
++        {
++            "relations": [
++                {
++                    "id": f"rel:{bare}-provides-api",
++                    "type": "Realization",
++                    "source": f"{bare},00000000-0000-0000-0000-00000000000{n}",
++                    "target": svc,
++                }
++                for n, (bare, svc) in enumerate(
++                    (
++                        ("app:kubecoder-controller", KUBECODER_API),
++                        ("app:kube-coder-tunnel-reclaim", RECLAIM_API),
++                    )
++                )
++            ]
++        }
++    )
++    return ds
++
++
++def _kubecoder_workload(containers=KUBECODER_CONTAINERS):
++    wl = "kubecoder-controller"
++    backing = [
++        {
++            "hint": f"{KUBECODER_NS}-{wl}-{name}",
++            "id": ga.composite(
++                product.split(":")[0], f"{KUBECODER_NS}-{wl}-{name}", f"{KUBECODER_NS}.{wl}.{name}"
++            ),
++            "container": name,
++            "product": product,
++            "port_nums": {port},
++            "port_names": set(),
++        }
++        for name, product, port in containers
++    ]
++    return {
++        "name": wl,
++        "labels": {"app.kubernetes.io/name": wl},
++        "backing": backing,
++        "all": [b["id"] for b in backing],
++    }
++
++
++def _kubecoder_service(target_port_annotation="8080", target_port=8090):
++    anns = {ga.SERVER_NAME_ANNOTATION: "kubecoder.home"}
++    if target_port_annotation:
++        anns["nginx.webathome.org/target-port"] = target_port_annotation
++    return {
++        "kind": "Service",
++        "metadata": {"name": "kubecoder-controller", "annotations": anns},
++        "spec": {
++            "selector": {"app.kubernetes.io/name": "kubecoder-controller"},
++            "ports": [{"port": 8080, "targetPort": target_port}],
++        },
++    }
++
++
++def _reconcile_kubecoder(service, exposures=None, workload=None):
++    exposed = [
++        {
++            "doc": service,
++            "ns": KUBECODER_NS,
++            "env": "prd",
++            "introduced": "2026-06-17",
++            "release": "kubecoder",
++            "exposures": exposures or {},
++            "webUi": [],
++        }
++    ]
++    elements = {"applicationServices": {}, "applicationInterfaces": {}}
++    relations, add_rel = _relations()
++    gaps = []
++    ga.reconcile_exposed_services(
++        exposed,
++        {KUBECODER_NS: [workload or _kubecoder_workload()]},
++        elements,
++        add_rel,
++        _kubecoder_dataset(),
++        gaps,
++    )
++    [assignment] = [r for r in relations.values() if r["type"] == "Assignment"]
++    realizers = {
++        r["source"].split(",")[0] for r in relations.values() if r["type"] == "Realization"
++    }
++    return elements["applicationServices"], assignment["target"], realizers, gaps
++
++
++def _container_hint(container):
++    return f"app:{KUBECODER_NS}-kubecoder-controller-{container}"
++
++
++class InHouseExposureTests(unittest.TestCase):
++    def test_the_in_house_service_is_the_routed_containers_not_the_pods(self):
++        minted, target, realizers, gaps = _reconcile_kubecoder(_kubecoder_service())
++
++        self.assertEqual(minted, {})
++        self.assertEqual(target, KUBECODER_API)
++        self.assertEqual(realizers, set())
++        self.assertEqual(gaps, [])
++
++    def test_an_exposures_entry_names_the_container_whose_service_is_referenced(self):
++        minted, target, realizers, gaps = _reconcile_kubecoder(
++            _kubecoder_service(target_port_annotation=None),
++            exposures={"kubecoder-controller": "tunnel-reclaim"},
++        )
++
++        self.assertEqual(minted, {})
++        self.assertEqual(target, RECLAIM_API)
++        self.assertEqual(realizers, set())
++        self.assertEqual(gaps, [])
++
++    def test_a_front_door_with_no_service_of_its_own_takes_the_pods_one_in_house_service(self):
++        without_reclaim = _kubecoder_workload(KUBECODER_CONTAINERS[:3])
++        for case, target_port in (("routed to the proxy", 8090), ("routed nowhere", 9999)):
++            with self.subTest(case=case):
++                minted, target, realizers, gaps = _reconcile_kubecoder(
++                    _kubecoder_service(target_port_annotation=None, target_port=target_port),
++                    workload=without_reclaim,
++                )
++
++                self.assertEqual(minted, {})
++                self.assertEqual(target, KUBECODER_API)
++                self.assertEqual(realizers, set())
++                self.assertEqual(gaps, [])
++
++    def test_an_exposures_entry_naming_an_upstream_container_mints_one_it_realizes(self):
++        minted, target, realizers, gaps = _reconcile_kubecoder(
++            _kubecoder_service(),
++            exposures={"kubecoder-controller": "ingress"},
++            workload=_kubecoder_workload(KUBECODER_CONTAINERS[:3]),
++        )
++
++        [svc] = minted.values()
++        self.assertEqual(target, svc["id"])
++        self.assertEqual(realizers, {"ss:kubecoder-prd-kubecoder-controller-ingress"})
++        self.assertEqual(gaps, [])
++
++    def test_an_exposures_entry_naming_a_missing_container_mints_one_every_backer_realizes(self):
++        minted, target, realizers, gaps = _reconcile_kubecoder(
++            _kubecoder_service(),
++            exposures={"kubecoder-controller": "controller"},
++            workload=_kubecoder_workload(KUBECODER_CONTAINERS[:3]),
++        )
++
++        [svc] = minted.values()
++        self.assertEqual(target, svc["id"])
++        self.assertEqual(
++            realizers,
++            {"ss:kubecoder-prd-kubecoder-controller-ingress"}
++            | {_container_hint(c) for c in ("kubecoder-controller", "manual")},
++        )
++        self.assertEqual(
++            gaps,
++            [
++                "kubecoder: exposures[kubecoder-controller] names container 'controller', "
++                "which no backing workload has"
++            ],
++        )
++
++    def test_a_front_door_before_two_in_house_services_mints_one_it_realizes(self):
++        minted, target, realizers, gaps = _reconcile_kubecoder(
++            _kubecoder_service(target_port_annotation=None)
++        )
++
++        [svc] = minted.values()
++        self.assertEqual(target, svc["id"])
++        self.assertEqual(realizers, {"ss:kubecoder-prd-kubecoder-controller-ingress"})
++        self.assertEqual(gaps, [])
++
++    def test_with_no_routed_container_two_in_house_services_mint_one_every_backer_realizes(self):
++        minted, target, realizers, gaps = _reconcile_kubecoder(
++            _kubecoder_service(target_port_annotation=None, target_port=9999)
++        )
++
++        [svc] = minted.values()
++        self.assertEqual(target, svc["id"])
++        self.assertEqual(
++            realizers,
++            {"ss:kubecoder-prd-kubecoder-controller-ingress"}
++            | {_container_hint(c) for c in ("kubecoder-controller", "manual", "tunnel-reclaim")},
++        )
++        [gap] = gaps
++        self.assertIn("HTTP target port matches no backing container", gap)
++
++
+ def _inst(ns, wl, container, is_init=False):
+     hint = f"{ns}-{wl}-{container}"
+     return {
+
+/work/ArgoCDTools — P2: git diff 131e2b970562..14d85ae9dda8
+
+aac-tools/image/gen_architecture.py      |  98 +++++++++++++----
+ aac-tools/tests/test_gen_architecture.py | 306 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 383 insertions(+), 21 deletions(-)
+
+diff --git a/aac-tools/image/gen_architecture.py b/aac-tools/image/gen_architecture.py
+index 3a374c6..d0f036b 100644
+--- a/aac-tools/image/gen_architecture.py
++++ b/aac-tools/image/gen_architecture.py
+@@ -34,7 +34,8 @@ edges a deployment defines but does not own the recipe for:
+   the rendered value of VAR off the consuming container, resolve the host to the
+   concrete provider instance, and emit `provider —Serving→ consumer`. Only the
+   renderer can do this — the value is runtime state, fenced out of the published
+-  dataset.
++  dataset. A value is literal or sourced from a ConfigMap the render carries
++  (container_env); one sourced from a Secret is never read.
+ * the OpenBao secret-store edge — the ClusterSecretStore that points the External
+   Secrets Operator at OpenBao is a deployer-owned manifest, so `OpenBao —Serving→ ESO`
+   is ours to draw.
+@@ -70,6 +71,15 @@ Judgment lives in `architecture.yaml` at the repo root:
+           providers: [server]    #   wires when the proxy fronts several;
+                                  #   `entry: <name>` when the var is a
+                                  #   `name=url,...` list (webhook-relay's RECEIVERS)
++      argocd:                    # `containers` scopes `realizes` and `upstream`,
++        product: ss:argo-cd      #   the only keys it takes, to named containers
++        realizes: [cap:configuration-management]
++        containers:              #   of the image: a key a container's entry sets
++          copyutil:              #   replaces the image's for that container; a
++            realizes: []         #   key it omits, and every container it does
++          server:                #   not name, takes the image's. A name no
++            upstream: {env: REDIS_SERVER, providers: [redis]}   # container of
++                                 #   the image has is reported as a gap
+     cnpg:                        # CloudNativePG CRs -> product (Cluster/Pooler)
+       Cluster:                   #   the operator materializes these at runtime,
+         product: ss:postgresql   #   so there's no walkable workload — we read
+@@ -167,6 +177,9 @@ CEPH_DRIVERS = {
+ 
+ WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
+ 
++# The keys an image entry's `containers:` scope may set for one container.
++SCOPED_KEYS = {"realizes", "upstream"}
++
+ # CloudNativePG declares its database substrate as custom resources the operator
+ # materializes at runtime: a `Cluster` (the PostgreSQL instances) and a `Pooler`
+ # (the PgBouncer front-end apps connect to). The operator-created pods/Services
+@@ -250,6 +263,11 @@ def pod_labels(doc):
+     return (tmpl.get("metadata") or {}).get("labels") or {}
+ 
+ 
++def container_scopes(img_ann):
++    """An image entry's `containers:` map; the short, product-only form has none."""
++    return (img_ann.get("containers") or {}) if isinstance(img_ann, dict) else {}
++
++
+ def kind_for(product):
+     return "SystemSoftware" if product.startswith("ss:") else "ApplicationComponent"
+ 
+@@ -629,13 +647,13 @@ ENV_REF = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)|\$\$\(")
+ def expand_env_refs(value, env):
+     """Resolve `$(VAR)` references in `value` against the container's `env` map.
+ 
+-    `env` is the {name: value} map of literal-valued env vars on the same
+-    container (valueFrom entries aren't here — a `$(SECRET_VAR)` therefore stays
+-    verbatim, which is correct: its runtime value is unpublished state, and a
+-    host is never carried in a secret). Recursive references resolve depth-first;
+-    a reference cycle or a name resolving to itself is broken by leaving the
+-    unresolved reference verbatim (the kubelet would too — it only substitutes
+-    *preceding* vars). `$$(` is the documented escape for a literal `$(`.
++    `env` is the container's container_env map (a Secret-sourced var isn't
++    there — a `$(SECRET_VAR)` therefore stays verbatim, which is correct: its
++    runtime value is unpublished state, and a host is never carried in a
++    secret). Recursive references resolve depth-first; a reference cycle or a
++    name resolving to itself is broken by leaving the unresolved reference
++    verbatim (the kubelet would too — it only substitutes *preceding* vars).
++    `$$(` is the documented escape for a literal `$(`.
+     """
+ 
+     def repl(m, _seen):
+@@ -649,6 +667,26 @@ def expand_env_refs(value, env):
+     return ENV_REF.sub(lambda m: repl(m, frozenset()), value)
+ 
+ 
++def container_env(c, ns, configmaps):
++    """{name: value} of a container's env vars whose value the render carries.
++
++    A literal `value`, or a `valueFrom.configMapKeyRef` read from the rendered
++    ConfigMap `configmaps[(ns, name)]` names. A var sourced from a Secret is
++    unpublished runtime state and stays out, as does one whose ConfigMap or key
++    the render does not carry.
++    """
++    env = {}
++    for e in c.get("env") or []:
++        if "value" in e:
++            env[e["name"]] = e["value"]
++            continue
++        ref = (e.get("valueFrom") or {}).get("configMapKeyRef")
++        data = configmaps.get((ns, ref["name"])) if ref else None
++        if data and ref["key"] in data:
++            env[e["name"]] = data[ref["key"]]
++    return env
++
++
+ def parse_host(value):
+     """(host, port) from a connection string, preserving identity.
+ 
+@@ -848,8 +886,8 @@ def main():
+     exposed = []  # [{doc, ns, env, introduced, release}] — annotated
+     secret_stores = []  # [{doc, ns, release, release_name}]
+     mcp_clients = []  # [{ns, chart, container, configMap, key, hostField}]
+-    configmaps = {}  # (ns, name) -> data dict (for mcp client lists)
+     cnpg_pooler_svcs = {}  # (ns, svc-name) -> [pooler instance id] for the index
++    errors = []
+ 
+     ds = load_dataset(repo)
+ 
+@@ -868,6 +906,14 @@ def main():
+         return ref
+ 
+     images = ann.get("images") or {}
++    for image_name, entry in images.items():
++        for cname, scope in container_scopes(entry).items():
++            unscoped = sorted(set(scope or {}) - SCOPED_KEYS)
++            if unscoped:
++                errors.append(
++                    f"gen-architecture: images[{image_name}].containers[{cname}] sets "
++                    f"{unscoped}; a container's entry scopes only {sorted(SCOPED_KEYS)}"
++                )
+ 
+     # Deployer-owned MCP-client bindings: a consuming container plus the rendered
+     # ConfigMap that lists the MCP servers it connects to.
+@@ -899,6 +945,14 @@ def main():
+         elements[arr].setdefault(prod["id"], entry)
+ 
+     docs = render(repo, meta, stage, ns, release_name, upstream_of(ann))
++    # (ns, name) -> data: what a ConfigMap-sourced env value and an MCP client's
++    # server list are read from.
++    configmaps = {
++        (ns, d["metadata"]["name"]): d.get("data") or {}
++        for d in docs
++        if d.get("kind") == "ConfigMap"
++    }
++    rendered_containers = {}  # image name -> the names of the containers running it
+ 
+     # Classify each PVC by its statically-bound PV's CSI driver
+     # (PVC.spec.volumeName -> PV.spec.csi.driver); the PVC's own
+@@ -940,6 +994,9 @@ def main():
+             if isinstance(img_ann, str):
+                 img_ann = {"product": img_ann}
+             img_ann = img_ann or {}
++            rendered_containers.setdefault(image_name, set()).add(c["name"])
++            scope = container_scopes(img_ann).get(c["name"]) or {}
++            realizes = scope.get("realizes", img_ann.get("realizes")) or []
+             product = img_ann.get("product")
+             kind = img_ann.get("kind") or (kind_for(product) if product else "ApplicationComponent")
+             nkey = f"{ns}.{wl}.{c['name']}"
+@@ -963,7 +1020,6 @@ def main():
+                     "image": image,
+                 },
+             }
+-            realizes = {t for t in img_ann.get("realizes") or []}
+             instances.append(
+                 {
+                     "id": inst_id,
+@@ -975,9 +1031,9 @@ def main():
+                     "chart": app,
+                     "hint": hint,
+                     "is_init": c["name"] in init_names,
+-                    "env": {e["name"]: e["value"] for e in (c.get("env") or []) if "value" in e},
+-                    "realizes": realizes,
+-                    "upstream": img_ann.get("upstream"),
++                    "env": container_env(c, ns, configmaps),
++                    "realizes": set(realizes),
++                    "upstream": scope.get("upstream", img_ann.get("upstream")),
+                 }
+             )
+             wl_all.append(inst_id)
+@@ -1005,7 +1061,7 @@ def main():
+                 add_rel(f"rel:{hint}-spec", inst_id, resolve_product(product), "Specialization")
+             # Realizations: capabilities (bare cap:) and the cluster storage
+             # services (resolve svc: to the id the storage producer mints).
+-            for tgt in img_ann.get("realizes") or []:
++            for tgt in realizes:
+                 add_rel(
+                     f"rel:{hint}-realizes-{hint_of(tgt)}",
+                     inst_id,
+@@ -1036,6 +1092,13 @@ def main():
+             }
+         )
+ 
++    for image_name, names in rendered_containers.items():
++        for cname in sorted(set(container_scopes(images.get(image_name))) - names):
++            gaps.append(
++                f"{app}: images[{image_name}].containers names '{cname}'; "
++                f"no container of the image has that name"
++            )
++
+     emit_cnpg_substrate(
+         docs,
+         ann.get("cnpg") or {},
+@@ -1073,8 +1136,6 @@ def main():
+             secret_stores.append(
+                 {"doc": doc, "ns": ns, "release": release, "release_name": release_name}
+             )
+-        elif doc.get("kind") == "ConfigMap":
+-            configmaps[(ns, doc["metadata"]["name"])] = doc.get("data") or {}
+ 
+     inst_by_id = {i["id"]: i for i in instances}
+     instances_by_product = {}
+@@ -1089,7 +1150,6 @@ def main():
+     for nk, pids in cnpg_pooler_svcs.items():
+         incluster.setdefault(nk, []).extend(pids)
+ 
+-    errors = []
+     reconcile_exposed_services(exposed, workloads_by_ns, elements, add_rel, ds, gaps)
+     publish_service_interfaces(
+         incluster,
+@@ -1632,8 +1692,8 @@ def resolve_upstreams(instances, inst_by_id, external, incluster, ds, add_rel, e
+             wanted = wire.get("providers") or []
+             if var not in inst["env"]:
+                 errors.append(
+-                    f"gen-architecture: upstream: {loc}: {var} is not set to a "
+-                    f"literal value on the container"
++                    f"gen-architecture: upstream: {loc}: {var} is not set on the "
++                    f"container to a literal or ConfigMap-sourced value"
+                 )
+                 continue
+             value = expand_env_refs(inst["env"][var], inst["env"])
+diff --git a/aac-tools/tests/test_gen_architecture.py b/aac-tools/tests/test_gen_architecture.py
+index f7f8984..3879dc5 100644
+--- a/aac-tools/tests/test_gen_architecture.py
++++ b/aac-tools/tests/test_gen_architecture.py
+@@ -4,16 +4,24 @@ The successors of HelmCharts' `tests/test_gen_architecture.py` — the same elev
+ behaviours, under the same names, over the same synthetic in-memory fixtures — plus
+ the list form of `upstream`, which only this port accepts. They exercise the
+ post-render passes, which the port carries across whole. Then the in-house service an
+-exposed host references, taken from the container its Service routes to. Last, the
++exposed host references, taken from the container its Service routes to. Then the
+ interfaces every render publishes for its Services, and the resolution of a provider
+ another render deploys through them: it draws the edge one render drawing both sides
+-draws.
++draws. Last, over a whole run: an image entry scoped to named containers, and env
++values read from the ConfigMaps the render carries.
+ """
+ 
+ from __future__ import annotations
+ 
++import contextlib
++import io
+ import json
++import tempfile
+ import unittest
++from pathlib import Path
++from unittest import mock
++
++import yaml
+ 
+ from .support import load
+ 
+@@ -1125,3 +1133,297 @@ class AcrossRendersTests(unittest.TestCase):
+             set(ga.CROSS_PRODUCER_HOST_HINTS),
+             {"secrets.home", "ceph", "homeassistant.webathome.org"},
+         )
++
++
++# Argo CD as its prd stage renders (ArgoCDDeploy, 2026-09-29), trimmed to one of each
++# kind of container its one image runs: controllers that read redis's address from a
++# ConfigMap and its password from a Secret, a controller that reads neither, the
++# copyutil init container and the redis-secret-init Job.
++ARGO_NS = "argocd-prd"
++CONFIG_MGMT = "cap:configuration-management"
++PARAMS_CM = "argocd-cmd-params-cm"
++REDIS_SERVER = {
++    "name": "REDIS_SERVER",
++    "valueFrom": {"configMapKeyRef": {"name": PARAMS_CM, "key": "redis.server"}},
++}
++REDIS_PASSWORD = {
++    "name": "REDIS_PASSWORD",
++    "valueFrom": {"secretKeyRef": {"name": "argocd-redis", "key": "auth"}},
++}
++
++
++def _container(name, image, env=(), ports=()):
++    return {
++        "name": name,
++        "image": f"registry:5000/{image}:1",
++        "env": list(env),
++        "ports": [{"containerPort": p} for p in ports],
++    }
++
++
++def _rendered(kind, name, containers, init=()):
++    return {
++        "kind": kind,
++        "metadata": {"name": name},
++        "spec": {
++            "template": {
++                "metadata": {"labels": {"app": name}},
++                "spec": {"initContainers": list(init), "containers": list(containers)},
++            }
++        },
++    }
++
++
++def _argo_render(*extra):
++    return [
++        _rendered(
++            "Deployment",
++            "argocd-prd-server",
++            [_container("server", "argocd", [REDIS_SERVER, REDIS_PASSWORD])],
++        ),
++        _rendered(
++            "Deployment",
++            "argocd-prd-repo-server",
++            [_container("repo-server", "argocd", [REDIS_SERVER, REDIS_PASSWORD])],
++            init=[_container("copyutil", "argocd")],
++        ),
++        _rendered(
++            "Deployment",
++            "argocd-prd-notifications-controller",
++            [_container("notifications-controller", "argocd")],
++        ),
++        _rendered("Job", "argocd-prd-redis-secret-init", [_container("secret-init", "argocd")]),
++        _rendered(
++            "Deployment",
++            "argocd-prd-redis",
++            [_container("redis", "redis", [REDIS_PASSWORD], ports=[6379])],
++        ),
++        {
++            "kind": "Service",
++            "metadata": {"name": "argocd-prd-redis"},
++            "spec": {
++                "selector": {"app": "argocd-prd-redis"},
++                "ports": [{"port": 6379, "targetPort": 6379}],
++            },
++        },
++        {
++            "kind": "ConfigMap",
++            "metadata": {"name": PARAMS_CM},
++            "data": {"redis.server": "argocd-prd-redis:6379"},
++        },
++        *extra,
++    ]
++
++
++REDIS_WIRE = {"env": "REDIS_SERVER", "providers": ["redis"]}
++
++
++def _images(argocd, **more):
++    return {"argocd": argocd, "redis": {"product": "ss:redis", "realizes": ["cap:cache"]}, **more}
++
++
++def _generate(images, docs, ds=None):
++    """Run the command over an `argocd` deploy repo whose prd render is `docs`: the
++    exit code, the artifact (None when nothing was written) and stderr."""
++    with tempfile.TemporaryDirectory() as tmp:
++        root = Path(tmp)
++        annotation = {"introduced": "2026-08-17", "images": images}
++        (root / ga.ANNOTATIONS).write_text(yaml.safe_dump(annotation), encoding="utf-8")
++        (root / ga.CHART_DIR).mkdir()
++        (root / ga.CHART_DIR / "Chart.yaml").write_text("name: argocd\n", encoding="utf-8")
++        argv = ["gen-architecture", "--stage", "prd", "--producer", "argocd-deploy"]
++        err = io.StringIO()
++        code = 0
++        with (
++            mock.patch("sys.argv", argv + ["--repo", str(root)]),
++            mock.patch.object(ga, "render", return_value=docs),
++            mock.patch.object(ga, "load_dataset", return_value=ds or ga.Dataset()),
++            contextlib.redirect_stderr(err),
++        ):
++            try:
++                ga.main()
++            except SystemExit as e:
++                code = e.code
++        artifact = root / "docs" / "architecture" / "argocd-deploy.yaml"
++        written = yaml.safe_load(artifact.read_text()) if artifact.exists() else None
++        return code, written, err.getvalue()
++
++
++def _edges(artifact, rtype, target=None):
++    """{(source container, target container or id)} of the artifact's `rtype` edges."""
++    container = {
++        e["id"]: e["stats"]["container"]
++        for arr in ("systemSoftware", "applicationComponents")
++        for e in artifact.get(arr) or []
++        if "container" in (e.get("stats") or {})
++    }
++    return {
++        (container.get(r["source"], r["source"]), container.get(r["target"], r["target"]))
++        for r in artifact["relations"]
++        if r["type"] == rtype and target in (None, r["target"])
++    }
++
++
++# Every Argo CD controller realizes the capability and the one-shots none, spelled
++# both ways a container scope allows: naming the containers that realize it, or
++# giving it to the image and taking it from the containers that don't.
++CAPABILITY_BY_NAMING = {
++    "product": "ss:argo-cd",
++    "containers": {
++        "server": {"realizes": [CONFIG_MGMT], "upstream": REDIS_WIRE},
++        "repo-server": {"realizes": [CONFIG_MGMT], "upstream": REDIS_WIRE},
++        "notifications-controller": {"realizes": [CONFIG_MGMT]},
++    },
++}
++CAPABILITY_BY_OMISSION = {
++    "product": "ss:argo-cd",
++    "realizes": [CONFIG_MGMT],
++    "containers": {
++        "copyutil": {"realizes": []},
++        "secret-init": {"realizes": []},
++        "server": {"upstream": REDIS_WIRE},
++        "repo-server": {"upstream": REDIS_WIRE},
++    },
++}
++
++
++class ContainerScopeTests(unittest.TestCase):
++    def test_a_scoped_realizes_reaches_only_the_containers_it_is_scoped_to(self):
++        for case, argocd in (
++            ("naming", CAPABILITY_BY_NAMING),
++            ("omission", CAPABILITY_BY_OMISSION),
++        ):
++            with self.subTest(case=case):
++                code, artifact, err = _generate(_images(argocd), _argo_render())
++
++                self.assertEqual(code, 0, err)
++                self.assertEqual(
++                    _edges(artifact, "Realization", CONFIG_MGMT),
++                    {
++                        ("server", CONFIG_MGMT),
++                        ("repo-server", CONFIG_MGMT),
++                        ("notifications-controller", CONFIG_MGMT),
++                    },
++                )
++                self.assertEqual(
++                    _edges(artifact, "Realization", "cap:cache"), {("redis", "cap:cache")}
++                )
++
++    def test_an_upstream_scoped_to_its_readers_is_drawn_from_the_configmap_value(self):
++        for case, argocd in (
++            ("naming", CAPABILITY_BY_NAMING),
++            ("omission", CAPABILITY_BY_OMISSION),
++        ):
++            with self.subTest(case=case):
++                code, artifact, err = _generate(_images(argocd), _argo_render())
++
++                self.assertEqual(code, 0, err)
++                served = {e for e in _edges(artifact, "Serving") if e[0] != ga.MICROK8S_PRD}
++                self.assertEqual(served, {("redis", "server"), ("redis", "repo-server")})
++
++    def test_an_upstream_fails_on_a_container_it_applies_to_that_does_not_set_its_var(self):
++        cases = (
++            (
++                "image-wide",
++                {"product": "ss:argo-cd", "upstream": REDIS_WIRE},
++                {"notifications-controller", "secret-init"},
++            ),
++            (
++                "scoped",
++                {
++                    "product": "ss:argo-cd",
++                    "containers": {"notifications-controller": {"upstream": REDIS_WIRE}},
++                },
++                {"notifications-controller"},
++            ),
++        )
++        for case, argocd, failing in cases:
++            with self.subTest(case=case):
++                code, artifact, err = _generate(_images(argocd), _argo_render())
++
++                self.assertEqual(code, 1)
++                self.assertIsNone(artifact)
++                unset = [line for line in err.splitlines() if "REDIS_SERVER is not set" in line]
++                self.assertEqual(len(unset), len(failing))
++                for container in failing:
++                    self.assertTrue(any(f".{container}: " in line for line in unset), unset)
++
++    def test_a_container_scope_naming_no_container_of_the_image_is_a_gap(self):
++        argocd = {
++            "product": "ss:argo-cd",
++            "containers": {"repo-servr": {"realizes": [CONFIG_MGMT]}},
++        }
++
++        code, artifact, err = _generate(_images(argocd), _argo_render())
++
++        self.assertEqual(code, 0, err)
++        self.assertEqual(_edges(artifact, "Realization", CONFIG_MGMT), set())
++        self.assertIn("gap: argocd: images[argocd].containers names 'repo-servr'", err)
++
++    def test_a_container_scope_takes_only_realizes_and_upstream(self):
++        argocd = {
++            "product": "ss:argo-cd",
++            "containers": {"server": {"served_by": ["svc:x"], "product": "ss:other"}},
++        }
++
++        code, artifact, err = _generate(_images(argocd), _argo_render())
++
++        self.assertEqual(code, 1)
++        self.assertIsNone(artifact)
++        self.assertIn("images[argocd].containers[server] sets ['product', 'served_by']", err)
++
++
++class ConfigMapEnvTests(unittest.TestCase):
++    CONFIGMAPS = {(ARGO_NS, PARAMS_CM): {"redis.server": "argocd-prd-redis:6379"}}
++
++    def test_a_configmap_sourced_value_is_read_from_the_rendered_configmap(self):
++        c = _container("server", "argocd", [{"name": "MODE", "value": "ha"}, REDIS_SERVER])
++
++        self.assertEqual(
++            ga.container_env(c, ARGO_NS, self.CONFIGMAPS),
++            {"MODE": "ha", "REDIS_SERVER": "argocd-prd-redis:6379"},
++        )
++
++    def test_a_secret_sourced_value_stays_unresolved(self):
++        url = {"name": "REDIS_URL", "value": "redis://:$(REDIS_PASSWORD)@$(REDIS_SERVER)/0"}
++        env = ga.container_env(
++            _container("server", "argocd", [REDIS_PASSWORD, REDIS_SERVER, url]),
++            ARGO_NS,
++            self.CONFIGMAPS,
++        )
++
++        self.assertNotIn("REDIS_PASSWORD", env)
++        self.assertEqual(
++            ga.expand_env_refs(env["REDIS_URL"], env),
++            "redis://:$(REDIS_PASSWORD)@argocd-prd-redis:6379/0",
++        )
++
++    def test_a_configmap_or_key_the_render_does_not_carry_leaves_its_var_unset(self):
++        cases = (
++            ("no such configmap", {}),
++            ("no such key", {(ARGO_NS, PARAMS_CM): {"redis.db": "0"}}),
++            ("another namespace", {("other-prd", PARAMS_CM): {"redis.server": "x:6379"}}),
++        )
++        for case, configmaps in cases:
++            with self.subTest(case=case):
++                env = ga.container_env(
++                    _container("server", "argocd", [REDIS_SERVER]), ARGO_NS, configmaps
++                )
++
++                self.assertEqual(env, {})
++
++    def test_a_boundby_recipe_reads_a_configmap_sourced_value(self):
++        cache_url = {
++            "name": "CACHE_URL",
++            "valueFrom": {"configMapKeyRef": {"name": PARAMS_CM, "key": "redis.server"}},
++        }
++        bot = _rendered("Deployment", "bot", [_container("bot", "bot", [cache_url])])
++        ds = ga.Dataset()
++        ds.add_envelope(_recipe("app:bot", "CACHE_URL", "cap:cache"))
++
++        code, artifact, err = _generate(
++            _images("ss:argo-cd", bot="app:bot"), _argo_render(bot), ds=ds
++        )
++
++        self.assertEqual(code, 0, err)
++        self.assertIn(("redis", "bot"), _edges(artifact, "Serving"))
+
+/work/ArgoCDTools — P3: git diff 14d85ae9dda8..eadf4ca83153
+
+aac-tools/image/gen_architecture.py      | 175 ++++++++++++++++++++++++++++++++++++++-------------
+ aac-tools/tests/test_gen_architecture.py |  97 +++++++++++++++++++++++++++-
+ 2 files changed, 226 insertions(+), 46 deletions(-)
+
+diff --git a/aac-tools/image/gen_architecture.py b/aac-tools/image/gen_architecture.py
+index d0f036b..d2f2424 100644
+--- a/aac-tools/image/gen_architecture.py
++++ b/aac-tools/image/gen_architecture.py
+@@ -51,65 +51,152 @@ resolves to the instances the published interfaces at that host link, filtered
+ exactly as this render's own providers are (resolve_host). A host that resolves
+ nowhere fails the run.
+ 
+-Judgment lives in `architecture.yaml` at the repo root:
+-
+-    introduced: '2026-06-17'     # the app's date; a deploy repo's git history dates
+-                                 #   the repo, so it cannot be derived here
+-    upstream:                    # an upstream-chart app only: the chart Argo renders
+-      repo: https://kubernetes-sigs.github.io/headlamp/   # as source 0, at the exact
+-      chart: headlamp            #   version its registry entry pins; chart/ is then
+-      version: 0.45.0            #   the companion, rendered beside it
+-    images:                      # image name (registry:5000/<name>) -> product
++The judgment layer is `architecture.yaml` at the repo root: what a render cannot know.
++Every key the generator reads from it is described below the sketch; of the top-level
++keys only `introduced` is required.
++
++    introduced: '2026-06-17'
++    upstream:
++      repo: https://kubernetes-sigs.github.io/headlamp/
++      chart: headlamp
++      version: 0.45.0
++    images:
+       dnsmasq-config-generator: app:dnsmasq-config-generator
+-      dnsmasq:                   # long form when a capability/kind is needed
++      busybox:
++      dnsmasq:
+         product: ss:dnsmasq
+         realizes: [cap:dns, cap:dhcp]
+-      mcp-filter:                # a proxy: `env` locates the pod it fronts,
+-        product: app:mcp-filter  #   `providers` names that pod's containers
+-        upstream:                #   serving it (omitted when the host is a
+-          env: MCP_UPSTREAM_URL  #   cross-producer element); a list of such
+-          providers: [server]    #   wires when the proxy fronts several;
+-                                 #   `entry: <name>` when the var is a
+-                                 #   `name=url,...` list (webhook-relay's RECEIVERS)
+-      argocd:                    # `containers` scopes `realizes` and `upstream`,
+-        product: ss:argo-cd      #   the only keys it takes, to named containers
++      python:
++        served_by: ["svc:backup-server,0d98747c-6eb7-4e6a-b91d-f09fa6c3ae1f"]
++      mcp-filter:
++        product: app:mcp-filter
++        upstream: {env: MCP_UPSTREAM_URL, providers: [server]}
++      webhook-relay:
++        product: app:webhook-relay
++        upstream:
++          - {env: RECEIVERS, entry: argocd-server, providers: [server]}
++      argocd:
++        product: ss:argo-cd
+         realizes: [cap:configuration-management]
+-        containers:              #   of the image: a key a container's entry sets
+-          copyutil:              #   replaces the image's for that container; a
+-            realizes: []         #   key it omits, and every container it does
+-          server:                #   not name, takes the image's. A name no
+-            upstream: {env: REDIS_SERVER, providers: [redis]}   # container of
+-                                 #   the image has is reported as a gap
+-    cnpg:                        # CloudNativePG CRs -> product (Cluster/Pooler)
+-      Cluster:                   #   the operator materializes these at runtime,
+-        product: ss:postgresql   #   so there's no walkable workload — we read
+-        realizes: [cap:relational-database]   # the CRs directly (see CNPG_KINDS)
++        containers:
++          copyutil: {realizes: []}
++          server: {upstream: {env: REDIS_SERVER, providers: [redis]}}
++    cnpg:
++      Cluster:
++        product: ss:postgresql
++        realizes: [cap:relational-database]
+       Pooler:
+         product: ss:pgbouncer
+         realizes: [cap:relational-database]
+-    products:                    # upstream «SoftwareProduct» entries this app owns
++    products:
+       - id: ss:dnsmasq
+         label: dnsmasq
+         summary: Lightweight DNS forwarder and DHCP server.
+         homepage: https://thekelleys.org.uk/dnsmasq/doc.html
+-    exposures:                   # service name -> the container its host routes to,
+-      git-sync: gitblit          #   when the port cannot name it
+-    webUi:                       # exposed hosts that are human, browser-facing
+-      - grafana.home             #   UIs -> the interface carries `webUi: true`
+-    mcpClients:                  # container -> the rendered ConfigMap listing the
+-      intercom-server:           #   MCP servers it connects to
++        logo: dnsmasq
++    exposures:
++      git-sync: gitblit
++    webUi:
++      - grafana.home
++    mcpClients:
++      intercom-server:
+         configMap: mcp-servers
+         key: servers.json
+-        providers: {trello: [server]}
+-
+-Kind is derived from the product prefix (app: -> ApplicationComponent, ss: ->
+-SystemSoftware). An image with no annotation is reported as a gap.
++        hostField: url
++        providers: {trello: [filter], gitblit: [gitblit-mcp-server]}
++
++`introduced` — the app's date, `YYYY-MM-DD`, quoted or not; every element the run emits
++carries it. A deploy repo's git history dates the repo, not the app, so it cannot be
++derived.
++
++`upstream` — an upstream-chart app only: the chart Argo renders as source 0, in exactly
++`repo`, `chart` and `version`, the registry entry's three keys; `chart/` is then the
++companion, rendered beside it. `version` is exact (`1.2.3`, a leading `v` and a `-` or
++`+` suffix allowed): a range would render whatever the repository serves today.
++
++`images` — one entry per image, keyed by the image reference's last path segment without
++its tag or digest (`registry:5000/dnsmasq:latest` is `dnsmasq`). Every container running
++the image, init containers too, becomes an instance element; a rendered image with no
++entry is reported as a gap. An entry is null (a base or utility image with no product:
++its instances specialize nothing), a product id (short for `{product: <id>}`), or a
++mapping of any of these keys:
++
++  `product`     a bare `app:<name>` or `ss:<name>`, resolved to its composite id from
++                `products:`, else from the dataset; one that resolves nowhere is kept
++                bare and reported as a gap.
++  `kind`        `SystemSoftware` or `ApplicationComponent`, the instances' element
++                kind. Without it the product decides: `ss:` is SystemSoftware, any other
++                product or none is ApplicationComponent.
++  `realizes`    the ids the instances Realize, usually bare `cap:<name>`.
++                `svc:cluster-ceph-rbd` and `svc:cluster-ceph-cephfs` become the ids the
++                storage producer mints; any other id is drawn as written.
++  `served_by`   the ids of elements that Serve the instances, such as the backup server
++                serving a backup job. They are drawn as written and never resolved, so
++                each is the full composite `<prefix>:<hint>,<uuid>` the dataset
++                publishes.
++  `upstream`    the wire a generic proxy fronts, or a list of wires, each drawing
++                provider —Serving→ proxy. `env` names the container's var holding the
++                URL: a loopback host is the proxy's own pod, any other host resolves as
++                a boundBy value does. `providers` names the containers of the pod behind
++                that host that serve the proxy, and is omitted when the host is a
++                cross-producer element. `entry: <name>` reads a var holding a
++                `name=url,...` list and takes the URL of that name. An init container
++                takes no wire. On every other container it applies to, an unset var, a
++                host resolving nowhere, a pod host with no `providers` or with one its
++                pod lacks, and an entry the list lacks are hard fails.
++  `containers`  container name → `realizes` and `upstream`, the only keys it takes
++                (another is a hard fail), scoped to the image's containers of that
++                name. A key a container's entry sets replaces the image's for that
++                container; a key it omits, and every container it does not name, takes
++                the image's. A name no container of the image has is reported as a gap.
++
++`cnpg` — keyed by the kind of a CloudNativePG (`postgresql.cnpg.io`) resource the render
++carries, `Cluster` or `Pooler`. The operator materializes these at runtime, so there is
++no workload to walk: the resources are read directly, and each becomes one
++SystemSoftware instance; a resource whose kind has no entry is reported as a gap. An
++entry takes `product`, `realizes` and `served_by`, read as an image entry's. A Pooler is
++Served by its backing Cluster, and its Service's DNS names resolve to it.
++
++`products` — the «SoftwareProduct» catalog entries this app owns, each written as the
++element it publishes: `id` is a bare `app:<name>` or `ss:<name>` whose composite id the
++generator mints, then `label`, `summary`, `homepage`, `logo`, and `introduced` when it is
++not the app's. The generator copies the fields as written; arch-validate judges them.
++
++`exposures` — Service name → the container its hosts route to, when its port cannot
++name it (a reverse proxy in front). A Service annotated `nginx.webathome.org/server-name`
++or `dns.webathome.org/hostname` publishes each of its comma-separated hosts as an
++interface assigned to one service. That is the in-house service (the `svc:` the
++container's product realizes in DockerImages) of the container the hosts route to: the
++container the `exposures:` entry names, outright and with no fallback; else the one on
++the Service's HTTP target port — `nginx.webathome.org/target-port`, else the one
++container behind every port, else the port named `http`. When a port-routed container
++realizes no in-house service (an auth proxy, a VPN gateway holding the pod's ports), or
++no container is routed, the pod's in-house service is taken if the backing containers —
++the selected pods' non-init containers with a product — realize exactly one. Otherwise
++the generator mints the Service's own `svc:`, realized by the routed container, or by
++every backing container with a gap when none is routed (an entry naming a container the
++pods lack is reported as a gap too).
++
++`webUi` — the exposed hosts that are human, browser-facing UIs; each one's interface
++carries `webUi: true`, which the homeapps launcher tiles.
++
++`mcpClients` — consuming container name → the rendered ConfigMap listing the MCP
++servers it connects to. `configMap` and `key` locate a JSON `{"servers": [...]}`;
++`hostField` (default `url`) names the field of each server holding its URL; `providers`
++maps each server, by its `name` or else its URL, to the containers of the pod behind its
++host that serve the client. A server whose host is a cross-producer element needs no
++entry. A consuming container the namespace lacks, a ConfigMap key not rendered, a host
++resolving nowhere, a server with no entry or with one its pod lacks, and an entry naming
++no server are hard fails.
++
++A hard fail writes nothing and exits 1; every unresolved edge of the run is reported
++before it exits. A run that emits no element for a layer declaring `images`, `products`
++or `upstream` fails the same way. A gap is a `gap:` line on stderr beside the written
++artifact, and fails nothing.
+ 
+ The artifact is a build output: regenerate it, do not commit it and do not hand-edit
+ it.
+ 
+-Usage: gen-architecture --stage <stage> --producer <id> [--repo <path>]
+-
+ Environment:
+   ARCH_DATASET_URL      base merged dataset (default: live webathome.org);
+                         a value without a scheme is read as a local file.
+@@ -827,9 +914,11 @@ def resolve_svc_target(svc_target, value, consumer, instances_by_product, ds):
+ 
+ 
+ def parse_args(argv=None):
++    # --help prints the module docstring whole: it is the judgment layer's contract.
+     parser = argparse.ArgumentParser(
+         prog="gen-architecture",
+-        description="Generate a deploy repo's architecture artifact for one stage.",
++        description=__doc__,
++        formatter_class=argparse.RawDescriptionHelpFormatter,
+     )
+     # One run, one stage: the artifact is attached to a pipeline, and a pipeline
+     # listening to two stages would make it flap. No default, no "all stages", and
+diff --git a/aac-tools/tests/test_gen_architecture.py b/aac-tools/tests/test_gen_architecture.py
+index 3879dc5..d99b9eb 100644
+--- a/aac-tools/tests/test_gen_architecture.py
++++ b/aac-tools/tests/test_gen_architecture.py
+@@ -7,8 +7,9 @@ post-render passes, which the port carries across whole. Then the in-house servi
+ exposed host references, taken from the container its Service routes to. Then the
+ interfaces every render publishes for its Services, and the resolution of a provider
+ another render deploys through them: it draws the edge one render drawing both sides
+-draws. Last, over a whole run: an image entry scoped to named containers, and env
+-values read from the ConfigMaps the render carries.
++draws. Then, over a whole run: an image entry scoped to named containers, and env
++values read from the ConfigMaps the render carries. Last, `--help`, which prints the
++judgment layer's contract.
+ """
+ 
+ from __future__ import annotations
+@@ -16,14 +17,18 @@ from __future__ import annotations
+ import contextlib
+ import io
+ import json
++import re
++import subprocess
++import sys
+ import tempfile
++import textwrap
+ import unittest
+ from pathlib import Path
+ from unittest import mock
+ 
+ import yaml
+ 
+-from .support import load
++from .support import ROOT, load
+ 
+ ga = load("gen_architecture")
+ 
+@@ -1427,3 +1432,89 @@ class ConfigMapEnvTests(unittest.TestCase):
+ 
+         self.assertEqual(code, 0, err)
+         self.assertIn(("redis", "bot"), _edges(artifact, "Serving"))
++
++
++# --------------------------------------------------------------------------- #
++# --help: the judgment layer's contract
++# --------------------------------------------------------------------------- #
++
++# Every key the generator reads from a deploy repo's architecture.yaml, by where it sits.
++JUDGMENT_KEYS = {
++    "the top level": {
++        "introduced",
++        "upstream",
++        "images",
++        "cnpg",
++        "products",
++        "exposures",
++        "webUi",
++        "mcpClients",
++    },
++    "upstream": set(ga.UPSTREAM_KEYS),
++    "an image entry": {"product", "kind", "realizes", "served_by", "upstream", "containers"},
++    "an upstream wire": {"env", "providers", "entry"},
++    "a container's entry": ga.SCOPED_KEYS,
++    "cnpg": ga.CNPG_KINDS,
++    "a cnpg entry": {"product", "realizes", "served_by"},
++    "a products entry": {"id", "label", "summary", "homepage", "logo", "introduced"},
++    "an mcpClients entry": {"configMap", "key", "hostField", "providers"},
++}
++
++
++def _help():
++    """What `gen-architecture --help` prints: the script run by path, as the image runs it."""
++    proc = subprocess.run(
++        [sys.executable, str(ROOT / "image" / "gen_architecture.py"), "--help"],
++        capture_output=True,
++        text=True,
++        check=True,
++    )
++    return proc.stdout
++
++
++def _sketch(text):
++    """The judgment-layer sketch --help prints: the indented block opening `introduced:`."""
++    lines = text.splitlines()
++    start = next(i for i, line in enumerate(lines) if line.startswith("    introduced:"))
++    block = []
++    for line in lines[start:]:
++        if not line.startswith("    "):
++            break
++        block.append(line)
++    return yaml.safe_load(textwrap.dedent("\n".join(block)))
++
++
++class HelpContractTests(unittest.TestCase):
++    def test_help_prints_the_module_docstring_whole(self):
++        """One source: the contract --help prints is the one the module documents."""
++        self.assertIn(ga.__doc__.strip(), _help())
++
++    def test_help_names_every_key_the_judgment_layer_takes(self):
++        text = _help()
++        for where, keys in JUDGMENT_KEYS.items():
++            for key in sorted(keys):
++                with self.subTest(where=where, key=key):
++                    self.assertRegex(text, rf"`{re.escape(key)}[`:]")
++
++    def test_the_sketch_is_a_judgment_layer_the_generator_accepts(self):
++        sketch = _sketch(_help())
++
++        self.assertEqual(set(sketch), JUDGMENT_KEYS["the top level"])
++        self.assertEqual(ga.upstream_of(sketch)["chart"], "headlamp")
++        scoped = {
++            key
++            for entry in sketch["images"].values()
++            for scope in ga.container_scopes(entry).values()
++            for key in scope
++        }
++        self.assertEqual(scoped, ga.SCOPED_KEYS)
++        served_by = [
++            ref
++            for entry in sketch["images"].values()
++            if isinstance(entry, dict)
++            for ref in entry.get("served_by") or []
++        ]
++        self.assertNotEqual(served_by, [])
++        for ref in served_by:
++            with self.subTest(served_by=ref):
++                self.assertIn(",", ref, "served_by is drawn unresolved: a composite id")

@@ -1,7 +1,8 @@
 # Close-out — slice 026 aac_tools_generator_and_producers
 
 <!-- Run header: stamped by the driver at close-out from state.json. Agents never edit it. -->
-Run: <not yet stamped>
+Run: 2026-09-29 20:27 → 2026-09-30 11:20 · 18 phases · 3 bail-outs (3 operator questions) · 1
+test round · doc phase done · $109.27 (planner 20 %, research 10 %, rework 3 %)
 
 <!-- Entries are written by `close_out.py append` (the tool named in your dispatch), never by
      hand: the next id under the section's letter (A · N · B · Q · S), the body, then three bold

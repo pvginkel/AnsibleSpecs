@@ -1,0 +1,2 @@
+root: python3 -m unittest discover -s support/argo-migrate    [  OK  ]
+root: python3 -m unittest discover -s support/recommend-resources    [  OK  ]

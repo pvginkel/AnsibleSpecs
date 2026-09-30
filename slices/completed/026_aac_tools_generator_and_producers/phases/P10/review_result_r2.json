@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "Round 1's F1 is resolved: the four ScanToPdf and MyDownloads carriers are now in P12a–b behind the prd health gate, with no batch pinning a deploy repo twice. Their downstream triggers, the auto-sync and the durations were re-verified against Jenkins, GitHub and Argo CD. The Ansible diff is unchanged and correct. One advisory finding: close-out N4 says scantopdf-prd and media-prd restart once, but two carriers pin each of them.",
+ "details": "code_review_r2.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Close-out N4 says scantopdf-prd and media-prd restart once during P12a–b; two carriers per deploy repo, in separate batches, make each restart twice."}
+ ]}

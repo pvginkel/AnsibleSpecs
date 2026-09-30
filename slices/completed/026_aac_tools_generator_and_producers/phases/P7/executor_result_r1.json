@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "PrometheusDeploy's judgment layer declares svc:telegram-bot-api (composite id) serving the alertmanager image (e761059 on phase/026-P7, unpushed; push rides P9c). The published generator's prd output gains exactly one Serving edge Telegram Bot API -> Alertmanager, and kc project test is green.", "refuted": []}

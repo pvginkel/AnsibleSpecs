@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "All three P12c carriers (ElectronicsInventory 55fb7b7, ZigbeeControl e6c9f76, IoTSupport dc4260e+c38bd6f) are migrated onto the toolchain's arch-validate, with lint-only copies deleted and ElectronicsInventory's moved lint gates run green here. Their AaC consoles ran arch-validate in the aac-tools container on the pushed heads, and pins rolled healthy. Ruling D6 is met. One advisory: close-out B2 is left live with a now-false Consequence line.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Close-out B2 is noted resolved but not struck; its Consequence still says the sweep stops at IoTSupport (close-out S14)"}
+ ]}

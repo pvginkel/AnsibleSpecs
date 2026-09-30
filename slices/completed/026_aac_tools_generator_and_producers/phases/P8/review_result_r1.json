@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "Architecture's producer guidance, seed skill, USAGE.md, README and kit doc point at arch-validate in the aac-tools toolchain with no copy instruction left; the update agent reads the contract from cexec aac-tools gen-architecture --help (witnessed working from the central update's /tmp clone path) and the environment declares aac-tools. One advisory finding: the sidecar's --help can lag the generator Jenkins builds with.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "update-architecture.md:49-50 says the sidecar's --help is the contract the deploy repos build with, but the sidecar is pinned at pod start while Jenkins pulls aac-tools:latest every build"}]}

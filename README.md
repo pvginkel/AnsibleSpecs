@@ -29,7 +29,6 @@ slice's own documents hold the detail.
 
 Triaged 2026-09-24 from the ANS intake queue (the record: `handovers/triage_2026-09-24.md` at `1b6cd36`):
 
-- **[026](slices/backlog/026_aac_tools_generator_and_producers/slice.md)** — aac-tools and the producers: generator fixes (in-house service per container, Argo CD's capability and redis edges, the app-name equality), the annotation contract in `gen-architecture --help`, Alertmanager's Telegram edge, and every copied `arch-validate.py` onto the toolchain (minor).
 
 Triaged 2026-09-26 from the DHCP outage follow-up (the record: `handovers/triage_2026-09-26.md` at `8ecf048`):
 
@@ -93,6 +92,7 @@ Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handov
 | [030 retire-modern-app-dev-images](slices/completed/030_retire_modern_app_dev_images/plan.md) | — | — | Retire modern-app-dev and modern-app-dev-playwright: their build and validation pipelines move to other images, then both images go (improvement). |
 | [032 track-build-follows-argocd-sync](slices/completed/032_track_build_follows_argocd_sync/plan.md) | — | — | track_build.py follows a green build into its Argo CD sync: the pin commit (and Promote-PRD's prd fast-forward) tracked to a synced, healthy app by default for every Argo-deployed repo, git lookups from the environment's own clone only, and a 5-minute default `--appear-timeout` (feature). |
 | [031 image-pins-by-tag-and-tracking-label](slices/completed/031_image_pins_by_tag_and_tracking_label/plan.md) | — | — | Image pins by tag, and the tracking-tag label decides what registry-cleanup may delete: per-build tags for every matrix image and no digest pins, the label instead of the tag-name pattern, and the suspended registry-cleanup job (major). |
+| [026 aac-tools-generator-and-producers](slices/completed/026_aac_tools_generator_and_producers/plan.md) | — | — | aac-tools and the producers: generator fixes (in-house service per container, Argo CD's capability and redis edges, the app-name equality), the annotation contract in `gen-architecture --help`, Alertmanager's Telegram edge, and every copied `arch-validate.py` onto the toolchain (minor). |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

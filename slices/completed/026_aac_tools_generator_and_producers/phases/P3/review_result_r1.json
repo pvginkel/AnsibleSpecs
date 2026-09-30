@@ -1,0 +1,11 @@
+{"outcome": "signoff",
+ "summary": "`gen-architecture --help` prints the module docstring whole, and the docstring's judgment-layer contract matches every key the generator reads, served_by, container scoping and P1's pick included. The old-vs-new comparison reproduces: 44 of 49 stages byte-identical, 5 with P1's intended changes, and KubeCoderDeploy's prd branch, which the comparison skipped, is identical too. Three advisory findings.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "coverage-gap",
+   "summary": "HelpContractTests' key check does not look per section: removing the image entry's served_by definition leaves all 3 tests green"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "products paragraph says fields are copied as written, but stereotype and lifecycle are overwritten (lifecycle forced to active)"},
+  {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "comparison ran KubeCoderDeploy's main, not the prd branch its architecture job builds; the review regenerated prd and it is identical"}
+ ]}

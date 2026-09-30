@@ -1,0 +1,23 @@
+{
+  "outcome": "issues",
+  "summary": "The routed-container pick works: on a mapped scratch KubeCoderDeploy, kubecoder.home references svc:kubecoder-controller-api and nothing is minted, and the 26-repo comparison holds. One recorded behaviour change is untested: an exposures: entry naming a missing container now mints and reports a gap, and a mutation that restores the old outcome survives the suite.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "coverage-gap",
+      "summary": "No test covers an exposures: entry naming a missing container (now mints + gap); mutations restoring the pod pick or dropping the gap survive"
+    },
+    {
+      "id": "F2",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "functional",
+      "anchor": "none",
+      "summary": "Front-door fallback still picks the pod's in-house service (jenkins-mcp, trello-mcp x2 -> svc:mcp-filter); an executor-settled reading of R1 for the operator to confirm"
+    }
+  ]
+}

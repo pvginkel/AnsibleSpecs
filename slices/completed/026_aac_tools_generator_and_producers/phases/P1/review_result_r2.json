@@ -1,0 +1,6 @@
+{
+  "outcome": "signoff",
+  "summary": "Round 1's F1 is resolved: the new test for an exposures: entry naming a missing container fails under M4 (pod pick restored), M5 (gap disabled) and M6 (backers not realizing the minted service), and passes on 131e2b9. The fix touches no generator code; no new findings.",
+  "details": "code_review_r2.md",
+  "findings": []
+}
