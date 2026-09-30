@@ -2,10 +2,10 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — Inventory of pipeline types",
-      "description": "Inventory of pipeline types: every kind of pipeline the estate runs, and for each topic the variants in use today — built from the jobs of report.md Appendix A and the clones. Every Appendix A job belongs to exactly one type, except the jobs of the five ModernAppTemplate repos (DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl, FieldnotesApp), which are listed as skipped, with that reason (ruling F2). The inventory sits where the migration slice can work from it.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R1 \u2014 Inventory of pipeline types",
+      "description": "Inventory of pipeline types: every kind of pipeline the estate runs, and for each topic the variants in use today \u2014 built from the jobs of report.md Appendix A and the clones. Every Appendix A job belongs to exactly one type, except the jobs of the five ModernAppTemplate repos (DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl, FieldnotesApp), which are listed as skipped, with that reason (ruling F2). The inventory sits where the migration slice can work from it.",
+      "verdict": "pass",
+      "rationale": "Inventory at reviews/2026-09-jenkinsfile-review/inventory.md (587 lines): 124-job scope, the ten jobs of the five ModernAppTemplate repos skipped with ruling F2 (line 13, 18); types index on the site repeats it (docs/pages/types/index.md:28).",
       "evidence": [
         "/work/scratch/jenkins-config/files.tsv: 124 rows, one per Appendix A job (2026-09-30)",
         "/work/AnsibleSpecs/reviews/2026-09-jenkinsfile-review/report.md:1418, :1423, :1426, :1448, :1486, :1487, :1489, :1490, :1516, :1531 (the five repos' ten Appendix A rows)"
@@ -13,78 +13,78 @@
     },
     {
       "id": "V02",
-      "area": "R2 — Rulings page",
-      "description": "Rulings page: one proposed rule plus an example per topic — stage naming, stage granularity, checkout, pod definition, secrets and `withVault` scope, timeouts, `post`/`notify`, file naming and headers, and when code goes into the library — in the slice folder. \"Stage granularity and the library rule are judgment calls, so Claude doesn't settle them alone.\" The operator rules before the guide is written: the rulings stand in plan.md's Requirements / rulings before the first guide page is committed.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R2 \u2014 Rulings page",
+      "description": "Rulings page: one proposed rule plus an example per topic \u2014 stage naming, stage granularity, checkout, pod definition, secrets and `withVault` scope, timeouts, `post`/`notify`, file naming and headers, and when code goes into the library \u2014 in the slice folder. \"Stage granularity and the library rule are judgment calls, so Claude doesn't settle them alone.\" The operator rules before the guide is written: the rulings stand in plan.md's Requirements / rulings before the first guide page is committed.",
+      "verdict": "pass",
+      "rationale": "rulings.md in the slice folder; P4 r1-r3 reviews and consult_2 confirmed the rulings stand in plan.md before the first guide page commit (P5 paused for them).",
       "evidence": []
     },
     {
       "id": "V03",
-      "area": "R3 — Stage labels",
+      "area": "R3 \u2014 Stage labels",
       "description": "A dedicated section on stage labels (\"Please have a dedicated section for labeling stages. I find these very messy and all over the place.\"). It sits next to the section on stage granularity, not inside it.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "docs/pages/guide/stage-labels.md is its own page beside stage-granularity.md, both in the guide nav; served from https://pipelines.home/docs/.",
       "evidence": []
     },
     {
       "id": "V04",
-      "area": "R4 — The cookbook",
-      "description": "The cookbook — the style guide itself, strict (\"I want it to be followed strictly\"), with examples, covering every pipeline type: rules written as MUSTs with the reason for each, one complete reference Jenkinsfile per pipeline type of the inventory, a short recipe per topic, and declarative only (J08 is \"migrate all\").",
-      "verdict": null,
-      "rationale": "",
+      "area": "R4 \u2014 The cookbook",
+      "description": "The cookbook \u2014 the style guide itself, strict (\"I want it to be followed strictly\"), with examples, covering every pipeline type: rules written as MUSTs with the reason for each, one complete reference Jenkinsfile per pipeline type of the inventory, a short recipe per topic, and declarative only (J08 is \"migrate all\").",
+      "verdict": "pass",
+      "rationale": "Guide: 12 topic pages with MUST rules; 13 type pages + 14 complete example Jenkinsfiles; all declarative. Served live at pipelines.home/docs/ (llms-full.txt 196 KB).",
       "evidence": []
     },
     {
       "id": "V05",
-      "area": "R4 — Linter",
+      "area": "R4 \u2014 Linter",
       "description": "\"Every example passes the declarative linter\": each example, an excerpt inside the complete file it is cut from, passes the controller's full check at `/pipeline-model-converter/validate`, and the published example is byte for byte the one checked.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "lint_examples.py (docs lint GREEN in sweep r1) sends each example minus marker lines to /pipeline-model-converter/validate. Test phase: every non-blank line of all 14 examples found verbatim in the served llms-full.txt, so published text is what was linted.",
       "evidence": []
     },
     {
       "id": "V06",
-      "area": "R4 — The rulings the guide carries",
-      "description": "The guide carries exactly the rulings of review plan §4 and the operator's rulings from the rulings page: J24 (`checkout scm` for the job's own repo), J23 (the one load line, floating on `main`, no pin), J01 (the job-properties block and its placement, in declarative `options {}`/`triggers {}`; retention is the global build discarder, so files declare none), J08 (declarative), J11/J12 (the standard timeout, and only the exceptions the rulings page settles, ruling F5; the iac files' 4-hour backstop with a `post { aborted }` notify), J17 (`withVault` scope), J19 (the iac dev-stage duplication is deliberate: those files stay self-contained), the §6a result (what a new repo needs for its push hook), non-secret settings inline rather than as global env vars (Q6; `HA_URL` is the ruled exception, and endpoints never go into OpenBao), `notify` use, `Jenkinsfile.*` naming, and header comments.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R4 \u2014 The rulings the guide carries",
+      "description": "The guide carries exactly the rulings of review plan \u00a74 and the operator's rulings from the rulings page: J24 (`checkout scm` for the job's own repo), J23 (the one load line, floating on `main`, no pin), J01 (the job-properties block and its placement, in declarative `options {}`/`triggers {}`; retention is the global build discarder, so files declare none), J08 (declarative), J11/J12 (the standard timeout, and only the exceptions the rulings page settles, ruling F5; the iac files' 4-hour backstop with a `post { aborted }` notify), J17 (`withVault` scope), J19 (the iac dev-stage duplication is deliberate: those files stay self-contained), the \u00a76a result (what a new repo needs for its push hook), non-secret settings inline rather than as global env vars (Q6; `HA_URL` is the ruled exception, and endpoints never go into OpenBao), `notify` use, `Jenkinsfile.*` naming, and header comments.",
+      "verdict": "pass",
+      "rationale": "P5 r1/r2 code reviews and consult_2 checked each ruling (J24,J23,J01,J08,J11/12,J17,J19,\u00a76a,Q6,notify,naming,headers) against the guide pages; sampled pages exist (checkout, job-properties, timeouts, secrets, post-and-notify, file-layout, new-repo, library). Content judged on reviews + page read, not re-derived line by line.",
       "evidence": [
         "/work/AnsibleSpecs/reviews/2026-09-jenkinsfile-review/report.md:564-568 (J11's 90- and 180-minute values are exception candidates)"
       ]
     },
     {
       "id": "V07",
-      "area": "R4 — Stage generators and computed triggers",
+      "area": "R4 \u2014 Stage generators and computed triggers",
       "description": "The guide has a recipe for each pipeline that generates stages or computes its triggers: `DockerImages/Jenkinsfile` (a stage per image variant), `Intercom/Jenkinsfile` (a stage pair per hardware version) and `Architecture/Jenkinsfile` (triggers computed from YAML, which `triggers {}` cannot express).",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "types/image-matrix, types/firmware (Intercom/firmware stage pairs) and types/architecture-collector (computed triggers) with examples image-matrix.groovy, firmware.groovy, architecture-collector.groovy, all linted.",
       "evidence": []
     },
     {
       "id": "V08",
-      "area": "R4 — The pod helper (033 close-out B3)",
-      "description": "The guide describes the pod helper as it is — the global var `podYaml`, called as `podYaml(templates: [...], images: [...])` inside `agent { kubernetes { ... } }` — and states the map form of an `images:` entry with an explicit container `name:`.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R4 \u2014 The pod helper (033 close-out B3)",
+      "description": "The guide describes the pod helper as it is \u2014 the global var `podYaml`, called as `podYaml(templates: [...], images: [...])` inside `agent { kubernetes { ... } }` \u2014 and states the map form of an `images:` entry with an explicit container `name:`.",
+      "verdict": "pass",
+      "rationale": "guide/pod.md and reference/podYaml.md (vars/podYaml.md) describe podYaml(templates:, images:) in agent { kubernetes }, map form with name:; PodYamlTest extended (7 tests).",
       "evidence": [
         "/work/JenkinsPipelineUtils/vars/podYaml.groovy exists as its own var at d9ff168"
       ]
     },
     {
       "id": "V09",
-      "area": "R5 — When code goes into the library",
-      "description": "When code goes into the library (\"And when do we put something into the utility library.\"): the guide gives a decision test, with examples from the estate — J14/J15/J16 are accepted helpers, and J19 was ruled against (\"Keep the duplication; the style guide says it is deliberate\").",
-      "verdict": null,
-      "rationale": "",
+      "area": "R5 \u2014 When code goes into the library",
+      "description": "When code goes into the library (\"And when do we put something into the utility library.\"): the guide gives a decision test, with examples from the estate \u2014 J14/J15/J16 are accepted helpers, and J19 was ruled against (\"Keep the duplication; the style guide says it is deliberate\").",
+      "verdict": "pass",
+      "rationale": "guide/library.md: decision test with J14/J15/J16 accepted and J19 ruled against (P5 review).",
       "evidence": []
     },
     {
       "id": "V10",
-      "area": "R6 — Docs site source and build",
+      "area": "R6 \u2014 Docs site source and build",
       "description": "Docs site: source in `JenkinsPipelineUtils/docs/`, built with MkDocs + Material (ruling D2) on KubeCoder's manual as the basis, \"including its LLM support\": `llms.txt`, `llms-full.txt` and a per-page `.md` copy for every page, plus the validation settings under which the build fails `--strict` on an orphaned page, a missing target, an absolute link or a broken anchor. The strict build runs in the library's `kc project test`.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "docs/mkdocs.yml: Material, llmstxt plugin (llms.txt, llms-full.txt, per-page .md), validation warn-keys under --strict; check_site.py in kc project test (docs test GREEN in sweep). Served llms.txt 200 and llms-full.txt 200.",
       "evidence": [
         "/work/scratch/KubeCoder/manual/mkdocs.yml:43-57 (llmstxt plugin, one \"*.md\" sections pattern)",
         "/work/scratch/KubeCoder/manual/mkdocs.yml:59-72 (validation settings)",
@@ -93,10 +93,10 @@
     },
     {
       "id": "V11",
-      "area": "R6 — Hostname and index page",
+      "area": "R6 \u2014 Hostname and index page",
       "description": "\"Hostname: pipelines.home/docs, with an index page at /.\" The site image serves a small landing page at `/` that links to the docs, and the docs under `/docs/`. The name is LAN-only, published by the Service annotations with a step-ca certificate, and the image's nginx config passes `nginx -t` at build time.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Live: https://pipelines.home/ serves the landing page (200, 1295 B), /docs/ 200, TLS trusted from this pod (step-ca); nginx -t at image build witnessed by P9. LAN-only via chart values (P8).",
       "evidence": [
         "/work/scratch/ChartsDeploy/chart/templates/charts-service.yaml:9-12 (server-name, is-public, enable-ssl annotations)",
         "/work/scratch/ChartsDeploy/chart/values.yaml:5 (isPublic: no)"
@@ -104,31 +104,31 @@
     },
     {
       "id": "V12",
-      "area": "R6 / D6 — The site is live",
+      "area": "R6 / D6 \u2014 The site is live",
       "description": "Once the ArgoCDDeploy push lands, Argo syncs the `pipelines` app on its own, with no Argo action by anyone (ruling D6). `https://pipelines.home/` then answers with the landing page, and `https://pipelines.home/docs/` and its `llms.txt` answer with the guide, when fetched from a KubeCoder environment. The site is served from the image tag that the latest site build pinned in PipelinesDeploy.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Pushed ArgoCDDeploy a854420 with no Argo action by anyone; within ~1 minute https://pipelines.home/, /docs/, /docs/llms.txt all 200. Served files last-modified 19:52:11 = site build IaC/JenkinsPipelineUtils #1, whose pin 302b1a0 is on PipelinesDeploy main. Could not read the Application object (no kubectl in this container), so the served site is the evidence.",
       "evidence": [
         "/work/ArgoCDDeploy/releases/values.yaml:10-11 (autoSync defaults to true)"
       ]
     },
     {
       "id": "V13",
-      "area": "R6 / D1 — The site build",
+      "area": "R6 / D1 \u2014 The site build",
       "description": "The site is served as its own small app, the way charts.home is served (ruling D1). The library's Jenkinsfile follows the guide, and a job created through the API runs it. Its first build from the pushed library is green: it pushes the site image to `registry:5000` and writes the image pin into PipelinesDeploy's prd values. The job builds and publishes the site only; slice 033's ruling that the library's tests get no Jenkins job stands.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Library push 973257a started IaC/JenkinsPipelineUtils #1 by the hook: SUCCESS, pushed image, pin commit 302b1a0 'ci: image pins from IaC/JenkinsPipelineUtils #1' on PipelinesDeploy main. Job config saved at xml/IaC/JenkinsPipelineUtils.xml. Library has no tests job.",
       "evidence": [
         "/work/Charts/Jenkinsfile:31-52 (kaniko2 image, writeVersionPins into ChartsDeploy)",
-        "/work/JenkinsPipelineUtils/.kubecoder/project.yaml:3 (\"No Jenkins job builds this repo.\" — true before this slice)"
+        "/work/JenkinsPipelineUtils/.kubecoder/project.yaml:3 (\"No Jenkins job builds this repo.\" \u2014 true before this slice)"
       ]
     },
     {
       "id": "V14",
-      "area": "R6 / D1 / D6 — Deploy repo and registrations",
+      "area": "R6 / D1 / D6 \u2014 Deploy repo and registrations",
       "description": "PipelinesDeploy is shaped like ChartsDeploy, and its `kc project test` is green, with the placeholder manifest replaced by the real one. `AaC/PipelinesDeploy`'s first build is green and archives the producer's artifact. ArgoCDDeploy's registry carries the app's prd stage, auto-synced from the start, the way charts is registered (ruling D6). The producer is registered in Architecture's `pipeline-producers.yaml`, and that commit reaches `main` only after the AaC job's first green build.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "PipelinesDeploy lint/test GREEN (sweep); AaC/PipelinesDeploy #1 SUCCESS with artifact pipelines-deploy.yaml, #2 SUCCESS; Architecture registration 574b7fe pushed only after that green build; ArgoCDDeploy a854420 registers pipelines with no autoSync key and is live.",
       "evidence": [
         "/work/ArgoCDDeploy/releases/values.yaml:51-54 (charts' registry entry, `prd: {}`)",
         "/work/Architecture/pipeline-producers.yaml:222-224 (charts-deploy producer entry)",
@@ -137,20 +137,20 @@
     },
     {
       "id": "V15",
-      "area": "R7 — Library reference pages",
+      "area": "R7 \u2014 Library reference pages",
       "description": "J22's docs half: library reference pages on the site, kept next to `vars/`, including the pod helper slice 033 added. There is one hand-written page for every global var, and a library test in `kc project test` fails when a var has no page. That failure has been witnessed, not assumed.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "vars/*.md: 8 pages for the 8 vars; check_site.py fails on a missing page, witnessed by P3 (recorded in its done-record), and runs in kc project test (docs test GREEN).",
       "evidence": [
         "/work/JenkinsPipelineUtils/vars/ at d9ff168: cicd, containerTemplates, gitUtils, helmCharts, kubectl, notify, podYaml, utils (.groovy)"
       ]
     },
     {
       "id": "V16",
-      "area": "R8 — The skill",
-      "description": "The skill (\"Instead I want a skill.\") is in KubeCoderConfig's `kubecoder` plugin (ruling D3). \"The skill is itself still a reference to the online docs\": it carries the guide's hard rules and links to the site. It follows that repo's conventions — the plugin `version` is bumped in the same commit and the Markdown passes the repo's Prettier check, run through `modern-app` (ruling D5) — and it is pushed to KubeCoderConfig's main.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R8 \u2014 The skill",
+      "description": "The skill (\"Instead I want a skill.\") is in KubeCoderConfig's `kubecoder` plugin (ruling D3). \"The skill is itself still a reference to the online docs\": it carries the guide's hard rules and links to the site. It follows that repo's conventions \u2014 the plugin `version` is bumped in the same commit and the Markdown passes the repo's Prettier check, run through `modern-app` (ruling D5) \u2014 and it is pushed to KubeCoderConfig's main.",
+      "verdict": "pass",
+      "rationale": "jenkins-pipelines skill in KubeCoderConfig kubecoder plugin, version 0.8.4 -> 0.9.0 in same commit, Prettier run through modern-app (P7 gate_r2.log); pushed 45612e9 to origin/main by the test phase. Root lint RED is accepted by ruling D5.",
       "evidence": [
         "/work/scratch/KubeCoderConfig/CLAUDE.md:19 (every change under kubecoder/ bumps the plugin version)",
         "/work/scratch/KubeCoderConfig/kubecoder/.claude-plugin/plugin.json:4 (version 0.8.4 before this slice)"
@@ -158,34 +158,34 @@
     },
     {
       "id": "V17",
-      "area": "R9 — §6a webhook test",
-      "description": "§6a — the webhook test (\"I want to test this.\"): review plan §6a's steps ran on the throwaway private repo `pvginkel/jenkins-trigger-test`, with a job created through the API. The result — what a new repo needs for its push hook — is recorded in `report.md` and is the guide's new-repo recipe. The throwaway job is deleted, and deleting the throwaway repo is left to the operator as an action in the close-out report (D4).",
-      "verdict": null,
-      "rationale": "",
+      "area": "R9 \u2014 \u00a76a webhook test",
+      "description": "\u00a76a \u2014 the webhook test (\"I want to test this.\"): review plan \u00a76a's steps ran on the throwaway private repo `pvginkel/jenkins-trigger-test`, with a job created through the API. The result \u2014 what a new repo needs for its push hook \u2014 is recorded in `report.md` and is the guide's new-repo recipe. The throwaway job is deleted, and deleting the throwaway repo is left to the operator as an action in the close-out report (D4).",
+      "verdict": "pass",
+      "rationale": "report.md Appendix A R1 holds the result (lines ~1379-1410); guide/new-repo.md is the recipe; throwaway job deleted (xml-deleted/jenkins-trigger-test.xml saved); repo deletion is close-out action A1.",
       "evidence": []
     },
     {
       "id": "V18",
       "area": "Standing rules",
       "description": "Every Jenkins job this slice creates or deletes goes through the API, with its `config.xml` saved under `/work/scratch/jenkins-config/xml/` (a deleted job's under `xml-deleted/`). Every Jenkinsfile the slice writes passes the controller's full declarative linter check.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "xml/ holds IaC/JenkinsPipelineUtils.xml and AaC/PipelinesDeploy.xml; xml-deleted/ holds jenkins-trigger-test. The two new Jenkinsfiles and all examples pass the controller linter (docs lint GREEN).",
       "evidence": []
     },
     {
       "id": "V19",
       "area": "Scope",
-      "description": "No existing pipeline is converted: no Jenkinsfile of an existing job changes — `KubeCoder/Jenkinsfile` and ModernAppTemplate's template are untouched — and no library var changes what it does.",
-      "verdict": null,
-      "rationale": "",
+      "description": "No existing pipeline is converted: no Jenkinsfile of an existing job changes \u2014 `KubeCoder/Jenkinsfile` and ModernAppTemplate's template are untouched \u2014 and no library var changes what it does.",
+      "verdict": "pass",
+      "rationale": "Library diff d9ff168..HEAD touches only docs/, vars/*.md, the library's own new Jenkinsfile and dotfiles, PodYamlTest and vars/podYaml.groovy. No existing job's Jenkinsfile and no KubeCoder/ModernAppTemplate file changed. podYaml gained the `aac-tools` template (ruling P4 a1) for PipelinesDeploy's Jenkinsfile.architecture; existing templates behave as before.",
       "evidence": []
     },
     {
       "id": "V20",
       "area": "Coverage preservation",
       "description": "No library test coverage is lost: every test class that ran in the library's `kc project test` before this slice still runs and passes.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "All six classes (LibraryCompileTest, TrackingTagTest, ChangedFilesTest, PodYamlTest, VersionPinsTest, AlertEscapeTest) still present; PodYamlTest only grew; root test GREEN in the sweep.",
       "evidence": [
         "/work/JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/: LibraryCompileTest, TrackingTagTest, ChangedFilesTest, PodYamlTest, VersionPinsTest, AlertEscapeTest at d9ff168"
       ]
