@@ -692,7 +692,7 @@ Later phases:
   the UI's `DisableConcurrentBuildsJobProperty` beside the step's triggers, and its
   `JobPropertyTrackerAction` lists only `PipelineTriggersJobProperty` (workflow-multibranch 842).
 
-### P7 — The skill: the guide's hard rules in every session, pointing at the site
+### P7 — The skill: the guide's hard rules in every session, pointing at the site ✅ DONE 2026-09-30
 
 Target: github:pvginkel/KubeCoderConfig
 
