@@ -3,11 +3,12 @@
     {
       "id": "V01",
       "area": "R1 — Inventory of pipeline types",
-      "description": "Inventory of pipeline types: every kind of pipeline the estate runs, and for each topic the variants in use today — built from the jobs of report.md Appendix A and the clones. Every Appendix A job belongs to exactly one type, and the inventory sits where the migration slice can work from it.",
+      "description": "Inventory of pipeline types: every kind of pipeline the estate runs, and for each topic the variants in use today — built from the jobs of report.md Appendix A and the clones. Every Appendix A job belongs to exactly one type, except the jobs of the five ModernAppTemplate repos (DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl, FieldnotesApp), which are listed as skipped, with that reason (ruling F2). The inventory sits where the migration slice can work from it.",
       "verdict": null,
       "rationale": "",
       "evidence": [
-        "/work/scratch/jenkins-config/files.tsv: 124 rows, one per Appendix A job (2026-09-30)"
+        "/work/scratch/jenkins-config/files.tsv: 124 rows, one per Appendix A job (2026-09-30)",
+        "/work/AnsibleSpecs/reviews/2026-09-jenkinsfile-review/report.md:1418, :1423, :1426, :1448, :1486, :1487, :1489, :1490, :1516, :1531 (the five repos' ten Appendix A rows)"
       ]
     },
     {
@@ -45,15 +46,17 @@
     {
       "id": "V06",
       "area": "R4 — The rulings the guide carries",
-      "description": "The guide carries exactly the rulings of review plan §4 and the operator's rulings from the rulings page: J24 (`checkout scm` for the job's own repo), J23 (the one load line, floating on `main`, no pin), J01 (the job-properties block and its placement, in declarative `options {}`/`triggers {}`; retention is the global build discarder, so files declare none), J08 (declarative), J11/J12 (the standard timeout and its ruled exceptions; the iac files' 4-hour backstop with a `post { aborted }` notify), J17 (`withVault` scope), J19 (the iac dev-stage duplication is deliberate: those files stay self-contained), the §6a result (what a new repo needs for its push hook), non-secret settings inline rather than as global env vars (Q6; `HA_URL` is the ruled exception, and endpoints never go into OpenBao), `notify` use, `Jenkinsfile.*` naming, and header comments.",
+      "description": "The guide carries exactly the rulings of review plan §4 and the operator's rulings from the rulings page: J24 (`checkout scm` for the job's own repo), J23 (the one load line, floating on `main`, no pin), J01 (the job-properties block and its placement, in declarative `options {}`/`triggers {}`; retention is the global build discarder, so files declare none), J08 (declarative), J11/J12 (the standard timeout, and only the exceptions the rulings page settles, ruling F5; the iac files' 4-hour backstop with a `post { aborted }` notify), J17 (`withVault` scope), J19 (the iac dev-stage duplication is deliberate: those files stay self-contained), the §6a result (what a new repo needs for its push hook), non-secret settings inline rather than as global env vars (Q6; `HA_URL` is the ruled exception, and endpoints never go into OpenBao), `notify` use, `Jenkinsfile.*` naming, and header comments.",
       "verdict": null,
       "rationale": "",
-      "evidence": []
+      "evidence": [
+        "/work/AnsibleSpecs/reviews/2026-09-jenkinsfile-review/report.md:564-568 (J11's 90- and 180-minute values are exception candidates)"
+      ]
     },
     {
       "id": "V07",
       "area": "R4 — Stage generators and computed triggers",
-      "description": "The guide has a recipe for each pipeline that generates stages or computes its triggers: `DockerImages/Jenkinsfile` (a stage per image variant), `Intercom/Jenkinsfile` (a stage pair per hardware version) and `Architecture/Jenkinsfile` (triggers computed from YAML, which `triggers {}` cannot express). The monorepo validation type's reference file describes what ModernAppTemplate's root template renders.",
+      "description": "The guide has a recipe for each pipeline that generates stages or computes its triggers: `DockerImages/Jenkinsfile` (a stage per image variant), `Intercom/Jenkinsfile` (a stage pair per hardware version) and `Architecture/Jenkinsfile` (triggers computed from YAML, which `triggers {}` cannot express).",
       "verdict": null,
       "rationale": "",
       "evidence": []

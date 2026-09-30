@@ -71,6 +71,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P4",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "AnsibleSpecs Jenkins review report.md still says the five ModernAppTemplate repos are edited in place (Q11), against the skip ruled in slice 034's plan review",
+      "body": [
+        "Slice 034's plan review ruling F2 skips the five ModernAppTemplate repos completely: DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and FieldnotesApp. Operator: \"Please completely skip the moderapptemplate repos. I'll get them fixed when we do the next sync.\" The review's work plan (reviews/2026-09-jenkinsfile-review/plan.md) records this and says it replaces Q11's \"edited in place\". report.md does not: its migration section says the five template-generated files \"are edited in place (Q11 ruling)\" (report.md:1392-1393), and the Appendix A rows of the five root jobs say \"(Q11: edit in place)\" (report.md:1487, :1489, :1490, :1516, :1531). Slice 034's plan does not edit those lines. Its P1 touches only the R1 note, and its P4 inventory lists the ten jobs of the five repos as skipped."
+      ],
+      "consequence": "A session that plans the migration from report.md alone reads that the five template-rendered Jenkinsfiles get converted in place, against the operator's ruling. Only the review plan and slice 034's inventory say they are skipped.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r3, plan.md Ruling F2 and reviews/2026-09-jenkinsfile-review/report.md:1392-1393",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

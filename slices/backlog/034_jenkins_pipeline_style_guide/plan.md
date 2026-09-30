@@ -209,14 +209,16 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
   recipe (P5) and every phase that gives a repo a Jenkins job (P8, P9).
 - **Hosting comes last (D1), after the guide and the skill.** The deploy repo (P8) comes before
   the library's build job (P9), which pins into it. The two registrations (P10, P11) follow.
-- **The test phase goes live in this order, each step needing the one before:**
+- **The test phase goes live in this order, each step needing the one before.** Every push in
+  it is authorized: PipelinesDeploy and ArgoCDDeploy by D6, JenkinsPipelineUtils and
+  Architecture by F1, and KubeCoderConfig by D3.
   1. Push PipelinesDeploy and JenkinsPipelineUtils.
   2. Run the site-build job's first build. It writes the first image pin into PipelinesDeploy
      and pushes it from Jenkins, so the local clone is behind origin from then on.
   3. Get a first green build of `AaC/PipelinesDeploy`.
   4. Then push Architecture and ArgoCDDeploy:
      - A push to Architecture's main also rebuilds the architecture viewer and redeploys it in
-       prd. That repo's standing rule is to push as you go (Architecture `CLAUDE.md:40-42`).
+       prd (Architecture `CLAUDE.md:40-42`). F1 accepts that redeploy.
      - The ArgoCDDeploy push creates the Application, and Argo syncs it on its own (D6); the
        site-live check follows.
 
@@ -242,9 +244,11 @@ over as the guide's new-repo recipe.
 - **If the hook does not install,** the record says what does install it and who can do it.
   The pod's token may be unable to create hooks: the argocd runbook's § Webhooks says so for
   deploy repos. Confirm that rather than assume it. The record also says how the result relates
-  to the checkbox sequence the operator reported in the R1 note. The GitHub plugin's hook
-  management setting is in the controller's global config
-  (`/work/scratch/jenkins-config/global-config.xml`).
+  to the checkbox sequence the operator reported in the R1 note.
+- **The GitHub plugin's hook management setting** is read from the controller: it is the GitHub
+  server entry's "Manage hooks" box in the system configuration (`/manage/configure`, as
+  `admin`). The `jenkins-config` dump does not carry it (F3). On 2026-09-30 the box was on, with
+  hook URL `https://jenkins.webathome.org/github-webhook/`.
 - **Authority.** Every write here is pre-authorized (D4). The standing rule still applies: save
   the job's `config.xml` before deleting it (`xml-deleted/`). The run cannot delete the GitHub
   repo (D4), so enter an `action` in the close-out report for the operator to delete it.
@@ -257,8 +261,11 @@ Target: ../JenkinsPipelineUtils
 
 - It builds `--strict` from a locked toolchain.
 - It is addressed at `https://pipelines.home/docs/`.
-- It has a docs home page and the nav skeleton that P3, P5 and P6 fill.
+- It has a docs home page.
 - It has the source of the landing page at `/` that links to the docs.
+
+P2 ships no guide page. Each later phase adds its pages and their nav rows in the same change
+(KubeCoder `docs/conventions/operator-manual.md:51`; F4).
 
 The strict build is part of the library's `kc project test`. The driver's per-phase gate runs
 only `test`, and every later phase that touches the docs must be gated by that build.
@@ -307,8 +314,12 @@ Target: ../AnsibleSpecs
 
 1. **The inventory (R1)** lives in the review folder next to `report.md`, because the migration
    slice after this one works from it too. It lists every kind of pipeline the estate runs, each
-   type with its member jobs. Every Appendix A job belongs to exactly one type. For each guide
-   topic, it gives the variants in use today and where each occurs.
+   type with its member jobs. For each guide topic, it gives the variants in use today and where
+   each occurs. Every Appendix A job belongs to exactly one type, except the five
+   ModernAppTemplate repos' jobs. Those are listed as skipped, with F2's reason. That is all ten
+   of their Appendix A rows, the `AaC/` producer jobs included (`report.md:1418`, `:1423`,
+   `:1426`, `:1448`, `:1486`, `:1487`, `:1489`, `:1490`, `:1516`, `:1531`), because the ruling
+   skips the repos completely. They count toward no type and no topic's variants.
 2. **The rulings page (R2)** lives in this slice folder. For each topic it gives:
    - one proposed rule with a short example;
    - the reason for the rule;
@@ -326,10 +337,13 @@ Target: ../AnsibleSpecs
   `report.md` go on the page as settled, and the page proposes only where the operator has not
   ruled. Stage granularity and the library rule are judgment calls. Propose them with their
   trade-offs, and leave the settling to the operator (R2).
+- **J11's timeout exceptions are proposed, not settled** (F5). Its 90-minute candidates are
+  `ElectronicsInventory` and `IoTSupport`, both skipped (F2). Its 180-minute candidate is
+  `DockerImages` (`report.md:564-568`).
 - **Asked on the page.**
-  - **Helper types.** J14, J15 and J16 will each replace the body of a type with a helper. For
-    each of those types, the page asks which form the guide's reference file shows until the
-    helper exists.
+  - **Helper types.** An accepted helper (J14, J15 or J16) will replace the body of a type. For
+    each inventory type that one of them will serve, the page asks which form the guide's
+    reference file shows until the helper exists.
   - **The stage generators and computed triggers** in DockerImages, Intercom and Architecture
     (slice.md, Source material) each get a proposal.
   - **The new-repo recipe.** P1's result feeds the proposals it bears on.
@@ -354,8 +368,9 @@ The sections include:
 - the library decision test, with the estate's examples (R5);
 - the new-repo recipe from P1.
 
-Every ruling R4 lists is carried exactly, together with Grounding's "Rulings nuances". The guide
-describes declarative only.
+Every ruling R4 lists is carried exactly, together with Grounding's "Rulings nuances". J11's
+exceptions are only the ones the rulings page settles (F5). The guide describes declarative
+only.
 
 - **Rules are checkable.** Each rule is stated as a fact about a file that one could check, so a
   later conformance checker has something to test (slice.md, Out of scope).
@@ -379,8 +394,6 @@ every rule from P5, with a short note on what is specific to that type. Specific
   - DockerImages generates a stage per image variant;
   - Intercom generates a stage pair per hardware version;
   - Architecture computes its triggers from YAML, which `triggers {}` cannot express.
-- **Monorepo validation.** Its reference file describes what ModernAppTemplate's root template
-  renders (Q11). Changing the template is the migration's job.
 - **Helper types.** Where the rulings chose a form for a type J14/J15/J16 will serve, the
   reference file shows that form.
 
@@ -428,7 +441,7 @@ name follows). It is shaped like ChartsDeploy (`/work/scratch/ChartsDeploy`) and
 Its `kc project test` renders the chart, checks the Terraform, and generates and validates the
 producer's artifact. The `AaC/PipelinesDeploy` job exists: it is created through the API (D4),
 with its `config.xml` saved. The repo gets the Jenkins push hook that the guide's new-repo recipe
-calls for.
+calls for; F1 authorizes creating it.
 
 - **The checklist** is the argocd runbook's § "Giving an app its own architecture producer":
   - `introduced:` takes the date of the first commit that adds `chart/`;
@@ -505,9 +518,10 @@ locally.
 
 - A conformance checker. Operator: "Maybe not start with it." The guide's rules are written so
   one could check them later.
-- Converting any pipeline, including bringing `KubeCoder/Jenkinsfile` into line with the guide,
-  and changing ModernAppTemplate's rendered Jenkinsfile. These belong to the migration slice after
-  this one.
+- Converting any pipeline, including bringing `KubeCoder/Jenkinsfile` into line with the guide.
+  That belongs to the migration slice after this one.
+- The five ModernAppTemplate repos and the template itself (F2). The operator fixes them at the
+  next template sync.
 - The library helpers themselves (J14–J17, J21), J22's self-test job, and ANS-84's
   job-configuration move.
 - Zensical (ruled D2). The operator migrates the MkDocs sites in one go later.
