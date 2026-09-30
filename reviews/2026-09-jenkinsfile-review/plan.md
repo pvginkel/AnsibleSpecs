@@ -115,6 +115,11 @@ that day.
   Its output: the accepted items cut into slices, `slice.md` per slice, ANS-84 and ANS-89
   absorbed by the slices that deliver them. This plan's §2–§10 grouping and order go in as the
   proposal; the operator reshapes it.
+
+  *(09-30)* Ran. The operator took one slice, not the proposed three: "we do the safety net and
+  the trial, and then see where we're at. I would not build new slices already." **Slice 033**
+  (ANS-166) holds §3 (J08) and §6 (J22's self-test and the pin bump, J18, J20). Everything else
+  stays unfiled in `handovers/triage_2026-09-30.md` until 033's outcome is known.
 - [ ] **C** Small-changes runbook. Items too small to carry a slice's overhead do not become
   slices and do not go back to ad-hoc work either: they go into one runbook in this folder
   (`small-changes.md`), each with its exact steps, its verification and its undo, run **before**
