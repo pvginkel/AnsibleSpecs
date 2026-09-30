@@ -5,6 +5,40 @@ land. Strike through (`~~…~~`) any item whose suggestion you reject rather tha
 the record stays whole. Owner marks: **op** = operator, **C** = Claude, **S** = Sonnet
 subagent.
 
+## How this plan is worked — read this first (ruled 2026-09-30)
+
+> Operator, 2026-09-30: "we do the safety net and the trial, and then see where we're at. I
+> would not build new slices already." And: "Small steps and review regularly. I'll start the
+> next step from a new session. It needs to know how we do this."
+
+- **One slice at a time.** Only the slice being worked is filed. When it closes, stop: bring
+  this plan and the review up to date, show the operator where things stand, and let the
+  operator choose the next cut. Do not file slices ahead, and do not propose a full cut again
+  unless asked.
+- **Each step is its own session**, started by the operator. A step ends with this plan
+  updated and committed, so the next session starts from the files, not from a conversation.
+- **Where the record is.** The operator's rulings on every item are in `report.md` (read its
+  2026-09-30 refresh block first). The unfiled remainder is in `handovers/triage_2026-09-30.md`:
+  the proposed groups A (style guide), C (library helpers) and D (ANS-84's move), each item with
+  its ruling. The next cut is made from there, not from scratch. ANS-84 stays open until the
+  slice that moves the job configuration absorbs it.
+- **Where things stand (2026-09-30).** Slice **033** (ANS-166, in `slices/backlog/`) holds the
+  declarative trial (§3, J08) and the library safety net (§6: J22's self-test, the compile
+  gate's pin bump, J18, J20). **Next step: `/dev:plan-slice 033`.** After 033 the operator
+  gives the declarative verdict (migrate all, or keep the J08 rule), and that shapes the next
+  cut. The style guide (§4) most likely comes next, because it depends on the verdict. The
+  small-changes runbook (§1a: J07, Q7, Q6's four globals) waits for the operator's go.
+- **State does not survive an environment.** `/work/scratch` (clones, the `jenkins-config`
+  dump) can be gone in a new session. When a step needs current Jenkins or file state, rebuild
+  it: `python3 refresh.py /work/scratch/jenkins-config` (needs `JENKINS_TOKEN`), clone the repos
+  in its `repos.txt` plus JenkinsPipelineUtils into `/work/scratch`, then run `python3
+  analyse.py > /work/scratch/jenkins-config/files.tsv`. Before any wave that edits
+  Jenkinsfiles, take a fresh `config.xml` snapshot into its own directory.
+- **Keep the operator posted.** The operator is often away from the screen. Send progress,
+  questions and completion through the `notification` MCP tool rather than waiting in the
+  terminal. The standing rules below still apply: each push, Replay and Jenkins API write needs
+  the operator's OK.
+
 > **Routing changed, 2026-09-21.** Operator, after the fold-in: *"I think I'd prefer doing all
 > this work in its own slices. A triage session should really be deciding that."* So §2–§10 are
 > no longer a queue Claude works directly. They are the inventory `/dev:triage` adjudicates and
