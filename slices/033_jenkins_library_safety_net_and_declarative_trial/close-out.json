@@ -141,7 +141,14 @@
         "repo": "JenkinsPipelineUtils"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "Checked the trigger (fault) in the code: it holds. Every caller of cicd.writeVersionPins under /work and /work/scratch names paths through mappings only: images.<name> in each app's Jenkinsfile, controllerConfig.images.worker/vsix in KubeCoder's, and images.<name> or relay.image in every DockerImages */deploy-pins.json. So no pin today resolves through a sequence entry. To reach it, a caller has to write a path through a YAML list, which applyPins' own doc comment calls the caller's bug: a misconfiguration, as the label says. The signal is silent, as labelled: the value is written and committed without an error. Nothing changed."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -166,7 +173,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by JenkinsPipelineUtils d9ff168: VersionPinsTest now asserts normalizePins — interpolated (GString) file paths, pin paths and values come back as Strings a String subscript reads, and a file named once as a String and once interpolated is refused with 'pins names <file> twice'; kc project test green (VersionPinsTest 98); a mutation dropping the String conversion and the refusal turned both tests red, then reverted",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "commit": "d9ff168"
+      },
       "ruling": null
     },
     {
@@ -217,7 +229,14 @@
         "repo": "DesignAssistant"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "Checked the trigger (future-change): it holds. The controller's job tree (GET /api/json, read 2026-09-30) has no DesignAssistant or Archived folder. DesignAssistant's Jenkinsfile:13 and Jenkinsfile.deploy-uat:13 on main (read through gitblit) call containerTemplates.canon('canon'), which vars/containerTemplates.groovy no longer defines. The saved configs under /work/scratch/jenkins-config/xml-deleted/Archived/DesignAssistant/ run exactly those two scripts. No job runs them, so nothing fails until somebody restores a job: a change to the controller, not something ordinary operation produces. A restored job would then fail its build at podTemplate with a missing-method error, which is loud, as labelled."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -292,7 +311,14 @@
         "repo": "JenkinsPipelineUtils"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "Checked the signal (loud) in the kubernetes plugin the controller runs, 4557.ve746270f672f. A declarative kubernetes agent runs the podTemplate step (KubernetesDeclarativeAgentScript.groovy:50). The step parses the agent's yaml (PodTemplateUtils.validateYamlContainerNames) and, when a container name does not match [a-z0-9]([-a-z0-9]*[a-z0-9])?, aborts the build before any pod is requested (PodTemplateStepExecution.java:152-160) with 'Container Names MUST match RFC 1123 - They can only contain lowercase letters, numbers or dashes: my_tool'. So the build fails at once with the offending name in its log: loud holds. podYaml's only caller today, KubeCoder's held Jenkinsfile, uses the names k8s, modern-app-toolchain, golang and node, all valid. Nothing changed."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -316,7 +342,14 @@
         "repo": "JenkinsPipelineUtils"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-09-30",
+        "text": [
+          "Checked the trigger (fault): it holds. podYaml's only caller, KubeCoder's held Jenkinsfile at 4a6be3de, passes no env on any images entry, so no build today renders one. To reach it, a pipeline has to pass null (an unset variable or parameter) as an env value, which podYaml's documented input (env: name -> value) does not provide for: a misuse by the caller, as the label says. The signal is silent, as labelled. Nothing changed."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -355,9 +388,9 @@
       "evidence": "witnessed",
       "author": "the driver's phase gate, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
       "notes": [
         {
@@ -366,6 +399,27 @@
           "text": [
             "The ruling covers KubeCoder's tests only. Sweep r1 at 30df8e2d also went RED on KubeCoder root lint, vscode-extension build and vscode-desktop build. All three fail with 'cexec: tool \"python\"/\"frontend\" is not available in this environment', not on the tree. Consult 1 ran the same commands at 30df8e2d in the modern-app container (node 24, uv, ruff): ruff check 'All checks passed!', ruff format --check '200 files already formatted', and worker/scripts/package-extension.sh and vscode-desktop/scripts/package-extension.sh each packaged their vsix (rc 0, npm audit off). That is substitute evidence, not the gate."
           ]
+        },
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): witnessed: the waived gate hides no problem. P4 changed only Jenkinsfile (git diff --stat 5bbf14bf 30df8e2d), and the doc phase's 4a6be3de only docs/operations/*.md. Of KubeCoder's suites, only vscode-desktop/test/publish.test.ts reads the Jenkinsfile (grep over *.py, *.ts, *.go and *.js). What it asserts still holds in the converted file: the desktop packaging script runs before stage('Build kubecoder-manual') (lines 183 and 345), and 'test -s vscode-desktop/build/kubecoder-desktop.vsix' is there (line 184). The wrap-up ran vscode-desktop's npm test at 4a6be3de in the modern-app container: 484 pass, 0 fail. The other suites read nothing the slice changed, and the operator's Replay runs them all in Jenkins before the push."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
         }
       ],
       "wrap_up": null,
@@ -437,9 +491,9 @@
       "evidence": "witnessed",
       "author": "the driver's sweep, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
       "notes": [
         {
@@ -448,6 +502,27 @@
           "text": [
             "Red for the environment, not the tree: KubeCoder root lint fails with 'cexec: tool \"python\" is not available in this environment' before ruff runs. The same ruff check and ruff format --check at 30df8e2d passed in the modern-app container (consult 1, E2's note). P4 changed only Jenkinsfile, which ruff does not read."
           ]
+        },
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): witnessed: the red row is the environment's, not the tree's. It fails with 'cexec: tool \"python\" is not available in this environment' before ruff runs. The wrap-up re-ran the same lint at the clone's HEAD 4a6be3de in the modern-app container: ruff check 'All checks passed!', ruff format --check '200 files already formatted'. The slice changed Jenkinsfile and two docs/operations/*.md files, and ruff reads none of them."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
         }
       ],
       "wrap_up": null,
@@ -466,9 +541,9 @@
       "evidence": "witnessed",
       "author": "the driver's sweep, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
       "notes": [
         {
@@ -477,6 +552,27 @@
           "text": [
             "Red for the environment, not the tree: vscode-extension and vscode-desktop build fail with 'cexec: tool \"frontend\" is not available in this environment' before either package-extension.sh runs. Both scripts packaged their vsix at 30df8e2d in the modern-app container (consult 1, E2's note). P4 changed only Jenkinsfile, which neither script reads."
           ]
+        },
+        {
+          "by": "wrap-up",
+          "date": "2026-09-30",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): read: the red row is the environment's, not the tree's. It fails with 'cexec: tool \"frontend\" is not available in this environment' before either package-extension.sh runs. Consult 1 packaged both vsix at 30df8e2d in the modern-app container (rc 0). Since then only docs/operations/*.md changed (4a6be3de), and neither script reads those. The wrap-up's vscode-desktop npm test at 4a6be3de (484 pass) compiled the same TypeScript sources."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
         }
       ],
       "wrap_up": null,
