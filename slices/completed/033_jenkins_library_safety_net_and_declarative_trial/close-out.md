@@ -24,7 +24,7 @@ driver, push check, 2026-09-30 — held as planned. The slice's commits sit on `
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Push awaits the operator's go; V02 settles on it.
+**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Pushed on the operator's go (KubeCoder 4a6be3de); V02 settles on the build the push triggers.
 
 ### A2 — Settle V04 after the operator's verdict after the Build-Main Replay
 
@@ -67,7 +67,7 @@ Deleting it is safe once the slice's commits are on origin — the push check be
 **Triage:** action · nothing that could show · no impact
 **Provenance:** witnessed — the driver's target resolution
 **Route:** to you — an action
-**Disposition:**
+**Disposition:** 2026-09-30 — deleted after the push; the clone was clean and level with origin/main.
 
 ### I1 — JenkinsPipelineUtils: the k8s and modern-app-toolchain sidecar settings are written twice, in containerTemplates and in podYaml.sidecars()
 
@@ -79,7 +79,7 @@ Ruling F1 leaves containerTemplates untouched, so podYaml carries its own copy o
 needs design · prevents a degradation · in JenkinsPipelineUtils
 **Provenance:** witnessed — code-writer, P3, r1, vars/podYaml.groovy
 **Route:** to you — an improvement
-**Disposition:**
+**Disposition:** 2026-09-30 — carried into the declarative migration (handovers/triage_2026-09-30.md, § After 033), which retires the describables and the duplicate with them.
 
 ## Card requests
 
@@ -148,7 +148,7 @@ wrap-up, 2026-09-30 — looked and left it: Checked the signal (loud) in the kub
 in JenkinsPipelineUtils
 **Provenance:** witnessed — code-reviewer, P3, round 1, phases/P3/code_review_r1.md F1
 **Route:** closed — it is loud on an ordinary condition
-**Disposition:**
+**Disposition:** 2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033).
 
 ### B4 — JenkinsPipelineUtils podYaml renders an env value of null as the string "null" · minor
 
@@ -166,7 +166,7 @@ wrap-up, 2026-09-30 — looked and left it: Checked the trigger (fault): it hold
 JenkinsPipelineUtils
 **Provenance:** witnessed — code-reviewer, P3, round 1, phases/P3/code_review_r1.md F2
 **Route:** closed — it needs a fault
-**Disposition:**
+**Disposition:** 2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033).
 
 ## Record
 
