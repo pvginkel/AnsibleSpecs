@@ -942,7 +942,7 @@ Record:
   `sweep_ledger.md` § Carriers, and the logs are `/work/scratch/p9-sweep/logs/p12c-<Repo>.log` and
   `p12c-r2-IoTSupport.log`.
 
-### P13a — Device carriers, one at a time, first part
+### P13a — Device carriers, one at a time, first part ✅ DONE 2026-09-30
 
 Target: root
 
