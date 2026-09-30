@@ -516,6 +516,52 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P11",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils style guide CHK-3: 'a repo the job pushes to MUST NOT be cloned in Checkout' contradicts CHK-1 for a job that pushes to its own repo",
+      "body": [
+        "docs/pages/guide/checkout.md:34 (CHK-3) says a repo the job pushes to MUST NOT be cloned in Checkout. CHK-1 (checkout.md:8) makes every Checkout stage clone the job's own repo with checkout scm. The reference files validation-job.groovy (:36-40, push at :162-178) and promotion.groovy (:102-106, pushes at :176-225) do both, as intended: checkout.md:39 and P6's recipe sentence at :67-68 say an own-repo push re-clones inside withCredentials. The MUST line as written reads as a violation of both files."
+      ],
+      "consequence": "Whoever writes the later conformance checker from CHK-3's MUST line flags SSEGateway and Promote-PRD, the guide's own reference files, as non-conforming.",
+      "evidence": "read",
+      "author": "code reviewer, P6, round 1, phases/P6/code_review_r1.md F1",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "one-edit",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P12",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils docs types/index.md: says every job is of one of the listed types, then lists 'Jobs without a type', including KitchenDisplay, which the inventory types as T13",
+      "body": [
+        "docs/pages/types/index.md:3 opens 'Every Jenkins job in the estate is of one of these types'; its section at :23, 'Jobs without a type', lists Firmware/KitchenDisplay and the five ModernAppTemplate repos. KitchenDisplay is inventory type T13 (reviews/2026-09-jenkinsfile-review/inventory.md:235); rulings §1 withholds its reference file, not its type."
+      ],
+      "consequence": "none beyond a page that contradicts itself: a reader still learns correctly that these jobs have no reference file.",
+      "evidence": "read",
+      "author": "code reviewer, P6, round 1, phases/P6/code_review_r1.md F2",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
