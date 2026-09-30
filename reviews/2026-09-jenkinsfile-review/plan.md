@@ -66,8 +66,12 @@ Standing rules for every step:
   deletion of `Archived/`: re-dumped Jenkins (125 jobs), fresh clones of all 89 repos plus
   JenkinsPipelineUtils and ModernAppTemplate in `/work/scratch`, cross-checked against a gitblit
   `**/Jenkinsfile*` sweep, Appendix A regenerated (125 rows), and Q11–Q13 raised.
-- [ ] **op** Rule on Q11 (template-generated Jenkinsfiles, J15), Q12 (`CanonApp`) and Q13
-  (`FieldnotesApp`'s duplicate trigger). All three are in `report.md`'s open questions.
+- [x] **op** Rule on Q11 (template-generated Jenkinsfiles, J15), Q12 (`CanonApp`) and Q13
+  (`FieldnotesApp`'s duplicate trigger), 2026-09-30. Q11: edit the five files in place ("do the
+  right thing… we'll handle merging later"). Q12: the operator deleted `CanonApp`. Q13: no API
+  step needed. The `properties` step appends on its first run and removes every tracked kind,
+  UI copies included, from the second run on (source read, and confirmed against the 09-23 dump
+  the operator restored to `/work/scratch/jenkins-config-old`).
 
 ## 1. Your review
 
@@ -117,10 +121,13 @@ that day.
   the slices. Triage decides what is small; the candidates the review sees:
   - J07 — built-in node executors 2 → 0 (one API call)
   - Q7 — the pod cap of 3 written down in `docs/live-infra-access.md` (one paragraph)
-  - J09 — ~~move and disable `CanonApp`, disable `Archived/FundaChecker`~~ *(09-30)* delete
-    or disable `CanonApp`, as Q12 rules (`FundaChecker` went with `Archived/`)
-  - *(09-30)* Q13 — delete `FieldnotesApp`'s UI-set duplicate push trigger (API,
-    `config.xml` saved first), if Q13 says the step appends
+  - ~~J09 — move and disable `CanonApp`, disable `Archived/FundaChecker`~~ *(09-30)* done:
+    the operator deleted `CanonApp` (Q12), and `FundaChecker` went with `Archived/`
+  - ~~*(09-30)* Q13 — delete `FieldnotesApp`'s UI-set duplicate push trigger (API,
+    `config.xml` saved first), if Q13 says the step appends~~ not needed: its next build clears
+    it (Q13)
+  - *(09-30)* bump `groovy-cps.version` in `JenkinsPipelineUtils/tests/pom.xml` from 4376 to
+    the controller's 4383 (J22's compile gate; one line, `kc project test` to verify)
   - Q6 — delete the four dead global env vars
   - §6a — the `githubPush()` webhook test (its result feeds the style guide)
   - ~~Q4 — the trivy de-duplication, because the operator wants it early; it is ~25 lines in one
@@ -147,7 +154,8 @@ that day.
     through Argo now, and re-confirmed: they can still be pushed.
   - the style guide's delivery form: a skill, not a header link (§4, ruled 2026-09-23)
   - *(09-30)* the 21 `AaC/*Deploy` jobs and `AaC/FieldnotesApp` added since 09-23 (P1 rows);
-    Q11's ruling on the five template-generated files; Q13's UI-copy clean-up; slice 026
+    the five template-generated files edited in place (Q11); R6 after the **second** build
+    (Q13); slice 026
     closed before anything edits an app `Jenkinsfile.architecture` (R8)
 
 ## 2. Per-job settings decision document
@@ -159,8 +167,8 @@ that day.
   Each row gets a response slot. *(refresh)* 105 rows; `KubeCoder/Build-Main` already carries
   its ruling (`abortPrevious: true`, in the file since 2026-09-23) — record it, do not re-ask.
   *(09-30)* 125 rows. `FieldnotesApp` declared `abortPrevious: true` itself (FN-18); record it
-  like Build-Main. Under Q11 (a), one value covers the five template apps unless they are ruled
-  apart.
+  like Build-Main. The five template apps are ruled per file like any other (Q11: edited in
+  place).
 - [ ] **op** Rule on it
 - [ ] **C** Fold the rulings into Appendix A, which becomes the §9 executor's spec
 
@@ -234,8 +242,8 @@ next Jenkinsfile.
 
 ## 5. Stale jobs, dead code and controller settings — ~~straightforward changes, no slice~~
 
-- [ ] **C** J09 — ~~move `CanonApp` to `Archived/` and disable it; disable `Archived/FundaChecker`~~
-  *(09-30)* `CanonApp` as Q12 rules; `Archived/` and `FundaChecker` are gone
+- [x] ~~**C** J09 — move `CanonApp` to `Archived/` and disable it; disable `Archived/FundaChecker`~~
+  *(09-30)* The operator deleted `CanonApp` (Q12); `Archived/` and `FundaChecker` are gone
 - ~~**C** J10 — `Firmware/KitchenDisplay`, as Q1 decides (retire = delete the job)~~ Deferred,
   not rejected: ANS-93 (Later). The job stays disabled and is skipped by §9.
 - [ ] **C** J20 — remove the dead library code (needs J09 and §6's self-test). The
@@ -267,7 +275,7 @@ next Jenkinsfile.
   `kc project test` compiles every `vars/*.groovy` through the controller's CPS transform. It
   asserts no behaviour, so J22's pure-function asserts still stand. Whether they need a Jenkins
   job or ride `kc project test` is for plan-slice (the repo's `project.yaml` says no job builds
-  it).
+  it). Its `groovy-cps.version` pin (4376) already trails the controller's 4383 (§1a).
 - [ ] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
   ~~`IaC/HelmCharts` run (or `DockerImages`, the other caller, once HelmCharts is gone)~~
   *(09-30)* `DockerImages` or `IaC/IaC Docker Image` run, the two callers left
@@ -337,10 +345,11 @@ style guide, and is written declaratively if §3 says "migrate all".
   values inlined in IoTSupport's two files (Q6). `Firmware/KitchenDisplay` is skipped
   (ANS-93); its `AaC/` twin is not. `KubeCoderDeploy/Jenkinsfile.architecture` keeps its
   explicit `prd` clone (the J24 exception). If §3 says "migrate all", this pass is folded into
-  that migration instead. *(09-30)* The J24 exception lapsed: `AaC/KubeCoderDeploy` builds
-  `*/prd` now, so `checkout scm` fits there too. The brief also carries Appendix A's R8
-  (regenerate line numbers after slice 026, strip UI copies per Q13) and Q11's ruling for the
-  five template-generated files.
+  that migration instead. *(09-30)* There is no J24 exception: `AaC/KubeCoderDeploy` builds
+  `*/prd` and did on 09-23 too (the 09-23 text misread it), so `checkout scm` fits there as
+  well. The brief also carries Appendix A's R8 (regenerate line numbers after slice 026; R6
+  after each job's second build, per Q13) and Q11's ruling: the five template-generated files
+  are edited in place.
 - [x] **op** Q2 and J26 settled (2026-09-21): TrelloMcp stays on `test`, so its edit lands
   there; J26 accepted.
 - [ ] **C** J26 — rename `master` → `main` on the four MyDownloads/ScanToPdf client and server
@@ -356,13 +365,15 @@ style guide, and is written declaratively if §3 says "migrate all".
   end in a pin write, which is a prd rollout through Argo on every rebuild (new tag, deploy-repo
   commit, sync, pod restart) plus an `AaC/*Deploy` build; 6 end in a Helm deploy (no-op).
   *(09-30)* 22 pin writers (21 prd, `KubeCoder/Build-Main` dev); no Helm deploy is left. The
-  five template apps go per Q11: under (a), the template is tagged first, then `copier update`
-  runs repo by repo.
+  five template apps go like the rest (Q11). Every job needs a second build before its config
+  is clean (Q13). For a pin writer that is a second rollout, so let it be the next natural
+  push rather than a forced one.
   Q10 was re-asked on that basis and answered 2026-09-23: "Yes, they can still be pushed."
 - [ ] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
   batches are still sized to the 3 pod slots.
 - [ ] **C** After each wave: re-dump `config.xml` (`jenkins-config/refresh.py`) and diff
-  against the snapshot. The only expected change is a `JobPropertyTrackerAction` plus the
+  against the snapshot *(09-30: take the snapshot right before the wave, into a fresh
+  directory; `/work/scratch` does not survive an environment move)*. The only expected change is a `JobPropertyTrackerAction` plus the
   ruled `abortPrevious` values.
 - [ ] **C** Close-out: all jobs re-dumped, the "Controller config" comments in the iac files
   still accurate, ANS-84 closed
