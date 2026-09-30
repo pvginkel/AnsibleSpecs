@@ -429,6 +429,93 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "D3",
+      "kind": "decision",
+      "grade": null,
+      "headline": "JenkinsPipelineUtils style guide: the Configuration apply, Image matrix and Architecture collector reference files name podYaml's python template, which the library does not have yet",
+      "body": [
+        "Ruling §5 (a) gives every library sidecar a podYaml template, and ruled that this slice adds only aac-tools (a1); python, helm and iac_toolchain are the migration's. POD-5 then requires a file to name the sidecar by template, so docs/examples/configuration-apply.groovy, image-matrix.groovy and architecture-collector.groovy declare podYaml(templates: [..., 'python']), and each type page says podYaml has no python template yet. The controller's linter does not evaluate the agent, so all three pass it; podYaml refuses the name when a build evaluates the agent ('podYaml: the library has no template 'python'; it has aac-tools, k8s, modern-app-toolchain')."
+      ],
+      "consequence": "A session that copies one of these three reference files before the migration adds the python template gets a build that fails at agent evaluation with podYaml's refusal; the linter and the guide's own gate stay green.",
+      "evidence": "witnessed",
+      "author": "executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "loud"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D4",
+      "kind": "decision",
+      "grade": null,
+      "headline": "JenkinsPipelineUtils style guide: the reference files carry state between stages in variables declared before pipeline {}, which Declarative's script splitting would refuse",
+      "body": [
+        "promotion.groovy (sha, recordOnly, pins) and image-matrix.groovy (builtTags, pinsByRepo) declare script-level variables that later stages read. That works because RuntimeASTTransformer.SCRIPT_SPLITTING_TRANSFORMATION defaults to false at the controller's pipeline-model-definition 2.2293 (RuntimeASTTransformer.groovy:77-80). With it true and SCRIPT_SPLITTING_ALLOW_LOCAL_VARIABLES false, Declarative throws JENKINS-37984's IllegalStateException for any such declaration (:1282-1304). The alternatives were env strings (pins and builtTags are maps and lists) or @groovy.transform.Field."
+      ],
+      "consequence": "If the controller ever enables Declarative script splitting, DockerImages and KubeCoder/Promote-PRD, once migrated to these files, fail to start with JENKINS-37984's error until their variables become @Field or env values.",
+      "evidence": "witnessed",
+      "author": "executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "loud"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D5",
+      "kind": "decision",
+      "grade": null,
+      "headline": "JenkinsPipelineUtils style guide: a generated producer artifact is archived in its Generate stage, before Validate, where AaC/Home Assistant Fleet archives only after validation today",
+      "body": [
+        "GRAN-3 puts the archive in the stage that makes the artifact and GRAN-2 makes the validation a stage of its own, so deploy-architecture.groovy and snapshot-producer.groovy run Generate architecture (generate, archive), then Validate architecture. Architecture/Jenkinsfile copies every producer with selector: lastSuccessful(), so a model that fails validation is never collected; the type pages and the files' comments say so. Jenkinsfile.ha-fleet's header today archives last 'so a bad snapshot is never published'."
+      ],
+      "consequence": "none beyond the choice: a producer build that fails validation keeps its invalid model among its artifacts, where today HA Fleet's does not; AaC/Architecture never collects it either way.",
+      "evidence": "witnessed",
+      "author": "executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": "nit",
+      "headline": "MyDownloadsClient's Jenkinsfile: copyArtifactPermission names MyDownloads only, but Webathome copies its apk too",
+      "body": [
+        "MyDownloadsClient/Jenkinsfile (master) declares properties([copyArtifactPermission('MyDownloads')]); Webathome/Jenkinsfile copies from 'MyDownloads/MyDownloadsClient' (copyArtifacts, lastSuccessful). Webathome #242 logged 'Copied 1 artifact from \"MyDownloads » MyDownloadsClient\" build number 69', so the controller does not enforce the list today. PROP-2 has the file name the job that copies it."
+      ],
+      "consequence": "If the controller starts enforcing Copy Artifact permissions, Webathome's build fails at its copyArtifacts step until MyDownloadsClient's file names Webathome as well.",
+      "evidence": "witnessed",
+      "author": "executor, P6, r1, Jenkins Webathome #242 console",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "MyDownloadsClient"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

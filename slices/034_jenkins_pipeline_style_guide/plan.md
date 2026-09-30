@@ -651,6 +651,47 @@ what is specific to that type. Specific cases:
 Every complete example passes the controller's full declarative linter check. The published file
 is byte for byte the file that was checked, and the done-record carries the responses.
 
+**Done (P6).** `podYaml` has the `aac-tools` template (`c4de566`: `registry:5000/aac-tools`, as
+`containerTemplates.aac_tools`; a `PodYamlTest` case, the `podYaml.md` row, `containerTemplates.md`'s
+cell). The reference files are twelve pages under `docs/pages/types/` (`ab605b7`, nav section
+"Pipeline types"; `types/index.md` lists KitchenDisplay and the five template repos as jobs without
+a type). Each page shows its complete file from `docs/examples/`, page and file sharing a stem:
+T1 `app-architecture` (AaC/Ginbov), T2 `deploy-architecture` (AaC/ChartsDeploy), T3 `image-build`
+(Ginbov) plus `change-detection` (IaC Docker Image), T4 `artifact-build` (ScanToPdfServer), T5
+`firmware` (PaperClock) plus `firmware-versions` (Intercom), T6 `validation-job`, T7
+`iac-controller`, T8 `configuration-apply`, T9 `promotion`, T10 `image-matrix` (the generator
+recipe), T11 `architecture-collector` (the computed-triggers recipe), T12 `snapshot-producer`. The
+rule pages link them: GRAN-7 (Intercom's stages), PROP-8 (`Set triggers`), CHK-3/SEC-3
+(SSEGateway's push), LABEL-6 and FILE-6 (the generator).
+
+Later phases:
+- P7: a type's page is `https://pipelines.home/docs/types/<stem>/`, the overview `…/docs/types/`.
+- P8: the `Jenkinsfile.architecture` is `docs/examples/deploy-architecture.groovy` with its names
+  changed (edited in place). P9: the Jenkinsfile's shape is `docs/examples/image-build.groovy`
+  (edited in place).
+- Test phase: V04 is the types pages, V07 the three recipes, V19's one exception `c4de566`.
+
+- Linter, as published: all 14 files "Jenkinsfile successfully validated." — app-architecture,
+  architecture-collector, artifact-build, change-detection, configuration-apply,
+  deploy-architecture, firmware-versions, firmware, iac-controller, image-build, image-matrix,
+  promotion, snapshot-producer, validation-job. A red on the way: an elvis inside `for (… in …)`,
+  "expecting ')', found '?:'". `kc project test` (root, docs) and `kc project lint` green.
+- T4 is ScanToPdfServer, not MyDownloadsClient: the client's `copyArtifactPermission` names only
+  MyDownloads, though Webathome copies it (close-out B3).
+- T2/T12: `Generate architecture` archives, then `Validate architecture` (GRAN-3; close-out D5).
+  T11: Checkout, Set triggers, Collect producer artifacts (archives the inputs), Validate
+  architecture (`collect.py`), Build architecture_viewer image, Write image pins; `abortPrevious`.
+- T9: Validate commit, Retag images, Advance prd, Tag release; each push from its own clone
+  (CHK-3). The release-tag check reads the checkout's tags: `checkout scm` fetches `--tags` (AaC/Ginbov
+  console), and KubeCoderDeploy is private, so a bare `ls-remote` has no credential.
+- T9/T10 pass state between stages in script-level variables: Declarative's script splitting is
+  off by default at 2.2293 (close-out D4). T10 drops the per-image timeout (TIME-4).
+- T8/T10/T11 name `podYaml`'s `python` template, which does not exist yet (ruling §5; close-out
+  D3). T12's cron, `H 4 * * *`, is the job's `config.xml`'s.
+- The `properties` call keeps the concurrency guard: AaC/Architecture's live `config.xml` holds
+  the UI's `DisableConcurrentBuildsJobProperty` beside the step's triggers, and its
+  `JobPropertyTrackerAction` lists only `PipelineTriggersJobProperty` (workflow-multibranch 842).
+
 ### P7 — The skill: the guide's hard rules in every session, pointing at the site
 
 Target: github:pvginkel/KubeCoderConfig
@@ -668,7 +709,9 @@ the online docs (R8).
   have. `modern-app` carries the same Node, so the executor runs the repo's own Prettier check
   there. Its manifest has no `test:` verb, so the driver's gate runs nothing.
 - **Links.** The links go to `https://pipelines.home/docs/`, in the form a session reads best:
-  the site's `llms.txt` and per-page Markdown copies exist for that. The site goes live only in
+  the site's `llms.txt` and per-page Markdown copies exist for that. Each pipeline type's reference
+  file has its page at `https://pipelines.home/docs/types/<stem>/` (P6), under the overview
+  `…/docs/types/`. The site goes live only in
   the test phase, but the links are right from the start.
 - **The guide stays the only source.** The skill stays short. For each rule it carries, it says
   where the guide details it, rather than restating the guide.
@@ -686,8 +729,9 @@ name follows). It is shaped like ChartsDeploy (`/work/scratch/ChartsDeploy`) and
 - the prd stage configuration, holding the image pin that the site build writes;
 - the Terraform that the PreSync hook applies, including the Argo relay webhook this stage owns;
 - the architecture producer `pipelines-deploy`: judgment layer, `.architecturerc`, and a
-  `Jenkinsfile.architecture` written to the guide, its agent `podYaml(templates: ['aac-tools'])`
-  (the template P6 adds);
+  `Jenkinsfile.architecture` written to the guide: the deploy-repo producer's reference file,
+  JenkinsPipelineUtils `docs/examples/deploy-architecture.groovy`, with its names changed. Its
+  agent is `podYaml(templates: ['aac-tools'])`, the template P6 added (`c4de566`);
 - a README and a manifest.
 
 Its `kc project test` renders the chart, checks the Terraform, and generates and validates the
@@ -729,7 +773,8 @@ KubeCoder's manual image (`manual/Dockerfile`, `manual/nginx.conf`). From them t
 - `nginx -t` at build time (`:60`);
 - relative redirects under a path prefix.
 
-**The Jenkinsfile.** It is the guide's first application in the estate and follows the guide. On
+**The Jenkinsfile.** It is the guide's first application in the estate and follows the guide: its
+shape is the image build's reference file, `docs/examples/image-build.groovy`. On
 each push to main it builds the image with kaniko into `registry:5000`, tagged with the build
 number, and writes that pin into PipelinesDeploy's prd values. Charts does the same
 (`/work/Charts/Jenkinsfile:31-52`).
