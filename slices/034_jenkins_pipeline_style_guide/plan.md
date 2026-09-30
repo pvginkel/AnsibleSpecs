@@ -742,7 +742,7 @@ Later phases:
   P11).
 - Nothing holds the skill's summaries and ids to the guide across the two repos (close-out I1).
 
-### P8 — PipelinesDeploy: the site's deploy repo, in ChartsDeploy's shape
+### P8 — PipelinesDeploy: the site's deploy repo, in ChartsDeploy's shape ✅ DONE 2026-09-30
 
 Target: github:pvginkel/PipelinesDeploy
 
