@@ -64,7 +64,11 @@ The standing rules quoted below come from that plan.
 - **Ruling (2026-09-30), KubeCoder's gate:** the KubeCoder phase's gate is the controller's full
   declarative linter check on the converted Jenkinsfile, not KubeCoder's `kc project test`; the
   operator's Replay runs KubeCoder's suites in Jenkins. Operator: "Sure, skip the test. It's
-  fine."
+  fine." The waiver covers KubeCoder's lint and build as well as its tests: the sweep's red
+  KubeCoder rows (root lint, vscode-extension build, vscode-desktop build) fail only because this
+  environment has no `python` or `frontend` tool container, the same commands are green in
+  `modern-app`, and the operator's Replay runs them in Jenkins. Operator (completion consult r1):
+  "Extend waiver."
 - **Ruling D3 (2026-09-30):** the conversion is faithful. The converted Jenkinsfile gets no
   `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or
   cleanup handling. R1's shape list and its acceptance criterion drop those two words. Operator:
@@ -176,6 +180,8 @@ declarative `agent { kubernetes { yaml … } }`, the shape a "migrate all" verdi
 ## Driver rulings
 
 - gate github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile — ruling 2026-09-30: the change is the Jenkinsfile only, this environment cannot run KubeCoder's suites, and the operator's Replay runs them in Jenkins
+- accept github:pvginkel/KubeCoder lint — ruling 2026-09-30 (completion consult r1): this environment has no `python` tool container; green in `modern-app`; the operator's Replay runs it in Jenkins
+- accept github:pvginkel/KubeCoder build — ruling 2026-09-30 (completion consult r1): this environment has no `frontend` tool container; both package-extension.sh scripts green in `modern-app`; the operator's Replay runs them in Jenkins
 
 ### P1 — The library's gate runs at the controller's workflow-cps and asserts the pure functions ✅ DONE 2026-09-30
 
