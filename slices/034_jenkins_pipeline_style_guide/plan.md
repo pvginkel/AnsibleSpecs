@@ -322,6 +322,40 @@ only `test`, and every later phase that touches the docs must be gated by that b
 - **The library's manifest.** The manifest's comments describe the repo
   (`.kubecoder/project.yaml:1-3`). Keep them true.
 
+**Done (P2).** `docs/` in JenkinsPipelineUtils holds the site (`197b9a3`): `mkdocs.yml`
+(`docs_dir: pages`, `site_url: https://pipelines.home/docs/`, the manual's llmstxt and validation
+blocks), `pyproject.toml` + `uv.lock` (a virtual project whose `dependencies` are the toolchain —
+no dependency group), `pages/index.md` (the docs home; nav is `Home` alone), `landing/index.html`
+(the page at `/`, relative links `docs/` and `docs/llms.txt`) and `check_site.py`. The manifest's
+new `docs` component runs `cexec iac uv run --locked mkdocs build --strict`, then `check_site.py`,
+in `kc project test`.
+
+Later phases:
+- P3, P5, P6: MkDocs reads pages from `docs/pages/` alone; each page's nav row goes into
+  `docs/mkdocs.yml` in the same commit. `check_site.py` covers every page's llms.txt entry,
+  llms-full.txt inlining and Markdown copy with no per-page edit. Fenced ```` ```groovy ```` blocks
+  highlight (`pymdownx.highlight` + `pymdownx.superfences`).
+- P9: the served tree is `docs/landing/` at `/` and the build at `/docs/` — `check_site.py`'s
+  `SITE_PREFIX` checks that layout. The builder works in `docs/`: `uv sync --locked` (not the
+  manual's `--only-group manual`), then `mkdocs build --strict`. `docs/.venv/` and `docs/site/`
+  are local build state (gitignored).
+
+- Toolchain in `iac` (Python 3.13.7, uv 0.12.20; `modern-app` carries the same). Locked: mkdocs
+  1.6.1, mkdocs-material 9.7.7, mkdocs-llmstxt 0.5.0, pymdown-extensions 12.1;
+  `requires-python >=3.13`. Ansible's `config.yaml` declares a `python` tool this pod does not run.
+- A page's Markdown copy lands at `<page dest>/index.md` (`guide/x.md` → `guide/x/index.md`), the
+  URL llms.txt lists.
+- Witnessed red: the strict build on an orphaned page, a nav row to a missing file, a root-absolute
+  link and a broken `#anchor` (each "Aborted with 1 warnings in strict mode!", exit 1);
+  `check_site.py` on the sections pattern narrowed to `index.md` (a second page gets no copy), on a
+  landing link to a missing file, and on a landing page with no `docs/` link.
+- A strict-aborted build still writes `site/`, so `check_site.py` can pass after a red build; the
+  verb stays red on the build statement.
+- Not brought over, beyond the plan's list: the manual's logo (the library has none).
+  `navigation.instant` stays off, as in the basis.
+- The manifest header names the docs site and both sidecars. "No Jenkins job builds this repo" is
+  still true; P9 rewrites it.
+
 ### P3 — One reference page per library global var, and a test that holds it there
 
 Target: ../JenkinsPipelineUtils
@@ -336,7 +370,9 @@ page.
 - **Where the pages live.** They are kept beside the vars they describe, so that a change to a
   var and the change to its page travel together (the settled ruling: "hand-written next to the
   vars"). Exactly where is the executor's call, as long as the site publishes the pages and the
-  test can pair each var with its page. Nothing may change what Jenkins loads from `vars/`.
+  test can pair each var with its page. Nothing may change what Jenkins loads from `vars/`. The
+  site reads its pages from `docs/pages/` alone (P2's `docs_dir`), so a page kept elsewhere has to
+  reach that directory.
 - **`podYaml`** is its own var. It is called as `podYaml(templates: [...], images: [...])` inside
   `agent { kubernetes { ... } }`, not as `containerTemplates.podYaml` (Grounding). Its page
   covers both forms of an `images:` entry and states that a string entry's derived container
@@ -505,7 +541,10 @@ Target: ../JenkinsPipelineUtils
 at `/` and the docs at `/docs/`. Two images are the precedent: charts.home's (`/work/Charts`) and
 KubeCoder's manual image (`manual/Dockerfile`, `manual/nginx.conf`). From them this image takes:
 
-- the strict build in the builder stage (`manual/Dockerfile:34`);
+- the strict build in the builder stage (`manual/Dockerfile:34`), run in `docs/` after
+  `uv sync --locked` — the toolchain is `docs/pyproject.toml`'s `dependencies`, not a group, so the
+  manual's `--only-group manual` does not apply;
+- the served layout `docs/check_site.py` checks: `docs/landing/` at `/`, the build under `/docs/`;
 - `nginx -t` at build time (`:60`);
 - relative redirects under a path prefix.
 
