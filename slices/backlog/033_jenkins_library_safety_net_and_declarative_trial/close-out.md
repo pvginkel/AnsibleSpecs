@@ -4,3 +4,64 @@
      lines are yours to write; everything else is overwritten by the next render. -->
 
 Run: <not yet stamped>
+
+## Comes to you
+
+### A1 — Push KubeCoder by hand when its hold lifts
+
+`plan.md`'s `## Push holds` section holds `github:pvginkel/KubeCoder`: ruling D2: the operator replays `KubeCoder/Build-Main` with the converted Jenkinsfile first, then pushes it by hand
+
+Criteria owed after that push — the run cannot prove them, so they stay open until the push lands and are settled after it:
+
+- V02 — The operator replays `KubeCoder/Build-Main` with the converted script — a real build and, through …
+- V03 — The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin …
+
+**Consequence:** until you push it, nothing KubeCoder deploys carries the slice, and V02, V03 stay unproven.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
+### A2 — Settle V04 after the operator's verdict after the Build-Main Replay
+
+V04 — The operator gives the verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`, scripted for pod pipelines). If "migrate all", the migration is a slice of its own.
+
+`verification.json` marks V04 owed after: the operator's verdict after the Build-Main Replay. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V04 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
+### A3 — Settle V09 after the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac- …
+
+V09 — One run of a caller verifies `hasChanges` after the library push: "`DockerImages/Jenkinsfile` and `Ansible/Jenkinsfile.iac-image`; either one's next build is the verification run."
+
+`verification.json` marks V09 owed after: the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac-image after the library push. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V09 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
+## For the wrap-up
+
+### P1 — Ansible CLAUDE.md still tells slices to target an undeclared repo as ../scratch/<Repo>; the dev plugin's github:<owner>/<repo> Target now clones it · minor
+
+<details><summary>body</summary>
+
+Ansible/CLAUDE.md § Related repos: a repo a slice changes but the environment does not declare goes under /work/scratch/<Repo>, and 'its phases say Target: ../scratch/<Repo>, and the environment that runs the slice clones it there first'. The dev plugin (0.9.60, docs/plan-template.md and docs/run-loop.md § The plan is the queue) has a Target: github:<owner>/<repo> form for exactly this case: the driver clones or adopts /work/scratch/<repo> itself, and the dry run does it at planning time. Slice 033's plan uses github:pvginkel/KubeCoder, so it departs from the project's written convention while following the plugin's. The CLAUDE.md sentence does not mention the github: form, so the next plan writer reading it first is steered to the manual-clone form.
+
+</details>
+
+**Consequence:** A plan writer following CLAUDE.md writes ../scratch/<Repo> and the run depends on someone having cloned the repo by hand first
+
+**Triage:** prose · shows in normal use · degrades · loud · fix is one edit · in Ansible
+**Provenance:** read — plan-reviewer, planning, r1, plan_review_r1.md
+**Route:** the wrap-up — fix
+**Disposition:**

@@ -25,6 +25,78 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Push KubeCoder by hand when its hold lifts",
+      "body": [
+        "`plan.md`'s `## Push holds` section holds `github:pvginkel/KubeCoder`: ruling D2: the operator replays `KubeCoder/Build-Main` with the converted Jenkinsfile first, then pushes it by hand",
+        "",
+        "Criteria owed after that push — the run cannot prove them, so they stay open until the push lands and are settled after it:",
+        "",
+        "- V02 — The operator replays `KubeCoder/Build-Main` with the converted script — a real build and, through …",
+        "- V03 — The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin …"
+      ],
+      "consequence": "until you push it, nothing KubeCoder deploys carries the slice, and V02, V03 stay unproven.",
+      "evidence": "read",
+      "author": "`plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A2",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V04 after the operator's verdict after the Build-Main Replay",
+      "body": [
+        "V04 — The operator gives the verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`, scripted for pod pipelines). If \"migrate all\", the migration is a slice of its own.",
+        "",
+        "`verification.json` marks V04 owed after: the operator's verdict after the Build-Main Replay. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V04 stays unproven until then; the test phase does not settle it.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A3",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V09 after the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac- …",
+      "body": [
+        "V09 — One run of a caller verifies `hasChanges` after the library push: \"`DockerImages/Jenkinsfile` and `Ansible/Jenkinsfile.iac-image`; either one's next build is the verification run.\"",
+        "",
+        "`verification.json` marks V09 owed after: the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac-image after the library push. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V09 stays unproven until then; the test phase does not settle it.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
