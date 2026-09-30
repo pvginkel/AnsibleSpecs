@@ -986,7 +986,7 @@ Record:
   #2316–#2319 were green, and each site pin rolled. The rows are in `sweep_ledger.md` § Carriers,
   and the logs are `/work/scratch/p9-sweep/logs/p13a-<Repo>.log`.
 
-### P13b — Device carriers, one at a time, second part
+### P13b — Device carriers, one at a time, second part ✅ DONE 2026-09-30
 
 Target: root
 
