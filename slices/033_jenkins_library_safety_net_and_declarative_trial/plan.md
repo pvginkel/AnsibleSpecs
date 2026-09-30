@@ -264,7 +264,7 @@ Record:
 - Callers re-checked 2026-09-30 over the 267 `Jenkinsfile*` under `/work` and `/work/scratch`:
   none calls a deleted helper. `helmCharts`'s `JsonOutput` import stays, since `kaniko2` uses it.
 
-### P3 — `podYaml`: a declarative agent's pod YAML from library templates and pipeline-chosen images
+### P3 — `podYaml`: a declarative agent's pod YAML from library templates and pipeline-chosen images ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
