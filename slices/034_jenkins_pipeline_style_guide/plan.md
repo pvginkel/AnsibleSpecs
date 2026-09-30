@@ -188,9 +188,9 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
   the `options {}`/`triggers {}` equivalent; some jobs use `abortPrevious`. J11: standard
   `timeout(60 MINUTES)`, exception candidates 90 minutes (ElectronicsInventory, IoTSupport) and
   180 (DockerImages). J12: 4 hours on the six `iac-*` files plus a `post { aborted }` notify.
-  J14: required `idfVersion` parameter, no default. J19: a repo may carry its own helpers via
-  `load 'support/jenkins/iac.groovy'`. Q6: `HA_URL` stays a global; the other globals are inlined
-  or deleted.
+  J14: required `idfVersion` parameter, no default. J19: no helper, in the library or loaded from
+  the repo; the duplication in the T7 files is deliberate (option (2), `report.md:880-881`). Q6:
+  `HA_URL` stays a global; the other globals are inlined or deleted.
 - **The review's working state.** `/work/scratch/jenkins-config` exists (`files.tsv` of
   2026-09-30, `xml/`, `repos.txt`, `clone-list.txt`); most clones are in `/work/scratch`, and
   `refresh.py`/`analyse.py` in the review folder rebuild them. `JENKINS_TOKEN` is set.
