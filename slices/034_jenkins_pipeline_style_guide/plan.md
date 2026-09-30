@@ -921,6 +921,18 @@ constraints). The reason is in the runbook: a registered producer with no archiv
 the collector's discovery, and a collector run that fails publishes nothing. This phase commits
 locally.
 
+**Done (P11).** Architecture `574b7fe` on `phase/034-P11`, not pushed: `pipeline-producers.yaml`
+ends in the entry `pipelines-deploy` (repo `pvginkel/PipelinesDeploy`, job `AaC/PipelinesDeploy`),
+after `prometheus-deploy`, in the three-key shape of ChartsDeploy's entry (no `defaultLogo`, no
+`trigger`). The schema-checked loader (`_arch.load_pipeline_producers`) reads it, 80 producers.
+
+Later phases:
+- Test phase: Ordering step 4 pushes that commit, and only after `AaC/PipelinesDeploy`'s first
+  green build (V14).
+
+`kc project test` passed on the commit: artifact and views validation, `validate.py meta`,
+tooling's pytest, the viewer's and the service's vitest.
+
 ## Not in scope
 
 - A conformance checker. Operator: "Maybe not start with it." The guide's rules are written so
