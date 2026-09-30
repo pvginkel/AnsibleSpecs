@@ -290,7 +290,7 @@ Later phases:
 - Not tested: a pipeline without `checkout scm`, `createItem` inside a folder, and why the UI
   takes three applies.
 
-### P2 — The docs site's source in the library, built strict with the KubeCoder manual's tooling
+### P2 — The docs site's source in the library, built strict with the KubeCoder manual's tooling ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
