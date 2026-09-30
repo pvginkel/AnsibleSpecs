@@ -386,6 +386,89 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (consult_bail) at the completion consult",
+      "body": [
+        "The driver's bail (`consult_bail`), as it recorded it:",
+        "",
+        "> Every acceptance criterion has implementing work (V01 P4; V05 P3; V06-V08, V10, V12 P1-P2; V11 the test phase's push; V02-V04, V09 are owed after the operator's actions), so the plan owes no further phase. Sweep r1 has three RED KubeCoder rows at 30df8e2d: root lint, vscode-extension build and vscode-desktop build. Each fails only because this environment has no `python` or `frontend` tool container (`cexec: tool ... is not available`), and a phase cannot fix that. The same commands run in `modern-app` are green (ruff check and format, both package-extension.sh scripts). The KubeCoder driver…",
+        "",
+        "Stopped 2026-09-30 14:03; resumed 2026-09-30 14:04."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E4",
+      "kind": "event",
+      "grade": null,
+      "headline": "Red row accepted by ruling: github:pvginkel/KubeCoder lint",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoder lint — ruling 2026-09-30 (completion consult r1): this environment has no `python` tool container; green in `modern-app`; the operator's Replay runs it in Jenkins`"
+      ],
+      "consequence": "`kc project lint` is red for github:pvginkel/KubeCoder in the tree this slice leaves; the driver let it through on the ruling.",
+      "evidence": "witnessed",
+      "author": "the driver's sweep, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [
+        {
+          "by": "consult 2",
+          "date": "2026-09-30",
+          "text": [
+            "Red for the environment, not the tree: KubeCoder root lint fails with 'cexec: tool \"python\" is not available in this environment' before ruff runs. The same ruff check and ruff format --check at 30df8e2d passed in the modern-app container (consult 1, E2's note). P4 changed only Jenkinsfile, which ruff does not read."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E5",
+      "kind": "event",
+      "grade": null,
+      "headline": "Red row accepted by ruling: github:pvginkel/KubeCoder build",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoder build — ruling 2026-09-30 (completion consult r1): this environment has no `frontend` tool container; both package-extension.sh scripts green in `modern-app`; the operator's Replay runs them in Jenkins`"
+      ],
+      "consequence": "`kc project build` is red for github:pvginkel/KubeCoder in the tree this slice leaves; the driver let it through on the ruling.",
+      "evidence": "witnessed",
+      "author": "the driver's sweep, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [
+        {
+          "by": "consult 2",
+          "date": "2026-09-30",
+          "text": [
+            "Red for the environment, not the tree: vscode-extension and vscode-desktop build fail with 'cexec: tool \"frontend\" is not available in this environment' before either package-extension.sh runs. Both scripts packaged their vsix at 30df8e2d in the modern-app container (consult 1, E2's note). P4 changed only Jenkinsfile, which neither script reads."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
