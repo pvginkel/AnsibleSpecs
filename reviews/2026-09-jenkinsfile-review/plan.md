@@ -26,9 +26,11 @@ subagent.
   `slices/completed/`. The library safety net is live, and the declarative trial ran:
   `KubeCoder/Build-Main` #559, a Replay of #558 with the converted file, went green with the same
   pod and the same 16 stages, and Argo synced its pin commit to `kubecoder-dev`. The converted
-  file is not pushed yet (033 close-out A1). **The operator's verdict is "migrate all"** (§3), so
+  file is pushed, and #560, the build the push started, is green too. **The operator's verdict is "migrate all"** (§3), so
   the next cut is the declarative migration, which folds in J14/J15, together with the style
-  guide (§4), which now has one form to describe. The operator chooses the cut. The small-changes
+  guide (§4), which now has one form to describe. The operator chooses the cut. What the
+  migration carries besides the files is in `handovers/triage_2026-09-30.md` § After 033.
+  Still owed from 033: V09, settled by the next `IaC/IaC Docker Image` build. The small-changes
   runbook (§1a: J07, Q7, Q6's four globals) still waits for the operator's go.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
@@ -234,15 +236,16 @@ written as declarative templates) and §9 (`options{}` versus `properties([...])
   (`properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])`)
   and ends in `cicd.writeVersionPins()` to KubeCoderDeploy; the conversion carries the former
   into `options{}`/`triggers{}` and the latter into a `script {}` step.
-- [ ] **op** Replay `KubeCoder/Build-Main` with the converted script (a real build and, through
+- [x] **op** Replay `KubeCoder/Build-Main` with the converted script (a real build and, through
   the pin commit, a dev rollout by Argo), then push. *(09-30)* Slice 033 did the conversion
   (KubeCoder `30df8e2d`). Build #559, the Replay of #558 on the same commit (`5bbf14bf`) with
   library `d9ff168`, went SUCCESS. Its pod matches #558's container for container. The only
   differences are ruling F1's (`node` pulls `Always`; `golang`/`node` run `sleep infinity`
   instead of `cat` with a tty) and the default-valued fields #558 printed and #559 leaves out
   (`resources: {}`, `tty: false`, `privileged: false`). The 16 stages ran in the same order.
-  The pin commit `e705c1f` to KubeCoderDeploy synced to `kubecoder-dev`. The push was still
-  owed when this was written (033 close-out A1).
+  The pin commit `e705c1f` to KubeCoderDeploy synced to `kubecoder-dev`. Pushed (KubeCoder
+  `4a6be3de`); the build the push started, #560, went green with the same pod and stages, and
+  its pin commit synced to `kubecoder-dev`.
 - [x] **op** Verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`,
   scripted for pod pipelines). If "migrate all", the migration is a slice of its own, and it
   folds in J14/J15, which get written declaratively.

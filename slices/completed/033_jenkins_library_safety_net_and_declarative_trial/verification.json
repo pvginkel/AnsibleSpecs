@@ -17,10 +17,11 @@
       "area": "R1 \u2014 J08 declarative trial on KubeCoder",
       "description": "The operator replays `KubeCoder/Build-Main` with the converted script \u2014 a real build and, through the pin commit, a dev rollout by Argo \u2014 then pushes it.",
       "owed_after": "github:pvginkel/KubeCoder",
-      "verdict": "owed",
-      "rationale": "Replay done (#559, green, dev rollout synced); the verdict stays owed until the operator pushes KubeCoder (close-out A1).",
+      "verdict": "pass",
+      "rationale": "Replay #559 green; then the operator's push (KubeCoder 4a6be3de) started #560 from the file itself: SUCCESS, same pod as #559 and the same 16 stages, pin commit KubeCoderDeploy 509abc4 synced to kubecoder-dev (Succeeded, Healthy).",
       "evidence": [
-        "$JENKINS_URL/job/KubeCoder/job/Build-Main/559/ \u2014 the Replay of #558 with the converted Jenkinsfile (KubeCoder 30df8e2d) on the same commit 5bbf14bf and library d9ff168: SUCCESS; its pin commit KubeCoderDeploy e705c1f synced to kubecoder-dev (Argo operation Succeeded 2026-09-30T12:34:15Z). The push is still owed (read 2026-09-30)"
+        "$JENKINS_URL/job/KubeCoder/job/Build-Main/559/ \u2014 the Replay of #558 with the converted Jenkinsfile (KubeCoder 30df8e2d) on the same commit 5bbf14bf and library d9ff168: SUCCESS; its pin commit KubeCoderDeploy e705c1f synced to kubecoder-dev (Argo operation Succeeded 2026-09-30T12:34:15Z). The push is still owed (read 2026-09-30)",
+        "$JENKINS_URL/job/KubeCoder/job/Build-Main/560/ \u2014 started by the GitHub push, revision 4a6be3de, library d9ff168: SUCCESS; job config.xml now carries DisableConcurrentBuilds (abortPrevious true) and GitHubPushTrigger under the DeclarativeJobPropertyTrackerAction (read 2026-09-30)"
       ]
     },
     {

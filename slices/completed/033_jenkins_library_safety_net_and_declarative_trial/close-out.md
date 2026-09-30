@@ -24,7 +24,7 @@ driver, push check, 2026-09-30 — held as planned. The slice's commits sit on `
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Pushed on the operator's go (KubeCoder 4a6be3de); V02 settles on the build the push triggers.
+**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Pushed on the operator's go (KubeCoder 4a6be3de); #560, the build the push started, went green with the same pod and stages; V02 pass.
 
 ### A2 — Settle V04 after the operator's verdict after the Build-Main Replay
 
