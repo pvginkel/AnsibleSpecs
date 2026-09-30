@@ -814,7 +814,7 @@ Later phases:
 - Memory request 7Mi, charts.home's nginx as measured (`kubectl top`, 2026-09-30).
 - `introduced: '2026-09-30'` is the date of `4e34cd6`, the commit that adds `chart/`.
 
-### P9 — The site image, and the library's own build job
+### P9 — The site image, and the library's own build job ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
