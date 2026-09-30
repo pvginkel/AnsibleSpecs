@@ -1,0 +1,3 @@
+{"outcome": "signoff", "summary": "P2 delivers the docs site's source as the phase specifies: a strict MkDocs + Material build from a locked toolchain, addressed at https://pipelines.home/docs/, with a docs home, the landing page source and the KubeCoder manual's LLM support and validation settings, gated in kc project test. Targeted probes (a nested rich page, llms.txt/llms-full.txt mutations, landing-link mutation) confirmed check_site.py and the build catch what they claim; no findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

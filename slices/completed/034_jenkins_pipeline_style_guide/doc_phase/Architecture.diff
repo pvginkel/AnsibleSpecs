@@ -1,0 +1,16 @@
+/work/Architecture — P11: git diff 78efe68a12ad..574b7fe625cb
+
+pipeline-producers.yaml | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/pipeline-producers.yaml b/pipeline-producers.yaml
+index 3a2bf3f..5e0c6a7 100644
+--- a/pipeline-producers.yaml
++++ b/pipeline-producers.yaml
+@@ -273,3 +273,6 @@ producers:
+   - id: prometheus-deploy
+     repo: pvginkel/PrometheusDeploy
+     jenkinsJob: AaC/PrometheusDeploy
++  - id: pipelines-deploy
++    repo: pvginkel/PipelinesDeploy
++    jenkinsJob: AaC/PipelinesDeploy

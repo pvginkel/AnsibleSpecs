@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "PipelinesDeploy 4e34cd6 delivers P8's outcome in ChartsDeploy/TfmirrorDeploy's shape. The chart renders correctly, the pin key resolves under writeVersionPins, the Terraform matches the hook's variable plumbing, the Jenkinsfile passes the controller linter, and AaC/PipelinesDeploy exists with its config.xml saved and the Jenkins hook installed. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

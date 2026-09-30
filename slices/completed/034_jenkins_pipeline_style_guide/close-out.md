@@ -4,7 +4,7 @@
      lines are yours to write; everything else is overwritten by the next render. -->
 
 Run: 2026-09-30 17:47 → 22:25 · 11 phases · 3 bail-outs (1 operator question) · 1 test round ·
-doc phase at stage gate · wrap-up landed · run docs
+doc phase done · wrap-up landed · $94.01 (planner 17 %, research 2 %, rework 5 %)
 
 ## Comes to you
 

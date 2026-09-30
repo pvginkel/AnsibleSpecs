@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "Round 1's blocking F2 (rule 6 against §13) and F3 (a scheduled job's cron never registers) are resolved, and F1's sidecar choice is now on the page with correct facts. But option (a), Claude's lean, says the missing podYaml templates affect only the guide's reference files; they also fail the first build of P8's guide-conformant AaC/PipelinesDeploy producer, which V14 requires to be green.",
+ "details": "code_review_r2.md",
+ "findings": [
+  {"id": "F7", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "§5 option (a) scopes the missing-template gap to the reference files, but P8's T2 producer written to the guide names aac_tools and its first build (V14) throws in podYaml"},
+  {"id": "F8", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "§14 step 4's POST /job/<job>/build has no form for a job in a folder (close-out P9)"}
+ ]}

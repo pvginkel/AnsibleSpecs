@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "podYaml's aac-tools template matches containerTemplates.aac_tools and is tested; T1–T12 each have a page and a complete reference file whose behaviour matches the live job, the three recipes follow rulings §13, and all 14 files pass the controller's linter as published (re-run in review). Two advisory prose findings only.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "CHK-3's 'a repo the job pushes to MUST NOT be cloned in Checkout' contradicts CHK-1 for own-repo pushes; validation-job and promotion break it as written"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "types/index.md says every job has one of the types, then lists 'Jobs without a type', including KitchenDisplay, which the inventory types as T13"}
+ ]}

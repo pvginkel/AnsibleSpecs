@@ -1,0 +1,2 @@
+root: cexec frontend npm run format:check    [FAILED]
+cexec: tool "frontend" is not available in this environment; the tools it has are: aac-tools, go, iac, java, modern-app; if you just added it to .kubecoder/config.yaml, run `kc env restart` to apply it

@@ -1,0 +1,445 @@
+/work/scratch/PipelinesDeploy — P8: git diff d3b112acfd1c..4e34cd65b909
+
+.architecturerc                           | 12 ++++++++++
+ .gitignore                                |  8 +++++++
+ .kubecoder/project.yaml                   | 25 ++++++++++++++++++---
+ Jenkinsfile.architecture                  | 62 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ README.md                                 | 17 +++++++++++++-
+ architecture.yaml                         | 17 ++++++++++++++
+ chart/Chart.lock                          |  6 +++++
+ chart/Chart.yaml                          |  9 ++++++++
+ chart/templates/namespace.yaml            | 12 ++++++++++
+ chart/templates/pipelines-deployment.yaml | 23 +++++++++++++++++++
+ chart/templates/pipelines-service.yaml    | 21 +++++++++++++++++
+ chart/templates/tf-presync-hook.yaml      |  1 +
+ chart/values.yaml                         |  9 ++++++++
+ config/prd/terraform.tfvars               |  2 ++
+ config/prd/values.yaml                    | 14 ++++++++++++
+ terraform/providers.tf                    | 18 +++++++++++++++
+ terraform/variables.tf                    | 14 ++++++++++++
+ terraform/webhook.tf                      | 16 +++++++++++++
+ tests/build-deps.sh                       |  6 +++++
+ tests/terraform.sh                        |  7 ++++++
+ 20 files changed, 295 insertions(+), 4 deletions(-)
+
+diff --git a/.architecturerc b/.architecturerc
+new file mode 100644
+index 0000000..b57f247
+--- /dev/null
++++ b/.architecturerc
+@@ -0,0 +1,12 @@
++generated: true
++sources:
++  - architecture.yaml
++  - chart/
++  - config/prd/
++instructions: >
++  Generated producer (id pipelines-deploy). The artifact docs/architecture/pipelines-deploy.yaml
++  is a build output: gitignored, produced by gen-architecture from the aac-tools image, which
++  renders chart/ with config/prd/values.yaml the way Argo CD renders it. The
++  AaC/PipelinesDeploy Jenkins job runs it. Edit only the judgment layer, architecture.yaml at
++  the repo root, whose schema is what gen-architecture --help prints from the aac-tools
++  toolchain.
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..732e412
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,8 @@
++# The pinned library chart is resolved by `helm dependency build` from chart/Chart.lock, here
++# and on Argo's repo-server alike; the tarball is never committed.
++/chart/charts/
++# tests/terraform.sh's `terraform init`; the hook initialises its own clone.
++/terraform/.terraform/
++/terraform/.terraform.lock.hcl
++# The architecture artifact is a build output (Jenkinsfile.architecture).
++/docs/architecture/
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index b4ee95b..b21e508 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -1,6 +1,25 @@
+-# Placeholder, so the dev loop can gate this repo: Ansible slice 034's deploy-repo phase replaces
+-# it with the repo's real entry points.
++# Curated entry points for PipelinesDeploy. Helm and Terraform live in the `iac` toolchain sidecar.
+ projects:
+   root:
+     description: >-
+-      pipelines's deploy repo, for the pipelines.home docs site.
++      The pipelines app's deploy repo, for the pipelines.home docs site: its Helm chart on the
++      homelab-shared library dependency, the per-stage configuration Argo CD syncs pipelines
++      from, the Terraform the PreSync hook applies, and the judgment layer of the
++      `pipelines-deploy` architecture producer. There is no deploy pipeline: Argo deploys it
++      (argo-cd D51).
++    jenkins: AaC/PipelinesDeploy
++    lint:
++      - cexec iac tests/build-deps.sh
++      - >-
++        cexec iac helm lint chart --namespace pipelines-prd --values config/prd/values.yaml
++        --set hook.repo=https://github.com/pvginkel/PipelinesDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=pipelines-prd
++      - cexec iac terraform fmt -check -diff -recursive
++    # The last two statements are the commands Jenkinsfile.architecture runs.
++    test:
++      - cexec iac tests/build-deps.sh
++      - >-
++        cexec iac helm template pipelines-prd chart --namespace pipelines-prd --values config/prd/values.yaml
++        --set hook.repo=https://github.com/pvginkel/PipelinesDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=pipelines-prd
++      - cexec iac tests/terraform.sh
++      - cexec aac-tools gen-architecture --stage prd --producer pipelines-deploy
++      - cexec aac-tools arch-validate docs/architecture/pipelines-deploy.yaml
+diff --git a/Jenkinsfile.architecture b/Jenkinsfile.architecture
+new file mode 100644
+index 0000000..38fc3a0
+--- /dev/null
++++ b/Jenkinsfile.architecture
+@@ -0,0 +1,62 @@
++// Generates the architecture of the pipelines app's prd stage as producer pipelines-deploy,
++// validates it against the architecture service, and archives it as the producer's artifact,
++// which AaC/Architecture collects.
++//
++// The artifact is generated, never committed. gen-architecture renders chart/ the way Argo CD
++// renders it, reads the judgment layer (architecture.yaml at the repo root) and writes
++// docs/architecture/pipelines-deploy.yaml. One pipeline publishes one stage, from the branch Argo
++// CD syncs it from: main.
++//
++// Controller config:
++//   - Job: AaC/PipelinesDeploy
++//   - SCM: pvginkel/PipelinesDeploy, branch main
++//   - Script Path: Jenkinsfile.architecture
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++pipeline {
++    agent {
++        kubernetes {
++            inheritFrom 'jenkins-agent'
++            yaml podYaml(templates: ['aac-tools'])
++        }
++    }
++
++    options {
++        disableConcurrentBuilds(abortPrevious: true)
++        skipDefaultCheckout()
++        timeout(time: 60, unit: 'MINUTES')
++        timestamps()
++    }
++
++    triggers {
++        githubPush()
++    }
++
++    stages {
++        stage('Checkout') {
++            steps {
++                checkout scm
++            }
++        }
++
++        stage('Generate architecture') {
++            steps {
++                container('aac-tools') {
++                    sh 'gen-architecture --stage prd --producer pipelines-deploy'
++                }
++                archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
++            }
++        }
++
++        // AaC/Architecture copies a producer's last successful build, so a model that fails here
++        // never reaches it, archived or not.
++        stage('Validate architecture') {
++            steps {
++                container('aac-tools') {
++                    sh 'arch-validate docs/architecture/*.yaml'
++                }
++            }
++        }
++    }
++}
+diff --git a/README.md b/README.md
+index 337552e..78e7dc5 100644
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,17 @@
+ # PipelinesDeploy
+-pipelines's deploy repository: Argo CD syncs it (argo-cd D51).
++
++The deploy repository of the app `pipelines`: the pipelines.home docs site, which serves the
++Jenkins pipeline style guide and the JenkinsPipelineUtils reference pages. Argo CD syncs the
++`pipelines-prd` Application from `main` (`chart/` with `config/prd/values.yaml`); the PreSync
++hook applies `terraform/` with `config/prd/*.tfvars` against
++`argocd/PipelinesDeploy/prd/terraform.tfstate`.
++
++- **The image** is `registry:5000/pipelines-home`, built from JenkinsPipelineUtils' `docs/` by
++  that repo's Jenkinsfile. The build writes its pin into `config/prd/values.yaml` (argo-cd D53).
++  Git is the deployed state; a rollback is a `git revert`.
++- **The hosts** `pipelines.home` and `pipelines` are LAN-only, with a step-ca certificate: the
++  Service's `nginx.webathome.org/*` annotations publish them.
++- **Terraform** holds only this repository's GitHub webhook to the relay (`terraform/webhook.tf`).
++  The namespace is the chart's (`templates/namespace.yaml`), never Terraform's.
++- **Architecture**: `Jenkinsfile.architecture`, run by the job `AaC/PipelinesDeploy`, publishes
++  producer `pipelines-deploy` (D50).
+diff --git a/architecture.yaml b/architecture.yaml
+new file mode 100644
+index 0000000..1297411
+--- /dev/null
++++ b/architecture.yaml
+@@ -0,0 +1,17 @@
++# The judgment layer the aac-tools generator reads (Jenkinsfile.architecture). Its schema is what
++# `gen-architecture --help` prints from the aac-tools toolchain.
++
++# The date of the first commit that adds chart/, which every published element carries.
++introduced: '2026-09-30'
++
++# The image is built by the JenkinsPipelineUtils repo (its docs site baked into nginx), not
++# DockerImages, so this producer owns the product.
++images:
++  pipelines-home: ss:pipelines-home
++
++products:
++  - id: ss:pipelines-home
++    label: Jenkins pipelines docs site
++    summary: Static nginx serving the Jenkins pipeline style guide and the JenkinsPipelineUtils library reference — the MkDocs site built from that repo's docs/ — at pipelines.home.
++    homepage: https://github.com/pvginkel/JenkinsPipelineUtils
++    logo: jenkins
+diff --git a/chart/Chart.lock b/chart/Chart.lock
+new file mode 100644
+index 0000000..2018dd8
+--- /dev/null
++++ b/chart/Chart.lock
+@@ -0,0 +1,6 @@
++dependencies:
++- name: homelab-shared
++  repository: https://charts.home
++  version: 0.3.1
++digest: sha256:3c59b3d17e0c986693d4a2837888cf81a86499cac5579ace9af0ad039210b600
++generated: "2026-09-30T21:17:17.974562681+02:00"
+diff --git a/chart/Chart.yaml b/chart/Chart.yaml
+new file mode 100644
+index 0000000..1aa123a
+--- /dev/null
++++ b/chart/Chart.yaml
+@@ -0,0 +1,9 @@
++apiVersion: v2
++name: pipelines
++version: "0.1"
++type: application
++dependencies:
++  # Exact, not a range (D17): the hook Job this chart renders moves on a deliberate commit.
++  - name: homelab-shared
++    version: "0.3.1"
++    repository: https://charts.home
+diff --git a/chart/templates/namespace.yaml b/chart/templates/namespace.yaml
+new file mode 100644
+index 0000000..b2af3e4
+--- /dev/null
++++ b/chart/templates/namespace.yaml
+@@ -0,0 +1,12 @@
++{{/*
++The stage namespace is a tracked chart manifest (argo-cd D25), applied at wave -1 so it exists
++before the PreSync hook runs. `Prune=false` blocks only the sync-time prune path (D26); the
++Application-delete cascade still removes it.
++*/}}
++apiVersion: v1
++kind: Namespace
++metadata:
++  name: {{ .Release.Namespace }}
++  annotations:
++    argocd.argoproj.io/sync-wave: "-1"
++    argocd.argoproj.io/sync-options: Prune=false
+diff --git a/chart/templates/pipelines-deployment.yaml b/chart/templates/pipelines-deployment.yaml
+new file mode 100644
+index 0000000..1598f95
+--- /dev/null
++++ b/chart/templates/pipelines-deployment.yaml
+@@ -0,0 +1,23 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: pipelines
++spec:
++  replicas: 1
++  selector:
++    matchLabels:
++      app: pipelines
++  template:
++    metadata:
++      labels:
++        app: pipelines
++    spec:
++      containers:
++        - name: pipelines-app
++          image: registry:5000/pipelines-home{{ required "images.pipelines is not set: config/<stage>/values.yaml carries the site build's pin" .Values.images.pipelines }}
++          ports:
++            - containerPort: 80
++          {{- with (index .Values.resources.pipelines "pipelines-app") }}
++          resources:
++            {{- toYaml . | nindent 12 }}
++          {{- end }}
+diff --git a/chart/templates/pipelines-service.yaml b/chart/templates/pipelines-service.yaml
+new file mode 100644
+index 0000000..6e4c49d
+--- /dev/null
++++ b/chart/templates/pipelines-service.yaml
+@@ -0,0 +1,21 @@
++{{- /*
++The annotations publish the stage's hosts on the LAN only, each with a step-ca certificate: the
++DNS generator and the nginx layer read them.
++*/ -}}
++apiVersion: v1
++kind: Service
++metadata:
++  name: pipelines
++  annotations:
++    nginx.webathome.org/server-name: {{ required "service.serverName is not set: config/<stage>/values.yaml names the stage's hosts" .Values.service.serverName | quote }}
++    nginx.webathome.org/is-public: "no"
++    nginx.webathome.org/enable-ssl: "yes"
++spec:
++  type: ClusterIP
++  selector:
++    app: pipelines
++  ports:
++    - name: http
++      protocol: TCP
++      port: 80
++      targetPort: 80
+diff --git a/chart/templates/tf-presync-hook.yaml b/chart/templates/tf-presync-hook.yaml
+new file mode 100644
+index 0000000..ffa5a15
+--- /dev/null
++++ b/chart/templates/tf-presync-hook.yaml
+@@ -0,0 +1 @@
++{{- include "homelab-shared.tf-presync-hook" . -}}
+diff --git a/chart/values.yaml b/chart/values.yaml
+new file mode 100644
+index 0000000..015c6fb
+--- /dev/null
++++ b/chart/values.yaml
+@@ -0,0 +1,9 @@
++service:
++  serverName:
++
++images:
++  pipelines:
++
++resources:
++  pipelines:
++    pipelines-app:
+diff --git a/config/prd/terraform.tfvars b/config/prd/terraform.tfvars
+new file mode 100644
+index 0000000..e347026
+--- /dev/null
++++ b/config/prd/terraform.tfvars
+@@ -0,0 +1,2 @@
++# This stage owns the repository's webhook; it is the only stage.
++manage_webhook = true
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+new file mode 100644
+index 0000000..0c4dcc8
+--- /dev/null
++++ b/config/prd/values.yaml
+@@ -0,0 +1,14 @@
++service:
++  serverName: pipelines.home, pipelines
++
++resources:
++  pipelines:
++    pipelines-app:
++      requests:
++        memory: 7Mi
++
++# The image the release runs (argo-cd D53). The site build, JenkinsPipelineUtils' Jenkinsfile,
++# writes this pin with cicd.writeVersionPins, which never creates a key: the tag it pushes to
++# registry:5000/pipelines-home, a per-build tag and never a digest.
++images:
++  pipelines: ':latest'
+diff --git a/terraform/providers.tf b/terraform/providers.tf
+new file mode 100644
+index 0000000..932bf0f
+--- /dev/null
++++ b/terraform/providers.tf
+@@ -0,0 +1,18 @@
++# Applied only by the Argo CD PreSync hook (ArgoCDTools argocd-hook), from its own clone. It
++# fills the empty http backend at init, exports its environment (TF_VAR_*, GITHUB_TOKEN) and
++# passes config/<stage>/*.tfvars at apply.
++
++terraform {
++  required_providers {
++    github = {
++      source = "integrations/github"
++    }
++  }
++
++  backend "http" {}
++}
++
++# Authenticates with GITHUB_TOKEN.
++provider "github" {
++  owner = "pvginkel"
++}
+diff --git a/terraform/variables.tf b/terraform/variables.tf
+new file mode 100644
+index 0000000..c8cbc17
+--- /dev/null
++++ b/terraform/variables.tf
+@@ -0,0 +1,14 @@
++# From the hook's environment.
++
++variable "github_webhook_secret" {
++  description = "Argo CD's shared webhook secret, the one the relay verifies deliveries against (TF_VAR_github_webhook_secret)."
++  type        = string
++  sensitive   = true
++}
++
++# From config/<stage>/*.tfvars.
++
++variable "manage_webhook" {
++  description = "Whether this stage's state owns the repository's GitHub webhook. True in exactly one stage: the webhook is per repository and the state per stage, so a second owner's apply fails on GitHub's hook-already-exists."
++  type        = bool
++}
+diff --git a/terraform/webhook.tf b/terraform/webhook.tf
+new file mode 100644
+index 0000000..39ac870
+--- /dev/null
++++ b/terraform/webhook.tf
+@@ -0,0 +1,16 @@
++# This repository's push deliveries, to the webhook relay, which verifies the signature and
++# forwards each delivery to argocd-server (argo-cd D39, D49).
++resource "github_repository_webhook" "argocd" {
++  count = var.manage_webhook ? 1 : 0
++
++  repository = "PipelinesDeploy"
++  active     = true
++  events     = ["push"]
++
++  configuration {
++    url          = "https://deploy-hooks.webathome.org/api/webhook"
++    content_type = "json"
++    insecure_ssl = false
++    secret       = var.github_webhook_secret
++  }
++}
+diff --git a/tests/build-deps.sh b/tests/build-deps.sh
+new file mode 100755
+index 0000000..eee1ae6
+--- /dev/null
++++ b/tests/build-deps.sh
+@@ -0,0 +1,6 @@
++#!/bin/sh
++# Resolve chart/Chart.lock into chart/charts/, the same verb Argo's repo-server runs (D17).
++set -eu
++cd "$(dirname "$0")/.."
++helm repo add charts-home https://charts.home --force-update >/dev/null
++helm dependency build chart
+diff --git a/tests/terraform.sh b/tests/terraform.sh
+new file mode 100755
+index 0000000..f463b7b
+--- /dev/null
++++ b/tests/terraform.sh
+@@ -0,0 +1,7 @@
++#!/bin/sh
++# terraform/ is formatted and valid. No backend and no credentials.
++set -eu
++cd "$(dirname "$0")/.."
++terraform fmt -check -diff -recursive
++terraform -chdir=terraform init -backend=false -input=false -no-color
++terraform -chdir=terraform validate -no-color

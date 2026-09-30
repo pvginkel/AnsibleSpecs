@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "P3 delivers J22's docs half: a hand-written page per var at vars/<name>.md, published under reference/ through the docs/pages/reference symlink. Each page matches its var's code, and Jenkins never loads the pages (upstream SCMBasedRetriever copies vars/*.groovy and vars/*.txt only). Two mutations confirmed check_site.py fails, naming the var, on a var with no page and on pages not kept in vars/. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

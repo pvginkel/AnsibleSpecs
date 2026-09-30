@@ -1,0 +1,7 @@
+{"outcome": "done",
+ "summary": "All 15 wrap-up entries are marked. I fixed six prose entries, one commit each (JenkinsPipelineUtils 36de472, 2449878, b6aa936; Architecture 2d06907; AnsibleSpecs ebc819b, b820450), and every gate was green. I asked for one card (P7: two guide rules the operator never ruled on), left B1, B3 and P6 with what I read, and relabelled E3-E7 as events with no problem, and B1's trigger and fix.",
+ "fixed": ["P10", "P11", "P12", "P13", "P8", "P9"],
+ "folded": [],
+ "cards": ["P7"],
+ "left": ["B1", "B3", "P6"],
+ "relabelled": ["B1", "E3", "E4", "E5", "E6", "E7"]}

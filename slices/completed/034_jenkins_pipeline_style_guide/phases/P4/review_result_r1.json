@@ -1,0 +1,17 @@
+{"outcome": "issues",
+ "summary": "The inventory is accurate: the partition and every count re-derive from files.tsv, config.xml and the 114 Jenkinsfiles. Three rulings-page proposals cannot be carried out as written: §5 relies on podYaml templates that do not exist for most types, §2 rule 6 contradicts §13's DockerImages labels, and §14's recipe leaves a new scheduled job that never runs.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "§5's 'templates: holds the library's sidecars' relies on podYaml templates that exist only for k8s and modern-app-toolchain; aac_tools (72 files), python, helm and iac_toolchain have none, and the page does not say so"},
+  {"id": "F2", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "§2 rule 6 (a generated stage computes only its parenthesised part) contradicts §13's generated 'Build <image> image' labels for DockerImages"},
+  {"id": "F3", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "§14's new-repo recipe has the push start every job's first build; a scheduled job has no push trigger, so its file-declared cron never registers and the job never runs"},
+  {"id": "F4", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "contradiction",
+   "summary": "§3 (stage granularity) lists no retired variants for any option; the inventory section it cites holds them"},
+  {"id": "F5", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "The settled table and §11 present two unruled items as settled: J08's 'when {}' and Theme E's registry-host constant"},
+  {"id": "F6", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Grounding's J19 'load' nuance, which the page drops silently, is the option the operator did not pick; recorded for P5 in plan.md"}
+ ]}

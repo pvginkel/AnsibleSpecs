@@ -1,0 +1,1 @@
+{"outcome": "signoff", "summary": "Round 1's blocking F1 is resolved: the podYaml and cicd reference examples now open with the CHK-1 Checkout stage. Each, put into a complete declarative file, passes the controller's linter (re-run by the reviewer). The fix commit adds no new problem.", "details": "code_review_r2.md", "findings": []}

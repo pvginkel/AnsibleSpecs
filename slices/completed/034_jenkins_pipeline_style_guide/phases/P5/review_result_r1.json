@@ -1,0 +1,11 @@
+{"outcome": "issues",
+ "summary": "The guide pages carry every ruling, and the examples pass the controller's linter (lint run and mutation-checked by the reviewer). One blocking gap: the podYaml and cicd reference pages still show a complete stages {} block whose first stage is not Checkout, against the plan's instruction to bring P3's snippets into line with the rules. Two advisory findings: check_site's Groovy-fence guard, and an overclaim on the overview page.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "contradiction",
+   "summary": "vars/podYaml.md and vars/cicd.md examples show a stages {} block with no Checkout first stage (CHK-1/GRAN-1), against plan.md:577"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "check_site.py's GROOVY_BLOCK misses ```groovy title=…, ``` groovy, ~~~groovy and ```Groovy fences, so a typed Groovy example there escapes both the check and the linter"},
+  {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "guide/index.md says every rule is verifiable from the Jenkinsfile alone; NEW-1–3 and LIB-1–5 are not about a Jenkinsfile"}
+ ]}

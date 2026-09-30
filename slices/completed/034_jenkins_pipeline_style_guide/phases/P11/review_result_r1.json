@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The single pipeline-producers.yaml entry registers pipelines-deploy with repo pvginkel/PipelinesDeploy and job AaC/PipelinesDeploy. It is schema-valid in ChartsDeploy's shape, and it matches the producer id in PipelinesDeploy, the chart name, the artifact path and the existing Jenkins job. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

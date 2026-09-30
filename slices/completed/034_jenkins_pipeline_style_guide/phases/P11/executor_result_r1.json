@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "Architecture 574b7fe on phase/034-P11 registers the pipelines-deploy producer (pvginkel/PipelinesDeploy, AaC/PipelinesDeploy) at the end of pipeline-producers.yaml, in ChartsDeploy's shape; kc project test is green. Committed locally only: the push waits for AaC/PipelinesDeploy's first green build (test phase, Ordering step 4).", "refuted": []}

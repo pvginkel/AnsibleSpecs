@@ -1,0 +1,15 @@
+{
+  "outcome": "signoff",
+  "summary": "The jenkins-pipelines skill carries all 64 guide rule ids with summaries that match the MUST text (CHK-3's deliberate rephrase is close-out P11), every link resolves in a fresh strict build, the plugin has a minor bump in the same commit, and Prettier is green. One advisory finding: the skill gives no guidance for the unconverted Jenkinsfiles it will meet before the migration.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Minor",
+      "impact": "advisory",
+      "category": "other",
+      "anchor": "none",
+      "summary": "The skill tells sessions every Jenkinsfile follows the guide and a breaking file is wrong, with no guidance for the unconverted files it fires on until the migration slice converts them"
+    }
+  ]
+}

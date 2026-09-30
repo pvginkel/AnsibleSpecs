@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "ArgoCDDeploy a854420 registers `pipelines` in releases/values.yaml the way charts is registered: prd from PipelinesDeploy, no autoSync key so auto-synced (D6), alphabetical. It renders pipelines-prd identical in shape to charts-prd, inside the AppProject's existing globs, and the render test covers it; nothing is live to take over. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

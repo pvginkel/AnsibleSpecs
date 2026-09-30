@@ -1,0 +1,20 @@
+/work/ArgoCDDeploy — P10: git diff c005fb5332c3..a854420ff688
+
+releases/values.yaml | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/releases/values.yaml b/releases/values.yaml
+index 068431e..ecf647b 100644
+--- a/releases/values.yaml
++++ b/releases/values.yaml
+@@ -196,6 +196,10 @@ apps:
+     repo: https://github.com/pvginkel/PgadminDeploy.git
+     stages:
+       prd: {}
++  pipelines:
++    repo: https://github.com/pvginkel/PipelinesDeploy.git
++    stages:
++      prd: {}
+   postgres-pas:
+     repo: https://github.com/pvginkel/PostgresPasDeploy.git
+     stages:

@@ -1,0 +1,192 @@
+/work/scratch/KubeCoderConfig — P7: git diff 1faf9332dba9..45612e929e24
+
+kubecoder/.claude-plugin/plugin.json        |   2 +-
+ kubecoder/skills/jenkins-pipelines/SKILL.md | 167 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 168 insertions(+), 1 deletion(-)
+
+diff --git a/kubecoder/.claude-plugin/plugin.json b/kubecoder/.claude-plugin/plugin.json
+index 3013eb7..4b2e195 100644
+--- a/kubecoder/.claude-plugin/plugin.json
++++ b/kubecoder/.claude-plugin/plugin.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "kubecoder",
+   "description": "Claude plugin for KubeCoder",
+-  "version": "0.8.4",
++  "version": "0.9.0",
+   "author": {
+     "name": "Pieter van Ginkel"
+   },
+diff --git a/kubecoder/skills/jenkins-pipelines/SKILL.md b/kubecoder/skills/jenkins-pipelines/SKILL.md
+new file mode 100644
+index 0000000..1bc65d2
+--- /dev/null
++++ b/kubecoder/skills/jenkins-pipelines/SKILL.md
+@@ -0,0 +1,167 @@
++---
++name: jenkins-pipelines
++description: |
++  The estate's Jenkins pipeline style guide at https://pipelines.home/docs/ —
++  its hard rules by id, and where the guide details each. Use whenever writing,
++  editing or reviewing a Jenkinsfile (`Jenkinsfile` or `Jenkinsfile.<purpose>`),
++  creating a Jenkins job, or deciding whether code goes into the
++  JenkinsPipelineUtils library.
++---
++
++Every Jenkinsfile in the estate follows the style guide at
++https://pipelines.home/docs/, strictly: a file that breaks one of its rules is
++wrong, whatever else it gets right. The guide is declarative only, and it is the
++only source. This skill names its hard rules in brief, each by its id, so you
++know what to hold a file to; the guide's page holds the rule's exact wording,
++its reason and a recipe. Read a rule's page before you write a file to it.
++
++**Reading the guide.** https://pipelines.home/docs/llms.txt indexes every page
++as a Markdown copy, and `llms-full.txt` beside it holds the whole site in one
++file. A page's Markdown copy is `https://pipelines.home/docs/<path>/index.md`,
++and a rule's id stands in its heading (`POD-4`); a browser reads the page at
++`…/<path>/` and the rule at `#pod-4`. Each library var has its reference page at
++`https://pipelines.home/docs/reference/<var>/index.md`.
++
++**Start from the type's reference file.** Every pipeline type has a complete
++reference Jenkinsfile that applies every rule, on its page at
++`https://pipelines.home/docs/types/<stem>/`. The overview,
++https://pipelines.home/docs/types/index.md, names the types and which job each
++reference file comes from. A new pipeline starts from its type's reference file.
++
++## The hard rules
++
++### [Files and headers](https://pipelines.home/docs/guide/file-layout/index.md)
++
++- One declarative `pipeline {}`; no scripted `node`, `podTemplate` or `stage`
++  outside it (FILE-1).
++- Named `Jenkinsfile` or `Jenkinsfile.<purpose>`, at the repo root;
++  `Jenkinsfile.architecture` is the architecture producer (FILE-2).
++- A header comment first: what the job does and every change it makes outside
++  the build, ending in a `Controller config:` block — `Job:`, `SCM:`,
++  `Script Path:`, never triggers or concurrency (FILE-3). No link to the guide
++  (FILE-4).
++- The library line, once and exactly:
++  `library identifier: 'JenkinsPipelineUtils', changelog: false` — no
++  `@Library`, no version (FILE-5).
++- Header, import, library line, local code, `pipeline {}`, and nothing after it
++  (FILE-6). A comment says why, never what the next line does (FILE-7).
++
++### [Job properties](https://pipelines.home/docs/guide/job-properties/index.md)
++
++- Blocks in order: `agent`, `options`, `triggers`, `parameters`, `stages`,
++  `post` (PROP-1).
++- `options {}` holds, in order and nothing else: `disableConcurrentBuilds(…)`,
++  `skipDefaultCheckout()`, `timeout(…)`, `timestamps()`, and
++  `copyArtifactPermission('<job>')` only where another job copies this job's
++  artifacts (PROP-2, PROP-4).
++- `disableConcurrentBuilds(abortPrevious: true)`. Plain
++  `disableConcurrentBuilds()`, with a comment saying why, only for a build that
++  decides from its change sets what to build or makes a sequence of changes an
++  abort would cut in half; the guide lists those jobs (PROP-3).
++- No `buildDiscarder` (PROP-5). Built on push: `triggers { githubPush() }`;
++  scheduled: `triggers { cron('…') }` with `H` in the minute field; started by
++  hand: no `triggers {}` (PROP-6). Parameters in `parameters {}` (PROP-7). No
++  `properties` step, except AaC/Architecture's `Set triggers` (PROP-8).
++
++### [Checkout](https://pipelines.home/docs/guide/checkout/index.md)
++
++- `skipDefaultCheckout()`, and the first stage is `Checkout`, running
++  `checkout scm`; the job's own repo is never cloned with `git` or in a shell
++  (CHK-1). The iac-controller files too (CHK-4).
++- Other repos the build reads are cloned in that same stage, each in
++  `dir('<Repo>')`, the job's own included (CHK-2).
++- A push never goes from the `Checkout` stage's clone: the stage that pushes
++  clones the repo inside `withCredentials` and pushes from that clone, the job's
++  own repo included. A pin write clones nothing (CHK-3).
++
++### [Agent and pod](https://pipelines.home/docs/guide/pod/index.md)
++
++- One `agent { kubernetes { … } }`, at the top of `pipeline {}`; no stage
++  declares an agent (POD-1). An iac-controller job:
++  `agent { label 'iac-controller' }` (POD-2).
++- `inheritFrom 'jenkins-agent'`, or `jenkins-agent-large` in the jobs the guide
++  lists. `kaniko` only for a build that runs kaniko, and then with
++  `yamlMergeStrategy merge()` (POD-3).
++- Every other container comes from
++  `yaml podYaml(templates: [...], images: [...])`. An `images:` entry is a map
++  with an explicit `name:`, `[image: 'espressif/idf:v5.5.3', name: 'idf']`,
++  never a string (POD-4). A library sidecar is named in `templates:`, never
++  under `images:` (POD-5). No container that no step runs in (POD-6).
++
++### [Secrets and settings](https://pipelines.home/docs/guide/secrets/index.md)
++
++- `withVault` goes inside the `steps` of the stage that uses the secret, around
++  only the steps that use it; never around `pipeline {}`, the agent, the
++  checkout, a lint or a test (SEC-1). No secret in the pod spec (SEC-2).
++- The one Jenkins credential is GitHub's,
++  `5f6fbd66-b41c-405f-b107-85ba6fd97f10`. A shell that pushes gets it from
++  `withCredentials([usernamePassword(…)])` around that shell only (SEC-3).
++- A shell reads a secret from its environment (`\$TOKEN` in a `"""` script); a
++  secret is never interpolated into a Groovy string (SEC-4).
++- A setting that is not a secret is written in the file where it is used. No
++  controller global environment variable except `HA_URL`, and no URL or host
++  from OpenBao (SEC-5).
++
++### [Timeouts](https://pipelines.home/docs/guide/timeouts/index.md)
++
++- A pod pipeline: `timeout(time: 60, unit: 'MINUTES')` in its pipeline-level
++  `options {}` (TIME-1). An iac-controller file:
++  `timeout(time: 4, unit: 'HOURS')` (TIME-2). The one exception is DockerImages,
++  180 minutes (TIME-3).
++- A `timeout` step inside a stage bounds a step known to hang, under a comment
++  naming the hang, and never sits inside `catchError` (TIME-4). An iac dev stage
++  bounds its playbook with the shell's `timeout --kill-after=1m <n>m` (TIME-5).
++
++### [Stage granularity](https://pipelines.home/docs/guide/stage-granularity/index.md)
++
++- A stage for each outcome, and no other stage: the checkout, first; one stage
++  per gate; one per artifact; one per change outside the build, such as a pin
++  write, an upload, an apply, a push or a started job (GRAN-1 to GRAN-5). Never
++  split to have more stages, never merged to have fewer.
++- A change comes after the gates and builds it depends on (GRAN-6).
++- Every stage is written out as `stage('<label>')`; only DockerImages generates
++  stages (GRAN-7). A stage that runs only sometimes says so in `when {}`
++  (GRAN-8).
++
++### [Stage labels](https://pipelines.home/docs/guide/stage-labels/index.md)
++
++- An imperative verb, then its object, in sentence case: `Build firmware`. A
++  name is spelled as it is elsewhere (LABEL-1).
++- The standard labels, where they apply: `Checkout`, `Lint`, `Test`,
++  `Validate <artifact>`, `Build <image> image`, `Build <artifact>`,
++  `Generate <artifact>`, `Write image pins`, `Trigger <job>`, `Deploy firmware`
++  (LABEL-2).
++- The scope last, in parentheses: `Apply Terraform (prd)` (LABEL-3). Never `+`:
++  `Lint and test` (LABEL-4). Never the repo or job name, nor anything the stage
++  does not do (LABEL-5). Unique within the file, and a string literal (LABEL-6).
++
++### [post and notify](https://pipelines.home/docs/guide/post-and-notify/index.md)
++
++- `notify` only for what the build's result does not say, never for a failure
++  (POST-1). A failed iac dev stage calls `notify.warning(message)`, then
++  `unstable(message)`, in the stage (POST-2).
++- A file with plain `disableConcurrentBuilds()` ends with the guide's abort
++  marker `post` block; a file with `abortPrevious: true` has no
++  `post { aborted }` (POST-3). `post` holds only alerts and cleanup (POST-4).
++
++### [The library](https://pipelines.home/docs/guide/library/index.md)
++
++- Code goes into JenkinsPipelineUtils when it carries a contract that must be
++  the same across the estate; a repo's own workflow stays in its files, however
++  many copies there are (LIB-1). The library never takes over the job's
++  properties, trigger or agent size (LIB-2). A per-repo value is an argument
++  with no default (LIB-3). A whole-pipeline helper needs three jobs whose files
++  are one body (LIB-4). A new var comes with its page, `vars/<name>.md`, in the
++  same commit (LIB-5).
++- An image build calls `helmCharts.kaniko2(…)`, never the positional
++  `helmCharts.kaniko(…)` (LIB-6). Each iac-controller file carries its own
++  dev-stage code (LIB-7). Logic only one file uses is a `def` before
++  `pipeline {}`, `@NonCPS` only when it is pure and calls no step (LIB-8).
++
++### [A new repo](https://pipelines.home/docs/guide/new-repo/index.md)
++
++- A new job is created through the Jenkins API, from the guide's `config.xml`
++  template (NEW-1). A push-built job's `config.xml` carries `GitHubPushTrigger`
++  when the job is created: the file's `triggers {}` never install the repo's
++  push hook (NEW-2). A new job goes into its product's folder, and an existing
++  job is never moved (NEW-3).
