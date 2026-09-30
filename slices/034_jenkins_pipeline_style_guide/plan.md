@@ -881,7 +881,7 @@ Later phases:
 - Manifest: root `jenkins: IaC/JenkinsPipelineUtils`, the header names the job, `docs` gains
   `build:`. `kc project test` green. The library's hook was unchanged by the job's creation.
 
-### P10 — The app registered with Argo CD
+### P10 — The app registered with Argo CD ✅ DONE 2026-09-30
 
 Target: ../ArgoCDDeploy
 
