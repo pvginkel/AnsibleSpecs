@@ -637,6 +637,81 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A3",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the scratch clone /work/scratch/PipelinesDeploy once the slice is done",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/PipelinesDeploy` for `Target: github:pvginkel/PipelinesDeploy`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.",
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D6",
+      "kind": "decision",
+      "grade": null,
+      "headline": "PipelinesDeploy departs from ChartsDeploy's shape: no committed library chart, a github-only Terraform, no HelmCharts carry-over values, and its product minted as ss: like charts-home",
+      "body": [
+        "P8's plan says PipelinesDeploy is shaped like ChartsDeploy. Four places differ, each following another precedent of the estate:",
+        "- `chart/charts/` is gitignored and `tests/build-deps.sh` resolves homelab-shared from charts.home, as TfmirrorDeploy, ArgoCDDeploy and KubeCoderDeploy do. ChartsDeploy (and RegistryDeploy) commit the tarball only because charts.home and the registry must render while charts.home is down (`tests/check-deps.sh`'s comment); pipelines.home has no such cycle.",
+        "- `terraform/` declares only the github provider and the two variables the webhook needs (`github_webhook_secret`, `manage_webhook`), in KubeCoderDeploy's hand-built form, not the six providers every migrated deploy repo carries from HelmCharts' `_providers/providers.tf`. Terraform ignores the hook's other `TF_VAR_*` exports, which name undeclared variables.",
+        "- No `global.environment` in the stage values and no `deployment.timestamp` annotation: both are carry-overs of HelmCharts' deploy CLI (argo_migrate.py `compose_values`) that no template or tool reads.",
+        "- The product is `ss:pipelines-home`, the kind charts.home's `ss:charts-home` has (static nginx serving content a repo of the estate builds). KubeCoder's MkDocs manual is `app:kubecoder-manual`, the other available precedent."
+      ],
+      "consequence": "none beyond the choice: the repo is smaller than ChartsDeploy and renders only while charts.home is up, where a literal copy would carry a committed tarball, four unused providers and two unread values.",
+      "evidence": "witnessed",
+      "author": "code-writer, P8, r1, plan.md P8 done-record",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none",
+        "repo": "PipelinesDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "I3",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "PipelinesDeploy architecture.yaml: pipelines.home is not listed under webUi, so the homeapps launcher shows no tile for the docs site",
+      "body": [
+        "The judgment layer's `webUi:` key marks the exposed hosts that are browser-facing UIs; the homeapps launcher tiles each one (`gen-architecture --help`). argocd.home, grafana.home, git.home, headlamp.home and jenkins.webathome.org are listed. pipelines.home serves a landing page at `/` and the style guide under `/docs/`, but P8's plan does not ask for a tile, so `architecture.yaml` has no `webUi:` entry. Adding one is `webUi: [pipelines.home]` in PipelinesDeploy's `architecture.yaml`."
+      ],
+      "consequence": "The docs site is reached by typing pipelines.home or following a link; the homeapps launcher that tiles the estate's other web UIs does not show it.",
+      "evidence": "witnessed",
+      "author": "code-writer, P8, r1, PipelinesDeploy architecture.yaml",
+      "labels": {
+        "benefit": "user",
+        "felt": "in-use",
+        "change": "add",
+        "size": "one-edit",
+        "product-call": "yes",
+        "prevents": "nothing",
+        "area": "plain",
+        "repo": "PipelinesDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

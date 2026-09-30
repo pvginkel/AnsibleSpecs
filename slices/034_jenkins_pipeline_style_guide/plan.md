@@ -252,13 +252,16 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
 - **The test phase goes live in this order, each step needing the one before.** Every push in
   it is authorized: PipelinesDeploy and ArgoCDDeploy by D6, JenkinsPipelineUtils and
   Architecture by F1, and KubeCoderConfig by D3.
-  1. Push PipelinesDeploy and JenkinsPipelineUtils.
+  1. Push JenkinsPipelineUtils, then PipelinesDeploy straight after. `AaC/PipelinesDeploy`'s
+     build loads the library from `main` and needs its `aac-tools` template (`c4de566`). The
+     site build that the library push starts writes its pin into PipelinesDeploy's
+     `config/prd/values.yaml`, which has to be on `main` when that build reaches its pin stage.
   2. Get the site-build job's first build. The step-1 push starts it: the job carries the push
      trigger from creation (P1's recipe), and the library already has the hook. Start it by hand
      only if the push did not. It writes the first image pin into PipelinesDeploy and pushes it
      from Jenkins, so the local clone is behind origin from then on.
   3. Get a first green build of `AaC/PipelinesDeploy`. The pushes of steps 1 and 2 start its
-     builds.
+     builds; the pin push's build aborts one still running (`abortPrevious: true`).
   4. Then push Architecture and ArgoCDDeploy:
      - A push to Architecture's main also rebuilds the architecture viewer and redeploys it in
        prd (Architecture `CLAUDE.md:40-42`). F1 accepts that redeploy.
@@ -779,6 +782,38 @@ Jenkins hook only; the Argo relay webhook comes from this stage's Terraform.
   test phase's push (Ordering constraints). A build started by hand before that push would build
   the placeholder `main`.
 
+**Done (P8).** PipelinesDeploy `4e34cd6` on `phase/034-P8`: the chart `pipelines` (homelab-shared
+0.3.1; Deployment `pipelines`, container `pipelines-app` on port 80, image
+`registry:5000/pipelines-home`; Service annotated `server-name: pipelines.home, pipelines`,
+`is-public: "no"`, `enable-ssl: "yes"`; ChartsDeploy's namespace and hook templates), the prd
+values with the pin `images.pipelines: ':latest'`, the Terraform (the relay webhook,
+`manage_webhook = true`), producer `pipelines-deploy` (`architecture.yaml` minting
+`ss:pipelines-home`, `.architecturerc`, `Jenkinsfile.architecture`), a README and the real
+manifest. `AaC/PipelinesDeploy` exists, created through the API with `GitHubPushTrigger`, its
+`config.xml` in `jenkins-config/xml/AaC/`, no build yet. Jenkins installed the repo's hook at
+creation (`web`, push, JSON, `https://jenkins.webathome.org/github-webhook/`).
+
+Later phases:
+- P9: the image is `registry:5000/pipelines-home`, serving on port 80; its pin is `images.pipelines`
+  in `config/prd/values.yaml` (edited in place).
+- P10: the chart's name is `pipelines`: the registry entry is `pipelines`, namespace `pipelines-prd`.
+- Test phase: push JenkinsPipelineUtils, then PipelinesDeploy (Ordering step 1, edited in place).
+
+- Linter: "Jenkinsfile successfully validated." The file differs from
+  `docs/examples/deploy-architecture.groovy`, markers dropped, only in names and `--producer`.
+- `kc project lint` and `kc project test` green. The artifact: 6 elements, 8 relations, no `gap:`
+  line; two regenerations byte-identical (runbook step 1). The published dataset had no
+  `pipelines` product or id.
+- Departures from ChartsDeploy (close-out D6): `chart/charts/` is not committed, and
+  `tests/build-deps.sh` resolves it as TfmirrorDeploy's does. The Terraform declares the github
+  provider and two variables, KubeCoderDeploy's form; Terraform ignores the hook's other
+  `TF_VAR_*`. No `global.environment` or `deployment.timestamp`: nothing reads them.
+- `':latest'` holds the key until the site build pins: `writeVersionPins` never creates one, and
+  the Deployment's `required` fails a render without it. Argo gets the app at Ordering step 4,
+  after the first pin.
+- Memory request 7Mi, charts.home's nginx as measured (`kubectl top`, 2026-09-30).
+- `introduced: '2026-09-30'` is the date of `4e34cd6`, the commit that adds `chart/`.
+
 ### P9 — The site image, and the library's own build job
 
 Target: ../JenkinsPipelineUtils
@@ -794,12 +829,14 @@ KubeCoder's manual image (`manual/Dockerfile`, `manual/nginx.conf`). From them t
 - the reference pages: `docs/pages/reference` is a symlink to `../../vars` (P3), so the builder
   stage copies `vars/` beside `docs/`, with the repo root as the build context;
 - `nginx -t` at build time (`:60`);
-- relative redirects under a path prefix.
+- relative redirects under a path prefix;
+- port 80, where PipelinesDeploy's Deployment and Service send traffic (P8), not the manual's 8081.
 
 **The Jenkinsfile.** It is the guide's first application in the estate and follows the guide: its
 shape is the image build's reference file, `docs/examples/image-build.groovy`. On
-each push to main it builds the image with kaniko into `registry:5000`, tagged with the build
-number, and writes that pin into PipelinesDeploy's prd values. Charts does the same
+each push to main it builds the image with kaniko into `registry:5000/pipelines-home`, tagged with
+the build number, and writes that pin into PipelinesDeploy's prd values: `images.pipelines` in
+`config/prd/values.yaml` (P8). Charts does the same
 (`/work/Charts/Jenkinsfile:31-52`).
 
 **The job** that runs the Jenkinsfile exists. It is created through the API (D4) with
