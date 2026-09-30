@@ -101,6 +101,15 @@ P13a moved each of these four firmware repos' `lint` gate from `./scripts/arch-v
 **Provenance:** witnessed: executor, P13a, r1, sweep_ledger.md P13a rows
 **Disposition:**
 
+### A9 — Restart the CalendarDisplay, PaperClock and Intercom KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+
+P13b moved each of these three firmware repos' `lint` gate from `./scripts/arch-validate.py docs/architecture/*.yaml` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in each repo's own `.kubecoder/config.yaml` (CalendarDisplay `718dba0`, PaperClock `4e65593`, Intercom `72ebe0f`, all pushed). A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier).
+
+**Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
+
+**Provenance:** witnessed: executor, P13b, r1, sweep_ledger.md P13b rows
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->

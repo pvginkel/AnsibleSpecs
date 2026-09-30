@@ -998,6 +998,31 @@ As P13a, for the carriers P10 assigns here, resuming from the ledger.
 2. PaperClock, about 12 min.
 3. Intercom, about 8 min.
 
+**Done (P13b).** The three P13b device carriers run the toolchain's `arch-validate` wherever they
+ran the copy, and their copies are deleted. Each was pushed alone and is done, flash included:
+CalendarDisplay `718dba0`, PaperClock `4e65593` and Intercom `72ebe0f`. The device class is
+closed, and so is the sweep: every `sweep_ledger.md` carrier row reads done, except Ansible's
+(the test phase pushes it) and the three archived repos. The Ansible branch carries no commit.
+
+Later phases:
+- Test phase: V12's GitHub tree check runs on current trees. All 27 carriers the sweep pushed
+  have no copy on their default branch. Ansible keeps its copy until `b92d01a` is pushed.
+- Test phase: close-out A4–A9 name every environment that gained aac-tools. A9 covers P13b's
+  three.
+
+Record:
+- Each carrier moved `Jenkinsfile.architecture` onto `containerTemplates.aac_tools` and its `lint`
+  gate onto `cexec aac-tools arch-validate`. Each `.kubecoder/config.yaml` declares aac-tools
+  (close-out A9), and the comments that called the script stdlib-only are gone. No other file
+  named the script. `SEED-NOTES.md` stays as history.
+- Before each push, `cexec aac-tools arch-validate docs/architecture/*.yaml` passed in each clone.
+  Each origin head had last been built green on 2026-09-11/13.
+- Firmware #58, #115 and #81 were green in 1m20s–1m59s. Each printed its upload success line,
+  and Intercom's printed one per hardware revision. AaC #11, #15 and #25 ran `arch-validate` in
+  the `aac-tools` container. Architecture #2320, #2322 (#2321 superseded) and #2323 were green,
+  and each site pin rolled. GitHub's trees of the three hold no `arch-validate.py`, and none is
+  truncated. The logs are `/work/scratch/p9-sweep/logs/p13b-<Repo>.log`.
+
 ## Not in scope
 
 - R3's app-name equality check (Ruling D2): no check is built; the runbook's warning stays.
