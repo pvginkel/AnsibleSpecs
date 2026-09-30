@@ -192,6 +192,57 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (plugin_version) outside any phase",
+      "body": [
+        "The driver's bail (`plugin_version`), as it recorded it:",
+        "",
+        "> this loop runs plugin 0.9.60 from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.60/tools; the installed plugin is 0.9.61, which the agents it dispatches load, so driver and agents disagree on what they hand each other. Relaunch from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.61/tools/run_loop.py with the same arguments plus --resume (a run loop resumes from state.json).",
+        "",
+        "Stopped 2026-09-30 13:35; resumed 2026-09-30 13:35."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "I1",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "JenkinsPipelineUtils: the k8s and modern-app-toolchain sidecar settings are written twice, in containerTemplates and in podYaml.sidecars()",
+      "body": [
+        "Ruling F1 leaves containerTemplates untouched, so podYaml carries its own copy of the two sidecars' settings: registry:5000/k8s:1.35.5 and registry:5000/kube-coder-modern-app-toolchain:node-24 with uid 1000 (vars/podYaml.groovy sidecars(), vars/containerTemplates.groovy k8s/modern_app_toolchain). A comment on sidecars() names the pairing; no test compares them. If the verdict keeps scripted pod pipelines, both stay, and one source (or a test that both agree) removes the chance of a bump landing in one only. If the verdict migrates everything, the describables go and so does the duplicate."
+      ],
+      "consequence": "A sidecar image bump made in containerTemplates alone leaves KubeCoder's declarative build on the old image, with no error.",
+      "evidence": "witnessed",
+      "author": "code-writer, P3, r1, vars/podYaml.groovy",
+      "labels": {
+        "benefit": "operations",
+        "felt": "after-change",
+        "change": "remove",
+        "size": "design",
+        "product-call": "no",
+        "prevents": "degraded",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

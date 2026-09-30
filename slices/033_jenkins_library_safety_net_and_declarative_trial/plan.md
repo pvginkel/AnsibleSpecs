@@ -298,6 +298,32 @@ this lands:
   a map `images:` entry, an `env` value YAML would otherwise read as something other than the
   string given (empty, `true`, a number), and each refusal. The tests reach the var as P1's do.
 
+**Done (P3).** `vars/podYaml.groovy` (new; `containerTemplates.groovy` untouched) renders the pod
+spec; `PodYamlTest` asserts it in full. JenkinsPipelineUtils `c33e64a` on `phase/033-P3`;
+`kc project test` green, 175 tests (Compile 11, TrackingTag 23, VersionPins 96, AlertEscape 10,
+ChangedFiles 9, PodYaml 26).
+
+Later phases:
+- P4's call, asserted verbatim by `PodYamlTest.templatesComeBeforeImagesEachInTheOrderGiven`:
+  `podYaml(templates: ['k8s', 'modern-app-toolchain'], images: [[image:
+  'registry:5000/kube-coder-go-toolchain:latest', name: 'golang', resources: [requests: [cpu:
+  '2', memory: '2Gi'], limits: [cpu: '4', memory: '4Gi']]], 'node:24-bookworm'])`.
+- Containers render in that order (templates, then images); the output is a plain String, with
+  `apiVersion: v1`/`kind: Pod` and only `spec.containers`.
+
+Record:
+- Each container: `name`, `image`, `imagePullPolicy: Always`, `command: [sleep]`,
+  `args: [infinity]`, then `resources`, `securityContext.runAsUser`, `env` where given. The
+  #558 print's `tty: false`, `privileged: false` and `resources: {}` are API defaults and are
+  not rendered.
+- Every caller-supplied string (names, images, resource names and quantities, env names and
+  values) is a YAML double-quoted scalar; control characters are `\xNN` escapes. `runAsUser`
+  takes an integer or a numeric string. GString arguments are read as their text.
+- Refused with `IllegalArgumentException`, message asserted: an unknown template, an unknown
+  `images` map key, a map without `image`, a `resources` key other than `requests`/`limits`, a
+  top-level key other than `templates`/`images`, and two containers under one name.
+- Checked once by hand: the rendered YAML loads in PyYAML to the intended pod.
+
 ### P4 — KubeCoder's Build-Main Jenkinsfile, declarative
 
 Target: github:pvginkel/KubeCoder
