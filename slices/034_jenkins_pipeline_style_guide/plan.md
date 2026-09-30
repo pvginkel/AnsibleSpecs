@@ -622,7 +622,9 @@ Later phases:
   file; LIB-7 carries J19's (2), no helper in the library or loaded from the repo.
 - Reference pages brought into line: podYaml (map entries; its first example's `k8s` now has a
   step), helmCharts/utils labels, kubectl `Test`, notify's dev-stage form, cicd's full
-  `options {}`, containerTemplates' podYaml column (POD-5, no `images:` stand-ins).
+  `options {}`, containerTemplates' podYaml column (POD-5, no `images:` stand-ins). The two
+  `stages {}` examples, podYaml's and cicd's, open with `Checkout` (CHK-1; review r1 F1,
+  `d21017c`); each, in a complete file, "Jenkinsfile successfully validated.".
 
 ### P6 — One complete reference Jenkinsfile per pipeline type
 
