@@ -414,7 +414,7 @@ Later phases:
 - `gitUtils.getTreeHashFile`'s `version` never reaches the file. The page documents that as it
   is; the defect is close-out B1 (V19 leaves the var unchanged).
 
-### P4 — The inventory of pipeline types, and the rulings page
+### P4 — The inventory of pipeline types, and the rulings page ✅ DONE 2026-09-30
 
 Target: ../AnsibleSpecs
 
