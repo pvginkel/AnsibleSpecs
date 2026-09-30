@@ -539,7 +539,7 @@ Later phases:
 - Code review r2: §5's (a) now states its cost to P8's producer and V14, split into (a1)/(a2).
   `podYaml` refuses `aac_tools`: a scratch copy of `PodYamlTest` with that refusal case, 27 green.
 
-### P5 — The guide's rules: one strict section per topic, stage labels on their own
+### P5 — The guide's rules: one strict section per topic, stage labels on their own ✅ DONE 2026-09-30
 
 Target: ../JenkinsPipelineUtils
 
