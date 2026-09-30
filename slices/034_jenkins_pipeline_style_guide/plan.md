@@ -909,7 +909,7 @@ Later phases:
 `kc project lint` (helm lint of the chart and `releases`) and `kc project test` (the render test,
 the `argocd-deploy` producer's generate and validate) passed on the commit.
 
-### P11 — The producer registered in Architecture
+### P11 — The producer registered in Architecture ✅ DONE 2026-09-30
 
 Target: ../Architecture
 
