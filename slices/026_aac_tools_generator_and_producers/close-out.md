@@ -83,6 +83,15 @@ P12b moved the `lint` gate of IntercomServer and SSEGateway from `./scripts/arch
 **Provenance:** witnessed: executor, P12b, r1, sweep_ledger.md P12b rows
 **Disposition:**
 
+### A7 — Restart the ElectronicsInventory KubeCoder environment so its lint gates find the aac-tools sidecar (operator)
+
+P12c moved both components' `lint` gate in ElectronicsInventory from `../scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in the repo's own `.kubecoder/config.yaml`. A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). ZigbeeControl had no local gate that ran its copies, so its environment config is unchanged.
+
+**Consequence:** Until the environment restarts, `kc project lint --project backend|frontend` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
+
+**Provenance:** witnessed: executor, P12c, r1, sweep_ledger.md P12c rows
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
