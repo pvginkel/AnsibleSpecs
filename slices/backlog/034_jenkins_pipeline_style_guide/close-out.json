@@ -48,6 +48,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P3",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Ansible .aiworkflowrc: its header says 'the driver pushes', but with the test phase enabled the test agent pushes and the driver only checks",
+      "body": [
+        "Ansible .aiworkflowrc lines 4-7: 'Same values, so the loop behaves exactly as before: both phases run, the driver pushes, and no devlock is taken'. The same file sets [test_phase] strategy, so the test phase runs. The dev plugin's docs/project-contract.md:75-77 says 'With a test phase, that phase's procedure doc pushes and the driver checks it happened; with no test phase the driver pushes'. run-loop.md § The push check says the same. The comment describes the no-test-phase mode."
+      ],
+      "consequence": "A session reading the project's workflow config expects the driver to push a slice's repos, while the test agent actually owns the push and the driver only checks it and bails 'unpushed'.",
+      "evidence": "read",
+      "author": "plan-reviewer, planning r1, Ansible .aiworkflowrc:4-7 and dev 0.9.61 docs/project-contract.md:75-77",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
