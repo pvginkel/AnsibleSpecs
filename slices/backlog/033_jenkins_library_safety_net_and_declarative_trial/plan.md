@@ -122,6 +122,12 @@ The standing rules quoted below come from that plan.
   environment has no `python` tool container, so KubeCoder's own `kc project test` cannot run
   here.
 
+## Task shape
+
+cross-cutting — the ask spans two repos (JenkinsPipelineUtils for R2–R5 and the `podYaml` helper,
+KubeCoder for R1's conversion) and R1 sets a pattern: the first library helper feeding a
+declarative `agent { kubernetes { yaml … } }`, the shape a "migrate all" verdict would copy.
+
 ## Ordering constraints
 
 - The library's `podYaml` helper lands before the KubeCoder conversion that calls it.
@@ -135,6 +141,105 @@ The standing rules quoted below come from that plan.
 ## Driver rulings
 
 - gate github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile — ruling 2026-09-30: the change is the Jenkinsfile only, this environment cannot run KubeCoder's suites, and the operator's Replay runs them in Jenkins
+
+### P1 — The library's gate runs at the controller's workflow-cps and asserts the pure functions
+
+Target: ../JenkinsPipelineUtils
+
+R3, and R2 except `utils.hasChanges`, which only P2 makes callable. When this lands:
+
+- `tests/pom.xml`'s `groovy-cps.version` (`tests/pom.xml:17`, `4376.v30c8c00684a_3`) is the
+  controller's `workflow-cps`, `4383.v04fa_a_3d67b_d9` (read from the controller's plugin API and
+  found on repo.jenkins-ci.org, 2026-09-30). The versions the pom's comment ties to that
+  groovy-cps pom (`tests/pom.xml:13-19`) follow it.
+- `kc project test` asserts the behaviour of `cicd.applyPins`, `cicd.replacePin`,
+  `cicd.plainSafe` and `notify.escape`: what their doc comments promise and the refusals they
+  throw (`vars/cicd.groovy:176-351`, `vars/notify.groovy:22-37`), not one smoke call each.
+  `helmCharts.resolveTrackingTag` already has `TrackingTagTest`, and every var already compiles
+  (`LibraryCompileTest.java:69-76`); both stay as they are.
+- The tests reach the vars the way the grounding's prototype did ("How to call vars from JUnit"
+  above) and `TrackingTagTest` does. No new dependency.
+
+### P2 — `utils.hasChanges` goes `@NonCPS` under test, and the dead helpers go
+
+Target: ../JenkinsPipelineUtils
+
+R4 and R5. When this lands:
+
+- `hasChanges` (`vars/utils.groovy:33-41`) is `@NonCPS` and otherwise as it was. The gate calls
+  it against a stand-in `currentBuild` (bound as the grounding's prototype did): `'.*'` answers
+  true, a pattern that cannot match answers false. With that, R2's list is covered.
+- Gone: `helmCharts.tools` with its `toolsInstalled` field, `helmCharts.resolveImageTag`
+  (`vars/helmCharts.groovy:7-36`), `containerTemplates.debian` and `containerTemplates.canon`
+  (`vars/containerTemplates.groovy:66-78`). None has a caller (grounding, "R5 premise
+  correction").
+- Kept, per R5's KitchenDisplay ruling and J15 being out of this slice: `helmCharts.ssh`/`rsync`
+  (`KitchenDisplay/Jenkinsfile:41-45` still calls both), `containerTemplates.rsync`/`dockbuild`,
+  `gitUtils`, `kubectl.waitForJob`/`readFileFromPod`.
+
+### P3 — `containerTemplates.podYaml(...)`: the library's sidecars as a declarative agent's pod YAML
+
+Target: ../JenkinsPipelineUtils
+
+R1's library half. A declarative `agent { kubernetes { … } }` takes its pod as a YAML string,
+while `containerTemplates.*` return `containerTemplate(...)` describables that only a scripted
+`podTemplate(containers: …)` takes (`vars/containerTemplates.groovy:1-7`). When this lands:
+
+- `containerTemplates.podYaml(...)` returns a pod spec, as a string the controller's `kubernetes`
+  plugin (4557) takes as an agent's `yaml`, holding the library sidecars the caller names — at
+  least `k8s` and `modern_app_toolchain`, which KubeCoder uses — each under the container name the
+  caller chooses, as the describable methods' `name` argument does today (KubeCoder addresses
+  `k8s` and `modern-app-toolchain`).
+- A caller's own containers join the same pod without the caller hand-merging YAML. KubeCoder's
+  `golang` and `node` (`KubeCoder/Jenkinsfile:25-29`) stay KubeCoder's, not library templates,
+  and keep their resources, pull policy, command and tty.
+- Each library sidecar's settings (image, command, pull policy, user, env) are written once in
+  the library, and both the describable a scripted pipeline gets and the entry `podYaml` renders
+  derive from that, so the two forms cannot drift. The scripted consumers see no change;
+  KitchenDisplay's `rsync`/`dockbuild` are not touched.
+- A sidecar renders to what the plugin builds from its describable today. The pod spec the
+  plugin prints at the top of a scripted build's console is the reference —
+  `$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText` (user `admin`, `$JENKINS_TOKEN`)
+  shows `k8s` and `modern-app-toolchain` among the rest.
+- It runs where Declarative evaluates the `agent` block, before any agent exists, so it calls
+  no step that needs a node.
+- `kc project test` proves the output: it parses as a pod whose containers carry what the
+  sidecars' settings say, and a caller's own container comes through intact.
+
+### P4 — KubeCoder's Build-Main Jenkinsfile, declarative
+
+Target: github:pvginkel/KubeCoder
+
+KubeCoder is not checked out by this environment; the driver clones it to `/work/scratch/KubeCoder`
+for this slice.
+
+R1's conversion. `Jenkinsfile` becomes a declarative `pipeline {}`, and the trial changes its
+syntax, not what the build does:
+
+- The agent is `agent { kubernetes { … } }`, inheriting the controller's `jenkins-agent kaniko`
+  templates as today's `podTemplate(inheritFrom: …)` does (`Jenkinsfile:9`), its `yaml` from
+  P3's `containerTemplates.podYaml(...)`: `k8s`, `modern-app-toolchain`, and `golang`/`node`
+  as they are (`Jenkinsfile:12-29`, their why-comment with them). The pod equals the scripted
+  build's — containers, images, pull policies, users, resources, and what the inherited
+  templates add (the `kaniko` container, the init container, the volumes, the node selector);
+  Build-Main #558's console (P3) is the reference. Steps that ran in the default `jnlp`
+  container (the checkout, the CLI-reference gate's `git` steps, `Jenkinsfile:218-219`) still do.
+- `options{}`/`triggers{}` carry the job config today's `properties([...])` sets
+  (`Jenkinsfile:7`): `disableConcurrentBuilds(abortPrevious: true)` and the GitHub push trigger.
+- The same work in the same order: every stage, container, `sh` step and kaniko destination,
+  with the pin write to KubeCoderDeploy last (`Jenkinsfile:321-339`). What Declarative allows
+  only in `script {}` goes there.
+- `when{}` and `post{}`: the scripted file has no conditional stage and no failure or cleanup
+  handling — every stage runs on every build (`Jenkinsfile:31-340`) — so the conversion adds
+  neither.
+- `vscode-desktop/test/publish.test.ts:102-115` reads the Jenkinsfile's text (the desktop
+  packaging line ahead of `stage('Build kubecoder-manual')`, and the `test -s` check on the
+  vsix); it still passes.
+- The gate is the controller's full declarative linter check (Driver rulings): POST the file to
+  `$JENKINS_URL/pipeline-model-converter/validate` as `admin` with `$JENKINS_TOKEN`. The
+  done-record carries its response.
+- The commit stays local (Push holds). The operator's Replay can run only once the run has pushed
+  the library with P3's helper.
 
 ## Not in scope
 
