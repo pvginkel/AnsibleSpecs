@@ -157,21 +157,315 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
 - **GitHub token.** The pod's `GH_TOKEN` has `repo` and `workflow` — enough to create a private
   repo, not to delete one (D4).
 
+## Task shape
+
+cross-cutting — the work lands in five repos (JenkinsPipelineUtils' docs and first Jenkinsfile, a
+new deploy repo, ArgoCDDeploy, Architecture's producer registry, KubeCoderConfig: R6, R8, rulings
+D1–D3) and sets a new pattern: the estate's first docs site built from a library repo.
+
 ## Ordering constraints
 
-- The inventory and rulings page come first, and the run pauses for the operator's rulings
-  before any guide content is written (R2). The webhook test (R9) comes before the guide's
-  new-repo recipe.
-- The site's deploy repo must exist on GitHub before a phase targets it; its producer's `AaC/`
-  job must build green before its Architecture registry entry (runbook).
+- **Work that needs no ruling comes before the pause.** The webhook test, the site's source and the
+  reference pages run first, then the inventory and rulings page. The run's one planned pause
+  comes at P5's start. P5's executor returns `question` until the operator's rulings on P4's
+  rulings page are in Requirements / rulings. No guide content lands before those rulings (R2).
+- **The webhook test (P1) comes before anything that relies on its result:** the guide's new-repo
+  recipe (P5) and every phase that gives a repo a Jenkins job (P8, P9).
+- **Hosting comes last (D1), after the guide and the skill.** The deploy repo (P8) comes before
+  the library's build job (P9), which pins into it. The two registrations (P10, P11) follow.
+- **The test phase goes live in this order, each step needing the one before:**
+  1. Push PipelinesDeploy and JenkinsPipelineUtils.
+  2. Run the site-build job's first build. It writes the first image pin into PipelinesDeploy.
+  3. Get a first green build of `AaC/PipelinesDeploy`.
+  4. Then push Architecture and ArgoCDDeploy:
+     - A push to Architecture's main also rebuilds the architecture viewer and redeploys it in
+       prd (Architecture `CLAUDE.md:40-42`).
+     - The ArgoCDDeploy push creates the Application OutOfSync. Its first sync is the operator's
+       (D1).
+
+  KubeCoderConfig can be pushed at any point.
+
+### P1 — The webhook test (§6a): what a new repo needs for its push hook, on record
+
+Target: ../AnsibleSpecs
+
+The operator's question on report.md Appendix A R1 (`report.md:1352`) gets an answer by
+experiment. The question: when a Jenkinsfile declares the push trigger, does Jenkins install the
+GitHub push hook on a repo that has none? The result goes into report.md under that R1 note, and
+review plan §6a is ticked. The record says, step by step, what a new repo and its new job need
+before a push starts a build, and who can take each step. It is written so that P5 can take it
+over as the guide's new-repo recipe.
+
+- **Steps.** Follow review plan §6a: the throwaway private repo `pvginkel/jenkins-trigger-test`,
+  a job created through the API with no trigger in its `config.xml`, build #1 started by hand,
+  the repo's hooks read, a commit pushed, and a check on whether build #2 starts by itself.
+- **One change from §6a's letter.** The throwaway Jenkinsfile is declarative and declares
+  `githubPush()` in `triggers {}`. The reason: the guide describes declarative only (R4, J08
+  "migrate all"), so the result has to hold for the form the guide prescribes.
+- **If the hook does not install,** the record says what does install it and who can do it.
+  The pod's token may be unable to create hooks: the argocd runbook's § Webhooks says so for
+  deploy repos. Confirm that rather than assume it. The record also says how the result relates
+  to the checkbox sequence the operator reported in the R1 note. The GitHub plugin's hook
+  management setting is in the controller's global config
+  (`/work/scratch/jenkins-config/global-config.xml`).
+- **Authority.** Every write here is pre-authorized (D4). The standing rule still applies: save
+  the job's `config.xml` before deleting it (`xml-deleted/`). The run cannot delete the GitHub
+  repo (D4), so enter an `action` in the close-out report for the operator to delete it.
+
+### P2 — The docs site's source in the library, built strict with the KubeCoder manual's tooling
+
+Target: ../JenkinsPipelineUtils
+
+`JenkinsPipelineUtils/docs/` holds an MkDocs + Material site (D2):
+
+- It builds `--strict` from a locked toolchain.
+- It is addressed at `https://pipelines.home/docs/`.
+- It has a docs home page and the nav skeleton that P3, P5 and P6 fill.
+- It has the source of the landing page at `/` that links to the docs.
+
+The strict build is part of the library's `kc project test`. The driver's per-phase gate runs
+only `test`, and every later phase that touches the docs must be gated by that build.
+
+- **The basis is KubeCoder's manual** at `4a6be3de` (`/work/scratch/KubeCoder`): `manual/`, the
+  `manual` dependency group in `pyproject.toml` with `uv.lock`, and the rules in
+  `docs/conventions/operator-manual.md`. The operator wants the LLM support brought over whole
+  (D2):
+  - `llms.txt`, `llms-full.txt` and the per-page `.md` copies, with the one catch-all sections
+    pattern that leaves no page out (`manual/mkdocs.yml:43-57`);
+  - the validation settings that make an orphaned page, a missing target, an absolute link or a
+    broken anchor fail the strict build (`:59-72`).
+- **Not brought over:** the start-time `site_url` rewrite, because `pipelines.home` has one stage
+  and its `site_url` is fixed; the generated CLI reference; and the VSIX.
+- **Toolchain.** The toolchain has to run in this environment's sidecars (`kc env describe`
+  lists them).
+- **The library's manifest.** The manifest's comments describe the repo
+  (`.kubecoder/project.yaml:1-3`). Keep them true.
+
+### P3 — One reference page per library global var, and a test that holds it there
+
+Target: ../JenkinsPipelineUtils
+
+This is J22's docs half (R7). The site's reference section has a hand-written page for every
+global var in `vars/`. Today those are `cicd`, `containerTemplates`, `gitUtils`, `helmCharts`,
+`kubectl`, `notify`, `podYaml` and `utils` (`vars/` at `d9ff168`). Each page tells a Jenkinsfile
+author what the var offers: its calls, their arguments, what each does, and any contract the
+caller must keep. A library test in `kc project test` fails, and names the var, when a var has no
+page.
+
+- **Where the pages live.** They are kept beside the vars they describe, so that a change to a
+  var and the change to its page travel together (the settled ruling: "hand-written next to the
+  vars"). Exactly where is the executor's call, as long as the site publishes the pages and the
+  test can pair each var with its page. Nothing may change what Jenkins loads from `vars/`.
+- **`podYaml`** is its own var. It is called as `podYaml(templates: [...], images: [...])` inside
+  `agent { kubernetes { ... } }`, not as `containerTemplates.podYaml` (Grounding). Its page
+  covers both forms of an `images:` entry and states that a string entry's derived container
+  name is not checked against RFC 1123 (033 close-out B3).
+- **The pages describe the library as it is.** The helpers J14–J17/J21 are out of scope.
+  report.md J20 names the code that stays only for `Firmware/KitchenDisplay`. Usage snippets are
+  declarative. P5 brings them into line with the rulings.
+
+### P4 — The inventory of pipeline types, and the rulings page
+
+Target: ../AnsibleSpecs
+
+1. **The inventory (R1)** lives in the review folder next to `report.md`, because the migration
+   slice after this one works from it too. It lists every kind of pipeline the estate runs, each
+   type with its member jobs. Every Appendix A job belongs to exactly one type. For each guide
+   topic, it gives the variants in use today and where each occurs.
+2. **The rulings page (R2)** lives in this slice folder. For each topic it gives:
+   - one proposed rule with a short example;
+   - the reason for the rule;
+   - the variants the rule would retire, taken from the inventory;
+   - a response slot.
+
+   The topics are R2's list. Stage labels is a topic of its own, apart from stage granularity
+   (R3). The library rule is on the page as well (R5). The page is written for the operator to
+   rule on cold.
+
+- **Rebuilding the review's state.** It may be gone by the time this runs. Review plan, "State
+  does not survive an environment", says how to rebuild it. It was present on 2026-09-30:
+  `/work/scratch/jenkins-config/files.tsv`, 124 rows.
+- **Settled rulings are shown as settled.** Grounding's "Rulings nuances" and the responses in
+  `report.md` go on the page as settled, and the page proposes only where the operator has not
+  ruled. Stage granularity and the library rule are judgment calls. Propose them with their
+  trade-offs, and leave the settling to the operator (R2).
+- **Asked on the page.**
+  - **Helper types.** J14, J15 and J16 will each replace the body of a type with a helper. For
+    each of those types, the page asks which form the guide's reference file shows until the
+    helper exists.
+  - **The stage generators and computed triggers** in DockerImages, Intercom and Architecture
+    (slice.md, Source material) each get a proposal.
+  - **The new-repo recipe.** P1's result feeds the proposals it bears on.
+
+### P5 — The guide's rules: one strict section per topic, stage labels on their own
+
+Target: ../JenkinsPipelineUtils
+
+**This phase starts with the rulings check.** First, confirm that the operator's rulings on P4's
+rulings page are recorded in plan.md's Requirements / rulings. If they are not, return `question`
+and name the page. This is the run's one planned pause. Where a ruling changes what a later phase
+says, edit that phase.
+
+The guide's rule sections are on the site. Each topic that was ruled gets:
+
+- its rules as MUSTs, with the reason for each;
+- a short recipe: a worked example.
+
+The sections include:
+
+- a dedicated stage-labels section, next to the stage-granularity section and not inside it (R3);
+- the library decision test, with the estate's examples (R5);
+- the new-repo recipe from P1.
+
+Every ruling R4 lists is carried exactly, together with Grounding's "Rulings nuances". The guide
+describes declarative only.
+
+- **Rules are checkable.** Each rule is stated as a fact about a file that one could check, so a
+  later conformance checker has something to test (slice.md, Out of scope).
+- **The pod helper.** The guide states the map form of `podYaml`'s `images:` with an explicit
+  container `name:` (033 close-out B3).
+- **Library calls.** Rules name only library calls that exist today, unless a ruling directs
+  otherwise.
+- **Examples pass the full declarative linter.** Every example passes the controller's full check
+  (`/pipeline-model-converter/validate`, as `admin` with `$JENKINS_TOKEN`). An excerpt is checked
+  inside the complete file it is cut from. The done-record carries the responses.
+- **P3's reference pages.** Any P3 snippet that breaks a rule is brought into line.
+
+### P6 — One complete reference Jenkinsfile per pipeline type
+
+Target: ../JenkinsPipelineUtils
+
+For every type in P4's inventory, the guide carries a complete reference Jenkinsfile that applies
+every rule from P5, with a short note on what is specific to that type. Specific cases:
+
+- **Stage generators and computed triggers.** Each has its recipe:
+  - DockerImages generates a stage per image variant;
+  - Intercom generates a stage pair per hardware version;
+  - Architecture computes its triggers from YAML, which `triggers {}` cannot express.
+- **Monorepo validation.** Its reference file describes what ModernAppTemplate's root template
+  renders (Q11). Changing the template is the migration's job.
+- **Helper types.** Where the rulings chose a form for a type J14/J15/J16 will serve, the
+  reference file shows that form.
+
+Every complete example passes the controller's full declarative linter check. The published file
+is byte for byte the file that was checked, and the done-record carries the responses.
+
+### P7 — The skill: the guide's hard rules in every session, pointing at the site
+
+Target: github:pvginkel/KubeCoderConfig
+
+A short skill in the `kubecoder` plugin, which every environment loads (D3). It fires whenever a
+session writes or edits a Jenkinsfile. It carries the guide's hard rules and sends the session to
+the online guide for the rest. Like `kubecoder-env` for the operator manual, it is a reference to
+the online docs (R8).
+
+- **KubeCoderConfig's conventions apply:**
+  - a minor `version` bump in `kubecoder/.claude-plugin/plugin.json` in the same commit, because
+    this is a new skill (`CLAUDE.md:19-36`);
+  - Prettier-formatted Markdown (`CLAUDE.md:38-43`).
+- **Lint.** The repo's lint runs through a `frontend` sidecar that this environment does not
+  have. `modern-app` carries the same Node, so the executor runs the repo's own Prettier check
+  there. Its manifest has no `test:` verb, so the driver's gate runs nothing.
+- **Links.** The links go to `https://pipelines.home/docs/`, in the form a session reads best:
+  the site's `llms.txt` and per-page Markdown copies exist for that. The site goes live only
+  after the operator's first sync, but the links are right from the start.
+- **The guide stays the only source.** The skill stays short. For each rule it carries, it says
+  where the guide details it, rather than restating the guide.
+
+### P8 — PipelinesDeploy: the site's deploy repo, in ChartsDeploy's shape
+
+Target: github:pvginkel/PipelinesDeploy
+
+PipelinesDeploy is the deploy repo for the app `pipelines` (the `<App>Deploy` convention the repo
+name follows). It is shaped like ChartsDeploy (`/work/scratch/ChartsDeploy`) and carries:
+
+- a homelab-shared chart that serves the site image in a namespace of its own;
+- the Service annotations that publish `pipelines.home` on the LAN with a step-ca certificate
+  (`chart/templates/charts-service.yaml:9-12`, `isPublic: no`);
+- the prd stage configuration, holding the image pin that the site build writes;
+- the Terraform that the PreSync hook applies, including the Argo relay webhook this stage owns;
+- the architecture producer `pipelines-deploy`: judgment layer, `.architecturerc`, and a
+  `Jenkinsfile.architecture` written to the guide;
+- a README and a manifest.
+
+Its `kc project test` renders the chart, checks the Terraform, and generates and validates the
+producer's artifact. The `AaC/PipelinesDeploy` job exists: it is created through the API (D4),
+with its `config.xml` saved. The repo gets the Jenkins push hook that the guide's new-repo recipe
+calls for.
+
+- **The checklist** is the argocd runbook's § "Giving an app its own architecture producer":
+  - `introduced:` takes the date of the first commit that adds `chart/`;
+  - the producer id is the chart's name plus `-deploy`, and the chart's name must equal the
+    registry entry that P10 writes;
+  - an owned product is minted only once, so search the published dataset first.
+- **Starting state.** The repo was created at planning under D4 and holds only a README.
+- **Nothing deploys yet.** Nothing deploys from this repo until the operator's first sync (D1).
+  Until the first site build writes the pin, the values file only needs to render.
+- **Operator-only steps.** If the new-repo recipe needs a step only the operator can take, enter
+  it as an `action` in the close-out report. Until the hook exists, the job's builds are started
+  by hand.
+
+### P9 — The site image, and the library's own build job
+
+Target: ../JenkinsPipelineUtils
+
+**The image.** The library repo builds the site into an nginx image that serves the landing page
+at `/` and the docs at `/docs/`. Two images are the precedent: charts.home's (`/work/Charts`) and
+KubeCoder's manual image (`manual/Dockerfile`, `manual/nginx.conf`). From them this image takes:
+
+- the strict build in the builder stage (`manual/Dockerfile:34`);
+- `nginx -t` at build time (`:60`);
+- relative redirects under a path prefix.
+
+**The Jenkinsfile.** It is the guide's first application in the estate and follows the guide. On
+each push to main it builds the image with kaniko into `registry:5000`, tagged with the build
+number, and writes that pin into PipelinesDeploy's prd values. Charts does the same
+(`/work/Charts/Jenkinsfile:31-52`).
+
+**The job** that runs the Jenkinsfile exists: it is created through the API (D4), with its
+`config.xml` saved, and it is triggered as the new-repo recipe says. It builds and publishes the
+site and nothing else. Slice 033's ruling stands: the library's tests get no Jenkins job.
+
+**The manifest.** Its statement that no Jenkins job builds the repo (`.kubecoder/project.yaml:3`)
+becomes a true statement about the new job. The image build is reachable through the repo's
+`kc project` verbs, as Charts' is.
+
+- **Linter.** The Jenkinsfile passes the full declarative linter check.
+- **First build.** It waits for the push (Ordering constraints).
+- **Job name and folder** follow Charts' precedent (`IaC/Charts`) unless the guide rules
+  otherwise.
+
+### P10 — The app registered with Argo CD
+
+Target: ../ArgoCDDeploy
+
+ArgoCDDeploy's registry, `releases/values.yaml`, carries the `pipelines` app: its prd stage from
+PipelinesDeploy, with `autoSync: false`. The procedure is the argocd runbook's § "Registering,
+undeploying and unregistering an app", and D1 makes the first sync the operator's. Entries are
+alphabetical, and the schema, lint and render test stay green. Nothing syncs until the operator
+does it. For comparison, charts' own entry is at `releases/values.yaml:51-54`.
+
+### P11 — The producer registered in Architecture
+
+Target: ../Architecture
+
+`pipeline-producers.yaml` registers `pipelines-deploy` (repo `pvginkel/PipelinesDeploy`, job
+`AaC/PipelinesDeploy`), the way ChartsDeploy's entry does (`pipeline-producers.yaml:222-224`).
+
+The commit is pushed only after `AaC/PipelinesDeploy`'s first green build (Ordering
+constraints). The reason is in the runbook: a registered producer with no archived artifact fails
+the collector's discovery, and a collector run that fails publishes nothing. This phase commits
+locally.
 
 ## Not in scope
 
 - A conformance checker. Operator: "Maybe not start with it." The guide's rules are written so
   one could check them later.
 - Converting any pipeline, including bringing `KubeCoder/Jenkinsfile` into line with the guide,
-  and changing ModernAppTemplate's rendered Jenkinsfile — the migration slice after this one.
+  and changing ModernAppTemplate's rendered Jenkinsfile. These belong to the migration slice after
+  this one.
 - The library helpers themselves (J14–J17, J21), J22's self-test job, and ANS-84's
   job-configuration move.
-- Zensical (ruled D2) — the operator migrates the MkDocs sites in one go later.
-- The first Argo sync of the site, and deleting the throwaway GitHub repo — operator actions.
+- Zensical (ruled D2). The operator migrates the MkDocs sites in one go later.
+- The first Argo sync of the site, and deleting the throwaway GitHub repo. Both are operator
+  actions.

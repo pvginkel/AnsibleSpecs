@@ -2,5 +2,29 @@
   "store": 1,
   "slice": "034_jenkins_pipeline_style_guide",
   "closed": null,
-  "entries": []
+  "entries": [
+    {
+      "id": "P1",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Ansible argocd runbook: a new producer is registered 'with a PR' against Architecture, but that repo is worked by direct commits to main",
+      "body": [
+        "docs/runbooks/argocd.md § 'Giving an app its own architecture producer', step 4, says to register the producer 'with a PR against pipeline-producers.yaml in pvginkel/Architecture'. Architecture's CLAUDE.md:40-42 says to work directly on main, with no topic branches, and to push as you go. The last registration there, charts-deploy (Architecture 3b97700), was a direct commit with a single parent. Slice 034's P11 registers pipelines-deploy by the repo's own convention."
+      ],
+      "consequence": "Whoever follows the runbook opens a pull request that the repo's own convention doesn't use; the registration itself works either way.",
+      "evidence": "read",
+      "author": "plan-writer, planning r1, Ansible docs/runbooks/argocd.md and Architecture CLAUDE.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
 }
