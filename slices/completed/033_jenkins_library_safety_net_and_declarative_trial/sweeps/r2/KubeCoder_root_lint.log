@@ -1,0 +1,4 @@
+root: cexec python uv run --all-packages ruff check .    [FAILED]
+cexec: tool "python" is not available in this environment; the tools it has are: aac-tools, go, iac, java, modern-app; if you just added it to .kubecoder/config.yaml, run `kc env restart` to apply it
+root: cexec python uv run --all-packages ruff format --check .    [FAILED]
+cexec: tool "python" is not available in this environment; the tools it has are: aac-tools, go, iac, java, modern-app; if you just added it to .kubecoder/config.yaml, run `kc env restart` to apply it

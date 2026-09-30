@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "T1 fixed in JenkinsPipelineUtils d9ff168 (normalizePins asserted; gate green, mutation-checked). B1-B4: the label each close rests on holds in the code, left. E2/E4/E5: the waived KubeCoder gates hide no problem (the only Jenkinsfile-reading test passes, lint green in modern-app), labelled none and routed to the record.",
+ "fixed": ["T1"], "folded": [], "cards": [], "left": ["B1", "B2", "B3", "B4"],
+ "relabelled": ["E2", "E4", "E5"]}

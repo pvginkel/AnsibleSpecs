@@ -1,0 +1,470 @@
+/work/scratch/KubeCoder — P4: git diff 5bbf14bf4d6f..30df8e2d4e31
+
+Jenkinsfile | 359 +++++++++++++++++++++++++++++++++++++++++++++++---------------------------------
+ 1 file changed, 213 insertions(+), 146 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index ae020f42..ccd47fb0 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -1,48 +1,67 @@
+ library identifier: 'JenkinsPipelineUtils', changelog: false
+ 
+-// Both of the job's properties, declared here rather than in its UI configuration. A `properties`
+-// step replaces the whole set, so a bare disableConcurrentBuilds() would drop the push trigger.
+-// The lock is what cicd.writeVersionPins() below asks of its caller: two builds pushing pins at
+-// once lose the race on the second push.
+-properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])
++pipeline {
++    agent {
++        kubernetes {
++            inheritFrom 'jenkins-agent kaniko'
++            // The inherited `kaniko` template is YAML only, and under the default strategy the
++            // plugin keeps only the last YAML, this one, dropping the `kaniko` container, its
++            // `busybox-share-init` init container and its `busybox` volume.
++            yamlMergeStrategy merge()
++            yaml podYaml(templates: ['k8s', 'modern-app-toolchain'], images: [
++                // The golang container runs `go test -race ./...` over the whole worker module, four
++                // of whose packages spawn real tmux servers concurrently (slice 175, #683). It runs
++                // the same image the local `go` sidecar runs (.kubecoder/config.yaml, `- use: go`),
++                // so the suite drives the same tmux in both places and a CI-only failure is
++                // reproducible locally rather than only arguable. The image floats on `:latest`, as
++                // the sidecar's does, so the `Always` pull podYaml gives every container is
++                // load-bearing: under IfNotPresent a node's cached layer silently reopens that gap.
++                //
++                // Its share is declared here rather than inherited from the `jenkins-agent kaniko`
++                // pod template, which lives outside this repo. `go test`'s default -p is the go
++                // command's OWN GOMAXPROCS, and this image's go command derives that from this
++                // container's cgroup CPU limit — so the limit, not the node's core count, is what
++                // bounds how many test binaries run at once. worker/go.mod's `go 1.26` does the same
++                // for each test binary's own P count.
++                [image: 'registry:5000/kube-coder-go-toolchain:latest', name: 'golang',
++                    resources: [requests: [cpu: '2', memory: '2Gi'], limits: [cpu: '4', memory: '4Gi']]],
++                'node:24-bookworm',
++            ])
++        }
++    }
+ 
+-podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+-    containerTemplates.k8s('k8s'),
+-    containerTemplates.modern_app_toolchain('modern-app-toolchain'),
+-    // The golang container runs `go test -race ./...` over the whole worker module, four of
+-    // whose packages spawn real tmux servers concurrently (slice 175, #683). It runs the same
+-    // image the local `go` sidecar runs (.kubecoder/config.yaml, `- use: go`), so the suite
+-    // drives the same tmux in both places and a CI-only failure is reproducible locally rather
+-    // than only arguable. The image floats on `:latest`, as the sidecar's does, so
+-    // alwaysPullImage is load-bearing: without it the Kubernetes plugin uses IfNotPresent and a
+-    // node's cached layer silently reopens that gap.
+-    //
+-    // Its share is declared here rather than inherited from the `jenkins-agent kaniko` pod
+-    // template, which lives outside this repo. `go test`'s default -p is the go command's OWN
+-    // GOMAXPROCS, and this image's go command derives that from this container's cgroup CPU
+-    // limit — so the limit, not the node's core count, is what bounds how many test binaries run
+-    // at once. worker/go.mod's `go 1.26` does the same for each test binary's own P count.
+-    containerTemplate(name: 'golang', image: 'registry:5000/kube-coder-go-toolchain:latest',
+-        command: 'cat', ttyEnabled: true, alwaysPullImage: true,
+-        resourceRequestCpu: '2', resourceLimitCpu: '4',
+-        resourceRequestMemory: '2Gi', resourceLimitMemory: '4Gi'),
+-    containerTemplate(name: 'node', image: 'node:24-bookworm', command: 'cat', ttyEnabled: true),
+-]) {
+-    node(POD_LABEL) {
++    // The job's properties — the lock here, the push trigger under `triggers` — are declared in
++    // this file rather than in its UI configuration. The lock is what cicd.writeVersionPins() below
++    // asks of its caller: two builds pushing pins at once lose the race on the second push.
++    options {
++        disableConcurrentBuilds(abortPrevious: true)
++        // Without it Declarative checks out before the first stage and `Cloning repo` again.
++        skipDefaultCheckout()
++    }
++
++    triggers {
++        githubPush()
++    }
++
++    stages {
+         stage('Cloning repo') {
+-            checkout scm
++            steps {
++                checkout scm
++            }
+         }
+ 
+         stage('Validate (lint + tests)') {
+-            container('modern-app-toolchain') {
+-                // --all-packages: the workspace root is package=false, so a plain
+-                // `uv sync` installs only the root dev group (pytest/ruff) and NOT the
+-                // members or their deps. --no-sync on `uv run` keeps that full env
+-                // (a re-sync would prune back to the root env).
+-                sh 'uv sync --all-packages --frozen'
+-                sh 'uv run --no-sync ruff check .'
+-                sh 'uv run --no-sync ruff format --check .'
+-                sh 'uv run --no-sync pytest'
++            steps {
++                container('modern-app-toolchain') {
++                    // --all-packages: the workspace root is package=false, so a plain
++                    // `uv sync` installs only the root dev group (pytest/ruff) and NOT the
++                    // members or their deps. --no-sync on `uv run` keeps that full env
++                    // (a re-sync would prune back to the root env).
++                    sh 'uv sync --all-packages --frozen'
++                    sh 'uv run --no-sync ruff check .'
++                    sh 'uv run --no-sync ruff format --check .'
++                    sh 'uv run --no-sync pytest'
++                }
+             }
+         }
+ 
+@@ -67,46 +86,48 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         //
+         // Any drift fails the build before the images are built.
+         stage('Contracts drift gate') {
+-            container('modern-app-toolchain') {
+-                sh 'uv run --no-sync python -m tools.contracts_codegen'
+-                // The TypeScript half of the same gate (slice 186, slice 181): compile the
+-                // just-emitted declarations with `tsc --noEmit` in BOTH consumers, so regeneration
+-                // and compile-proof go red together, before any image is built. Each subproject
+-                // has its own lockfile and its own node_modules and shares neither. The two
+-                // `npm ci` runs are also what put `tsc` in the pod workspace for the `Test +
+-                // package vscode-extension` and `Test + package vscode-desktop` stages, whose
+-                // `npm test` compiles before it tests and installs nothing of its own — so this
+-                // stage has to keep running first. Each stage's PACKAGING step runs an `npm ci`
+-                // of its own (worker/scripts/package-extension.sh,
+-                // vscode-desktop/scripts/package-extension.sh), which is why the qualifier
+-                // matters: the install this gate provides is what the suite runs on, not what
+-                // the packaging does.
+-                sh 'npm --prefix vscode-extension ci'
+-                sh 'npm --prefix vscode-extension run typecheck'
+-                sh 'npm --prefix vscode-desktop ci'
+-                sh 'npm --prefix vscode-desktop run typecheck'
+-            }
+-            container('golang') {
+-                dir('worker') {
+-                    sh 'go install github.com/atombender/go-jsonschema@v0.22.0'
+-                    sh '''
+-                        tmp=$(mktemp -d)
+-                        $(go env GOPATH)/bin/go-jsonschema --only-models --tags json -p contracts \
+-                            -o "$tmp/contracts_gen.go" internal/contracts/contracts.schema.json
+-                        diff -u internal/contracts/contracts_gen.go "$tmp/contracts_gen.go"
+-                    '''
+-                    // Belt-and-braces alongside the diff: a future generator producing non-gofmt or
+-                    // vet-dirty output fails here with a clear message. These run against the
+-                    // committed (now untouched) tree, which the diff above just proved is
+-                    // byte-identical to what the generator emits. (gofmt -l lists offending files →
+-                    // must be empty.)
+-                    sh 'test -z "$(gofmt -l internal/contracts)"'
+-                    // Scoped to the contracts package only: the dedicated worker Go stage runs the
+-                    // full-module vet/test, so scoping here keeps the suite running once per build.
+-                    // This scope still covers the round-trip wire-fidelity test
+-                    // (internal/contracts/contracts_roundtrip_test.go).
+-                    sh 'go vet ./internal/contracts/...'
+-                    sh 'go test ./internal/contracts/...'
++            steps {
++                container('modern-app-toolchain') {
++                    sh 'uv run --no-sync python -m tools.contracts_codegen'
++                    // The TypeScript half of the same gate (slice 186, slice 181): compile the
++                    // just-emitted declarations with `tsc --noEmit` in BOTH consumers, so regeneration
++                    // and compile-proof go red together, before any image is built. Each subproject
++                    // has its own lockfile and its own node_modules and shares neither. The two
++                    // `npm ci` runs are also what put `tsc` in the pod workspace for the `Test +
++                    // package vscode-extension` and `Test + package vscode-desktop` stages, whose
++                    // `npm test` compiles before it tests and installs nothing of its own — so this
++                    // stage has to keep running first. Each stage's PACKAGING step runs an `npm ci`
++                    // of its own (worker/scripts/package-extension.sh,
++                    // vscode-desktop/scripts/package-extension.sh), which is why the qualifier
++                    // matters: the install this gate provides is what the suite runs on, not what
++                    // the packaging does.
++                    sh 'npm --prefix vscode-extension ci'
++                    sh 'npm --prefix vscode-extension run typecheck'
++                    sh 'npm --prefix vscode-desktop ci'
++                    sh 'npm --prefix vscode-desktop run typecheck'
++                }
++                container('golang') {
++                    dir('worker') {
++                        sh 'go install github.com/atombender/go-jsonschema@v0.22.0'
++                        sh '''
++                            tmp=$(mktemp -d)
++                            $(go env GOPATH)/bin/go-jsonschema --only-models --tags json -p contracts \
++                                -o "$tmp/contracts_gen.go" internal/contracts/contracts.schema.json
++                            diff -u internal/contracts/contracts_gen.go "$tmp/contracts_gen.go"
++                        '''
++                        // Belt-and-braces alongside the diff: a future generator producing non-gofmt or
++                        // vet-dirty output fails here with a clear message. These run against the
++                        // committed (now untouched) tree, which the diff above just proved is
++                        // byte-identical to what the generator emits. (gofmt -l lists offending files →
++                        // must be empty.)
++                        sh 'test -z "$(gofmt -l internal/contracts)"'
++                        // Scoped to the contracts package only: the dedicated worker Go stage runs the
++                        // full-module vet/test, so scoping here keeps the suite running once per build.
++                        // This scope still covers the round-trip wire-fidelity test
++                        // (internal/contracts/contracts_roundtrip_test.go).
++                        sh 'go vet ./internal/contracts/...'
++                        sh 'go test ./internal/contracts/...'
++                    }
+                 }
+             }
+         }
+@@ -129,10 +150,12 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // the `Contracts drift gate` stage above ran into this pod workspace, which every container
+         // in the pod shares.
+         stage('Test + package vscode-extension') {
+-            container('node') {
+-                sh 'npm --prefix vscode-extension test'
+-                sh "worker/scripts/package-extension.sh 0.0.${currentBuild.number}"
+-                sh 'test -s worker/build/extension.vsix'
++            steps {
++                container('node') {
++                    sh 'npm --prefix vscode-extension test'
++                    sh "worker/scripts/package-extension.sh 0.0.${currentBuild.number}"
++                    sh 'test -s worker/build/extension.vsix'
++                }
+             }
+         }
+ 
+@@ -154,10 +177,12 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // tree, not git archive; not excluded by .dockerignore). Hard-fail if no non-empty vsix is
+         // produced, so the image never publishes an empty one.
+         stage('Test + package vscode-desktop') {
+-            container('node') {
+-                sh 'npm --prefix vscode-desktop test'
+-                sh "vscode-desktop/scripts/package-extension.sh 0.0.${currentBuild.number}"
+-                sh 'test -s vscode-desktop/build/kubecoder-desktop.vsix'
++            steps {
++                container('node') {
++                    sh 'npm --prefix vscode-desktop test'
++                    sh "vscode-desktop/scripts/package-extension.sh 0.0.${currentBuild.number}"
++                    sh 'test -s vscode-desktop/build/kubecoder-desktop.vsix'
++                }
+             }
+         }
+ 
+@@ -177,7 +202,10 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // only and does not touch the shipped binary, which the worker image still builds
+         // CGO_ENABLED=0 (D121).
+         stage('Build + test kubecoder-worker (Go)') {
+-            withEnv(['GOFLAGS=-buildvcs=false']) {
++            environment {
++                GOFLAGS = '-buildvcs=false'
++            }
++            steps {
+                 container('golang') {
+                     // tmux is a TEST dependency of this stage (slice 093): the session and setup
+                     // packages drive a real tmux binary and carry no skip guard. The toolchain
+@@ -208,32 +236,43 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // pages, so a broken tree fails there first with a better message) and BEFORE the image builds — the kubecoder-manual image bakes these pages, so a
+         // stale one must fail the build before it is baked.
+         stage('CLI reference drift gate') {
+-            withEnv(['GOFLAGS=-buildvcs=false']) {
++            environment {
++                GOFLAGS = '-buildvcs=false'
++            }
++            steps {
+                 container('golang') {
+                     dir('worker') {
+                         sh 'go test ./cmd/worker -run TestCLIReference -update'
+                     }
+                 }
++                sh 'git add -A -- manual/docs/reference/cli'
++                sh 'git diff --cached --exit-code -- manual/docs/reference/cli'
+             }
+-            sh 'git add -A -- manual/docs/reference/cli'
+-            sh 'git diff --cached --exit-code -- manual/docs/reference/cli'
+         }
+ 
+         stage('Build kubecoder-controller') {
+-            container('kaniko') {
+-                helmCharts.kaniko("controller/Dockerfile", ".", [
+-                    "registry:5000/kubecoder-controller:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-controller:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("controller/Dockerfile", ".", [
++                            "registry:5000/kubecoder-controller:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-controller:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+         stage('Build kubecoder-worker') {
+-            container('kaniko') {
+-                helmCharts.kaniko("worker/Dockerfile", ".", [
+-                    "registry:5000/kubecoder-worker:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-worker:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("worker/Dockerfile", ".", [
++                            "registry:5000/kubecoder-worker:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-worker:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+@@ -241,11 +280,15 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // binaries image (slice 104): one file at the image root, mounted on the dev container only.
+         // It builds from the same staged worker/build/extension.vsix the packaging stage produced.
+         stage('Build kubecoder-vsix') {
+-            container('kaniko') {
+-                helmCharts.kaniko("vscode-extension/Dockerfile", ".", [
+-                    "registry:5000/kubecoder-vsix:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-vsix:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("vscode-extension/Dockerfile", ".", [
++                            "registry:5000/kubecoder-vsix:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-vsix:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+@@ -254,29 +297,41 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // `.local`, so the k3s CI gate's environments mount it as `images.localHome` and get the
+         // shim where the real Claude Code install would be.
+         stage('Build kubecoder-claude-shim') {
+-            container('kaniko') {
+-                helmCharts.kaniko("worker/Dockerfile.claude-shim", ".", [
+-                    "registry:5000/kubecoder-claude-shim:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-claude-shim:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("worker/Dockerfile.claude-shim", ".", [
++                            "registry:5000/kubecoder-claude-shim:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-claude-shim:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+         stage('Build kubecoder-bot') {
+-            container('kaniko') {
+-                helmCharts.kaniko("bot/Dockerfile", ".", [
+-                    "registry:5000/kubecoder-bot:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-bot:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("bot/Dockerfile", ".", [
++                            "registry:5000/kubecoder-bot:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-bot:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+         stage('Build kubecoder-mcp') {
+-            container('kaniko') {
+-                helmCharts.kaniko("mcp-server/Dockerfile", ".", [
+-                    "registry:5000/kubecoder-mcp:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-mcp:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("mcp-server/Dockerfile", ".", [
++                            "registry:5000/kubecoder-mcp:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-mcp:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+@@ -288,11 +343,15 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // `uv sync --all-packages`); what it does cover under manual/ is the image's start-time
+         // origin substitution, which has a pytest suite of its own.
+         stage('Build kubecoder-manual') {
+-            container('kaniko') {
+-                helmCharts.kaniko("manual/Dockerfile", ".", [
+-                    "registry:5000/kubecoder-manual:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-manual:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("manual/Dockerfile", ".", [
++                            "registry:5000/kubecoder-manual:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-manual:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+@@ -303,11 +362,15 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // 660s proxy_read_timeout (without which every long `kc project` command 504s). That one
+         // is verified against prd on the deployment tail.
+         stage('Build kubecoder-ingress') {
+-            container('kaniko') {
+-                helmCharts.kaniko("controller/Dockerfile.ingress", ".", [
+-                    "registry:5000/kubecoder-ingress:dev-${currentBuild.number}",
+-                    "registry:5000/kubecoder-ingress:dev-latest",
+-                ])
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko("controller/Dockerfile.ingress", ".", [
++                            "registry:5000/kubecoder-ingress:dev-${currentBuild.number}",
++                            "registry:5000/kubecoder-ingress:dev-latest",
++                        ])
++                    }
++                }
+             }
+         }
+ 
+@@ -319,22 +382,26 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+         // chart carries no reference to it. The `k8s` container carries the `git` the writer
+         // needs. Nothing deploys from here.
+         stage('Write image pins') {
+-            container('k8s') {
+-                String n = "${currentBuild.number}"
+-                cicd.writeVersionPins(repo: 'pvginkel/KubeCoderDeploy', message: "ci: image pins from KubeCoder/Build-Main #${n}", pins: [
+-                    'config/dev/values.yaml': [
+-                        'images.controller': ":dev-${n}", 'images.bot': ":dev-${n}", 'images.mcp': ":dev-${n}",
+-                        'images.ingress': ":dev-${n}", 'images.manual': ":dev-${n}",
+-                        'controllerConfig.images.worker': "registry:5000/kubecoder-worker:dev-${n}",
+-                        'controllerConfig.images.vsix': "registry:5000/kubecoder-vsix:dev-${n}"
+-                    ],
+-                    'config/prd/values.yaml': [
+-                        'images.controller': ":prd-${n}", 'images.bot': ":prd-${n}", 'images.mcp': ":prd-${n}",
+-                        'images.ingress': ":prd-${n}", 'images.manual': ":prd-${n}",
+-                        'controllerConfig.images.worker': "registry:5000/kubecoder-worker:prd-${n}",
+-                        'controllerConfig.images.vsix': "registry:5000/kubecoder-vsix:prd-${n}"
+-                    ]
+-                ])
++            steps {
++                container('k8s') {
++                    script {
++                        String n = "${currentBuild.number}"
++                        cicd.writeVersionPins(repo: 'pvginkel/KubeCoderDeploy', message: "ci: image pins from KubeCoder/Build-Main #${n}", pins: [
++                            'config/dev/values.yaml': [
++                                'images.controller': ":dev-${n}", 'images.bot': ":dev-${n}", 'images.mcp': ":dev-${n}",
++                                'images.ingress': ":dev-${n}", 'images.manual': ":dev-${n}",
++                                'controllerConfig.images.worker': "registry:5000/kubecoder-worker:dev-${n}",
++                                'controllerConfig.images.vsix': "registry:5000/kubecoder-vsix:dev-${n}"
++                            ],
++                            'config/prd/values.yaml': [
++                                'images.controller': ":prd-${n}", 'images.bot': ":prd-${n}", 'images.mcp': ":prd-${n}",
++                                'images.ingress': ":prd-${n}", 'images.manual': ":prd-${n}",
++                                'controllerConfig.images.worker': "registry:5000/kubecoder-worker:prd-${n}",
++                                'controllerConfig.images.vsix': "registry:5000/kubecoder-vsix:prd-${n}"
++                            ]
++                        ])
++                    }
++                }
+             }
+         }
+     }

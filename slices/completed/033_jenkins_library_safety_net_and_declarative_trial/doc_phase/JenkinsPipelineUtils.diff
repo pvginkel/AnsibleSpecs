@@ -1,0 +1,1068 @@
+/work/JenkinsPipelineUtils — P1: git diff 276beff5eaa4..9cbbad9d0e1e
+
+.kubecoder/project.yaml                                         |   3 +-
+ tests/pom.xml                                                   |   7 +-
+ .../org/webathome/jenkinspipelineutils/AlertEscapeTest.java     |  59 ++++++
+ .../org/webathome/jenkinspipelineutils/VersionPinsTest.java     | 284 ++++++++++++++++++++++++++++
+ 4 files changed, 349 insertions(+), 4 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 0a92c1f..b782d75 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -10,5 +10,6 @@ projects:
+       Helm and kubectl steps and Telegram notifications.
+     # Compiles every vars/*.groovy through the CPS transform at the controller's
+     # workflow-cps version, as the controller loads a trusted library — see
+-    # tests/pom.xml for the pin. -q keeps a passing run's Maven output out of the gate.
++    # tests/pom.xml for the pin — and asserts the behaviour of the @NonCPS functions.
++    # -q keeps a passing run's Maven output out of the gate.
+     test: cexec java mvn -B -q -f tests/pom.xml test
+diff --git a/tests/pom.xml b/tests/pom.xml
+index d917036..b76f38d 100644
+--- a/tests/pom.xml
++++ b/tests/pom.xml
+@@ -3,8 +3,9 @@
+   <modelVersion>4.0.0</modelVersion>
+ 
+   <!-- The library's test gate: compiles every vars/*.groovy through the CPS transform the
+-       Jenkins controller loads it with. It lives here, not at the repository root, because
+-       Jenkins loads the root's src/, vars/ and resources/ as the library itself. -->
++       Jenkins controller loads it with, and asserts the behaviour of its @NonCPS functions. It
++       lives here, not at the repository root, because Jenkins loads the root's src/, vars/ and
++       resources/ as the library itself. -->
+   <groupId>org.webathome</groupId>
+   <artifactId>jenkins-pipeline-utils-tests</artifactId>
+   <version>0</version>
+@@ -14,7 +15,7 @@
+          plugin version, bumped when the controller's workflow-cps is upgraded. groovy.version
+          and groovy-sandbox.version are that groovy-cps pom's: it declares them provided and
+          optional, so they do not arrive transitively. guava does, at that pom's version. -->
+-    <groovy-cps.version>4376.v30c8c00684a_3</groovy-cps.version>
++    <groovy-cps.version>4383.v04fa_a_3d67b_d9</groovy-cps.version>
+     <groovy.version>2.4.21</groovy.version>
+     <groovy-sandbox.version>1.34.1</groovy-sandbox.version>
+ 
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/AlertEscapeTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/AlertEscapeTest.java
+new file mode 100644
+index 0000000..32e5fc0
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/AlertEscapeTest.java
+@@ -0,0 +1,59 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.Method;
++import java.util.stream.Stream;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++
++/**
++ * notify.escape, which keeps a raisealert marker's message on one log line. It is {@code @NonCPS},
++ * so the CPS transform leaves its body to run as plain Groovy here.
++ */
++class AlertEscapeTest {
++
++    private static GroovyClassLoader loader;
++    private static Object notify;
++    private static Method escape;
++
++    @BeforeAll
++    static void loadNotify() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("notify");
++        notify = type.getDeclaredConstructor().newInstance();
++        escape = type.getMethod("escape", String.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    static Stream<Arguments> messages() {
++        return Stream.of(
++                Arguments.of("build 57 is green", "build 57 is green"),
++                Arguments.of("", ""),
++                Arguments.of("tab\tstays", "tab\tstays"),
++                // Line breaks become their two-character escapes.
++                Arguments.of("line one\nline two", "line one\\nline two"),
++                Arguments.of("crlf\r\nend", "crlf\\r\\nend"),
++                Arguments.of("lone\rcr", "lone\\rcr"),
++                Arguments.of("trailing\n", "trailing\\n"),
++                // A backslash the message holds is escaped first, so the two characters \n stay
++                // distinguishable from an escaped line break.
++                Arguments.of("literal \\n", "literal \\\\n"),
++                Arguments.of("C:\\dir", "C:\\\\dir"),
++                Arguments.of("both \\n\n", "both \\\\n\\n"));
++    }
++
++    @ParameterizedTest(name = "case {index}")
++    @MethodSource("messages")
++    void escapesBackslashAndLineBreaks(String message, String expected) throws Exception {
++        assertEquals(expected, escape.invoke(notify, message));
++    }
++}
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/VersionPinsTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/VersionPinsTest.java
+new file mode 100644
+index 0000000..45a5f30
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/VersionPinsTest.java
+@@ -0,0 +1,284 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertFalse;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.LinkedHashMap;
++import java.util.Map;
++import java.util.stream.Stream;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++import org.junit.jupiter.params.provider.ValueSource;
++
++/**
++ * The surgical write behind cicd.writeVersionPins: applyPins finds each pin's line, replacePin
++ * rewrites its scalar, plainSafe decides whether a value may stay unquoted. All three are
++ * {@code @NonCPS}, so the CPS transform leaves their bodies to run as plain Groovy here.
++ */
++class VersionPinsTest {
++
++    private static final String FILE = "config/dev/values.yaml";
++
++    private static final String VALUES = """
++            # Pinned by KubeCoder/Build-Main; every other line is hand-curated.
++            images:  # the build's own tags
++              controller: dev-523   # the controller image
++              agent: "dev-523"
++              sidecar: 'dev-523'
++            replicas: 1
++
++            notes: |
++              Bump images.controller by hand only in an emergency:
++
++              images:
++                controller: dev-1
++            summary: >
++              images:
++                agent: dev-1
++            env:
++              - name: LOG_LEVEL
++            web:
++              image:
++                tag: dev-523
++              resources:
++                cpu: 1
++            api:
++              image:
++                tag: dev-523
++            """;
++
++    private static GroovyClassLoader loader;
++    private static Object cicd;
++    private static Method applyPins;
++    private static Method replacePin;
++    private static Method plainSafe;
++
++    @BeforeAll
++    static void loadCicd() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("cicd");
++        cicd = type.getDeclaredConstructor().newInstance();
++        applyPins = type.getMethod("applyPins", String.class, String.class, Map.class);
++        replacePin = type.getMethod("replacePin", String.class, String.class);
++        plainSafe = type.getMethod("plainSafe", String.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    private static Object call(Method method, Object... args) throws Exception {
++        try {
++            return method.invoke(cicd, args);
++        } catch (InvocationTargetException e) {
++            if (e.getCause() instanceof IllegalArgumentException refused) {
++                throw refused;
++            }
++            throw e;
++        }
++    }
++
++    /** Pins are given as dotted path, value, dotted path, value, ... */
++    private static String apply(String text, String... pins) throws Exception {
++        Map<String, String> map = new LinkedHashMap<>();
++        for (int i = 0; i < pins.length; i += 2) {
++            map.put(pins[i], pins[i + 1]);
++        }
++        return (String) call(applyPins, FILE, text, map);
++    }
++
++    @Test
++    void writesEachPinAndLeavesEveryOtherByte() throws Exception {
++        String expected = """
++                # Pinned by KubeCoder/Build-Main; every other line is hand-curated.
++                images:  # the build's own tags
++                  controller: dev-524   # the controller image
++                  agent: "dev-524"
++                  sidecar: 'dev-524'
++                replicas: 1
++
++                notes: |
++                  Bump images.controller by hand only in an emergency:
++
++                  images:
++                    controller: dev-1
++                summary: >
++                  images:
++                    agent: dev-1
++                env:
++                  - name: LOG_LEVEL
++                web:
++                  image:
++                    tag: dev-523
++                  resources:
++                    cpu: 1
++                api:
++                  image:
++                    tag: dev-524
++                """;
++
++        assertEquals(
++                expected,
++                apply(
++                        VALUES,
++                        "images.controller", "dev-524",
++                        "images.agent", "dev-524",
++                        "images.sidecar", "dev-524",
++                        "api.image.tag", "dev-524"));
++    }
++
++    // writeVersionPins commits nothing when the text comes back equal.
++    @Test
++    void pinsTheFileAlreadyHoldsChangeNothing() throws Exception {
++        assertEquals(
++                VALUES,
++                apply(
++                        VALUES,
++                        "images.controller", "dev-523",
++                        "images.agent", "dev-523",
++                        "images.sidecar", "dev-523",
++                        "api.image.tag", "dev-523"));
++    }
++
++    @Test
++    void aFileWithoutAFinalNewlineGainsNone() throws Exception {
++        assertEquals("images:\n  controller: dev-524", apply("images:\n  controller: dev-523", "images.controller", "dev-524"));
++    }
++
++    @ParameterizedTest(name = "{0} is refused")
++    @ValueSource(strings = {
++        // No such key.
++        "images.missing",
++        "image.tag",
++        // A mapping, not a scalar.
++        "images",
++        "web.image",
++        // Beneath a scalar.
++        "web.image.tag.version",
++        // A block scalar, and the prose inside one that reads like YAML.
++        "notes",
++        "notes.images.controller",
++        "summary.images.agent",
++        // A sequence, and a key inside one of its entries.
++        "env",
++        "env.name",
++    })
++    void aPathWithoutAScalarLineIsRefused(String path) {
++        IllegalArgumentException refused =
++                assertThrows(IllegalArgumentException.class, () -> apply(VALUES, path, "dev-524"));
++        assertEquals(
++                "cicd.writeVersionPins: " + FILE + " holds no " + path
++                        + "; a path the file does not already carry is never created",
++                refused.getMessage());
++    }
++
++    @Test
++    void everyMissingPathIsNamed() {
++        IllegalArgumentException refused = assertThrows(
++                IllegalArgumentException.class,
++                () -> apply(VALUES, "images.controller", "dev-524", "images.gateway", "dev-524", "api.tag", "dev-524"));
++        assertTrue(refused.getMessage().contains(" holds no images.gateway, api.tag; "), refused.getMessage());
++    }
++
++    @Test
++    void aPathOnTwoLinesIsRefused() {
++        String twice = """
++                images:
++                  controller: dev-523
++                replicas: 1
++                images:
++                  controller: dev-523
++                """;
++        IllegalArgumentException refused = assertThrows(
++                IllegalArgumentException.class, () -> apply(twice, "images.controller", "dev-524"));
++        assertEquals(
++                "cicd.writeVersionPins: " + FILE + " holds 'images.controller' on both line 2 and line 5",
++                refused.getMessage());
++    }
++
++    static Stream<Arguments> pinnedLines() {
++        return Stream.of(
++                // Plain: the key, its indent and spacing, and whatever trails the scalar stay.
++                Arguments.of("tag: dev-523", "dev-524", "tag: dev-524"),
++                Arguments.of("    tag:   dev-523", "dev-524", "    tag:   dev-524"),
++                Arguments.of("tag: dev-523   # CI writes this", "dev-524", "tag: dev-524   # CI writes this"),
++                Arguments.of("tag: dev-523   ", "dev-524", "tag: dev-524   "),
++                Arguments.of("tag: a#b", "dev-524", "tag: dev-524"),
++                // Plain, with a value plain style would read back as something else: double-quoted.
++                Arguments.of("tag: dev-523", "524", "tag: \"524\""),
++                Arguments.of("tag: dev-523 # CI writes this", ":524", "tag: \":524\" # CI writes this"),
++                Arguments.of("tag: dev-523", "true", "tag: \"true\""),
++                Arguments.of("tag: dev-523", "a #b", "tag: \"a #b\""),
++                Arguments.of("tag: dev-523", "\"q\" \\ x", "tag: \"\\\"q\\\" \\\\ x\""),
++                // Double-quoted stays double-quoted, escapes and all, whatever the old value held.
++                Arguments.of("tag: \"dev-523\"", "dev-524", "tag: \"dev-524\""),
++                Arguments.of("tag: \"523\" # c", "524", "tag: \"524\" # c"),
++                Arguments.of("tag: \"a # b\" # c", "dev-524", "tag: \"dev-524\" # c"),
++                Arguments.of("tag: \"a\\\"b\" # c", "dev-524", "tag: \"dev-524\" # c"),
++                Arguments.of("tag: \"a\\\\\" # c", "dev-524", "tag: \"dev-524\" # c"),
++                Arguments.of("tag: \"x\"", "a\"b\\c", "tag: \"a\\\"b\\\\c\""),
++                // Single-quoted stays single-quoted, a quote inside doubled.
++                Arguments.of("tag: 'dev-523'", "dev-524", "tag: 'dev-524'"),
++                Arguments.of("tag: '523' # c", "524", "tag: '524' # c"),
++                Arguments.of("tag: 'a # b' # c", "dev-524", "tag: 'dev-524' # c"),
++                Arguments.of("tag: 'it''s' # c", "dev-524", "tag: 'dev-524' # c"),
++                Arguments.of("tag: 'it''' # c", "dev-524", "tag: 'dev-524' # c"),
++                Arguments.of("tag: 'x'", "it's", "tag: 'it''s'"));
++    }
++
++    @ParameterizedTest(name = "[{0}] <- {1} is [{2}]")
++    @MethodSource("pinnedLines")
++    void replacesOnlyTheScalar(String line, String value, String expected) throws Exception {
++        assertEquals(expected, call(replacePin, line, value));
++    }
++
++    @ParameterizedTest(name = "{0} stays plain")
++    @ValueSource(strings = {
++        "latest",
++        "dev-524",
++        "node-24",
++        "v1.2.3",
++        "sha-3f9c2a1",
++        "registry:5000/app:57",
++        "a#b",
++        "a b",
++        "yes-please",
++        "nullable",
++    })
++    void plainSafeValues(String value) throws Exception {
++        assertTrue((boolean) call(plainSafe, value));
++    }
++
++    @ParameterizedTest(name = "[{0}] is quoted")
++    @ValueSource(strings = {
++        // Empty, or whitespace a plain scalar drops.
++        "",
++        " latest",
++        "latest ",
++        // A leading indicator character.
++        "-x", "?x", ":524", ",x", "[x", "]x", "{x", "}x", "#x", "&x", "*x", "!x", "|x", ">x",
++        "'x", "\"x", "%x", "@x", "`x",
++        // What may resolve to a number, a date or null.
++        "524", "+1", ".5", "0x1f", ".inf", "2026-09-21", "26.7.3-postgres", "~",
++        // The YAML 1.1 booleans and null, in any case.
++        "y", "Y", "yes", "YES", "n", "no", "No", "true", "True", "false", "FALSE", "on", "On", "off", "null",
++        "Null",
++        // A mapping or a comment inside the value.
++        "a: b",
++        "a #b",
++        "a:",
++    })
++    void valuesPlainStyleWouldRetype(String value) throws Exception {
++        assertFalse((boolean) call(plainSafe, value));
++    }
++}
+
+/work/JenkinsPipelineUtils — P2: git diff 9cbbad9d0e1e..e5c62bd69df4
+
+.../org/webathome/jenkinspipelineutils/ChangedFilesTest.java    | 95 +++++++++++++++++++++++++++++
+ vars/containerTemplates.groovy                                  | 14 -----
+ vars/helmCharts.groovy                                          | 32 ----------
+ vars/utils.groovy                                               |  1 +
+ 4 files changed, 96 insertions(+), 46 deletions(-)
+
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/ChangedFilesTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/ChangedFilesTest.java
+new file mode 100644
+index 0000000..5250831
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/ChangedFilesTest.java
+@@ -0,0 +1,95 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++import groovy.lang.Binding;
++import groovy.lang.GroovyClassLoader;
++import groovy.lang.Script;
++import java.lang.reflect.Method;
++import java.util.Arrays;
++import java.util.List;
++import java.util.Map;
++import java.util.stream.Stream;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++
++/**
++ * utils.hasChanges, which asks whether the build's change sets touch a path matching a pattern. It
++ * is {@code @NonCPS}, so the CPS transform leaves its body to run as plain Groovy here; without the
++ * annotation the direct call throws CpsCallableInvocation. It reads the {@code currentBuild} global,
++ * which the script binding stands in for, shaped as RunWrapper's changeSets / items /
++ * affectedFiles / path.
++ */
++class ChangedFilesTest {
++
++    private static final Map<String, Object> BUILD = build(
++            changeSet(commit("README.md"), commit("docs/manual.md", "Jenkinsfile")),
++            changeSet(commit("images/k8s/Dockerfile", "images/k8s/versions.env")));
++
++    private static GroovyClassLoader loader;
++    private static Class<?> type;
++    private static Method hasChanges;
++
++    @BeforeAll
++    static void loadUtils() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        type = loader.loadClass("utils");
++        hasChanges = type.getMethod("hasChanges", Object.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    private static Map<String, Object> commit(String... paths) {
++        return Map.of("affectedFiles", Arrays.stream(paths).map(p -> Map.of("path", p)).toList());
++    }
++
++    @SafeVarargs
++    private static Map<String, Object> changeSet(Map<String, Object>... commits) {
++        return Map.of("items", List.of(commits));
++    }
++
++    @SafeVarargs
++    private static Map<String, Object> build(Map<String, Object>... changeSets) {
++        return Map.of("changeSets", List.of(changeSets));
++    }
++
++    private static Object answer(Map<String, Object> currentBuild, String pattern) throws Exception {
++        Script utils = (Script) type.getDeclaredConstructor().newInstance();
++        utils.setBinding(new Binding(Map.of("currentBuild", currentBuild)));
++        return hasChanges.invoke(utils, pattern);
++    }
++
++    static Stream<Arguments> patterns() {
++        return Stream.of(
++                Arguments.of(".*", true),
++                // A negative lookahead on the empty string matches no path at all.
++                Arguments.of("(?!)", false),
++                // Every change set and every commit in it is searched, not only the first.
++                Arguments.of("images/k8s/.*", true),
++                Arguments.of("Jenkinsfile", true),
++                Arguments.of(".*\\.env", true),
++                // ==~ matches the whole path: a prefix or a bare file name is no match.
++                Arguments.of("images", false),
++                Arguments.of("manual\\.md", false),
++                Arguments.of("charts/.*", false));
++    }
++
++    @ParameterizedTest(name = "{0} -> {1}")
++    @MethodSource("patterns")
++    void answersWhetherAChangedPathMatches(String pattern, boolean expected) throws Exception {
++        assertEquals(expected, answer(BUILD, pattern));
++    }
++
++    // A build with no change sets: the first build of a job, or one started by hand.
++    @Test
++    void noChangeSetsIsNoChange() throws Exception {
++        assertEquals(false, answer(build(), ".*"));
++    }
++}
+diff --git a/vars/containerTemplates.groovy b/vars/containerTemplates.groovy
+index bc2dbe2..d443682 100644
+--- a/vars/containerTemplates.groovy
++++ b/vars/containerTemplates.groovy
+@@ -63,20 +63,6 @@ def modern_app_toolchain(String name) {
+     return containerTemplate(name: name, image: 'registry:5000/kube-coder-modern-app-toolchain:node-24', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000')
+ }
+ 
+-/**
+- * Debian Bookworm slim container.
+- */
+-def debian(String name) {
+-    return containerTemplate(name: name, image: 'debian:bookworm-slim', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+-}
+-
+-/**
+- * Canon CLI container (canon lint, build, generate).
+- */
+-def canon(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/canon', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000')
+-}
+-
+ /**
+  * Rsync container for file synchronization.
+  */
+diff --git a/vars/helmCharts.groovy b/vars/helmCharts.groovy
+index ad4b75b..cc5ea5b 100644
+--- a/vars/helmCharts.groovy
++++ b/vars/helmCharts.groovy
+@@ -4,38 +4,6 @@
+ 
+ import groovy.json.JsonOutput
+ 
+-@groovy.transform.Field
+-def toolsInstalled = false
+-
+-/**
+- * Runs a closure inside the tools/ directory, installing Python dependencies
+- * on first use. Subsequent calls in the same build skip installation.
+- */
+-def tools(Closure body) {
+-    dir('tools') {
+-        if (!toolsInstalled) {
+-            sh 'uv pip install -r requirements.txt --system --break-system-packages'
+-
+-            toolsInstalled = true
+-        }
+-
+-        body()
+-    }
+-}
+-
+-/**
+- * Resolves a container image reference to its digest using a helper script.
+- *
+- * @return The resolved image digest.
+- */
+-def resolveImageTag(String image) {
+-    def digest = sh(script: "python resolve-image-tag.py '${image}'", returnStdout: true)
+-
+-    println("Resolved '${image}' to digest '${digest}'")
+-
+-    return digest
+-}
+-
+ /**
+  * Builds a container image using Kaniko with insecure registry support.
+  * Must be called inside a container('kaniko') block.
+diff --git a/vars/utils.groovy b/vars/utils.groovy
+index 41b9f45..a4b8dad 100644
+--- a/vars/utils.groovy
++++ b/vars/utils.groovy
+@@ -30,6 +30,7 @@ int lastSuccessfulBuildNumber(String jobFullName) {
+  * @param pattern  Regex pattern matched against changed file paths.
+  * @return true if at least one changed file matches.
+  */
++@NonCPS
+ def hasChanges(pattern) {
+     return currentBuild.changeSets.any { changeSet ->
+         changeSet.items.any { item ->
+
+/work/JenkinsPipelineUtils — P3: git diff e5c62bd69df4..c33e64a8623f
+
+.../java/org/webathome/jenkinspipelineutils/PodYamlTest.java    | 291 ++++++++++++++++++++++++++++
+ vars/podYaml.groovy                                             | 168 ++++++++++++++++
+ 2 files changed, 459 insertions(+)
+
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
+new file mode 100644
+index 0000000..0d29ba7
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
+@@ -0,0 +1,291 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.stream.Stream;
++import org.codehaus.groovy.runtime.GStringImpl;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++
++/**
++ * podYaml, which renders a declarative Kubernetes agent's pod spec from library sidecars and
++ * pipeline-chosen images. It is {@code @NonCPS}, so the CPS transform leaves its body to run as
++ * plain Groovy here. The sidecars' reference is KubeCoder/Build-Main #558's pod, as the kubernetes
++ * plugin printed it from containerTemplates.k8s and modern_app_toolchain.
++ */
++class PodYamlTest {
++
++    private static final String HEADER = """
++            apiVersion: v1
++            kind: Pod
++            spec:
++              containers:
++            """;
++
++    private static GroovyClassLoader loader;
++    private static Object podYaml;
++    private static Method call;
++
++    @BeforeAll
++    static void loadPodYaml() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("podYaml");
++        podYaml = type.getDeclaredConstructor().newInstance();
++        call = type.getMethod("call", Map.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    private static String render(Map<String, Object> args) throws Exception {
++        try {
++            return (String) call.invoke(podYaml, args);
++        } catch (InvocationTargetException e) {
++            if (e.getCause() instanceof IllegalArgumentException refused) {
++                throw refused;
++            }
++            throw e;
++        }
++    }
++
++    /** Keys and values alternate; the map keeps their order, as a Groovy map literal does. */
++    private static Map<String, Object> ordered(Object... pairs) {
++        Map<String, Object> map = new LinkedHashMap<>();
++        for (int i = 0; i < pairs.length; i += 2) {
++            map.put((String) pairs[i], pairs[i + 1]);
++        }
++        return map;
++    }
++
++    @Test
++    void librarySidecarsCarryTheirContainerTemplateSettings() throws Exception {
++        String expected = HEADER + """
++                  - name: "k8s"
++                    image: "registry:5000/k8s:1.35.5"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                  - name: "modern-app-toolchain"
++                    image: "registry:5000/kube-coder-modern-app-toolchain:node-24"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                    securityContext:
++                      runAsUser: 1000
++                """;
++        assertEquals(expected, render(Map.of("templates", List.of("k8s", "modern-app-toolchain"))));
++    }
++
++    @Test
++    void anImageReferenceRunsLikeASidecar() throws Exception {
++        String expected = HEADER + """
++                  - name: "node"
++                    image: "node:24-bookworm"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                """;
++        assertEquals(expected, render(Map.of("images", List.of("node:24-bookworm"))));
++    }
++
++    static Stream<Arguments> imageNames() {
++        return Stream.of(
++                Arguments.of("node:24-bookworm", "node"),
++                Arguments.of("registry:5000/kube-coder-go-toolchain:latest", "kube-coder-go-toolchain"),
++                // A registry port is not a tag.
++                Arguments.of("registry:5000/python", "python"),
++                Arguments.of("espressif/idf:v5.3.1", "idf"),
++                Arguments.of("espressif/idf@sha256:0123abcd", "idf"),
++                Arguments.of("espressif/idf:v5.3.1@sha256:0123abcd", "idf"));
++    }
++
++    @ParameterizedTest(name = "{0} -> {1}")
++    @MethodSource("imageNames")
++    void anImageReferenceIsNamedAfterItsLastPathSegment(String image, String name) throws Exception {
++        String rendered = render(Map.of("images", List.of(image)));
++        assertEquals("  - name: \"" + name + "\"", rendered.lines().toList().get(4));
++    }
++
++    // A pipeline interpolates the version it needs: "esp-idf:${version}" is a GString, not a String.
++    @Test
++    void anInterpolatedImageReferenceIsAnImageReference() throws Exception {
++        Object image = new GStringImpl(new Object[] {"v5.3.1"}, new String[] {"espressif/idf:", ""});
++        assertEquals(
++                render(Map.of("images", List.of("espressif/idf:v5.3.1"))),
++                render(Map.of("images", List.of(image))));
++    }
++
++    @Test
++    void aMapEntryOverridesNameResourcesUserAndEnv() throws Exception {
++        Map<String, Object> esp = ordered(
++                "image", "espressif/idf:v5.3.1",
++                "name", "esp-idf",
++                "resources", ordered(
++                        "requests", ordered("cpu", "2", "memory", "2Gi"),
++                        "limits", ordered("cpu", 4, "memory", "4Gi", "ephemeral-storage", "10Gi")),
++                "runAsUser", "1000",
++                "env", ordered("IDF_CCACHE_ENABLE", "1", "HOME", "/tmp"));
++        String expected = HEADER + """
++                  - name: "esp-idf"
++                    image: "espressif/idf:v5.3.1"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                    resources:
++                      requests:
++                        "cpu": "2"
++                        "memory": "2Gi"
++                      limits:
++                        "cpu": "4"
++                        "memory": "4Gi"
++                        "ephemeral-storage": "10Gi"
++                    securityContext:
++                      runAsUser: 1000
++                    env:
++                    - name: "IDF_CCACHE_ENABLE"
++                      value: "1"
++                    - name: "HOME"
++                      value: "/tmp"
++                """;
++        assertEquals(expected, render(Map.of("images", List.of(esp))));
++    }
++
++    // What a map entry does not override, it takes from the string form.
++    @Test
++    void aMapEntryWithOnlyAnImageIsTheStringForm() throws Exception {
++        assertEquals(
++                render(Map.of("images", List.of("node:24-bookworm"))),
++                render(Map.of("images", List.of(Map.of("image", "node:24-bookworm")))));
++    }
++
++    static Stream<Arguments> envValues() {
++        return Stream.of(
++                // Unquoted, YAML reads these as null, a boolean and an integer.
++                Arguments.of("", "\"\""),
++                Arguments.of("true", "\"true\""),
++                Arguments.of("1000", "\"1000\""),
++                Arguments.of("# not a comment", "\"# not a comment\""),
++                Arguments.of("C:\\cache \"x\"", "\"C:\\\\cache \\\"x\\\"\""),
++                // Inside double quotes a raw line break folds to a space; the escape keeps it.
++                Arguments.of("a\nb\tc", "\"a\\x0ab\\x09c\""));
++    }
++
++    @ParameterizedTest(name = "value: {1}")
++    @MethodSource("envValues")
++    void anEnvValueStaysTheStringGiven(String value, String scalar) throws Exception {
++        String rendered = render(Map.of("images", List.of(Map.of("image", "node", "env", Map.of("V", value)))));
++        assertEquals("      value: " + scalar, rendered.lines().toList().getLast());
++    }
++
++    // KubeCoder/Build-Main's pod: the library sidecars first, then the pipeline's own images.
++    @Test
++    void templatesComeBeforeImagesEachInTheOrderGiven() throws Exception {
++        Map<String, Object> golang = ordered(
++                "image", "registry:5000/kube-coder-go-toolchain:latest",
++                "name", "golang",
++                "resources", ordered(
++                        "requests", ordered("cpu", "2", "memory", "2Gi"),
++                        "limits", ordered("cpu", "4", "memory", "4Gi")));
++        String expected = HEADER + """
++                  - name: "k8s"
++                    image: "registry:5000/k8s:1.35.5"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                  - name: "modern-app-toolchain"
++                    image: "registry:5000/kube-coder-modern-app-toolchain:node-24"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                    securityContext:
++                      runAsUser: 1000
++                  - name: "golang"
++                    image: "registry:5000/kube-coder-go-toolchain:latest"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                    resources:
++                      requests:
++                        "cpu": "2"
++                        "memory": "2Gi"
++                      limits:
++                        "cpu": "4"
++                        "memory": "4Gi"
++                  - name: "node"
++                    image: "node:24-bookworm"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                """;
++        assertEquals(
++                expected,
++                render(ordered(
++                        "templates", List.of("k8s", "modern-app-toolchain"),
++                        "images", List.of(golang, "node:24-bookworm"))));
++    }
++
++    static Stream<Arguments> refusals() {
++        return Stream.of(
++                Arguments.of(
++                        Map.of("templates", List.of("k8s", "helm")),
++                        "podYaml: the library has no template 'helm'; it has k8s, modern-app-toolchain"),
++                Arguments.of(
++                        Map.of("images", List.of(ordered("image", "node:24-bookworm", "cpu", "2"))),
++                        "podYaml: an images entry takes image, name, resources, runAsUser and env; got cpu"),
++                Arguments.of(
++                        Map.of("images", List.of(Map.of("name", "node"))),
++                        "podYaml: an images entry names no image: [name:node]"),
++                Arguments.of(
++                        Map.of("images", List.of(Map.of("image", "node", "resources", Map.of("limit", Map.of("cpu", "1"))))),
++                        "podYaml: resources takes requests and limits; got 'limit'"),
++                Arguments.of(
++                        Map.of("image", List.of("node:24-bookworm")),
++                        "podYaml: takes templates and images; got image"),
++                // A library sidecar and an image of the same name.
++                Arguments.of(
++                        Map.of("templates", List.of("k8s"), "images", List.of("registry:5000/k8s:1.36.0")),
++                        "podYaml: two containers are named 'k8s'"),
++                Arguments.of(
++                        Map.of("images", List.of("node:24-bookworm", "node:22-bookworm")),
++                        "podYaml: two containers are named 'node'"),
++                Arguments.of(
++                        Map.of("templates", List.of("k8s", "k8s")),
++                        "podYaml: two containers are named 'k8s'"));
++    }
++
++    @ParameterizedTest(name = "{1}")
++    @MethodSource("refusals")
++    void aCallItCannotRenderAsGivenIsRefused(Map<String, Object> args, String message) {
++        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> render(args));
++        assertEquals(message, refused.getMessage());
++    }
++}
+diff --git a/vars/podYaml.groovy b/vars/podYaml.groovy
+new file mode 100644
+index 0000000..09f3ae9
+--- /dev/null
++++ b/vars/podYaml.groovy
+@@ -0,0 +1,168 @@
++/**
++ * Returns the pod spec, as YAML, for a declarative Kubernetes agent: the library sidecars named in
++ * `templates`, then a container for each entry of `images`, in the order given.
++ *
++ *     agent {
++ *         kubernetes {
++ *             inheritFrom 'jenkins-agent'
++ *             yaml podYaml(templates: ['k8s'], images: ['node:24-bookworm'])
++ *         }
++ *     }
++ *
++ * Every container is kept alive by `sleep infinity` and pulled `Always`; `container('<name>')`
++ * runs a stage's steps in it.
++ *
++ * Declarative evaluates an agent's parameters on the controller before any agent exists, so this
++ * and everything it calls is @NonCPS and calls no step.
++ *
++ * @param templates  Library sidecars by name: `k8s` (kubectl, crane) and `modern-app-toolchain`
++ *                   (KubeCoder's full-stack tool image: Node 24, pnpm, bun, poetry, uv).
++ * @param images     Any other container, as an image reference, named after the image's last
++ *                   path segment without its tag (`node:24-bookworm` runs as `node`), or as a map
++ *                   with `image` and any of `name`, `resources` (`requests` and `limits`, each
++ *                   resource name -> quantity), `runAsUser` and `env` (name -> value).
++ */
++@NonCPS
++String call(Map args) {
++    def unknown = args.keySet().collect { it.toString() } - ['templates', 'images']
++    if (unknown) {
++        throw new IllegalArgumentException("podYaml: takes templates and images; got ${unknown.join(', ')}")
++    }
++
++    Map<String, Map> library = sidecars()
++    List<Map> containers = []
++
++    (args.templates ?: []).each { template ->
++        String name = template.toString()
++        if (!library.containsKey(name)) {
++            throw new IllegalArgumentException(
++                "podYaml: the library has no template '${name}'; it has ${library.keySet().join(', ')}")
++        }
++        containers.add([name: name] + library[name])
++    }
++    (args.images ?: []).each { entry ->
++        if (entry instanceof Map) {
++            containers.add(imageContainer(entry))
++        } else {
++            String image = entry.toString()
++            containers.add([name: containerName(image), image: image])
++        }
++    }
++
++    Set<String> names = []
++    containers.each { container ->
++        if (!names.add(container.name)) {
++            throw new IllegalArgumentException("podYaml: two containers are named '${container.name}'")
++        }
++    }
++
++    List<String> lines = ['apiVersion: v1', 'kind: Pod', 'spec:', '  containers:']
++    containers.each { lines.addAll(containerLines(it)) }
++    return lines.join('\n') + '\n'
++}
++
++/**
++ * The sidecars `templates` names, as `containerTemplates` declares them for a scripted
++ * podTemplate. uid 1000 is the agent's own user: git refuses a checkout another uid owns.
++ */
++@NonCPS
++Map<String, Map> sidecars() {
++    return [
++        'k8s': [image: 'registry:5000/k8s:1.35.5'],
++        'modern-app-toolchain': [image: 'registry:5000/kube-coder-modern-app-toolchain:node-24', runAsUser: 1000],
++    ]
++}
++
++/**
++ * An `images` map entry as a container: every key a String, every value the type it renders as.
++ */
++@NonCPS
++Map imageContainer(Map entry) {
++    Map given = [:]
++    entry.each { key, value -> given[key.toString()] = value }
++
++    def unknown = given.keySet() - ['image', 'name', 'resources', 'runAsUser', 'env']
++    if (unknown) {
++        throw new IllegalArgumentException(
++            "podYaml: an images entry takes image, name, resources, runAsUser and env; got ${unknown.join(', ')}")
++    }
++    if (!given.image) {
++        throw new IllegalArgumentException("podYaml: an images entry names no image: ${entry}")
++    }
++
++    String image = given.image.toString()
++    Map container = [name: given.name ? given.name.toString() : containerName(image), image: image]
++
++    if (given.resources) {
++        Map<String, Map<String, String>> resources = [:]
++        given.resources.each { kind, quantities ->
++            if (!(kind.toString() in ['requests', 'limits'])) {
++                throw new IllegalArgumentException("podYaml: resources takes requests and limits; got '${kind}'")
++            }
++            Map<String, String> byResource = [:]
++            quantities.each { resource, quantity -> byResource[resource.toString()] = quantity.toString() }
++            resources[kind.toString()] = byResource
++        }
++        container.resources = resources
++    }
++    if (given.runAsUser != null) {
++        container.runAsUser = Long.parseLong(given.runAsUser.toString())
++    }
++    if (given.env) {
++        Map<String, String> env = [:]
++        given.env.each { name, value -> env[name.toString()] = value.toString() }
++        container.env = env
++    }
++    return container
++}
++
++/**
++ * The image's last path segment without its tag or digest:
++ * `registry:5000/kube-coder-go-toolchain:latest` -> `kube-coder-go-toolchain`.
++ */
++@NonCPS
++String containerName(String image) {
++    return image.substring(image.lastIndexOf('/') + 1).split(/[:@]/)[0]
++}
++
++@NonCPS
++List<String> containerLines(Map container) {
++    List<String> lines = [
++        "  - name: ${quoted(container.name)}".toString(),
++        "    image: ${quoted(container.image)}".toString(),
++        '    imagePullPolicy: Always',
++        '    command:',
++        '    - sleep',
++        '    args:',
++        '    - infinity',
++    ]
++    if (container.resources) {
++        lines.add('    resources:')
++        container.resources.each { kind, quantities ->
++            lines.add("      ${kind}:".toString())
++            quantities.each { resource, quantity -> lines.add("        ${quoted(resource)}: ${quoted(quantity)}".toString()) }
++        }
++    }
++    if (container.runAsUser != null) {
++        lines.add('    securityContext:')
++        lines.add("      runAsUser: ${container.runAsUser}".toString())
++    }
++    if (container.env) {
++        lines.add('    env:')
++        container.env.each { name, value ->
++            lines.add("    - name: ${quoted(name)}".toString())
++            lines.add("      value: ${quoted(value)}".toString())
++        }
++    }
++    return lines
++}
++
++/**
++ * `value` as a YAML double-quoted scalar, which reads back as exactly that string whatever it
++ * holds: `true`, `1000` and the empty string stay strings.
++ */
++@NonCPS
++String quoted(String value) {
++    String escaped = value.replace('\\', '\\\\').replace('"', '\\"')
++    return '"' + escaped.replaceAll(/[\x00-\x1f\x7f]/) { String c -> String.format('\\x%02x', (int) c.charAt(0)) } + '"'
++}

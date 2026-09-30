@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "hasChanges is @NonCPS with no other change, and ChangedFilesTest asserts it: '.*' true, '(?!)' false. The reviewer ran the @NonCPS-removal mutation and all 9 cases went red. The five dead helpers are deleted and everything the plan keeps is kept. One advisory: DesignAssistant's Jenkinsfiles, whose jobs have been deleted, still call containerTemplates.canon.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+               "summary": "DesignAssistant's Jenkinsfile and Jenkinsfile.deploy-uat (main and develop) still call the deleted containerTemplates.canon; no live job runs them (their jobs were deleted), so restoring those jobs would fail pod creation"}]}

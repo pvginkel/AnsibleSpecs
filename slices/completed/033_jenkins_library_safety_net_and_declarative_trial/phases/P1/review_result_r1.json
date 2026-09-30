@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The groovy-cps pin now matches the controller's live workflow-cps 4383, and the new tests check applyPins/replacePin/plainSafe and notify.escape in depth, refusals included; two extra mutations turned the tests red. One advisory comment overclaim.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "The pom.xml and project.yaml comments say every @NonCPS function has behaviour tests; normalizePins and rebuildAtIso have none"}]}

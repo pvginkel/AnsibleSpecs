@@ -1,0 +1,2 @@
+worker: cexec go sh -c 'test -z "$(gofmt -l .)"'    [  OK  ]
+worker: cexec go go vet ./...    [  OK  ]
