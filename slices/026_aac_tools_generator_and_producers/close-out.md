@@ -13,12 +13,22 @@ Run: <not yet stamped>
 
 ## Summary
 
-<!-- Written by the doc-writer as its last act: a few lines on the slice and what shipped.
-     Until then, blank. -->
+Slice 026 fixed the aac-tools generator and moved every producer's validator onto the toolchain.
+`gen-architecture` now takes an exposed Service's in-house service from the container the host
+routes to. KubeCoderDeploy's `main` maps kube-coder-tunnel-reclaim, and five other deploy repos
+drop a minted duplicate service. The judgment layer can scope `realizes` and `upstream` to named
+containers, and ConfigMap-sourced env values resolve. In the published model, Argo CD's
+controllers realize configuration management and its redis serves three of them. `gen-architecture
+--help` prints the whole annotation contract, and all 48 deploy repos, the argocd runbook,
+argo-migrate and Architecture's update agent point at it. Alertmanager is Served by the Telegram
+Bot API. All 28 carriers, Ansible included, run `arch-validate` from aac-tools, and their copies
+are gone. R3's app-name check was ruled out (D2).
 
 ## Outstanding actions
 
-Focus: <!-- doc-writer: what the operator must do before the slice's outcome holds -->
+Focus: A2 and A3 are what the outcome still waits on. The tunnel-reclaim mapping publishes only
+after KubeCoderDeploy is promoted to `prd`, and V09 waits on the Architecture environment's restart.
+A4–A9 are 16 carrier environments to restart; until then, `kc project lint` fails in each one.
 
 <!-- The operator runbook. One entry per keystroke only the operator can make: what to do,
      why it is owed to the operator, what stays open until it is done. -->
@@ -112,7 +122,9 @@ P13b moved each of these three firmware repos' `lint` gate from `./scripts/arch-
 
 ## Notable events
 
-Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
+Focus: The run paused three times for the operator (N2, N7, N9). The sweep restarted more of prd
+than Ruling D1 priced: scantopdf-prd and media-prd restarted three times (N4, N6). N1 matters
+beyond the run: five minted `svc:` ids left the published model.
 
 <!-- What happened to this run that an uneventful one would not have had: a bail-out, an
      appended phase, a blocked proof re-routed, a live run that exposed what the suite hid. What
@@ -221,35 +233,22 @@ Stopped 2026-09-30 09:23; resumed 2026-09-30 09:27.
 **Provenance:** witnessed — the driver's bail record in state.json
 **Disposition:**
 
+### N10 — The doc phase commits a README change on ArgoCDTools main, so the driver's push rebuilds and republishes both ArgoCDTools images
+
+ArgoCDTools c6d37c8 (README only: gen-architecture --help as the annotation layer's contract; producer repos run arch-validate from the image and keep no copy) sits on main, one ahead of origin. Any ArgoCDTools push runs IaC/ArgoCDTools, which republishes argocd-hook and aac-tools as :<N> and :latest and writes no pin. The README is outside both images' build contexts (each image folder is its own context), so the new builds carry the same generator and validator.
+
+**Consequence:** none — aac-tools:latest moves to a new build number with unchanged commands; the estate's architecture builds pull it with no difference in output.
+
+**Provenance:** witnessed, doc-writer, doc phase, r1, ArgoCDTools c6d37c8
+**Disposition:**
+
 ## Bugs
 
-Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
-     class (witnessed before read), never on length; how many are witnessed; which are in this
-     slice's repos, which elsewhere -->
+Focus: Two are open, both witnessed, and both sit in code this slice does not change. B3 comes
+first: FieldnotesApp builds fail at random on a racy test and ship no image. B4 is log noise in
+IoTSupport.
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
-
-### ~~B1 — Jenkins AaC/Architecture and AaC/WebathomeOrgDeploy trigger each other in an endless loop, redeploying the architecture site every ~6 minutes · major~~ — resolved outside the slice by Architecture a2dabd2 (ANS-136, 2026-09-26: WebathomeOrgDeploy trigger: false); P9c re-checked it: none of AaC/Architecture #2214-#2263 was started by AaC/WebathomeOrgDeploy, and AaC/WebathomeOrgDeploy #563-#568 started no AaC/Architecture build; struck by consult 1
-
-AaC/Architecture pins the new site image into WebathomeOrgDeploy. The push of that pin starts AaC/WebathomeOrgDeploy ("Started by GitHub push"), and that job starts AaC/Architecture downstream, which pins again. Nothing else is needed to keep it going. On 2026-09-25, every one of the last 12 AaC/Architecture builds (#1861-#1872, 08:31-09:35) was "Started by upstream project AaC/WebathomeOrgDeploy". AaC/WebathomeOrgDeploy #354-#358 built exactly the pin commits (`ci: image pins from AaC/Architecture #1868`…`#1872`). WebathomeOrgDeploy's origin/main gained 161 commits since 2026-09-24. The triage-2026-09-24 handover (ANS-111) attributes the 5-9-minute rollouts to the 79 producers publishing. The self-trigger means they would continue with no producer activity at all, and ANS-111's RollingUpdate fix removes the outage but not the loop. The plan works around it: the push sweep rebases WebathomeOrgDeploy immediately before pushing (attachments/push-sweep.md).
-
-code-writer, P9c r1, 2026-09-29 — Already fixed outside this slice: Architecture a2dabd2 (2026-09-26, ANS-136) marks WebathomeOrgDeploy trigger: false, so AaC/WebathomeOrgDeploy no longer starts AaC/Architecture. On 2026-09-29, pin pushes started AaC/WebathomeOrgDeploy #563-#567, each green. None of AaC/Architecture #2214-#2263, the job's whole retained history, was started by WebathomeOrgDeploy. WebathomeOrgDeploy now gains one pin commit per collector run, not one every ~6 minutes.
-
-**Consequence:** Jenkins runs two builds every ~6 minutes forever, the architecture site's pod is replaced each time (35-45 s with no pod until ANS-111's fix lands), and WebathomeOrgDeploy gains ~200 pin commits a day.
-
-**Provenance:** witnessed | plan-writer, planning, r1 — Jenkins API build causes for AaC/Architecture and AaC/WebathomeOrgDeploy, and WebathomeOrgDeploy git log, 2026-09-25
-**Disposition:**
-
-### ~~B2 — IoTSupport: AaC/IoTSupport has been red since 2026-09-24, because its generator cannot map the archived SomfyRemote's firmware product · major~~ — resolved by P12c r2 (IoTSupport c38bd6f, under Ruling D6 after the operator deleted device fhwiwoxa and model somfy_remote): AaC/IoTSupport #42 built that head green, and AaC/Architecture #2314 published it; struck by consult 1
-
-AaC/IoTSupport #38–#41 (2026-09-24 to 2026-09-26, each started by a GitHub push) fail in IoTSupport's own tools/gen-architecture.py with 'ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset'. The last green build is #37 (2026-09-21). In backend/docs/architecture/firmware-products.yaml that UUID is somfy_remote, the product SomfyRemote published. SomfyRemote is archived and its product is no longer in the dataset, but IoTSupport still registers a device of that model: the published dataset still carries IoTSupport's #37 artifact, with device:somfy-remote-fhwiwoxa and a Specialization to ss:somfy-remote,3e684732-…. The generator fails on any registered model it cannot map, so dropping the mapping line alone swaps one error for another. Remedy options: retire the somfy-remote device (and its model) in the IoTSupport service, then drop the mapping line. Or keep SomfyRemote's product in the dataset some other way. P12c checks for a ruling or a later green AaC/IoTSupport build before it touches IoTSupport, and otherwise stops there with a question.
-
-executor, P12c r2, 2026-09-30 — Resolved under Ruling D6: the operator deleted device fhwiwoxa and model somfy_remote in IoT Support (2026-09-30 07:25 UTC), the run dropped somfy_remote from firmware-products.yaml with IoTSupport's migration (c38bd6f), and AaC/IoTSupport #42 built that head green; AaC/Architecture #2314 published it.
-
-**Consequence:** IoTSupport's published architecture stays frozen at its 2026-09-21 artifact. The sweep stops at IoTSupport, the last P12c carrier, so V12 cannot hold for it until the operator retires the device or rules otherwise.
-
-**Provenance:** witnessed | code-writer, P10, r1 — Jenkins AaC/IoTSupport #41 console; sweep_ledger.md § Carriers
-**Disposition:**
 
 ### B3 — FieldnotesApp: test_syncs_and_deliveries_are_counted scrapes the board-sync counter before the queued sync increments it · minor
 
@@ -269,9 +268,39 @@ When the operator deleted the somfy_remote model (DELETE /api/device-models/4, 2
 **Provenance:** witnessed: executor, P12c, r2, kubectl logs iot-prd/iotsupport-598d6d6f5-gjlv7 -c iotsupport-app
 **Disposition:**
 
+### ~~B1 — Jenkins AaC/Architecture and AaC/WebathomeOrgDeploy trigger each other in an endless loop, redeploying the architecture site every ~6 minutes · major~~ — resolved outside the slice by Architecture a2dabd2 (ANS-136, 2026-09-26: WebathomeOrgDeploy trigger: false); P9c re-checked it: none of AaC/Architecture #2214-#2263 was started by AaC/WebathomeOrgDeploy, and AaC/WebathomeOrgDeploy #563-#568 started no AaC/Architecture build; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+AaC/Architecture pins the new site image into WebathomeOrgDeploy. The push of that pin starts AaC/WebathomeOrgDeploy ("Started by GitHub push"), and that job starts AaC/Architecture downstream, which pins again. Nothing else is needed to keep it going. On 2026-09-25, every one of the last 12 AaC/Architecture builds (#1861-#1872, 08:31-09:35) was "Started by upstream project AaC/WebathomeOrgDeploy". AaC/WebathomeOrgDeploy #354-#358 built exactly the pin commits (`ci: image pins from AaC/Architecture #1868`…`#1872`). WebathomeOrgDeploy's origin/main gained 161 commits since 2026-09-24. The triage-2026-09-24 handover (ANS-111) attributes the 5-9-minute rollouts to the 79 producers publishing. The self-trigger means they would continue with no producer activity at all, and ANS-111's RollingUpdate fix removes the outage but not the loop. The plan works around it: the push sweep rebases WebathomeOrgDeploy immediately before pushing (attachments/push-sweep.md).
+
+code-writer, P9c r1, 2026-09-29 — Already fixed outside this slice: Architecture a2dabd2 (2026-09-26, ANS-136) marks WebathomeOrgDeploy trigger: false, so AaC/WebathomeOrgDeploy no longer starts AaC/Architecture. On 2026-09-29, pin pushes started AaC/WebathomeOrgDeploy #563-#567, each green. None of AaC/Architecture #2214-#2263, the job's whole retained history, was started by WebathomeOrgDeploy. WebathomeOrgDeploy now gains one pin commit per collector run, not one every ~6 minutes.
+
+**Consequence:** Jenkins runs two builds every ~6 minutes forever, the architecture site's pod is replaced each time (35-45 s with no pod until ANS-111's fix lands), and WebathomeOrgDeploy gains ~200 pin commits a day.
+
+**Provenance:** witnessed | plan-writer, planning, r1 — Jenkins API build causes for AaC/Architecture and AaC/WebathomeOrgDeploy, and WebathomeOrgDeploy git log, 2026-09-25
+**Disposition:**
+
+</details>
+
+### ~~B2 — IoTSupport: AaC/IoTSupport has been red since 2026-09-24, because its generator cannot map the archived SomfyRemote's firmware product · major~~ — resolved by P12c r2 (IoTSupport c38bd6f, under Ruling D6 after the operator deleted device fhwiwoxa and model somfy_remote): AaC/IoTSupport #42 built that head green, and AaC/Architecture #2314 published it; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+AaC/IoTSupport #38–#41 (2026-09-24 to 2026-09-26, each started by a GitHub push) fail in IoTSupport's own tools/gen-architecture.py with 'ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset'. The last green build is #37 (2026-09-21). In backend/docs/architecture/firmware-products.yaml that UUID is somfy_remote, the product SomfyRemote published. SomfyRemote is archived and its product is no longer in the dataset, but IoTSupport still registers a device of that model: the published dataset still carries IoTSupport's #37 artifact, with device:somfy-remote-fhwiwoxa and a Specialization to ss:somfy-remote,3e684732-…. The generator fails on any registered model it cannot map, so dropping the mapping line alone swaps one error for another. Remedy options: retire the somfy-remote device (and its model) in the IoTSupport service, then drop the mapping line. Or keep SomfyRemote's product in the dataset some other way. P12c checks for a ruling or a later green AaC/IoTSupport build before it touches IoTSupport, and otherwise stops there with a question.
+
+executor, P12c r2, 2026-09-30 — Resolved under Ruling D6: the operator deleted device fhwiwoxa and model somfy_remote in IoT Support (2026-09-30 07:25 UTC), the run dropped somfy_remote from firmware-products.yaml with IoTSupport's migration (c38bd6f), and AaC/IoTSupport #42 built that head green; AaC/Architecture #2314 published it.
+
+**Consequence:** IoTSupport's published architecture stays frozen at its 2026-09-21 artifact. The sweep stops at IoTSupport, the last P12c carrier, so V12 cannot hold for it until the operator retires the device or rules otherwise.
+
+**Provenance:** witnessed | code-writer, P10, r1 — Jenkins AaC/IoTSupport #41 console; sweep_ledger.md § Carriers
+**Disposition:**
+
+</details>
+
 ## Open questions and rulings
 
-Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines -->
+Focus: None is open. The operator answered each of the run's pauses before it resumed.
 
 <!-- Questions the operator should settle that the run did not need answered to proceed. What
      turned on it, what the run did meanwhile. A question the run DOES need answered is a
@@ -279,8 +308,10 @@ Focus: <!-- doc-writer: what most turns on an answer, from the Consequence lines
 
 ## Suggestions
 
-Focus: <!-- doc-writer: which change a decision or another slice, from the Consequence lines;
-     which are witnessed -->
+Focus: S7 and S3 need a ruling. S7 asks whether `--help` documents the product lifecycle override
+or the code honours it. S3 asks whether the MCP hosts stay on the shared `svc:mcp-filter`. S1 is a
+slice of its own. S2 and S10 are stale texts outside this slice's pushes. S3, S4, S6, S8 and S10
+are witnessed.
 
 <!-- Ideas, improvements, inputs for other slices, fix proposals for the bugs above. -->
 
@@ -320,15 +351,6 @@ The suite still passes after either of two mutations. One makes the instance rec
 **Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
-### ~~S5 — aac-tools gen-architecture: resolve_boundby's comment still calls the container env literal-valued · cosmetic~~ — resolved by consult 1 (ArgoCDTools ef3e662): the comment now says the container env is literal or ConfigMap-sourced; aac-tools suite and ruff re-run green; struck by consult 1
-
-gen_architecture.py:1572-1573 says the value is expanded against the container's other literal-valued env. Since P2 that env also holds ConfigMap-sourced values (container_env).
-
-**Consequence:** none
-
-**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
-**Disposition:**
-
 ### S6 — aac-tools gen-architecture: the --help contract test does not notice when the image entry's served_by definition is removed · minor
 
 HelpContractTests' key check (ArgoCDTools aac-tools/tests/test_gen_architecture.py:1492-1497) only requires each key to appear somewhere in --help. The JUDGMENT_KEYS section labels are subtest names, not the section searched. Deleting the served_by bullet from the image-entry keys (gen_architecture.py:133-136) leaves all three HelpContractTests green, because the cnpg paragraph still names served_by. The same holds for any key named in two paragraphs (product, realizes, upstream). The contract is complete at eadf4ca: this is only a regression guard. A check that looks for each key in its own paragraph would close it.
@@ -360,15 +382,6 @@ consult 1, 2026-09-30 — Moot for this slice: P4 found ArgoCDTools origin/main 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F3
 **Disposition:**
 
-### ~~S9 — ArgoCDDeploy architecture.yaml: the argocd comment says an unset upstream var hard-fails on every other container of the image, but init containers are exempt · nit~~ — resolved by consult 1 (ArgoCDDeploy c005fb5): the comment now names the image's non-init containers; ArgoCDDeploy kc project lint and test re-run green; struck by consult 1
-
-architecture.yaml:25-26 says 'on any other container of the image an upstream wire whose var is unset is a hard fail'. The generator skips upstream on init containers (ArgoCDTools aac-tools/image/gen_architecture.py:1774, 'if not upstream or inst["is_init"]: continue'). An image-level REDIS_SERVER wire fails on applicationset-controller, notifications-controller and secret-init, and leaves the copyutil init container alone. The reason given for scoping the wire still holds; only 'any other container' is too broad. Could be narrowed to the image's non-init containers when P9a edits this file's header.
-
-**Consequence:** none — a reader who follows the comment still writes a correct layer
-
-**Provenance:** witnessed, code-reviewer, P6, r1, phases/P6/code_review_r1.md (F1)
-**Disposition:**
-
 ### S10 — Deploy repos' architecture.yaml still name HelmCharts configs/prd/<app>/<stage>/release.yaml as the registry entry that pins the upstream chart version · nit
 
 PrometheusDeploy's architecture.yaml:7-8 says the upstream chart version is the one 'this app's registry entry pins (HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both'. HelmCharts was archived on 2026-09-28, and the pin now lives in ArgoCDDeploy releases/values.yaml (prometheus: stages.prd.version "29.33.0", line 210). The same HelmCharts wording appears in 9 more deploy repos' architecture.yaml (grep 'HelmCharts configs' over /work/scratch/sweep031/*/architecture.yaml). P7 left it alone because it is outside R5.
@@ -376,15 +389,6 @@ PrometheusDeploy's architecture.yaml:7-8 says the upstream chart version is the 
 **Consequence:** A maintainer bumping an upstream chart version is sent to an archived repo for the second pin; the header does not name ArgoCDDeploy's releases/values.yaml, where the version actually is.
 
 **Provenance:** witnessed, code-writer, P7, r1, /work/scratch/PrometheusDeploy/architecture.yaml
-**Disposition:**
-
-### ~~S11 — P7's done-record cited the pre-amend PrometheusDeploy sha e761059; the branch head is 4aa1ef5 · nit~~ — resolved by P7's review r1: it corrected plan.md in place to 4aa1ef5, which P9c pushed; struck by consult 1
-
-The executor amended its commit (reflog: 4aa1ef5 is 'commit (amend)' of e761059) after writing the done-record. The review corrected the sha in plan.md in place.
-
-**Consequence:** none — plan.md now names 4aa1ef5
-
-**Provenance:** witnessed, code-reviewer, P7, r1, phases/P7/code_review_r1.md
 **Disposition:**
 
 ### S12 — Architecture update-architecture agent: the contract it reads from the sidecar's gen-architecture --help can be older than the generator the deploy repos build with · minor
@@ -396,7 +400,48 @@ update-architecture.md:49-50 has a central update session run `cexec aac-tools g
 **Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
 **Disposition:**
 
+### ~~S5 — aac-tools gen-architecture: resolve_boundby's comment still calls the container env literal-valued · cosmetic~~ — resolved by consult 1 (ArgoCDTools ef3e662): the comment now says the container env is literal or ConfigMap-sourced; aac-tools suite and ruff re-run green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+gen_architecture.py:1572-1573 says the value is expanded against the container's other literal-valued env. Since P2 that env also holds ConfigMap-sourced values (container_env).
+
+**Consequence:** none
+
+**Provenance:** read, code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
+**Disposition:**
+
+</details>
+
+### ~~S9 — ArgoCDDeploy architecture.yaml: the argocd comment says an unset upstream var hard-fails on every other container of the image, but init containers are exempt · nit~~ — resolved by consult 1 (ArgoCDDeploy c005fb5): the comment now names the image's non-init containers; ArgoCDDeploy kc project lint and test re-run green; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+architecture.yaml:25-26 says 'on any other container of the image an upstream wire whose var is unset is a hard fail'. The generator skips upstream on init containers (ArgoCDTools aac-tools/image/gen_architecture.py:1774, 'if not upstream or inst["is_init"]: continue'). An image-level REDIS_SERVER wire fails on applicationset-controller, notifications-controller and secret-init, and leaves the copyutil init container alone. The reason given for scoping the wire still holds; only 'any other container' is too broad. Could be narrowed to the image's non-init containers when P9a edits this file's header.
+
+**Consequence:** none — a reader who follows the comment still writes a correct layer
+
+**Provenance:** witnessed, code-reviewer, P6, r1, phases/P6/code_review_r1.md (F1)
+**Disposition:**
+
+</details>
+
+### ~~S11 — P7's done-record cited the pre-amend PrometheusDeploy sha e761059; the branch head is 4aa1ef5 · nit~~ — resolved by P7's review r1: it corrected plan.md in place to 4aa1ef5, which P9c pushed; struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
+
+The executor amended its commit (reflog: 4aa1ef5 is 'commit (amend)' of e761059) after writing the done-record. The review corrected the sha in plan.md in place.
+
+**Consequence:** none — plan.md now names 4aa1ef5
+
+**Provenance:** witnessed, code-reviewer, P7, r1, phases/P7/code_review_r1.md
+**Disposition:**
+
+</details>
+
 ### ~~S13 — Close-out B1 is still live, though P9c recorded its pin loop fixed by Architecture a2dabd2 (ANS-136) · nit~~ — resolved by consult 1 striking B1 (Architecture a2dabd2); struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 P9c noted B1 instead of striking it. Its note (and attachments/push-sweep.md:76-79) say Architecture a2dabd2 (2026-09-26) sets trigger: false on webathome-org-deploy, so AaC/WebathomeOrgDeploy no longer starts AaC/Architecture. No pin commit followed WebathomeOrgDeploy 6c83563 on origin/main. The list view shows B1's headline ('endless loop … · major') and its Consequence ('two builds every ~6 minutes forever'), not the note, and counts still counts it.
 
@@ -405,7 +450,11 @@ P9c noted B1 instead of striking it. Its note (and attachments/push-sweep.md:76-
 **Provenance:** read | code-reviewer, P9c, r1 — phases/P9c/code_review_r1.md F1
 **Disposition:**
 
+</details>
+
 ### ~~S14 — Close-out B2 is still live, though P12c r2 resolved it under Ruling D6 · nit~~ — resolved by consult 1 striking B2 (P12c, IoTSupport c38bd6f, AaC/IoTSupport #42 green); struck by consult 1
+
+<details><summary>struck — body kept for the record</summary>
 
 P12c r2 noted B2 resolved (the operator's device and model delete, c38bd6f, AaC/IoTSupport #42 green) but did not strike it. Its Consequence line still says the sweep stops at IoTSupport and that V12 cannot hold for it. The list view shows that line under B2's '· major' headline, not the note, and counts still counts it. close_out.py strike --reason is the tool's path for a resolved entry, as S13 records for B1.
 
@@ -413,3 +462,5 @@ P12c r2 noted B2 resolved (the operator's device and model delete, c38bd6f, AaC/
 
 **Provenance:** read | code-reviewer, P12c, r1 — phases/P12c/code_review_r1.md F1
 **Disposition:**
+
+</details>
