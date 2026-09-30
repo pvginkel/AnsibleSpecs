@@ -69,7 +69,11 @@ Date: 2026-09-21. Reviewed from fresh clones under `/work/scratch` (paths below 
 >   `UnderfloorHeatingController` and `ZigbeeControl`. `Jenkinsfile.ha-fleet` runs
 >   Architecture's own canonical script, so it is not a carrier. The migration kept the library line where
 >   it was in every file checked, so Appendix A's line numbers hold. Re-run `analyse.py` once 026
->   closes, before anything edits those files.
+>   closes, before anything edits those files. *(R8 done, 2026-09-30 11:40)* 026 closed at 11:20
+>   and all 11 now call `arch-validate` from `aac-tools`. The re-run moved two library lines:
+>   `ElectronicsInventory` 11→10 and `ZigbeeControl` 10→9. `IoTSupport`'s token-URL line moved
+>   36→37 (Q6). Appendix A and Q6 are corrected. A second Jenkins re-dump at 11:30 showed no
+>   job changes beyond `CanonApp`'s deletion.
 > - Appendix A: 124 rows. Rejected items keep their 09-21 figures; the 09-23 block below stands
 >   as the record of that refresh.
 
@@ -730,7 +734,7 @@ accept
 
 ### J16 — Architecture-producer helper for the `Jenkinsfile.architecture` copies
 
-> *(2026-09-30 refresh)* 77 copies now: 28 app producers (with `AaC/FieldnotesApp`) and 49 deploy producers (with `KeycloakDeploy/Jenkinsfile.architecture-dev`). Slice 026 (ANS-116, running) moves every app producer onto `aac-tools`; 11 are still on a copied `arch-validate.py`. Once 026 closes, the helper only removes boilerplate, and it is written against the post-026 bodies.
+> *(2026-09-30 refresh)* 77 copies now: 28 app producers (with `AaC/FieldnotesApp`) and 49 deploy producers (with `KeycloakDeploy/Jenkinsfile.architecture-dev`). Slice 026 (ANS-116) moved every app producer onto `aac-tools`; it closed 2026-09-30 and none still run a copied `arch-validate.py`. Once 026 closes, the helper only removes boilerplate, and it is written against the post-026 bodies.
 
 - **What** — `architectureProducer(artifacts: ['docs/architecture/*.yaml'])` for the 21
   identical files; `artifacts: [...], validateIn: ['backend', 'frontend']` for the three
@@ -1172,7 +1176,7 @@ I don't know. Please advise.
 
 **Q6 — Global environment variables.** `ANDROID_HOME`, `ELASTICSEARCH_CLUSTER_URL`,
 `S3_ENDPOINT_URL`, `KEYCLOAK_KENSHO_TEST_REALM` are set globally but appear in no Jenkinsfile;
-`KEYCLOAK_OIDC_TOKEN_URL` only in `IoTSupport/Jenkinsfile.architecture:36`. Still used by
+`KEYCLOAK_OIDC_TOKEN_URL` only in `IoTSupport/Jenkinsfile.architecture:37`. Still used by
 scripts inside repos, or dead? `HA_URL` and the three `KEYCLOAK_TEST_*` are used and non-secret
 — inline them in the files, or keep them global (and then in J04's YAML)?
 
@@ -1410,7 +1414,7 @@ half, so the plain standard fits better. No job is a candidate for allowing conc
 | AaC/DockerImages | DockerImages/Jenkinsfile.architecture | DCB(abort); push | P1 after line 12 | — |  |
 | AaC/DoorbellReceiver | DoorbellReceiver/Jenkinsfile.architecture | DCB(abort); push | P1 after line 6 | — |  |
 | AaC/ElasticsearchDeploy | ElasticsearchDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-24); J24: `checkout scm` for the clone at :16-18 |
-| AaC/ElectronicsInventory | ElectronicsInventory/Jenkinsfile.architecture | DCB(abort); push | P1 after line 11 | — |  |
+| AaC/ElectronicsInventory | ElectronicsInventory/Jenkinsfile.architecture | DCB(abort); push | P1 after line 10 | — |  |
 | AaC/ElectronicsInventoryDeploy | ElectronicsInventoryDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/ExternalSecretsDeploy | ExternalSecretsDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-24); J24: `checkout scm` for the clone at :16-18 |
 | AaC/FieldnotesApp | FieldnotesApp/Jenkinsfile.architecture | DCB(abort); push | P1 after line 8 | — | app producer, added 2026-09-27 (`06f6b0f`) |
@@ -1473,7 +1477,7 @@ half, so the plain standard fits better. No job is a candidate for allowing conc
 | AaC/YoutrackMcpDeploy | YoutrackMcpDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
 | AaC/YouTrackMCPServer | YouTrackMCPServer/Jenkinsfile.architecture | push (no DCB) | P1 after line 5 | — | gains a concurrency guard |
 | AaC/Zigbee2mqttDeploy | Zigbee2mqttDeploy/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — | deploy-repo producer (2026-09-23); J24: `checkout scm` for the clone at :16-18 |
-| AaC/ZigbeeControl | ZigbeeControl/Jenkinsfile.architecture | DCB(abort); push | P1 after line 10 | — |  |
+| AaC/ZigbeeControl | ZigbeeControl/Jenkinsfile.architecture | DCB(abort); push | P1 after line 9 | — |  |
 | DHCP/DHCPApp | DHCPApp/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (validate 6 min median, then kaniko + pin write); rebuild rolls prd through Argo (pins into DnsmasqDeploy); generated from ModernAppTemplate root v0.1.2 (Q11: edit in place); drop the unused import on line 1 (J25) |
 | DockerImages | DockerImages/Jenkinsfile | DCB(queue) [file]; push; param `image` [file] | add `pipelineTriggers([githubPush()]),` to the `properties([...])` at lines 29–35 | — | already on the standard, declared in the file since 2026-09-23; rebuild rolls prd through Argo (per-image pins, per-build tags since slice 031); no Helm deploy (`6041476`) and no trivy scan (`6a1e87b`, DI-13) since 09-26/09-29 |
 | ElectronicsInventory/ElectronicsInventory | ElectronicsInventory/Jenkinsfile | DCB(abort); push | P1 after line 3 | — | candidate **A** (21.5 min median, busiest validation job); rebuild rolls prd through Argo (pin write); generated from ModernAppTemplate root v0.1.2 (Q11: edit in place); drop the unused import on line 1 (J25) |

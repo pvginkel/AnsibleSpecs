@@ -100,6 +100,11 @@ Standing rules for every step:
   deletion of `Archived/`: re-dumped Jenkins (125 jobs), fresh clones of all 89 repos plus
   JenkinsPipelineUtils and ModernAppTemplate in `/work/scratch`, cross-checked against a gitblit
   `**/Jenkinsfile*` sweep, Appendix A regenerated (125 rows), and Q11–Q13 raised.
+- [x] **C** R8 after slice 026 closed (2026-09-30 11:40): fast-forwarded every clone, re-dumped
+  Jenkins (no job changes beyond `CanonApp`'s deletion), re-ran `analyse.py`. Two Appendix A
+  rows moved (`ElectronicsInventory` P1 after line 10, `ZigbeeControl` after line 9), and so did
+  Q6's `IoTSupport` citation (`:37`). The operator froze other work until this project is done
+  (2026-09-30), so no further parallel Jenkinsfile edits are expected.
 - [x] **op** Rule on Q11 (template-generated Jenkinsfiles, J15), Q12 (`CanonApp`) and Q13
   (`FieldnotesApp`'s duplicate trigger), 2026-09-30. Q11: edit the five files in place ("do the
   right thing… we'll handle merging later"). Q12: the operator deleted `CanonApp`. Q13: no API
@@ -363,7 +368,7 @@ style guide, and is written declaratively if §3 says "migrate all".
   clones `prd`): ANS-78 is delivered for them, and the helper only removes their boilerplate.
   *(09-30)* 77 copies (28 app, 49 deploy). ANS-78 moved into slice 026 (ANS-116, in progress
   in another environment on 09-30), which puts every app producer on `aac-tools`. J16 waits for
-  026 to close and is written against the post-026 bodies.
+  026 to close and is written against the post-026 bodies. *(09-30)* 026 closed at 11:20.
 
 ## 8. Timeouts — after the §2 rulings
 
