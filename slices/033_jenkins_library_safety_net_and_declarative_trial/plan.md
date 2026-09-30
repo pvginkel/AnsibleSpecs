@@ -243,6 +243,27 @@ R4 and R5. When this lands:
   (`KitchenDisplay/Jenkinsfile:41-45` still calls both), `containerTemplates.rsync`/`dockbuild`,
   `gitUtils`, `kubectl.waitForJob`/`readFileFromPod`.
 
+**Done (P2).** `hasChanges` is `@NonCPS` (one line added) and `ChangedFilesTest` asserts it;
+`helmCharts.tools`/`toolsInstalled`/`resolveImageTag` and `containerTemplates.debian`/`canon`
+are deleted. JenkinsPipelineUtils `e5c62bd` on `phase/033-P2`; `kc project test` green, 148
+tests (Compile 10, TrackingTag 23, VersionPins 96, AlertEscape 10, ChangedFiles 9).
+
+Later phases:
+- `containerTemplates.groovy` lost only lines 66-78; the lines P3 cites (1-7, 19-21, 62-64)
+  are unmoved.
+- A test that needs a pipeline global binds it on a fresh var instance cast to
+  `groovy.lang.Script`: `setBinding(new Binding(Map.of(name, stand-in)))`, as `ChangedFilesTest`
+  does.
+
+Record:
+- `ChangedFilesTest`: one stand-in build, two change sets, three commits, five paths, shaped as
+  `changeSets`/`items`/`affectedFiles`/`path`. `.*` true, `(?!)` false; a match in the second
+  change set counts; `==~` matches the whole path (`images`, `manual\.md` answer false); an
+  empty `changeSets` answers false for `.*`.
+- Witnessed: with `@NonCPS` removed, all 9 cases error with `CpsCallableInvocation`.
+- Callers re-checked 2026-09-30 over the 267 `Jenkinsfile*` under `/work` and `/work/scratch`:
+  none calls a deleted helper. `helmCharts`'s `JsonOutput` import stays, since `kaniko2` uses it.
+
 ### P3 — `podYaml`: a declarative agent's pod YAML from library templates and pipeline-chosen images
 
 Target: ../JenkinsPipelineUtils
