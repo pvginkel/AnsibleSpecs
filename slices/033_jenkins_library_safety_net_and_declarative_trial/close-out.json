@@ -47,7 +47,15 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "driver, push check",
+          "date": "2026-09-30",
+          "text": [
+            "held as planned. The slice's commits sit on `main` in that repo and nowhere else; every repo the plan does not hold was pushed as usual."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -384,7 +392,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by KubeCoder 4a6be3de: docs/operations/pipeline-dependencies.md now cites Build-Main's declarative agent (inheritFrom, podYaml's templates and images) for the sidecars, the golang image and the node image; ci-gates.md's pull-policy sentence names podYaml's Always pull in place of alwaysPullImage",
+        "by": "doc phase",
+        "date": "2026-09-30",
+        "commit": "4a6be3de"
+      },
       "ruling": null
     },
     {
