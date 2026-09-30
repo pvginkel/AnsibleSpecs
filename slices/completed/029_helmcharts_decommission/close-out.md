@@ -694,7 +694,7 @@ Ansible ansible/inventories/prd/group_vars/openbao.yml, openbao_jenkins_kv_paths
 **Consequence:** Jenkins keeps read access to the prd cephx user, the RGW admin key and the iac-provisioner token, whether or not any pipeline still needs them.
 
 **Provenance:** witnessed, the operator's session after the registry switch, 2026-09-28; ansible/inventories/prd/group_vars/openbao.yml
-**Disposition:** PLease advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested fix now — Ansible 687a80e, AnsibleSpecs 4ae5126; takes effect on the operator's site-openbao.yml run
+**Disposition:** PLease advise — the operator, 2026-09-29: "Agreed on the rest. Please execute and push when done." — suggested fix now — Ansible 687a80e, AnsibleSpecs 4ae5126; applied by the operator's site-openbao.yml run, 2026-09-30 (the jenkins policy was the only change)
 
 </details>
 
