@@ -190,6 +190,19 @@ Ruling D5 said to rebuild FieldnotesApp once on 1ee1929 after #40 went red. When
 **Provenance:** witnessed, code-writer, P12b r2, sweep_ledger.md FieldnotesApp row
 **Disposition:**
 
+### N9 — Run paused for an operator question in P12c
+
+The question, as the driver recorded it:
+
+> D1 stop rule at IoTSupport: AaC/IoTSupport is still red at #41, its last build (last green #37), failing in IoTSupport's own generator with `ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset` (the archived SomfyRemote's somfy_remote firmware product, still used by registered device somfy-remote-fhwiwoxa; close-out B2), and no ruling settles it, so IoTSupport is neither migrated nor pushed. ElectronicsInventory 55fb7b7 and ZigbeeControl e6c9f76 are pushed and done: app builds #256/#61 green, both prd apps Synced/Healthy at their new pins, AaC…
+
+Stopped 2026-09-30 09:23; resumed 2026-09-30 09:27.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:**
+
 ## Bugs
 
 Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines and the evidence
@@ -213,6 +226,8 @@ code-writer, P9c r1, 2026-09-29 — Already fixed outside this slice: Architectu
 
 AaC/IoTSupport #38–#41 (2026-09-24 to 2026-09-26, each started by a GitHub push) fail in IoTSupport's own tools/gen-architecture.py with 'ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset'. The last green build is #37 (2026-09-21). In backend/docs/architecture/firmware-products.yaml that UUID is somfy_remote, the product SomfyRemote published. SomfyRemote is archived and its product is no longer in the dataset, but IoTSupport still registers a device of that model: the published dataset still carries IoTSupport's #37 artifact, with device:somfy-remote-fhwiwoxa and a Specialization to ss:somfy-remote,3e684732-…. The generator fails on any registered model it cannot map, so dropping the mapping line alone swaps one error for another. Remedy options: retire the somfy-remote device (and its model) in the IoTSupport service, then drop the mapping line. Or keep SomfyRemote's product in the dataset some other way. P12c checks for a ruling or a later green AaC/IoTSupport build before it touches IoTSupport, and otherwise stops there with a question.
 
+executor, P12c r2, 2026-09-30 — Resolved under Ruling D6: the operator deleted device fhwiwoxa and model somfy_remote in IoT Support (2026-09-30 07:25 UTC), the run dropped somfy_remote from firmware-products.yaml with IoTSupport's migration (c38bd6f), and AaC/IoTSupport #42 built that head green; AaC/Architecture #2314 published it.
+
 **Consequence:** IoTSupport's published architecture stays frozen at its 2026-09-21 artifact. The sweep stops at IoTSupport, the last P12c carrier, so V12 cannot hold for it until the operator retires the device or rules otherwise.
 
 **Provenance:** witnessed | code-writer, P10, r1 — Jenkins AaC/IoTSupport #41 console; sweep_ledger.md § Carriers
@@ -225,6 +240,15 @@ FieldnotesApp #40 (P12b's push of `1ee1929`, 2026-09-30 01:19) failed in its sui
 **Consequence:** FieldnotesApp builds fail at random on this test, and a red build ships no image. A retry on the same head is the only remedy today.
 
 **Provenance:** witnessed: executor, P12b, r1, https://jenkins.webathome.org/job/FieldnotesApp/40/ (testReport, validation.log)
+**Disposition:**
+
+### B4 — IoTSupport: deleting a device model logs an SQLAlchemy row-count warning for firmware_versions · cosmetic
+
+When the operator deleted the somfy_remote model (DELETE /api/device-models/4, 2026-09-30 07:25 UTC), iotsupport-app logged `app/services/device_model_service.py:211: SAWarning: DELETE statement on table 'firmware_versions' expected to delete 5 row(s); 0 were matched.` The model and its S3 objects were deleted and the request returned 204, so the rows were already gone when the ORM's own delete ran — two paths delete the same firmware_versions rows. Out of this slice's scope; not fixed.
+
+**Consequence:** none today — the delete succeeds; the warning is noise in the backend log on every model deletion
+
+**Provenance:** witnessed: executor, P12c, r2, kubectl logs iot-prd/iotsupport-598d6d6f5-gjlv7 -c iotsupport-app
 **Disposition:**
 
 ## Open questions and rulings

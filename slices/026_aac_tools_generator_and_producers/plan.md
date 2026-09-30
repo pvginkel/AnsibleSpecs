@@ -915,6 +915,33 @@ it, or whether an `AaC/IoTSupport` build after #41 is green. If neither holds, d
 push IoTSupport. Record it in the ledger as stopped, and hand back a `question` that names this
 failure.
 
+**Done (P12c).** The three P12c carriers run the toolchain's `arch-validate` wherever they ran
+the copy, and their copies are deleted. Each is pushed and done: ElectronicsInventory `55fb7b7` and
+ZigbeeControl `e6c9f76` as a batch, then IoTSupport `c38bd6f` alone. Round 1 stopped at IoTSupport
+(red `AaC/IoTSupport`, B2), and Ruling D6 was answered. The prd class is closed. The Ansible branch
+carries no commit.
+
+Later phases:
+- P13a–b: nothing changes from P12b's instructions.
+
+Record:
+- ElectronicsInventory (round 1): #256 green, pinned ElectronicsInventoryDeploy `b2d20f3`, which
+  electronics-inventory-prd rolled. AaC #26 is green. Both components' `lint` gates moved onto
+  `cexec aac-tools`, so its `.kubecoder/config.yaml` declares aac-tools (close-out A7).
+- ZigbeeControl (round 1): #61 green, pinned Zigbee2mqttDeploy `e144d49`, which zigbee2mqtt-prd
+  rolled. AaC #24 is green. No local gate ran its copies. Architecture #2310 and the site pin rolled
+  for both.
+- IoTSupport (round 2): the iotsupport-app log shows the operator deleted device `fhwiwoxa` and
+  model `somfy_remote` at 07:25 UTC. `dc4260e` migrates. The pod keeps `python` for the generator
+  stage and adds `aac-tools` for both validate stages. No local gate ran its copies. `c38bd6f` drops
+  `somfy_remote` from `firmware-products.yaml` (D6). #146 green, pinned IotDeploy `dd7a27c`, which
+  iot-prd rolled. AaC/IoTSupport #42 is green, its first since #37, with 3 artifacts. Architecture
+  #2314 and the site pin rolled. Close-out B2 has a note that it is resolved. B4 records a
+  row-count SAWarning in the backend log from the model delete.
+- Every AaC console ran `arch-validate` in the `aac-tools` container. The rows are in
+  `sweep_ledger.md` § Carriers, and the logs are `/work/scratch/p9-sweep/logs/p12c-<Repo>.log` and
+  `p12c-r2-IoTSupport.log`.
+
 ### P13a — Device carriers, one at a time, first part
 
 Target: root
