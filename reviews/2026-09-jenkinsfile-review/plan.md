@@ -22,6 +22,14 @@ subagent.
 > Appendix A is at 105 rows. The operator refreshes once more when HelmCharts goes; until then
 > the HelmCharts rows are transitional. What it changes in this plan is marked *(refresh)*.
 
+> **Refreshed 2026-09-30**, the last sync before work starts. `report.md`'s top block has the
+> deltas: 125 jobs, all in scope (`Archived/` and HelmCharts gone; 21 more `AaC/*Deploy`
+> producers and `AaC/FieldnotesApp`), no Helm deploy left anywhere, 22 pin writers, five apps
+> whose `Jenkinsfile` is rendered from ModernAppTemplate, trivy gone from DockerImages, ANS-89
+> delivered by slice 027, and slice 026 rewriting the app `Jenkinsfile.architecture` files while
+> this was written. Three new questions (Q11–Q13) wait for rulings. What it changes here is
+> marked *(09-30)*.
+
 Standing rules for every step:
 
 - **Verification.** Every edited Jenkinsfile goes through the linter at
@@ -35,7 +43,10 @@ Standing rules for every step:
   saving the job's `config.xml` to `/work/scratch/jenkins-config/xml/` (a deleted job's file
   moves to `xml-deleted/`). `refresh.py` in this folder (`python3 refresh.py
   /work/scratch/jenkins-config`, with `JENKINS_TOKEN` in the environment) re-dumps the tree,
-  every `config.xml`, the plugin list and `jobs-ui-config.md` in one go.
+  every `config.xml`, the plugin list and `jobs-ui-config.md` in one go. *(09-30)*
+  `analyse.py` (same folder, run after the clones) writes `files.tsv`, the per-file facts
+  Appendix A's line numbers come from. The clones live in `/work/scratch/<Repo>`; the list is
+  `jenkins-config/clone-list.txt`.
 
 ## 0. Done
 
@@ -50,7 +61,13 @@ Standing rules for every step:
 - [x] **C** Refresh against Jenkins (2026-09-23): re-dumped every job (`refresh.py`), pulled the
   42 existing clones, cloned the 28 deploy repos (`clone-list.txt` is now 70 incl.
   JenkinsPipelineUtils), rewrote the report's counts, references and Appendix A, and re-asked
-  Q10. Owed: one more refresh when HelmCharts is deleted (operator's call on timing).
+  Q10. ~~Owed: one more refresh when HelmCharts is deleted (operator's call on timing).~~
+- [x] **C** Last refresh before work starts (2026-09-30), after HelmCharts' decommission and the
+  deletion of `Archived/`: re-dumped Jenkins (125 jobs), fresh clones of all 89 repos plus
+  JenkinsPipelineUtils and ModernAppTemplate in `/work/scratch`, cross-checked against a gitblit
+  `**/Jenkinsfile*` sweep, Appendix A regenerated (125 rows), and Q11–Q13 raised.
+- [ ] **op** Rule on Q11 (template-generated Jenkinsfiles, J15), Q12 (`CanonApp`) and Q13
+  (`FieldnotesApp`'s duplicate trigger). All three are in `report.md`'s open questions.
 
 ## 1. Your review
 
@@ -100,11 +117,15 @@ that day.
   the slices. Triage decides what is small; the candidates the review sees:
   - J07 — built-in node executors 2 → 0 (one API call)
   - Q7 — the pod cap of 3 written down in `docs/live-infra-access.md` (one paragraph)
-  - J09 — move and disable `CanonApp`, disable `Archived/FundaChecker`
+  - J09 — ~~move and disable `CanonApp`, disable `Archived/FundaChecker`~~ *(09-30)* delete
+    or disable `CanonApp`, as Q12 rules (`FundaChecker` went with `Archived/`)
+  - *(09-30)* Q13 — delete `FieldnotesApp`'s UI-set duplicate push trigger (API,
+    `config.xml` saved first), if Q13 says the step appends
   - Q6 — delete the four dead global env vars
   - §6a — the `githubPush()` webhook test (its result feeds the style guide)
-  - Q4 — the trivy de-duplication, because the operator wants it early; it is ~25 lines in one
-    file, but it is a behaviour change with a push, so triage may still rule it a slice item
+  - ~~Q4 — the trivy de-duplication, because the operator wants it early; it is ~25 lines in one
+    file, but it is a behaviour change with a push, so triage may still rule it a slice item~~
+    *(09-30)* withdrawn: DI-13 removed the scan (operator, 2026-09-29: "don't dedup")
 
   Everything in the runbook keeps the standing rules: a push, a Replay and a Jenkins API write
   each need the operator's OK.
@@ -118,13 +139,16 @@ that day.
   - the ordering — the style guide live before the mass edit (§4 → §9), the self-test before
     any library refactor (§6 → §5's J20, §7), the declarative verdict before the helpers are
     written (§3 → §7), J26 before the wave that touches those four repos
-  - Q4's "early"
+  - ~~Q4's "early"~~ *(09-30)* void, DI-13 removed the scan
   - the side asks that have no J-number: the style guide and docs site (§4), `job-settings.md`
     (§2), the webhook test (§6a), the post-wave `config.xml` re-dump and diff (§9)
   - *(refresh)* the 29 jobs added by the Argo migration (28 `AaC/*Deploy` P1 rows;
     `Promote-PRD` needs nothing). Q10 was re-asked because 18 rebuilds are prd rollouts
     through Argo now, and re-confirmed: they can still be pushed.
   - the style guide's delivery form: a skill, not a header link (§4, ruled 2026-09-23)
+  - *(09-30)* the 21 `AaC/*Deploy` jobs and `AaC/FieldnotesApp` added since 09-23 (P1 rows);
+    Q11's ruling on the five template-generated files; Q13's UI-copy clean-up; slice 026
+    closed before anything edits an app `Jenkinsfile.architecture` (R8)
 
 ## 2. Per-job settings decision document
 
@@ -134,6 +158,9 @@ that day.
   candidates (A/S flags, retention and timeout exceptions, Q9) are marked with their evidence.
   Each row gets a response slot. *(refresh)* 105 rows; `KubeCoder/Build-Main` already carries
   its ruling (`abortPrevious: true`, in the file since 2026-09-23) — record it, do not re-ask.
+  *(09-30)* 125 rows. `FieldnotesApp` declared `abortPrevious: true` itself (FN-18); record it
+  like Build-Main. Under Q11 (a), one value covers the five template apps unless they are ruled
+  apart.
 - [ ] **op** Rule on it
 - [ ] **C** Fold the rulings into Appendix A, which becomes the §9 executor's spec
 
@@ -157,7 +184,9 @@ written as declarative templates) and §9 (`options{}` versus `properties([...])
 - Note: the KubeCoder repo isn't cloned in this environment's `/work`; work from
   `/work/scratch/KubeCoder` or from the KubeCoder environment. ~~Slice 012 (backlog) also edits
   this file's `helmCharts.kaniko(...)` calls. Whichever lands second rebases onto the other.~~
-  *(refresh)* Slice 012 is completed; nothing else is queued on the file.
+  *(refresh)* Slice 012 is completed; nothing else is queued on the file. *(09-30)* Still
+  341 lines; slice 030 moved its Validate stage into the `modern_app_toolchain` sidecar
+  (`2fea4ab2`), which the conversion carries over.
 
 ## 4. Pipeline style guide and a docs site for JenkinsPipelineUtils
 
@@ -205,14 +234,15 @@ next Jenkinsfile.
 
 ## 5. Stale jobs, dead code and controller settings — ~~straightforward changes, no slice~~
 
-- [ ] **C** J09 — move `CanonApp` to `Archived/` and disable it; disable `Archived/FundaChecker`
+- [ ] **C** J09 — ~~move `CanonApp` to `Archived/` and disable it; disable `Archived/FundaChecker`~~
+  *(09-30)* `CanonApp` as Q12 rules; `Archived/` and `FundaChecker` are gone
 - ~~**C** J10 — `Firmware/KitchenDisplay`, as Q1 decides (retire = delete the job)~~ Deferred,
   not rejected: ANS-93 (Later). The job stays disabled and is skipped by §9.
 - [ ] **C** J20 — remove the dead library code (needs J09 and §6's self-test). The
   KitchenDisplay-only code (`ssh`/`scp`/`rsync`, `containerTemplates.rsync` and `dockbuild`,
   `gitUtils.groovy`) stays until ANS-93 is worked.
 - [ ] **C** Q6 — delete the dead global env vars (`ELASTICSEARCH_CLUSTER_URL`,
-  `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`, `ANDROID_HOME`) after saving the global
+  `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`, `ANDROID_HOME`; all nine still set on 09-30) after saving the global
   config; verify with one `MyDownloads/MyDownloadsClient` build (`ANDROID_HOME` comes from the
   `android-35` image). The IoTSupport `KEYCLOAK_*` four go after §9 inlines them. `HA_URL` stays
   global (ruled): endpoints do not go into OpenBao, and Architecture is public, so it cannot be
@@ -221,22 +251,28 @@ next Jenkinsfile.
   Verify with one pod build and one `IaC/Build-Main`.
 - [ ] **C** Q7 — the container cap of 3 is deliberate: say so in
   `/work/Ansible/docs/live-infra-access.md`, with what it means for a mass push.
-- [ ] **C** Q4 — trivy warning de-duplication in `DockerImages/Jenkinsfile` through a
+- ~~**C** Q4 — trivy warning de-duplication in `DockerImages/Jenkinsfile` through a
   `trivy-state.json` carried forward in the job's own artifacts; a warning only for CVE ids
-  that are new for that image. Early: the operator already reads the warnings as noise.
+  that are new for that image. Early: the operator already reads the warnings as noise.~~
+  *(09-30)* Withdrawn: DI-13 removed the scan on 2026-09-29.
 
 ## 6. Library safety net — before any library refactor
 
 - [ ] **C** J22 — a `Jenkinsfile` that loads the library at the pushed commit and asserts the pure
   functions (shares the library's `Jenkinsfile` with the §4 docs build)
 - [ ] **op/C** J22 — create the `JenkinsPipelineUtils` job (a UI/API step)
-- [ ] **C** ANS-89 (a real Groovy parse gate for the library, from slice 011's close-out) is the
+- [x] ~~**C** ANS-89 (a real Groovy parse gate for the library, from slice 011's close-out) is the
   pre-push half of the same safety net; decide with the self-test whether it rides along here
-  or stays its own card.
+  or stays its own card.~~ *(09-30)* Delivered by slice 027 (ANS-117, which absorbed ANS-89):
+  `kc project test` compiles every `vars/*.groovy` through the controller's CPS transform. It
+  asserts no behaviour, so J22's pure-function asserts still stand. Whether they need a Jenkins
+  job or ride `kc project test` is for plan-slice (the repo's `project.yaml` says no job builds
+  it).
 - [ ] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
-  `IaC/HelmCharts` run (or `DockerImages`, the other caller, once HelmCharts is gone)
-- [ ] **C** J23 — standard library load line in the 3 odd files, folded into those files' next
-  edit (J02 and §9)
+  ~~`IaC/HelmCharts` run (or `DockerImages`, the other caller, once HelmCharts is gone)~~
+  *(09-30)* `DockerImages` or `IaC/IaC Docker Image` run, the two callers left
+- [ ] **C** J23 — standard library load line in the ~~3~~ *(09-30)* 2 odd files (`Home`,
+  `Jenkinsfile.ha-fleet`), folded into those files' next edit (J02 and §9)
 
 ## 6a. Does a file-declared `githubPush()` install the webhook? (your note on Appendix A R1)
 
@@ -263,7 +299,9 @@ style guide, and is written declaratively if §3 says "migrate all".
   files and J11's timeout inside the helper; one firmware Replay (a no-op re-flash). As
   modified: the IDF version is a required argument per repo (`idfVersion: 'v5.5.3'`), with no
   default in the library, so versions move one repo at a time.
-- [ ] J15 — `validation.runSuiteJob(...)` for the 4 monorepo apps, with the `@NonCPS` suite
+- [ ] *(09-30: Q11 — likely withdrawn or re-aimed at ModernAppTemplate; the five monorepo apps
+  render their `Jenkinsfile` from its root template now, and none Helm-deploys)* J15 —
+  `validation.runSuiteJob(...)` for the 4 monorepo apps, with the `@NonCPS` suite
   parser and `poetry install --only main` as the one install line (Q5 — see the report).
   ~~J27 (a short-lived Secret)~~ rejected. *(refresh)* The deploy tail is a fourth difference
   now (ElectronicsInventory and ZigbeeControl write pins, DHCPApp and IoTSupport still
@@ -276,11 +314,15 @@ style guide, and is written declaratively if §3 says "migrate all".
   goes into slice 014 as a phase~~ — 014 is completed. The file rewrite rides §9's wave 1.
   *(refresh)* The 29 deploy-repo producers are already on `aac-tools` (one body; `KubeCoderDeploy`
   clones `prd`): ANS-78 is delivered for them, and the helper only removes their boilerplate.
+  *(09-30)* 77 copies (28 app, 49 deploy). ANS-78 moved into slice 026 (ANS-116, in progress
+  in another environment on 09-30), which puts every app producer on `aac-tools`. J16 waits for
+  026 to close and is written against the post-026 bodies.
 
 ## 8. Timeouts — after the §2 rulings
 
 - [ ] **C** J12 — 4-hour backstop plus an `aborted` marker in the 6 declarative `iac-*` files
-  and `HelmCharts/Jenkinsfile` (skip it if HelmCharts' deletion lands first); full linter
+  ~~and `HelmCharts/Jenkinsfile` (skip it if HelmCharts' deletion lands first)~~ *(09-30:
+  HelmCharts is gone)*; full linter
   check; watch the next scheduled run
 - [ ] **C** J11 — pod-pipeline timeout. The §7 helpers already carry it; the remaining files get
   it in the §9 pass, not in a push of their own.
@@ -295,19 +337,27 @@ style guide, and is written declaratively if §3 says "migrate all".
   values inlined in IoTSupport's two files (Q6). `Firmware/KitchenDisplay` is skipped
   (ANS-93); its `AaC/` twin is not. `KubeCoderDeploy/Jenkinsfile.architecture` keeps its
   explicit `prd` clone (the J24 exception). If §3 says "migrate all", this pass is folded into
-  that migration instead.
+  that migration instead. *(09-30)* The J24 exception lapsed: `AaC/KubeCoderDeploy` builds
+  `*/prd` now, so `checkout scm` fits there too. The brief also carries Appendix A's R8
+  (regenerate line numbers after slice 026, strip UI copies per Q13) and Q11's ruling for the
+  five template-generated files.
 - [x] **op** Q2 and J26 settled (2026-09-21): TrelloMcp stays on `test`, so its edit lands
   there; J26 accepted.
 - [ ] **C** J26 — rename `master` → `main` on the four MyDownloads/ScanToPdf client and server
   repos (GitHub API) and update the eight jobs' branch spec (API, `config.xml` saved first),
   before the wave that touches them. Needs your OK as a push-class step.
 - [ ] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Ansible`,
-  `HelmCharts` (if it still exists), the AaC-only repos and *(refresh)* the 28 deploy repos.
+  ~~`HelmCharts` (if it still exists)~~, the AaC-only repos and *(refresh)* the ~~28~~
+  *(09-30)* 48 deploy repos (49 jobs; KeycloakDeploy has two). Not before slice 026 closes: it
+  pushes the same app and firmware repos.
   `Architecture` (J02 included) moves to wave 2: its push now pins `architecture_viewer` into
   WebathomeOrgDeploy.
 - [ ] **S** Wave 2 — app repos, in batches sized to the 3 pod slots. *(refresh)* 18 of them
   end in a pin write, which is a prd rollout through Argo on every rebuild (new tag, deploy-repo
   commit, sync, pod restart) plus an `AaC/*Deploy` build; 6 end in a Helm deploy (no-op).
+  *(09-30)* 22 pin writers (21 prd, `KubeCoder/Build-Main` dev); no Helm deploy is left. The
+  five template apps go per Q11: under (a), the template is tagged first, then `copier update`
+  runs repo by repo.
   Q10 was re-asked on that basis and answered 2026-09-23: "Yes, they can still be pushed."
 - [ ] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
   batches are still sized to the 3 pod slots.
