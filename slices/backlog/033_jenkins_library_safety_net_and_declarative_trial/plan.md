@@ -233,9 +233,8 @@ syntax, not what the build does:
 - The same work in the same order: every stage, container, `sh` step and kaniko destination,
   with the pin write to KubeCoderDeploy last (`Jenkinsfile:321-339`). What Declarative allows
   only in `script {}` goes there.
-- `when{}` and `post{}`: the scripted file has no conditional stage and no failure or cleanup
-  handling — every stage runs on every build (`Jenkinsfile:31-340`) — so the conversion adds
-  neither.
+- No `when{}` and no `post{}` (ruling D3): the scripted file has no conditional stage and no
+  failure or cleanup handling — every stage runs on every build (`Jenkinsfile:31-340`).
 - `vscode-desktop/test/publish.test.ts:102-115` reads the Jenkinsfile's text (the desktop
   packaging line ahead of `stage('Build kubecoder-manual')`, and the `test -s` check on the
   vsix); it still passes.

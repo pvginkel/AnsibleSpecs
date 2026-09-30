@@ -3,12 +3,13 @@
     {
       "id": "V01",
       "area": "R1 — J08 declarative trial on KubeCoder",
-      "description": "`KubeCoder/Jenkinsfile` (Build-Main) is converted to declarative: `agent { kubernetes { yaml … } }` built from a library `containerTemplates.podYaml(...)`, `options{}`/`triggers{}` for its job config, `when{}`, `post{}`. The file must pass the full linter check (POST `/pipeline-model-converter/validate` on the controller).",
+      "description": "`KubeCoder/Jenkinsfile` (Build-Main) is converted to declarative: `agent { kubernetes { yaml … } }` built from a library `containerTemplates.podYaml(...)`, `options{}`/`triggers{}` for its job config. The file must pass the full linter check (POST `/pipeline-model-converter/validate` on the controller). The conversion is faithful (ruling D3): the converted file gets no `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or cleanup handling.",
       "verdict": null,
       "rationale": "",
       "evidence": [
         "KubeCoder/Jenkinsfile:7 — today's job config is scripted `properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])` (KubeCoder HEAD 5bbf14bf)",
-        "KubeCoder/Jenkinsfile:9-30 — today's pod is `podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [...])` with `containerTemplates.k8s`, `containerTemplates.modern_app_toolchain` and inline `golang`/`node`"
+        "KubeCoder/Jenkinsfile:9-30 — today's pod is `podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [...])` with `containerTemplates.k8s`, `containerTemplates.modern_app_toolchain` and inline `golang`/`node`",
+        "KubeCoder/Jenkinsfile:31-340 — every stage runs on every build: no `if`, `try`, `catch`, `finally`, `catchError` or `warnError` outside comments (grep, KubeCoder HEAD 5bbf14bf, 2026-09-30)"
       ]
     },
     {
