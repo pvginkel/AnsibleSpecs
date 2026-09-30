@@ -381,6 +381,39 @@ page.
   report.md J20 names the code that stays only for `Firmware/KitchenDisplay`. Usage snippets are
   declarative. P5 brings them into line with the rulings.
 
+**Done (P3).** Each global var's page is `vars/<name>.md`, beside its code (`751d837`).
+`docs/pages/reference` is a symlink to `../../vars`, so the site publishes the pages at
+`reference/<name>/` under a "Library reference" nav section; `exclude_docs` keeps the `.groovy`
+files off the site. Jenkins copies only `vars/*.groovy` and `vars/*.txt` from a library checkout
+(pipeline-groovy-lib `SCMBasedRetriever.java:235`), so the pages never reach it. `check_site.py`
+fails, naming the var, when a `vars/*.groovy` has no published page or its page is not
+`vars/<name>.md`, and on a `reference/` page for no var.
+
+Later phases:
+- P5, P6: guide pages go anywhere under `docs/pages/` except `reference/`, which is `vars/`;
+  `check_site.py` fails on a page there that is no var's. Link a var's page relatively, e.g.
+  `../reference/podYaml.md#combining-with-inherited-pod-templates` from `guide/x.md` (anchors are
+  validated). P5 reviews the declarative snippets in `vars/*.md` against the rulings.
+- P9: the image's builder needs `vars/` beside `docs/` (repo root as context); without it the
+  symlink dangles and the strict build fails on the reference nav rows.
+
+- Witnessed red: `vars/witness.groovy` with no page → `check_site.py`: "vars/witness.groovy: no
+  reference page; write vars/witness.md and give it a nav row under Library reference in
+  mkdocs.yml" (exit 1; `kc project test docs` [FAILED] with --strict green). Its page without a nav
+  row → --strict "not included in the "nav" configuration: reference/witness.md" (exit 1). The page
+  with the var gone → "reference/witness.md: a reference page for no var in vars/" (exit 1).
+- Linter: the 8 example blocks in `vars/*.md`, each wrapped in a minimal pipeline, all answered
+  "Jenkinsfile successfully validated." The fenced signature lines are not examples and were not
+  linted. Control: `steps { notify.warning('x') }` → "Method calls on objects not allowed outside
+  "script" blocks." — the pages' "a call on a var's method runs inside `script { }`" rests on it.
+- Settled beyond the plan: each page names its var's internal `@NonCPS` helpers as not part of
+  what it offers. The containerTemplates page maps each template to its `podYaml` counterpart. The
+  KitchenDisplay-only code (`gitUtils`, `helmCharts.rsync`/`ssh`, `containerTemplates.rsync`/
+  `dockbuild`) is marked as such with ANS-93; `helmCharts.rsync`/`ssh` fail wherever they run (key
+  deleted, HelmCharts `25a95ba`).
+- `gitUtils.getTreeHashFile`'s `version` never reaches the file. The page documents that as it
+  is; the defect is close-out B1 (V19 leaves the var unchanged).
+
 ### P4 — The inventory of pipeline types, and the rulings page
 
 Target: ../AnsibleSpecs
@@ -454,7 +487,9 @@ only.
 - **Examples pass the full declarative linter.** Every example passes the controller's full check
   (`/pipeline-model-converter/validate`, as `admin` with `$JENKINS_TOKEN`). An excerpt is checked
   inside the complete file it is cut from. The done-record carries the responses.
-- **P3's reference pages.** Any P3 snippet that breaks a rule is brought into line.
+- **P3's reference pages** are `vars/<name>.md`, published under `reference/` through the
+  `docs/pages/reference` → `../../vars` symlink. Any P3 snippet that breaks a rule is brought into
+  line there. Guide pages do not go under `docs/pages/reference/`.
 
 ### P6 — One complete reference Jenkinsfile per pipeline type
 
@@ -545,6 +580,8 @@ KubeCoder's manual image (`manual/Dockerfile`, `manual/nginx.conf`). From them t
   `uv sync --locked` — the toolchain is `docs/pyproject.toml`'s `dependencies`, not a group, so the
   manual's `--only-group manual` does not apply;
 - the served layout `docs/check_site.py` checks: `docs/landing/` at `/`, the build under `/docs/`;
+- the reference pages: `docs/pages/reference` is a symlink to `../../vars` (P3), so the builder
+  stage copies `vars/` beside `docs/`, with the repo root as the build context;
 - `nginx -t` at build time (`:60`);
 - relative redirects under a path prefix.
 

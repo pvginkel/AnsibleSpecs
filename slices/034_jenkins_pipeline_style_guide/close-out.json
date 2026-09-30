@@ -167,6 +167,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils gitUtils.getTreeHashFile: the version argument never reaches the cache-key file, so changing it does not invalidate a cache",
+      "body": [
+        "vars/gitUtils.groovy:8 builds `awk '{print $3}$version'`, splicing `version` into the awk program after the action, where awk reads it as a pattern. A non-zero number ('-2', KitchenDisplay's value) makes the file also carry git ls-tree's whole line, the same line whatever the number; any other value (e.g. 'v2', an unset awk variable) leaves the file as the bare id. So a bump from '-2' to '-3' yields the identical file and arbitraryFileCache keeps the old cache; the doc comment's 'optionally suffixed with a version string' is not what happens. Witnessed: `echo '160000 commit abc123<TAB>lib/curl' | awk '{print $3}-2'` prints the id then the whole line; `... | awk '{print $3}v2'` prints the id alone. The one change: `awk -v v='$version' '{print $3 v}'`. Not changed in slice 034 (V19: no var changes what it does); the var is KitchenDisplay-only and goes or is rebuilt with ANS-93 (report.md J10/J20). vars/gitUtils.md documents the behaviour as it is."
+      ],
+      "consequence": "If Firmware/KitchenDisplay's pipeline is revived as it stands, bumping a getTreeHashFile version to force a dependency rebuild keeps the old cache, and the firmware builds against stale library output with no message.",
+      "evidence": "witnessed",
+      "author": "code-writer, P3, r1; vars/gitUtils.md",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "silent",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
