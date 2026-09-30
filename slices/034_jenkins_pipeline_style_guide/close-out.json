@@ -284,6 +284,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P9",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "AnsibleSpecs slice 034 rulings.md §14 step 4: 'POST /job/<job>/build' has no form for a job in a folder",
+      "body": [
+        "Step 2 of the new-repo recipe gives createItem's folder form (/job/<Folder>/createItem, rulings.md:709-710). Step 4, which starts a non-push job's first build, gives only POST /job/<job>/build (rulings.md:715). Step 6 puts new jobs in AaC/, Firmware/ or IaC/, and such a job answers at /job/<Folder>/job/<job>/build. P5 carries the recipe into the guide."
+      ],
+      "consequence": "Whoever follows the recipe for a hand-started or scheduled job in a folder gets a 404 on the first-build call, and has to work out the nested path themselves.",
+      "evidence": "read",
+      "author": "code-reviewer, P4, round 2, phases/P4/code_review_r2.md F8",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "one-edit",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
