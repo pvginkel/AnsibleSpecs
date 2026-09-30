@@ -61,7 +61,7 @@ Image: their files are T3's without the last stage.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> accept
 
 ## 2. Stage labels (requirement R3)
 
@@ -125,7 +125,7 @@ stage did. Each part of the rule is a string check, so a later conformance check
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> I don't like the +, so prefer and. The rest is fine.
 
 ## 3. Stage granularity — a judgment call
 
@@ -165,7 +165,7 @@ Stage labels (section 2) also assume one action per stage.
 
 **Operator response:** <!-- A | B | C | modify | discuss -->
 
->
+> So (re)tagging 5 images can really be one stage. A is fine, and it does this. We shouldn't have many stages just to have the stages. A promotion build has that risk. I think A covers this quite nicely, but I suggest it's followed strictly.
 
 ## 4. Checkout
 
@@ -220,7 +220,7 @@ webhook test both used this form.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> agree
 
 ## 5. Pod definition
 
@@ -286,7 +286,7 @@ agent {
 
 **Operator response:** <!-- accept | modify | reject | discuss; for the sidecars: a1 | a2 | b -->
 
->
+> agree
 
 ## 6. Secrets and `withVault` scope
 
@@ -341,7 +341,7 @@ stage('Deploy firmware') {
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> agree
 
 ## 7. Timeouts
 
@@ -387,7 +387,7 @@ options {
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> agree
 
 ## 8. `post` and `notify`
 
@@ -422,7 +422,7 @@ options {
 
 **Operator response:** <!-- accept | modify | reject | discuss; for aborts: a | b | c -->
 
->
+> agree
 
 ## 9. The job-properties block
 
@@ -486,7 +486,7 @@ pipeline {
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> Most builds will be `abortPrevious: true`. The only builds that should not get this are the ones that depend on change detection, like DockerImages. The rest is fine.
 
 ## 10. File naming and header comments
 
@@ -536,7 +536,7 @@ library identifier: 'JenkinsPipelineUtils', changelog: false
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> agree
 
 ## 11. When code goes into the library (requirement R5) — a judgment call
 
@@ -593,7 +593,7 @@ pipeline body: IaC/IaC Docker Image's `imageBuildRequired` and Promote-PRD's `pr
 
 **Operator response:** <!-- A | B | C | modify | discuss -->
 
->
+> agree
 
 ## 12. Helper types: which form the reference file shows until the helper exists
 
@@ -627,7 +627,7 @@ still wanted now that its five template users are skipped. Under section 11's op
 
 **Operator response:** <!-- a | b | c, per type or for all -->
 
->
+> no strong opinion; I'll follow your lead
 
 ## 13. Stage generators and computed triggers
 
@@ -694,7 +694,7 @@ and the guide says so.
 
 **Operator response:** <!-- accept | modify | reject | discuss, per file if they differ -->
 
->
+> agree
 
 ## 14. The new-repo recipe
 
@@ -733,4 +733,4 @@ hand would need the plugin's shared secret.
 
 **Operator response:** <!-- accept | modify | reject | discuss -->
 
->
+> agree

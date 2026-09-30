@@ -121,6 +121,46 @@ the place. Hostname: pipelines.home/docs, with an index page at /."
   its own pages' nav rows with the pages (KubeCoder manual's rule), so P2 ships no guide page
   ahead of the rulings; J11's 90/180-minute timeouts are exception *candidates* — the guide
   carries only the exceptions the rulings page settles. Operator: "The rest is agreed."
+- **Rulings page (P4's `rulings.md`, answered 2026-09-30).** The operator's responses are
+  quoted as written, one per section. "agree" or "accept" adopts that section's proposed rule
+  exactly as the page states it. Where the section offered a choice, it also adopts Claude's
+  lean.
+  - **§1 pipeline types:** "accept".
+  - **§2 stage labels:** "I don't like the +, so prefer and. The rest is fine." Rule 4 becomes:
+    a label never contains `+`. Where a label joins two actions, it joins them with `and`
+    (`Lint and test`, not `Lint + test`). The rest of §2 stands as proposed.
+  - **§3 stage granularity:** option **A**, followed strictly. Operator: "So (re)tagging 5
+    images can really be one stage. A is fine, and it does this. We shouldn't have many stages
+    just to have the stages. A promotion build has that risk. I think A covers this quite
+    nicely, but I suggest it's followed strictly."
+  - **§4 checkout:** "agree".
+  - **§5 pod definition:** "agree", which adopts option (a): `podYaml` gains a template for
+    each sidecar it lacks. Asked in the run session which way (a) goes for PipelinesDeploy's
+    `Jenkinsfile.architecture`, the operator chose **a1**. This slice adds an `aac_tools`
+    template to `podYaml` in JenkinsPipelineUtils, with its reference page and test coverage.
+    That lands before P8, and P8's file uses the template, as the guide says. The other
+    sidecars' templates (`python`, `helm`, `iac_toolchain`) are left to the migration slice.
+  - **§6 secrets:** "agree".
+  - **§7 timeouts:** "agree".
+  - **§8 post and notify:** "agree". Aborts follow option **(c)**: J12's `post { aborted }`
+    marker goes in every pod pipeline except the files that declare `abortPrevious: true`.
+  - **§9 job properties:** "Most builds will be `abortPrevious: true`. The only builds that
+    should not get this are the ones that depend on change detection, like DockerImages. The
+    rest is fine." In the run session the operator also chose to exempt side-effecting
+    pipelines. The standard becomes `disableConcurrentBuilds(abortPrevious: true)`, and plain
+    `disableConcurrentBuilds()` is the exception for:
+    - builds that depend on change detection (DockerImages);
+    - pipelines with a side-effecting sequence that an abort would cut in half: the review's
+      **S** jobs and the T7 iac apply files.
+    Under §8 (c), the exempt files carry the abort marker. This replaces the settled row "the
+    standard is `disableConcurrentBuilds()`; `abortPrevious: true` only where the per-job
+    ruling says so".
+  - **§10 naming and headers:** "agree".
+  - **§11 the library rule:** "agree", which adopts option **C** (B plus the three fences).
+  - **§12 helper-type form:** "no strong opinion; I'll follow your lead". Form **(a)** for all
+    four types (T1, T2, T5, T6): the full declarative file.
+  - **§13 generators and computed triggers:** "agree".
+  - **§14 new-repo recipe:** "agree".
 - **Settled in refinement (the operator did not object):** the rulings page lives in the slice
   folder, and the run pauses once, after the inventory, for the operator's rulings on it — the
   guide is written only after them, and those rulings are recorded in this section. The webhook
