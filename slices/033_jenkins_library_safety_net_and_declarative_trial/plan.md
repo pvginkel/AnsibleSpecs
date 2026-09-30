@@ -324,7 +324,7 @@ Record:
   top-level key other than `templates`/`images`, and two containers under one name.
 - Checked once by hand: the rendered YAML loads in PyYAML to the intended pod.
 
-### P4 — KubeCoder's Build-Main Jenkinsfile, declarative
+### P4 — KubeCoder's Build-Main Jenkinsfile, declarative ✅ DONE 2026-09-30
 
 Target: github:pvginkel/KubeCoder
 
