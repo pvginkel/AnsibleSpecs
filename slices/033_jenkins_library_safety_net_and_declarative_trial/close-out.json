@@ -243,6 +243,54 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils podYaml names a string images: entry after its last path segment even when that is not a valid Kubernetes container name",
+      "body": [
+        "containerName (vars/podYaml.groovy:124-126) strips path and tag and passes the rest through. Image repository names may hold '.' and '_', which RFC 1123 container names may not: a probe rendered name \"my_tool\" for registry:5000/my_tool:1 and name \"tool.v2\" for ghcr.io/foo/tool.v2. podYaml accepts the call; the failure comes when the pod template is built or the API server refuses the pod, and the caller must use the map form with an explicit name. No image in this slice (P4's k8s, modern-app-toolchain, golang, node) is affected."
+      ],
+      "consequence": "A pipeline that passes such an image as a string gets a build that fails at pod creation until it switches to the map form with a name:",
+      "evidence": "witnessed",
+      "author": "code-reviewer, P3, round 1, phases/P3/code_review_r1.md F1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "design",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B4",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils podYaml renders an env value of null as the string \"null\"",
+      "body": [
+        "imageContainer converts env values with value.toString() (vars/podYaml.groovy:113); Groovy's null.toString() is \"null\". A probe rendered env: [A: null] as value: \"null\". A pipeline passing an unset variable or parameter as an env value gets the literal text null in the container, with no refusal."
+      ],
+      "consequence": "A container started with an env value from an unset variable sees the literal string null and acts on it, with no error at build start",
+      "evidence": "witnessed",
+      "author": "code-reviewer, P3, round 1, phases/P3/code_review_r1.md F2",
+      "labels": {
+        "trigger": "fault",
+        "impact": "broken",
+        "signal": "silent",
+        "fix": "design",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

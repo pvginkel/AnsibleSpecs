@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "vars/podYaml.groovy meets P3's outcome: sidecars match Build-Main #558's printed pod, string and map images: entries render with the library defaults, the three required refusals hold, all @NonCPS, and PodYamlTest asserts whole outputs including P4's exact call. Two advisory edge behaviours (invalid derived container names, null env value) ride along in the close-out report.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "A string images: entry whose last path segment holds '.' or '_' renders a container name Kubernetes refuses at pod creation"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "An env value of null renders as the string \"null\" with no refusal"}
+ ]}
