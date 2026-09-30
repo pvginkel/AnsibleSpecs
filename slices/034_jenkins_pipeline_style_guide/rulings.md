@@ -717,8 +717,8 @@ and the guide says so.
    or scheduled job gets no push trigger and needs no hook.
 3. Check the hook with `gh api repos/pvginkel/<repo>/hooks`.
 4. Start the first build: push to a push-built job's branch, or `POST /job/<job>/build` for any
-   other job. That build puts the file's `triggers {}` on the job, a cron included, and from then
-   on the file owns the trigger.
+   other job, `/job/<Folder>/job/<job>/build` for a job in a folder. That build puts the file's
+   `triggers {}` on the job, a cron included, and from then on the file owns the trigger.
 5. Write the header's `Controller config:` block (section 10) from the job just created.
 6. **Where the job goes.** A new job goes into the folder of the product it belongs to when that
    folder exists: `AaC/` for an architecture producer, `Firmware/`, `IaC/`. Otherwise it goes at
