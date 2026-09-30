@@ -454,12 +454,43 @@ Target: ../AnsibleSpecs
     (slice.md, Source material) each get a proposal.
   - **The new-repo recipe.** P1's result feeds the proposals it bears on.
 
+**Done (P4).** The inventory is `reviews/2026-09-jenkinsfile-review/inventory.md`. Its 114
+in-scope jobs each have one of 13 types, T1–T13, and the ten ModernAppTemplate rows are listed as
+skipped with F2's reason. Its 13 topic sections give each variant with the jobs and lines where it
+occurs. The rulings page is `rulings.md` in this slice folder: a table of what is settled, then 14
+response slots. Those are the types, the nine R2 topics (labels and granularity apart), the
+job-properties block, the helper-type form, the three generators, and the new-repo recipe.
+
+Later phases:
+- P5: its rulings check reads `rulings.md`'s 14 slots. §3 (granularity) and §11 (library) are
+  the operator's pick among options, and §8 carries a sub-choice for aborts. Two facts from the
+  plugin source hold proposals up. A pipeline-level `options { timeout }` runs inside the
+  top-level agent (`ModelInterpreter.groovy`, `call()`), so it excludes the pod wait (J11). And
+  `Utils.updateJobProperties` keeps triggers the file did not declare (Architecture's shape).
+- P6: the types are the inventory's T1–T13, with their member lists. The page proposes no
+  reference file for T13 (KitchenDisplay). Intercom's two versions share one `build/`, so its
+  stages stay build, deploy, build, deploy.
+- The migration slice: `inventory.md` is its per-job type map and its list of variants to retire.
+
+- State: the clones were fetched and `analyse.py` re-run; the only change is
+  `KubeCoder/Jenkinsfile`, now declarative, and `files.tsv` was rewritten. The live job list
+  equals Appendix A's 124 rows.
+- Linter: the page's T5 shape (`options`/`triggers`/`podYaml` map entry/`post { aborted }`) and
+  T11's `Set triggers` stage beside `options {}` both answered "Jenkinsfile successfully
+  validated."
+- Controller, read from `/manage/configure`: a Specific Build Discarder keeps 50 builds of every
+  job, and the Timestamper's "Enabled for all Pipeline builds" is off. DockerImages generates 49
+  stages, 7 of them matrix variants.
+- P4's `report.md:1418`…`:1531` row citations predate P1's insertion into report.md; the
+  inventory names the ten skipped rows by job.
+
 ### P5 — The guide's rules: one strict section per topic, stage labels on their own
 
 Target: ../JenkinsPipelineUtils
 
 **This phase starts with the rulings check.** First, confirm that the operator's rulings on P4's
-rulings page are recorded in plan.md's Requirements / rulings. If they are not, return `question`
+rulings page (`rulings.md` in this slice folder, 14 response slots) are recorded in plan.md's
+Requirements / rulings. If they are not, return `question`
 and name the page. This is the run's one planned pause. Where a ruling changes what a later phase
 says, edit that phase.
 
@@ -495,8 +526,10 @@ only.
 
 Target: ../JenkinsPipelineUtils
 
-For every type in P4's inventory, the guide carries a complete reference Jenkinsfile that applies
-every rule from P5, with a short note on what is specific to that type. Specific cases:
+For every type in P4's inventory (`reviews/2026-09-jenkinsfile-review/inventory.md`, T1–T13,
+less any type the rulings leave without one — `rulings.md` §1 proposes none for T13), the guide
+carries a complete reference Jenkinsfile that applies every rule from P5, with a short note on
+what is specific to that type. Specific cases:
 
 - **Stage generators and computed triggers.** Each has its recipe:
   - DockerImages generates a stage per image variant;

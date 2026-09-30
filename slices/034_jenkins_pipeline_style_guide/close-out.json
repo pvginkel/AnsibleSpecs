@@ -191,6 +191,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "nit",
+      "headline": "Four in-scope Jenkinsfiles carry small defects: unused pod containers (Home, Ansible's Jenkinsfile.architecture), a stale header (TerraformRegistry), a stage label naming the wrong artifact (GitblitMCPSupportPlugin)",
+      "body": [
+        "Found while building the inventory (reviews/2026-09-jenkinsfile-review/inventory.md), which records each under its topic for the migration slice. Home/Jenkinsfile declares a containerTemplates.helm('helm') sidecar that no step uses. Ansible/Jenkinsfile.architecture (AaC/Ansible) inherits 'jenkins-agent kaniko' but builds no image. TerraformRegistry/Jenkinsfile:3-6 says the build 'then triggers a HelmCharts deploy'; it writes pins into TfmirrorDeploy. GitblitMCPSupportPlugin/Jenkinsfile labels its stage 'Building GitblitSearchApiPlugin' while it builds gitblit-initializer. The rulings page (rulings.md §2, §5, §10) proposes rules that retire each of them, and the migration rewrites all four files. Three of the four repos end in a pin write, so a push of a fix before the migration is a prd rollout of that app."
+      ],
+      "consequence": "Until the migration rewrites them, Home and AaC/Ansible pull a container no step uses on every build, and two files tell a reader something false about what they do; a separate fix pushed to Home, TerraformRegistry or GitblitMCPSupportPlugin rolls that app in prd.",
+      "evidence": "witnessed",
+      "author": "code-writer, P4, r1, inventory.md (Pod definition; File naming and header comments; Stage labels)",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "area": "plain",
+        "repo": "Home"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
