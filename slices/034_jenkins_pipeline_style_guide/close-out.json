@@ -303,6 +303,81 @@
         "fix": "one-edit",
         "repo": "AnsibleSpecs"
       },
+      "notes": [
+        {
+          "by": "code-writer, P5, r2",
+          "date": "2026-09-30",
+          "text": [
+            "The guide's new-repo page (docs/pages/guide/new-repo.md, JenkinsPipelineUtils b37b8ba) gives both forms of step 4's first-build call, /job/<job>/build and /job/<Folder>/job/<job>/build; rulings.md itself is unchanged."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E2",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run paused for an operator question in P5",
+      "body": [
+        "The question, as the driver recorded it:",
+        "",
+        "> The run's planned pause: the operator's rulings on the rulings page /work/AnsibleSpecs/slices/034_jenkins_pipeline_style_guide/rulings.md are missing. All 14 'Operator response' slots are still unfilled placeholders (§1 types, §2 stage labels, §3 granularity A/B/C, §4 checkout, §5 pod definition incl. sidecars a1/a2/b, §6 secrets/withVault, §7 timeouts, §8 post/notify incl. aborts a/b/c, §9 job-properties, §10 naming/headers, §11 library A/B/C, §12 helper-type form, §13 generators, §14 new-repo recipe), and plan.md's Requirements / rulings has none of them. Please rule on each slot and record…",
+        "",
+        "Stopped 2026-09-30 19:22; resumed 2026-09-30 20:04."
+      ],
+      "consequence": "none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D1",
+      "kind": "decision",
+      "grade": null,
+      "headline": "JenkinsPipelineUtils style guide PROP-3: the plain disableConcurrentBuilds() list applies the §9 ruling's criteria, so it names jobs the review's S flags did not",
+      "body": [
+        "The §9 ruling makes disableConcurrentBuilds(abortPrevious: true) the standard, and plain disableConcurrentBuilds() the exception for change-detecting builds (DockerImages) and for 'pipelines with a side-effecting sequence that an abort would cut in half: the review's S jobs and the T7 iac apply files'. The guide's PROP-3 (docs/pages/guide/job-properties.md) states both criteria and lists the jobs they cover today. Beyond the 14 S flags and DockerImages, the list holds: IaC/IaC Docker Image (it calls utils.hasChanges, as DockerImages does); all six iac-controller files, IaC/Build-Main and IaC/Scheduled Drift included although they apply nothing, because J12 settles the abort marker on all six and a marker with abortPrevious pages for every superseded build (§8 (c)'s reason); KubeCoder/Promote-PRD (Appendix A: 'the retag → fast-forward → tag sequence is one an abort must not cut'; not flagged S only because it already queued); MyDownloads/MyDownloadsServer (archive, then 'build job: MyDownloads', the same sequence as the S-flagged ScanToPdfServer; not flagged only because it had no guard at all, which the S definition presupposes). The abort marker (POST-3) goes exactly where plain disableConcurrentBuilds() is."
+      ],
+      "consequence": "none beyond the choice: the migration gives these four jobs and the two read-only iac files queueing concurrency and the abort marker, where a literal reading (the S flags and the four applying iac files only) would give those six abortPrevious: true and no marker.",
+      "evidence": "witnessed",
+      "author": "code-writer, P5, r2; docs/pages/guide/job-properties.md in JenkinsPipelineUtils b37b8ba",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D2",
+      "kind": "decision",
+      "grade": null,
+      "headline": "JenkinsPipelineUtils style guide: a lint and a test suite are two stages (GRAN-2); LABEL-4's 'and' join is for one command that runs both",
+      "body": [
+        "The §2 ruling replaced rule 4 with 'a label never contains +; where a label joins two actions, it joins them with and (Lint and test, not Lint + test)'. The §3 ruling is option A, 'followed strictly', whose text makes each gate — a lint, a test suite, a validation — its own stage. Read together, Lint and test would be a label for a stage A splits in two. The guide reconciles them in GRAN-2: gates stay separate stages, and one command that runs two gates at once (a make check that lints and tests) is one stage whose label joins both with and. LABEL-4 carries the and/+ rule and its example as ruled. YouTrackConfiguration's 'Lint and test' (ruff, ruff format, pytest as separate commands) therefore becomes Lint and Test in the migration."
+      ],
+      "consequence": "none beyond the choice: the migration splits every file whose lint and tests run as separate commands into a Lint and a Test stage, where the other reading would keep one combined stage labelled with 'and'.",
+      "evidence": "witnessed",
+      "author": "code-writer, P5, r2; docs/pages/guide/stage-granularity.md and stage-labels.md in JenkinsPipelineUtils b37b8ba",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
       "notes": [],
       "wrap_up": null,
       "strike": null,

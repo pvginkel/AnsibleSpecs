@@ -577,6 +577,53 @@ only.
   `docs/pages/reference` → `../../vars` symlink. Any P3 snippet that breaks a rule is brought into
   line there. Guide pages do not go under `docs/pages/reference/`.
 
+**Done (P5).** The guide's rules are twelve pages under `docs/pages/guide/` in JenkinsPipelineUtils
+(`b37b8ba`), nav section "Style guide": overview; files and headers (FILE-1–7); job properties
+(PROP-1–8); checkout (CHK-1–4); agent and pod (POD-1–6); secrets and settings (SEC-1–5); timeouts
+(TIME-1–5); stage granularity (GRAN-1–8) and stage labels (LABEL-1–6), side by side; post and
+notify (POST-1–4); the library (LIB-1–8, the decision test and the estate's cases); a new repo
+(NEW-1–3, §14's steps and the `config.xml` template). Each rule is a MUST with its reason and an
+id anchor (`guide/pod/#pod-4`); each page ends in a recipe. The recipes' Groovy is cut with
+`pymdownx.snippets` from four complete files in `docs/examples/`. `kc project lint`
+(`docs/lint_examples.py`) posts each, as published, to the controller's linter, and
+`check_site.py` fails on any other groovy block on a page outside `reference/`.
+
+Later phases:
+- P6: reference files go in `docs/examples/` (the lint covers `**/*.groovy`), shown with
+  `--8<-- "<file>.groovy"`; a groovy block typed into a guide page fails `kc project test`. The four
+  P5 files (Ginbov T3, PaperClock T5, Scheduled Calico T7, IaC Docker Image T3) apply every rule:
+  adopt, rename or replace them, keeping the pages' includes resolving (`check_paths`).
+- P6: the `aac-tools` template (ruling §5 a1) is yours, edited in place. Its name has a hyphen: the
+  container takes the template's name, and Kubernetes refuses `_`.
+- P6: GRAN-7/8, LABEL-6, PROP-8 and FILE-6 state the generator rules; the recipes are yours. CHK-3
+  and SEC-3 (a push clones inside `withCredentials`) have no example yet: link a type file that
+  pushes.
+- P7: the hard rules are the MUST lines. Link a page as `https://pipelines.home/docs/guide/<page>/`
+  (Markdown copy `…/<page>/index.md`) and a rule by its lower-case id (`#prop-3`).
+- P8, P9: neither job is on PROP-3's list: `disableConcurrentBuilds(abortPrevious: true)`, 60-minute
+  timeout, `timestamps()`, no `post`. P8's agent is `podYaml(templates: ['aac-tools'])`.
+- Test phase: V05 is `kc project lint` in JenkinsPipelineUtils. V19's "no library var changes"
+  has one exception, the ruled `aac-tools` template (P6).
+
+- Rulings check: all 14 slots are in Requirements / rulings (`dc25c31`).
+- Linter: the four examples, markers stripped, "Jenkinsfile successfully validated."; control
+  `notify.warning('x')` bare in `steps` → "Method calls on objects not allowed outside "script"
+  blocks.". The 8 changed reference snippets, each in a complete declarative file: all validated.
+- Witnessed red: a groovy block appended to `timeouts.md` → check_site.py
+  "guide/timeouts.md:70: a groovy block that is not one `--8<-- …` line" (exit 1); a missing
+  snippet section → `SnippetMissingError`, the build fails.
+- Settled beyond the rulings' text, close-out D1/D2: PROP-3's plain-`disableConcurrentBuilds()`
+  list applies the ruled criteria — all six T7 files, Promote-PRD, MyDownloadsServer, IaC Docker
+  Image beside the S flags and DockerImages; the abort marker goes exactly there. GRAN-2 keeps
+  gates apart; LABEL-4's `and` names one command that runs two.
+- Also settled: FILE-3 allows why-paragraphs before the `Controller config:` block (T7's headers);
+  §14 step 5 is a check against the created job, since FILE-3 puts the block in step 1's file;
+  POD-3 lists today's `jenkins-agent-large` jobs and sends a new job to its type's reference
+  file; LIB-7 carries J19's (2), no helper in the library or loaded from the repo.
+- Reference pages brought into line: podYaml (map entries; its first example's `k8s` now has a
+  step), helmCharts/utils labels, kubectl `Test`, notify's dev-stage form, cicd's full
+  `options {}`, containerTemplates' podYaml column (POD-5, no `images:` stand-ins).
+
 ### P6 — One complete reference Jenkinsfile per pipeline type
 
 Target: ../JenkinsPipelineUtils
@@ -592,6 +639,12 @@ what is specific to that type. Specific cases:
   - Architecture computes its triggers from YAML, which `triggers {}` cannot express.
 - **Helper types.** Where the rulings chose a form for a type J14/J15/J16 will serve, the
   reference file shows that form.
+- **The `aac-tools` template (ruling §5, a1).** Before the T1/T2 reference files, `podYaml` gains
+  the template `aac-tools`, as `containerTemplates.aac_tools` declares it
+  (`registry:5000/aac-tools`), with its row on `vars/podYaml.md`, `containerTemplates.md`'s
+  "In `podYaml`" cell, and a `PodYamlTest` case. It is the one library change the rulings make
+  (V19's exception), and it lands before P8, whose file names it. The other sidecars' templates
+  are the migration's.
 
 Every complete example passes the controller's full declarative linter check. The published file
 is byte for byte the file that was checked, and the done-record carries the responses.
@@ -631,7 +684,8 @@ name follows). It is shaped like ChartsDeploy (`/work/scratch/ChartsDeploy`) and
 - the prd stage configuration, holding the image pin that the site build writes;
 - the Terraform that the PreSync hook applies, including the Argo relay webhook this stage owns;
 - the architecture producer `pipelines-deploy`: judgment layer, `.architecturerc`, and a
-  `Jenkinsfile.architecture` written to the guide;
+  `Jenkinsfile.architecture` written to the guide, its agent `podYaml(templates: ['aac-tools'])`
+  (the template P6 adds);
 - a README and a manifest.
 
 Its `kc project test` renders the chart, checks the Terraform, and generates and validates the
