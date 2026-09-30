@@ -229,7 +229,7 @@ Focus: <!-- doc-writer: the worst one first — ranked on the Consequence lines 
 
 <!-- Defects the run will not fix. Severity in the headline: major | minor | nit | cosmetic. -->
 
-### B1 — Jenkins AaC/Architecture and AaC/WebathomeOrgDeploy trigger each other in an endless loop, redeploying the architecture site every ~6 minutes · major
+### ~~B1 — Jenkins AaC/Architecture and AaC/WebathomeOrgDeploy trigger each other in an endless loop, redeploying the architecture site every ~6 minutes · major~~ — resolved outside the slice by Architecture a2dabd2 (ANS-136, 2026-09-26: WebathomeOrgDeploy trigger: false); P9c re-checked it: none of AaC/Architecture #2214-#2263 was started by AaC/WebathomeOrgDeploy, and AaC/WebathomeOrgDeploy #563-#568 started no AaC/Architecture build; struck by consult 1
 
 AaC/Architecture pins the new site image into WebathomeOrgDeploy. The push of that pin starts AaC/WebathomeOrgDeploy ("Started by GitHub push"), and that job starts AaC/Architecture downstream, which pins again. Nothing else is needed to keep it going. On 2026-09-25, every one of the last 12 AaC/Architecture builds (#1861-#1872, 08:31-09:35) was "Started by upstream project AaC/WebathomeOrgDeploy". AaC/WebathomeOrgDeploy #354-#358 built exactly the pin commits (`ci: image pins from AaC/Architecture #1868`…`#1872`). WebathomeOrgDeploy's origin/main gained 161 commits since 2026-09-24. The triage-2026-09-24 handover (ANS-111) attributes the 5-9-minute rollouts to the 79 producers publishing. The self-trigger means they would continue with no producer activity at all, and ANS-111's RollingUpdate fix removes the outage but not the loop. The plan works around it: the push sweep rebases WebathomeOrgDeploy immediately before pushing (attachments/push-sweep.md).
 
@@ -240,7 +240,7 @@ code-writer, P9c r1, 2026-09-29 — Already fixed outside this slice: Architectu
 **Provenance:** witnessed | plan-writer, planning, r1 — Jenkins API build causes for AaC/Architecture and AaC/WebathomeOrgDeploy, and WebathomeOrgDeploy git log, 2026-09-25
 **Disposition:**
 
-### B2 — IoTSupport: AaC/IoTSupport has been red since 2026-09-24, because its generator cannot map the archived SomfyRemote's firmware product · major
+### ~~B2 — IoTSupport: AaC/IoTSupport has been red since 2026-09-24, because its generator cannot map the archived SomfyRemote's firmware product · major~~ — resolved by P12c r2 (IoTSupport c38bd6f, under Ruling D6 after the operator deleted device fhwiwoxa and model somfy_remote): AaC/IoTSupport #42 built that head green, and AaC/Architecture #2314 published it; struck by consult 1
 
 AaC/IoTSupport #38–#41 (2026-09-24 to 2026-09-26, each started by a GitHub push) fail in IoTSupport's own tools/gen-architecture.py with 'ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset'. The last green build is #37 (2026-09-21). In backend/docs/architecture/firmware-products.yaml that UUID is somfy_remote, the product SomfyRemote published. SomfyRemote is archived and its product is no longer in the dataset, but IoTSupport still registers a device of that model: the published dataset still carries IoTSupport's #37 artifact, with device:somfy-remote-fhwiwoxa and a Specialization to ss:somfy-remote,3e684732-…. The generator fails on any registered model it cannot map, so dropping the mapping line alone swaps one error for another. Remedy options: retire the somfy-remote device (and its model) in the IoTSupport service, then drop the mapping line. Or keep SomfyRemote's product in the dataset some other way. P12c checks for a ruling or a later green AaC/IoTSupport build before it touches IoTSupport, and otherwise stops there with a question.
 
@@ -320,7 +320,7 @@ The suite still passes after either of two mutations. One makes the instance rec
 **Provenance:** witnessed, code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
 **Disposition:**
 
-### S5 — aac-tools gen-architecture: resolve_boundby's comment still calls the container env literal-valued · cosmetic
+### ~~S5 — aac-tools gen-architecture: resolve_boundby's comment still calls the container env literal-valued · cosmetic~~ — resolved by consult 1 (ArgoCDTools ef3e662): the comment now says the container env is literal or ConfigMap-sourced; aac-tools suite and ruff re-run green; struck by consult 1
 
 gen_architecture.py:1572-1573 says the value is expanded against the container's other literal-valued env. Since P2 that env also holds ConfigMap-sourced values (container_env).
 
@@ -342,6 +342,8 @@ HelpContractTests' key check (ArgoCDTools aac-tools/tests/test_gen_architecture.
 
 The products paragraph of the contract (ArgoCDTools aac-tools/image/gen_architecture.py:163) says "The generator copies the fields as written". The code (:1026-1032) sets stereotype to SoftwareProduct and lifecycle to active whatever the entry says. lifecycle is a schema field (Architecture schema/v0.1/generated/systemsoftware.schema.yaml:30). No estate layer sets it today.
 
+consult 1, 2026-09-30 — Left open on purpose. The fix is a choice between honouring an owned product's lifecycle in code and documenting the override in the contract that --help prints. That is a product decision, not a residue comment fix.
+
 **Consequence:** A judgment layer that sets lifecycle on a product it owns, for example to retire it, publishes the product as active, with no gap and no error.
 
 **Provenance:** read | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
@@ -351,12 +353,14 @@ The products paragraph of the contract (ArgoCDTools aac-tools/image/gen_architec
 
 /work/scratch/p3-cmp/run.sh copies every deploy repo's origin/main. KubeCoderDeploy's Jenkinsfile.architecture clones branch prd, whose chart and values differ from main. The reviewer regenerated origin/prd e050439 with both generators: both exit 0, the artifacts are byte-identical, and the gap line is the same. So P3's conclusion holds. P4 redoes the comparison only if origin moves the generator. The plan's P3 Later phases now tells it to include prd.
 
+consult 1, 2026-09-30 — Moot for this slice: P4 found ArgoCDTools origin/main still at 7836cca, the comparison's baseline, so no redo ran, and the published KubeCoderDeploy prd stage had been witnessed byte-identical in P3's review. Only a future generator comparison built from /work/scratch/p3-cmp needs the prd branch added.
+
 **Consequence:** none — witnessed identical at eadf4ca; a P4 redo that skips prd would leave the published KubeCoderDeploy stage unchecked.
 
 **Provenance:** witnessed | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F3
 **Disposition:**
 
-### S9 — ArgoCDDeploy architecture.yaml: the argocd comment says an unset upstream var hard-fails on every other container of the image, but init containers are exempt · nit
+### ~~S9 — ArgoCDDeploy architecture.yaml: the argocd comment says an unset upstream var hard-fails on every other container of the image, but init containers are exempt · nit~~ — resolved by consult 1 (ArgoCDDeploy c005fb5): the comment now names the image's non-init containers; ArgoCDDeploy kc project lint and test re-run green; struck by consult 1
 
 architecture.yaml:25-26 says 'on any other container of the image an upstream wire whose var is unset is a hard fail'. The generator skips upstream on init containers (ArgoCDTools aac-tools/image/gen_architecture.py:1774, 'if not upstream or inst["is_init"]: continue'). An image-level REDIS_SERVER wire fails on applicationset-controller, notifications-controller and secret-init, and leaves the copyutil init container alone. The reason given for scoping the wire still holds; only 'any other container' is too broad. Could be narrowed to the image's non-init containers when P9a edits this file's header.
 
@@ -374,7 +378,7 @@ PrometheusDeploy's architecture.yaml:7-8 says the upstream chart version is the 
 **Provenance:** witnessed, code-writer, P7, r1, /work/scratch/PrometheusDeploy/architecture.yaml
 **Disposition:**
 
-### S11 — P7's done-record cited the pre-amend PrometheusDeploy sha e761059; the branch head is 4aa1ef5 · nit
+### ~~S11 — P7's done-record cited the pre-amend PrometheusDeploy sha e761059; the branch head is 4aa1ef5 · nit~~ — resolved by P7's review r1: it corrected plan.md in place to 4aa1ef5, which P9c pushed; struck by consult 1
 
 The executor amended its commit (reflog: 4aa1ef5 is 'commit (amend)' of e761059) after writing the done-record. The review corrected the sha in plan.md in place.
 
@@ -392,7 +396,7 @@ update-architecture.md:49-50 has a central update session run `cexec aac-tools g
 **Provenance:** read, code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
 **Disposition:**
 
-### S13 — Close-out B1 is still live, though P9c recorded its pin loop fixed by Architecture a2dabd2 (ANS-136) · nit
+### ~~S13 — Close-out B1 is still live, though P9c recorded its pin loop fixed by Architecture a2dabd2 (ANS-136) · nit~~ — resolved by consult 1 striking B1 (Architecture a2dabd2); struck by consult 1
 
 P9c noted B1 instead of striking it. Its note (and attachments/push-sweep.md:76-79) say Architecture a2dabd2 (2026-09-26) sets trigger: false on webathome-org-deploy, so AaC/WebathomeOrgDeploy no longer starts AaC/Architecture. No pin commit followed WebathomeOrgDeploy 6c83563 on origin/main. The list view shows B1's headline ('endless loop … · major') and its Consequence ('two builds every ~6 minutes forever'), not the note, and counts still counts it.
 
@@ -401,7 +405,7 @@ P9c noted B1 instead of striking it. Its note (and attachments/push-sweep.md:76-
 **Provenance:** read | code-reviewer, P9c, r1 — phases/P9c/code_review_r1.md F1
 **Disposition:**
 
-### S14 — Close-out B2 is still live, though P12c r2 resolved it under Ruling D6 · nit
+### ~~S14 — Close-out B2 is still live, though P12c r2 resolved it under Ruling D6 · nit~~ — resolved by consult 1 striking B2 (P12c, IoTSupport c38bd6f, AaC/IoTSupport #42 green); struck by consult 1
 
 P12c r2 noted B2 resolved (the operator's device and model delete, c38bd6f, AaC/IoTSupport #42 green) but did not strike it. Its Consequence line still says the sweep stops at IoTSupport and that V12 cannot hold for it. The list view shows that line under B2's '· major' headline, not the note, and counts still counts it. close_out.py strike --reason is the tool's path for a resolved entry, as S13 records for B1.
 
