@@ -32,6 +32,12 @@ subagent.
   migration carries besides the files is in `handovers/triage_2026-09-30.md` § After 033.
   Still owed from 033: V09, settled by the next `IaC/IaC Docker Image` build. The small-changes
   runbook (§1a: J07, Q7, Q6's four globals) still waits for the operator's go.
+- **Next cut (2026-09-30): slice 034** (ANS-170), the style guide. The operator: "I would like
+  the style guide to be delivered. [...] Then I want this used for the actual pipeline
+  migration." It covers every pipeline type as a cookbook, with a dedicated section on stage
+  labels and a rule for when code goes into the library. Site: `pipelines.home/docs`, with an
+  index page at `/`. No conformance checker for now. The migration is cut after 034 closes, and
+  it brings `KubeCoder/Jenkinsfile` into line with the guide.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
@@ -282,7 +288,7 @@ next Jenkinsfile.
 > or lives elsewhere is reviewed when this section is worked. No header link goes into any
 > Jenkinsfile; §9 drops that ride-along.
 
-- [ ] **op** Hosting. JenkinsPipelineUtils is private, which rules out free GitHub Pages.
+- [x] **op** Hosting. *(09-30)* `pipelines.home/docs`, with an index page at `/` (slice 034). JenkinsPipelineUtils is private, which rules out free GitHub Pages.
   ~~About half the pipeline repos are public, and Architecture's rules forbid internal
   hostnames in public repos, so a `.home` link in every Jenkinsfile would break that rule.
   Choose a public hostname, or accept an internal link in public repos.~~ That constraint went
