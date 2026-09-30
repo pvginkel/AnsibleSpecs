@@ -895,6 +895,20 @@ Entries are alphabetical, and the schema, lint and render test stay green. The p
 locally. The push, and with it Argo's first sync, belongs to the test phase (Ordering
 constraints).
 
+**Done (P10).** ArgoCDDeploy `a854420` on `phase/034-P10`: `releases/values.yaml` has the entry
+`pipelines` (repo `https://github.com/pvginkel/PipelinesDeploy.git`, `stages: prd: {}`), between
+`pgadmin` and `postgres-pas`. It renders the Application `pipelines-prd` (namespace
+`pipelines-prd`, `main`, `../config/prd/values.yaml`) with `syncPolicy.automated` (`prune: true`,
+`selfHeal: false`) and D5's retry block. The AppProject needed no edit: its `*-prd` destination
+glob and its `https://github.com/pvginkel/*` source glob already cover the app.
+
+Later phases:
+- Test phase: pushing ArgoCDDeploy (Ordering step 4) creates `pipelines-prd` through `releases`'
+  auto-sync, and Argo then syncs it on its own (V12). No Argo action is needed.
+
+`kc project lint` (helm lint of the chart and `releases`) and `kc project test` (the render test,
+the `argocd-deploy` producer's generate and validate) passed on the commit.
+
 ### P11 — The producer registered in Architecture
 
 Target: ../Architecture
