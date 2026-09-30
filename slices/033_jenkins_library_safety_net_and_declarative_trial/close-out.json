@@ -70,7 +70,22 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "code-writer P4 r1",
+          "date": "2026-09-30",
+          "text": [
+            "What the conversion took, for the verdict (KubeCoder 30df8e2d): Declarative refuses a method call on an object outside script{} (\"Method calls on objects not allowed outside \\\"script\\\" blocks\"), so each of the eight library calls (seven helmCharts.kaniko, one cicd.writeVersionPins) sits in its own script{}; the pin stage's local String needs one too. Keeping the 'Cloning repo' stage takes options{ skipDefaultCheckout() }. GOFLAGS moved from withEnv to stage environment{}. The file grew from 341 to 408 lines, all structure (steps{}/script{} wrappers); no stage, sh step or kaniko destination changed. The linter validates agent parameter names and trigger symbols but does not load the library, so podYaml's call and the library step ahead of pipeline{} are proven only by the Replay."
+          ]
+        },
+        {
+          "by": "code-writer P4 r1",
+          "date": "2026-09-30",
+          "text": [
+            "Count in the note above corrected: nine library calls, each in its own script{} — eight helmCharts.kaniko (one per image stage) and one cicd.writeVersionPins."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -286,6 +301,29 @@
         "fix": "design",
         "area": "plain",
         "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A4",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the scratch clone /work/scratch/KubeCoder once the slice is done",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/KubeCoder` for `Target: github:pvginkel/KubeCoder`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.",
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
       "notes": [],
       "wrap_up": null,

@@ -371,6 +371,34 @@ syntax, not what the build does:
 - The commit stays local (Push holds). The operator's Replay can run only once the run has pushed
   the library with P3's helper.
 
+**Done (P4).** `Jenkinsfile` is a declarative `pipeline {}`: `agent { kubernetes { inheritFrom
+'jenkins-agent kaniko'; yamlMergeStrategy merge(); yaml podYaml(…) } }` with P3's asserted call
+verbatim, `options { disableConcurrentBuilds(abortPrevious: true); skipDefaultCheckout() }`,
+`triggers { githubPush() }`, and the same 16 stages in order, no `when{}`/`post{}`. KubeCoder
+`30df8e2d` on `phase/033-P4`, not pushed (Push holds). Gate, POST
+`/pipeline-model-converter/validate` as `admin`: `Jenkinsfile successfully validated.`
+
+Later phases:
+- The linter does not load the library: `podYaml`'s evaluation in the agent and the `library`
+  step ahead of `pipeline {}` are proven only by the Replay, which needs the library pushed (D2).
+- KubeCoder `docs/operations/pipeline-dependencies.md:16,17,40` still cite the Jenkinsfile's
+  `podTemplate` and its `golang`/`node` `containerTemplate`s (the doc phase's).
+- `vscode-desktop/test/publish.test.ts` passes on the converted file (6/6, run locally).
+
+Record:
+- Each library object call (`helmCharts.kaniko` ×8, `cicd.writeVersionPins`) sits in a `script {}`
+  inside its `container(...)`: the validator refuses a method call on an object outside one. The
+  pin stage's `String n` rides in the same `script {}`.
+- `skipDefaultCheckout()` keeps `Cloning repo` the one checkout; no `defaultContainer`, so
+  unwrapped steps (checkout, the CLI gate's `git`) run in `jnlp` as before.
+- `GOFLAGS=-buildvcs=false` moved from `withEnv` to stage `environment {}` (Go and CLI-reference
+  stages); in the latter it also reaches the two `git` steps, which do not read it.
+- Negative control on the same endpoint: a misspelt `yamlMergeStrategy`, a misspelt `githubPush`
+  and an object call outside `script {}` each came back as an error — the check is a full one.
+- Against #558's pod print, podYaml's four containers match by name, image, user and resources
+  but for F1's (`node` `Always`, `sleep infinity`); `kaniko`, `busybox-share-init`, the volumes,
+  the node selector and `jnlp` come from the inherited templates under `merge()`.
+
 ## Not in scope
 
 - A Jenkins job or Jenkinsfile for JenkinsPipelineUtils (ruling D1).
