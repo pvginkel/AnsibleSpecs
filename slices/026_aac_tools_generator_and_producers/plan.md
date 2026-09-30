@@ -830,7 +830,7 @@ Record:
 - GitHub's trees of the eight default branches hold no `arch-validate.py` at the pushed heads.
   Builds and rollouts: `sweep_ledger.md`.
 
-### P12b — Carriers whose push redeploys production, second part
+### P12b — Carriers whose push redeploys production, second part ✅ DONE 2026-09-30
 
 Target: root
 
