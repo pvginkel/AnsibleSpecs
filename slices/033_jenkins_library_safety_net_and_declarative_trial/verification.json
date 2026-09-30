@@ -2,112 +2,112 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — J08 declarative trial on KubeCoder",
-      "description": "`KubeCoder/Jenkinsfile` (Build-Main) is converted to declarative: `agent { kubernetes { yaml … } }` built from the library's pod-YAML helper — per ruling F1 a standalone `podYaml`, called as `podYaml templates: […], images: […]`, not `containerTemplates.podYaml(...)` — with `yamlMergeStrategy merge()` so the inherited `kaniko` template's YAML survives (ruling F2), and `options{}`/`triggers{}` for its job config. The file must pass the full linter check (POST `/pipeline-model-converter/validate` on the controller). The conversion is faithful (ruling D3): the converted file gets no `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or cleanup handling.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R1 \u2014 J08 declarative trial on KubeCoder",
+      "description": "`KubeCoder/Jenkinsfile` (Build-Main) is converted to declarative: `agent { kubernetes { yaml \u2026 } }` built from the library's pod-YAML helper \u2014 per ruling F1 a standalone `podYaml`, called as `podYaml templates: [\u2026], images: [\u2026]`, not `containerTemplates.podYaml(...)` \u2014 with `yamlMergeStrategy merge()` so the inherited `kaniko` template's YAML survives (ruling F2), and `options{}`/`triggers{}` for its job config. The file must pass the full linter check (POST `/pipeline-model-converter/validate` on the controller). The conversion is faithful (ruling D3): the converted file gets no `when{}` and no `post{}`, because the scripted file has no conditional stage and no failure or cleanup handling.",
+      "verdict": "pass",
+      "rationale": "Converted Jenkinsfile (KubeCoder 30df8e2d): declarative agent kubernetes with inheritFrom, yamlMergeStrategy merge(), yaml podYaml(...), options/triggers, no when/post/try/catch; 16 stages before and after. POST /pipeline-model-converter/validate \u2192 \"Jenkinsfile successfully validated.\" (2026-09-30).",
       "evidence": [
-        "KubeCoder/Jenkinsfile:7 — today's job config is scripted `properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])` (KubeCoder HEAD 5bbf14bf)",
-        "KubeCoder/Jenkinsfile:9-30 — today's pod is `podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [...])` with `containerTemplates.k8s`, `containerTemplates.modern_app_toolchain` and inline `golang`/`node`",
-        "KubeCoder/Jenkinsfile:31-340 — every stage runs on every build: no `if`, `try`, `catch`, `finally`, `catchError` or `warnError` outside comments (grep, KubeCoder HEAD 5bbf14bf, 2026-09-30)"
+        "KubeCoder/Jenkinsfile:7 \u2014 today's job config is scripted `properties([disableConcurrentBuilds(abortPrevious: true), pipelineTriggers([githubPush()])])` (KubeCoder HEAD 5bbf14bf)",
+        "KubeCoder/Jenkinsfile:9-30 \u2014 today's pod is `podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [...])` with `containerTemplates.k8s`, `containerTemplates.modern_app_toolchain` and inline `golang`/`node`",
+        "KubeCoder/Jenkinsfile:31-340 \u2014 every stage runs on every build: no `if`, `try`, `catch`, `finally`, `catchError` or `warnError` outside comments (grep, KubeCoder HEAD 5bbf14bf, 2026-09-30)"
       ]
     },
     {
       "id": "V02",
-      "area": "R1 — J08 declarative trial on KubeCoder",
-      "description": "The operator replays `KubeCoder/Build-Main` with the converted script — a real build and, through the pin commit, a dev rollout by Argo — then pushes it.",
+      "area": "R1 \u2014 J08 declarative trial on KubeCoder",
+      "description": "The operator replays `KubeCoder/Build-Main` with the converted script \u2014 a real build and, through the pin commit, a dev rollout by Argo \u2014 then pushes it.",
       "owed_after": "github:pvginkel/KubeCoder",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Operator replays KubeCoder/Build-Main with the converted Jenkinsfile, then pushes it (ruling D2).",
       "evidence": []
     },
     {
       "id": "V03",
-      "area": "R1 — J08 declarative trial on KubeCoder",
-      "description": "The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin prints it at the top of the console, matches a scripted Build-Main build's (containers, images, pull policies, users, resources, the inherited `kaniko` container, `busybox-share-init` init container and volumes), except for what ruling F1 brings — `node` pulls `Always`, and `golang` and `node` are kept alive by `sleep infinity` rather than `cat` with a tty — and the same stages run in the same order, ending in the KubeCoderDeploy pin write.",
+      "area": "R1 \u2014 J08 declarative trial on KubeCoder",
+      "description": "The converted build changes syntax, not what it does: the Replay's pod, as the `kubernetes` plugin prints it at the top of the console, matches a scripted Build-Main build's (containers, images, pull policies, users, resources, the inherited `kaniko` container, `busybox-share-init` init container and volumes), except for what ruling F1 brings \u2014 `node` pulls `Always`, and `golang` and `node` are kept alive by `sleep infinity` rather than `cat` with a tty \u2014 and the same stages run in the same order, ending in the KubeCoderDeploy pin write.",
       "owed_after": "github:pvginkel/KubeCoder",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Settled by comparing the Replay console pod spec to build 558 after the operator replays Build-Main.",
       "evidence": [
-        "$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText — a scripted build (SUCCESS) whose printed pod spec holds jnlp, kaniko, k8s, modern-app-toolchain, golang, node, the busybox-share-init init container, nodeSelector and the busybox/workspace-volume emptyDirs (read 2026-09-30)"
+        "$JENKINS_URL/job/KubeCoder/job/Build-Main/558/consoleText \u2014 a scripted build (SUCCESS) whose printed pod spec holds jnlp, kaniko, k8s, modern-app-toolchain, golang, node, the busybox-share-init init container, nodeSelector and the busybox/workspace-volume emptyDirs (read 2026-09-30)"
       ]
     },
     {
       "id": "V04",
-      "area": "R1 — J08 declarative trial on KubeCoder",
+      "area": "R1 \u2014 J08 declarative trial on KubeCoder",
       "description": "The operator gives the verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`, scripted for pod pipelines). If \"migrate all\", the migration is a slice of its own.",
       "owed_after": "the operator's verdict after the Build-Main Replay",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Operator verdict after the Replay.",
       "evidence": []
     },
     {
       "id": "V05",
-      "area": "R1 — the library's podYaml helper",
-      "description": "The library's `podYaml` helper is on JenkinsPipelineUtils' main, in a file of its own (ruling F1): `podYaml templates: […], images: […]` returns one pod spec a declarative Kubernetes agent takes, holding the library's `k8s` and `modern-app-toolchain` sidecars with the settings their `containerTemplates` describables carry, plus any container the pipeline names by image — a string, or a map overriding name, resources, `runAsUser` and env — kept alive and pulled `Always` like the sidecars, with no library change. `containerTemplates.*` is untouched. The helper is `@NonCPS` string building, and `kc project test` asserts its output in full.",
-      "verdict": null,
-      "rationale": "",
+      "area": "R1 \u2014 the library's podYaml helper",
+      "description": "The library's `podYaml` helper is on JenkinsPipelineUtils' main, in a file of its own (ruling F1): `podYaml templates: [\u2026], images: [\u2026]` returns one pod spec a declarative Kubernetes agent takes, holding the library's `k8s` and `modern-app-toolchain` sidecars with the settings their `containerTemplates` describables carry, plus any container the pipeline names by image \u2014 a string, or a map overriding name, resources, `runAsUser` and env \u2014 kept alive and pulled `Always` like the sidecars, with no library change. `containerTemplates.*` is untouched. The helper is `@NonCPS` string building, and `kc project test` asserts its output in full.",
+      "verdict": "pass",
+      "rationale": "vars/podYaml.groovy on JenkinsPipelineUtils main (pushed caf6b75), @NonCPS, templates/images args; containerTemplates untouched; PodYamlTest (6 tests) green in the sweep root test.",
       "evidence": [
-        "JenkinsPipelineUtils/vars/containerTemplates.groovy:19-21,62-64 — `k8s` (`registry:5000/k8s:1.35.5`) and `modern_app_toolchain` (`registry:5000/kube-coder-modern-app-toolchain:node-24`, `runAsUser: '1000'`) return `containerTemplate(...)` describables kept alive by `sleep infinity` with `alwaysPullImage: true`, which an `agent` block cannot take (library HEAD 276beff)",
-        "KubeCoder/Jenkinsfile:25-29 — `golang` (`registry:5000/kube-coder-go-toolchain:latest`, CPU 2/4, memory 2Gi/4Gi) and `node` (`node:24-bookworm`) are the pipeline's own containers, which `images:` carries (KubeCoder HEAD 5bbf14bf)"
+        "JenkinsPipelineUtils/vars/containerTemplates.groovy:19-21,62-64 \u2014 `k8s` (`registry:5000/k8s:1.35.5`) and `modern_app_toolchain` (`registry:5000/kube-coder-modern-app-toolchain:node-24`, `runAsUser: '1000'`) return `containerTemplate(...)` describables kept alive by `sleep infinity` with `alwaysPullImage: true`, which an `agent` block cannot take (library HEAD 276beff)",
+        "KubeCoder/Jenkinsfile:25-29 \u2014 `golang` (`registry:5000/kube-coder-go-toolchain:latest`, CPU 2/4, memory 2Gi/4Gi) and `node` (`node:24-bookworm`) are the pipeline's own containers, which `images:` carries (KubeCoder HEAD 5bbf14bf)"
       ]
     },
     {
       "id": "V06",
-      "area": "R2 — J22 library self-test",
+      "area": "R2 \u2014 J22 library self-test",
       "description": "The library's self-test asserts the pure functions `cicd.applyPins`/`replacePin`/`plainSafe`, `helmCharts.resolveTrackingTag`, `notify.escape`, `utils.hasChanges`, and references every var so each compiles. Per ruling D1 it runs in the pre-push Maven gate (`kc project test`); no Jenkins job or Jenkinsfile is added for the library.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Sweep root test GREEN (mvn tests); AlertEscapeTest, ChangedFilesTest, VersionPinsTest, TrackingTagTest, LibraryCompileTest present; no Jenkinsfile added.",
       "evidence": [
-        "JenkinsPipelineUtils/.kubecoder/project.yaml — `root`'s test is `cexec java mvn -B -q -f tests/pom.xml test`",
-        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:69-76 — every vars/*.groovy is compiled through the CPS transform",
-        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/TrackingTagTest.java — `helmCharts.resolveTrackingTag` already has behaviour tests (276beff)",
-        "JenkinsPipelineUtils/vars/cicd.groovy:188,275,326 and vars/notify.groovy:31 — `applyPins`, `replacePin`, `plainSafe` and `escape` are `@NonCPS`, so callable directly from JUnit"
+        "JenkinsPipelineUtils/.kubecoder/project.yaml \u2014 `root`'s test is `cexec java mvn -B -q -f tests/pom.xml test`",
+        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:69-76 \u2014 every vars/*.groovy is compiled through the CPS transform",
+        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/TrackingTagTest.java \u2014 `helmCharts.resolveTrackingTag` already has behaviour tests (276beff)",
+        "JenkinsPipelineUtils/vars/cicd.groovy:188,275,326 and vars/notify.groovy:31 \u2014 `applyPins`, `replacePin`, `plainSafe` and `escape` are `@NonCPS`, so callable directly from JUnit"
       ]
     },
     {
       "id": "V07",
-      "area": "R3 — J22 compile gate's version pin",
+      "area": "R3 \u2014 J22 compile gate's version pin",
       "description": "The compile gate's `groovy-cps.version` pin no longer trails the controller: it is the controller's `workflow-cps` version, as `tests/pom.xml` says it is (\"bumped when the controller's workflow-cps is upgraded\").",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "tests/pom.xml:18 groovy-cps.version = 4383.v04fa_a_3d67b_d9, matching controller workflow-cps.",
       "evidence": [
-        "JenkinsPipelineUtils/tests/pom.xml:17 — `4376.v30c8c00684a_3`",
-        "$JENKINS_URL/pluginManager/api/json — `workflow-cps 4383.v04fa_a_3d67b_d9` (read 2026-09-30)",
-        "https://repo.jenkins-ci.org/public/com/cloudbees/groovy-cps/maven-metadata.xml — lists `4383.v04fa_a_3d67b_d9` (read 2026-09-30)"
+        "JenkinsPipelineUtils/tests/pom.xml:17 \u2014 `4376.v30c8c00684a_3`",
+        "$JENKINS_URL/pluginManager/api/json \u2014 `workflow-cps 4383.v04fa_a_3d67b_d9` (read 2026-09-30)",
+        "https://repo.jenkins-ci.org/public/com/cloudbees/groovy-cps/maven-metadata.xml \u2014 lists `4383.v04fa_a_3d67b_d9` (read 2026-09-30)"
       ]
     },
     {
       "id": "V08",
-      "area": "R4 — J18 utils.hasChanges @NonCPS",
+      "area": "R4 \u2014 J18 utils.hasChanges @NonCPS",
       "description": "`utils.hasChanges` is annotated `@NonCPS` and otherwise as it was, verified with the J22 self-test: called with `'.*'` it answers true, with a pattern that cannot match it answers false.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "vars/utils.groovy:33 @NonCPS def hasChanges; ChangedFilesTest present and green in sweep.",
       "evidence": [
-        "JenkinsPipelineUtils/vars/utils.groovy:33-41 — `def hasChanges(pattern)` has no `@NonCPS`, reads `currentBuild.changeSets` and calls no step"
+        "JenkinsPipelineUtils/vars/utils.groovy:33-41 \u2014 `def hasChanges(pattern)` has no `@NonCPS`, reads `currentBuild.changeSets` and calls no step"
       ]
     },
     {
       "id": "V09",
-      "area": "R4 — J18 utils.hasChanges @NonCPS",
+      "area": "R4 \u2014 J18 utils.hasChanges @NonCPS",
       "description": "One run of a caller verifies `hasChanges` after the library push: \"`DockerImages/Jenkinsfile` and `Ansible/Jenkinsfile.iac-image`; either one's next build is the verification run.\"",
       "owed_after": "the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac-image after the library push",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "owed",
+      "rationale": "Next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac-image after the library push (pushed 2026-09-30).",
       "evidence": [
-        "DockerImages/Jenkinsfile:82 and Ansible/Jenkinsfile.iac-image:65-70 — the callers"
+        "DockerImages/Jenkinsfile:82 and Ansible/Jenkinsfile.iac-image:65-70 \u2014 the callers"
       ]
     },
     {
       "id": "V10",
-      "area": "R5 — J20 dead library code",
-      "description": "The dead library code is removed — `helmCharts.tools`/`toolsInstalled`, `resolveImageTag`, `containerTemplates.debian`, `containerTemplates.canon` — and the KitchenDisplay-only code stays (`helmCharts.ssh`/`rsync`, `containerTemplates.rsync` and `dockbuild`, `gitUtils.groovy`), as do `kubectl.waitForJob` and `readFileFromPod`. Verified with the J22 self-test (compiles every var).",
-      "verdict": null,
-      "rationale": "",
+      "area": "R5 \u2014 J20 dead library code",
+      "description": "The dead library code is removed \u2014 `helmCharts.tools`/`toolsInstalled`, `resolveImageTag`, `containerTemplates.debian`, `containerTemplates.canon` \u2014 and the KitchenDisplay-only code stays (`helmCharts.ssh`/`rsync`, `containerTemplates.rsync` and `dockbuild`, `gitUtils.groovy`), as do `kubectl.waitForJob` and `readFileFromPod`. Verified with the J22 self-test (compiles every var).",
+      "verdict": "pass",
+      "rationale": "grep: toolsInstalled/tools/resolveImageTag/debian/canon gone from vars; helmCharts.ssh/rsync, containerTemplates.rsync/dockbuild, gitUtils, kubectl.waitForJob, readFileFromPod remain; compile test green.",
       "evidence": [
-        "JenkinsPipelineUtils/vars/helmCharts.groovy:7-36 — `toolsInstalled`, `tools`, `resolveImageTag`",
-        "JenkinsPipelineUtils/vars/containerTemplates.groovy:69,76 — `debian`, `canon`",
-        "KitchenDisplay/Jenkinsfile:41-45 — still calls `helmCharts.ssh` and `helmCharts.rsync`",
+        "JenkinsPipelineUtils/vars/helmCharts.groovy:7-36 \u2014 `toolsInstalled`, `tools`, `resolveImageTag`",
+        "JenkinsPipelineUtils/vars/containerTemplates.groovy:69,76 \u2014 `debian`, `canon`",
+        "KitchenDisplay/Jenkinsfile:41-45 \u2014 still calls `helmCharts.ssh` and `helmCharts.rsync`",
         "No `Jenkinsfile*` under /work or /work/scratch, and no exported job config under /work/scratch/jenkins-config/xml, names the deleted helpers (grep, 2026-09-30)"
       ]
     },
@@ -115,18 +115,18 @@
       "id": "V11",
       "area": "Library push (ruling D2)",
       "description": "The run pushes JenkinsPipelineUtils to main once its gates pass, so the library the operator's Replay loads carries `podYaml`; KubeCoder's converted Jenkinsfile is committed but not pushed by the run.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "JenkinsPipelineUtils pushed 276beff..caf6b75 to origin/main; KubeCoder commit 30df8e2d left unpushed (held by ruling D2).",
       "evidence": []
     },
     {
       "id": "V12",
       "area": "Coverage preservation",
       "description": "No library test coverage is lost: slice 027's compile test and its controls (syntax error, `synchronized` block, CPS-transformed body) and `TrackingTagTest` still run and pass in `kc project test`.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "LibraryCompileTest (3 tests incl. controls) and TrackingTagTest still run; root test GREEN.",
       "evidence": [
-        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:78-107 — the three controls"
+        "JenkinsPipelineUtils/tests/src/test/java/org/webathome/jenkinspipelineutils/LibraryCompileTest.java:78-107 \u2014 the three controls"
       ]
     }
   ]
