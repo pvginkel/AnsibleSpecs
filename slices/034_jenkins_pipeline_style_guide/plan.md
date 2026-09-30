@@ -227,7 +227,7 @@ D1–D3) and sets a new pattern: the estate's first docs site built from a libra
 
   KubeCoderConfig can be pushed at any point.
 
-### P1 — The webhook test (§6a): what a new repo needs for its push hook, on record
+### P1 — The webhook test (§6a): what a new repo needs for its push hook, on record ✅ DONE 2026-09-30
 
 Target: ../AnsibleSpecs
 
