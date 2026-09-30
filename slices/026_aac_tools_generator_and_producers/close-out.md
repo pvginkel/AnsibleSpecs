@@ -92,6 +92,15 @@ P12c moved both components' `lint` gate in ElectronicsInventory from `../scripts
 **Provenance:** witnessed: executor, P12c, r1, sweep_ledger.md P12c rows
 **Disposition:**
 
+### A8 — Restart the InfraStatisticsDisplay, GestureDevice, UnderfloorHeatingController and DoorbellReceiver KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+
+P13a moved each of these four firmware repos' `lint` gate from `./scripts/arch-validate.py docs/architecture/*.yaml` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in each repo's own `.kubecoder/config.yaml`. A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier).
+
+**Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
+
+**Provenance:** witnessed: executor, P13a, r1, sweep_ledger.md P13a rows
+**Disposition:**
+
 ## Notable events
 
 Focus: <!-- doc-writer: the shape of the run — bail-outs, appended phases, surprises -->
@@ -381,4 +390,13 @@ P9c noted B1 instead of striking it. Its note (and attachments/push-sweep.md:76-
 **Consequence:** The triage view presents a loop fixed on 2026-09-26 as the report's one open major bug.
 
 **Provenance:** read | code-reviewer, P9c, r1 — phases/P9c/code_review_r1.md F1
+**Disposition:**
+
+### S14 — Close-out B2 is still live, though P12c r2 resolved it under Ruling D6 · nit
+
+P12c r2 noted B2 resolved (the operator's device and model delete, c38bd6f, AaC/IoTSupport #42 green) but did not strike it. Its Consequence line still says the sweep stops at IoTSupport and that V12 cannot hold for it. The list view shows that line under B2's '· major' headline, not the note, and counts still counts it. close_out.py strike --reason is the tool's path for a resolved entry, as S13 records for B1.
+
+**Consequence:** The triage view presents IoTSupport's red AaC build, green since #42, as an open major bug that stops the sweep.
+
+**Provenance:** read | code-reviewer, P12c, r1 — phases/P12c/code_review_r1.md F1
 **Disposition:**
