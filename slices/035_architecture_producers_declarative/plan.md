@@ -350,7 +350,7 @@ Record:
   The guide has no width rule, so they stay on one line, as in the reference.
 - Linter 50/50 "Jenkinsfile successfully validated."; a file with a broken option was rejected.
 
-### P3 — The 25 app-repo producers of the reference shape are declarative files on the helper's steps
+### P3 — The 25 app-repo producers of the reference shape are declarative files on the helper's steps ✅ DONE 2026-10-01
 
 Target: root
 
