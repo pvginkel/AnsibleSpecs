@@ -1,0 +1,3 @@
+root: cexec java mvn -B -q -f tests/pom.xml test    [  OK  ]
+docs: cexec iac uv run --locked mkdocs build --strict    [  OK  ]
+docs: cexec iac uv run --locked python check_site.py    [  OK  ]

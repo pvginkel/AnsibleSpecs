@@ -37,7 +37,6 @@ Triaged 2026-09-27 from DockerImages' DI-7 and DI-10 (the record: `handovers/tri
 
 Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handovers/triage_2026-09-30.md`, open — the rest of the review waits on this slice):
 
-- **035** — Architecture producers to declarative: the 77 `Jenkinsfile.architecture` producers onto the style guide's declarative form and an `architectureProducer` helper, with their job configuration moved into the files (cut 2026-10-01)
 
 
 ## Completed
@@ -96,6 +95,7 @@ Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handov
 | [026 aac-tools-generator-and-producers](slices/completed/026_aac_tools_generator_and_producers/plan.md) | — | — | aac-tools and the producers: generator fixes (in-house service per container, Argo CD's capability and redis edges, the app-name equality), the annotation contract in `gen-architecture --help`, Alertmanager's Telegram edge, and every copied `arch-validate.py` onto the toolchain (minor). |
 | [033 jenkins-library-safety-net-and-declarative-trial](slices/completed/033_jenkins_library_safety_net_and_declarative_trial/plan.md) | — | — | Jenkins library safety net and the declarative trial: behaviour tests for JenkinsPipelineUtils (J22, the compile gate's pin), `@NonCPS` on `hasChanges` (J18), dead library code out (J20), and `KubeCoder/Jenkinsfile` converted to declarative for the operator's migrate-all verdict (J08) (improvement). |
 | [034 jenkins-pipeline-style-guide](slices/completed/034_jenkins_pipeline_style_guide/plan.md) | — | — | Jenkins pipeline style guide, its docs site and skill: one strict, example-driven guide for every pipeline type, published at `pipelines.home` beside the library's reference pages, and a skill that carries its rules into every session (improvement). |
+| [035 architecture-producers-declarative](slices/completed/035_architecture_producers_declarative/plan.md) | — | — | Architecture producers to declarative: the 77 `Jenkinsfile.architecture` producers onto the style guide's declarative form and an `architectureProducer` helper, with their job configuration moved into the files (cut 2026-10-01) |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

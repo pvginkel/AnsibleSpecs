@@ -1,0 +1,570 @@
+/work/JenkinsPipelineUtils — P1: git diff 0965d41cc21b..5c39ece271d7
+
+docs/examples/app-architecture.groovy                           |   6 +-
+ docs/examples/deploy-architecture.groovy                        |  10 +-
+ docs/mkdocs.yml                                                 |   1 +
+ docs/pages/guide/library.md                                     |   6 +-
+ docs/pages/types/app-architecture.md                            |  13 ++-
+ docs/pages/types/deploy-architecture.md                         |  10 +-
+ docs/pages/types/index.md                                       |   4 +-
+ .../jenkinspipelineutils/ArchitectureProducerTest.java          | 174 ++++++++++++++++++++++++++++
+ vars/architectureProducer.groovy                                | 120 +++++++++++++++++++
+ vars/architectureProducer.md                                    |  96 +++++++++++++++
+ 10 files changed, 419 insertions(+), 21 deletions(-)
+
+diff --git a/docs/examples/app-architecture.groovy b/docs/examples/app-architecture.groovy
+index 49e1065..363a7fc 100644
+--- a/docs/examples/app-architecture.groovy
++++ b/docs/examples/app-architecture.groovy
+@@ -37,10 +37,10 @@ pipeline {
+ 
+         stage('Validate architecture') {
+             steps {
+-                container('aac-tools') {
+-                    sh 'arch-validate docs/architecture/*.yaml'
++                script {
++                    architectureProducer.validate(files: ['docs/architecture/*.yaml'])
++                    architectureProducer.archive(files: ['docs/architecture/*.yaml'])
+                 }
+-                archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
+             }
+         }
+     }
+diff --git a/docs/examples/deploy-architecture.groovy b/docs/examples/deploy-architecture.groovy
+index 281944b..0aee621 100644
+--- a/docs/examples/deploy-architecture.groovy
++++ b/docs/examples/deploy-architecture.groovy
+@@ -43,10 +43,10 @@ pipeline {
+         // --8<-- [start:stages]
+         stage('Generate architecture') {
+             steps {
+-                container('aac-tools') {
+-                    sh 'gen-architecture --stage prd --producer charts-deploy'
++                script {
++                    architectureProducer.generate(stage: 'prd', producer: 'charts-deploy')
++                    architectureProducer.archive(files: ['docs/architecture/*.yaml'])
+                 }
+-                archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
+             }
+         }
+ 
+@@ -54,8 +54,8 @@ pipeline {
+         // never reaches it, archived or not.
+         stage('Validate architecture') {
+             steps {
+-                container('aac-tools') {
+-                    sh 'arch-validate docs/architecture/*.yaml'
++                script {
++                    architectureProducer.validate(files: ['docs/architecture/*.yaml'])
+                 }
+             }
+         }
+diff --git a/docs/mkdocs.yml b/docs/mkdocs.yml
+index 19ea84a..b1a5bdc 100644
+--- a/docs/mkdocs.yml
++++ b/docs/mkdocs.yml
+@@ -118,6 +118,7 @@ nav:
+       - Architecture collector: types/architecture-collector.md
+       - Scheduled snapshot producer: types/snapshot-producer.md
+   - Library reference:
++      - architectureProducer: reference/architectureProducer.md
+       - cicd: reference/cicd.md
+       - containerTemplates: reference/containerTemplates.md
+       - gitUtils: reference/gitUtils.md
+diff --git a/docs/pages/guide/library.md b/docs/pages/guide/library.md
+index a648e59..c692220 100644
+--- a/docs/pages/guide/library.md
++++ b/docs/pages/guide/library.md
+@@ -59,15 +59,15 @@ so a push to it changes every consumer at once, on each one's next build.
+ | Case | Test | Outcome |
+ | --- | --- | --- |
+ | J14: `espFirmware(…)` for the eight ESP-IDF firmware jobs, with a required `idfVersion` | the type's whole pipeline ([LIB-1](#lib-1)); the ESP-IDF version per repo ([LIB-3](#lib-3)) | accepted, not yet in the library |
+-| J16: `architectureProducer(…)` for the architecture producers, 23 app and 49 deploy-repo files | the type's whole pipeline | accepted, not yet in the library |
++| J16: `architectureProducer`'s steps for the architecture producers, 28 app and 50 deploy-repo files | how a producer's model is generated, validated and archived for AaC/Architecture ([LIB-1](#lib-1)); the stage, the producer id and the model files per repo ([LIB-3](#lib-3)) | in the library ([`architectureProducer`](../reference/architectureProducer.md)) |
+ | J21: one kaniko API, `helmCharts.kaniko2(…)` | how an image is built and labelled | in the library ([LIB-6](#lib-6)) |
+ | J15: the validation-Job helper | the whole-pipeline fence ([LIB-4](#lib-4)): with the five apps it was for rendered from a template, it serves one job, SSEGateway | not built |
+ | J19: an `iac` helper for the iac-controller dev stages | the iac-controller jobs' own workflow | ruled against: "Keep the duplication; the style guide says it is deliberate" ([LIB-7](#lib-7)) |
+ | J01: a `jobDefaults()` var for the job properties | nothing the file should show ([LIB-2](#lib-2)) | ruled against: it "would hide exactly the lines the move exists to surface" |
+ | A constant for the registry host, `registry:5000` | no contract: the host is the same in every image reference | ruled against: it would make the files "less readable to save nothing" |
+ 
+-Until a type's helper is in the library, [the type's reference file](../types/index.md) is the
+-full declarative file.
++Until J14's helper is in the library, [the firmware type's reference file](../types/firmware.md) is
++the full declarative file.
+ 
+ ## The calls a file uses
+ 
+diff --git a/docs/pages/types/app-architecture.md b/docs/pages/types/app-architecture.md
+index 98fa7ba..07c70f7 100644
+--- a/docs/pages/types/app-architecture.md
++++ b/docs/pages/types/app-architecture.md
+@@ -6,12 +6,17 @@ artifact. AaC/Architecture copies the artifact from the job's last successful bu
+ 
+ ## What is specific to this type
+ 
+-- **The `aac-tools` sidecar.** `arch-validate` runs in the container of `podYaml`'s `aac-tools`
+-  template ([POD-5](../guide/pod.md#pod-5)), and submits the model to the architecture service.
++- **The `aac-tools` sidecar.** The pod declares `podYaml`'s `aac-tools` template
++  ([POD-5](../guide/pod.md#pod-5)). `arch-validate` runs in its container and submits the model to
++  the architecture service.
+ - **One stage after the checkout.** The model is committed, so the build makes nothing.
+   `Validate architecture` is the gate, and it archives the files it validated.
+-- **The accepted helper.** J16's `architectureProducer(…)` is not in the library, so a producer's
+-  file is this full file ([The library](../guide/library.md#the-estates-cases)).
++- **The library's steps.** [`architectureProducer`](../reference/architectureProducer.md) carries
++  what every producer shares: the `aac-tools` container, the `arch-validate` command line and an
++  archive that AaC/Architecture collects. The file still writes out every stage and calls
++  `validate` and `archive` inside `Validate architecture`, in `script {}`
++  ([LIB-6](../guide/library.md#lib-6)). Its own value is the model files it validates and archives
++  ([LIB-3](../guide/library.md#lib-3)).
+ - **A new producer** also needs its entry in Architecture's `pipeline-producers.yaml`
+   ([A new repo](../guide/new-repo.md#recipe-the-steps), step 7).
+ 
+diff --git a/docs/pages/types/deploy-architecture.md b/docs/pages/types/deploy-architecture.md
+index d6c9709..aca14e1 100644
+--- a/docs/pages/types/deploy-architecture.md
++++ b/docs/pages/types/deploy-architecture.md
+@@ -6,8 +6,9 @@ producer's artifact. AaC/Architecture copies the artifact from the job's last su
+ 
+ ## What is specific to this type
+ 
+-- **Generate, then validate.** `Generate architecture` runs `gen-architecture --stage <stage>
+-  --producer <id>` and archives the file it writes ([GRAN-3](../guide/stage-granularity.md#gran-3)).
++- **Generate, then validate.** `Generate architecture` calls `architectureProducer.generate`,
++  which runs `gen-architecture --stage <stage> --producer <id>`, and archives the file it writes
++  ([GRAN-3](../guide/stage-granularity.md#gran-3)).
+   `Validate architecture` is the gate. A model that fails validation was archived by a failed
+   build, and AaC/Architecture never copies it.
+ - **One stage per file.** The file publishes one stage of the app, from the branch Argo CD syncs
+@@ -15,8 +16,9 @@ producer's artifact. AaC/Architecture copies the artifact from the job's last su
+   ([FILE-2](../guide/file-layout.md#file-2)).
+ - **`checkout scm`**, like every other file ([CHK-1](../guide/checkout.md#chk-1)): the branch is
+   the job's, not written in the file.
+-- **The `aac-tools` sidecar** and **the accepted helper** are as for the
+-  [app architecture producer](app-architecture.md).
++- **The `aac-tools` sidecar** and **the library's steps** are as for the
++  [app architecture producer](app-architecture.md). A deploy repo's own values are its stage and
++  its producer id.
+ 
+ ## The reference file
+ 
+diff --git a/docs/pages/types/index.md b/docs/pages/types/index.md
+index ab314ef..1bf0857 100644
+--- a/docs/pages/types/index.md
++++ b/docs/pages/types/index.md
+@@ -26,5 +26,5 @@ controller's declarative linter. A new pipeline starts from its type's reference
+   Its job is disabled and its deploy path is gone, so the type has no reference file. ANS-93
+   decides whether it is deleted or rebuilt.
+ - **DHCPApp, ElectronicsInventory, FieldnotesApp, IoTSupport and ZigbeeControl** render their
+-  `Jenkinsfile` from ModernAppTemplate's template. This guide leaves those five repos out, their
+-  architecture producers included.
++  `Jenkinsfile` from ModernAppTemplate's template, and this guide leaves those five jobs out. Their
++  architecture producers, the jobs `AaC/<App>`, are [app architecture producers](app-architecture.md).
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/ArchitectureProducerTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/ArchitectureProducerTest.java
+new file mode 100644
+index 0000000..0296251
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/ArchitectureProducerTest.java
+@@ -0,0 +1,174 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.stream.Stream;
++import org.codehaus.groovy.runtime.GStringImpl;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++import org.junit.jupiter.params.provider.ValueSource;
++
++/**
++ * What architectureProducer's steps run and archive: generateCommand and validateCommand are the
++ * shell commands generate and validate run in the aac-tools container, archivePattern is what
++ * archive hands archiveArtifacts. All three are {@code @NonCPS}, so the CPS transform leaves their
++ * bodies to run as plain Groovy here.
++ */
++class ArchitectureProducerTest {
++
++    private static GroovyClassLoader loader;
++    private static Object architectureProducer;
++    private static Method generateCommand;
++    private static Method validateCommand;
++    private static Method archivePattern;
++
++    @BeforeAll
++    static void loadArchitectureProducer() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("architectureProducer");
++        architectureProducer = type.getDeclaredConstructor().newInstance();
++        generateCommand = type.getMethod("generateCommand", Map.class);
++        validateCommand = type.getMethod("validateCommand", Map.class);
++        archivePattern = type.getMethod("archivePattern", Map.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    private static String invoke(Method step, Map<String, Object> args) throws Exception {
++        try {
++            return (String) step.invoke(architectureProducer, args);
++        } catch (InvocationTargetException e) {
++            if (e.getCause() instanceof IllegalArgumentException refused) {
++                throw refused;
++            }
++            throw e;
++        }
++    }
++
++    /** Keys and values alternate; the map keeps their order, as a Groovy map literal does. */
++    private static Map<String, Object> ordered(Object... pairs) {
++        Map<String, Object> map = new LinkedHashMap<>();
++        for (int i = 0; i < pairs.length; i += 2) {
++            map.put((String) pairs[i], pairs[i + 1]);
++        }
++        return map;
++    }
++
++    @Test
++    void generateRunsGenArchitectureForTheStageAndProducer() throws Exception {
++        assertEquals(
++                "gen-architecture --stage prd --producer charts-deploy",
++                invoke(generateCommand, ordered("stage", "prd", "producer", "charts-deploy")));
++    }
++
++    // A file may interpolate a value: "${app}-deploy" is a GString, not a String.
++    @Test
++    void anInterpolatedProducerIsAProducer() throws Exception {
++        Object producer = new GStringImpl(new Object[] {"keycloak"}, new String[] {"", "-deploy-dev"});
++        assertEquals(
++                "gen-architecture --stage dev --producer keycloak-deploy-dev",
++                invoke(generateCommand, ordered("stage", "dev", "producer", producer)));
++    }
++
++    @Test
++    void validateRunsArchValidateOnEveryFileInTheOrderGiven() throws Exception {
++        assertEquals(
++                "arch-validate backend/docs/architecture/*.yaml frontend/docs/architecture/*.yaml",
++                invoke(validateCommand, Map.of("files", List.of(
++                        "backend/docs/architecture/*.yaml", "frontend/docs/architecture/*.yaml"))));
++    }
++
++    @Test
++    void archiveTakesEveryFileAsOnePattern() throws Exception {
++        assertEquals(
++                "backend/docs/architecture/architecture.yaml,backend/docs/architecture/deployed-architecture.yaml",
++                invoke(archivePattern, Map.of("files", List.of(
++                        "backend/docs/architecture/architecture.yaml",
++                        "backend/docs/architecture/deployed-architecture.yaml"))));
++    }
++
++    // Each pattern matches only files AaC/Architecture's filter takes.
++    @ParameterizedTest
++    @ValueSource(strings = {
++        "docs/architecture/*.yaml",
++        "docs/architecture/ansible-architecture.yaml",
++        "architecture/*.yaml",
++        "backend/docs/architecture/deployed-architecture.yaml",
++        "docs/architecture/**/*.yaml",
++    })
++    void archiveTakesAPatternTheCollectorCollects(String pattern) throws Exception {
++        assertEquals(pattern, invoke(archivePattern, Map.of("files", List.of(pattern))));
++    }
++
++    // DockerImages' per-image */architecture.yaml is the case: no directory named architecture.
++    @ParameterizedTest
++    @ValueSource(strings = {
++        "*/architecture.yaml",
++        "docs/architecture/*.yml",
++        "docs/architecture/**",
++        "docs/architecture/",
++        "docs/arch*/*.yaml",
++        "architecture.yaml",
++    })
++    void archiveRefusesAPatternTheCollectorDoesNotCollect(String pattern) {
++        IllegalArgumentException refused = assertThrows(
++                IllegalArgumentException.class,
++                () -> invoke(archivePattern, Map.of("files", List.of("docs/architecture/*.yaml", pattern))));
++        assertEquals(
++                "architectureProducer.archive: AaC/Architecture does not collect '" + pattern
++                        + "': a model is a .yaml file under a directory named architecture",
++                refused.getMessage());
++    }
++
++    static Stream<Arguments> refusals() {
++        return Stream.of(
++                Arguments.of(
++                        generateCommand, Map.of("stage", "prd"),
++                        "architectureProducer.generate: producer is required"),
++                Arguments.of(
++                        generateCommand, ordered("stage", "", "producer", "charts-deploy"),
++                        "architectureProducer.generate: stage is required"),
++                Arguments.of(
++                        generateCommand, ordered("stage", "prd", "producer", "charts-deploy", "repo", "."),
++                        "architectureProducer.generate: takes stage and producer; got repo"),
++                Arguments.of(
++                        validateCommand, Map.of(),
++                        "architectureProducer.validate: files is required"),
++                Arguments.of(
++                        validateCommand, Map.of("files", List.of()),
++                        "architectureProducer.validate: files is required"),
++                Arguments.of(
++                        validateCommand, Map.of("file", List.of("docs/architecture/*.yaml")),
++                        "architectureProducer.validate: takes files; got file"),
++                Arguments.of(
++                        validateCommand, Map.of("files", "docs/architecture/*.yaml"),
++                        "architectureProducer.validate: files takes a list of paths; got 'docs/architecture/*.yaml'"),
++                Arguments.of(
++                        archivePattern, Map.of(),
++                        "architectureProducer.archive: files is required"),
++                Arguments.of(
++                        archivePattern, ordered("files", List.of("docs/architecture/*.yaml"), "fingerprint", false),
++                        "architectureProducer.archive: takes files; got fingerprint"));
++    }
++
++    @ParameterizedTest(name = "{2}")
++    @MethodSource("refusals")
++    void aCallWithAMissingEmptyOrUnknownArgumentFailsNamingIt(Method step, Map<String, Object> args, String message) {
++        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> invoke(step, args));
++        assertEquals(message, refused.getMessage());
++    }
++}
+diff --git a/vars/architectureProducer.groovy b/vars/architectureProducer.groovy
+new file mode 100644
+index 0000000..85a701d
+--- /dev/null
++++ b/vars/architectureProducer.groovy
+@@ -0,0 +1,120 @@
++/**
++ * The steps an architecture producer's stages call. `generate` and `validate` run the
++ * architecture-as-code tools in the `aac-tools` container, which the pod declares with
++ * `podYaml(templates: ['aac-tools'])`; `archive` archives the models AaC/Architecture collects.
++ * Each is a call on the var's method, so a declarative stage runs it in `script {}`:
++ *
++ *     stage('Generate architecture') {
++ *         steps {
++ *             script {
++ *                 architectureProducer.generate(stage: 'prd', producer: 'charts-deploy')
++ *                 architectureProducer.archive(files: ['docs/architecture/*.yaml'])
++ *             }
++ *         }
++ *     }
++ *
++ * Every argument is required, with no default. A missing, empty or unknown argument fails
++ * the build, and the error names it.
++ */
++
++/**
++ * Runs `gen-architecture --stage <stage> --producer <producer>`, which renders the deploy repo's
++ * chart for that stage and writes docs/architecture/<producer>.yaml.
++ *
++ * @param stage     The stage the file publishes: config/<stage>/values.yaml.
++ * @param producer  The producer id, as Architecture's pipeline-producers.yaml registers it.
++ */
++def generate(Map args) {
++    String command = generateCommand(args)
++    container('aac-tools') {
++        sh command
++    }
++}
++
++/**
++ * Runs `arch-validate` on the files, which submits each to the architecture service.
++ *
++ * @param files  Paths or shell globs, relative to the workspace.
++ */
++def validate(Map args) {
++    String command = validateCommand(args)
++    container('aac-tools') {
++        sh command
++    }
++}
++
++/**
++ * Archives the files, fingerprinted, as the producer's artifact.
++ *
++ * @param files  Ant patterns, relative to the workspace, each of which AaC/Architecture collects.
++ */
++def archive(Map args) {
++    archiveArtifacts artifacts: archivePattern(args), fingerprint: true
++}
++
++@NonCPS
++String generateCommand(Map args) {
++    Map<String, Object> given = arguments('generate', args, ['stage', 'producer'])
++    return "gen-architecture --stage ${given.stage} --producer ${given.producer}".toString()
++}
++
++@NonCPS
++String validateCommand(Map args) {
++    return 'arch-validate ' + paths('validate', args).join(' ')
++}
++
++/**
++ * The files as one archiveArtifacts pattern. AaC/Architecture copies from a producer's last
++ * successful build each .yaml file under a directory named architecture, at any depth, and nothing
++ * else: a pattern outside that archives a model the collector never sees.
++ */
++@NonCPS
++String archivePattern(Map args) {
++    List<String> patterns = paths('archive', args)
++    patterns.each { String file ->
++        if (!collected(file)) {
++            throw new IllegalArgumentException(
++                "architectureProducer.archive: AaC/Architecture does not collect '${file}': a model is a .yaml file under a directory named architecture")
++        }
++    }
++    return patterns.join(',')
++}
++
++/**
++ * Whether every file the pattern matches lies under a directory named `architecture` and ends in
++ * `.yaml`.
++ */
++@NonCPS
++boolean collected(String pattern) {
++    List<String> segments = pattern.split('/') as List
++    return segments.size() > 1 && segments[0..-2].contains('architecture') && segments[-1].endsWith('.yaml')
++}
++
++@NonCPS
++List<String> paths(String step, Map args) {
++    def given = arguments(step, args, ['files']).files
++    if (!(given instanceof List)) {
++        throw new IllegalArgumentException("architectureProducer.${step}: files takes a list of paths; got '${given}'")
++    }
++    return given.collect { it.toString() }
++}
++
++/**
++ * `args` with every key a String, once it holds each of `names`, non-empty, and nothing else.
++ */
++@NonCPS
++Map<String, Object> arguments(String step, Map args, List<String> names) {
++    Map<String, Object> given = [:]
++    args.each { key, value -> given[key.toString()] = value }
++
++    def unknown = given.keySet() - names
++    if (unknown) {
++        throw new IllegalArgumentException("architectureProducer.${step}: takes ${names.join(' and ')}; got ${unknown.join(', ')}")
++    }
++    names.each { name ->
++        if (!given[name]) {
++            throw new IllegalArgumentException("architectureProducer.${step}: ${name} is required")
++        }
++    }
++    return given
++}
+diff --git a/vars/architectureProducer.md b/vars/architectureProducer.md
+new file mode 100644
+index 0000000..54eed8a
+--- /dev/null
++++ b/vars/architectureProducer.md
+@@ -0,0 +1,96 @@
++# architectureProducer
++
++The steps an architecture producer's stages call. `generate` and `validate` run the
++architecture-as-code tools in the `aac-tools` container, and `archive` archives the models
++AaC/Architecture collects. The steps carry what is the same in every producer: the container the
++tools run in, the tools' command lines, and an archive that the collector's filter matches. A
++value that differs per repo is an argument with no default: the stage and the producer id a deploy
++repo generates, and the model files a producer validates and archives.
++
++The pod declares the `aac-tools` container with [`podYaml`](podYaml.md)'s `aac-tools` template.
++Each step is a call on the var's method, so a declarative stage runs it in `script {}`. The file
++still writes out its every stage; the steps go inside them.
++
++```groovy
++agent {
++    kubernetes {
++        inheritFrom 'jenkins-agent'
++        yaml podYaml(templates: ['aac-tools'])
++    }
++}
++
++stages {
++    stage('Checkout') {
++        steps {
++            checkout scm
++        }
++    }
++
++    stage('Generate architecture') {
++        steps {
++            script {
++                architectureProducer.generate(stage: 'prd', producer: 'charts-deploy')
++                architectureProducer.archive(files: ['docs/architecture/*.yaml'])
++            }
++        }
++    }
++
++    stage('Validate architecture') {
++        steps {
++            script {
++                architectureProducer.validate(files: ['docs/architecture/*.yaml'])
++            }
++        }
++    }
++}
++```
++
++## Steps
++
++Every argument is required. A missing argument, an empty one or one the step does not take fails
++the build, and the error names it.
++
++### generate
++
++`architectureProducer.generate(stage: '<stage>', producer: '<id>')` runs
++`gen-architecture --stage <stage> --producer <id>` in the `aac-tools` container. gen-architecture
++renders the deploy repo's chart the way Argo CD renders that stage, reads the repo's judgment
++layer, `architecture.yaml` at the repo root, and writes `docs/architecture/<id>.yaml`.
++
++| Argument   | What it is                                                                          |
++| ---------- | ----------------------------------------------------------------------------------- |
++| `stage`    | The stage the file publishes: it names `config/<stage>/values.yaml`.                |
++| `producer` | The producer id, as Architecture's `pipeline-producers.yaml` registers it.          |
++
++### validate
++
++`architectureProducer.validate(files: [...])` runs `arch-validate` on the files in the `aac-tools`
++container. arch-validate submits each file to the architecture service, and a model the service
++rejects fails the build.
++
++| Argument | What it is                                                                                     |
++| -------- | ---------------------------------------------------------------------------------------------- |
++| `files`  | A list of paths or shell globs, relative to the workspace, passed to `arch-validate` in order. |
++
++### archive
++
++`architectureProducer.archive(files: [...])` archives the files, fingerprinted, as the producer's
++artifact. AaC/Architecture copies from a producer's last successful build every `.yaml` file under
++a directory named `architecture`, at any depth, and nothing else. So each entry must be a pattern
++whose last segment ends in `.yaml`, under a path segment that is exactly `architecture`:
++`docs/architecture/*.yaml` passes, `*/architecture.yaml` fails the build before anything is
++archived. A pattern that matches no file fails the build too.
++
++| Argument | What it is                                                         |
++| -------- | ------------------------------------------------------------------ |
++| `files`  | A list of Ant patterns, relative to the workspace.                 |
++
++The call goes in the stage that makes the artifact ([GRAN-3](../guide/stage-granularity.md#gran-3)):
++`Generate architecture` for a model the build generates, and the stage that validates it for a
++committed model.
++
++## Internals
++
++`generateCommand`, `validateCommand`, `archivePattern`, `paths`, `arguments` and `collected` check
++the arguments and build what the steps run. They are not part of what `architectureProducer`
++offers a Jenkinsfile.

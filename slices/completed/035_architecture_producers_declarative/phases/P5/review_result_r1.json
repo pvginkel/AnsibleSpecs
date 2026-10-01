@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The review's records type the five apps' producers and PipelinesDeploy's, count 78, and carry dated J01/J16/J24/Q9 status and the 035 'where things stand'; every fact checked against the 78 committed producer files and Appendix A holds. One advisory: the J16 note states the ~40-line estimate as the files' length.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "report.md J16 note says each producer is about 40 lines; 51 of the 78 committed files are 62 lines or more"}]}

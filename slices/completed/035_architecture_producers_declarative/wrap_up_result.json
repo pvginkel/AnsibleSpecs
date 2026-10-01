@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "B1 fixed in Ansible 2701b24: argo-migrate's producer template is now the declarative deploy-architecture form on architectureProducer's steps; the root test gate is green. E4 and E5 are relabelled as events that describe no problem, because the prd pushes and rollouts the test phase made under Ruling P1 all went green and prd is healthy, so both now go to the record.",
+ "fixed": ["B1"], "folded": [], "cards": [], "left": [],
+ "relabelled": ["E4", "E5"]}
