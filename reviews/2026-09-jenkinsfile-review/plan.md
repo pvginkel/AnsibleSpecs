@@ -83,7 +83,10 @@ subagent.
   Both sit where the second slice works. ANS-84 stays open for the second slice.
 - **Next cut, once 035 closes: the second slice**, the build and deploy pipelines to declarative,
   cut from `handovers/triage_2026-09-30.md` § Cut: slice 035. It absorbs ANS-84. The operator
-  chooses the cut. *(10-01, after 035)* Put to the operator.
+  chooses the cut. *(10-01, after 035)* Cut as listed ("Agreed. Go."): slice **036** (ANS-181),
+  `036_build_and_deploy_pipelines_declarative`, with J14 inside it, 035's P6 and P7 folded in,
+  and a ~60-minute "nodes offline" bound with the slot counter read before any reset. ANS-84 is
+  closed as absorbed under ANS-181. Next step: `/dev:plan-slice` on 036.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
