@@ -804,10 +804,12 @@ accept
 > (LIB-3). All 78 producers validate and archive through it, and the 50 deploy-repo producers
 > also generate through it. IoTSupport keeps its own generator in its file, and its `withVault`
 > now wraps only that generator's `sh`. That is the part of J17 this entry depended on; the rest
-> of J17 belongs to the second slice. Each producer stays a full declarative file of about 40
-> lines: header, library line, and `pipeline {}` with its `options{}`, `triggers{}` and stages
-> written out. The operator accepted that length. The guide's two architecture reference files
-> call the steps, its library page lists J16 as "in the library", and none of its rules changed.
+> of J17 belongs to the second slice. Each producer stays a full declarative file: header,
+> library line, and `pipeline {}` with its `options{}`, `triggers{}` and stages written out.
+> Ruling D2 put that at about 40 lines, and the operator accepted the length. The committed files
+> run 47 to 93 lines, 62 for 48 of the 50 deploy-repo files. The guide's two architecture
+> reference files call the steps, its library page lists J16 as "in the library", and none of its
+> rules changed.
 
 ### J17 — Drop the inert `containerEnvVar` secret forwarding; scope `withVault`
 
