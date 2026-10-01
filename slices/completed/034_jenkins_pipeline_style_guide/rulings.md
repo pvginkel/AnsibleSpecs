@@ -19,7 +19,7 @@ ModernAppTemplate repos.
 
 | Ruling | What the guide carries | Source |
 |---|---|---|
-| J08 | Declarative only (`pipeline {}`), because every pipeline migrates. Conditional stages use `when {}` | report.md J08, 2026-09-30: "migrate all" |
+| J08 | Declarative only (`pipeline {}`), because every pipeline migrates. Conditional stages use `when {}` | report.md J08, 2026-09-30: "migrate all"; `when {}` (GRAN-8) ruled 2026-10-01, close-out P7: "I'm not sure, but I'll follow your recommendation." Claude recommended accepting GRAN-8 as written |
 | J24 | `checkout scm` for the job's own repo; an explicit `git` only for other repos | J24: accept |
 | J23 | One load line, `library identifier: 'JenkinsPipelineUtils', changelog: false`. It floats on `main`, with no pin | J23: accept. "See, this is something we need in the style guide." |
 | J01 | Job properties are declared in the file: in declarative, `options {}` and `triggers {}`. The standard is `disableConcurrentBuilds()`, and exceptions are ruled per job (review plan §2). Files declare no retention, because the global build discarder covers it | J01: accept; Appendix A R3: "There are exceptions."; J13: "reject. I configured a global build discarder. It's fine." |
@@ -549,7 +549,7 @@ library identifier: 'JenkinsPipelineUtils', changelog: false
   - J19, the iac dev-stage helper: "Keep the duplication; the style guide says it is
     deliberate."
   - J01's `jobDefaults()` var: it "would hide exactly the lines the move exists to surface".
-  - Theme E's registry-host constant: it would make 28 files "less readable to save nothing".
+  - Theme E's registry-host constant: it would make 28 files "less readable to save nothing". Operator, 2026-10-01 (close-out P7): "I agree not introducing a constant."
 
 **A. A count test.** Code goes into the library when the same code sits in the files of three or
 more repos and a fix must reach all of them. Otherwise it stays in the file.
