@@ -289,7 +289,7 @@ Record:
 - types/index.md: the five apps' `AaC/<App>` jobs are app architecture producers; their build
   `Jenkinsfile`s stay untyped. Docs lint: all 14 examples and the Jenkinsfile validated.
 
-### P2 — The 50 deploy-repo producers are declarative files on the helper's steps
+### P2 — The 50 deploy-repo producers are declarative files on the helper's steps ✅ DONE 2026-10-01
 
 Target: root
 
