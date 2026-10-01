@@ -450,7 +450,7 @@ Record:
   stays out of both, said by a comment. Python is `[image: 'registry:5000/python', name: 'python']`.
 - Linter 3/3 "Jenkinsfile successfully validated."; an unknown option was rejected.
 
-### P5 — The review's records show the producers migrated
+### P5 — The review's records show the producers migrated ✅ DONE 2026-10-01
 
 Target: ../AnsibleSpecs
 
