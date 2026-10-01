@@ -261,6 +261,34 @@ The library's compile test picks up a new var by itself. The docs component's li
 `JENKINS_TOKEN`, which the pod has. Run it before handing back, because the per-phase gate runs
 only the tests (the strict docs build and `check_site.py`).
 
+**Done (P1).** `vars/architectureProducer.groovy` and its page `vars/architectureProducer.md`
+are in the library, tested by `ArchitectureProducerTest`; both architecture reference files call
+the steps; the guide pages are updated (JenkinsPipelineUtils `5c39ece` on `phase/035-P1`).
+
+Later phases:
+- P2–P4: three steps, each in `script {}`, every argument required, no default, no
+  `container()` around them (the pod still declares `podYaml(templates: ['aac-tools'])`):
+  `architectureProducer.generate(stage: 'prd', producer: '<id>')`,
+  `architectureProducer.validate(files: [...])`, `architectureProducer.archive(files: [...])`.
+- P2: `Generate architecture` = `generate` + `archive(files: ['docs/architecture/*.yaml'])`;
+  `Validate architecture` = `validate(files: ['docs/architecture/*.yaml'])`, the same glob in
+  every deploy file.
+- P3/P4: an app's Validate stage = `validate` + `archive`, same `files`. Monorepos pass
+  workspace-relative paths (`backend/docs/architecture/*.yaml`), no `dir()`; ElectronicsInventory's
+  archive, outside any stage today, goes into each Validate stage.
+- P4: `archive` refuses a pattern with no path segment exactly `architecture` or a last segment
+  not ending `.yaml` (DockerImages archives its collected copies, never `*/architecture.yaml`).
+
+Record:
+- `archive` is its own step, not folded into `generate`, so GRAN-3 stays checkable from the file;
+  its check is the collector's filter `**/architecture/**/*.yaml`.
+- Argument checks and command strings are `@NonCPS` (`generateCommand`, `validateCommand`,
+  `archivePattern`), throwing `IllegalArgumentException` that names the argument, as `podYaml`.
+- library.md: J16 row "28 app and 50 deploy-repo files", contract test, "in the library"; the
+  sentence after the table now names only J14's firmware reference file. No rule section changed.
+- types/index.md: the five apps' `AaC/<App>` jobs are app architecture producers; their build
+  `Jenkinsfile`s stay untyped. Docs lint: all 14 examples and the Jenkinsfile validated.
+
 ### P2 — The 50 deploy-repo producers are declarative files on the helper's steps
 
 Target: root
