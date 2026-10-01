@@ -94,9 +94,13 @@
       "area": "R4 \u2014 the central update reads the contract from --help",
       "description": "A central architecture update session on a deploy repo runs `gen-architecture --help` from the Architecture environment's aac-tools toolchain as the judgment layer's schema.",
       "owed_after": "the operator's restart of the Architecture KubeCoder environment and the release of central update runs (ARCH-14)",
-      "verdict": "owed",
-      "rationale": "Needs the operator restart of the Architecture environment and central update runs (ARCH-14) (close-out A3).",
+      "verdict": "pass",
+      "rationale": "Settled 2026-10-01 on the operator's ruling (ANS-180), without an observed session. The environment has been restarted: `cexec aac-tools gen-architecture --help` prints the contract from the Architecture environment. ARCH-14 is done, so central update runs are no longer held. The update agent is told to run that command (V08). No session has run it yet: a fleet.py scan the same day found every stale deploy producer carrying only housekeeping commits (the slice 035 Jenkinsfile.architecture rewrite, the slice 026 .architecturerc wording) and no build reporting a gap. Triage would therefore skip them, and the operator ruled that waiting for an organic session is not worth holding the criterion open.",
       "evidence": [
+        "Architecture .claude/agents/update-architecture.md:49",
+        "cexec aac-tools gen-architecture --help (Architecture environment, 2026-10-01)",
+        "fleet.py scan 2026-10-01",
+        "ANS-180",
         "close-out A3"
       ]
     },
