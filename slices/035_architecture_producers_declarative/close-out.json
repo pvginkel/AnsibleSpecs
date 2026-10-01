@@ -56,6 +56,20 @@
           "text": [
             "Under Ruling D2 as reversed at plan review r1, each architecture type's reference after 035 is a full declarative file whose stages call architectureProducer's steps. It is not a one-call file. The manual's gap is the same, measured against that file instead."
           ]
+        },
+        {
+          "by": "doc-writer, doc phase r1",
+          "date": "2026-10-01",
+          "text": [
+            "Architecture's USAGE.md:137-140 (§ arch-validate CLI) also says producers run arch-validate in Jenkins 'in the container containerTemplates.aac_tools declares'. After 035 no Jenkinsfile in the estate calls containerTemplates.aac_tools: every producer declares podYaml(templates: ['aac-tools']) and runs the tools through architectureProducer's steps. Same repo and same fix as the manual and the seed-architecture skill."
+          ]
+        },
+        {
+          "by": "doc-writer, doc phase r1",
+          "date": "2026-10-01",
+          "text": [
+            "Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools'])."
+          ]
         }
       ],
       "wrap_up": null,
@@ -387,6 +401,60 @@
         "signal": "none"
       },
       "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P6",
+      "kind": "prose",
+      "grade": "cosmetic",
+      "headline": "KubeCoder docs/operations/pipeline-dependencies.md: names Jenkinsfile.architecture's stage('Architecture'), which the producer no longer has",
+      "body": [
+        "docs/operations/pipeline-dependencies.md:27 says the architecture validator is reached through `Jenkinsfile.architecture`'s `stage('Architecture')`, which runs `arch-validate` in the `aac-tools` image. Since slice 035 (KubeCoder 154cd97b) the producer is a declarative file whose stages are `Checkout` and `Validate architecture`, and the latter calls `architectureProducer.validate` and `archive` from JenkinsPipelineUtils, which run `arch-validate` in the `aac-tools` container. KubeCoder is not a diff row of this slice, so the doc phase leaves the line to the repo."
+      ],
+      "consequence": "none — a reader of KubeCoder's dependency table looks for a stage the file no longer has; the dependency itself is stated correctly.",
+      "evidence": "read",
+      "author": "doc-writer, doc phase, round 1, /work/scratch/KubeCoder/docs/operations/pipeline-dependencies.md:27 against /work/scratch/KubeCoder/Jenkinsfile.architecture",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "KubeCoder"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P7",
+      "kind": "prose",
+      "grade": "cosmetic",
+      "headline": "ArgoCDTools README: says Jenkins takes the aac-tools image through containerTemplates.aac_tools, which no Jenkinsfile calls after 035",
+      "body": [
+        "README.md:283-285 says `aac-tools` is taken floating, and that 'the shared pipeline library's `containerTemplates.aac_tools` names it with no tag and pulls it on every build'. After slice 035 no Jenkinsfile in the estate calls `containerTemplates.aac_tools`: every architecture producer declares the image with `podYaml(templates: ['aac-tools'])`, whose template is also untagged (`registry:5000/aac-tools`, JenkinsPipelineUtils vars/podYaml.groovy). The describable is retired by the second slice. ArgoCDTools is not a diff row of this slice, so the doc phase leaves the line to the repo."
+      ],
+      "consequence": "none — the README names a library call no pipeline uses; the floating-tag fact it states still holds through podYaml's template.",
+      "evidence": "read",
+      "author": "doc-writer, doc phase, round 1, /work/ArgoCDTools/README.md:283-285 against JenkinsPipelineUtils vars/podYaml.groovy and the 78 producer files",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [
+        {
+          "by": "doc-writer, doc phase r1",
+          "date": "2026-10-01",
+          "text": [
+            "Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools'])."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
