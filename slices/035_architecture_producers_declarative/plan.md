@@ -219,7 +219,7 @@ review's records in AnsibleSpecs.
 - prd root — the one-go push of every producer repo the slice touches rolls prd apps and re-flashes devices through their own builds (Ruling D1, Ruling P1)
 - prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)
 
-### P1 — `architectureProducer`'s steps are in the library, and the architecture types' reference files call them
+### P1 — `architectureProducer`'s steps are in the library, and the architecture types' reference files call them ✅ DONE 2026-10-01
 
 Target: ../JenkinsPipelineUtils
 
