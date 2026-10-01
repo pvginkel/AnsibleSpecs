@@ -161,7 +161,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 1 (JenkinsPipelineUtils 0d640cf): the sentence now says a call fails only when its entries together match no file, and that with several entries an empty one is skipped; kc project test docs (mkdocs --strict, check_site.py) re-run green",
+        "by": "consult 1",
+        "date": "2026-10-01",
+        "commit": "0d640cf"
+      },
       "ruling": null
     },
     {
@@ -212,7 +217,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 1 (AnsibleSpecs d878907): the J16 note keeps Ruling D2's ~40-line estimate as the estimate and gives the measured 47 to 93 lines, 62 for 48 deploy-repo files (wc -l over all 78 files re-run)",
+        "by": "consult 1",
+        "date": "2026-10-01",
+        "commit": "d878907"
+      },
       "ruling": null
     },
     {
