@@ -1,7 +1,10 @@
 {
   "store": 1,
   "slice": "035_architecture_producers_declarative",
-  "closed": null,
+  "closed": {
+    "date": "2026-10-01",
+    "words": "Yes"
+  },
   "entries": [
     {
       "id": "P1",
@@ -190,8 +193,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P3",
@@ -299,8 +311,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E2",
@@ -328,8 +349,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E3",
@@ -353,8 +383,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E4",
@@ -396,8 +435,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E5",
@@ -439,8 +487,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B3",
@@ -501,8 +558,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P6",
@@ -524,8 +590,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P7",
@@ -555,8 +630,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Yes",
+        "did": null,
+        "date": "2026-10-01"
+      }
     }
   ]
 }

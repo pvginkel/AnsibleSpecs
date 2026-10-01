@@ -6,166 +6,9 @@
 Run: 2026-10-01 12:22 → 14:35 · 5 phases · 3 bail-outs · 1 test round · doc phase done · wrap-up
 landed · $37.86 (planner 34 %, research 4 %, rework 0 %)
 
-## Closed
-
-### B2 — JenkinsPipelineUtils architectureProducer.archive: its collector check accepts a comma-joined entry, so an uncollected pattern can slip past it · minor
-
-<details><summary>body</summary>
-
-`collected()` splits an entry on `/` only (`vars/architectureProducer.groovy:88-90`). `archivePattern` joins the entries with `,` (`:80`), and `archiveArtifacts` splits on commas. So `files: ['docs/architecture/a.yaml,*/architecture.yaml']` passes the check, and `*/architecture.yaml` is archived where AaC/Architecture never looks. That is the DockerImages case the check exists to refuse (`vars/architectureProducer.md:80-81`). No producer calls the step that way yet. ElectronicsInventory's current archive is one comma-joined string (`Jenkinsfile.architecture:39`), so a hand copy could produce such an entry, but both of its halves are collected.
-
-</details>
-
-**Consequence:** A producer that passes a comma-joined entry can archive a model the collector never collects, and nothing refuses it.
-
-**Triage:** defect · needs a fault · degrades · silent · fix unknown · in JenkinsPipelineUtils
-**Provenance:** read — code-reviewer, P1, round 1, phases/P1/code_review_r1.md F1
-**Route:** closed — it needs a fault
-**Disposition:**
-
-### P6 — KubeCoder docs/operations/pipeline-dependencies.md: names Jenkinsfile.architecture's stage('Architecture'), which the producer no longer has · cosmetic
-
-<details><summary>body</summary>
-
-docs/operations/pipeline-dependencies.md:27 says the architecture validator is reached through `Jenkinsfile.architecture`'s `stage('Architecture')`, which runs `arch-validate` in the `aac-tools` image. Since slice 035 (KubeCoder 154cd97b) the producer is a declarative file whose stages are `Checkout` and `Validate architecture`, and the latter calls `architectureProducer.validate` and `archive` from JenkinsPipelineUtils, which run `arch-validate` in the `aac-tools` container. KubeCoder is not a diff row of this slice, so the doc phase leaves the line to the repo.
-
-</details>
-
-**Consequence:** none — a reader of KubeCoder's dependency table looks for a stage the file no longer has; the dependency itself is stated correctly.
-
-**Triage:** prose · shows in normal use · no impact · fix is one edit · in KubeCoder
-**Provenance:** read — doc-writer, doc phase, round 1, /work/scratch/KubeCoder/docs/operations/pipeline-dependencies.md:27 against /work/scratch/KubeCoder/Jenkinsfile.architecture
-**Route:** closed — the fix lives in KubeCoder, which the slice did not touch
-**Disposition:**
-
-### P7 — ArgoCDTools README: says Jenkins takes the aac-tools image through containerTemplates.aac_tools, which no Jenkinsfile calls after 035 · cosmetic
-
-<details><summary>body</summary>
-
-README.md:283-285 says `aac-tools` is taken floating, and that 'the shared pipeline library's `containerTemplates.aac_tools` names it with no tag and pulls it on every build'. After slice 035 no Jenkinsfile in the estate calls `containerTemplates.aac_tools`: every architecture producer declares the image with `podYaml(templates: ['aac-tools'])`, whose template is also untagged (`registry:5000/aac-tools`, JenkinsPipelineUtils vars/podYaml.groovy). The describable is retired by the second slice. ArgoCDTools is not a diff row of this slice, so the doc phase leaves the line to the repo.
-
-doc-writer, doc phase r1, 2026-10-01 — Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools']).
-
-</details>
-
-**Consequence:** none — the README names a library call no pipeline uses; the floating-tag fact it states still holds through podYaml's template.
-
-**Triage:** prose · shows in normal use · no impact · fix is one edit · in ArgoCDTools
-**Provenance:** read — doc-writer, doc phase, round 1, /work/ArgoCDTools/README.md:283-285 against JenkinsPipelineUtils vars/podYaml.groovy and the 78 producer files
-**Route:** closed — the fix lives in ArgoCDTools, which the slice did not touch
-**Disposition:**
+Closed: 2026-10-01 — Yes
 
 ## Record
-
-### E1 — Run stopped (protocol_failure) in P5
-
-<details><summary>kept for the record</summary>
-
-The driver's bail (`protocol_failure`), as it recorded it:
-
-> the driver's own run record was committed onto phase/035-P5 (a `git add -A` in /work/AnsibleSpecs): slices/035_architecture_producers_declarative/phases/P5/code_review_r1.md, slices/035_architecture_producers_declarative/phases/P5/review_result_r1.json. Rewrite the branch without those paths, then resume.
-
-Stopped 2026-10-01 13:08; resumed 2026-10-01 13:09.
-
-**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E2 — Run stopped (protocol_failure) outside any phase
-
-<details><summary>kept for the record</summary>
-
-The driver's bail (`protocol_failure`), as it recorded it:
-
-> git checkout phase/035-P5 failed:
-> error: Your local changes to the following files would be overwritten by checkout:
-> 	slices/035_architecture_producers_declarative/close-out.json
-> Please commit your changes or stash them before you switch branches.
-> Aborting
-
-Stopped 2026-10-01 13:09; resumed 2026-10-01 13:09.
-
-**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E3 — Run stopped (lost_work) in P5
-
-<details><summary>kept for the record</summary>
-
-The driver's bail (`lost_work`), as it recorded it:
-
-> commit 638d9cbe3a39 is on P5's record as work the driver saw on the branch, and phase/035-P5 in /work/AnsibleSpecs does not carry it. Something rebuilt the branch or replaced the checkout under the run; the loop will not carry on over the top of a commit it cannot account for. Check that no second driver is on this slice (each holds run.lock), then either restore the branch or clear the phase's record in state.json (status, stage, gate_green_commit, reviewed_head) to run it again from the executor.
-
-Stopped 2026-10-01 13:09; resumed 2026-10-01 13:09.
-
-**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E4 — prd authorized by ruling: root
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- prd root — the one-go push of every producer repo the slice touches rolls prd apps and re-flashes devices through their own builds (Ruling D1, Ruling P1)`
-
-wrap-up, 2026-10-01 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json (V05, V08, V09): it pushed JenkinsPipelineUtils first, then the 77 repos in one go with AaC/Architecture paused; all 33 non-AaC jobs the push started (the prd app rollouts, the firmware re-flashes) finished SUCCESS, and the collector was re-enabled and built once green (#2378). That is the prd churn Ruling D1 accepted, with nothing that went wrong in it; AaC/IoTSupport's red build is B3's own entry. Live on 2026-10-01 after the run: every pod on prd is Running or Completed, and every Argo CD application is Synced and Healthy except argocd-prd, whose autoSync is off by D3. The event describes no problem.
-
-**Consequence:** the test phase was told pushing and rolling prd for root is its own; what it did there is in its verdict and verification.json.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E5 — prd authorized by ruling: ../JenkinsPipelineUtils
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)`
-
-wrap-up, 2026-10-01 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json (V03, V08, V13): JenkinsPipelineUtils was pushed first (0d640cf, 11:23:01), its site build pinned the docs into PipelinesDeploy, and AaC/PipelinesDeploy built green. Live on 2026-10-01 after the run: https://pipelines.home/docs/ answers 200, and its types/deploy-architecture page carries the architectureProducer steps, so the slice's site reached prd. The event describes no problem.
-
-**Consequence:** the test phase was told pushing and rolling prd for ../JenkinsPipelineUtils is its own; what it did there is in its verdict and verification.json.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E6 — Churn after the one-go push: five builds sat 38 minutes on 'nodes offline' while the k8s cloud cap was contended, not leaked
-
-<details><summary>kept for the record</summary>
-
-After the push of 77 repos the queue held up to 58 'All nodes of label … are offline' items. Five of them were 38 minutes old with the queue otherwise draining, so I read the Kubernetes provisioning counter via the Script Console (read-only): cloudCounts 5 equalled the 5 live KubernetesSlave nodes on three samples, so no slot leak and no reset was needed. The cloud's containerCap read 5 on one sample and 3 on the next two. Queue and executors reached zero at 12:14 UTC, about 50 minutes after the push, and the stuck items ran.
-
-**Consequence:** none
-
-**Triage:** event · trigger unknown · no impact
-**Provenance:** witnessed — test-agent, round 1, /scriptText samples 11:56-11:57 UTC
-**Route:** the record
-**Disposition:**
-
-</details>
 
 ### ~~A1 — Settle V14 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …~~ — V14 settled as pass in verification.json: AaC/KubeCoderDeploy #11 built origin/prd cb2011e0 green with the migrated file; struck by the operator's ruling
 
@@ -202,6 +45,20 @@ Ansible
 
 </details>
 
+### ~~B2 — JenkinsPipelineUtils architectureProducer.archive: its collector check accepts a comma-joined entry, so an uncollected pattern can slip past it · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`collected()` splits an entry on `/` only (`vars/architectureProducer.groovy:88-90`). `archivePattern` joins the entries with `,` (`:80`), and `archiveArtifacts` splits on commas. So `files: ['docs/architecture/a.yaml,*/architecture.yaml']` passes the check, and `*/architecture.yaml` is archived where AaC/Architecture never looks. That is the DockerImages case the check exists to refuse (`vars/architectureProducer.md:80-81`). No producer calls the step that way yet. ElectronicsInventory's current archive is one comma-joined string (`Jenkinsfile.architecture:39`), so a hand copy could produce such an entry, but both of its halves are collected.
+
+**Consequence:** A producer that passes a comma-joined entry can archive a model the collector never collects, and nothing refuses it.
+
+**Triage:** defect · needs a fault · degrades · silent · fix unknown · in JenkinsPipelineUtils
+**Provenance:** read — code-reviewer, P1, round 1, phases/P1/code_review_r1.md F1
+**Disposition:** Yes
+
+</details>
+
 ### ~~B3 — IoTSupport: AaC/IoTSupport's deployed-architecture.yaml fails arch-validate — /devices/3/stats/firmware is Infinity, not a string~~ — carded as IS-1 (project IS created for IoTSupport on the operator's word); struck by the operator's ruling
 
 <details><summary>struck — kept for the record</summary>
@@ -215,6 +72,110 @@ close-out session, 2026-10-01 — Still red: AaC/IoTSupport last build is #44 (F
 **Triage:** defect · shows in normal use · degrades · loud · fix unknown · in IoTSupport
 **Provenance:** witnessed — test-agent, round 1, AaC/IoTSupport builds #43 and #44 console logs
 **Disposition:** File — carded as IS-1 (project IS created for IoTSupport on the operator's word)
+
+</details>
+
+### ~~E1 — Run stopped (protocol_failure) in P5~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The driver's bail (`protocol_failure`), as it recorded it:
+
+> the driver's own run record was committed onto phase/035-P5 (a `git add -A` in /work/AnsibleSpecs): slices/035_architecture_producers_declarative/phases/P5/code_review_r1.md, slices/035_architecture_producers_declarative/phases/P5/review_result_r1.json. Rewrite the branch without those paths, then resume.
+
+Stopped 2026-10-01 13:08; resumed 2026-10-01 13:09.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** Yes
+
+</details>
+
+### ~~E2 — Run stopped (protocol_failure) outside any phase~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The driver's bail (`protocol_failure`), as it recorded it:
+
+> git checkout phase/035-P5 failed:
+> error: Your local changes to the following files would be overwritten by checkout:
+> 	slices/035_architecture_producers_declarative/close-out.json
+> Please commit your changes or stash them before you switch branches.
+> Aborting
+
+Stopped 2026-10-01 13:09; resumed 2026-10-01 13:09.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** Yes
+
+</details>
+
+### ~~E3 — Run stopped (lost_work) in P5~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The driver's bail (`lost_work`), as it recorded it:
+
+> commit 638d9cbe3a39 is on P5's record as work the driver saw on the branch, and phase/035-P5 in /work/AnsibleSpecs does not carry it. Something rebuilt the branch or replaced the checkout under the run; the loop will not carry on over the top of a commit it cannot account for. Check that no second driver is on this slice (each holds run.lock), then either restore the branch or clear the phase's record in state.json (status, stage, gate_green_commit, reviewed_head) to run it again from the executor.
+
+Stopped 2026-10-01 13:09; resumed 2026-10-01 13:09.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** Yes
+
+</details>
+
+### ~~E4 — prd authorized by ruling: root~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- prd root — the one-go push of every producer repo the slice touches rolls prd apps and re-flashes devices through their own builds (Ruling D1, Ruling P1)`
+
+wrap-up, 2026-10-01 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json (V05, V08, V09): it pushed JenkinsPipelineUtils first, then the 77 repos in one go with AaC/Architecture paused; all 33 non-AaC jobs the push started (the prd app rollouts, the firmware re-flashes) finished SUCCESS, and the collector was re-enabled and built once green (#2378). That is the prd churn Ruling D1 accepted, with nothing that went wrong in it; AaC/IoTSupport's red build is B3's own entry. Live on 2026-10-01 after the run: every pod on prd is Running or Completed, and every Argo CD application is Synced and Healthy except argocd-prd, whose autoSync is off by D3. The event describes no problem.
+
+**Consequence:** the test phase was told pushing and rolling prd for root is its own; what it did there is in its verdict and verification.json.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
+**Disposition:** Yes
+
+</details>
+
+### ~~E5 — prd authorized by ruling: ../JenkinsPipelineUtils~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)`
+
+wrap-up, 2026-10-01 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json (V03, V08, V13): JenkinsPipelineUtils was pushed first (0d640cf, 11:23:01), its site build pinned the docs into PipelinesDeploy, and AaC/PipelinesDeploy built green. Live on 2026-10-01 after the run: https://pipelines.home/docs/ answers 200, and its types/deploy-architecture page carries the architectureProducer steps, so the slice's site reached prd. The event describes no problem.
+
+**Consequence:** the test phase was told pushing and rolling prd for ../JenkinsPipelineUtils is its own; what it did there is in its verdict and verification.json.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
+**Disposition:** Yes
+
+</details>
+
+### ~~E6 — Churn after the one-go push: five builds sat 38 minutes on 'nodes offline' while the k8s cloud cap was contended, not leaked~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+After the push of 77 repos the queue held up to 58 'All nodes of label … are offline' items. Five of them were 38 minutes old with the queue otherwise draining, so I read the Kubernetes provisioning counter via the Script Console (read-only): cloudCounts 5 equalled the 5 live KubernetesSlave nodes on three samples, so no slot leak and no reset was needed. The cloud's containerCap read 5 on one sample and 3 on the next two. Queue and executors reached zero at 12:14 UTC, about 50 minutes after the push, and the stuck items ran.
+
+**Consequence:** none
+
+**Triage:** event · trigger unknown · no impact
+**Provenance:** witnessed — test-agent, round 1, /scriptText samples 11:56-11:57 UTC
+**Disposition:** Yes
 
 </details>
 
@@ -296,5 +257,35 @@ reviews/2026-09-jenkinsfile-review/report.md:807-809 (J16's Delivered note, adde
 **Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in AnsibleSpecs
 **Provenance:** read — code-reviewer, P5, r1, phases/P5/code_review_r1.md F1
 **Disposition:**
+
+</details>
+
+### ~~P6 — KubeCoder docs/operations/pipeline-dependencies.md: names Jenkinsfile.architecture's stage('Architecture'), which the producer no longer has · cosmetic~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+docs/operations/pipeline-dependencies.md:27 says the architecture validator is reached through `Jenkinsfile.architecture`'s `stage('Architecture')`, which runs `arch-validate` in the `aac-tools` image. Since slice 035 (KubeCoder 154cd97b) the producer is a declarative file whose stages are `Checkout` and `Validate architecture`, and the latter calls `architectureProducer.validate` and `archive` from JenkinsPipelineUtils, which run `arch-validate` in the `aac-tools` container. KubeCoder is not a diff row of this slice, so the doc phase leaves the line to the repo.
+
+**Consequence:** none — a reader of KubeCoder's dependency table looks for a stage the file no longer has; the dependency itself is stated correctly.
+
+**Triage:** prose · shows in normal use · no impact · fix is one edit · in KubeCoder
+**Provenance:** read — doc-writer, doc phase, round 1, /work/scratch/KubeCoder/docs/operations/pipeline-dependencies.md:27 against /work/scratch/KubeCoder/Jenkinsfile.architecture
+**Disposition:** Yes
+
+</details>
+
+### ~~P7 — ArgoCDTools README: says Jenkins takes the aac-tools image through containerTemplates.aac_tools, which no Jenkinsfile calls after 035 · cosmetic~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+README.md:283-285 says `aac-tools` is taken floating, and that 'the shared pipeline library's `containerTemplates.aac_tools` names it with no tag and pulls it on every build'. After slice 035 no Jenkinsfile in the estate calls `containerTemplates.aac_tools`: every architecture producer declares the image with `podYaml(templates: ['aac-tools'])`, whose template is also untagged (`registry:5000/aac-tools`, JenkinsPipelineUtils vars/podYaml.groovy). The describable is retired by the second slice. ArgoCDTools is not a diff row of this slice, so the doc phase leaves the line to the repo.
+
+doc-writer, doc phase r1, 2026-10-01 — Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools']).
+
+**Consequence:** none — the README names a library call no pipeline uses; the floating-tag fact it states still holds through podYaml's template.
+
+**Triage:** prose · shows in normal use · no impact · fix is one edit · in ArgoCDTools
+**Provenance:** read — doc-writer, doc phase, round 1, /work/ArgoCDTools/README.md:283-285 against JenkinsPipelineUtils vars/podYaml.groovy and the 78 producer files
+**Disposition:** Yes
 
 </details>
