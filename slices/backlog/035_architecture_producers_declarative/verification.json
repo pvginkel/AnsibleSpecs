@@ -1,0 +1,125 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — every producer declarative",
+      "description": "Every architecture producer becomes declarative per the style guide: \"the pipelines that can become a few lines, of course, migrate those so that they are a few lines.\" On origin, all 78 producer files are either the header comment, the library line and one `architectureProducer` call, or a full declarative file written to the guide. They are the `Jenkinsfile.architecture*` behind every `AaC/*` job except AaC/Architecture and AaC/Home Assistant Fleet. None keeps a scripted `podTemplate` or `node`, as every file but PipelinesDeploy's does today (e.g. `ChartsDeploy/Jenkinsfile.architecture:11`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — the five ModernAppTemplate apps",
+      "description": "The five ModernAppTemplate apps are migrated; ModernAppTemplate itself is not. The producer files behind AaC/DHCPApp, AaC/ElectronicsInventory, AaC/FieldnotesApp, AaC/IoTSupport and AaC/ZigbeeControl are migrated in their own repos, and each job builds its migrated file green. ModernAppTemplate carries no commit from this slice. The guide types the five producers. Today `JenkinsPipelineUtils/docs/pages/types/index.md:28` leaves the five repos out, \"their architecture producers included\".",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — J16 helper",
+      "description": "J16: an `architectureProducer(…)` helper for the producers. `vars/architectureProducer.groovy` and its page `vars/architectureProducer.md` are on JenkinsPipelineUtils' origin `main`. Every per-repo value is an argument with no default (LIB-3), and a call that lacks an argument or names an unknown one fails the build and names it. The library page's J16 row reads \"in the library\". Today `docs/pages/guide/library.md:62` reads \"accepted, not yet in the library\".",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R4 — J01 job configuration into the files",
+      "description": "J01: the job configuration moves into the files (\"move as much of possible of this into the Jenkinsfiles\"). The concurrency guard and the push trigger are declared in `options{}` and `triggers{}`: by the file for a full declarative producer, and by the helper for one on it (Ruling D2). After the churn, every producer job that built its migrated file has a declarative property tracker that lists them. Each such job holds exactly one `disableConcurrentBuilds` and one push trigger. AaC/Ansible and AaC/YouTrackMCPServer, which have no guard today (Grounding G4), hold one with `abortPrevious=true`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R5 — Q9",
+      "description": "Q9: \"`AaC/UnderfloorHeatingController` is the only AaC job with `abortPrevious=false`. Reason, or accident?\" Operator: \"Accident.\" After the one hand-started build that follows its first declarative build (S2), AaC/UnderfloorHeatingController holds `abortPrevious=true`. No job's configuration was edited through the Jenkins API.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R6 — J24, J25, J23",
+      "description": "J24, J25, J23 ride along in the same edit. No producer clones its own repo with `git branch:`/`credentialsId:`/`url:`. 49 do today, e.g. `ChartsDeploy/Jenkinsfile.architecture:16`, `KubeCoderDeploy/Jenkinsfile.architecture:26` (branch `prd`) and `DockerImages/Jenkinsfile.architecture:19`. Every producer checks out with `checkout scm`, KubeCoderDeploy included (S3). Each file loads the library once, with exactly `library identifier: 'JenkinsPipelineUtils', changelog: false`. No dead import, stale comment or stray whitespace is left in a touched file.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R7 — 034 B2, producer part",
+      "description": "034 close-out B2, the producer part: \"`Ansible/Jenkinsfile.architecture` (AaC/Ansible) inherits 'jenkins-agent kaniko' but builds no image.\" The file runs on `jenkins-agent` without `kaniko` (today `Jenkinsfile.architecture:3`), and AaC/Ansible builds it green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R8 — one push, one check",
+      "description": "How the change is pushed and checked: \"just change everything and push it all out in one go, and then stop. Let the system churn through the whole thing, and when everything's quiet (i.e. the Jenkins build queue goes empty), check the results.\" Every repo the slice touched is pushed in one go: those the producer ledger lists, plus Ansible and JenkinsPipelineUtils. JenkinsPipelineUtils is on origin before any producer repo is pushed. The check waits for quiet: an empty queue and no running builds. An item that waits past a bound on \"nodes offline\" is the slot leak, reset from the Script Console, not churn. Then one Jenkins API pull reads every job's `lastBuild` against the push time. Every job the push started has finished, and each red one is reported with its cause.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "Ruling D1 — the collector, once",
+      "description": "AaC/Architecture is disabled before the one-go push. It is re-enabled only once the queue is quiet, then built once, and that build is green. Its collection includes every producer it collected before the slice. webathome-org's `architecture_viewer` pin from that build rolls out.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "Ruling D2 — the guide amended",
+      "description": "The guide admits the one-call file. FILE-1 (`docs/pages/guide/file-layout.md:6`) and LIB-2 (`docs/pages/guide/library.md:25`) carry the exception \"a type with a whole-pipeline helper: the file is one call to it, and the helper's page states the job settings it declares\". No other guide rule contradicts a one-call producer. The helper's page states the job settings it declares. The two architecture type pages show the one-call reference file and name the producers that stay full declarative files (Ansible, DockerImages, IoTSupport). The guide's docs build (strict) and `check_site.py` are green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Declarative linter",
+      "description": "The controller's declarative linter validates every full declarative producer file (Ansible's, DockerImages' and IoTSupport's) and the pipeline the helper runs. JenkinsPipelineUtils' docs lint, which sends every example to the linter, is green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "S4 — IoTSupport's withVault",
+      "description": "IoTSupport's producer is a full declarative file. Its `withVault` wraps only the step that uses the credentials; today it wraps the whole pod (`IoTSupport/Jenkinsfile.architecture:13`, around `podTemplate` at `:19`). AaC/IoTSupport builds green, generating and archiving `backend/docs/architecture/deployed-architecture.yaml`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "S1 — PipelinesDeploy",
+      "description": "PipelinesDeploy's producer is on the helper like the other deploy-repo producers, and AaC/PipelinesDeploy builds it green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "KubeCoderDeploy's producer on prd",
+      "description": "AaC/KubeCoderDeploy builds the one-call file green from `prd`. The slice commits it on KubeCoderDeploy's `main`. The job builds `prd`, which only KubeCoder/Promote-PRD fast-forwards (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`), so the push starts no build of it.",
+      "owed_after": "the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which fast-forwards KubeCoderDeploy's prd to main",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "S5 — the review's records",
+      "description": "The review's records are updated (S5). `reviews/2026-09-jenkinsfile-review/inventory.md` types the five apps' producers and PipelinesDeploy's, and counts 78 producers. `report.md` shows the status of J16, J01, J24 and Q9 after this slice. `plan.md`'s \"where things stand\" records 035.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
