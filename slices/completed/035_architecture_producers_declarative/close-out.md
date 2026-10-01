@@ -6,21 +6,6 @@
 Run: 2026-10-01 12:22 → 14:35 · 5 phases · 3 bail-outs · 1 test round · doc phase done · wrap-up
 landed · $37.86 (planner 34 %, research 4 %, rework 0 %)
 
-## Card requests
-
-### B3 — IoTSupport: AaC/IoTSupport's deployed-architecture.yaml fails arch-validate — /devices/3/stats/firmware is Infinity, not a string
-
-AaC/IoTSupport #44 (the first build of the migrated file, started by the slice's push, library 0d640cf) went red in 'Validate architecture (backend)': arch-validate rejects backend/docs/architecture/deployed-architecture.yaml, '/devices/3/stats/firmware: value Infinity is not of expected type string'. Build #43 (before the slice, 2026-10-01 morning, the old scripted file) failed with the identical message; #41 failed on another cause (firmware product UUID not found in the dataset); #42 was the last green. So it is not the migration: the generator (backend/tools/gen-architecture.py _device_stats, stats['firmware'] = firmware_version) emits a version string that the validator reads back as a float, from live fleet data I cannot read from this pod. The slice's V12 asks AaC/IoTSupport to build green; it does not, and the collector keeps collecting #42's artifacts. The migrated file's structure (withVault around the generator steps only, KEYCLOAK_OIDC_TOKEN_URL kept) ran as designed up to that point.
-
-close-out session, 2026-10-01 — Still red: AaC/IoTSupport last build is #44 (FAILURE); no build since.
-
-**Consequence:** AaC/IoTSupport stays red on every push until the generator quotes or normalises the firmware version; AaC/Architecture shows IoTSupport's last green (#42) artifacts, so the deployed model of the device fleet goes stale.
-
-**Triage:** defect · shows in normal use · degrades · loud · fix unknown · in IoTSupport
-**Provenance:** witnessed — test-agent, round 1, AaC/IoTSupport builds #43 and #44 console logs
-**Route:** card request — the fix lives in IoTSupport, which the slice did not touch
-**Disposition:** File
-
 ## Closed
 
 ### B2 — JenkinsPipelineUtils architectureProducer.archive: its collector check accepts a comma-joined entry, so an uncollected pattern can slip past it · minor
@@ -214,6 +199,22 @@ plan-writer r2, 2026-10-01 — Under Ruling D2 as reversed at plan review r1, a 
 Ansible
 **Provenance:** read — plan-writer, planning r1, Ansible support/argo-migrate/argo_migrate.py
 **Disposition:**
+
+</details>
+
+### ~~B3 — IoTSupport: AaC/IoTSupport's deployed-architecture.yaml fails arch-validate — /devices/3/stats/firmware is Infinity, not a string~~ — carded as IS-1 (project IS created for IoTSupport on the operator's word); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+AaC/IoTSupport #44 (the first build of the migrated file, started by the slice's push, library 0d640cf) went red in 'Validate architecture (backend)': arch-validate rejects backend/docs/architecture/deployed-architecture.yaml, '/devices/3/stats/firmware: value Infinity is not of expected type string'. Build #43 (before the slice, 2026-10-01 morning, the old scripted file) failed with the identical message; #41 failed on another cause (firmware product UUID not found in the dataset); #42 was the last green. So it is not the migration: the generator (backend/tools/gen-architecture.py _device_stats, stats['firmware'] = firmware_version) emits a version string that the validator reads back as a float, from live fleet data I cannot read from this pod. The slice's V12 asks AaC/IoTSupport to build green; it does not, and the collector keeps collecting #42's artifacts. The migrated file's structure (withVault around the generator steps only, KEYCLOAK_OIDC_TOKEN_URL kept) ran as designed up to that point.
+
+close-out session, 2026-10-01 — Still red: AaC/IoTSupport last build is #44 (FAILURE); no build since.
+
+**Consequence:** AaC/IoTSupport stays red on every push until the generator quotes or normalises the firmware version; AaC/Architecture shows IoTSupport's last green (#42) artifacts, so the deployed model of the device fleet goes stale.
+
+**Triage:** defect · shows in normal use · degrades · loud · fix unknown · in IoTSupport
+**Provenance:** witnessed — test-agent, round 1, AaC/IoTSupport builds #43 and #44 console logs
+**Disposition:** File — carded as IS-1 (project IS created for IoTSupport on the operator's word)
 
 </details>
 

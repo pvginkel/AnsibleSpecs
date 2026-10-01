@@ -471,10 +471,15 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "carded as IS-1 (project IS created for IoTSupport on the operator's word)",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
       "ruling": {
         "words": "File",
-        "did": null,
+        "did": "carded as IS-1 (project IS created for IoTSupport on the operator's word)",
         "date": "2026-10-01"
       }
     },
