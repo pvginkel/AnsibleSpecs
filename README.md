@@ -37,6 +37,8 @@ Triaged 2026-09-27 from DockerImages' DI-7 and DI-10 (the record: `handovers/tri
 
 Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handovers/triage_2026-09-30.md`, open — the rest of the review waits on this slice):
 
+- **035** — Architecture producers to declarative: the 77 `Jenkinsfile.architecture` producers onto the style guide's declarative form and an `architectureProducer` helper, with their job configuration moved into the files (cut 2026-10-01)
+
 
 ## Completed
 

@@ -1282,6 +1282,9 @@ new app gets whatever the template carries. Two choices follow.
 > *Superseded (2026-09-30, slice 034's plan review):* "Please completely skip the
 > moderapptemplate repos. I'll get them fixed when we do the next sync." The five get no
 > reference file in the guide, and the migration leaves them alone.
+>
+> *Overruled (2026-10-01, the migration's triage):* "MAT itself must be skipped, the downstream
+> repos not." The five apps are migrated like any other repo; only ModernAppTemplate is left alone.
 
 **Q12 — `CanonApp` now that `Archived/` is gone (2026-09-30).** J09 said "move to `Archived/`
 and disable". The folder no longer exists, and the job still has a live push trigger on an

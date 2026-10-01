@@ -17,6 +17,10 @@ environment" in [plan.md](plan.md).
 
 ## Skipped: the ModernAppTemplate repos (ruling F2)
 
+> *Overruled 2026-10-01:* "MAT itself must be skipped, the downstream repos not." The ten jobs
+> below are migrated (slice 035 takes the five producers, the second slice the five builds). This
+> section is kept as written in slice 034.
+
 The operator, in slice 034's plan review (2026-09-30): "Please completely skip the
 moderapptemplate repos. I'll get them fixed when we do the next sync." DHCPApp,
 ElectronicsInventory, IoTSupport, ZigbeeControl and FieldnotesApp render their `Jenkinsfile` from
