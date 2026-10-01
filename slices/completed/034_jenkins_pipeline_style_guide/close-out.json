@@ -323,8 +323,17 @@
           "What the fix takes: the operator's ruling on both points, which is not mine to give. Accept both and nothing in the guide moves; only rulings.md gets a line recording the ruling. Reject or modify either and GRAN-8 or library.md's row changes, possibly with the skill's GRAN-8 line (KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md) and the reference files that follow it. Correcting rulings.md alone, taking the two items out of \"settled\", would make that page a true record and leave the guide stating both as rules, so I left the page as it is."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "both accepted as the guide states them (Claude recommended GRAN-8 as written); rulings.md records the rulings, nothing in the guide or skill moves",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": "e82635e"
+      },
+      "ruling": {
+        "words": "GRAN-8: I'm not sure, but I'll follow your recommendation. I agree not introducing a constant.",
+        "did": "both accepted as the guide states them (Claude recommended GRAN-8 as written); rulings.md records the rulings, nothing in the guide or skill moves",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P8",

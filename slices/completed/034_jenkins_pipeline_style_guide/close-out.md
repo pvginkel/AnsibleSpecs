@@ -153,24 +153,6 @@ a product call · prevents a degradation · in KubeCoder
 
 ## Card requests
 
-### P7 — AnsibleSpecs slice 034 rulings.md shows two unruled items as settled: J08's 'conditional stages use when {}' and Theme E's registry-host constant · minor
-
-The settled table's J08 row adds 'Conditional stages use when {}' (rulings.md:22). J08's ruling is 'migrate all' (report.md:490-496); when {} appears only in J08's 'What it buys', and §13 then allows Utils.markStageSkippedForConditional for DockerImages (rulings.md:628-629). §11 lists Theme E's registry-host constant under 'Ruled against' (rulings.md:534), which was the report's own judgement (report.md:980-985) with no operator response.
-
-consult 2, 2026-09-30 — Both items made it into the published guide without an operator ruling. GRAN-8 (docs/pages/guide/stage-granularity.md:69-73) makes when {} a MUST and carves out §13's DockerImages exception (Utils.markStageSkippedForConditional), which removes the contradiction with §13 on the guide side. library.md:67 lists the registry-host constant as 'ruled against'. So the guide states both as rules while the operator was only shown them as settled.
-
-wrap-up, 2026-09-30 — asks for a card: How it is reached, as deployed: the published style guide at https://pipelines.home/docs/ states two rules that no operator response carries, and every future Jenkinsfile and the jenkins-pipelines skill follow them. (1) GRAN-8 (docs/pages/guide/stage-granularity.md, JenkinsPipelineUtils) makes it a MUST that a stage that runs only under a condition says so in `when {}`, and that a file does not mark a stage skipped itself, except DockerImages' generator. Its source is rulings.md's "Already settled" J08 row ("Conditional stages use `when {}`"). J08's ruling was "migrate all", and `when {}` appears only in J08's "What it buys" in report.md. (2) library.md's decision-test table (library.md:67) records "A constant for the registry host, `registry:5000`" as "ruled against". Its source is rulings.md §11 "Ruled against" (rulings.md:552), which quotes report.md's own Theme E judgement (report.md:980-985); the operator never answered that judgement. Neither was put to the operator as a question, so the guide's strict MUST reaches the estate's files unruled.
-
-What the fix takes: the operator's ruling on both points, which is not mine to give. Accept both and nothing in the guide moves; only rulings.md gets a line recording the ruling. Reject or modify either and GRAN-8 or library.md's row changes, possibly with the skill's GRAN-8 line (KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md) and the reference files that follow it. Correcting rulings.md alone, taking the two items out of "settled", would make that page a true record and leave the guide stating both as rules, so I left the page as it is.
-
-**Consequence:** The operator is told two points are settled that were never put to him, so neither gets a ruling, and the when {} row contradicts the page's own §13.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in AnsibleSpecs
-**Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md (F5)
-**Route:** card request — the wrap-up asks for a card
-**Disposition:**
-
 ### B2 — Four in-scope Jenkinsfiles carry small defects: unused pod containers (Home, Ansible's Jenkinsfile.architecture), a stale header (TerraformRegistry), a stage label naming the wrong artifact (GitblitMCPSupportPlugin) · nit
 
 Found while building the inventory (reviews/2026-09-jenkinsfile-review/inventory.md), which records each under its topic for the migration slice. Home/Jenkinsfile declares a containerTemplates.helm('helm') sidecar that no step uses. Ansible/Jenkinsfile.architecture (AaC/Ansible) inherits 'jenkins-agent kaniko' but builds no image. TerraformRegistry/Jenkinsfile:3-6 says the build 'then triggers a HelmCharts deploy'; it writes pins into TfmirrorDeploy. GitblitMCPSupportPlugin/Jenkinsfile labels its stage 'Building GitblitSearchApiPlugin' while it builds gitblit-initializer. The rulings page (rulings.md §2, §5, §10) proposes rules that retire each of them, and the migration rewrites all four files. Three of the four repos end in a pin write, so a push of a fix before the migration is a prd rollout of that app.
@@ -484,6 +466,27 @@ docs/runbooks/argocd.md § Webhooks: 'The pod's GitHub token can list hooks (cex
 **Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
 **Provenance:** witnessed — code-writer, P1, r1, report.md Appendix A R1 note (C 2026-09-30)
 **Disposition:**
+
+</details>
+
+### ~~P7 — AnsibleSpecs slice 034 rulings.md shows two unruled items as settled: J08's 'conditional stages use when {}' and Theme E's registry-host constant · minor~~ — both accepted as the guide states them (Claude recommended GRAN-8 as written); rulings.md records the rulings, nothing in the guide or skill moves (e82635e); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The settled table's J08 row adds 'Conditional stages use when {}' (rulings.md:22). J08's ruling is 'migrate all' (report.md:490-496); when {} appears only in J08's 'What it buys', and §13 then allows Utils.markStageSkippedForConditional for DockerImages (rulings.md:628-629). §11 lists Theme E's registry-host constant under 'Ruled against' (rulings.md:534), which was the report's own judgement (report.md:980-985) with no operator response.
+
+consult 2, 2026-09-30 — Both items made it into the published guide without an operator ruling. GRAN-8 (docs/pages/guide/stage-granularity.md:69-73) makes when {} a MUST and carves out §13's DockerImages exception (Utils.markStageSkippedForConditional), which removes the contradiction with §13 on the guide side. library.md:67 lists the registry-host constant as 'ruled against'. So the guide states both as rules while the operator was only shown them as settled.
+
+wrap-up, 2026-09-30 — asks for a card: How it is reached, as deployed: the published style guide at https://pipelines.home/docs/ states two rules that no operator response carries, and every future Jenkinsfile and the jenkins-pipelines skill follow them. (1) GRAN-8 (docs/pages/guide/stage-granularity.md, JenkinsPipelineUtils) makes it a MUST that a stage that runs only under a condition says so in `when {}`, and that a file does not mark a stage skipped itself, except DockerImages' generator. Its source is rulings.md's "Already settled" J08 row ("Conditional stages use `when {}`"). J08's ruling was "migrate all", and `when {}` appears only in J08's "What it buys" in report.md. (2) library.md's decision-test table (library.md:67) records "A constant for the registry host, `registry:5000`" as "ruled against". Its source is rulings.md §11 "Ruled against" (rulings.md:552), which quotes report.md's own Theme E judgement (report.md:980-985); the operator never answered that judgement. Neither was put to the operator as a question, so the guide's strict MUST reaches the estate's files unruled.
+
+What the fix takes: the operator's ruling on both points, which is not mine to give. Accept both and nothing in the guide moves; only rulings.md gets a line recording the ruling. Reject or modify either and GRAN-8 or library.md's row changes, possibly with the skill's GRAN-8 line (KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md) and the reference files that follow it. Correcting rulings.md alone, taking the two items out of "settled", would make that page a true record and leave the guide stating both as rules, so I left the page as it is.
+
+**Consequence:** The operator is told two points are settled that were never put to him, so neither gets a ruling, and the when {} row contradicts the page's own §13.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in AnsibleSpecs
+**Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md (F5)
+**Disposition:** GRAN-8: I'm not sure, but I'll follow your recommendation. I agree not introducing a constant. — both accepted as the guide states them (Claude recommended GRAN-8 as written); rulings.md records the rulings, nothing in the guide or skill moves
 
 </details>
 
