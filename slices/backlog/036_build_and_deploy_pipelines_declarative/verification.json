@@ -1,0 +1,207 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — every remaining pipeline declarative",
+      "description": "\"Every remaining pipeline becomes declarative per the style guide.\" Each file of the inventory's T3–T12 jobs (T3 16, T4 5, T5 8, T6 1, T7 6, T8–T12 one each) is a declarative `pipeline {}` file to the guide's rules, starting from its type's reference file, and passes the controller's declarative linter. Firmware/KitchenDisplay (T13) stays unconverted (Settled S6). \"The pipelines that can become a few lines\" (the firmware files) are a few lines on library steps. `KubeCoder/Jenkinsfile` is \"into line with the guide\": today it has no header, timeout or Checkout stage, makes 8 positional `helmCharts.kaniko(` calls and has a string `images:` entry (`KubeCoder/Jenkinsfile:28`). The six `Ansible/Jenkinsfile.iac-*` no longer declare `buildDiscarder` (today e.g. `Jenkinsfile.iac-apply:59`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2 — the five ModernAppTemplate apps",
+      "description": "\"The five ModernAppTemplate apps' `Jenkinsfile` are migrated; ModernAppTemplate itself is not.\" The build `Jenkinsfile` of DHCPApp, ElectronicsInventory, FieldnotesApp, IoTSupport and ZigbeeControl is a declarative file to the guide whose `Test` stage calls the library's validation step (Ruling D1), in place of the ~130-line block each carries today (`FieldnotesApp/Jenkinsfile:26-169`). ModernAppTemplate has no commit from this slice.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R3 — the stage generators",
+      "description": "\"The stage generators\": `DockerImages/Jenkinsfile` generates its per-variant stages inside one `Build images` stage with `Write image pins` under `when {}` (image-matrix reference, S7). `Intercom/Jenkinsfile` writes out a Build and Deploy stage pair per hardware version, with no loop or `matrix` (today `for (hardwareVersion in [1, 2])` at `Intercom/Jenkinsfile:28`; S1, GRAN-7). `Architecture/Jenkinsfile` computes its triggers from `pipeline-producers.yaml` in a `Set triggers` stage (PROP-8). After its first build on the migrated file, AaC/Architecture's upstream trigger names the same producer jobs as the pre-push snapshot does.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R4 — J14 firmware helper",
+      "description": "\"J14: one firmware helper for the ESP-IDF pipelines, with the IDF version per repo.\" The library holds the firmware build and upload steps (S1), with a reference page that says a Replay is an OTA deploy. Each of the eight firmware files calls them, clones its repos in its own `Checkout` stage, and names its own `espressif/idf:<version>` image in its own agent: \"the version must be a parameter\", so a bump is one repo's commit. All eight pin `v5.5.3`, today inline at e.g. `PaperClock/Jenkinsfile:10`. The library's tests cover the steps. Each firmware job's build after the push is green, so its devices took the upload.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R5 — podYaml fixes",
+      "description": "\"podYaml fixes.\" 033 B4: a null `env` value is refused or dropped, never rendered as `\"null\"` (`vars/podYaml.groovy:115`). 033 B3: a container name Kubernetes would refuse fails at agent evaluation with a message naming the entry, not at pod creation (`containerName()`, `:126-127`). 034 D3: podYaml has python, helm and iac-toolchain templates, which today it lacks (`:70-75`), each as its describable declares it; the iac toolchain runs as uid 1000 with `TF_PLUGIN_CACHE_DIR` empty (`vars/containerTemplates.groovy:46-49`). The three type pages no longer say podYaml has no python template (`docs/pages/types/configuration-apply.md:16`, `image-matrix.md:16`, `architecture-collector.md:15`). The library's tests cover the templates and both refusals.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R6 — 033 I1: describables retired",
+      "description": "\"033 I1: retire the `containerTemplates` describables\" \"once no migrated file calls them\": `helm`, `k8s`, `python`, `aac_tools`, `iac_toolchain` and `modern_app_toolchain` are gone from `vars/containerTemplates.groovy` (today `:9-64`). `rsync` and `dockbuild` stay for KitchenDisplay (S6). No Jenkinsfile on the branch an enabled Jenkins job builds calls a removed describable. ModernAppTemplate's template is the accepted break (\"It's fine if MAT is broken\"). podYaml's templates are the one declaration of each library sidecar's image, so \"a sidecar bump made in one place only\" no longer leaves a second copy behind.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R7 — J17 secret forwarding and withVault scope",
+      "description": "\"J17: drop the inert secret forwarding; scope `withVault`.\" The `containerEnvVar` secret lines are gone from the eight firmware files (today `PaperClock/Jenkinsfile:11-12`) and from `Architecture/Jenkinsfile.ha-fleet` (`:47-48`). `withVault` no longer wraps the whole pod (`PaperClock/Jenkinsfile:3`) and wraps only the steps that use the secret: the firmware upload, the HA fleet snapshot's generation, and YouTrackConfiguration's apply. Today YouTrackConfiguration's \"wraps the checkout and the lint in the admin token\" (`YouTrackConfiguration/Jenkinsfile:14-19`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R8 — J21 one kaniko API",
+      "description": "\"J21: one kaniko API.\" Every image build in a migrated file calls `helmCharts.kaniko2(…)` (LIB-6, S2), and the positional `helmCharts.kaniko(…)` overload (`vars/helmCharts.groovy:20-27`) is deleted along with its reference text (`vars/helmCharts.md:81-89`). No Jenkinsfile on the branch an enabled job builds calls it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "R9 — J11 and J12 timeouts",
+      "description": "\"J11 and J12: timeouts.\" Every pod pipeline declares `timeout(time: 60, unit: 'MINUTES')` in its pipeline-level `options {}` (TIME-1). DockerImages declares 180 minutes (TIME-3), and no other file has an exception: ElectronicsInventory and IoTSupport are at 60 (S3). The six `Ansible/Jenkinsfile.iac-*` declare `timeout(time: 4, unit: 'HOURS')` and the `post { aborted { … notify.error(…) } }` marker (J12, TIME-2, POST-3).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R10 — J02 HA Fleet cron",
+      "description": "\"J02: the Home Assistant Fleet cron into its file.\" `Architecture/Jenkinsfile.ha-fleet` declares its cron (`H 4 * * *`, the UI's value) and its concurrency guard. The two comments that say the schedule is owned by the job config (`:27-28`, `:52-53`) are deleted.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "R11 — J26 master to main",
+      "description": "\"J26: `master` → `main` for the four remaining repos.\" MyDownloadsClient, MyDownloadsServer, ScanToPdfClient and ScanToPdfServer default to `main` on GitHub, and the eight jobs (`MyDownloads/*`, `ScanToPdf/*` and their `AaC/*` twins) build `*/main`. Each job's `config.xml` was saved before the change (Ruling D3). No file in those repos names `master` as the job's branch: today `MyDownloadsClient/Jenkinsfile:17`, `ScanToPdfClient/Jenkinsfile:17` and `ScanToPdfServer/Jenkinsfile:13` clone `master`, and the four `Jenkinsfile.architecture` headers say `branch master` (`:7`). The eight jobs' builds after the push are green from `main`. `opentherm_library` is left on `master`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "R12 — Q2 TrelloMcp on test",
+      "description": "\"Q2: TrelloMcp stays on `test`.\" TrelloMcp's migrated `Jenkinsfile` is committed and pushed on `test`, the branch the job builds (its `Jenkinsfile` exists only on `origin/test` today). The job still builds `*/test`, and its build after the push is green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "R13 — Q6 IoTSupport KEYCLOAK globals",
+      "description": "\"Q6, the IoTSupport part.\" IoTSupport's two Jenkinsfiles write the values of `KEYCLOAK_TEST_BASE_URL`, `KEYCLOAK_TEST_REALM`, `KEYCLOAK_TEST_OIDC_TOKEN_URL` and `KEYCLOAK_OIDC_TOKEN_URL` inline. Today they read them at `IoTSupport/Jenkinsfile:99,101,107` and `Jenkinsfile.architecture:57`. After IoTSupport/IoTSupport and AaC/IoTSupport have built the inlined files green, the four global variables are deleted from the controller (Ruling D3). `HA_URL` stays a global (\"Leave HA_URL where it is please\").",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "R14 — 034 B2, the rest",
+      "description": "\"034 close-out B2, the rest.\" Home's file declares no helm sidecar (today `Home/Jenkinsfile:5`, used by no step). TerraformRegistry's header says the build pins into TfmirrorDeploy, not that it \"triggers a HelmCharts deploy\" (`TerraformRegistry/Jenkinsfile:3-6`). GitblitMCPSupportPlugin's image stage is labelled for gitblit-initializer, not `Building GitblitSearchApiPlugin` (`GitblitMCPSupportPlugin/Jenkinsfile:13`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "R15 — 034 I2 the skill's rule",
+      "description": "\"034 close-out I2: the skill's rule for a file that predates the guide.\" KubeCoderConfig's `kubecoder/skills/jenkins-pipelines/SKILL.md` says how a session treats a Jenkinsfile that predates the guide. Today it says only that every file follows the guide strictly (`:11-16`). It names the files that still predate it after this slice: ModernAppTemplate's own template, reconciled at its next sync, and KitchenDisplay's parked file (S6). Neither is a model for a new file. The repo's Prettier gate is green.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "R16 — job configuration in the files; ANS-84",
+      "description": "\"The job configuration moves into the files, and ANS-84 closes.\" Every migrated file declares its concurrency, its trigger and its parameters in the file. Concurrency follows PROP-3: `abortPrevious: true` except the jobs its table lists, ArgoCDTools and Charts included (S5). The trigger follows PROP-6 and the parameters PROP-7. No file declares `buildDiscarder` (J13 rejected, PROP-5), and none calls `properties` except AaC/Architecture's `Set triggers` (PROP-8). Per Ruling D2 there is no per-job sheet. After the queue is quiet, every job's `config.xml` is re-dumped and diffed against the snapshot taken right before the push. The record names, per job, what the UI still holds. It is in the slice folder.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "R17 — two stale doc lines from 035",
+      "description": "\"Two stale doc lines from slice 035's close-out.\" P6: KubeCoder `docs/operations/pipeline-dependencies.md` no longer names `stage('Architecture')` (`:27`). P7: ArgoCDTools' README no longer says Jenkins takes the `aac-tools` image through `containerTemplates.aac_tools` (`README.md:283-285`). Its second describable line, `containerTemplates.iac_toolchain` (`:272`), goes too (S11).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "R18 — push once, check once",
+      "description": "\"How the change is pushed and checked\": \"change everything and push it all out in one go, and then stop.\" Every repo the slice committed to is pushed in one go, JenkinsPipelineUtils first, and no consumer before it is on origin. Quiet is an empty queue and no running builds. An item that waited on \"nodes offline\" past about 60 minutes was checked against the Kubernetes cloud's provisioning counter and the live agents before any reset (Ruling T1). The check is one Jenkins API pull of every job's `lastBuild` against the push time. Every build the push started finished SUCCESS. That includes the eight OTA re-flashes, the prd app rollouts through the pin writers and KubeCoder's dev rollout (S8).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "Ruling D1 — the guide on the validation step",
+      "description": "The guide has a type page and a reference file for the five apps' builds, on the validation step (Ruling D1). The types index types the five build jobs; today it says the guide \"leaves those five jobs out\" (`docs/pages/types/index.md:28-30`). The library page's J15 row describes the step as in the library; today it reads \"not built … it serves one job\" (`docs/pages/guide/library.md:64`). The validation-Job page stays true for SSEGateway (`docs/pages/types/validation-job.md:19-20`). Every reference file passes the controller's declarative linter.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V20",
+      "area": "Settled S1 — the guide on the firmware steps",
+      "description": "The firmware page's \"accepted helper … not in the library\" (`docs/pages/types/firmware.md:17-19`), the library page's J14 row (`docs/pages/guide/library.md:61`) and the sentence after the table (`:69`) describe the firmware steps as in the library, with the IDF version in each file's agent (S1). `docs/examples/firmware.groovy` and `firmware-versions.groovy` call the steps, and every example passes the controller's declarative linter.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V21",
+      "area": "Behaviour kept",
+      "description": "Each migrated job still does what it did, apart from what a requirement changes. It builds the same images and tags. It writes the same pins: deploy repo, values file and keys. It archives the same artifacts and starts the same downstream jobs. It makes the same `stable` push, the same OTA uploads and the same applies.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V22",
+      "area": "Secrets per the guide",
+      "description": "No migrated file and no new library step interpolates a secret into a Groovy string, or puts it in a pod spec or a Job manifest (SEC-2, SEC-4). `withVault` wraps only the steps that use its secret (SEC-1). Today IoTSupport's Keycloak admin client secret is interpolated into the validation Job's manifest (`IoTSupport/Jenkinsfile:102-105`), which `kubectl.startJob` takes as a step argument stored with the build (`vars/kubectl.groovy:14-28`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V23",
+      "area": "Promote-PRD on its migrated file",
+      "description": "KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.",
+      "owed_after": "the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which no role in the run starts",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V24",
+      "area": "IaC/Apply on its migrated file",
+      "description": "IaC/Apply runs the migrated `Ansible/Jenkinsfile.iac-apply` green. The job is hand-started and converges real infrastructure, so only the operator starts it.",
+      "owed_after": "the operator's next IaC/Apply run",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V25",
+      "area": "Scheduled jobs on their migrated files",
+      "description": "IaC/Scheduled Calico Rollout, IaC/Scheduled Certs, IaC/Scheduled Drift, IaC/Scheduled Update and AaC/Home Assistant Fleet each run their migrated file green on their next cron. The push starts none of them.",
+      "owed_after": "each job's next scheduled run",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
