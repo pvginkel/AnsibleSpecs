@@ -193,18 +193,20 @@
 
 ## Task shape
 
-cross-cutting — slice.md's asks set a new pattern (the estate's first whole-pipeline library
-helper, with the style guide amended to admit a one-call file) and span JenkinsPipelineUtils, 77
-producer repos and the review's records in AnsibleSpecs.
+cross-cutting — slice.md's asks set a new pattern (the estate's first architecture-producer
+library helper, whose steps every producer file calls, and the two architecture types' reference
+files rewritten on it) and span JenkinsPipelineUtils, 77 producer repos besides Ansible and the
+review's records in AnsibleSpecs.
 
 ## Ordering constraints
 
-- The helper (var, its page, the guide amendment) lands and is pushed before any producer file
-  that calls it is pushed — a producer calling a var the library on `main` lacks goes red.
-  Pushing JenkinsPipelineUtils alone is harmless to consumers (a new var), so it may go ahead
-  of the one-go push.
-- `AaC/Architecture` is disabled before the one-go push and re-enabled (and built once) only
-  when the queue is quiet (Ruling D1).
+- The helper lands (P1) before P2–P4 write the files that call it. In the test phase's push,
+  JenkinsPipelineUtils goes first, and no producer repo is pushed before it is on origin: a
+  producer build loads the library from `main` and goes red on a step the library lacks.
+- `AaC/Architecture` is disabled before the first push, JenkinsPipelineUtils' included: that push
+  pins the docs site into PipelinesDeploy, which starts AaC/PipelinesDeploy and, through it, the
+  collector. It is re-enabled only once the queue is quiet **and** the hand-started
+  AaC/UnderfloorHeatingController build has finished (Ruling P1).
 - P2–P4 commit each producer repo locally and push nothing. The test phase pushes every repo in
   the slice folder's producer ledger (P2), plus Ansible and JenkinsPipelineUtils, under Ruling
   P1. Deploy repos take CI pin commits while the run works, PipelinesDeploy's from the
@@ -217,64 +219,64 @@ producer repos and the review's records in AnsibleSpecs.
 - prd root — the one-go push of every producer repo the slice touches rolls prd apps and re-flashes devices through their own builds (Ruling D1, Ruling P1)
 - prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)
 
-### P1 — `architectureProducer` is in the library, and the guide admits a one-call file
+### P1 — `architectureProducer`'s steps are in the library, and the architecture types' reference files call them
 
 Target: ../JenkinsPipelineUtils
 
-The library gains J16's helper (R3, Ruling D2): one var that runs an architecture producer's
-whole declarative pipeline. That pipeline is the one the two types' full reference files run
-today (`docs/examples/app-architecture.groovy`, `docs/examples/deploy-architecture.groovy`), and
-it includes the job settings: the `jenkins-agent` pod with the `aac-tools` sidecar,
-`disableConcurrentBuilds(abortPrevious: true)` and the other PROP-2 options,
-`triggers { githubPush() }`, `checkout scm`, then generate (deploy repos), validate and archive.
-Jenkins runs a declarative `pipeline {}` from a var's `call` (Declarative's pipelines defined in
-shared libraries), one per build.
+The library gains J16's helper in the shape Ruling D2 gives it: a var whose steps a producer
+calls inside its own written-out stages. The steps carry what must be the same in every producer
+(LIB-1's contract test): the `aac-tools` container the commands run in, the `gen-architecture`
+and `arch-validate` command lines, and an archive that AaC/Architecture's collection matches.
+The collector copies `**/architecture/**/*.yaml` from each producer's last successful build
+(`/work/Architecture/Jenkinsfile:75-78`).
 
-- **The arguments are what varies across the producers the helper takes**, each required with no
-  default (LIB-3). For a deploy repo that is the producer id and the stage. For an app repo it
-  is the model files the job validates and archives. For DHCPApp, ZigbeeControl and
-  ElectronicsInventory those span `backend/` and `frontend/`. Those three differ from the
-  single-directory body only in that value, so they go on the helper. Ansible, DockerImages and
-  IoTSupport stay full files (Ruling D2). A call with a missing or unknown argument fails the
-  build and names the argument, as `podYaml`'s does.
-- **What each producer archives does not change.** AaC/Architecture copies every producer's
-  archived `**/architecture/**/*.yaml` from the producer's last successful build. A producer on
-  the helper archives the same files it archives today.
-- **The var's page, `vars/architectureProducer.md`** (LIB-5, held by `check_site.py`), states the
-  job settings the helper declares (Ruling D2) and shows a call for each type.
-- **The guide admits the one-call file, in Ruling D2's words.** FILE-1 (`docs/pages/guide/file-layout.md:6`)
-  and LIB-2 (`docs/pages/guide/library.md:25`) carry the exception. No other rule that a one-call
-  file would break is left without it: FILE-6, and in the job-properties page its opening
-  "declared in its Jenkinsfile" and PROP-6. The library page's J16 row (`library.md:62`, "accepted,
-  not yet in the library") reads "in the library", with the producer count this slice migrates.
-- **The type pages and the types index.** The two architecture type pages show the one-call
-  file as the type's reference, and they name the producers that stay full declarative files and
-  say why. The index types the five ModernAppTemplate apps' producers (R2). Today
-  `docs/pages/types/index.md:28` leaves those five repos out, "their architecture producers
-  included", and `types/app-architecture.md:13` says the helper is not in the library. The five
-  apps' build `Jenkinsfile`s stay untyped; they belong to the second slice.
-- **The controller's declarative linter still checks the type's pipeline.** The docs
-  component's lint (`docs/lint_examples.py`) sends every example to the controller's linter,
-  which answers only for a file with a top-level `pipeline {}`, and a one-call file has none.
-  The index promises that every reference file passes the linter. That promise stays true here
-  because the pipeline the helper runs is what the linter checks.
+- **Every per-repo value is an argument with no default** (LIB-3). For a deploy repo that is
+  the producer id and the stage. For an app repo it is the model files it validates and
+  archives. For DHCPApp, ZigbeeControl and ElectronicsInventory those span `backend/` and
+  `frontend/`. `arch-validate` takes paths and does not depend on the working directory. A call
+  with a missing or unknown argument fails the build and names the argument, as `podYaml`'s
+  does.
+- **The steps cover every producer's validation and archive**, including the three in P4:
+  Ansible's one named file, DockerImages' collected files, and IoTSupport's two backend files and
+  its frontend's. What each producer archives does not change. The archive belongs to the stage
+  that makes the artifact (GRAN-3), as in the reference files today.
+- **The file keeps everything the guide puts in it** (Ruling D2): the agent with the `aac-tools`
+  template, `options{}`, `triggers{}`, the Checkout stage and every stage written out with its
+  label. A file calls the steps in a form that passes the controller's declarative linter as
+  written. A call on a var's method sits in `script {}` (LIB-6).
+- **The var's page, `vars/architectureProducer.md`** (LIB-5, held by the library's own test),
+  says what each step does and which container the pod must declare for it.
+- **The guide.** No rule changes (Ruling D2). The library page's J16 row
+  (`docs/pages/guide/library.md:62`) reads "in the library", under the contract test rather than
+  "the type's whole pipeline", with today's producer counts. The two reference files
+  (`docs/examples/app-architecture.groovy`, `docs/examples/deploy-architecture.groovy`) call the
+  helper's steps. Their type pages stop saying the helper is not in the library
+  (`docs/pages/types/app-architecture.md:13`). The types index types the five ModernAppTemplate
+  apps' producers (R2). Today `docs/pages/types/index.md:28` leaves the five repos out, "their
+  architecture producers included". The five apps' build `Jenkinsfile`s stay untyped, because
+  they belong to the second slice.
 
-The library's compile test picks up a new var by itself. The docs lint needs `JENKINS_TOKEN`,
-which the pod has; run it before handing back, since the per-phase gate is test only.
+The library's compile test picks up a new var by itself. The docs component's lint
+(`docs/lint_examples.py`, which sends every example to the controller's linter) needs
+`JENKINS_TOKEN`, which the pod has. Run it before handing back, because the per-phase gate runs
+only the tests (the strict docs build and `check_site.py`).
 
-### P2 — The 50 deploy-repo producers are one call
+### P2 — The 50 deploy-repo producers are declarative files on the helper's steps
 
 Target: root
 
-Every deploy repo's producer becomes its header comment, the library line and one
-`architectureProducer` call (R1, R3, Ruling D2). That is T2's 49 files and PipelinesDeploy's
-(S1), and KeycloakDeploy has two (Grounding G2).
+Every deploy repo's producer becomes the deploy-architecture reference file as P1 leaves it,
+with its own header and its own producer id and stage (R1, R3, R4, Ruling D2). That is T2's 49
+files, KeycloakDeploy's two among them, and PipelinesDeploy's (S1; Grounding G2). Each file
+declares the concurrency guard and the push trigger in its own `options{}` and `triggers{}`
+(R4). Each file passes the controller's declarative linter: a read-only POST to
+`…/pipeline-model-converter/validate` as `admin` with `JENKINS_TOKEN`, as the docs lint sends it.
 
 - **The header follows FILE-3.** Its `Controller config:` block comes from the job's live
   configuration: `GET …/config.xml` as `admin` with `JENKINS_TOKEN`, read-only. A why that an
   old header carries and that still holds may stay (FILE-7). Stale comments go (J25).
-- **The hand clone goes (J24, S3).** Today it is `ChartsDeploy/Jenkinsfile.architecture:16-18`,
-  and KubeCoderDeploy's clones `prd` (`:26`). The helper's `checkout scm` takes the job's own branch.
+- **The hand clone goes (J24, S3).** Today it is at `ChartsDeploy/Jenkinsfile.architecture:16-18`,
+  and KubeCoderDeploy's clones `prd` (`:26`). `checkout scm` takes the job's own branch.
 - **Where the edit lands.** Each repo's clone, on its default branch, brought to origin's head
   first. ArgoCDDeploy is edited in `/work/ArgoCDDeploy`, the environment's checkout. The stale
   duplicate under `/work/scratch/` is not touched. Every other repo is edited in
@@ -285,47 +287,51 @@ Every deploy repo's producer becomes its header comment, the library line and on
   (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`). origin/prd is an ancestor of
   origin/main, 16 commits behind, as read 2026-10-01. So the file first runs at the next
   promotion (V14).
-- **A producer ledger in the slice folder** lists every producer the slice migrates: repo,
-  clone path, branch, file, commit, and whether the file is one call or a full file. This phase
-  opens it with these 50 rows, and P3 and P4 complete it. It is the test phase's push list. The
-  review reads the commits through it, because this phase leaves no commit on the Ansible branch.
+- **A producer ledger in the slice folder** lists every producer the slice migrates: repo, clone
+  path, branch, file and commit. This phase opens it with these 50 rows, and P3 and P4 complete
+  it. It is the test phase's push list. The review reads the commits through it, because this
+  phase leaves no commit on the Ansible branch.
 
-### P3 — The 25 app-repo producers that fit the helper are one call
+### P3 — The 25 app-repo producers of the reference shape are declarative files on the helper's steps
 
 Target: root
 
-As P2, for the app repos' producers that go on the helper. These are T1's 21 single-directory
-files, FieldnotesApp's, and the backend-and-frontend producers of DHCPApp, ZigbeeControl and
-ElectronicsInventory (Grounding G2). The five ModernAppTemplate apps' producers are migrated in
-their own repos, and ModernAppTemplate gets no commit (R2).
+As P2, for the app repos whose producer only validates and archives its committed model. Each
+becomes the app-architecture reference file as P1 leaves it, with its own header and its own
+model files. These are T1's 21 single-directory files, FieldnotesApp's, and the
+backend-and-frontend producers of DHCPApp, ZigbeeControl and ElectronicsInventory (Grounding G2).
+The five ModernAppTemplate apps' producers are migrated in their own repos, and ModernAppTemplate
+gets no commit (R2).
 
-- AaC/YouTrackMCPServer gains the concurrency guard it lacks today, through the helper (R4,
-  Grounding G4).
-- AaC/UnderfloorHeatingController's producer gets `abortPrevious: true` from the helper (R5).
-  Its UI value still applies on its first build. The test phase's hand-started second build is
-  what settles it (S2).
+- AaC/YouTrackMCPServer's file declares the concurrency guard the job lacks today (R4, Grounding
+  G4).
+- AaC/UnderfloorHeatingController's file declares `abortPrevious: true` (R5). Its UI value still
+  applies on its first build. The test phase's hand-started second build is what settles it (S2).
 - The MyDownloads and ScanToPdf client and server repos have `master` as their default branch.
-- Every repo gets a row in the ledger.
+- Every file passes the linter as in P2, and every repo gets a row in the ledger.
 
-### P4 — The Ansible, DockerImages and IoTSupport producers become full declarative files to the guide
+### P4 — The Ansible, DockerImages and IoTSupport producers are declarative files that call the helper where it fits
 
 Target: root
 
-The three producers that Ruling D2 keeps off the helper become full declarative files written to
-the guide's rules. Each one passes the controller's declarative
-linter: a read-only POST to `…/pipeline-model-converter/validate` as `admin` with
-`JENKINS_TOKEN`, as the docs lint sends it.
+These three producers do work of their own besides the contract, so they do not take a
+reference file whole. Each becomes a full declarative file to the guide that validates and
+archives through the helper's steps. What is the repo's own workflow stays written out in the
+file (LIB-1). Each file passes the linter as in P2.
 
 - **Ansible's `Jenkinsfile.architecture`**, in this repo and on the phase branch, runs on
   `jenkins-agent` without `kaniko` (R7; `Jenkinsfile.architecture:3` today). It gains the FILE-3
   header, which it lacks today.
-- **DockerImages**, in `/work/DockerImages` (the environment's checkout), uses `checkout scm`
-  instead of its hand clone (`Jenkinsfile.architecture:19-21`). It still collects each app's
-  `*/architecture.yaml` under `docs/architecture/` before it validates and archives.
-- **IoTSupport**, in `/work/scratch/IoTSupport`, keeps `withVault` around only the step that
-  uses the credentials (S4, SEC-1). Today it wraps the whole pod (`Jenkinsfile.architecture:13`).
-  Its python container comes from `podYaml`'s `images:` (POD-4). `$KEYCLOAK_OIDC_TOKEN_URL`
-  stays, because Q6 is the second slice's.
+- **DockerImages**, in `/work/DockerImages` (the environment's checkout; the duplicate under
+  `/work/scratch/` is not touched), uses `checkout scm` instead of its hand clone
+  (`Jenkinsfile.architecture:19-21`). It still collects each app's `*/architecture.yaml` under
+  `docs/architecture/` before it validates and archives them.
+- **IoTSupport**, in `/work/scratch/IoTSupport`, still generates its backend's
+  `deployed-architecture.yaml` with its own python generator. Its `withVault` moves inside that
+  stage's steps, around only the steps that use the credentials (S4, SEC-1); today it wraps the
+  whole pod (`Jenkinsfile.architecture:13`). Its python container comes from `podYaml`'s
+  `images:` with a name (POD-4). Its `$KEYCLOAK_OIDC_TOKEN_URL` read (`:37`) stays: it is S4's
+  one recorded exception to the guide (SEC-5).
 - DockerImages' and IoTSupport's commits stay local, as in P2, and every repo gets a row in the
   ledger.
 
@@ -338,9 +344,9 @@ the conventions those files already use (`plan.md` § How this plan is worked).
 
 - `inventory.md` types the five apps' producers and PipelinesDeploy's, and counts 78 producers.
   Its § Skipped (lines 18–48) already marks the overrule.
-- `report.md` shows the status after this slice of J16 (delivered), J01 (the producers'
-  settings are in the files and the helper; the build pipelines and ANS-84 are left to the
-  second slice), J24 and Q9.
+- `report.md` shows the status after this slice of J16 (delivered, as steps per Ruling D2), J01
+  (the producers' guard and trigger are in their files; the build pipelines and ANS-84 are left
+  to the second slice), J24 and Q9.
 - `plan.md`'s "where things stand" records 035 and points at the second slice as the next cut.
 
 The live verification belongs to the test phase. These records state what the slice changed,
@@ -349,12 +355,13 @@ and the done-records of P1–P4 give the counts and names.
 ## Not in scope
 
 - ModernAppTemplate itself (R2).
+- Any change to a rule of the style guide (Ruling D2).
 - The build and deploy pipelines (inventory T3–T13 and the five apps' `Jenkinsfile`), with J14
   `espFirmware`, J17 (beyond S4), J21, J11, J12, J02, J26, Q2, the stage generators, podYaml's
   033 B3/B4 and python template, 034 B2's other three files, 034 I2, 033 I1's retirement of the
   describables, Q6's `KEYCLOAK_*` inlining, review §2 and §9, and closing ANS-84 — the second
   slice, cut after this one closes (`handovers/triage_2026-09-30.md` § Cut: slice 035).
 - `AaC/Architecture` and `AaC/Home Assistant Fleet` (not producers).
-- Stripping UI-held job properties through the Jenkins API (S2).
+- Editing a job's properties through the Jenkins API, or stripping the UI-held copies (S2).
 - Moving KubeCoderDeploy's `prd` branch. Its producer reaches `prd` with the operator's next
   KubeCoder promotion (V14).

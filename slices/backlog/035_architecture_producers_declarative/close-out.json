@@ -23,7 +23,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "moot: Ruling D2 was reversed at plan review r1. The guide gets no exception and FILE-1 and LIB-2 stand as written, so the skill's summaries of them stay true. The skill's library section (KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md:147-159, gitblit main) does not mention J16's status.",
+        "by": "plan-writer r2",
+        "date": "2026-10-01",
+        "commit": null
+      },
       "ruling": null
     },
     {
@@ -44,7 +49,15 @@
         "fix": "several-places",
         "repo": "Architecture"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "plan-writer r2",
+          "date": "2026-10-01",
+          "text": [
+            "Under Ruling D2 as reversed at plan review r1, each architecture type's reference after 035 is a full declarative file whose stages call architectureProducer's steps. It is not a one-call file. The manual's gap is the same, measured against that file instead."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -68,7 +81,15 @@
         "area": "plain",
         "repo": "Ansible"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "plan-writer r2",
+          "date": "2026-10-01",
+          "text": [
+            "Under Ruling D2 as reversed at plan review r1, a deploy-repo producer after 035 is the deploy-architecture reference file: a full declarative file whose stages call architectureProducer's steps. It is not one call. The template's gap is the same, measured against that file instead."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
