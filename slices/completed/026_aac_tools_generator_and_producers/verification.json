@@ -17,9 +17,11 @@
       "area": "R1 \u2014 in-house service from the Service's own container",
       "description": "The published architecture shows kube-coder-tunnel-reclaim mapped, with no gap line and no duplicate kubecoder.home service. KubeCoderDeploy's AaC build publishes from its `prd` branch, and this slice lands the mapping on `main` only.",
       "owed_after": "the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; not done by this slice)",
-      "verdict": "owed",
-      "rationale": "Mapping is on KubeCoderDeploy main only; settles after next promotion main->prd (close-out A2).",
+      "verdict": "pass",
+      "rationale": "Settled at close-out 2026-10-01: KubeCoderDeploy origin/prd (cb2011e) contains c776662; AaC/KubeCoderDeploy #11 built that prd head, SUCCESS, no gap: line. The published dataset specializes app:kubecoder-prd-kubecoder-controller-tunnel-reclaim onto app:kube-coder-tunnel-reclaim, and if:kubecoder-home is assigned to svc:kubecoder-controller-api only, with no duplicate service.",
       "evidence": [
+        "AaC/KubeCoderDeploy #11",
+        "architecture.webathome.org/data/v0.1/architecture.yaml (2026-10-01)",
         "close-out A2"
       ]
     },

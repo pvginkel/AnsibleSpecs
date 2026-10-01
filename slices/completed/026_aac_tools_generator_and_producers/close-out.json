@@ -1,7 +1,10 @@
 {
   "store": 1,
   "slice": "026_aac_tools_generator_and_producers",
-  "closed": null,
+  "closed": {
+    "date": "2026-10-01",
+    "words": "Perform the rest of your suggested actions please."
+  },
   "entries": [
     {
       "id": "A1",
@@ -20,10 +23,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "ANS-85 is already Done / Won't Do (resolved 2026-09-24)."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — ANS-85 already Done / Won't Do since 2026-09-24",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — ANS-85 already Done / Won't Do since 2026-09-24",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A2",
@@ -46,10 +66,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Happened: c776662 is on origin/prd (head cb2011e, 2026-10-01). AaC/KubeCoderDeploy #11 built that prd head at 2026-10-01 14:30Z — SUCCESS, no gap: line in the log."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "V02 settled as pass in verification.json, 2026-10-01 (AaC/KubeCoderDeploy #11 on prd cb2011e, published dataset checked)",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "V02 settled as pass in verification.json, 2026-10-01 (AaC/KubeCoderDeploy #11 on prd cb2011e, published dataset checked)",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A3",
@@ -70,10 +107,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Still owed: ARCH-14 is New, tagged Requires Operator (2026-10-01)."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded as ANS-180 (Operator Action), related to ARCH-14 and ANS-116",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Move A3 to its own card then and link to it from ARCH-14. I see that slice 014 is also linked. Maybe just link the slice card also then.",
+        "did": "carded as ANS-180 (Operator Action), related to ARCH-14 and ANS-116",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A4",
@@ -92,10 +146,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A5",
@@ -114,10 +185,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A6",
@@ -136,10 +224,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A7",
@@ -158,10 +263,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A8",
@@ -180,10 +302,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A9",
@@ -202,10 +341,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": "closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N1",
@@ -252,8 +408,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N2",
@@ -278,8 +443,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N3",
@@ -337,8 +511,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Don't worry about this.",
+        "did": "closed by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N4",
@@ -395,11 +578,34 @@
               "JenkinsPipelineUtils"
             ]
           }
+        },
+        {
+          "by": "the operator",
+          "date": "2026-10-01",
+          "text": [
+            "ruled earlier: N4 and N6: Ok."
+          ]
+        },
+        {
+          "by": "the operator",
+          "date": "2026-10-01",
+          "text": [
+            "ruled earlier: N4/N6: I meant: I've been so informed. I don't want to progress it."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "N4 and N6: Ok.",
+        "did": "closed by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N5",
@@ -420,8 +626,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N6",
@@ -476,11 +691,34 @@
               "JenkinsPipelineUtils"
             ]
           }
+        },
+        {
+          "by": "the operator",
+          "date": "2026-10-01",
+          "text": [
+            "ruled earlier: N4 and N6: Ok."
+          ]
+        },
+        {
+          "by": "the operator",
+          "date": "2026-10-01",
+          "text": [
+            "ruled earlier: N4/N6: I meant: I've been so informed. I don't want to progress it."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "N4 and N6: Ok.",
+        "did": "closed by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N7",
@@ -505,8 +743,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N8",
@@ -527,8 +774,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N9",
@@ -553,8 +809,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "N10",
@@ -575,8 +840,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B3",
@@ -641,8 +915,17 @@
           "Checked the trigger the close rests on: the race needs no fault — the test waits on the observation's status, then scrapes, while board_sync (FieldnotesApp backend/app/fieldnotes/observations.py) writes the observation through the store before it increments metrics.board_syncs, on a threading.Timer the test does not join. Ordinary CI scheduling opens the window (one red run in eight on an unchanged test), and it announces itself as a red build with a failing assertion: ordinary-condition and loud hold. FieldnotesApp is outside the repositories the slice touched."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B4",
@@ -700,8 +983,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B1",
@@ -819,8 +1111,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "This is not important to me.",
+        "did": "closed by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S2",
@@ -874,6 +1175,13 @@
               "KubeCoderDeploy"
             ]
           }
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Rebased onto origin/main (cb2011e): the commit is now KubeCoderDeploy 93855a3, not pushed."
+          ]
         }
       ],
       "wrap_up": null,
@@ -942,11 +1250,27 @@
               "ArgoCDTools"
             ]
           }
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Checked the published dataset (architecture.webathome.org/data/v0.1/architecture.yaml): the Trello 1008/1009 problem has not come back. app:jenkins-prd-jenkins-mcp-filter and app:trello-mcp-prd-trello-mcp-filter are separate instances, each with its own upstream Serving edge (ss:jenkins-prd-jenkins-jenkins, ss:trello-mcp-prd-trello-mcp-server) and its own Serving edge to intercom-server. Only the product-level service svc:mcp-filter ('Filtered MCP surface') is shared, as ss:nginx is."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed on the operator's condition, 2026-10-01: the apps stay separate (see note)",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I really won't know. What's important to me is that the separate apps stay separate. There was an issue before that becauase we were using mcp-filter in multiple places, we couldn't differentiate apps. If that issue hasn't come back, I'm good.",
+        "did": "closed on the operator's condition, 2026-10-01: the apps stay separate (see note)",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S4",
@@ -1015,8 +1339,17 @@
           "Checked the trigger the close rests on: both regressions are mutations of gen_architecture.py — the instance record's realizes taken from the image instead of the container scope, and the scope-gap loop (for image_name, names in rendered_containers) comparing against every rendered container. Neither can occur without a code change, and nothing in the estate builds a boundBy onto a container-scoped capability today: future-change holds."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S6",
@@ -1078,8 +1411,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S7",
@@ -1140,11 +1482,34 @@
               "ArgoCDTools"
             ]
           }
+        },
+        {
+          "by": "the operator",
+          "date": "2026-10-01",
+          "text": [
+            "ruled earlier: I really don't know. Can you advise?"
+          ]
+        },
+        {
+          "by": "the operator",
+          "date": "2026-10-01",
+          "text": [
+            "ruled earlier: Perform the rest of your suggested actions please."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "fixed in ArgoCDTools 34100da (lifecycle honoured, default active; stereotype still set; --help says so; test added) — not pushed",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": "34100da"
+      },
+      "ruling": {
+        "words": "I really don't know. Can you advise?",
+        "did": "fixed in ArgoCDTools 34100da (lifecycle honoured, default active; stereotype still set; --help says so; test added) — not pushed",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S8",
@@ -1236,11 +1601,27 @@
               "ExternalSecretsDeploy"
             ]
           }
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Already fixed before this close-out: one commit on 2026-09-29 22:04 across the deploy repos — ExternalSecretsDeploy dfef8d9, GrafanaDeploy dd1fc53, StepCaDeploy 3b013c2, CsiDriverSmbDeploy 595e3d9, HeadlampDeploy bec4b23, CephCsiCephfsDeploy 4f9283a, CephCsiRbdDeploy c4b7418, CloudnativePgDeploy 1dca5fd (all on origin/main); PrometheusDeploy 6fa1924. Gitblit's daily index still showed the old line. No *Deploy clone under /work/scratch carries it."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "already fixed 2026-09-29 (ExternalSecretsDeploy dfef8d9 and siblings, see note); nothing left to fix",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": "dfef8d9"
+      },
+      "ruling": {
+        "words": "Please fix it now.",
+        "did": "already fixed 2026-09-29 (ExternalSecretsDeploy dfef8d9 and siblings, see note); nothing left to fix",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S12",
@@ -1308,8 +1689,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Perform the rest of your suggested actions please.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "S5",

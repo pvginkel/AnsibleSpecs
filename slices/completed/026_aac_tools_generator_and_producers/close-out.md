@@ -6,20 +6,29 @@
 Run: 2026-09-29 20:27 → 2026-09-30 11:20 · 18 phases · 3 bail-outs (3 operator questions) · 1
 test round · doc phase done · $109.27 (planner 20 %, research 10 %, rework 3 %)
 
-## Comes to you
+Closed: 2026-10-01 — Perform the rest of your suggested actions please.
 
-### A1 — Close ANS-85 as won't-do (Ruling D2)
+## Record
+
+### ~~A1 — Close ANS-85 as won't-do (Ruling D2)~~ — closed by the operator, 2026-10-01 — ANS-85 already Done / Won't Do since 2026-09-24; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 Ruling D2 rules the app-name equality check out of this slice and closes its card as won't-do; the Argo CD runbook's warning stays (docs/runbooks/argocd.md:330-334). No role in the run touches the tracker.
+
+close-out session, 2026-10-01 — ANS-85 is already Done / Won't Do (resolved 2026-09-24).
 
 **Consequence:** ANS-85 stays open in the backlog as an unscheduled ask the operator has already decided against.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — | plan-writer, planning, r1 — plan.md Ruling D2
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — ANS-85 already Done / Won't Do since 2026-09-24
 
-### A2 — Settle V02 after the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; …
+</details>
+
+### ~~A2 — Settle V02 after the next KubeCoder promotion of KubeCoderDeploy main to prd (operator; …~~ — V02 settled as pass in verification.json, 2026-10-01 (AaC/KubeCoderDeploy #11 on prd cb2011e, published dataset checked); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 V02 — The published architecture shows kube-coder-tunnel-reclaim mapped, with no gap line and no duplicate kubecoder.home service. KubeCoderDeploy's AaC build publishes from its `prd` branch, and this slice lands the mapping on `main` only.
 
@@ -27,415 +36,127 @@ V02 — The published architecture shows kube-coder-tunnel-reclaim mapped, with 
 
 executor P9b r1, 2026-09-29 — KubeCoderDeploy main now carries the mapping on origin: P9b pushed `c776662` (P5's `e9a5ca7` plus the --help pointer). The push started no AaC/KubeCoderDeploy build: the job polls `*/prd`, and its last build is still #10. A prd generation from that main prints no `gap:` line. The promotion is the only step left.
 
+close-out session, 2026-10-01 — Happened: c776662 is on origin/prd (head cb2011e, 2026-10-01). AaC/KubeCoderDeploy #11 built that prd head at 2026-10-01 14:30Z — SUCCESS, no gap: line in the log.
+
 **Consequence:** V02 stays unproven until then; the test phase does not settle it.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — V02 settled as pass in verification.json, 2026-10-01 (AaC/KubeCoderDeploy #11 on prd cb2011e, published dataset checked)
 
-### A3 — Settle V09 after the operator's restart of the Architecture KubeCoder environment and …
+</details>
+
+### ~~A3 — Settle V09 after the operator's restart of the Architecture KubeCoder environment and …~~ — carded as ANS-180 (Operator Action), related to ARCH-14 and ANS-116; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 V09 — A central architecture update session on a deploy repo runs `gen-architecture --help` from the Architecture environment's aac-tools toolchain as the judgment layer's schema.
 
 `verification.json` marks V09 owed after: the operator's restart of the Architecture KubeCoder environment and the release of central update runs (ARCH-14). The run cannot take that action; settle the criterion once it has happened.
 
+close-out session, 2026-10-01 — Still owed: ARCH-14 is New, tagged Requires Operator (2026-10-01).
+
 **Consequence:** V09 stays unproven until then; the test phase does not settle it.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Move A3 to its own card then and link to it from ARCH-14. I see that slice 014 is also linked. Maybe just link the slice card also then. — carded as ANS-180 (Operator Action), related to ARCH-14 and ANS-116
 
-### A4 — Restart KitchenDisplay's KubeCoder environment so its lint gate finds the aac-tools sidecar (operator)
+</details>
+
+### ~~A4 — Restart KitchenDisplay's KubeCoder environment so its lint gate finds the aac-tools sidecar (operator)~~ — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P11 moved KitchenDisplay's `lint` gate from `./scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml` and declared `- use: aac-tools` in its `.kubecoder/config.yaml` (KitchenDisplay `067308b`, pushed). A running environment picks the new toolchain up only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). DockerImages' and KubeCoder's gates need no restart: DockerImages' gate is guarded and runs in the Ansible environment, which declares aac-tools, and KubeCoder's config already declared it.
+
+close-out session, 2026-10-01 — None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start.
 
 **Consequence:** Until that environment restarts, `kc project lint` in it fails at the first statement, because `cexec aac-tools` finds no sidecar.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** witnessed — executor, P11, r1, KitchenDisplay 067308b
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar
 
-### A5 — Restart the Ginbov, NewsFilter, Webathome, ScanToPdf and MyDownloads KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+</details>
+
+### ~~A5 — Restart the Ginbov, NewsFilter, Webathome, ScanToPdf and MyDownloads KubeCoder environments so their lint gates find the aac-tools sidecar (operator)~~ — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P12a moved the `lint` gate of Ginbov, NewsFilter, Webathome, ScanToPdfServer and MyDownloadsServer from `./scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in the environment each gate runs in. For Ginbov, NewsFilter and Webathome that is their own `.kubecoder/config.yaml`. ScanToPdfServer and MyDownloadsServer have no environment of their own. They are worked in the environments of the ScanToPdf and MyDownloads packager repos, whose `.kubecoder/config.yaml` gains the declaration (ScanToPdf `def421e`, MyDownloads `7a66719`). That also covers ScanToPdfClient's and MyDownloadsClient's gates, which move in P12b. A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). GitblitMCPServer's environment already declared aac-tools, and GitblitMCPSupportPlugin is worked in it. YouTrackMCPServer's gates never ran the script.
+
+close-out session, 2026-10-01 — None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start.
 
 **Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** witnessed — executor, P12a, r1, sweep_ledger.md P12a rows
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar
 
-### A6 — Restart the IntercomServer and SSEGateway KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+</details>
+
+### ~~A6 — Restart the IntercomServer and SSEGateway KubeCoder environments so their lint gates find the aac-tools sidecar (operator)~~ — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P12b moved the `lint` gate of IntercomServer and SSEGateway from `./scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in each repo's own `.kubecoder/config.yaml`. No other environment config in the estate clones either repo (gitblit search of `.kubecoder/config.yaml`). A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). ScanToPdfClient's and MyDownloadsClient's gates run in the ScanToPdf and MyDownloads environments, which A5 covers. FieldnotesApp and DHCPApp had no local gate that ran the script, and their environments already declared aac-tools.
+
+close-out session, 2026-10-01 — None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start.
 
 **Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** witnessed — executor, P12b, r1, sweep_ledger.md P12b rows
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar
 
-### A7 — Restart the ElectronicsInventory KubeCoder environment so its lint gates find the aac-tools sidecar (operator)
+</details>
+
+### ~~A7 — Restart the ElectronicsInventory KubeCoder environment so its lint gates find the aac-tools sidecar (operator)~~ — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P12c moved both components' `lint` gate in ElectronicsInventory from `../scripts/arch-validate.py` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in the repo's own `.kubecoder/config.yaml`. A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier). ZigbeeControl had no local gate that ran its copies, so its environment config is unchanged.
+
+close-out session, 2026-10-01 — None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start.
 
 **Consequence:** Until the environment restarts, `kc project lint --project backend|frontend` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** witnessed — executor, P12c, r1, sweep_ledger.md P12c rows
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar
 
-### A8 — Restart the InfraStatisticsDisplay, GestureDevice, UnderfloorHeatingController and DoorbellReceiver KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+</details>
+
+### ~~A8 — Restart the InfraStatisticsDisplay, GestureDevice, UnderfloorHeatingController and DoorbellReceiver KubeCoder environments so their lint gates find the aac-tools sidecar (operator)~~ — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P13a moved each of these four firmware repos' `lint` gate from `./scripts/arch-validate.py docs/architecture/*.yaml` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in each repo's own `.kubecoder/config.yaml`. A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier).
+
+close-out session, 2026-10-01 — None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start.
 
 **Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** witnessed — executor, P13a, r1, sweep_ledger.md P13a rows
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar
 
-### A9 — Restart the CalendarDisplay, PaperClock and Intercom KubeCoder environments so their lint gates find the aac-tools sidecar (operator)
+</details>
+
+### ~~A9 — Restart the CalendarDisplay, PaperClock and Intercom KubeCoder environments so their lint gates find the aac-tools sidecar (operator)~~ — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P13b moved each of these three firmware repos' `lint` gate from `./scripts/arch-validate.py docs/architecture/*.yaml` to `cexec aac-tools arch-validate docs/architecture/*.yaml`, and declared `- use: aac-tools` in each repo's own `.kubecoder/config.yaml` (CalendarDisplay `718dba0`, PaperClock `4e65593`, Intercom `72ebe0f`, all pushed). A running environment picks up a new toolchain only on restart, and the restart is the operator's (push-sweep attachment § Migrating a carrier).
+
+close-out session, 2026-10-01 — None of these environments has a pod in kubecoder-prd on 2026-10-01 (running: Ansible, FieldnotesApp, AIWorkflow, three KubeCoder envs, all restarted 14:31Z); a stopped environment would pick the sidecar up on its next start.
 
 **Consequence:** Until each environment restarts, `kc project lint` in it fails at the arch-validate step, because `cexec aac-tools` finds no sidecar.
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** witnessed — executor, P13b, r1, sweep_ledger.md P13b rows
-**Route:** to you — an action
-**Disposition:**
-
-### S3 — aac-tools gen-architecture: confirm R1's front-door fallback, which keeps jenkins-mcp's and trello-mcp's hosts on the shared svc:mcp-filter
-
-P1 reads R1 ("consider only the container behind the Service") with a fallback the executor settled, not the operator. When the routed container realizes no in-house service, the pod's single in-house service is referenced (gen_architecture.py:1302). Across the 26 in-house deploy repos it fires for four Services, all with the same output as before the phase. mydownloads (routed to gluetun) gets svc:mydownloads-api, which is right. jenkins-mcp, trello-mcp and trello-mcp-public (routed to the auth nginx) get svc:mcp-filter, although trello-mcp's pod also runs the upstream server ss:trello-mcp. Strict scoping would instead mint services realized by the proxy. An `exposures:` entry naming `server` would now mint a Trello MCP service realized by that container.
-
-wrap-up, 2026-10-01 — relabelled (kind: improvement → decision, trigger: — → normal-use, impact: — → degraded, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): From the text: the entry asks the operator to confirm a reading of R1 the executor settled (the pod's single in-house service as the fallback) against strict scoping or an exposures: entry — a choice that is the product owner's. Today's published model assigns the jenkins-mcp and trello-mcp hosts to the shared svc:mcp-filter, which nobody is told.
-
-**Consequence:** The published model keeps assigning the Trello MCP and Jenkins MCP hosts to the one mcp-filter service every filter deployment shares, until someone rules on the reading or adds an exposures: entry.
-
-**Triage:** decision · shows in normal use · degrades · silent · fix needs design · in
-ArgoCDTools
-**Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
-**Route:** to you — a decision
-**Disposition:**
-
-### S1 — App builds could skip rebuilding and pinning when a push changes no build input
-
-Twelve app repos build and pin into an auto-synced deploy repo on every push (plan Grounding, R6). Only DockerImages, HelmCharts and KubeCoder carry a changeset guard, and no skip-ci convention exists. So a commit touching only Jenkinsfile.architecture, a README or scripts/ rebuilds the image and restarts the production app. This slice accepts that once per app (Ruling D1). A changeset guard in the shared build (or a skip rule for architecture-only paths) would let the next estate-wide sweep, or any doc commit, leave production alone. Out of this slice (plan: Not in scope).
-
-wrap-up, 2026-10-01 — relabelled (benefit: — → operations, felt: — → in-use, change: — → add, size: — → design, product-call: — → no, prevents: — → degraded, area: — → plain, repo: — → JenkinsPipelineUtils): From the text: a changeset guard (or skip rule) in the shared build adds behaviour to every app pipeline; it would spare production restarts on docs/architecture-only commits, felt on each such commit today.
-
-**Consequence:** Every docs-only or architecture-only commit to one of these twelve app repos restarts its production app on a rebuilt image, and each device repo re-flashes its hardware.
-
-**Triage:** improvement · operations are better off · felt in use · adds something · needs
-design · prevents a degradation · in JenkinsPipelineUtils
-**Provenance:** read — | plan-writer, planning, r1 — plan.md Grounding (R6) and refinement.md D1
-**Route:** to you — an improvement
-**Disposition:**
-
-### S7 — aac-tools gen-architecture: --help says product entries are copied as written, but lifecycle and stereotype are overwritten · nit
-
-The products paragraph of the contract (ArgoCDTools aac-tools/image/gen_architecture.py:163) says "The generator copies the fields as written". The code (:1026-1032) sets stereotype to SoftwareProduct and lifecycle to active whatever the entry says. lifecycle is a schema field (Architecture schema/v0.1/generated/systemsoftware.schema.yaml:30). No estate layer sets it today.
-
-consult 1, 2026-09-30 — Left open on purpose. The fix is a choice between honouring an owned product's lifecycle in code and documenting the override in the contract that --help prints. That is a product decision, not a residue comment fix.
-
-wrap-up, 2026-10-01 — relabelled (kind: improvement → decision, trigger: — → future-change, impact: — → degraded, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): Read: gen_architecture.py's products paragraph says 'The generator copies the fields as written'; the products loop (now ~:1036-1046) sets stereotype=SoftwareProduct and lifecycle=active over the entry. No layer sets lifecycle today, so it shows only after a change; then the published model states the product active (a wrong status, silent). Consult 1 already called the fix a choice: honour lifecycle in code or document the override.
-
-**Consequence:** A judgment layer that sets lifecycle on a product it owns, for example to retire it, publishes the product as active, with no gap and no error.
-
-**Triage:** decision · needs a future change · degrades · silent · fix needs design · in
-ArgoCDTools
-**Provenance:** read — | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
-**Route:** to you — a decision
-**Disposition:**
-
-## Card requests
-
-### N3 — KitchenDisplay moved from the device class to P11: its Jenkins deploy job is disabled
-
-The Grounding classed KitchenDisplay as restarting a Raspberry Pi service on every push. Jenkins reports Firmware/KitchenDisplay as disabled (buildable false). Its last eight builds (#64–#71, to 2026-06-06) failed at 'Deploy kitchendisplay': the job checks out HelmCharts for assets/kubernetes-pipeline-key, and the file is not there. HelmCharts is now archived. A push therefore starts only AaC/KitchenDisplay, and P10 put it in P11, the no-rollout class. P11 checks that the job is still disabled right before the push. If it has been enabled, P11 moves KitchenDisplay to the end of P13b.
-
-wrap-up, 2026-10-01 — relabelled (trigger: unknown → normal-use, impact: unknown → broken, signal: unknown → silent, fix: — → design, area: — → sensitive, repo: — → KitchenDisplay): Read: Jenkins reports Firmware/KitchenDisplay buildable=false (color disabled, last build #71 FAILURE). KitchenDisplay's Jenkinsfile (lines 32-46) still clones HelmCharts in 'Build kitchendisplay' and deploys to the Pi through helmCharts.ssh/helmCharts.rsync, whose key comes from that checkout. So a push to KitchenDisplay deploys nothing and nothing says so; re-enabling fails on the archived repo. The fix is where the Pi deploy key comes from now that HelmCharts is archived: a choice touching a secret, in a repository the slice did not touch.
-
-**Consequence:** The Pi restart Ruling D1 accepted for KitchenDisplay does not happen. KitchenDisplay has no working Jenkins deploy: re-enabling the job as it stands fails at the same missing HelmCharts key.
-
-**Triage:** event · shows in normal use · breaks a flow · silent · fix needs design · sensitive
-area · in KitchenDisplay
-**Provenance:** witnessed — | code-writer, P10, r1 — Jenkins Firmware/KitchenDisplay api/json and #71 console
-**Route:** card request — the fix lives in KitchenDisplay, which the slice did not touch
-**Disposition:**
-
-### N4 — The prd class grows to seventeen carriers: four the Grounding classed as no rollout redeploy prd through a job their push starts
-
-ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient build no image themselves. But each Jenkinsfile runs `build job:` (`wait: false`) on `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, and MyDownloadsClient also on `Webathome`. Each of those runs kaniko and pins, with no guard, into ScantopdfDeploy, MediaDeploy or WebathomeOrgDeploy. The `scantopdf-prd`, `media-prd` and `webathome-org-prd` Applications auto-sync. Jenkins records the chain on real pushes: ScanToPdf #33 and #34, MyDownloads #98 and #100, and Webathome #236 and #238 were started by these carriers. The four moved from P11 to P12a–b and now go through the prd health gate. Ruling D1's trade-off named twelve prd apps. With FieldnotesApp (P10 r1), the sweep also restarts scantopdf and media.
-
-code-reviewer, P10, r2, 2026-09-30 — Correction: scantopdf-prd and media-prd each restart twice, not once. ScanToPdfServer (P12a) and ScanToPdfClient (P12b) each start a ScanToPdf build that pins ScantopdfDeploy. MyDownloadsServer (P12a) and MyDownloadsClient (P12b) each start a MyDownloads build that pins MediaDeploy. (phases/P10/code_review_r2.md F1)
-
-wrap-up, 2026-10-01 — relabelled (trigger: unknown → ordinary-condition, impact: unknown → degraded, signal: unknown → silent, fix: — → design, area: — → plain, repo: — → JenkinsPipelineUtils): Read: the carriers' Jenkinsfiles start ScanToPdf/ScanToPdf, MyDownloads/MyDownloads (and Webathome) with build job: wait:false, and those jobs rebuild and pin into auto-synced deploy repos with no changeset guard. A push that changes no build input (architecture-only, docs) therefore restarts scantopdf-prd/media-prd on unchanged code; the pods came back Synced/Healthy, so the impact corrects itself, and nothing reports the restart as needless. The fix is S1's: a changeset guard (shared build in JenkinsPipelineUtils, or per packager Jenkinsfile) — a design choice, outside the repositories the slice touched.
-
-**Consequence:** scantopdf-prd, media-prd and FieldnotesApp's app restart once on unchanged code during P12a–b, on top of the twelve production apps Ruling D1's trade-off named.
-
-**Triage:** event · shows on an ordinary condition · degrades · silent · fix needs design · in
-JenkinsPipelineUtils
-**Provenance:** witnessed — code-writer, P10, fix round r2, Jenkins build causes and the GitHub Jenkinsfiles (phases/P10/code_review_r1.md F1)
-**Route:** card request — the fix lives in JenkinsPipelineUtils, which the slice did not touch
-**Disposition:**
-
-### N6 — P12a pushed the ScanToPdf and MyDownloads packager repos, which no phase listed, for one environment config line each
-
-ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient carry no `.kubecoder/config.yaml`. Each is worked in the environment of its packager repo (ScanToPdf or MyDownloads), whose config clones it. Their `lint` gates now run `cexec aac-tools arch-validate`, so the attachment's § Migrating a carrier gives those two environments the aac-tools declaration: ScanToPdf `def421e` and MyDownloads `7a66719`, config only. Ruling D1 authorises pushing every repo the sweep touches, but a packager push runs its job, `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, with no guard. That job rebuilds the image and pins it. P12a pushed each packager in a batch apart from the carrier that pins the same deploy repo. ScanToPdf #38 pinned ScantopdfDeploy `45f0087`, and MyDownloads #105 pinned MediaDeploy `17171dc`. scantopdf-prd and media-prd were Synced and Healthy at each pin. Neither packager has an `AaC/` job. P12b's clients use the same two environments and leave the packagers alone.
-
-wrap-up, 2026-10-01 — relabelled (trigger: unknown → ordinary-condition, impact: unknown → degraded, signal: unknown → silent, fix: — → design, area: — → plain, repo: — → JenkinsPipelineUtils): Read: same mechanism as N4 — a push of the ScanToPdf or MyDownloads packager runs its job, which rebuilds and pins ScantopdfDeploy/MediaDeploy with no guard (ScanToPdf #38 -> 45f0087, MyDownloads #105 -> 17171dc), so a config-only push restarts the prd app on unchanged code; it recovered Synced/Healthy and nothing flagged it. Fix as N4/S1: a changeset guard, a design choice outside the slice's repositories.
-
-**Consequence:** scantopdf-prd and media-prd each restart once more on unchanged code: three times across P12a–b, where N4's correction counted two.
-
-**Triage:** event · shows on an ordinary condition · degrades · silent · fix needs design · in
-JenkinsPipelineUtils
-**Provenance:** witnessed — executor, P12a, r1, sweep_ledger.md rows ScanToPdf and MyDownloads
-**Route:** card request — the fix lives in JenkinsPipelineUtils, which the slice did not touch
-**Disposition:**
-
-### S10 — Deploy repos' architecture.yaml still name HelmCharts configs/prd/<app>/<stage>/release.yaml as the registry entry that pins the upstream chart version · nit
-
-PrometheusDeploy's architecture.yaml:7-8 says the upstream chart version is the one 'this app's registry entry pins (HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both'. HelmCharts was archived on 2026-09-28, and the pin now lives in ArgoCDDeploy releases/values.yaml (prometheus: stages.prd.version "29.33.0", line 210). The same HelmCharts wording appears in 9 more deploy repos' architecture.yaml (grep 'HelmCharts configs' over /work/scratch/sweep031/*/architecture.yaml). P7 left it alone because it is outside R5.
-
-wrap-up, 2026-10-01 — relabelled (kind: improvement → prose, trigger: — → normal-use, impact: — → degraded, signal: — → silent, fix: — → several-places, repo: — → PrometheusDeploy): Read: PrometheusDeploy's architecture.yaml:7-8 already names ArgoCDDeploy releases/values.yaml (commit 6fa1924, on origin/main). Gitblit's index (daily sync) still finds 'HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both' in the architecture.yaml of ExternalSecretsDeploy, CsiDriverSmbDeploy, CephCsiCephfsDeploy and CephCsiRbdDeploy at least, all repositories the slice's phases did not target. The edit is the same comment line in each.
-
-wrap-up, 2026-10-01 — relabelled (repo: PrometheusDeploy → ExternalSecretsDeploy): Correction to the repo just given: PrometheusDeploy's line is fixed already (6fa1924), so what remains lives only in the other deploy repos — ExternalSecretsDeploy, CsiDriverSmbDeploy, CephCsiCephfsDeploy, CephCsiRbdDeploy and the rest of the ten the body counts — none of which the slice's phases targeted.
-
-**Consequence:** A maintainer bumping an upstream chart version is sent to an archived repo for the second pin; the header does not name ArgoCDDeploy's releases/values.yaml, where the version actually is.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in ExternalSecretsDeploy
-**Provenance:** witnessed — code-writer, P7, r1, /work/scratch/PrometheusDeploy/architecture.yaml
-**Route:** card request — the fix lives in ExternalSecretsDeploy, which the slice did not touch
-**Disposition:**
-
-## Closed
-
-### B3 — FieldnotesApp: test_syncs_and_deliveries_are_counted scrapes the board-sync counter before the queued sync increments it · minor
-
-<details><summary>body</summary>
-
-FieldnotesApp #40 (P12b's push of `1ee1929`, 2026-09-30 01:19) failed in its suite on one of 347 tests: `backend/tests/fieldnotes/test_board_sync.py::test_syncs_and_deliveries_are_counted` asserted `fieldnotes_board_syncs_total{result="changed"} == 2` and read 1.0. The test waits with `eventually` for the observation's status to read `closed`, then scrapes. The queued sync runs on a `threading.Timer` in `ObservationService.sync_later`. `board_sync` (`backend/app/fieldnotes/observations.py:214-215`) commits the observation through `self.store.write(...)` first and increments `metrics.board_syncs` only after the write returns. So the test can see `closed` and scrape before the second `changed` is counted. The same job was green seven times on 2026-09-27/28 with the test unchanged (last touched in `e7891ed`). P12b's commit changes only `Jenkinsfile.architecture` and deletes `scripts/arch-validate.py`, which the suite does not read.
-
-wrap-up, 2026-10-01 — relabelled (trigger: — → ordinary-condition, impact: — → broken, signal: — → loud, fix: — → design, area: — → sensitive, repo: — → FieldnotesApp): From the text: a race between the test's scrape and the Timer-run sync's counter increment, met once in eight runs on unchanged code (ordinary CI timing). A red build ships no image until a retry (broken, loud). The entry names no fix; waiting on the counter in the test or counting before the store write in board_sync are two choices, and the area is timing.
-
-wrap-up, 2026-10-01 — looked and left it: Checked the trigger the close rests on: the race needs no fault — the test waits on the observation's status, then scrapes, while board_sync (FieldnotesApp backend/app/fieldnotes/observations.py) writes the observation through the store before it increments metrics.board_syncs, on a threading.Timer the test does not join. Ordinary CI scheduling opens the window (one red run in eight on an unchanged test), and it announces itself as a red build with a failing assertion: ordinary-condition and loud hold. FieldnotesApp is outside the repositories the slice touched.
-
-</details>
-
-**Consequence:** FieldnotesApp builds fail at random on this test, and a red build ships no image. A retry on the same head is the only remedy today.
-
-**Triage:** defect · shows on an ordinary condition · breaks a flow · loud · fix needs design ·
-sensitive area · in FieldnotesApp
-**Provenance:** witnessed — executor, P12b, r1, https://jenkins.webathome.org/job/FieldnotesApp/40/ (testReport, validation.log)
-**Route:** closed — the fix lives in FieldnotesApp, which the slice did not touch
-**Disposition:**
-
-### S4 — aac-tools gen-architecture: no test catches it if two parts of container scoping regress · minor
-
-<details><summary>body</summary>
-
-The suite still passes after either of two mutations. One makes the instance record carry the image-level realizes instead of the scoped one (gen_architecture.py:1035). The boundBy capability filter, the loopback pick and the secret-store match read that record, so a boundBy onto a container-scoped capability would then hard-fail. The other makes the scope gap compare against every rendered container instead of the image's own (:1096). Worth a test each. P6's layer relies on neither path.
-
-wrap-up, 2026-10-01 — relabelled (kind: improvement → test-gap, trigger: — → future-change, impact: — → broken, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): Read: a test is missing and the code (instance record realizes at gen_architecture.py:~1101/1137, the per-image scope gap at ~:1196) is right today. Of the two regressions, the first hard-fails a boundBy onto a container-scoped capability (loud), the second drops a gap line (silent); one of each is silent. The entry names no test: the first needs a fixture the suite lacks (a consumer workload in the argo render and a boundBy recipe in the dataset onto CONFIG_MGMT), so the test's shape is a choice, not a stated edit.
-
-wrap-up, 2026-10-01 — looked and left it: Checked the trigger the close rests on: both regressions are mutations of gen_architecture.py — the instance record's realizes taken from the image instead of the container scope, and the scope-gap loop (for image_name, names in rendered_containers) comparing against every rendered container. Neither can occur without a code change, and nothing in the estate builds a boundBy onto a container-scoped capability today: future-change holds.
-
-</details>
-
-**Consequence:** A later change could break a boundBy that resolves onto a container-scoped capability without any test failing. Nothing in the estate relies on that path today.
-
-**Triage:** test gap · needs a future change · breaks a flow · silent · fix needs design · in
-ArgoCDTools
-**Provenance:** witnessed — code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
-**Route:** closed — it cannot show with the code as it is
-**Disposition:**
-
-### S6 — aac-tools gen-architecture: the --help contract test does not notice when the image entry's served_by definition is removed · minor
-
-<details><summary>body</summary>
-
-HelpContractTests' key check (ArgoCDTools aac-tools/tests/test_gen_architecture.py:1492-1497) only requires each key to appear somewhere in --help. The JUDGMENT_KEYS section labels are subtest names, not the section searched. Deleting the served_by bullet from the image-entry keys (gen_architecture.py:133-136) leaves all three HelpContractTests green, because the cnpg paragraph still names served_by. The same holds for any key named in two paragraphs (product, realizes, upstream). The contract is complete at eadf4ca: this is only a regression guard. A check that looks for each key in its own paragraph would close it.
-
-wrap-up, 2026-10-01 — relabelled (kind: improvement → test-gap, trigger: — → future-change, impact: — → degraded, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): Read: HelpContractTests.test_help_names_every_key_the_judgment_layer_takes (tests/test_gen_architecture.py:1493-1498) searches the whole --help for each key; the contract is complete today. 'Look for each key in its own paragraph' leaves open how each of the nine JUDGMENT_KEYS sections maps to a span of the docstring (top-level paragraphs, the image-entry bullet list, the upstream and containers bullets nested in it, cnpg, products, mcpClients) — a choice that decides how tightly the test binds the docstring's layout, not a stated edit.
-
-</details>
-
-**Consequence:** A later docstring edit could drop served_by's (or realizes', product's) image-entry definition from --help without any test failing.
-
-**Triage:** test gap · needs a future change · degrades · silent · fix needs design · in
-ArgoCDTools
-**Provenance:** witnessed — | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F1 (mutation run)
-**Route:** closed — it cannot show with the code as it is
-**Disposition:**
-
-### S12 — Architecture update-architecture agent: the contract it reads from the sidecar's gen-architecture --help can be older than the generator the deploy repos build with · minor
-
-<details><summary>body</summary>
-
-update-architecture.md:49-50 has a central update session run `cexec aac-tools gen-architecture --help` for a deploy repo's contract, and says it is the contract of the generator the deploy repos build with. Jenkins pulls registry:5000/aac-tools untagged with alwaysPullImage on every AaC build (JenkinsPipelineUtils containerTemplates.groovy:34). The Architecture environment's sidecar carries whatever image its pod last started with, and the sessions run in that pod (tooling/fleet.py:827). So after an ArgoCDTools publication that changes the judgment-layer contract, the agent reads the older contract until the environment restarts. Idea: restart the Architecture environment as part of publishing a contract change, or have the fleet check the sidecar's image digest against registry latest before it runs sessions.
-
-wrap-up, 2026-10-01 — relabelled (benefit: — → operations, felt: — → after-change, change: — → add, size: — → design, product-call: — → no, prevents: — → degraded, area: — → plain, repo: — → Architecture): From the text: felt only after an ArgoCDTools publication changes the judgment-layer contract; either remedy (restart the Architecture environment on publishing, or a digest check in the fleet before sessions) adds a step or a check.
-
-</details>
-
-**Consequence:** After a future contract change, central update sessions edit deploy repos' judgment layers against the older contract until someone restarts the Architecture environment. A valid but incomplete edit passes the AaC build unnoticed.
-
-**Triage:** improvement · operations are better off · felt after a change · adds something ·
-needs design · prevents a degradation · in Architecture
-**Provenance:** read — code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
-**Route:** closed — it adds something for a benefit that is not felt in use
-**Disposition:**
-
-### B4 — IoTSupport: deleting a device model logs an SQLAlchemy row-count warning for firmware_versions · cosmetic
-
-<details><summary>body</summary>
-
-When the operator deleted the somfy_remote model (DELETE /api/device-models/4, 2026-09-30 07:25 UTC), iotsupport-app logged `app/services/device_model_service.py:211: SAWarning: DELETE statement on table 'firmware_versions' expected to delete 5 row(s); 0 were matched.` The model and its S3 objects were deleted and the request returned 204, so the rows were already gone when the ORM's own delete ran — two paths delete the same firmware_versions rows. Out of this slice's scope; not fixed.
-
-wrap-up, 2026-10-01 — relabelled (trigger: — → normal-use, impact: — → none, signal: — → none, fix: — → design, area: — → plain, repo: — → IoTSupport): From the text: every device-model deletion logs the SAWarning; the delete succeeds and returns 204, so nothing is wrong beyond log noise. Which of the two delete paths for firmware_versions to drop is not stated.
-
-</details>
-
-**Consequence:** none today — the delete succeeds; the warning is noise in the backend log on every model deletion
-
-**Triage:** defect · shows in normal use · no impact · fix needs design · in IoTSupport
-**Provenance:** witnessed — executor, P12c, r2, kubectl logs iot-prd/iotsupport-598d6d6f5-gjlv7 -c iotsupport-app
-**Route:** closed — the fix lives in IoTSupport, which the slice did not touch
-**Disposition:**
-
-## Record
-
-### N1 — R1's generator fix also removes a duplicate service from five other deploy repos' published models
-
-<details><summary>kept for the record</summary>
-
-The same bug R1 names for KubeCoder (a pod with two in-house apps each realizing a service makes gen-architecture mint a duplicate service for the host) already hit five other producers. With the fix, each drops its minted svc:<ns>-<service> and its Realization, and the host's interface is assigned to the routed container's own in-house service instead: electronics-inventory-deploy (parts.ginbov.nl -> svc:electronics-inventory-ui-web), fieldnotes-deploy (fieldnotes.home/fieldnotes -> svc:fieldnotes-ui-web; fieldnotes-hooks.webathome.org -> svc:webhook-relay), iot-deploy (iot.ginbov.nl -> svc:iotsupport-ui-web), scantopdf-deploy (scantopdf.home -> svc:scantopdf-api), zigbee2mqtt-deploy (z2m.webathome.org -> svc:zigbee-control-ui-web). They land on each repo's next AaC build after aac-tools is published.
-
-code-writer P1 r1, 2026-09-29 — Checked 2026-09-29: in the live dataset each of the six minted svc: ids appears only in its own producer's element, Realization and Assignment(s), and no file in /work/Architecture names one, so nothing dangles today; the consequence is limited to the ids disappearing.
-
-code-reviewer P1 r1, 2026-09-29 — Checked 2026-09-29: the five dropped ids (svc:electronics-inventory-prd-electronics-inventory, svc:fieldnotes-prd-fieldnotes, svc:fieldnotes-prd-fieldnotes-hooks, svc:iot-prd-iotsupport, svc:scantopdf-prd-scantopdf, svc:zigbee2mqtt-prd-zigbee-control) appear in the live dataset only in their own producer's Assignment and Realization relations. No file in /work/Architecture or /work/DockerImages references them, so nothing hand-authored dangles.
-
-wrap-up, 2026-10-01 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read: the event records a correct side-effect of R1's fix, not a problem. Both notes under the entry checked the five dropped svc: ids against the live dataset, /work/Architecture and /work/DockerImages and found them referenced only by their own producer's Realization and Assignment, so nothing dangles; the duplicates' disappearance is the fix working.
-
-**Consequence:** The published model loses five minted per-deployment services and their UUIDs; anything hand-authored elsewhere that references one of those svc: ids now dangles.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — code-writer, P1, r1, old-vs-new generation of the 26 deploy repos with in-house images (/work/scratch/p1-cmp/out)
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### N2 — Run paused for an operator question in P4
-
-<details><summary>kept for the record</summary>
-
-The question, as the driver recorded it:
-
-> Planned stop (Rulings D3, F3): ArgoCDTools main eadf4ca (P1–P3) is published, and IaC/ArgoCDTools #20 built it green, so registry:5000/aac-tools:20 and :latest carry the new generator. The how-to diff is committed (Ansible 5ef7adc on phase/026-P4, gate green) and so is the done-record. Please restart this environment (kc env restart) to bring the published aac-tools sidecar and modern-app together, then relaunch the run; the relaunched round only confirms and hands back done.
-
-Stopped 2026-09-29 21:15; resumed 2026-09-29 21:24.
-
-**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### N5 — KubeCoder was pushed without KubeCoder's devlock, which this environment cannot reach
-
-<details><summary>kept for the record</summary>
-
-KubeCoder's deploy-operations.md says a hand-driven push that rolls `kubecoder@dev` takes the devlock first. The lease is a flock on the shared KubeCoderSpecs mount (`scripts/devlock.sh`), and this environment has only a scratch clone of KubeCoderSpecs, whose lock file is a different inode. P11 pushed under Ruling D1 after checking proxies instead: the last `KubeCoder/Build-Main` build was #557 on 2026-09-28 19:29 UTC, no build was running, and KubeCoderSpecs' latest commit (2026-09-28 21:28 +0200) closes out slice 236, with no slice in a test or doc phase on origin. The push rebased onto origin/main, so the image it built is a superset of what dev ran.
-
-**Consequence:** none, if no KubeCoder session was validating on dev at the time. Otherwise that session saw its dev pods roll once on unchanged code.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — executor, P11, r1, /work/scratch/p9-sweep/logs/carrier-KubeCoder.log
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### N7 — Run paused for an operator question in P12b
-
-<details><summary>kept for the record</summary>
-
-The question, as the driver recorded it:
-
-> D1 stop rule: FieldnotesApp #40, the build of the pushed head 1ee1929, is red. One of 347 tests failed, backend test_board_sync::test_syncs_and_deliveries_are_counted (board_syncs_total{changed} read 1.0, expected 2). It is a race between the observation write and the counter increment, in code the migration does not touch (close-out B3). The build stopped before kaniko: no image, no pin, and fieldnotes-prd stays Healthy at 45bf980. AaC/FieldnotesApp #5 is green on the head. IntercomServer, DHCPApp and ScanToPdfClient are pushed and done. SSEGateway (41cf1b5) and MyDownloadsClient (fc6c74b) a…
-
-Stopped 2026-09-30 01:34; resumed 2026-09-30 08:29.
-
-**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### N8 — Ruling D5's FieldnotesApp rebuild did not run: an operator push had already built the migrated code green
-
-<details><summary>kept for the record</summary>
-
-Ruling D5 said to rebuild FieldnotesApp once on 1ee1929 after #40 went red. When P12b resumed, FieldnotesApp's main was at 97777d7 (FN-18, 2026-09-30 03:05), a descendant of 1ee1929 that no phase of this slice made. FieldnotesApp #41 had built it green and pinned FieldnotesDeploy b7daf6f, and fieldnotes-prd was Synced/Healthy there. AaC/FieldnotesApp #6 was green on it and ran arch-validate in the aac-tools container. A rebuild of the job builds main's head, so it would only have restarted fieldnotes-prd again on the same code. The run counted #41 as D5's green build and went on to SSEGateway.
-
-**Consequence:** none — fieldnotes-prd runs an image built from a head that carries the migration; the B3 race is unchanged and can still redden a later FieldnotesApp build
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — code-writer, P12b r2, sweep_ledger.md FieldnotesApp row
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### N9 — Run paused for an operator question in P12c
-
-<details><summary>kept for the record</summary>
-
-The question, as the driver recorded it:
-
-> D1 stop rule at IoTSupport: AaC/IoTSupport is still red at #41, its last build (last green #37), failing in IoTSupport's own generator with `ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset` (the archived SomfyRemote's somfy_remote firmware product, still used by registered device somfy-remote-fhwiwoxa; close-out B2), and no ruling settles it, so IoTSupport is neither migrated nor pushed. ElectronicsInventory 55fb7b7 and ZigbeeControl e6c9f76 are pushed and done: app builds #256/#61 green, both prd apps Synced/Healthy at their new pins, AaC…
-
-Stopped 2026-09-30 09:23; resumed 2026-09-30 09:27.
-
-**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### N10 — The doc phase commits a README change on ArgoCDTools main, so the driver's push rebuilds and republishes both ArgoCDTools images
-
-<details><summary>kept for the record</summary>
-
-ArgoCDTools c6d37c8 (README only: gen-architecture --help as the annotation layer's contract; producer repos run arch-validate from the image and keep no copy) sits on main, one ahead of origin. Any ArgoCDTools push runs IaC/ArgoCDTools, which republishes argocd-hook and aac-tools as :<N> and :latest and writes no pin. The README is outside both images' build contexts (each image folder is its own context), so the new builds carry the same generator and validator.
-
-**Consequence:** none — aac-tools:latest moves to a new build number with unchanged commands; the estate's architecture builds pull it with no difference in output.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — doc-writer, doc phase, r1, ArgoCDTools c6d37c8
-**Route:** the record
-**Disposition:**
+**Disposition:** Perform the rest of your suggested actions please. — closed by the operator, 2026-10-01 — none of the environments runs; the next start brings the sidecar
 
 </details>
 
@@ -469,6 +190,235 @@ executor, P12c r2, 2026-09-30 — Resolved under Ruling D6: the operator deleted
 
 </details>
 
+### ~~B3 — FieldnotesApp: test_syncs_and_deliveries_are_counted scrapes the board-sync counter before the queued sync increments it · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+FieldnotesApp #40 (P12b's push of `1ee1929`, 2026-09-30 01:19) failed in its suite on one of 347 tests: `backend/tests/fieldnotes/test_board_sync.py::test_syncs_and_deliveries_are_counted` asserted `fieldnotes_board_syncs_total{result="changed"} == 2` and read 1.0. The test waits with `eventually` for the observation's status to read `closed`, then scrapes. The queued sync runs on a `threading.Timer` in `ObservationService.sync_later`. `board_sync` (`backend/app/fieldnotes/observations.py:214-215`) commits the observation through `self.store.write(...)` first and increments `metrics.board_syncs` only after the write returns. So the test can see `closed` and scrape before the second `changed` is counted. The same job was green seven times on 2026-09-27/28 with the test unchanged (last touched in `e7891ed`). P12b's commit changes only `Jenkinsfile.architecture` and deletes `scripts/arch-validate.py`, which the suite does not read.
+
+wrap-up, 2026-10-01 — relabelled (trigger: — → ordinary-condition, impact: — → broken, signal: — → loud, fix: — → design, area: — → sensitive, repo: — → FieldnotesApp): From the text: a race between the test's scrape and the Timer-run sync's counter increment, met once in eight runs on unchanged code (ordinary CI timing). A red build ships no image until a retry (broken, loud). The entry names no fix; waiting on the counter in the test or counting before the store write in board_sync are two choices, and the area is timing.
+
+wrap-up, 2026-10-01 — looked and left it: Checked the trigger the close rests on: the race needs no fault — the test waits on the observation's status, then scrapes, while board_sync (FieldnotesApp backend/app/fieldnotes/observations.py) writes the observation through the store before it increments metrics.board_syncs, on a threading.Timer the test does not join. Ordinary CI scheduling opens the window (one red run in eight on an unchanged test), and it announces itself as a red build with a failing assertion: ordinary-condition and loud hold. FieldnotesApp is outside the repositories the slice touched.
+
+**Consequence:** FieldnotesApp builds fail at random on this test, and a red build ships no image. A retry on the same head is the only remedy today.
+
+**Triage:** defect · shows on an ordinary condition · breaks a flow · loud · fix needs design ·
+sensitive area · in FieldnotesApp
+**Provenance:** witnessed — executor, P12b, r1, https://jenkins.webathome.org/job/FieldnotesApp/40/ (testReport, validation.log)
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~B4 — IoTSupport: deleting a device model logs an SQLAlchemy row-count warning for firmware_versions · cosmetic~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+When the operator deleted the somfy_remote model (DELETE /api/device-models/4, 2026-09-30 07:25 UTC), iotsupport-app logged `app/services/device_model_service.py:211: SAWarning: DELETE statement on table 'firmware_versions' expected to delete 5 row(s); 0 were matched.` The model and its S3 objects were deleted and the request returned 204, so the rows were already gone when the ORM's own delete ran — two paths delete the same firmware_versions rows. Out of this slice's scope; not fixed.
+
+wrap-up, 2026-10-01 — relabelled (trigger: — → normal-use, impact: — → none, signal: — → none, fix: — → design, area: — → plain, repo: — → IoTSupport): From the text: every device-model deletion logs the SAWarning; the delete succeeds and returns 204, so nothing is wrong beyond log noise. Which of the two delete paths for firmware_versions to drop is not stated.
+
+**Consequence:** none today — the delete succeeds; the warning is noise in the backend log on every model deletion
+
+**Triage:** defect · shows in normal use · no impact · fix needs design · in IoTSupport
+**Provenance:** witnessed — executor, P12c, r2, kubectl logs iot-prd/iotsupport-598d6d6f5-gjlv7 -c iotsupport-app
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N1 — R1's generator fix also removes a duplicate service from five other deploy repos' published models~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The same bug R1 names for KubeCoder (a pod with two in-house apps each realizing a service makes gen-architecture mint a duplicate service for the host) already hit five other producers. With the fix, each drops its minted svc:<ns>-<service> and its Realization, and the host's interface is assigned to the routed container's own in-house service instead: electronics-inventory-deploy (parts.ginbov.nl -> svc:electronics-inventory-ui-web), fieldnotes-deploy (fieldnotes.home/fieldnotes -> svc:fieldnotes-ui-web; fieldnotes-hooks.webathome.org -> svc:webhook-relay), iot-deploy (iot.ginbov.nl -> svc:iotsupport-ui-web), scantopdf-deploy (scantopdf.home -> svc:scantopdf-api), zigbee2mqtt-deploy (z2m.webathome.org -> svc:zigbee-control-ui-web). They land on each repo's next AaC build after aac-tools is published.
+
+code-writer P1 r1, 2026-09-29 — Checked 2026-09-29: in the live dataset each of the six minted svc: ids appears only in its own producer's element, Realization and Assignment(s), and no file in /work/Architecture names one, so nothing dangles today; the consequence is limited to the ids disappearing.
+
+code-reviewer P1 r1, 2026-09-29 — Checked 2026-09-29: the five dropped ids (svc:electronics-inventory-prd-electronics-inventory, svc:fieldnotes-prd-fieldnotes, svc:fieldnotes-prd-fieldnotes-hooks, svc:iot-prd-iotsupport, svc:scantopdf-prd-scantopdf, svc:zigbee2mqtt-prd-zigbee-control) appear in the live dataset only in their own producer's Assignment and Realization relations. No file in /work/Architecture or /work/DockerImages references them, so nothing hand-authored dangles.
+
+wrap-up, 2026-10-01 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read: the event records a correct side-effect of R1's fix, not a problem. Both notes under the entry checked the five dropped svc: ids against the live dataset, /work/Architecture and /work/DockerImages and found them referenced only by their own producer's Realization and Assignment, so nothing dangles; the duplicates' disappearance is the fix working.
+
+**Consequence:** The published model loses five minted per-deployment services and their UUIDs; anything hand-authored elsewhere that references one of those svc: ids now dangles.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — code-writer, P1, r1, old-vs-new generation of the 26 deploy repos with in-house images (/work/scratch/p1-cmp/out)
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N2 — Run paused for an operator question in P4~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The question, as the driver recorded it:
+
+> Planned stop (Rulings D3, F3): ArgoCDTools main eadf4ca (P1–P3) is published, and IaC/ArgoCDTools #20 built it green, so registry:5000/aac-tools:20 and :latest carry the new generator. The how-to diff is committed (Ansible 5ef7adc on phase/026-P4, gate green) and so is the done-record. Please restart this environment (kc env restart) to bring the published aac-tools sidecar and modern-app together, then relaunch the run; the relaunched round only confirms and hands back done.
+
+Stopped 2026-09-29 21:15; resumed 2026-09-29 21:24.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N3 — KitchenDisplay moved from the device class to P11: its Jenkins deploy job is disabled~~ — closed by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The Grounding classed KitchenDisplay as restarting a Raspberry Pi service on every push. Jenkins reports Firmware/KitchenDisplay as disabled (buildable false). Its last eight builds (#64–#71, to 2026-06-06) failed at 'Deploy kitchendisplay': the job checks out HelmCharts for assets/kubernetes-pipeline-key, and the file is not there. HelmCharts is now archived. A push therefore starts only AaC/KitchenDisplay, and P10 put it in P11, the no-rollout class. P11 checks that the job is still disabled right before the push. If it has been enabled, P11 moves KitchenDisplay to the end of P13b.
+
+wrap-up, 2026-10-01 — relabelled (trigger: unknown → normal-use, impact: unknown → broken, signal: unknown → silent, fix: — → design, area: — → sensitive, repo: — → KitchenDisplay): Read: Jenkins reports Firmware/KitchenDisplay buildable=false (color disabled, last build #71 FAILURE). KitchenDisplay's Jenkinsfile (lines 32-46) still clones HelmCharts in 'Build kitchendisplay' and deploys to the Pi through helmCharts.ssh/helmCharts.rsync, whose key comes from that checkout. So a push to KitchenDisplay deploys nothing and nothing says so; re-enabling fails on the archived repo. The fix is where the Pi deploy key comes from now that HelmCharts is archived: a choice touching a secret, in a repository the slice did not touch.
+
+**Consequence:** The Pi restart Ruling D1 accepted for KitchenDisplay does not happen. KitchenDisplay has no working Jenkins deploy: re-enabling the job as it stands fails at the same missing HelmCharts key.
+
+**Triage:** event · shows in normal use · breaks a flow · silent · fix needs design · sensitive
+area · in KitchenDisplay
+**Provenance:** witnessed — | code-writer, P10, r1 — Jenkins Firmware/KitchenDisplay api/json and #71 console
+**Disposition:** Don't worry about this. — closed by the operator, 2026-10-01
+
+</details>
+
+### ~~N4 — The prd class grows to seventeen carriers: four the Grounding classed as no rollout redeploy prd through a job their push starts~~ — closed by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient build no image themselves. But each Jenkinsfile runs `build job:` (`wait: false`) on `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, and MyDownloadsClient also on `Webathome`. Each of those runs kaniko and pins, with no guard, into ScantopdfDeploy, MediaDeploy or WebathomeOrgDeploy. The `scantopdf-prd`, `media-prd` and `webathome-org-prd` Applications auto-sync. Jenkins records the chain on real pushes: ScanToPdf #33 and #34, MyDownloads #98 and #100, and Webathome #236 and #238 were started by these carriers. The four moved from P11 to P12a–b and now go through the prd health gate. Ruling D1's trade-off named twelve prd apps. With FieldnotesApp (P10 r1), the sweep also restarts scantopdf and media.
+
+code-reviewer, P10, r2, 2026-09-30 — Correction: scantopdf-prd and media-prd each restart twice, not once. ScanToPdfServer (P12a) and ScanToPdfClient (P12b) each start a ScanToPdf build that pins ScantopdfDeploy. MyDownloadsServer (P12a) and MyDownloadsClient (P12b) each start a MyDownloads build that pins MediaDeploy. (phases/P10/code_review_r2.md F1)
+
+wrap-up, 2026-10-01 — relabelled (trigger: unknown → ordinary-condition, impact: unknown → degraded, signal: unknown → silent, fix: — → design, area: — → plain, repo: — → JenkinsPipelineUtils): Read: the carriers' Jenkinsfiles start ScanToPdf/ScanToPdf, MyDownloads/MyDownloads (and Webathome) with build job: wait:false, and those jobs rebuild and pin into auto-synced deploy repos with no changeset guard. A push that changes no build input (architecture-only, docs) therefore restarts scantopdf-prd/media-prd on unchanged code; the pods came back Synced/Healthy, so the impact corrects itself, and nothing reports the restart as needless. The fix is S1's: a changeset guard (shared build in JenkinsPipelineUtils, or per packager Jenkinsfile) — a design choice, outside the repositories the slice touched.
+
+the operator, 2026-10-01 — ruled earlier: N4 and N6: Ok.
+
+the operator, 2026-10-01 — ruled earlier: N4/N6: I meant: I've been so informed. I don't want to progress it.
+
+**Consequence:** scantopdf-prd, media-prd and FieldnotesApp's app restart once on unchanged code during P12a–b, on top of the twelve production apps Ruling D1's trade-off named.
+
+**Triage:** event · shows on an ordinary condition · degrades · silent · fix needs design · in
+JenkinsPipelineUtils
+**Provenance:** witnessed — code-writer, P10, fix round r2, Jenkins build causes and the GitHub Jenkinsfiles (phases/P10/code_review_r1.md F1)
+**Disposition:** N4 and N6: Ok. — closed by the operator, 2026-10-01
+
+</details>
+
+### ~~N5 — KubeCoder was pushed without KubeCoder's devlock, which this environment cannot reach~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+KubeCoder's deploy-operations.md says a hand-driven push that rolls `kubecoder@dev` takes the devlock first. The lease is a flock on the shared KubeCoderSpecs mount (`scripts/devlock.sh`), and this environment has only a scratch clone of KubeCoderSpecs, whose lock file is a different inode. P11 pushed under Ruling D1 after checking proxies instead: the last `KubeCoder/Build-Main` build was #557 on 2026-09-28 19:29 UTC, no build was running, and KubeCoderSpecs' latest commit (2026-09-28 21:28 +0200) closes out slice 236, with no slice in a test or doc phase on origin. The push rebased onto origin/main, so the image it built is a superset of what dev ran.
+
+**Consequence:** none, if no KubeCoder session was validating on dev at the time. Otherwise that session saw its dev pods roll once on unchanged code.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — executor, P11, r1, /work/scratch/p9-sweep/logs/carrier-KubeCoder.log
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N6 — P12a pushed the ScanToPdf and MyDownloads packager repos, which no phase listed, for one environment config line each~~ — closed by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+ScanToPdfServer, ScanToPdfClient, MyDownloadsServer and MyDownloadsClient carry no `.kubecoder/config.yaml`. Each is worked in the environment of its packager repo (ScanToPdf or MyDownloads), whose config clones it. Their `lint` gates now run `cexec aac-tools arch-validate`, so the attachment's § Migrating a carrier gives those two environments the aac-tools declaration: ScanToPdf `def421e` and MyDownloads `7a66719`, config only. Ruling D1 authorises pushing every repo the sweep touches, but a packager push runs its job, `ScanToPdf/ScanToPdf` or `MyDownloads/MyDownloads`, with no guard. That job rebuilds the image and pins it. P12a pushed each packager in a batch apart from the carrier that pins the same deploy repo. ScanToPdf #38 pinned ScantopdfDeploy `45f0087`, and MyDownloads #105 pinned MediaDeploy `17171dc`. scantopdf-prd and media-prd were Synced and Healthy at each pin. Neither packager has an `AaC/` job. P12b's clients use the same two environments and leave the packagers alone.
+
+wrap-up, 2026-10-01 — relabelled (trigger: unknown → ordinary-condition, impact: unknown → degraded, signal: unknown → silent, fix: — → design, area: — → plain, repo: — → JenkinsPipelineUtils): Read: same mechanism as N4 — a push of the ScanToPdf or MyDownloads packager runs its job, which rebuilds and pins ScantopdfDeploy/MediaDeploy with no guard (ScanToPdf #38 -> 45f0087, MyDownloads #105 -> 17171dc), so a config-only push restarts the prd app on unchanged code; it recovered Synced/Healthy and nothing flagged it. Fix as N4/S1: a changeset guard, a design choice outside the slice's repositories.
+
+the operator, 2026-10-01 — ruled earlier: N4 and N6: Ok.
+
+the operator, 2026-10-01 — ruled earlier: N4/N6: I meant: I've been so informed. I don't want to progress it.
+
+**Consequence:** scantopdf-prd and media-prd each restart once more on unchanged code: three times across P12a–b, where N4's correction counted two.
+
+**Triage:** event · shows on an ordinary condition · degrades · silent · fix needs design · in
+JenkinsPipelineUtils
+**Provenance:** witnessed — executor, P12a, r1, sweep_ledger.md rows ScanToPdf and MyDownloads
+**Disposition:** N4 and N6: Ok. — closed by the operator, 2026-10-01
+
+</details>
+
+### ~~N7 — Run paused for an operator question in P12b~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The question, as the driver recorded it:
+
+> D1 stop rule: FieldnotesApp #40, the build of the pushed head 1ee1929, is red. One of 347 tests failed, backend test_board_sync::test_syncs_and_deliveries_are_counted (board_syncs_total{changed} read 1.0, expected 2). It is a race between the observation write and the counter increment, in code the migration does not touch (close-out B3). The build stopped before kaniko: no image, no pin, and fieldnotes-prd stays Healthy at 45bf980. AaC/FieldnotesApp #5 is green on the head. IntercomServer, DHCPApp and ScanToPdfClient are pushed and done. SSEGateway (41cf1b5) and MyDownloadsClient (fc6c74b) a…
+
+Stopped 2026-09-30 01:34; resumed 2026-09-30 08:29.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N8 — Ruling D5's FieldnotesApp rebuild did not run: an operator push had already built the migrated code green~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+Ruling D5 said to rebuild FieldnotesApp once on 1ee1929 after #40 went red. When P12b resumed, FieldnotesApp's main was at 97777d7 (FN-18, 2026-09-30 03:05), a descendant of 1ee1929 that no phase of this slice made. FieldnotesApp #41 had built it green and pinned FieldnotesDeploy b7daf6f, and fieldnotes-prd was Synced/Healthy there. AaC/FieldnotesApp #6 was green on it and ran arch-validate in the aac-tools container. A rebuild of the job builds main's head, so it would only have restarted fieldnotes-prd again on the same code. The run counted #41 as D5's green build and went on to SSEGateway.
+
+**Consequence:** none — fieldnotes-prd runs an image built from a head that carries the migration; the B3 race is unchanged and can still redden a later FieldnotesApp build
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — code-writer, P12b r2, sweep_ledger.md FieldnotesApp row
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N9 — Run paused for an operator question in P12c~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The question, as the driver recorded it:
+
+> D1 stop rule at IoTSupport: AaC/IoTSupport is still red at #41, its last build (last green #37), failing in IoTSupport's own generator with `ERROR: firmware product UUID 3e684732-6621-4297-926f-a4d9f82c538e not found in the published dataset` (the archived SomfyRemote's somfy_remote firmware product, still used by registered device somfy-remote-fhwiwoxa; close-out B2), and no ruling settles it, so IoTSupport is neither migrated nor pushed. ElectronicsInventory 55fb7b7 and ZigbeeControl e6c9f76 are pushed and done: app builds #256/#61 green, both prd apps Synced/Healthy at their new pins, AaC…
+
+Stopped 2026-09-30 09:23; resumed 2026-09-30 09:27.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~N10 — The doc phase commits a README change on ArgoCDTools main, so the driver's push rebuilds and republishes both ArgoCDTools images~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+ArgoCDTools c6d37c8 (README only: gen-architecture --help as the annotation layer's contract; producer repos run arch-validate from the image and keep no copy) sits on main, one ahead of origin. Any ArgoCDTools push runs IaC/ArgoCDTools, which republishes argocd-hook and aac-tools as :<N> and :latest and writes no pin. The README is outside both images' build contexts (each image folder is its own context), so the new builds carry the same generator and validator.
+
+**Consequence:** none — aac-tools:latest moves to a new build number with unchanged commands; the estate's architecture builds pull it with no difference in output.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — doc-writer, doc phase, r1, ArgoCDTools c6d37c8
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~S1 — App builds could skip rebuilding and pinning when a push changes no build input~~ — closed by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Twelve app repos build and pin into an auto-synced deploy repo on every push (plan Grounding, R6). Only DockerImages, HelmCharts and KubeCoder carry a changeset guard, and no skip-ci convention exists. So a commit touching only Jenkinsfile.architecture, a README or scripts/ rebuilds the image and restarts the production app. This slice accepts that once per app (Ruling D1). A changeset guard in the shared build (or a skip rule for architecture-only paths) would let the next estate-wide sweep, or any doc commit, leave production alone. Out of this slice (plan: Not in scope).
+
+wrap-up, 2026-10-01 — relabelled (benefit: — → operations, felt: — → in-use, change: — → add, size: — → design, product-call: — → no, prevents: — → degraded, area: — → plain, repo: — → JenkinsPipelineUtils): From the text: a changeset guard (or skip rule) in the shared build adds behaviour to every app pipeline; it would spare production restarts on docs/architecture-only commits, felt on each such commit today.
+
+**Consequence:** Every docs-only or architecture-only commit to one of these twelve app repos restarts its production app on a rebuilt image, and each device repo re-flashes its hardware.
+
+**Triage:** improvement · operations are better off · felt in use · adds something · needs
+design · prevents a degradation · in JenkinsPipelineUtils
+**Provenance:** read — | plan-writer, planning, r1 — plan.md Grounding (R6) and refinement.md D1
+**Disposition:** This is not important to me. — closed by the operator, 2026-10-01
+
+</details>
+
 ### ~~S2 — The aac-tools catalog entry still tells agents to keep a repo's scripts/arch-validate.py copy~~ — Fixed in KubeCoderDeploy 628782a (main, unpushed): the sentence telling agents to keep scripts/arch-validate.py removed from chart/values.yaml's aac-tools instructions; kc project lint and kc project test green. It reaches KubeCoder dev on push and prd on promotion.; struck by wrap-up
 
 <details><summary>struck — kept for the record</summary>
@@ -477,12 +427,52 @@ KubeCoderDeploy chart/values.yaml:594-596, the KubeCoder catalog description of 
 
 wrap-up, 2026-10-01 — relabelled (kind: improvement → prose, trigger: — → normal-use, impact: — → degraded, signal: — → silent, fix: — → one-edit, repo: — → KubeCoderDeploy): Read: KubeCoderDeploy chart/values.yaml:594-596, the aac-tools toolchain's instructions, still say a repo carrying scripts/arch-validate.py needs that copy for its own Jenkins pipeline. Jenkins now runs arch-validate in the aac-tools container (JenkinsPipelineUtils containerTemplates.aac_tools, architectureProducer.validate), so the sentence is stale text and its removal is the one edit.
 
+close-out session, 2026-10-01 — Rebased onto origin/main (cb2011e): the commit is now KubeCoderDeploy 93855a3, not pushed.
+
 **Consequence:** An agent that reads the environment's tool description is told to keep a copied validator, which the slice has just removed estate-wide, until someone edits the catalog entry and promotes KubeCoder.
 
 **Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in
 KubeCoderDeploy
 **Provenance:** read — | plan-writer, r3, KubeCoderDeploy chart/values.yaml:594-596 (also shown by kc env describe)
 **Disposition:**
+
+</details>
+
+### ~~S3 — aac-tools gen-architecture: confirm R1's front-door fallback, which keeps jenkins-mcp's and trello-mcp's hosts on the shared svc:mcp-filter~~ — closed on the operator's condition, 2026-10-01: the apps stay separate (see note); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+P1 reads R1 ("consider only the container behind the Service") with a fallback the executor settled, not the operator. When the routed container realizes no in-house service, the pod's single in-house service is referenced (gen_architecture.py:1302). Across the 26 in-house deploy repos it fires for four Services, all with the same output as before the phase. mydownloads (routed to gluetun) gets svc:mydownloads-api, which is right. jenkins-mcp, trello-mcp and trello-mcp-public (routed to the auth nginx) get svc:mcp-filter, although trello-mcp's pod also runs the upstream server ss:trello-mcp. Strict scoping would instead mint services realized by the proxy. An `exposures:` entry naming `server` would now mint a Trello MCP service realized by that container.
+
+wrap-up, 2026-10-01 — relabelled (kind: improvement → decision, trigger: — → normal-use, impact: — → degraded, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): From the text: the entry asks the operator to confirm a reading of R1 the executor settled (the pod's single in-house service as the fallback) against strict scoping or an exposures: entry — a choice that is the product owner's. Today's published model assigns the jenkins-mcp and trello-mcp hosts to the shared svc:mcp-filter, which nobody is told.
+
+close-out session, 2026-10-01 — Checked the published dataset (architecture.webathome.org/data/v0.1/architecture.yaml): the Trello 1008/1009 problem has not come back. app:jenkins-prd-jenkins-mcp-filter and app:trello-mcp-prd-trello-mcp-filter are separate instances, each with its own upstream Serving edge (ss:jenkins-prd-jenkins-jenkins, ss:trello-mcp-prd-trello-mcp-server) and its own Serving edge to intercom-server. Only the product-level service svc:mcp-filter ('Filtered MCP surface') is shared, as ss:nginx is.
+
+**Consequence:** The published model keeps assigning the Trello MCP and Jenkins MCP hosts to the one mcp-filter service every filter deployment shares, until someone rules on the reading or adds an exposures: entry.
+
+**Triage:** decision · shows in normal use · degrades · silent · fix needs design · in
+ArgoCDTools
+**Provenance:** witnessed — code-reviewer, P1, r1, phases/P1/code_review_r1.md F2
+**Disposition:** I really won't know. What's important to me is that the separate apps stay separate. There was an issue before that becauase we were using mcp-filter in multiple places, we couldn't differentiate apps. If that issue hasn't come back, I'm good. — closed on the operator's condition, 2026-10-01: the apps stay separate (see note)
+
+</details>
+
+### ~~S4 — aac-tools gen-architecture: no test catches it if two parts of container scoping regress · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The suite still passes after either of two mutations. One makes the instance record carry the image-level realizes instead of the scoped one (gen_architecture.py:1035). The boundBy capability filter, the loopback pick and the secret-store match read that record, so a boundBy onto a container-scoped capability would then hard-fail. The other makes the scope gap compare against every rendered container instead of the image's own (:1096). Worth a test each. P6's layer relies on neither path.
+
+wrap-up, 2026-10-01 — relabelled (kind: improvement → test-gap, trigger: — → future-change, impact: — → broken, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): Read: a test is missing and the code (instance record realizes at gen_architecture.py:~1101/1137, the per-image scope gap at ~:1196) is right today. Of the two regressions, the first hard-fails a boundBy onto a container-scoped capability (loud), the second drops a gap line (silent); one of each is silent. The entry names no test: the first needs a fixture the suite lacks (a consumer workload in the argo render and a boundBy recipe in the dataset onto CONFIG_MGMT), so the test's shape is a choice, not a stated edit.
+
+wrap-up, 2026-10-01 — looked and left it: Checked the trigger the close rests on: both regressions are mutations of gen_architecture.py — the instance record's realizes taken from the image instead of the container scope, and the scope-gap loop (for image_name, names in rendered_containers) comparing against every rendered container. Neither can occur without a code change, and nothing in the estate builds a boundBy onto a container-scoped capability today: future-change holds.
+
+**Consequence:** A later change could break a boundBy that resolves onto a container-scoped capability without any test failing. Nothing in the estate relies on that path today.
+
+**Triage:** test gap · needs a future change · breaks a flow · silent · fix needs design · in
+ArgoCDTools
+**Provenance:** witnessed — code-reviewer, P2, r1, phases/P2/code_review_r1.md F1
+**Disposition:** Perform the rest of your suggested actions please.
 
 </details>
 
@@ -496,6 +486,46 @@ gen_architecture.py:1572-1573 says the value is expanded against the container's
 
 **Provenance:** read — code-reviewer, P2, r1, phases/P2/code_review_r1.md F2
 **Disposition:**
+
+</details>
+
+### ~~S6 — aac-tools gen-architecture: the --help contract test does not notice when the image entry's served_by definition is removed · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+HelpContractTests' key check (ArgoCDTools aac-tools/tests/test_gen_architecture.py:1492-1497) only requires each key to appear somewhere in --help. The JUDGMENT_KEYS section labels are subtest names, not the section searched. Deleting the served_by bullet from the image-entry keys (gen_architecture.py:133-136) leaves all three HelpContractTests green, because the cnpg paragraph still names served_by. The same holds for any key named in two paragraphs (product, realizes, upstream). The contract is complete at eadf4ca: this is only a regression guard. A check that looks for each key in its own paragraph would close it.
+
+wrap-up, 2026-10-01 — relabelled (kind: improvement → test-gap, trigger: — → future-change, impact: — → degraded, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): Read: HelpContractTests.test_help_names_every_key_the_judgment_layer_takes (tests/test_gen_architecture.py:1493-1498) searches the whole --help for each key; the contract is complete today. 'Look for each key in its own paragraph' leaves open how each of the nine JUDGMENT_KEYS sections maps to a span of the docstring (top-level paragraphs, the image-entry bullet list, the upstream and containers bullets nested in it, cnpg, products, mcpClients) — a choice that decides how tightly the test binds the docstring's layout, not a stated edit.
+
+**Consequence:** A later docstring edit could drop served_by's (or realizes', product's) image-entry definition from --help without any test failing.
+
+**Triage:** test gap · needs a future change · degrades · silent · fix needs design · in
+ArgoCDTools
+**Provenance:** witnessed — | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F1 (mutation run)
+**Disposition:** Perform the rest of your suggested actions please.
+
+</details>
+
+### ~~S7 — aac-tools gen-architecture: --help says product entries are copied as written, but lifecycle and stereotype are overwritten · nit~~ — fixed in ArgoCDTools 34100da (lifecycle honoured, default active; stereotype still set; --help says so; test added) — not pushed; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The products paragraph of the contract (ArgoCDTools aac-tools/image/gen_architecture.py:163) says "The generator copies the fields as written". The code (:1026-1032) sets stereotype to SoftwareProduct and lifecycle to active whatever the entry says. lifecycle is a schema field (Architecture schema/v0.1/generated/systemsoftware.schema.yaml:30). No estate layer sets it today.
+
+consult 1, 2026-09-30 — Left open on purpose. The fix is a choice between honouring an owned product's lifecycle in code and documenting the override in the contract that --help prints. That is a product decision, not a residue comment fix.
+
+wrap-up, 2026-10-01 — relabelled (kind: improvement → decision, trigger: — → future-change, impact: — → degraded, signal: — → silent, fix: — → design, area: — → plain, repo: — → ArgoCDTools): Read: gen_architecture.py's products paragraph says 'The generator copies the fields as written'; the products loop (now ~:1036-1046) sets stereotype=SoftwareProduct and lifecycle=active over the entry. No layer sets lifecycle today, so it shows only after a change; then the published model states the product active (a wrong status, silent). Consult 1 already called the fix a choice: honour lifecycle in code or document the override.
+
+the operator, 2026-10-01 — ruled earlier: I really don't know. Can you advise?
+
+the operator, 2026-10-01 — ruled earlier: Perform the rest of your suggested actions please.
+
+**Consequence:** A judgment layer that sets lifecycle on a product it owns, for example to retire it, publishes the product as active, with no gap and no error.
+
+**Triage:** decision · needs a future change · degrades · silent · fix needs design · in
+ArgoCDTools
+**Provenance:** read — | code-reviewer, P3, r1 — phases/P3/code_review_r1.md F2
+**Disposition:** I really don't know. Can you advise? — fixed in ArgoCDTools 34100da (lifecycle honoured, default active; stereotype still set; --help says so; test added) — not pushed
 
 </details>
 
@@ -527,6 +557,27 @@ architecture.yaml:25-26 says 'on any other container of the image an upstream wi
 
 </details>
 
+### ~~S10 — Deploy repos' architecture.yaml still name HelmCharts configs/prd/<app>/<stage>/release.yaml as the registry entry that pins the upstream chart version · nit~~ — already fixed 2026-09-29 (ExternalSecretsDeploy dfef8d9 and siblings, see note); nothing left to fix; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+PrometheusDeploy's architecture.yaml:7-8 says the upstream chart version is the one 'this app's registry entry pins (HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both'. HelmCharts was archived on 2026-09-28, and the pin now lives in ArgoCDDeploy releases/values.yaml (prometheus: stages.prd.version "29.33.0", line 210). The same HelmCharts wording appears in 9 more deploy repos' architecture.yaml (grep 'HelmCharts configs' over /work/scratch/sweep031/*/architecture.yaml). P7 left it alone because it is outside R5.
+
+wrap-up, 2026-10-01 — relabelled (kind: improvement → prose, trigger: — → normal-use, impact: — → degraded, signal: — → silent, fix: — → several-places, repo: — → PrometheusDeploy): Read: PrometheusDeploy's architecture.yaml:7-8 already names ArgoCDDeploy releases/values.yaml (commit 6fa1924, on origin/main). Gitblit's index (daily sync) still finds 'HelmCharts configs/prd/<app>/<stage>/release.yaml): bump both' in the architecture.yaml of ExternalSecretsDeploy, CsiDriverSmbDeploy, CephCsiCephfsDeploy and CephCsiRbdDeploy at least, all repositories the slice's phases did not target. The edit is the same comment line in each.
+
+wrap-up, 2026-10-01 — relabelled (repo: PrometheusDeploy → ExternalSecretsDeploy): Correction to the repo just given: PrometheusDeploy's line is fixed already (6fa1924), so what remains lives only in the other deploy repos — ExternalSecretsDeploy, CsiDriverSmbDeploy, CephCsiCephfsDeploy, CephCsiRbdDeploy and the rest of the ten the body counts — none of which the slice's phases targeted.
+
+close-out session, 2026-10-01 — Already fixed before this close-out: one commit on 2026-09-29 22:04 across the deploy repos — ExternalSecretsDeploy dfef8d9, GrafanaDeploy dd1fc53, StepCaDeploy 3b013c2, CsiDriverSmbDeploy 595e3d9, HeadlampDeploy bec4b23, CephCsiCephfsDeploy 4f9283a, CephCsiRbdDeploy c4b7418, CloudnativePgDeploy 1dca5fd (all on origin/main); PrometheusDeploy 6fa1924. Gitblit's daily index still showed the old line. No *Deploy clone under /work/scratch carries it.
+
+**Consequence:** A maintainer bumping an upstream chart version is sent to an archived repo for the second pin; the header does not name ArgoCDDeploy's releases/values.yaml, where the version actually is.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in ExternalSecretsDeploy
+**Provenance:** witnessed — code-writer, P7, r1, /work/scratch/PrometheusDeploy/architecture.yaml
+**Disposition:** Please fix it now. — already fixed 2026-09-29 (ExternalSecretsDeploy dfef8d9 and siblings, see note); nothing left to fix
+
+</details>
+
 ### ~~S11 — P7's done-record cited the pre-amend PrometheusDeploy sha e761059; the branch head is 4aa1ef5 · nit~~ — resolved by P7's review r1: it corrected plan.md in place to 4aa1ef5, which P9c pushed; struck by consult 1
 
 <details><summary>struck — kept for the record</summary>
@@ -537,6 +588,23 @@ The executor amended its commit (reflog: 4aa1ef5 is 'commit (amend)' of e761059)
 
 **Provenance:** witnessed — code-reviewer, P7, r1, phases/P7/code_review_r1.md
 **Disposition:**
+
+</details>
+
+### ~~S12 — Architecture update-architecture agent: the contract it reads from the sidecar's gen-architecture --help can be older than the generator the deploy repos build with · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+update-architecture.md:49-50 has a central update session run `cexec aac-tools gen-architecture --help` for a deploy repo's contract, and says it is the contract of the generator the deploy repos build with. Jenkins pulls registry:5000/aac-tools untagged with alwaysPullImage on every AaC build (JenkinsPipelineUtils containerTemplates.groovy:34). The Architecture environment's sidecar carries whatever image its pod last started with, and the sessions run in that pod (tooling/fleet.py:827). So after an ArgoCDTools publication that changes the judgment-layer contract, the agent reads the older contract until the environment restarts. Idea: restart the Architecture environment as part of publishing a contract change, or have the fleet check the sidecar's image digest against registry latest before it runs sessions.
+
+wrap-up, 2026-10-01 — relabelled (benefit: — → operations, felt: — → after-change, change: — → add, size: — → design, product-call: — → no, prevents: — → degraded, area: — → plain, repo: — → Architecture): From the text: felt only after an ArgoCDTools publication changes the judgment-layer contract; either remedy (restart the Architecture environment on publishing, or a digest check in the fleet before sessions) adds a step or a check.
+
+**Consequence:** After a future contract change, central update sessions edit deploy repos' judgment layers against the older contract until someone restarts the Architecture environment. A valid but incomplete edit passes the AaC build unnoticed.
+
+**Triage:** improvement · operations are better off · felt after a change · adds something ·
+needs design · prevents a degradation · in Architecture
+**Provenance:** read — code-reviewer, P8, r1, phases/P8/code_review_r1.md F1
+**Disposition:** Perform the rest of your suggested actions please.
 
 </details>
 
