@@ -303,6 +303,93 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E4",
+      "kind": "event",
+      "grade": null,
+      "headline": "prd authorized by ruling: root",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- prd root — the one-go push of every producer repo the slice touches rolls prd apps and re-flashes devices through their own builds (Ruling D1, Ruling P1)`"
+      ],
+      "consequence": "the test phase was told pushing and rolling prd for root is its own; what it did there is in its verdict and verification.json.",
+      "evidence": "witnessed",
+      "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E5",
+      "kind": "event",
+      "grade": null,
+      "headline": "prd authorized by ruling: ../JenkinsPipelineUtils",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)`"
+      ],
+      "consequence": "the test phase was told pushing and rolling prd for ../JenkinsPipelineUtils is its own; what it did there is in its verdict and verification.json.",
+      "evidence": "witnessed",
+      "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": null,
+      "headline": "IoTSupport: AaC/IoTSupport's deployed-architecture.yaml fails arch-validate — /devices/3/stats/firmware is Infinity, not a string",
+      "body": [
+        "AaC/IoTSupport #44 (the first build of the migrated file, started by the slice's push, library 0d640cf) went red in 'Validate architecture (backend)': arch-validate rejects backend/docs/architecture/deployed-architecture.yaml, '/devices/3/stats/firmware: value Infinity is not of expected type string'. Build #43 (before the slice, 2026-10-01 morning, the old scripted file) failed with the identical message; #41 failed on another cause (firmware product UUID not found in the dataset); #42 was the last green. So it is not the migration: the generator (backend/tools/gen-architecture.py _device_stats, stats['firmware'] = firmware_version) emits a version string that the validator reads back as a float, from live fleet data I cannot read from this pod. The slice's V12 asks AaC/IoTSupport to build green; it does not, and the collector keeps collecting #42's artifacts. The migrated file's structure (withVault around the generator steps only, KEYCLOAK_OIDC_TOKEN_URL kept) ran as designed up to that point."
+      ],
+      "consequence": "AaC/IoTSupport stays red on every push until the generator quotes or normalises the firmware version; AaC/Architecture shows IoTSupport's last green (#42) artifacts, so the deployed model of the device fleet goes stale.",
+      "evidence": "witnessed",
+      "author": "test-agent, round 1, AaC/IoTSupport builds #43 and #44 console logs",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "IoTSupport"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E6",
+      "kind": "event",
+      "grade": null,
+      "headline": "Churn after the one-go push: five builds sat 38 minutes on 'nodes offline' while the k8s cloud cap was contended, not leaked",
+      "body": [
+        "After the push of 77 repos the queue held up to 58 'All nodes of label … are offline' items. Five of them were 38 minutes old with the queue otherwise draining, so I read the Kubernetes provisioning counter via the Script Console (read-only): cloudCounts 5 equalled the 5 live KubernetesSlave nodes on three samples, so no slot leak and no reset was needed. The cloud's containerCap read 5 on one sample and 3 on the next two. Queue and executors reached zero at 12:14 UTC, about 50 minutes after the push, and the stuck items ran."
+      ],
+      "consequence": "none",
+      "evidence": "witnessed",
+      "author": "test-agent, round 1, /scriptText samples 11:56-11:57 UTC",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
