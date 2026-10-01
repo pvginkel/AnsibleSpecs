@@ -424,6 +424,32 @@ file (LIB-1). Each file passes the linter as in P2.
 - DockerImages' and IoTSupport's commits stay local, as in P2, and every repo gets a row in the
   ledger (`producer-ledger.md` in the slice folder).
 
+**Done (P4).** Ansible's, DockerImages' and IoTSupport's producers are full declarative files to
+the guide that validate and archive through `architectureProducer`'s steps, and each passes the
+controller's linter. Ansible's is committed on `phase/035-P4` (`5b4b984`), on `jenkins-agent`
+alone. DockerImages (`8cb59df`, `/work/DockerImages`) and IoTSupport (`07401c8`,
+`/work/scratch/IoTSupport`) each hold one local commit on `main`, the only one ahead of origin.
+The ledger has 77 rows; Ansible's producer, the 78th, has no row, as its closing note says.
+
+Later phases:
+- None changed. P5's counts: 78 producers, 77 in the ledger plus Ansible's.
+
+Record:
+- Live config.xml: all three `pvginkel/<Repo>`, `*/main`, `Jenkinsfile.architecture`; AaC/Ansible
+  has no guard (G4); every file declares `abortPrevious: true`.
+- Ansible validates and archives its one named model, `docs/architecture/ansible-architecture.yaml`
+  (it archived the glob before; the directory holds only that file).
+- DockerImages: one `Validate architecture` stage: the copy `sh` (GRAN-5: no outcome of its own;
+  default container), then `validate` + `archive` on `docs/architecture/*.yaml`. The header keeps
+  the why of the copy (FILE-7); the egress line is dropped as in P3.
+- IoTSupport: `Generate architecture (backend)` runs the python generator in `dir('backend')`,
+  `withVault` around only its `sh` (pip install outside), then archives
+  `deployed-architecture.yaml` (GRAN-3, as the deploy reference); `Validate architecture
+  (backend)` validates both backend models and archives `architecture.yaml`;
+  `(frontend)` validates and archives `frontend/docs/architecture/*.yaml`. `firmware-products.yaml`
+  stays out of both, said by a comment. Python is `[image: 'registry:5000/python', name: 'python']`.
+- Linter 3/3 "Jenkinsfile successfully validated."; an unknown option was rejected.
+
 ### P5 — The review's records show the producers migrated
 
 Target: ../AnsibleSpecs

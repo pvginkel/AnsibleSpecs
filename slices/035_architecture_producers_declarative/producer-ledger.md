@@ -17,6 +17,7 @@ meantime is rebased onto its origin when pushed.
 | CsiDriverSmbDeploy | AaC/CsiDriverSmbDeploy | `/work/scratch/CsiDriverSmbDeploy` | main | `Jenkinsfile.architecture` | `a2ae307` |
 | DHCPApp | AaC/DHCPApp | `/work/scratch/DHCPApp` | main | `Jenkinsfile.architecture` | `982a482` |
 | DnsmasqDeploy | AaC/DnsmasqDeploy | `/work/scratch/DnsmasqDeploy` | main | `Jenkinsfile.architecture` | `e63304d` |
+| DockerImages | AaC/DockerImages | `/work/DockerImages` | main | `Jenkinsfile.architecture` | `8cb59df` |
 | DoorbellReceiver | AaC/DoorbellReceiver | `/work/scratch/DoorbellReceiver` | main | `Jenkinsfile.architecture` | `08146e5` |
 | ElasticsearchDeploy | AaC/ElasticsearchDeploy | `/work/scratch/ElasticsearchDeploy` | main | `Jenkinsfile.architecture` | `84dc55f` |
 | ElectronicsInventory | AaC/ElectronicsInventory | `/work/scratch/ElectronicsInventory` | main | `Jenkinsfile.architecture` | `e97e1a91` |
@@ -43,6 +44,7 @@ meantime is rebased onto its origin when pushed.
 | IntercomDeploy | AaC/IntercomDeploy | `/work/scratch/IntercomDeploy` | main | `Jenkinsfile.architecture` | `551e8ec` |
 | IntercomServer | AaC/IntercomServer | `/work/scratch/IntercomServer` | main | `Jenkinsfile.architecture` | `0df33c5` |
 | IotDeploy | AaC/IotDeploy | `/work/scratch/IotDeploy` | main | `Jenkinsfile.architecture` | `6e3aaca` |
+| IoTSupport | AaC/IoTSupport | `/work/scratch/IoTSupport` | main | `Jenkinsfile.architecture` | `07401c8` |
 | JenkinsDeploy | AaC/JenkinsDeploy | `/work/scratch/JenkinsDeploy` | main | `Jenkinsfile.architecture` | `50f75d6` |
 | KeycloakDeploy | AaC/KeycloakDeploy | `/work/scratch/KeycloakDeploy` | main | `Jenkinsfile.architecture` | `d433278` |
 | KeycloakDeploy | AaC/KeycloakDeploy-dev | `/work/scratch/KeycloakDeploy` | main | `Jenkinsfile.architecture-dev` | `d433278` |
@@ -85,3 +87,6 @@ meantime is rebased onto its origin when pushed.
 
 KubeCoderDeploy's commit is on `main`. AaC/KubeCoderDeploy builds `prd`, so its push starts no
 build of that job; the file first runs at the next KubeCoder/Promote-PRD (V14).
+
+Ansible's producer, the 78th, has no row: it is committed in the Ansible repo through the slice's
+own branches, and the test phase pushes Ansible with JenkinsPipelineUtils.
