@@ -320,6 +320,36 @@ declares the concurrency guard and the push trigger in its own `options{}` and `
   it. It is the test phase's push list. The review reads the commits through it, because this
   phase leaves no commit on the Ansible branch.
 
+**Done (P2).** All 50 deploy-repo producer files (49 repos; KeycloakDeploy has two) are the
+deploy-architecture reference file with their own header, stage and producer id, and each passes
+the controller's linter. Each repo holds one local commit on `main`, its only one ahead of
+origin, listed in the slice folder's `producer-ledger.md`. Nothing is pushed, and the Ansible
+branch has no commit.
+
+Later phases:
+- P3/P4: add one row per file to `producer-ledger.md` in its columns: Repo, Job, Clone, Branch,
+  File, Commit.
+- P3/P4: the header's first paragraphs follow the reference file's wording. `Controller config:`
+  comes from `GET /job/AaC/job/<Job>/config.xml`; curl needs `-g` for `api/json?tree=jobs[name]`.
+
+Record:
+- Each file is generated from `docs/examples/deploy-architecture.groovy` without its section
+  markers; only the header and the `generate` call's stage and producer differ. The generator
+  reproduced the reference byte for byte for ChartsDeploy.
+- Live config.xml of all 50 jobs: SCM `pvginkel/<Repo>`, `*/main` (KubeCoderDeploy `*/prd`), the
+  script path is the file. AaC/KeycloakDeploy-dev runs `Jenkinsfile.architecture-dev`.
+- Why-paragraphs are kept (FILE-7) only in ArgoCDDeploy (one stage per pipeline; the branch is
+  `apps.argocd.stages.prd`'s `targetRevision`, corrected from `apps.argocd`'s; argo-helm egress)
+  and KubeCoderDeploy (prd per D34; the file runs once Promote-PRD moves `prd`; charts.home
+  egress). Dropped everywhere: "(argo-cd D50)" and the collector-filter note, which `archive`
+  now enforces.
+- PipelinesDeploy keeps its header; only its two stages' steps change.
+- `checkout scm` leaves a detached HEAD with `origin`. gen-architecture needs only `origin` and
+  `HEAD` (aac-tools `image/gen_architecture.py` `require_checkout`), as PipelinesDeploy runs today.
+- Two `generate` lines exceed 100 columns (ElectronicsInventoryDeploy, HomeassistantMcpDeploy).
+  The guide has no width rule, so they stay on one line, as in the reference.
+- Linter 50/50 "Jenkinsfile successfully validated."; a file with a broken option was rejected.
+
 ### P3 — The 25 app-repo producers of the reference shape are declarative files on the helper's steps
 
 Target: root
@@ -336,7 +366,8 @@ gets no commit (R2).
 - AaC/UnderfloorHeatingController's file declares `abortPrevious: true` (R5). Its UI value still
   applies on its first build. The test phase's hand-started second build is what settles it (S2).
 - The MyDownloads and ScanToPdf client and server repos have `master` as their default branch.
-- Every file passes the linter as in P2, and every repo gets a row in the ledger.
+- Every file passes the linter as in P2, and every file gets a row in the ledger
+  (`producer-ledger.md` in the slice folder).
 
 ### P4 — The Ansible, DockerImages and IoTSupport producers are declarative files that call the helper where it fits
 
@@ -361,7 +392,7 @@ file (LIB-1). Each file passes the linter as in P2.
   `images:` with a name (POD-4). Its `$KEYCLOAK_OIDC_TOKEN_URL` read (`:37`) stays: it is S4's
   one recorded exception to the guide (SEC-5).
 - DockerImages' and IoTSupport's commits stay local, as in P2, and every repo gets a row in the
-  ledger.
+  ledger (`producer-ledger.md` in the slice folder).
 
 ### P5 — The review's records show the producers migrated
 
