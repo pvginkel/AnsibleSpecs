@@ -143,10 +143,10 @@
       "area": "KubeCoderDeploy's producer on prd",
       "description": "AaC/KubeCoderDeploy builds its migrated file green from `prd`. The slice commits that file on KubeCoderDeploy's `main`. The job builds `prd`, which only KubeCoder/Promote-PRD fast-forwards (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`), so the push starts no build of it.",
       "owed_after": "the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which fast-forwards KubeCoderDeploy's prd to main",
-      "verdict": "owed",
-      "rationale": "Commit is on KubeCoderDeploy main and pushed; AaC/KubeCoderDeploy built nothing (its #10 predates the push) as designed. Settles at the operator's next KubeCoder/Promote-PRD, after which AaC/KubeCoderDeploy must build green from prd.",
+      "verdict": "pass",
+      "rationale": "Settled at close-out 2026-10-01 after the operator's KubeCoder promotion: AaC/KubeCoderDeploy #11 checked out origin/prd cb2011e0, ran the migrated declarative file (podYaml aac-tools pod, stage 'Validate architecture', archive) and finished SUCCESS.",
       "evidence": [
-        "AaC/KubeCoderDeploy lastBuild #10 stale"
+        "AaC/KubeCoderDeploy #11 console log (origin/prd cb2011e0, Finished: SUCCESS)"
       ]
     },
     {

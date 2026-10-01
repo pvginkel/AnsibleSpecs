@@ -6,51 +6,20 @@
 Run: 2026-10-01 12:22 → 14:35 · 5 phases · 3 bail-outs · 1 test round · doc phase done · wrap-up
 landed · $37.86 (planner 34 %, research 4 %, rework 0 %)
 
-## Comes to you
-
-### A1 — Settle V14 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …
-
-V14 — AaC/KubeCoderDeploy builds its migrated file green from `prd`. The slice commits that file on KubeCoderDeploy's `main`. The job builds `prd`, which only KubeCoder/Promote-PRD fast-forwards (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`), so the push starts no build of it.
-
-`verification.json` marks V14 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which fast-forwards KubeCoderDeploy's prd to main. The run cannot take that action; settle the criterion once it has happened.
-
-**Consequence:** V14 stays unproven until then; the test phase does not settle it.
-
-**Triage:** action · trigger unknown · impact unknown · signal unknown
-**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:**
-
 ## Card requests
-
-### P2 — Architecture producer manual: § Jenkins integration still shows a scripted podTemplate producer, not the guide's form or the architectureProducer helper · minor
-
-`.claude/architecture/producer-manual.md` § Jenkins integration (around lines 690-720) gives a scripted `podTemplate`/`node` snippet with `containerTemplates.aac_tools`, followed by separate validate and archive steps, and `:659` points there. The seed-architecture skill (`.claude/skills/seed-architecture/SKILL.md:147-150`) also sends a new producer to `containerTemplates.aac_tools`. Since 034 the style guide has been the source of a Jenkinsfile's form. After 035, each architecture type's reference is a one-call `architectureProducer` file. No phase of this slice targets Architecture. Once the second slice retires the containerTemplates describables (033 I1), the snippet stops working altogether.
-
-plan-writer r2, 2026-10-01 — Under Ruling D2 as reversed at plan review r1, each architecture type's reference after 035 is a full declarative file whose stages call architectureProducer's steps. It is not a one-call file. The manual's gap is the same, measured against that file instead.
-
-doc-writer, doc phase r1, 2026-10-01 — Architecture's USAGE.md:137-140 (§ arch-validate CLI) also says producers run arch-validate in Jenkins 'in the container containerTemplates.aac_tools declares'. After 035 no Jenkinsfile in the estate calls containerTemplates.aac_tools: every producer declares podYaml(templates: ['aac-tools']) and runs the tools through architectureProducer's steps. Same repo and same fix as the manual and the seed-architecture skill.
-
-doc-writer, doc phase r1, 2026-10-01 — Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools']).
-
-**Consequence:** A session that seeds a new producer from the manual writes a scripted producer that the style guide rejects, until the jenkins-pipelines skill or a review corrects it.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in Architecture
-**Provenance:** read — plan-writer, planning r1, Architecture .claude/architecture/producer-manual.md
-**Route:** card request — the fix lives in Architecture, which the slice did not touch
-**Disposition:**
 
 ### B3 — IoTSupport: AaC/IoTSupport's deployed-architecture.yaml fails arch-validate — /devices/3/stats/firmware is Infinity, not a string
 
 AaC/IoTSupport #44 (the first build of the migrated file, started by the slice's push, library 0d640cf) went red in 'Validate architecture (backend)': arch-validate rejects backend/docs/architecture/deployed-architecture.yaml, '/devices/3/stats/firmware: value Infinity is not of expected type string'. Build #43 (before the slice, 2026-10-01 morning, the old scripted file) failed with the identical message; #41 failed on another cause (firmware product UUID not found in the dataset); #42 was the last green. So it is not the migration: the generator (backend/tools/gen-architecture.py _device_stats, stats['firmware'] = firmware_version) emits a version string that the validator reads back as a float, from live fleet data I cannot read from this pod. The slice's V12 asks AaC/IoTSupport to build green; it does not, and the collector keeps collecting #42's artifacts. The migrated file's structure (withVault around the generator steps only, KEYCLOAK_OIDC_TOKEN_URL kept) ran as designed up to that point.
+
+close-out session, 2026-10-01 — Still red: AaC/IoTSupport last build is #44 (FAILURE); no build since.
 
 **Consequence:** AaC/IoTSupport stays red on every push until the generator quotes or normalises the firmware version; AaC/Architecture shows IoTSupport's last green (#42) artifacts, so the deployed model of the device fleet goes stale.
 
 **Triage:** defect · shows in normal use · degrades · loud · fix unknown · in IoTSupport
 **Provenance:** witnessed — test-agent, round 1, AaC/IoTSupport builds #43 and #44 console logs
 **Route:** card request — the fix lives in IoTSupport, which the slice did not touch
-**Disposition:**
+**Disposition:** File
 
 ## Closed
 
@@ -213,6 +182,24 @@ After the push of 77 repos the queue held up to 58 'All nodes of label … are o
 
 </details>
 
+### ~~A1 — Settle V14 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …~~ — V14 settled as pass in verification.json: AaC/KubeCoderDeploy #11 built origin/prd cb2011e0 green with the migrated file; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+V14 — AaC/KubeCoderDeploy builds its migrated file green from `prd`. The slice commits that file on KubeCoderDeploy's `main`. The job builds `prd`, which only KubeCoder/Promote-PRD fast-forwards (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`), so the push starts no build of it.
+
+`verification.json` marks V14 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which fast-forwards KubeCoderDeploy's prd to main. The run cannot take that action; settle the criterion once it has happened.
+
+close-out session, 2026-10-01 — AaC/KubeCoderDeploy #11 (2026-10-01 14:30Z) checked out origin/prd cb2011e0, ran the migrated declarative file (podYaml aac-tools pod, stage 'Validate architecture', archive) and finished SUCCESS.
+
+**Consequence:** V14 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:** KubeCoder has been redeployed. — V14 settled as pass in verification.json: AaC/KubeCoderDeploy #11 built origin/prd cb2011e0 green with the migrated file
+
+</details>
+
 ### ~~B1 — Ansible argo-migrate: scaffold and add_stage still write the scripted, hand-cloning Jenkinsfile.architecture · minor~~ — resolved by the wrap-up (Ansible 2701b24): JENKINSFILE_ARCH is now the deploy-architecture reference form — declarative pipeline {}, options{}/triggers{}, checkout scm, architectureProducer.generate/archive/validate — and scaffold/add_stage pass job, repo and script path instead of the clone's credential and URL. The template rendered for charts/prd, keycloak/prd, keycloak/dev and mosquitto/prd matches the committed deploy files except where the header comment wraps; kc project test --project root (argo-migrate and recommend-resources unittests) re-run green; struck by wrap-up
 
 <details><summary>struck — kept for the record</summary>
@@ -242,6 +229,29 @@ The skill (`kubecoder/skills/jenkins-pipelines/SKILL.md`, read on gitblit `main`
 KubeCoderConfig
 **Provenance:** read — plan-writer, planning r1, KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md (gitblit main)
 **Disposition:**
+
+</details>
+
+### ~~P2 — Architecture producer manual: § Jenkins integration still shows a scripted podTemplate producer, not the guide's form or the architectureProducer helper · minor~~ — carded as ARCH-17; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+`.claude/architecture/producer-manual.md` § Jenkins integration (around lines 690-720) gives a scripted `podTemplate`/`node` snippet with `containerTemplates.aac_tools`, followed by separate validate and archive steps, and `:659` points there. The seed-architecture skill (`.claude/skills/seed-architecture/SKILL.md:147-150`) also sends a new producer to `containerTemplates.aac_tools`. Since 034 the style guide has been the source of a Jenkinsfile's form. After 035, each architecture type's reference is a one-call `architectureProducer` file. No phase of this slice targets Architecture. Once the second slice retires the containerTemplates describables (033 I1), the snippet stops working altogether.
+
+plan-writer r2, 2026-10-01 — Under Ruling D2 as reversed at plan review r1, each architecture type's reference after 035 is a full declarative file whose stages call architectureProducer's steps. It is not a one-call file. The manual's gap is the same, measured against that file instead.
+
+doc-writer, doc phase r1, 2026-10-01 — Architecture's USAGE.md:137-140 (§ arch-validate CLI) also says producers run arch-validate in Jenkins 'in the container containerTemplates.aac_tools declares'. After 035 no Jenkinsfile in the estate calls containerTemplates.aac_tools: every producer declares podYaml(templates: ['aac-tools']) and runs the tools through architectureProducer's steps. Same repo and same fix as the manual and the seed-architecture skill.
+
+doc-writer, doc phase r1, 2026-10-01 — Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools']).
+
+close-out session, 2026-10-01 — Still holds on Architecture main d30baa4: producer-manual.md:659 and :697-698 (podTemplate + containerTemplates.aac_tools), seed-architecture/SKILL.md:150, USAGE.md:139. The KubeCoderDeploy prd exception in the doc-writer's correction is gone: prd moved with the KubeCoder promotion (A1), so no Jenkinsfile in the estate calls containerTemplates.aac_tools any more.
+
+**Consequence:** A session that seeds a new producer from the manual writes a scripted producer that the style guide rejects, until the jenkins-pipelines skill or a review corrects it.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in Architecture
+**Provenance:** read — plan-writer, planning r1, Architecture .claude/architecture/producer-manual.md
+**Disposition:** File — carded as ARCH-17
 
 </details>
 

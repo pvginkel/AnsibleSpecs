@@ -70,11 +70,27 @@
           "text": [
             "Correction to 'no Jenkinsfile in the estate calls containerTemplates.aac_tools': one still does. KubeCoderDeploy's prd branch, which AaC/KubeCoderDeploy builds, keeps the scripted producer (podTemplate with containerTemplates.aac_tools, origin/prd:Jenkinsfile.architecture:21-22) until the operator's next KubeCoder promotion moves prd (A1). Every other producer, and KubeCoderDeploy's main, declares podYaml(templates: ['aac-tools'])."
           ]
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Still holds on Architecture main d30baa4: producer-manual.md:659 and :697-698 (podTemplate + containerTemplates.aac_tools), seed-architecture/SKILL.md:150, USAGE.md:139. The KubeCoderDeploy prd exception in the doc-writer's correction is gone: prd moved with the KubeCoder promotion (A1), so no Jenkinsfile in the estate calls containerTemplates.aac_tools any more."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded as ARCH-17",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "File",
+        "did": "carded as ARCH-17",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B1",
@@ -131,10 +147,27 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "AaC/KubeCoderDeploy #11 (2026-10-01 14:30Z) checked out origin/prd cb2011e0, ran the migrated declarative file (podYaml aac-tools pod, stage 'Validate architecture', archive) and finished SUCCESS."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "V14 settled as pass in verification.json: AaC/KubeCoderDeploy #11 built origin/prd cb2011e0 green with the migrated file",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "KubeCoder has been redeployed.",
+        "did": "V14 settled as pass in verification.json: AaC/KubeCoderDeploy #11 built origin/prd cb2011e0 green with the migrated file",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B2",
@@ -428,10 +461,22 @@
         "area": "plain",
         "repo": "IoTSupport"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "Still red: AaC/IoTSupport last build is #44 (FAILURE); no build since."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
-      "ruling": null
+      "ruling": {
+        "words": "File",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E6",
