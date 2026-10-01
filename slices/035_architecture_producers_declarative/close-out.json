@@ -116,6 +116,53 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils architectureProducer.archive: its collector check accepts a comma-joined entry, so an uncollected pattern can slip past it",
+      "body": [
+        "`collected()` splits an entry on `/` only (`vars/architectureProducer.groovy:88-90`). `archivePattern` joins the entries with `,` (`:80`), and `archiveArtifacts` splits on commas. So `files: ['docs/architecture/a.yaml,*/architecture.yaml']` passes the check, and `*/architecture.yaml` is archived where AaC/Architecture never looks. That is the DockerImages case the check exists to refuse (`vars/architectureProducer.md:80-81`). No producer calls the step that way yet. ElectronicsInventory's current archive is one comma-joined string (`Jenkinsfile.architecture:39`), so a hand copy could produce such an entry, but both of its halves are collected."
+      ],
+      "consequence": "A producer that passes a comma-joined entry can archive a model the collector never collects, and nothing refuses it.",
+      "evidence": "read",
+      "author": "code-reviewer, P1, round 1, phases/P1/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P3",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "JenkinsPipelineUtils vars/architectureProducer.md: 'A pattern that matches no file fails the build' is false for a files list with several entries",
+      "body": [
+        "`vars/architectureProducer.md:82` says an archive pattern that matches no file fails the build. `archiveArtifacts` puts every pattern into one Ant FileSet and aborts only when the whole set is empty (Jenkins core `ArtifactArchiver.perform`). So one empty entry among several is skipped without a word. The sentence holds only when no entry matches any file: that restriction is the one-edit fix. In the plan's shapes `validate` runs first on the same files and fails on an unmatched glob, so nothing goes wrong today."
+      ],
+      "consequence": "A producer author who relies on archive to catch a missing model, with several entries, gets a green build that archives only part of the model.",
+      "evidence": "read",
+      "author": "code-reviewer, P1, round 1, phases/P1/code_review_r1.md F2",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "architectureProducer's generate/validate/archive steps are in the library as Ruling D2 ruled. Every argument is required with no default, and the archive check matches the collector's filter. The steps can express every current producer's command lines and archive patterns. The guide changes are in scope, no rule changed, and the docs lint is green. Two Minor advisory findings, no blocking one.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "archive's collector check splits entries on '/' only, so a comma-joined entry can carry an uncollected pattern past it"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "vars/architectureProducer.md:82 says a pattern matching no file fails the build; with several entries archiveArtifacts fails only when none match"}
+ ]}
