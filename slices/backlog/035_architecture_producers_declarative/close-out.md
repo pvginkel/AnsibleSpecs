@@ -4,3 +4,53 @@
      lines are yours to write; everything else is overwritten by the next render. -->
 
 Run: <not yet stamped>
+
+## For the wrap-up
+
+### B1 — Ansible argo-migrate: scaffold and add_stage still write the scripted, hand-cloning Jenkinsfile.architecture · minor
+
+<details><summary>body</summary>
+
+`support/argo-migrate/argo_migrate.py:192-221` (`JENKINSFILE_ARCH`) templates a deploy repo's producer as `podTemplate`/`node` with `git branch: 'main', credentialsId:`. `cmd_scaffold` (`:1123`) and `add_stage` (`:946`) write it. Once 035 lands, every deploy-repo producer is one `architectureProducer` call, and this template is the only source left that writes the old form. Both commands read HelmCharts, which is archived, so a run is possible only for the parked apps. The plan leaves the template alone because it is not a producer.
+
+</details>
+
+**Consequence:** A deploy repo scaffolded for one of the parked apps gets a producer in the old scripted form with a hand clone, outside the style guide, and that producer stops working once the second slice retires the containerTemplates describables.
+
+**Triage:** defect · shows on an ordinary condition · degrades · silent · fix is one edit · in
+Ansible
+**Provenance:** read — plan-writer, planning r1, Ansible support/argo-migrate/argo_migrate.py
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### P1 — KubeCoderConfig jenkins-pipelines skill: its FILE-1 and LIB-2 lines will contradict the guide once the one-call producer exception lands · minor
+
+<details><summary>body</summary>
+
+The skill (`kubecoder/skills/jenkins-pipelines/SKILL.md`, read on gitblit `main`) summarises FILE-1 as "One declarative `pipeline {}`; no scripted `node`, `podTemplate` or `stage` outside it" (lines 35-36). It summarises LIB-2 as "The library never takes over the job's properties, trigger or agent size" (lines 151-152). Slice 035's P1 amends both rules in the guide with Ruling D2's exception for a type with a whole-pipeline helper, and 75 producers become one `architectureProducer` call. No phase targets KubeCoderConfig, because the plan keeps to the repos the refinement named, so the skill's summaries stay as they are. 034's close-out I1 already notes that nothing keeps the skill's summaries in step with the guide.
+
+</details>
+
+**Consequence:** A session that reviews or edits a producer from the skill's summaries flags a one-call Jenkinsfile.architecture as breaking FILE-1 and LIB-2 until it reads the guide's page.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in
+KubeCoderConfig
+**Provenance:** read — plan-writer, planning r1, KubeCoderConfig kubecoder/skills/jenkins-pipelines/SKILL.md (gitblit main)
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### P2 — Architecture producer manual: § Jenkins integration still shows a scripted podTemplate producer, not the guide's form or the architectureProducer helper · minor
+
+<details><summary>body</summary>
+
+`.claude/architecture/producer-manual.md` § Jenkins integration (around lines 690-720) gives a scripted `podTemplate`/`node` snippet with `containerTemplates.aac_tools`, followed by separate validate and archive steps, and `:659` points there. The seed-architecture skill (`.claude/skills/seed-architecture/SKILL.md:147-150`) also sends a new producer to `containerTemplates.aac_tools`. Since 034 the style guide has been the source of a Jenkinsfile's form. After 035, each architecture type's reference is a one-call `architectureProducer` file. No phase of this slice targets Architecture. Once the second slice retires the containerTemplates describables (033 I1), the snippet stops working altogether.
+
+</details>
+
+**Consequence:** A session that seeds a new producer from the manual writes a scripted producer that the style guide rejects, until the jenkins-pipelines skill or a review corrects it.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in Architecture
+**Provenance:** read — plan-writer, planning r1, Architecture .claude/architecture/producer-manual.md
+**Route:** the wrap-up — fix
+**Disposition:**

@@ -1,4 +1,4 @@
-# Slice 035 — Every architecture producer is a one-call declarative Jenkinsfile on the library's `architectureProducer` helper, with its job settings out of the Jenkins UI
+# Slice 035 — Every architecture producer is a full declarative Jenkinsfile to the style guide, its generate/validate contract in the library's `architectureProducer` steps, with its job settings out of the Jenkins UI
 
 ## Requirements / rulings
 
@@ -31,7 +31,7 @@
   disallow concurrent builds. I'd like a cleanup to move as much of possible of this into the
   Jenkinsfiles." In declarative form the concurrency guard and the trigger go into
   `options{}`/`triggers{}` by the guide's PROP rules (PROP-3's list accepted as 034 close-out
-  D1) — for the producers on the helper, into the helper per Ruling D2. Report Theme A: "All 49
+  D1) — in every file, per Ruling D2. Report Theme A: "All 49
   `AaC/*Deploy` jobs are UI-only"; `AaC/Ansible` and `AaC/YouTrackMCPServer` have no guard at all.
 - R5. **Q9:** "`AaC/UnderfloorHeatingController` is the only AaC job with `abortPrevious=false`.
   Reason, or accident?" Operator: "Accident."
@@ -70,33 +70,43 @@
   for the churn and run it once at the end**, when the queue is quiet, as part of the check —
   one webathome-org `architecture_viewer` rollout instead of 10–15, and pod slots freed for the
   app builds. No stop rules, no batches, no device ordering: everything is pushed at once.
-- **Ruling D2 (2026-10-01), operator: "I think I'm ok with the single line Jenkinsfile's
-  approach. I'd like to try it. So, your initial recommendation."** — to: **a whole-pipeline
-  helper.** `architectureProducer(…)` is a library var holding the whole declarative
-  `pipeline {}` — agent, `options{}` (the concurrency guard, per PROP-3), `triggers{ githubPush() }`,
-  the stages. Each producer on it becomes its header comment, the library line and one call
-  carrying its per-repo values as arguments with no default (LIB-3): producer name and stage,
-  what it validates/archives. The guide is amended in the same phase that adds the var: FILE-1
-  (one `pipeline {}` per file) and LIB-2 (the library must not take over properties, trigger,
-  agent size) get the exception "a type with a whole-pipeline helper: the file is one call to
-  it, and the helper's page states the job settings it declares"; the library page's J16 row and
-  the two architecture type pages move from "accepted, not yet in the library" to the helper.
-  The operator accepted the trade-off: for the producers on the helper the guard and trigger are
-  in one library file and its `vars/architectureProducer.md` page, not in the file. Producers
-  whose body does not fit the helper (at least `Ansible`, `DockerImages`, `IoTSupport`) stay full
-  declarative files per the guide's reference files.
+- **Ruling D2 (2026-10-01, reversed at the plan review), operator: "Maybe we're just wrong and
+  these rules are actually pretty good. What if we stick to the guide rules?" — then, on the
+  steps-helper shape put to them: "Go".** — to: **stick to the guide as written; no guide
+  exception.** Every producer is a full declarative file to the guide's reference: header, the
+  library line, `pipeline {}` with its agent, `options{}` (the guard per PROP-3, `skipDefaultCheckout()`,
+  the 60-minute timeout, `timestamps()`), `triggers{ githubPush() }`, and its stages written out
+  (Checkout, Generate, Validate). J16's `architectureProducer` is a **steps** helper, not a
+  whole-pipeline one: steps called inside those stages that carry the estate-wide contract —
+  the `aac-tools` container, the `gen-architecture`/`arch-validate` command lines, and the
+  archive pattern `AaC/Architecture` collects (LIB-1's contract test) — with per-repo values as
+  arguments with no default (LIB-3). The guide's library page's J16 row changes from "the type's
+  whole pipeline" to that contract and to "in the library"; the two architecture type pages and
+  reference files (`docs/examples/app-architecture.groovy`, `deploy-architecture.groovy`) show
+  the helper's steps. FILE-1, LIB-2 and every other rule stand unamended; every producer file
+  passes the controller's declarative linter as written. The operator's earlier ruling for the
+  one-call file (a whole-pipeline helper with a guide exception) is withdrawn: the review showed
+  it bends about ten rules (PROP-3, PROP-4, PROP-6, CHK-1, GRAN-1, GRAN-7, TIME-1, POD-1, FILE-1,
+  FILE-3, FILE-6, LIB-2) and the guide's premise that a rule is checkable from the file alone.
+  Accepted trade-off: the files are ~40 lines, not "a few lines". Producers whose body does not
+  fit the steps (at least `Ansible`, `DockerImages`, `IoTSupport`) may call them where they fit
+  or write the commands out, per the plan; all are full declarative files either way.
 - **Ruling P1 (2026-10-01), operator: "Agreed."** — to: **starting `/dev:run-slice` on 035 is
   the operator's OK for the one push.** The run edits everything, then its test phase pauses
-  `AaC/Architecture`, pushes every repo the slice touched in one go, waits for quiet, runs
-  `AaC/Architecture` once and one hand-started `AaC/UnderfloorHeatingController` build (S2), then
-  checks every job's last build. It does not stop to ask mid-way. This authorises the run to
+  `AaC/Architecture`, pushes every repo the slice touched in one go, waits for quiet, starts one
+  `AaC/UnderfloorHeatingController` build by hand (S2) and waits for it to finish, **only then**
+  re-enables `AaC/Architecture` and builds it once (it is downstream of every producer, with
+  `abortPrevious=true`, so a producer build after re-enabling would start or abort a second
+  collector run — review r1 B5), then checks every job's last build. Disabling and re-enabling
+  `AaC/Architecture` are the only Jenkins job writes; no job's properties are edited through the
+  API (review r1 A1). It does not stop to ask mid-way. This authorises the run to
   push every repo the slice touches, including repos that are not a phase's `Target:`, and to
   roll prd through those pushes.
 
 #### Settled by the session (refinement.md § Settled)
 
 - S1. PipelinesDeploy's producer (the docs site's own deploy repo, created 2026-09-30) is in
-  scope and goes onto the helper like the other deploy producers.
+  scope and is migrated like the other deploy producers (onto the helper's steps).
 - S2. A declarative file does not override a UI-set job setting on its first build; the file
   owns it from the second build (G3). So only `AaC/UnderfloorHeatingController` keeps
   `abortPrevious=false` after its first build; the test phase starts one more build of it by
@@ -106,7 +116,10 @@
 - S3. Every producer uses `checkout scm` (J24), KubeCoderDeploy included.
 - S4. IoTSupport's producer stays a full declarative file; its `withVault`, which today wraps the
   whole pod, moves inside the generate step (declarative cannot wrap a pod in it). The rest of
-  J17 stays in the second slice.
+  J17 stays in the second slice. Its `$KEYCLOAK_OIDC_TOKEN_URL` read stays: it breaks SEC-5
+  (`guide/secrets.md:46-47`), but inlining it is Q6, which slice.md puts in the second slice
+  ("Q6's `KEYCLOAK_*` inlining") — the one recorded exception to R1's "per the style guide"
+  (review r1 B4, operator "Go" to the default).
 - S5. The review's records (`reviews/2026-09-jenkinsfile-review/inventory.md`, `report.md`'s
   J16/J01/J24/Q9 status, `plan.md`'s "where things stand") are updated: the five apps' producers
   typed, the count 78, J16 delivered.
@@ -166,8 +179,9 @@
 - G5. **The guide** (JenkinsPipelineUtils `docs/pages/guide/`): `library.md` lists J16 as "the
   type's whole pipeline", "accepted, not yet in the library"; LIB-1 allows "how a whole pipeline
   type runs"; LIB-4 needs ≥3 jobs of one body (met); LIB-5 needs `vars/<name>.md` in the same
-  commit (the library's own test fails without it); FILE-1/FILE-6 and LIB-2 are the rules Ruling
-  D2 amends. Reference files: `docs/examples/app-architecture.groovy`,
+  commit (the library's own test fails without it); under Ruling D2 the steps helper is justified
+  by LIB-1's contract test, not LIB-4, and no rule is amended. `docs/lint_examples.py` sends every
+  `examples/**/*.groovy` to the controller's linter. Reference files: `docs/examples/app-architecture.groovy`,
   `docs/examples/deploy-architecture.groovy`; type pages `docs/pages/types/app-architecture.md`,
   `deploy-architecture.md`. The library floats on `main` (FILE-5): a push reaches every consumer
   on its next build, and a JenkinsPipelineUtils push also rebuilds the pipelines.home site and

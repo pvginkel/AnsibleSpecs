@@ -34,7 +34,7 @@
 
 **If this is wrong.** A mechanical re-rewrite of the 78 files later, plus undoing a guide amendment; nothing breaks in between.
 
-**Operator.** "I think I'm ok with the single line Jenkinsfile's approach. I'd like to try it. So, your initial recommendation." (2026-10-01, in chat, after asking whether the guard and trigger can live in the library)
+**Operator.** Reversed at the plan review (2026-10-01, in chat), after the review showed the one-call file bends about ten guide rules, not two: "Maybe we're just wrong and these rules are actually pretty good. What if we stick to the guide rules?" — then "Go" to the other way: full declarative files to the guide, and the helper as steps inside the stages carrying the generate/validate/archive contract. (Earlier the same day: "I think I'm ok with the single line Jenkinsfile's approach. I'd like to try it.")
 
 ## Open facts — questions only you can answer
 
