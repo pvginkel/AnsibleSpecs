@@ -46,7 +46,8 @@ subagent.
   and ruled GRAN-8 and the registry-host constant as the guide states them. Two of its
   close-out entries are folded into the migration's carry list (`handovers/triage_2026-09-30.md`
   § After 033): B2, four Jenkinsfiles with small defects the migration rewrites anyway, and I2,
-  the skill's missing rule for a Jenkinsfile that predates the guide. Nothing from 033 or 034
+  the skill's missing rule for a Jenkinsfile that predates the guide. 034's close-out is closed
+  (ANS-172); the docs site's launcher tile is ANS-174. Nothing from 033 or 034
   blocks the next step. **Next: the operator cuts the declarative migration** through
   `/dev:triage` → `/dev:plan-slice`, from § After 033's carry list and groups C and D. It
   absorbs ANS-84. The ModernAppTemplate repos stay out of it, and its push-everything-once
