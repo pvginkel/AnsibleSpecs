@@ -105,7 +105,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by the wrap-up (Ansible 2701b24): JENKINSFILE_ARCH is now the deploy-architecture reference form — declarative pipeline {}, options{}/triggers{}, checkout scm, architectureProducer.generate/archive/validate — and scaffold/add_stage pass job, repo and script path instead of the clone's credential and URL. The template rendered for charts/prd, keycloak/prd, keycloak/dev and mosquitto/prd matches the committed deploy files except where the header comment wraps; kc project test --project root (argo-migrate and recommend-resources unittests) re-run green",
+        "by": "wrap-up",
+        "date": "2026-10-01",
+        "commit": "2701b24"
+      },
       "ruling": null
     },
     {
@@ -330,11 +335,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-01",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json (V05, V08, V09): it pushed JenkinsPipelineUtils first, then the 77 repos in one go with AaC/Architecture paused; all 33 non-AaC jobs the push started (the prd app rollouts, the firmware re-flashes) finished SUCCESS, and the collector was re-enabled and built once green (#2378). That is the prd churn Ruling D1 accepted, with nothing that went wrong in it; AaC/IoTSupport's red build is B3's own entry. Live on 2026-10-01 after the run: every pod on prd is Running or Completed, and every Argo CD application is Synced and Healthy except argocd-prd, whose autoSync is off by D3. The event describes no problem."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -351,11 +378,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-01",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json (V03, V08, V13): JenkinsPipelineUtils was pushed first (0d640cf, 11:23:01), its site build pinned the docs into PipelinesDeploy, and AaC/PipelinesDeploy built green. Live on 2026-10-01 after the run: https://pipelines.home/docs/ answers 200, and its types/deploy-architecture page carries the architectureProducer steps, so the slice's site reached prd. The event describes no problem."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
