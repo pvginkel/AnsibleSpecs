@@ -369,6 +369,36 @@ gets no commit (R2).
 - Every file passes the linter as in P2, and every file gets a row in the ledger
   (`producer-ledger.md` in the slice folder).
 
+**Done (P3).** All 25 app-repo producer files are the app-architecture reference file with their
+own header and model files, and each passes the controller's linter. Each repo holds one local
+commit on its default branch (`master` for the MyDownloads and ScanToPdf pairs), its only one
+ahead of origin, listed in `producer-ledger.md` (now 75 rows). Nothing is pushed, and the Ansible
+branch has no commit.
+
+Later phases:
+- P4: a producer with backend and frontend models (IoTSupport) labels its stages by scope, per
+  LABEL-3: `Validate architecture (backend)`, `Validate architecture (frontend)`.
+- P4: the app header's first paragraph is the reference's, "Validates <Repo>'s hand-authored
+  architecture model, <files>, against the architecture service, and archives it as the
+  producer's artifact, which AaC/Architecture collects."
+
+Record:
+- Generated from `docs/examples/app-architecture.groovy`, header wrapped at 100 columns; the
+  generator reproduced the reference byte for byte for Ginbov. Only the header and, for the
+  monorepos, the stages differ.
+- Live config.xml of all 25 jobs: SCM `pvginkel/<Repo>`, branch `*/main` or `*/master` as above,
+  script path `Jenkinsfile.architecture`; AaC/YouTrackMCPServer has no guard and
+  AaC/UnderfloorHeatingController `abortPrevious=false` (G4); every file declares
+  `abortPrevious: true`.
+- DHCPApp, ZigbeeControl, ElectronicsInventory: two stages, `Validate architecture (backend)`
+  and `(frontend)`, each `validate` + `archive` on `<side>/docs/architecture/*.yaml`, no `dir()`.
+  Their header keeps one why-paragraph: one producer (`dhcpapp`, `zigbee-control`,
+  `electronics-inventory`), declared by both models.
+- Dropped as stale or now enforced by `archive` (J25): the egress line, KubeCoder's
+  collector-glob note and "kept separate from the build" paragraph, FieldnotesApp's producer-id
+  and no-Vault notes, the `dir()`/archive-glob NOTE comments.
+- Linter 25/25 "Jenkinsfile successfully validated."; a file with an unknown option was rejected.
+
 ### P4 — The Ansible, DockerImages and IoTSupport producers are declarative files that call the helper where it fits
 
 Target: root
