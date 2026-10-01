@@ -68,9 +68,22 @@ subagent.
   checks the churn once, with AaC/Architecture paused for it and built once at the end (its
   Rulings D1 and P1). Its close-out has the result. `report.md` (J16, J01, J24, Q9) and
   `inventory.md` (T1 28, T2 50) carry the status.
+- **Where things stand (2026-10-01, after 035).** Slice **035** (ANS-175, Resolved) is complete,
+  in `slices/completed/`, and its close-out is closed. All 78 producers are declarative files on
+  `architectureProducer`'s steps. The one-go push of 77 repos went quiet about 50 minutes later;
+  five items sat 38 minutes on "nodes offline" while the cloud cap was contended, not leaked
+  (close-out E6: `cloudCounts` matched the live agents, no reset). V14 passed after the KubeCoder
+  promotion (AaC/KubeCoderDeploy #11). AaC/IoTSupport, red before and after the migration (its
+  generator wrote a firmware version the validator read as a float), is fixed: IS-1 is Done and
+  #45 built green from IoTSupport d6ec6e8. The producer
+  manual's scripted snippet is ARCH-17. Ansible's argo-migrate template now writes the
+  reference producer (2701b24). Two stale doc lines were closed without a card: KubeCoder
+  `docs/operations/pipeline-dependencies.md` names the old `stage('Architecture')` (P6), and
+  ArgoCDTools' README says Jenkins takes `aac-tools` through `containerTemplates.aac_tools` (P7).
+  Both sit where the second slice works. ANS-84 stays open for the second slice.
 - **Next cut, once 035 closes: the second slice**, the build and deploy pipelines to declarative,
   cut from `handovers/triage_2026-09-30.md` § Cut: slice 035. It absorbs ANS-84. The operator
-  chooses the cut.
+  chooses the cut. *(10-01, after 035)* Put to the operator.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
