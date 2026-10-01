@@ -8,112 +8,20 @@ doc phase done · wrap-up landed · $94.01 (planner 17 %, research 2 %, rework 5
 
 ## Comes to you
 
-### A1 — Delete the throwaway GitHub repo pvginkel/jenkins-trigger-test (slice 034 P1's §6a webhook test)
-
-The §6a test is recorded (AnsibleSpecs reviews/2026-09-jenkinsfile-review/report.md, Appendix A R1, the 2026-09-30 note) and its Jenkins job is deleted. The private repo remains, with four commits and the Jenkins push hook the second job incarnation installed (deleting the job left the hook in place). The pod's GH_TOKEN carries repo and workflow, not delete_repo (ruling D4). In this pod, gh auth status also shows a second, inactive login from ~/.config/gh/hosts.yml whose token carries delete_repo; the run did not use it. Command: gh repo delete pvginkel/jenkins-trigger-test --yes (with a delete_repo token, e.g. env -u GH_TOKEN from this pod).
-
-**Consequence:** none beyond clutter: a private throwaway repo stays on the account, its hook pointing at a Jenkins job that no longer exists.
-
-**Triage:** action · nothing that could show · no impact
-**Provenance:** witnessed — code-writer, P1, r1, report.md Appendix A R1 note (C 2026-09-30)
-**Route:** to you — an action
-**Disposition:**
-
 ### A2 — Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done
 
 The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.
 
 Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
 
-**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
-
-**Triage:** action · nothing that could show · no impact
-**Provenance:** witnessed — the driver's target resolution
-**Route:** to you — an action
-**Disposition:**
-
-### A3 — Delete the scratch clone /work/scratch/PipelinesDeploy once the slice is done
-
-The driver cloned (or adopted) `/work/scratch/PipelinesDeploy` for `Target: github:pvginkel/PipelinesDeploy`; the slice's phases for that repo are branched, merged and pushed there.
-
-Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
+close-out session, 2026-10-01 — 2026-10-01 — /work/scratch/KubeCoderConfig is still present, clean and in sync with origin (last commit 45612e9, the run's skill commit); the delete appears not done.
 
 **Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
 
 **Triage:** action · nothing that could show · no impact
 **Provenance:** witnessed — the driver's target resolution
 **Route:** to you — an action
-**Disposition:**
-
-### D1 — JenkinsPipelineUtils style guide PROP-3: the plain disableConcurrentBuilds() list applies the §9 ruling's criteria, so it names jobs the review's S flags did not
-
-The §9 ruling makes disableConcurrentBuilds(abortPrevious: true) the standard, and plain disableConcurrentBuilds() the exception for change-detecting builds (DockerImages) and for 'pipelines with a side-effecting sequence that an abort would cut in half: the review's S jobs and the T7 iac apply files'. The guide's PROP-3 (docs/pages/guide/job-properties.md) states both criteria and lists the jobs they cover today. Beyond the 14 S flags and DockerImages, the list holds: IaC/IaC Docker Image (it calls utils.hasChanges, as DockerImages does); all six iac-controller files, IaC/Build-Main and IaC/Scheduled Drift included although they apply nothing, because J12 settles the abort marker on all six and a marker with abortPrevious pages for every superseded build (§8 (c)'s reason); KubeCoder/Promote-PRD (Appendix A: 'the retag → fast-forward → tag sequence is one an abort must not cut'; not flagged S only because it already queued); MyDownloads/MyDownloadsServer (archive, then 'build job: MyDownloads', the same sequence as the S-flagged ScanToPdfServer; not flagged only because it had no guard at all, which the S definition presupposes). The abort marker (POST-3) goes exactly where plain disableConcurrentBuilds() is.
-
-**Consequence:** none beyond the choice: the migration gives these four jobs and the two read-only iac files queueing concurrency and the abort marker, where a literal reading (the S flags and the four applying iac files only) would give those six abortPrevious: true and no marker.
-
-**Triage:** decision · nothing that could show · no impact
-**Provenance:** witnessed — code-writer, P5, r2; docs/pages/guide/job-properties.md in JenkinsPipelineUtils b37b8ba
-**Route:** to you — a decision
-**Disposition:**
-
-### D2 — JenkinsPipelineUtils style guide: a lint and a test suite are two stages (GRAN-2); LABEL-4's 'and' join is for one command that runs both
-
-The §2 ruling replaced rule 4 with 'a label never contains +; where a label joins two actions, it joins them with and (Lint and test, not Lint + test)'. The §3 ruling is option A, 'followed strictly', whose text makes each gate — a lint, a test suite, a validation — its own stage. Read together, Lint and test would be a label for a stage A splits in two. The guide reconciles them in GRAN-2: gates stay separate stages, and one command that runs two gates at once (a make check that lints and tests) is one stage whose label joins both with and. LABEL-4 carries the and/+ rule and its example as ruled. YouTrackConfiguration's 'Lint and test' (ruff, ruff format, pytest as separate commands) therefore becomes Lint and Test in the migration.
-
-**Consequence:** none beyond the choice: the migration splits every file whose lint and tests run as separate commands into a Lint and a Test stage, where the other reading would keep one combined stage labelled with 'and'.
-
-**Triage:** decision · nothing that could show · no impact
-**Provenance:** witnessed — code-writer, P5, r2; docs/pages/guide/stage-granularity.md and stage-labels.md in JenkinsPipelineUtils b37b8ba
-**Route:** to you — a decision
-**Disposition:**
-
-### D3 — JenkinsPipelineUtils style guide: the Configuration apply, Image matrix and Architecture collector reference files name podYaml's python template, which the library does not have yet
-
-Ruling §5 (a) gives every library sidecar a podYaml template, and ruled that this slice adds only aac-tools (a1); python, helm and iac_toolchain are the migration's. POD-5 then requires a file to name the sidecar by template, so docs/examples/configuration-apply.groovy, image-matrix.groovy and architecture-collector.groovy declare podYaml(templates: [..., 'python']), and each type page says podYaml has no python template yet. The controller's linter does not evaluate the agent, so all three pass it; podYaml refuses the name when a build evaluates the agent ('podYaml: the library has no template 'python'; it has aac-tools, k8s, modern-app-toolchain').
-
-**Consequence:** A session that copies one of these three reference files before the migration adds the python template gets a build that fails at agent evaluation with podYaml's refusal; the linter and the guide's own gate stay green.
-
-**Triage:** decision · shows on an ordinary condition · breaks a flow · loud
-**Provenance:** witnessed — executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record
-**Route:** to you — a decision
-**Disposition:**
-
-### D4 — JenkinsPipelineUtils style guide: the reference files carry state between stages in variables declared before pipeline {}, which Declarative's script splitting would refuse
-
-promotion.groovy (sha, recordOnly, pins) and image-matrix.groovy (builtTags, pinsByRepo) declare script-level variables that later stages read. That works because RuntimeASTTransformer.SCRIPT_SPLITTING_TRANSFORMATION defaults to false at the controller's pipeline-model-definition 2.2293 (RuntimeASTTransformer.groovy:77-80). With it true and SCRIPT_SPLITTING_ALLOW_LOCAL_VARIABLES false, Declarative throws JENKINS-37984's IllegalStateException for any such declaration (:1282-1304). The alternatives were env strings (pins and builtTags are maps and lists) or @groovy.transform.Field.
-
-**Consequence:** If the controller ever enables Declarative script splitting, DockerImages and KubeCoder/Promote-PRD, once migrated to these files, fail to start with JENKINS-37984's error until their variables become @Field or env values.
-
-**Triage:** decision · needs a future change · breaks a flow · loud
-**Provenance:** witnessed — executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record
-**Route:** to you — a decision
-**Disposition:**
-
-### D5 — JenkinsPipelineUtils style guide: a generated producer artifact is archived in its Generate stage, before Validate, where AaC/Home Assistant Fleet archives only after validation today
-
-GRAN-3 puts the archive in the stage that makes the artifact and GRAN-2 makes the validation a stage of its own, so deploy-architecture.groovy and snapshot-producer.groovy run Generate architecture (generate, archive), then Validate architecture. Architecture/Jenkinsfile copies every producer with selector: lastSuccessful(), so a model that fails validation is never collected; the type pages and the files' comments say so. Jenkinsfile.ha-fleet's header today archives last 'so a bad snapshot is never published'.
-
-**Consequence:** none beyond the choice: a producer build that fails validation keeps its invalid model among its artifacts, where today HA Fleet's does not; AaC/Architecture never collects it either way.
-
-**Triage:** decision · nothing that could show · no impact
-**Provenance:** witnessed — executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record
-**Route:** to you — a decision
-**Disposition:**
-
-### D6 — PipelinesDeploy departs from ChartsDeploy's shape: no committed library chart, a github-only Terraform, no HelmCharts carry-over values, and its product minted as ss: like charts-home
-
-P8's plan says PipelinesDeploy is shaped like ChartsDeploy. Four places differ, each following another precedent of the estate:
-- `chart/charts/` is gitignored and `tests/build-deps.sh` resolves homelab-shared from charts.home, as TfmirrorDeploy, ArgoCDDeploy and KubeCoderDeploy do. ChartsDeploy (and RegistryDeploy) commit the tarball only because charts.home and the registry must render while charts.home is down (`tests/check-deps.sh`'s comment); pipelines.home has no such cycle.
-- `terraform/` declares only the github provider and the two variables the webhook needs (`github_webhook_secret`, `manage_webhook`), in KubeCoderDeploy's hand-built form, not the six providers every migrated deploy repo carries from HelmCharts' `_providers/providers.tf`. Terraform ignores the hook's other `TF_VAR_*` exports, which name undeclared variables.
-- No `global.environment` in the stage values and no `deployment.timestamp` annotation: both are carry-overs of HelmCharts' deploy CLI (argo_migrate.py `compose_values`) that no template or tool reads.
-- The product is `ss:pipelines-home`, the kind charts.home's `ss:charts-home` has (static nginx serving content a repo of the estate builds). KubeCoder's MkDocs manual is `app:kubecoder-manual`, the other available precedent.
-
-**Consequence:** none beyond the choice: the repo is smaller than ChartsDeploy and renders only while charts.home is up, where a literal copy would carry a committed tarball, four unused providers and two unread values.
-
-**Triage:** decision · nothing that could show · no impact · in PipelinesDeploy
-**Provenance:** witnessed — code-writer, P8, r1, plan.md P8 done-record
-**Route:** to you — a decision
-**Disposition:**
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.
 
 ### I2 — KubeCoderConfig jenkins-pipelines skill: it gives no guidance for a Jenkinsfile that predates the guide, though every existing file does until the migration
 
@@ -424,6 +332,124 @@ Stopped 2026-09-30 22:05; resumed 2026-09-30 22:05.
 **Provenance:** witnessed — the driver's bail record in state.json
 **Route:** the record
 **Disposition:**
+
+</details>
+
+### ~~A1 — Delete the throwaway GitHub repo pvginkel/jenkins-trigger-test (slice 034 P1's §6a webhook test)~~ — done by the operator, 2026-10-01 — gh repo view pvginkel/jenkins-trigger-test: could not resolve to a repository; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The §6a test is recorded (AnsibleSpecs reviews/2026-09-jenkinsfile-review/report.md, Appendix A R1, the 2026-09-30 note) and its Jenkins job is deleted. The private repo remains, with four commits and the Jenkins push hook the second job incarnation installed (deleting the job left the hook in place). The pod's GH_TOKEN carries repo and workflow, not delete_repo (ruling D4). In this pod, gh auth status also shows a second, inactive login from ~/.config/gh/hosts.yml whose token carries delete_repo; the run did not use it. Command: gh repo delete pvginkel/jenkins-trigger-test --yes (with a delete_repo token, e.g. env -u GH_TOKEN from this pod).
+
+**Consequence:** none beyond clutter: a private throwaway repo stays on the account, its hook pointing at a Jenkins job that no longer exists.
+
+**Triage:** action · nothing that could show · no impact
+**Provenance:** witnessed — code-writer, P1, r1, report.md Appendix A R1 note (C 2026-09-30)
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — done by the operator, 2026-10-01 — gh repo view pvginkel/jenkins-trigger-test: could not resolve to a repository
+
+</details>
+
+### ~~A3 — Delete the scratch clone /work/scratch/PipelinesDeploy once the slice is done~~ — done by the operator, 2026-10-01 — /work/scratch/PipelinesDeploy is gone; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The driver cloned (or adopted) `/work/scratch/PipelinesDeploy` for `Target: github:pvginkel/PipelinesDeploy`; the slice's phases for that repo are branched, merged and pushed there.
+
+Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
+
+**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
+
+**Triage:** action · nothing that could show · no impact
+**Provenance:** witnessed — the driver's target resolution
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — done by the operator, 2026-10-01 — /work/scratch/PipelinesDeploy is gone
+
+</details>
+
+### ~~D1 — JenkinsPipelineUtils style guide PROP-3: the plain disableConcurrentBuilds() list applies the §9 ruling's criteria, so it names jobs the review's S flags did not~~ — accepted by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The §9 ruling makes disableConcurrentBuilds(abortPrevious: true) the standard, and plain disableConcurrentBuilds() the exception for change-detecting builds (DockerImages) and for 'pipelines with a side-effecting sequence that an abort would cut in half: the review's S jobs and the T7 iac apply files'. The guide's PROP-3 (docs/pages/guide/job-properties.md) states both criteria and lists the jobs they cover today. Beyond the 14 S flags and DockerImages, the list holds: IaC/IaC Docker Image (it calls utils.hasChanges, as DockerImages does); all six iac-controller files, IaC/Build-Main and IaC/Scheduled Drift included although they apply nothing, because J12 settles the abort marker on all six and a marker with abortPrevious pages for every superseded build (§8 (c)'s reason); KubeCoder/Promote-PRD (Appendix A: 'the retag → fast-forward → tag sequence is one an abort must not cut'; not flagged S only because it already queued); MyDownloads/MyDownloadsServer (archive, then 'build job: MyDownloads', the same sequence as the S-flagged ScanToPdfServer; not flagged only because it had no guard at all, which the S definition presupposes). The abort marker (POST-3) goes exactly where plain disableConcurrentBuilds() is.
+
+**Consequence:** none beyond the choice: the migration gives these four jobs and the two read-only iac files queueing concurrency and the abort marker, where a literal reading (the S flags and the four applying iac files only) would give those six abortPrevious: true and no marker.
+
+**Triage:** decision · nothing that could show · no impact
+**Provenance:** witnessed — code-writer, P5, r2; docs/pages/guide/job-properties.md in JenkinsPipelineUtils b37b8ba
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — accepted by the operator, 2026-10-01
+
+</details>
+
+### ~~D2 — JenkinsPipelineUtils style guide: a lint and a test suite are two stages (GRAN-2); LABEL-4's 'and' join is for one command that runs both~~ — accepted by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The §2 ruling replaced rule 4 with 'a label never contains +; where a label joins two actions, it joins them with and (Lint and test, not Lint + test)'. The §3 ruling is option A, 'followed strictly', whose text makes each gate — a lint, a test suite, a validation — its own stage. Read together, Lint and test would be a label for a stage A splits in two. The guide reconciles them in GRAN-2: gates stay separate stages, and one command that runs two gates at once (a make check that lints and tests) is one stage whose label joins both with and. LABEL-4 carries the and/+ rule and its example as ruled. YouTrackConfiguration's 'Lint and test' (ruff, ruff format, pytest as separate commands) therefore becomes Lint and Test in the migration.
+
+**Consequence:** none beyond the choice: the migration splits every file whose lint and tests run as separate commands into a Lint and a Test stage, where the other reading would keep one combined stage labelled with 'and'.
+
+**Triage:** decision · nothing that could show · no impact
+**Provenance:** witnessed — code-writer, P5, r2; docs/pages/guide/stage-granularity.md and stage-labels.md in JenkinsPipelineUtils b37b8ba
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — accepted by the operator, 2026-10-01
+
+</details>
+
+### ~~D3 — JenkinsPipelineUtils style guide: the Configuration apply, Image matrix and Architecture collector reference files name podYaml's python template, which the library does not have yet~~ — accepted by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Ruling §5 (a) gives every library sidecar a podYaml template, and ruled that this slice adds only aac-tools (a1); python, helm and iac_toolchain are the migration's. POD-5 then requires a file to name the sidecar by template, so docs/examples/configuration-apply.groovy, image-matrix.groovy and architecture-collector.groovy declare podYaml(templates: [..., 'python']), and each type page says podYaml has no python template yet. The controller's linter does not evaluate the agent, so all three pass it; podYaml refuses the name when a build evaluates the agent ('podYaml: the library has no template 'python'; it has aac-tools, k8s, modern-app-toolchain').
+
+**Consequence:** A session that copies one of these three reference files before the migration adds the python template gets a build that fails at agent evaluation with podYaml's refusal; the linter and the guide's own gate stay green.
+
+**Triage:** decision · shows on an ordinary condition · breaks a flow · loud
+**Provenance:** witnessed — executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — accepted by the operator, 2026-10-01
+
+</details>
+
+### ~~D4 — JenkinsPipelineUtils style guide: the reference files carry state between stages in variables declared before pipeline {}, which Declarative's script splitting would refuse~~ — accepted by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+promotion.groovy (sha, recordOnly, pins) and image-matrix.groovy (builtTags, pinsByRepo) declare script-level variables that later stages read. That works because RuntimeASTTransformer.SCRIPT_SPLITTING_TRANSFORMATION defaults to false at the controller's pipeline-model-definition 2.2293 (RuntimeASTTransformer.groovy:77-80). With it true and SCRIPT_SPLITTING_ALLOW_LOCAL_VARIABLES false, Declarative throws JENKINS-37984's IllegalStateException for any such declaration (:1282-1304). The alternatives were env strings (pins and builtTags are maps and lists) or @groovy.transform.Field.
+
+**Consequence:** If the controller ever enables Declarative script splitting, DockerImages and KubeCoder/Promote-PRD, once migrated to these files, fail to start with JENKINS-37984's error until their variables become @Field or env values.
+
+**Triage:** decision · needs a future change · breaks a flow · loud
+**Provenance:** witnessed — executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — accepted by the operator, 2026-10-01
+
+</details>
+
+### ~~D5 — JenkinsPipelineUtils style guide: a generated producer artifact is archived in its Generate stage, before Validate, where AaC/Home Assistant Fleet archives only after validation today~~ — accepted by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+GRAN-3 puts the archive in the stage that makes the artifact and GRAN-2 makes the validation a stage of its own, so deploy-architecture.groovy and snapshot-producer.groovy run Generate architecture (generate, archive), then Validate architecture. Architecture/Jenkinsfile copies every producer with selector: lastSuccessful(), so a model that fails validation is never collected; the type pages and the files' comments say so. Jenkinsfile.ha-fleet's header today archives last 'so a bad snapshot is never published'.
+
+**Consequence:** none beyond the choice: a producer build that fails validation keeps its invalid model among its artifacts, where today HA Fleet's does not; AaC/Architecture never collects it either way.
+
+**Triage:** decision · nothing that could show · no impact
+**Provenance:** witnessed — executor, P6, r1, JenkinsPipelineUtils ab605b7 and plan.md P6 done-record
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — accepted by the operator, 2026-10-01
+
+</details>
+
+### ~~D6 — PipelinesDeploy departs from ChartsDeploy's shape: no committed library chart, a github-only Terraform, no HelmCharts carry-over values, and its product minted as ss: like charts-home~~ — accepted by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+P8's plan says PipelinesDeploy is shaped like ChartsDeploy. Four places differ, each following another precedent of the estate:
+- `chart/charts/` is gitignored and `tests/build-deps.sh` resolves homelab-shared from charts.home, as TfmirrorDeploy, ArgoCDDeploy and KubeCoderDeploy do. ChartsDeploy (and RegistryDeploy) commit the tarball only because charts.home and the registry must render while charts.home is down (`tests/check-deps.sh`'s comment); pipelines.home has no such cycle.
+- `terraform/` declares only the github provider and the two variables the webhook needs (`github_webhook_secret`, `manage_webhook`), in KubeCoderDeploy's hand-built form, not the six providers every migrated deploy repo carries from HelmCharts' `_providers/providers.tf`. Terraform ignores the hook's other `TF_VAR_*` exports, which name undeclared variables.
+- No `global.environment` in the stage values and no `deployment.timestamp` annotation: both are carry-overs of HelmCharts' deploy CLI (argo_migrate.py `compose_values`) that no template or tool reads.
+- The product is `ss:pipelines-home`, the kind charts.home's `ss:charts-home` has (static nginx serving content a repo of the estate builds). KubeCoder's MkDocs manual is `app:kubecoder-manual`, the other available precedent.
+
+**Consequence:** none beyond the choice: the repo is smaller than ChartsDeploy and renders only while charts.home is up, where a literal copy would carry a committed tarball, four unused providers and two unread values.
+
+**Triage:** decision · nothing that could show · no impact · in PipelinesDeploy
+**Provenance:** witnessed — code-writer, P8, r1, plan.md P8 done-record
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — accepted by the operator, 2026-10-01
 
 </details>
 

@@ -152,8 +152,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "done by the operator, 2026-10-01 — gh repo view pvginkel/jenkins-trigger-test: could not resolve to a repository",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "done by the operator, 2026-10-01 — gh repo view pvginkel/jenkins-trigger-test: could not resolve to a repository",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P5",
@@ -450,8 +459,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "accepted by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "accepted by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "D2",
@@ -471,8 +489,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "accepted by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "accepted by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "T1",
@@ -544,8 +571,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "accepted by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "accepted by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "D4",
@@ -565,8 +601,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "accepted by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "accepted by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "D5",
@@ -586,8 +631,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "accepted by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "accepted by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B3",
@@ -694,10 +748,22 @@
         "impact": "none",
         "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-01",
+          "text": [
+            "2026-10-01 — /work/scratch/KubeCoderConfig is still present, clean and in sync with origin (last commit 45612e9, the run's skill commit); the delete appears not done."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
-      "ruling": null
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "I1",
@@ -771,8 +837,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "done by the operator, 2026-10-01 — /work/scratch/PipelinesDeploy is gone",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "done by the operator, 2026-10-01 — /work/scratch/PipelinesDeploy is gone",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "D6",
@@ -797,8 +872,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "accepted by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
+        "did": "accepted by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "I3",
