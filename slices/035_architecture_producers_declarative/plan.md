@@ -399,7 +399,7 @@ Record:
   and no-Vault notes, the `dir()`/archive-glob NOTE comments.
 - Linter 25/25 "Jenkinsfile successfully validated."; a file with an unknown option was rejected.
 
-### P4 — The Ansible, DockerImages and IoTSupport producers are declarative files that call the helper where it fits
+### P4 — The Ansible, DockerImages and IoTSupport producers are declarative files that call the helper where it fits ✅ DONE 2026-10-01
 
 Target: root
 
