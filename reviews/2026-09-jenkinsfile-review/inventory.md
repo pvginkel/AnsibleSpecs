@@ -15,6 +15,14 @@ Jenkinsfile per type below, and the migration slice after it works from this pag
 count toward the variants under each topic. To rebuild the state, see "State does not survive an
 environment" in [plan.md](plan.md).
 
+> *Updated 2026-10-01 by slice 035 (ANS-175):* the five ModernAppTemplate apps' producers are
+> typed T1, and AaC/PipelinesDeploy, created by slice 034 after this page was built, is typed T2.
+> That makes **78 producers**, T1 28 and T2 50, and 120 typed jobs. The five apps' build
+> `Jenkinsfile`s stay untyped until the second slice. Slice 035 migrated all 78 producers to full
+> declarative files to the style guide, on `architectureProducer`'s steps. T1 and T2 below
+> describe the files before that, and the topic sections count the 114 files as they stood on
+> 2026-09-30.
+
 ## Skipped: the ModernAppTemplate repos (ruling F2)
 
 > *Overruled 2026-10-01:* "MAT itself must be skipped, the downstream repos not." The ten jobs
@@ -51,8 +59,8 @@ Three consequences for the rest of this page:
 
 | Type | What the pipeline does | Jobs | Accepted library helper |
 |---|---|---|---|
-| T1 | App architecture producer: validates the repo's hand-authored architecture YAML and archives it | 23 | J16 |
-| T2 | Deploy-repo architecture producer: generates the YAML from the chart, then validates and archives it | 49 | J16 |
+| T1 | App architecture producer: validates the repo's hand-authored architecture YAML and archives it | 28 | J16 |
+| T2 | Deploy-repo architecture producer: generates the YAML from the chart, then validates and archives it | 50 | J16 |
 | T3 | Image build: kaniko image(s), then the image pin written into a deploy repo | 16 | — |
 | T4 | Artifact build for a downstream job: an apk, jar, zip or binary, archived and handed on | 5 | — |
 | T5 | ESP-IDF firmware: builds the firmware and uploads it to the devices over the air | 8 | J14 |
@@ -64,33 +72,57 @@ Three consequences for the rest of this page:
 | T11 | Architecture collector: triggers computed from YAML, collects every producer, builds the viewer | 1 | — |
 | T12 | Scheduled snapshot producer: a producer artifact generated from a live system on a cron | 1 | — |
 | T13 | Kiosk cross-build with an SSH deploy; the job is disabled | 1 | — |
-| | | **114** | |
+| | | **120** | |
 
-### T1 — App architecture producer (23)
+### T1 — App architecture producer (28)
+
+> *Migrated 2026-10-01 (slice 035):* every T1 file is a full declarative file to the guide.
+> 25 are the `app-architecture` reference file with their own header and model files.
+> AaC/Ansible, AaC/DockerImages and AaC/IoTSupport validate and archive through
+> `architectureProducer`'s steps and keep their own work written out. What follows describes the
+> files before the migration.
 
 Each is a `<Repo>/Jenkinsfile.architecture` run by job `AaC/<Repo>`. The pod inherits
 `jenkins-agent` and adds `containerTemplates.aac_tools('aac-tools')`. Stage `Cloning repo` runs
 `checkout scm`. Stage `Architecture` runs `arch-validate docs/architecture/*.yaml` in `aac-tools`,
 then `archiveArtifacts`. With comments stripped, 21 files are one body.
 
-Members: AaC/Ansible, AaC/CalendarDisplay, AaC/DockerImages, AaC/DoorbellReceiver,
-AaC/GestureDevice, AaC/Ginbov, AaC/GitblitMCPServer, AaC/GitblitMCPSupportPlugin,
-AaC/InfraStatisticsDisplay, AaC/Intercom, AaC/IntercomServer, AaC/KitchenDisplay, AaC/KubeCoder,
-AaC/MyDownloadsClient, AaC/MyDownloadsServer, AaC/NewsFilter, AaC/PaperClock, AaC/SSEGateway,
-AaC/ScanToPdfClient, AaC/ScanToPdfServer, AaC/UnderfloorHeatingController, AaC/Webathome,
-AaC/YouTrackMCPServer.
+Members: AaC/Ansible, AaC/CalendarDisplay, AaC/DHCPApp, AaC/DockerImages, AaC/DoorbellReceiver,
+AaC/ElectronicsInventory, AaC/FieldnotesApp, AaC/GestureDevice, AaC/Ginbov, AaC/GitblitMCPServer,
+AaC/GitblitMCPSupportPlugin, AaC/InfraStatisticsDisplay, AaC/Intercom, AaC/IntercomServer,
+AaC/IoTSupport, AaC/KitchenDisplay, AaC/KubeCoder, AaC/MyDownloadsClient, AaC/MyDownloadsServer,
+AaC/NewsFilter, AaC/PaperClock, AaC/SSEGateway, AaC/ScanToPdfClient, AaC/ScanToPdfServer,
+AaC/UnderfloorHeatingController, AaC/Webathome, AaC/YouTrackMCPServer, AaC/ZigbeeControl.
 
 - **AaC/Ansible** validates one named file (`docs/architecture/ansible-architecture.yaml`), in a
   stage of its own, and archives in another. It inherits `jenkins-agent kaniko` without building
   an image, and it has no header comment.
 - **AaC/DockerImages** copies each `*/architecture.yaml` to `docs/architecture/<app>.yaml` before
   it validates (`:28-35`). It clones itself with `git` (`:19-21`).
+- **AaC/DHCPApp** and **AaC/ZigbeeControl** share a monorepo body: stages `Validate backend
+  architecture` and `Validate frontend architecture`, each running `arch-validate` in
+  `dir('<side>')`, then archiving `<side>/docs/architecture/*.yaml`.
+- **AaC/ElectronicsInventory** has the same two stages, and archives both sides once, after them
+  and outside any stage.
+- **AaC/FieldnotesApp** is the 21 files' body with its stage labelled `Validate architecture`
+  instead of `Architecture`.
+- **AaC/IoTSupport** also generates. `withVault` (the `iotsupport-pipeline-oidc` client
+  credentials) wraps the whole pod (`:13`), which adds a `python` container. Stage `Generate
+  backend architecture` runs the backend's own `tools/gen-architecture.py` against the production
+  fleet, reading `$KEYCLOAK_OIDC_TOKEN_URL` (`:37`), into
+  `backend/docs/architecture/deployed-architecture.yaml`, which is not committed. Then it
+  validates and archives each side as DHCPApp does, the backend's two named files only.
 - **Header comments.** Two wordings are shared. One is in 12 files: the device and client/server
   repos. The other is in 8: Ginbov, the Gitblit pair, MyDownloadsServer, NewsFilter, SSEGateway,
-  Webathome and YouTrackMCPServer. AaC/KubeCoder and AaC/DockerImages each have a header of their
-  own, and AaC/Ansible has none.
+  Webathome and YouTrackMCPServer. AaC/KubeCoder, AaC/DockerImages and the five apps above each
+  have a header of their own, and AaC/Ansible has none.
 
-### T2 — Deploy-repo architecture producer (49)
+### T2 — Deploy-repo architecture producer (50)
+
+> *Migrated 2026-10-01 (slice 035):* every T2 file is the `deploy-architecture` reference file
+> with its own header, stage and producer id: `checkout scm`, then `architectureProducer`'s
+> `generate` and `archive` in one stage and its `validate` in the next. What follows describes the
+> files before the migration.
 
 Each is a `<App>Deploy/Jenkinsfile.architecture` run by job `AaC/<App>Deploy`. The pod is the
 same as T1's. Stage `Cloning repo` clones the repo itself with
@@ -106,10 +138,11 @@ AaC/GitSyncDeploy, AaC/GrafanaDeploy, AaC/GuacamoleDeploy, AaC/HeadlampDeploy, A
 AaC/HomeassistantMcpDeploy, AaC/IacProvisionerDeploy, AaC/InfraStatisticsDeploy,
 AaC/IntercomDeploy, AaC/IotDeploy, AaC/JenkinsDeploy, AaC/KeycloakDeploy, AaC/KeycloakDeploy-dev,
 AaC/KubeCoderDeploy, AaC/MediaDeploy, AaC/ModelsDeploy, AaC/MosquittoDeploy, AaC/NewsfilterDeploy,
-AaC/NginxDeploy, AaC/PgadminDeploy, AaC/PostgresPasDeploy, AaC/PrometheusDeploy,
-AaC/RegistryDeploy, AaC/ScantopdfDeploy, AaC/SourceDeploy, AaC/StepCaDeploy, AaC/StorageDeploy,
-AaC/TelegramMcpDeploy, AaC/TfmirrorDeploy, AaC/TrelloMcpDeploy, AaC/VersionPollerDeploy,
-AaC/WebathomeOrgDeploy, AaC/YoutrackDeploy, AaC/YoutrackMcpDeploy, AaC/Zigbee2mqttDeploy.
+AaC/NginxDeploy, AaC/PgadminDeploy, AaC/PipelinesDeploy, AaC/PostgresPasDeploy,
+AaC/PrometheusDeploy, AaC/RegistryDeploy, AaC/ScantopdfDeploy, AaC/SourceDeploy, AaC/StepCaDeploy,
+AaC/StorageDeploy, AaC/TelegramMcpDeploy, AaC/TfmirrorDeploy, AaC/TrelloMcpDeploy,
+AaC/VersionPollerDeploy, AaC/WebathomeOrgDeploy, AaC/YoutrackDeploy, AaC/YoutrackMcpDeploy,
+AaC/Zigbee2mqttDeploy.
 
 - **AaC/KeycloakDeploy-dev** builds `KeycloakDeploy/Jenkinsfile.architecture-dev`
   (`--stage dev --producer keycloak-dev-deploy`). Both Keycloak producers build on every push to
@@ -117,6 +150,10 @@ AaC/WebathomeOrgDeploy, AaC/YoutrackDeploy, AaC/YoutrackMcpDeploy, AaC/Zigbee2mq
 - **AaC/KubeCoderDeploy** clones branch `prd` (`:26-28`), which is the branch its job builds.
   **AaC/ArgoCDDeploy** clones at `:26-28` too. Both open with a 17-line header; the other 47
   open with a 7-line one.
+- **AaC/PipelinesDeploy**, created 2026-09-30 by slice 034 for the guide's docs site, was already
+  declarative in the guide's shape: `checkout scm`, then `gen-architecture` and the archive in
+  stage `Generate architecture` and `arch-validate` in stage `Validate architecture`, with its
+  guard and trigger in `options{}` and `triggers{}`.
 
 ### T3 — Image build (16)
 

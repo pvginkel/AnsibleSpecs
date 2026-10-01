@@ -54,6 +54,23 @@ subagent.
   files, J16's `architectureProducer` helper and their job configuration. The second slice,
   the build and deploy pipelines, is cut after 035 closes, from `handovers/triage_2026-09-30.md`
   § Cut: slice 035. That slice absorbs ANS-84. Next step: `/dev:plan-slice` on 035.
+- **Where things stand (2026-10-01, slice 035).** Slice **035** (ANS-175) migrates all **78**
+  architecture producers to full declarative files to the style guide. The planning count was 77,
+  before PipelinesDeploy's producer was added. The 78 are 28 app producers, the five
+  ModernAppTemplate apps' among them, and 50 deploy-repo producers. J16's `architectureProducer`
+  is in the library as three steps, `generate`, `validate` and `archive`, called inside each
+  producer's own stages instead of one call per file. At the plan review the operator chose to
+  keep the guide as written ("What if we stick to the guide rules?", then "Go"), so no rule of
+  the guide changed. Every file declares its guard (`abortPrevious: true`) and its push trigger
+  (J01 for the producers, Q9) and checks out with `checkout scm` (J24, KubeCoderDeploy
+  included). AaC/Ansible runs on `jenkins-agent` alone (034 B2's producer part).
+  ModernAppTemplate carries no commit. The slice pushes every repo it touched in one go and
+  checks the churn once, with AaC/Architecture paused for it and built once at the end (its
+  Rulings D1 and P1). Its close-out has the result. `report.md` (J16, J01, J24, Q9) and
+  `inventory.md` (T1 28, T2 50) carry the status.
+- **Next cut, once 035 closes: the second slice**, the build and deploy pipelines to declarative,
+  cut from `handovers/triage_2026-09-30.md` § Cut: slice 035. It absorbs ANS-84. The operator
+  chooses the cut.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
@@ -430,7 +447,7 @@ style guide, and is written declaratively if §3 says "migrate all".
 - [ ] J21 — one kaniko API, applied only to files already touched here
 - ~~J19 — `iac` var for the dev-stage idiom~~ ruled out: the duplication stays and the §4
   style guide says it is deliberate.
-- [ ] J16 — `architectureProducer(...)` for the 57 `Jenkinsfile.architecture` copies, calling
+- [x] J16 — `architectureProducer(...)` for the 57 `Jenkinsfile.architecture` copies, calling
   `arch-validate` from the `aac-tools` image, which delivers ANS-78 for the 28 app repos. ~~It
   goes into slice 014 as a phase~~ — 014 is completed. The file rewrite rides §9's wave 1.
   *(refresh)* The 29 deploy-repo producers are already on `aac-tools` (one body; `KubeCoderDeploy`
@@ -438,6 +455,9 @@ style guide, and is written declaratively if §3 says "migrate all".
   *(09-30)* 77 copies (28 app, 49 deploy). ANS-78 moved into slice 026 (ANS-116, in progress
   in another environment on 09-30), which puts every app producer on `aac-tools`. J16 waits for
   026 to close and is written against the post-026 bodies. *(09-30)* 026 closed at 11:20.
+  *(10-01)* Delivered by slice 035 as three steps called inside each producer's declarative
+  stages, not one call per file (the guide as written). All 78 producers validate and archive
+  through it; the 50 deploy-repo producers also generate through it.
 
 ## 8. Timeouts — after the §2 rulings
 
@@ -474,6 +494,8 @@ style guide, and is written declaratively if §3 says "migrate all".
   pushes the same app and firmware repos.
   `Architecture` (J02 included) moves to wave 2: its push now pins `architecture_viewer` into
   WebathomeOrgDeploy.
+  *(10-01)* Folded into the declarative migration: slice 035 put every architecture producer's
+  guard and trigger in its own file. What remains of §9 belongs to the second slice.
 - [ ] **S** Wave 2 — app repos, in batches sized to the 3 pod slots. *(refresh)* 18 of them
   end in a pin write, which is a prd rollout through Argo on every rebuild (new tag, deploy-repo
   commit, sync, pod restart) plus an `AaC/*Deploy` build; 6 end in a Helm deploy (no-op).

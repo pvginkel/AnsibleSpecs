@@ -313,6 +313,19 @@ removing a line later removes the property from the job on the next build.
 accept
 >
 
+> *Done for the architecture producers (2026-10-01, slice 035):* all 78 producers are full
+> declarative files. Each declares its guard, `disableConcurrentBuilds(abortPrevious: true)`, in
+> its own `options{}` and its push trigger in its own `triggers{ githubPush() }`. These are the
+> style guide's PROP rules, not this entry's scripted `properties([...])`. That covers Appendix
+> A's 77 `AaC/*` producer rows, plus AaC/PipelinesDeploy, which postdates the appendix.
+> AaC/Ansible and AaC/YouTrackMCPServer gain the guard they lacked, and
+> AaC/UnderfloorHeatingController moves to `abortPrevious: true` (Q9). The UI-held copies are
+> not stripped and no job was edited through the API. On a job's first declarative build an
+> existing UI property of the same kind still wins, and from its second build the file's value
+> applies (slice 035, Grounding G3). Left to the second slice (`handovers/triage_2026-09-30.md`
+> § Cut: slice 035): the build and deploy pipelines, AaC/Architecture, AaC/Home Assistant Fleet's
+> cron (J02), the §2 job-settings rulings, and closing ANS-84.
+
 ### J02 — Put the Home Assistant Fleet cron into `Jenkinsfile.ha-fleet`
 
 - **What** — `properties([disableConcurrentBuilds(), pipelineTriggers([cron('H 4 * * *')])])`
@@ -780,6 +793,22 @@ accept
 >
 > **Operator (2026-09-21, in conversation):** "I don't really mind." → as proposed.
 
+> *Delivered (2026-10-01, slice 035), as steps, not one call per file:* at the slice's plan
+> review the operator chose to keep the style guide as written ("What if we stick to the guide
+> rules?", then "Go"), so the one-call file of **What** above was dropped. The library's
+> `architectureProducer` (`vars/architectureProducer.groovy`, page `vars/architectureProducer.md`)
+> has three steps that a producer calls inside its own stages. `generate(stage:, producer:)` runs
+> `gen-architecture` and `validate(files:)` runs `arch-validate`, both in the `aac-tools`
+> container. `archive(files:)` archives the model, and refuses a pattern that AaC/Architecture's
+> `**/architecture/**/*.yaml` would not collect. Every argument is required, with no default
+> (LIB-3). All 78 producers validate and archive through it, and the 50 deploy-repo producers
+> also generate through it. IoTSupport keeps its own generator in its file, and its `withVault`
+> now wraps only that generator's `sh`. That is the part of J17 this entry depended on; the rest
+> of J17 belongs to the second slice. Each producer stays a full declarative file of about 40
+> lines: header, library line, and `pipeline {}` with its `options{}`, `triggers{}` and stages
+> written out. The operator accepted that length. The guide's two architecture reference files
+> call the steps, its library page lists J16 as "in the library", and none of its rules changed.
+
 ### J17 — Drop the inert `containerEnvVar` secret forwarding; scope `withVault`
 
 - **What** — Delete the `envVars: [containerEnvVar(key: 'IOTSUPPORT_CLIENT_SECRET',
@@ -1015,6 +1044,13 @@ readable to save nothing.
 accept
 >
 
+> *Done for the architecture producers (2026-10-01, slice 035):* every producer checks out with
+> `checkout scm`. That covers the 50 files that cloned themselves: the 49 deploy producers other
+> than PipelinesDeploy, KubeCoderDeploy's `prd` clone included, and
+> `DockerImages/Jenkinsfile.architecture`. AaC/KubeCoderDeploy builds `prd`, so its file runs
+> after the next KubeCoder/Promote-PRD. The other files under **Where** are build pipelines, left
+> to the second slice (the firmware ones inside J14).
+
 ### J25 — Dead imports, whitespace, stale comments
 
 - **What** — Remove `import org.jenkinsci.plugins.pipeline.modeldefinition.Utils` where
@@ -1230,6 +1266,12 @@ Reason, or accident? Only affects the exception ruling after J01.
 **Operator response:** <!-- accept | modify | reject | discuss -->
 Accident.
 >
+
+> *Done (2026-10-01, slice 035):* `UnderfloorHeatingController/Jenkinsfile.architecture`
+> declares `disableConcurrentBuilds(abortPrevious: true)` in its `options{}`, like every
+> producer. The job's UI value, `abortPrevious=false`, still wins on its first declarative build,
+> and the file's value applies from its second (slice 035, Grounding G3). The slice's test phase
+> starts that second build by hand. No job's properties were edited through the API.
 
 **Q10 — Wave plan for J01.** Pushing ~65 Jenkinsfile edits means ~67 builds (about 30 Helm
 redeploys, 8 firmware re-flashes) through three pod slots. Acceptable as one quiet-day wave per

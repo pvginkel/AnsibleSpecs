@@ -467,6 +467,33 @@ the conventions those files already use (`plan.md` § How this plan is worked).
 The live verification belongs to the test phase. These records state what the slice changed,
 and the done-records of P1–P4 give the counts and names.
 
+**Done (P5).** The review's three records under `reviews/2026-09-jenkinsfile-review/` show the
+producers migrated (specs `phase/035-P5`). `inventory.md` types the five apps' producers as T1
+and PipelinesDeploy's as T2, giving T1 28, T2 50, 78 producers and 120 typed jobs. `report.md`
+has a dated status note under J01, J16, J24 and Q9. `plan.md` has "Where things stand
+(2026-10-01, slice 035)" and the next-cut bullet. J16 is ticked in its §7, and its §9 wave 1 has
+a note.
+
+Later phases:
+- None changed. The records state the slice's change and the push-once method, not the live
+  result. `plan.md`'s 035 bullet points at the close-out for that.
+
+Record:
+- Conventions used: dated italic blockquotes after an operator response (report.md, as Q11's),
+  a dated top block and a per-type "Migrated" note (inventory.md, as its § Skipped overrule),
+  and `*(10-01)*` inline notes plus a tick (plan.md: "Tick items as they land").
+- inventory.md: the T1 and T2 descriptions stay those of the pre-migration files. The five apps'
+  and PipelinesDeploy's variants were added from their origin bodies. The topic sections keep the
+  114 files of 2026-09-30, and the top note says so.
+- report.md: J01 is done for the producers only. Left to the second slice: the build and deploy
+  pipelines, AaC/Architecture, J02's cron, §2 and ANS-84. J24 covers the 50 self-cloning files.
+  J16 records the steps shape with Ruling D2's quote, and IoTSupport's `withVault` as J17's
+  part. Q9 names the test phase's hand-started second build.
+- plan.md: 78 is the planning count of 77 plus PipelinesDeploy, as its bullet says. §9's wave 1
+  stays unticked because §9 belongs to the second slice, and §7's J17 is untouched.
+- Gate: the specs repo has no gate. Added prose is ≤ 100 columns, except the two existing
+  type-table rows.
+
 ## Not in scope
 
 - ModernAppTemplate itself (R2).
