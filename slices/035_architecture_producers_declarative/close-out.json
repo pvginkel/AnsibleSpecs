@@ -239,6 +239,60 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E2",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (protocol_failure) outside any phase",
+      "body": [
+        "The driver's bail (`protocol_failure`), as it recorded it:",
+        "",
+        "> git checkout phase/035-P5 failed:",
+        "> error: Your local changes to the following files would be overwritten by checkout:",
+        "> \tslices/035_architecture_producers_declarative/close-out.json",
+        "> Please commit your changes or stash them before you switch branches.",
+        "> Aborting",
+        "",
+        "Stopped 2026-10-01 13:09; resumed 2026-10-01 13:09."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (lost_work) in P5",
+      "body": [
+        "The driver's bail (`lost_work`), as it recorded it:",
+        "",
+        "> commit 638d9cbe3a39 is on P5's record as work the driver saw on the branch, and phase/035-P5 in /work/AnsibleSpecs does not carry it. Something rebuilt the branch or replaced the checkout under the run; the loop will not carry on over the top of a commit it cannot account for. Check that no second driver is on this slice (each holds run.lock), then either restore the branch or clear the phase's record in state.json (status, stage, gate_green_commit, reviewed_head) to run it again from the executor.",
+        "",
+        "Stopped 2026-10-01 13:09; resumed 2026-10-01 13:09."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
