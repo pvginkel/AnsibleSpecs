@@ -5,6 +5,21 @@
 
 Run: <not yet stamped>
 
+## Comes to you
+
+### A1 — Settle V14 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …
+
+V14 — AaC/KubeCoderDeploy builds its migrated file green from `prd`. The slice commits that file on KubeCoderDeploy's `main`. The job builds `prd`, which only KubeCoder/Promote-PRD fast-forwards (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`), so the push starts no build of it.
+
+`verification.json` marks V14 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which fast-forwards KubeCoderDeploy's prd to main. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V14 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
 ## For the wrap-up
 
 ### B1 — Ansible argo-migrate: scaffold and add_stage still write the scripted, hand-cloning Jenkinsfile.architecture · minor

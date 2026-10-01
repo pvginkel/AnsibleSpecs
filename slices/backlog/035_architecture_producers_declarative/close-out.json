@@ -93,6 +93,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V14 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …",
+      "body": [
+        "V14 — AaC/KubeCoderDeploy builds its migrated file green from `prd`. The slice commits that file on KubeCoderDeploy's `main`. The job builds `prd`, which only KubeCoder/Promote-PRD fast-forwards (`JenkinsPipelineUtils/docs/pages/guide/job-properties.md:53`), so the push starts no build of it.",
+        "",
+        "`verification.json` marks V14 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which fast-forwards KubeCoderDeploy's prd to main. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V14 stays unproven until then; the test phase does not settle it.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
