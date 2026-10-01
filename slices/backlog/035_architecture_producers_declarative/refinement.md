@@ -16,7 +16,7 @@
 
 **If this is wrong.** An extra restart of 13 apps and a second flash of 7 devices on unchanged code (recommendation), or a slice that closes with a third of its producers unproven (alternative); no data loss either way.
 
-**Operator.** _agree, or comment here_
+**Operator.** "Agreed." (2026-10-01, in chat)
 
 ## D2 — The producer helper takes the whole pipeline, so each file is one call, or only the steps, so each file still writes its pipeline out
 
@@ -34,7 +34,7 @@
 
 **If this is wrong.** A mechanical re-rewrite of the 78 files later, plus undoing a guide amendment; nothing breaks in between.
 
-**Operator.** _agree, or comment here_
+**Operator.** "I think I'm ok with the single line Jenkinsfile's approach. I'd like to try it. So, your initial recommendation." (2026-10-01, in chat, after asking whether the guard and trigger can live in the library)
 
 ## Open facts — questions only you can answer
 
