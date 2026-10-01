@@ -8,33 +8,6 @@ doc phase done · wrap-up landed · $94.01 (planner 17 %, research 2 %, rework 5
 
 ## Comes to you
 
-### A2 — Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done
-
-The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.
-
-Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
-
-close-out session, 2026-10-01 — 2026-10-01 — /work/scratch/KubeCoderConfig is still present, clean and in sync with origin (last commit 45612e9, the run's skill commit); the delete appears not done.
-
-**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
-
-**Triage:** action · nothing that could show · no impact
-**Provenance:** witnessed — the driver's target resolution
-**Route:** to you — an action
-**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.
-
-### I2 — KubeCoderConfig jenkins-pipelines skill: it gives no guidance for a Jenkinsfile that predates the guide, though every existing file does until the migration
-
-SKILL.md:11-16 tells every session that each Jenkinsfile in the estate follows the style guide strictly, and that a file breaking a rule is wrong. The skill fires on editing a Jenkinsfile. Until the migration slice converts them, none of the estate's existing files follows the guide (plan.md:850-851), and the skill goes live in every environment at slice 034's test-phase push. A session asked for a narrow edit to an unconverted file, such as a stage added to Home's scripted Jenkinsfile, is told the file breaks FILE-1, PROP-* and CHK-1, with no rule on whether to convert it or leave it. The guide's overview says the same (guide/index.md:3-4), so the skill is faithful to it. How a session should treat an unconverted file is the operator's call.
-
-**Consequence:** Until the migration lands, a session editing an unconverted Jenkinsfile guesses whether to convert it. One guess turns a small requested change into an unrequested rewrite of a live pipeline for the operator to review.
-
-**Triage:** improvement · a user is better off · felt in use · adds something · one edit · a
-product call · prevents a degradation · in KubeCoderConfig
-**Provenance:** read — code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
-**Route:** to you — an improvement
-**Disposition:**
-
 ### I3 — PipelinesDeploy architecture.yaml: pipelines.home is not listed under webUi, so the homeapps launcher shows no tile for the docs site
 
 The judgment layer's `webUi:` key marks the exposed hosts that are browser-facing UIs; the homeapps launcher tiles each one (`gen-architecture --help`). argocd.home, grafana.home, git.home, headlamp.home and jenkins.webathome.org are listed. pipelines.home serves a landing page at `/` and the style guide under `/docs/`, but P8's plan does not ask for a tile, so `architecture.yaml` has no `webUi:` entry. Adding one is `webUi: [pipelines.home]` in PipelinesDeploy's `architecture.yaml`.
@@ -61,18 +34,6 @@ a product call · prevents a degradation · in KubeCoder
 
 ## Card requests
 
-### B2 — Four in-scope Jenkinsfiles carry small defects: unused pod containers (Home, Ansible's Jenkinsfile.architecture), a stale header (TerraformRegistry), a stage label naming the wrong artifact (GitblitMCPSupportPlugin) · nit
-
-Found while building the inventory (reviews/2026-09-jenkinsfile-review/inventory.md), which records each under its topic for the migration slice. Home/Jenkinsfile declares a containerTemplates.helm('helm') sidecar that no step uses. Ansible/Jenkinsfile.architecture (AaC/Ansible) inherits 'jenkins-agent kaniko' but builds no image. TerraformRegistry/Jenkinsfile:3-6 says the build 'then triggers a HelmCharts deploy'; it writes pins into TfmirrorDeploy. GitblitMCPSupportPlugin/Jenkinsfile labels its stage 'Building GitblitSearchApiPlugin' while it builds gitblit-initializer. The rulings page (rulings.md §2, §5, §10) proposes rules that retire each of them, and the migration rewrites all four files. Three of the four repos end in a pin write, so a push of a fix before the migration is a prd rollout of that app.
-
-**Consequence:** Until the migration rewrites them, Home and AaC/Ansible pull a container no step uses on every build, and two files tell a reader something false about what they do; a separate fix pushed to Home, TerraformRegistry or GitblitMCPSupportPlugin rolls that app in prd.
-
-**Triage:** defect · shows in normal use · degrades · silent · fix is known, in several places ·
-in Home
-**Provenance:** witnessed — code-writer, P4, r1, inventory.md (Pod definition; File naming and header comments; Stage labels)
-**Route:** card request — the fix lives in Home, which the slice did not touch
-**Disposition:**
-
 ### P3 — Ansible .aiworkflowrc: its header says 'the driver pushes', but with the test phase enabled the test agent pushes and the driver only checks · nit
 
 Ansible .aiworkflowrc lines 4-7: 'Same values, so the loop behaves exactly as before: both phases run, the driver pushes, and no devlock is taken'. The same file sets [test_phase] strategy, so the test phase runs. The dev plugin's docs/project-contract.md:75-77 says 'With a test phase, that phase's procedure doc pushes and the driver checks it happened; with no test phase the driver pushes'. run-loop.md § The push check says the same. The comment describes the no-test-phase mode.
@@ -83,24 +44,6 @@ Ansible .aiworkflowrc lines 4-7: 'Same values, so the loop behaves exactly as be
 **Provenance:** read — plan-reviewer, planning r1, Ansible .aiworkflowrc:4-7 and dev 0.9.61 docs/project-contract.md:75-77
 **Route:** card request — the fix lives in Ansible, which the slice did not touch
 **Disposition:**
-
-## For the wrap-up
-
-### P4 — AnsibleSpecs Jenkins review report.md still says the five ModernAppTemplate repos are edited in place (Q11), against the skip ruled in slice 034's plan review · minor
-
-<details><summary>body</summary>
-
-Slice 034's plan review ruling F2 skips the five ModernAppTemplate repos completely: DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and FieldnotesApp. Operator: "Please completely skip the moderapptemplate repos. I'll get them fixed when we do the next sync." The review's work plan (reviews/2026-09-jenkinsfile-review/plan.md) records this and says it replaces Q11's "edited in place". report.md does not: its migration section says the five template-generated files "are edited in place (Q11 ruling)" (report.md:1392-1393), and the Appendix A rows of the five root jobs say "(Q11: edit in place)" (report.md:1487, :1489, :1490, :1516, :1531). Slice 034's plan does not edit those lines. Its P1 touches only the R1 note, and its P4 inventory lists the ten jobs of the five repos as skipped.
-
-</details>
-
-**Consequence:** A session that plans the migration from report.md alone reads that the five template-rendered Jenkinsfiles get converted in place, against the operator's ruling. Only the review plan and slice 034's inventory say they are skipped.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in AnsibleSpecs
-**Provenance:** read — plan-writer, planning, r3, plan.md Ruling F2 and reviews/2026-09-jenkinsfile-review/report.md:1392-1393
-**Route:** the wrap-up — fix
-**Disposition:** fixed during planning — report.md Q11 marked superseded, its migration paragraph and the five Appendix A rows updated.
 
 ## Closed
 
@@ -349,6 +292,24 @@ The §6a test is recorded (AnsibleSpecs reviews/2026-09-jenkinsfile-review/repor
 
 </details>
 
+### ~~A2 — Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done~~ — deleted 2026-10-01; the clone was clean and level with origin/main; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.
+
+Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
+
+close-out session, 2026-10-01 — 2026-10-01 — /work/scratch/KubeCoderConfig is still present, clean and in sync with origin (last commit 45612e9, the run's skill commit); the delete appears not done.
+
+**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
+
+**Triage:** action · nothing that could show · no impact
+**Provenance:** witnessed — the driver's target resolution
+**Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — deleted 2026-10-01; the clone was clean and level with origin/main
+
+</details>
+
 ### ~~A3 — Delete the scratch clone /work/scratch/PipelinesDeploy once the slice is done~~ — done by the operator, 2026-10-01 — /work/scratch/PipelinesDeploy is gone; struck by the operator's ruling
 
 <details><summary>struck — kept for the record</summary>
@@ -362,6 +323,21 @@ Deleting it is safe once the slice's commits are on origin — the push check be
 **Triage:** action · nothing that could show · no impact
 **Provenance:** witnessed — the driver's target resolution
 **Disposition:** I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end. — done by the operator, 2026-10-01 — /work/scratch/PipelinesDeploy is gone
+
+</details>
+
+### ~~B2 — Four in-scope Jenkinsfiles carry small defects: unused pod containers (Home, Ansible's Jenkinsfile.architecture), a stale header (TerraformRegistry), a stage label naming the wrong artifact (GitblitMCPSupportPlugin) · nit~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Found while building the inventory (reviews/2026-09-jenkinsfile-review/inventory.md), which records each under its topic for the migration slice. Home/Jenkinsfile declares a containerTemplates.helm('helm') sidecar that no step uses. Ansible/Jenkinsfile.architecture (AaC/Ansible) inherits 'jenkins-agent kaniko' but builds no image. TerraformRegistry/Jenkinsfile:3-6 says the build 'then triggers a HelmCharts deploy'; it writes pins into TfmirrorDeploy. GitblitMCPSupportPlugin/Jenkinsfile labels its stage 'Building GitblitSearchApiPlugin' while it builds gitblit-initializer. The rulings page (rulings.md §2, §5, §10) proposes rules that retire each of them, and the migration rewrites all four files. Three of the four repos end in a pin write, so a push of a fix before the migration is a prd rollout of that app.
+
+**Consequence:** Until the migration rewrites them, Home and AaC/Ansible pull a container no step uses on every build, and two files tell a reader something false about what they do; a separate fix pushed to Home, TerraformRegistry or GitblitMCPSupportPlugin rolls that app in prd.
+
+**Triage:** defect · shows in normal use · degrades · silent · fix is known, in several places ·
+in Home
+**Provenance:** witnessed — code-writer, P4, r1, inventory.md (Pod definition; File naming and header comments; Stage labels)
+**Disposition:** Agreed. — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)
 
 </details>
 
@@ -453,6 +429,21 @@ P8's plan says PipelinesDeploy is shaped like ChartsDeploy. Four places differ, 
 
 </details>
 
+### ~~I2 — KubeCoderConfig jenkins-pipelines skill: it gives no guidance for a Jenkinsfile that predates the guide, though every existing file does until the migration~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+SKILL.md:11-16 tells every session that each Jenkinsfile in the estate follows the style guide strictly, and that a file breaking a rule is wrong. The skill fires on editing a Jenkinsfile. Until the migration slice converts them, none of the estate's existing files follows the guide (plan.md:850-851), and the skill goes live in every environment at slice 034's test-phase push. A session asked for a narrow edit to an unconverted file, such as a stage added to Home's scripted Jenkinsfile, is told the file breaks FILE-1, PROP-* and CHK-1, with no rule on whether to convert it or leave it. The guide's overview says the same (guide/index.md:3-4), so the skill is faithful to it. How a session should treat an unconverted file is the operator's call.
+
+**Consequence:** Until the migration lands, a session editing an unconverted Jenkinsfile guesses whether to convert it. One guess turns a small requested change into an unrequested rewrite of a live pipeline for the operator to review.
+
+**Triage:** improvement · a user is better off · felt in use · adds something · one edit · a
+product call · prevents a degradation · in KubeCoderConfig
+**Provenance:** read — code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
+**Disposition:** Agreed. — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)
+
+</details>
+
 ### ~~P1 — Ansible argocd runbook: a new producer is registered 'with a PR' against Architecture, but that repo is worked by direct commits to main · nit~~ — resolved by Ansible 7ba6d6f (argocd runbook, CLAUDE.md: a new app auto-syncs …): step 4 of 'Giving an app its own architecture producer' now commits the entry to pipeline-producers.yaml on Architecture's main; no PR; struck by doc-writer, doc phase
 
 <details><summary>struck — kept for the record</summary>
@@ -478,6 +469,21 @@ docs/runbooks/argocd.md § 'Registering, undeploying and unregistering an app' (
 **Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
 **Provenance:** read — plan-writer, planning r2, Ansible docs/runbooks/argocd.md:209-232 and slice 034 plan.md ruling D6
 **Disposition:**
+
+</details>
+
+### ~~P4 — AnsibleSpecs Jenkins review report.md still says the five ModernAppTemplate repos are edited in place (Q11), against the skip ruled in slice 034's plan review · minor~~ — fixed during planning: report.md Q11 marked superseded; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Slice 034's plan review ruling F2 skips the five ModernAppTemplate repos completely: DHCPApp, ElectronicsInventory, IoTSupport, ZigbeeControl and FieldnotesApp. Operator: "Please completely skip the moderapptemplate repos. I'll get them fixed when we do the next sync." The review's work plan (reviews/2026-09-jenkinsfile-review/plan.md) records this and says it replaces Q11's "edited in place". report.md does not: its migration section says the five template-generated files "are edited in place (Q11 ruling)" (report.md:1392-1393), and the Appendix A rows of the five root jobs say "(Q11: edit in place)" (report.md:1487, :1489, :1490, :1516, :1531). Slice 034's plan does not edit those lines. Its P1 touches only the R1 note, and its P4 inventory lists the ten jobs of the five repos as skipped.
+
+**Consequence:** A session that plans the migration from report.md alone reads that the five template-rendered Jenkinsfiles get converted in place, against the operator's ruling. Only the review plan and slice 034's inventory say they are skipped.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in AnsibleSpecs
+**Provenance:** read — plan-writer, planning, r3, plan.md Ruling F2 and reviews/2026-09-jenkinsfile-review/report.md:1392-1393
+**Disposition:** fixed during planning — report.md Q11 marked superseded, its migration paragraph and the five Appendix A rows updated. — fixed during planning: report.md Q11 marked superseded
 
 </details>
 

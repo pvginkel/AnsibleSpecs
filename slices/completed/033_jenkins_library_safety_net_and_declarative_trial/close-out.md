@@ -6,9 +6,13 @@
 Run: 2026-09-30 13:18 → 14:18 · 4 phases · 2 bail-outs · 1 test round · doc phase done · wrap-up
 landed · $28.60 (planner 34 %, research 5 %, rework 2 %)
 
-## Comes to you
+Closed: 2026-10-01 — Agreed.
 
-### A1 — Push KubeCoder by hand when its hold lifts
+## Record
+
+### ~~A1 — Push KubeCoder by hand when its hold lifts~~ — pushed on the operator's go, 2026-09-30 (4a6be3de); struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 `plan.md`'s `## Push holds` section holds `github:pvginkel/KubeCoder`: ruling D2: the operator replays `KubeCoder/Build-Main` with the converted Jenkinsfile first, then pushes it by hand
 
@@ -23,10 +27,13 @@ driver, push check, 2026-09-30 — held as planned. The slice's commits sit on `
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `plan.md`'s `## Push holds` and `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Pushed on the operator's go (KubeCoder 4a6be3de); #560, the build the push started, went green with the same pod and stages; V02 pass.
+**Disposition:** 2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Pushed on the operator's go (KubeCoder 4a6be3de); #560, the build the push started, went green with the same pod and stages; V02 pass. — pushed on the operator's go, 2026-09-30
 
-### A2 — Settle V04 after the operator's verdict after the Build-Main Replay
+</details>
+
+### ~~A2 — Settle V04 after the operator's verdict after the Build-Main Replay~~ — V04 pass in verification.json, 2026-09-30; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 V04 — The operator gives the verdict: migrate them all, or keep the J08 rule (declarative on `iac-controller`, scripted for pod pipelines). If "migrate all", the migration is a slice of its own.
 
@@ -40,10 +47,13 @@ code-writer P4 r1, 2026-09-30 — Count in the note above corrected: nine librar
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:** 2026-09-30 — verdict given: migrate all (V04 pass). Recorded in reviews/2026-09-jenkinsfile-review/plan.md §3 and report.md J08; the migration is the next cut's, not yet filed.
+**Disposition:** 2026-09-30 — verdict given: migrate all (V04 pass). Recorded in reviews/2026-09-jenkinsfile-review/plan.md §3 and report.md J08; the migration is the next cut's, not yet filed. — V04 pass in verification.json, 2026-09-30
 
-### A3 — Settle V09 after the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac- …
+</details>
+
+### ~~A3 — Settle V09 after the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac- …~~ — settled 2026-10-01: IaC/IaC Docker Image #240-#242 ran Jenkinsfile.iac-image after the library push, all SUCCESS; V09 pass in verification.json; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 V09 — One run of a caller verifies `hasChanges` after the library push: "`DockerImages/Jenkinsfile` and `Ansible/Jenkinsfile.iac-image`; either one's next build is the verification run."
 
@@ -53,10 +63,13 @@ V09 — One run of a caller verifies `hasChanges` after the library push: "`Dock
 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:**
+**Disposition:** Agreed. — settled 2026-10-01: IaC/IaC Docker Image #240-#242 ran Jenkinsfile.iac-image after the library push, all SUCCESS; V09 pass in verification.json
 
-### A4 — Delete the scratch clone /work/scratch/KubeCoder once the slice is done
+</details>
+
+### ~~A4 — Delete the scratch clone /work/scratch/KubeCoder once the slice is done~~ — deleted, 2026-09-30; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 The driver cloned (or adopted) `/work/scratch/KubeCoder` for `Target: github:pvginkel/KubeCoder`; the slice's phases for that repo are branched, merged and pushed there.
 
@@ -66,113 +79,81 @@ Deleting it is safe once the slice's commits are on origin — the push check be
 
 **Triage:** action · nothing that could show · no impact
 **Provenance:** witnessed — the driver's target resolution
-**Route:** to you — an action
-**Disposition:** 2026-09-30 — deleted after the push; the clone was clean and level with origin/main.
+**Disposition:** 2026-09-30 — deleted after the push; the clone was clean and level with origin/main. — deleted, 2026-09-30
 
-### I1 — JenkinsPipelineUtils: the k8s and modern-app-toolchain sidecar settings are written twice, in containerTemplates and in podYaml.sidecars()
+</details>
 
-Ruling F1 leaves containerTemplates untouched, so podYaml carries its own copy of the two sidecars' settings: registry:5000/k8s:1.35.5 and registry:5000/kube-coder-modern-app-toolchain:node-24 with uid 1000 (vars/podYaml.groovy sidecars(), vars/containerTemplates.groovy k8s/modern_app_toolchain). A comment on sidecars() names the pairing; no test compares them. If the verdict keeps scripted pod pipelines, both stay, and one source (or a test that both agree) removes the chance of a bump landing in one only. If the verdict migrates everything, the describables go and so does the duplicate.
+### ~~B1 — JenkinsPipelineUtils cicd.applyPins writes a pin into a sequence entry's mapping instead of refusing the path · minor~~ — closed with the report, 2026-10-01
 
-**Consequence:** A sidecar image bump made in containerTemplates alone leaves KubeCoder's declarative build on the old image, with no error.
-
-**Triage:** improvement · operations are better off · felt after a change · removes something ·
-needs design · prevents a degradation · in JenkinsPipelineUtils
-**Provenance:** witnessed — code-writer, P3, r1, vars/podYaml.groovy
-**Route:** to you — an improvement
-**Disposition:** 2026-09-30 — carried into the declarative migration (handovers/triage_2026-09-30.md, § After 033), which retires the describables and the duplicate with them.
-
-## Card requests
-
-### P1 — Ansible CLAUDE.md still tells slices to target an undeclared repo as ../scratch/<Repo>; the dev plugin's github:<owner>/<repo> Target now clones it · minor
-
-Ansible/CLAUDE.md § Related repos: a repo a slice changes but the environment does not declare goes under /work/scratch/<Repo>, and 'its phases say Target: ../scratch/<Repo>, and the environment that runs the slice clones it there first'. The dev plugin (0.9.60, docs/plan-template.md and docs/run-loop.md § The plan is the queue) has a Target: github:<owner>/<repo> form for exactly this case: the driver clones or adopts /work/scratch/<repo> itself, and the dry run does it at planning time. Slice 033's plan uses github:pvginkel/KubeCoder, so it departs from the project's written convention while following the plugin's. The CLAUDE.md sentence does not mention the github: form, so the next plan writer reading it first is steered to the manual-clone form.
-
-**Consequence:** A plan writer following CLAUDE.md writes ../scratch/<Repo> and the run depends on someone having cloned the repo by hand first
-
-**Triage:** prose · shows in normal use · degrades · loud · fix is one edit · in Ansible
-**Provenance:** read — plan-reviewer, planning, r1, plan_review_r1.md
-**Route:** card request — the fix lives in Ansible, which the slice did not touch
-**Disposition:** 2026-09-30 — raised as ANS-169 (operator's go).
-
-## Closed
-
-### B1 — JenkinsPipelineUtils cicd.applyPins writes a pin into a sequence entry's mapping instead of refusing the path · minor
-
-<details><summary>body</summary>
+<details><summary>struck — kept for the record</summary>
 
 applyPins skips a sequence entry's own line (`  - name: LOG_LEVEL`), but the entry's later keys (`    value: info`) match its `key: ...` pattern and take the enclosing mapping's path. So in `env:\n  - name: LOG_LEVEL\n    value: info\n` the pin `env.value` resolves and is written (`value: debug`) where its doc comment promises a throw: 'A path that does not resolve to exactly one scalar line throws … neither may reach a commit.' With two such entries the pin is refused as 'on both line …', which names the wrong cause. VersionPinsTest asserts only the entry's first key (`env.name`) is refused and pins nothing about later keys. A fix tracks an open sequence entry like the open block scalar (`literal`), so keys under it carry no path.
 
 wrap-up, 2026-09-30 — looked and left it: Checked the trigger (fault) in the code: it holds. Every caller of cicd.writeVersionPins under /work and /work/scratch names paths through mappings only: images.<name> in each app's Jenkinsfile, controllerConfig.images.worker/vsix in KubeCoder's, and images.<name> or relay.image in every DockerImages */deploy-pins.json. So no pin today resolves through a sequence entry. To reach it, a caller has to write a path through a YAML list, which applyPins' own doc comment calls the caller's bug: a misconfiguration, as the label says. The signal is silent, as labelled: the value is written and committed without an error. Nothing changed.
-
-</details>
 
 **Consequence:** A Jenkinsfile that names a pin path running through a YAML list gets that list entry's value overwritten in the deploy repo and committed, with no error, instead of a refused build
 
 **Triage:** defect · needs a fault · breaks a flow · silent · fix needs design · in
 JenkinsPipelineUtils
 **Provenance:** witnessed — code-writer, P1, r1: a throwaway JUnit probe calling applyPins('f', 'env:\n - name: LOG_LEVEL\n value: info\n', [env.value: debug]) returned the file with 'value: debug'
-**Route:** closed — it needs a fault
-**Disposition:**
+**Disposition:** Agreed.
 
-### B2 — DesignAssistant's Jenkinsfiles still call containerTemplates.canon, which JenkinsPipelineUtils P2 deleted · minor
+</details>
 
-<details><summary>body</summary>
+### ~~B2 — DesignAssistant's Jenkinsfiles still call containerTemplates.canon, which JenkinsPipelineUtils P2 deleted · minor~~ — closed by the operator, 2026-10-01; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 P2 deleted `containerTemplates.canon` on the plan's grounding that it had no caller in any `Jenkinsfile*` under /work and /work/scratch. `pvginkel/DesignAssistant` is not cloned in this environment, and on GitHub it still calls the helper: `Jenkinsfile:13` (main and develop) and `Jenkinsfile.deploy-uat:13` (main and develop) build their pod with `containerTemplates.canon('canon')`. No live job runs these files. The controller's job tree has no DesignAssistant or Archived folder (read 2026-09-30), and the removed jobs' configs are saved under /work/scratch/jenkins-config/xml-deleted/Archived/DesignAssistant/ (Build-Main, Build-Develop, Deploy-UAT, Deploy-PRD). If Build-Main, Build-Develop or Deploy-UAT is restored from that config, it fails when it builds its pod template. Deploy-PRD calls only containerTemplates.k8s.
 
 wrap-up, 2026-09-30 — looked and left it: Checked the trigger (future-change): it holds. The controller's job tree (GET /api/json, read 2026-09-30) has no DesignAssistant or Archived folder. DesignAssistant's Jenkinsfile:13 and Jenkinsfile.deploy-uat:13 on main (read through gitblit) call containerTemplates.canon('canon'), which vars/containerTemplates.groovy no longer defines. The saved configs under /work/scratch/jenkins-config/xml-deleted/Archived/DesignAssistant/ run exactly those two scripts. No job runs them, so nothing fails until somebody restores a job: a change to the controller, not something ordinary operation produces. A restored job would then fail its build at podTemplate with a missing-method error, which is loud, as labelled.
-
-</details>
 
 **Consequence:** If the DesignAssistant jobs are restored from their saved config, Build-Main, Build-Develop and Deploy-UAT fail on every build with a missing-method error for containerTemplates.canon until the Jenkinsfiles or the library change
 
 **Triage:** defect · needs a future change · breaks a flow · loud · fix unknown · in
 DesignAssistant
 **Provenance:** read — code reviewer, P2, round 1, phases/P2/code_review_r1.md F1
-**Route:** closed — the fix lives in DesignAssistant, which the slice did not touch
-**Disposition:**
+**Disposition:** DesignAssistant has been archived and I don't know if I'll ever un-archive it. You don't have to take it into account. — closed by the operator, 2026-10-01
 
-### B3 — JenkinsPipelineUtils podYaml names a string images: entry after its last path segment even when that is not a valid Kubernetes container name · minor
+</details>
 
-<details><summary>body</summary>
+### ~~B3 — JenkinsPipelineUtils podYaml names a string images: entry after its last path segment even when that is not a valid Kubernetes container name · minor~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 containerName (vars/podYaml.groovy:124-126) strips path and tag and passes the rest through. Image repository names may hold '.' and '_', which RFC 1123 container names may not: a probe rendered name "my_tool" for registry:5000/my_tool:1 and name "tool.v2" for ghcr.io/foo/tool.v2. podYaml accepts the call; the failure comes when the pod template is built or the API server refuses the pod, and the caller must use the map form with an explicit name. No image in this slice (P4's k8s, modern-app-toolchain, golang, node) is affected.
 
 wrap-up, 2026-09-30 — looked and left it: Checked the signal (loud) in the kubernetes plugin the controller runs, 4557.ve746270f672f. A declarative kubernetes agent runs the podTemplate step (KubernetesDeclarativeAgentScript.groovy:50). The step parses the agent's yaml (PodTemplateUtils.validateYamlContainerNames) and, when a container name does not match [a-z0-9]([-a-z0-9]*[a-z0-9])?, aborts the build before any pod is requested (PodTemplateStepExecution.java:152-160) with 'Container Names MUST match RFC 1123 - They can only contain lowercase letters, numbers or dashes: my_tool'. So the build fails at once with the offending name in its log: loud holds. podYaml's only caller today, KubeCoder's held Jenkinsfile, uses the names k8s, modern-app-toolchain, golang and node, all valid. Nothing changed.
-
-</details>
 
 **Consequence:** A pipeline that passes such an image as a string gets a build that fails at pod creation until it switches to the map form with a name:
 
 **Triage:** defect · shows on an ordinary condition · breaks a flow · loud · fix needs design ·
 in JenkinsPipelineUtils
 **Provenance:** witnessed — code-reviewer, P3, round 1, phases/P3/code_review_r1.md F1
-**Route:** closed — it is loud on an ordinary condition
-**Disposition:** 2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033).
+**Disposition:** 2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033). — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033
 
-### B4 — JenkinsPipelineUtils podYaml renders an env value of null as the string "null" · minor
+</details>
 
-<details><summary>body</summary>
+### ~~B4 — JenkinsPipelineUtils podYaml renders an env value of null as the string "null" · minor~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
 
 imageContainer converts env values with value.toString() (vars/podYaml.groovy:113); Groovy's null.toString() is "null". A probe rendered env: [A: null] as value: "null". A pipeline passing an unset variable or parameter as an env value gets the literal text null in the container, with no refusal.
 
 wrap-up, 2026-09-30 — looked and left it: Checked the trigger (fault): it holds. podYaml's only caller, KubeCoder's held Jenkinsfile at 4a6be3de, passes no env on any images entry, so no build today renders one. To reach it, a pipeline has to pass null (an unset variable or parameter) as an env value, which podYaml's documented input (env: name -> value) does not provide for: a misuse by the caller, as the label says. The signal is silent, as labelled. Nothing changed.
-
-</details>
 
 **Consequence:** A container started with an env value from an unset variable sees the literal string null and acts on it, with no error at build start
 
 **Triage:** defect · needs a fault · breaks a flow · silent · fix needs design · in
 JenkinsPipelineUtils
 **Provenance:** witnessed — code-reviewer, P3, round 1, phases/P3/code_review_r1.md F2
-**Route:** closed — it needs a fault
-**Disposition:** 2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033).
+**Disposition:** 2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033). — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033
 
-## Record
+</details>
 
-### E1 — Run stopped (plugin_version) outside any phase
+### ~~E1 — Run stopped (plugin_version) outside any phase~~ — closed with the report, 2026-10-01
 
-<details><summary>kept for the record</summary>
+<details><summary>struck — kept for the record</summary>
 
 The driver's bail (`plugin_version`), as it recorded it:
 
@@ -184,14 +165,13 @@ Stopped 2026-09-30 13:35; resumed 2026-09-30 13:35.
 
 **Triage:** event · nothing that could show · no impact
 **Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
+**Disposition:** Agreed.
 
 </details>
 
-### E2 — Gate waived by ruling: github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile
+### ~~E2 — Gate waived by ruling: github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile~~ — closed with the report, 2026-10-01
 
-<details><summary>kept for the record</summary>
+<details><summary>struck — kept for the record</summary>
 
 `plan.md`'s `## Driver rulings` section: `- gate github:pvginkel/KubeCoder — the controller's full declarative linter check (POST /pipeline-model-converter/validate) on the converted Jenkinsfile — ruling 2026-09-30: the change is the Jenkinsfile only, this environment cannot run KubeCoder's suites, and the operator's Replay runs them in Jenkins`
 
@@ -203,14 +183,13 @@ wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown �
 
 **Triage:** event · nothing that could show · no impact
 **Provenance:** witnessed — the driver's phase gate, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
+**Disposition:** Agreed.
 
 </details>
 
-### E3 — Run stopped (consult_bail) at the completion consult
+### ~~E3 — Run stopped (consult_bail) at the completion consult~~ — closed with the report, 2026-10-01
 
-<details><summary>kept for the record</summary>
+<details><summary>struck — kept for the record</summary>
 
 The driver's bail (`consult_bail`), as it recorded it:
 
@@ -222,14 +201,13 @@ Stopped 2026-09-30 14:03; resumed 2026-09-30 14:04.
 
 **Triage:** event · nothing that could show · no impact
 **Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
+**Disposition:** Agreed.
 
 </details>
 
-### E4 — Red row accepted by ruling: github:pvginkel/KubeCoder lint
+### ~~E4 — Red row accepted by ruling: github:pvginkel/KubeCoder lint~~ — closed with the report, 2026-10-01
 
-<details><summary>kept for the record</summary>
+<details><summary>struck — kept for the record</summary>
 
 `plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoder lint — ruling 2026-09-30 (completion consult r1): this environment has no `python` tool container; green in `modern-app`; the operator's Replay runs it in Jenkins`
 
@@ -241,14 +219,13 @@ wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown �
 
 **Triage:** event · nothing that could show · no impact
 **Provenance:** witnessed — the driver's sweep, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
+**Disposition:** Agreed.
 
 </details>
 
-### E5 — Red row accepted by ruling: github:pvginkel/KubeCoder build
+### ~~E5 — Red row accepted by ruling: github:pvginkel/KubeCoder build~~ — closed with the report, 2026-10-01
 
-<details><summary>kept for the record</summary>
+<details><summary>struck — kept for the record</summary>
 
 `plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoder build — ruling 2026-09-30 (completion consult r1): this environment has no `frontend` tool container; both package-extension.sh scripts green in `modern-app`; the operator's Replay runs them in Jenkins`
 
@@ -260,8 +237,36 @@ wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown �
 
 **Triage:** event · nothing that could show · no impact
 **Provenance:** witnessed — the driver's sweep, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
+**Disposition:** Agreed.
+
+</details>
+
+### ~~I1 — JenkinsPipelineUtils: the k8s and modern-app-toolchain sidecar settings are written twice, in containerTemplates and in podYaml.sidecars()~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Ruling F1 leaves containerTemplates untouched, so podYaml carries its own copy of the two sidecars' settings: registry:5000/k8s:1.35.5 and registry:5000/kube-coder-modern-app-toolchain:node-24 with uid 1000 (vars/podYaml.groovy sidecars(), vars/containerTemplates.groovy k8s/modern_app_toolchain). A comment on sidecars() names the pairing; no test compares them. If the verdict keeps scripted pod pipelines, both stay, and one source (or a test that both agree) removes the chance of a bump landing in one only. If the verdict migrates everything, the describables go and so does the duplicate.
+
+**Consequence:** A sidecar image bump made in containerTemplates alone leaves KubeCoder's declarative build on the old image, with no error.
+
+**Triage:** improvement · operations are better off · felt after a change · removes something ·
+needs design · prevents a degradation · in JenkinsPipelineUtils
+**Provenance:** witnessed — code-writer, P3, r1, vars/podYaml.groovy
+**Disposition:** 2026-09-30 — carried into the declarative migration (handovers/triage_2026-09-30.md, § After 033), which retires the describables and the duplicate with them. — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033
+
+</details>
+
+### ~~P1 — Ansible CLAUDE.md still tells slices to target an undeclared repo as ../scratch/<Repo>; the dev plugin's github:<owner>/<repo> Target now clones it · minor~~ — carded as ANS-169; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Ansible/CLAUDE.md § Related repos: a repo a slice changes but the environment does not declare goes under /work/scratch/<Repo>, and 'its phases say Target: ../scratch/<Repo>, and the environment that runs the slice clones it there first'. The dev plugin (0.9.60, docs/plan-template.md and docs/run-loop.md § The plan is the queue) has a Target: github:<owner>/<repo> form for exactly this case: the driver clones or adopts /work/scratch/<repo> itself, and the dry run does it at planning time. Slice 033's plan uses github:pvginkel/KubeCoder, so it departs from the project's written convention while following the plugin's. The CLAUDE.md sentence does not mention the github: form, so the next plan writer reading it first is steered to the manual-clone form.
+
+**Consequence:** A plan writer following CLAUDE.md writes ../scratch/<Repo> and the run depends on someone having cloned the repo by hand first
+
+**Triage:** prose · shows in normal use · degrades · loud · fix is one edit · in Ansible
+**Provenance:** read — plan-reviewer, planning, r1, plan_review_r1.md
+**Disposition:** 2026-09-30 — raised as ANS-169 (operator's go). — carded as ANS-169
 
 </details>
 

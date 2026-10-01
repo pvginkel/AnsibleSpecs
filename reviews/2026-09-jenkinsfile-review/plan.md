@@ -30,7 +30,8 @@ subagent.
   the next cut is the declarative migration, which folds in J14/J15, together with the style
   guide (§4), which now has one form to describe. The operator chooses the cut. What the
   migration carries besides the files is in `handovers/triage_2026-09-30.md` § After 033.
-  Still owed from 033: V09, settled by the next `IaC/IaC Docker Image` build. The small-changes
+  V09, the last criterion owed from 033, passed on 2026-10-01: `IaC/IaC Docker Image` #240–#242
+  ran green after the library push. 033's close-out is closed (ANS-168). The small-changes
   runbook (§1a: J07, Q7, Q6's four globals) still waits for the operator's go.
 - **Next cut (2026-09-30): slice 034** (ANS-170), the style guide. The operator: "I would like
   the style guide to be delivered. [...] Then I want this used for the actual pipeline
@@ -38,6 +39,18 @@ subagent.
   labels and a rule for when code goes into the library. Site: `pipelines.home/docs`, with an
   index page at `/`. No conformance checker for now. The migration is cut after 034 closes, and
   it brings `KubeCoder/Jenkinsfile` into line with the guide.
+- **Where things stand (2026-10-01, after 034).** Slice **034** (ANS-170) is complete, in
+  `slices/completed/`. The style guide is live at `pipelines.home/docs` (source in
+  JenkinsPipelineUtils `docs/`, deployed by PipelinesDeploy), and the `jenkins-pipelines` skill
+  in KubeCoderConfig points sessions at it. The operator accepted the guide's decisions D1–D6
+  and ruled GRAN-8 and the registry-host constant as the guide states them. Two of its
+  close-out entries are folded into the migration's carry list (`handovers/triage_2026-09-30.md`
+  § After 033): B2, four Jenkinsfiles with small defects the migration rewrites anyway, and I2,
+  the skill's missing rule for a Jenkinsfile that predates the guide. Nothing from 033 or 034
+  blocks the next step. **Next: the operator cuts the declarative migration** through
+  `/dev:triage` → `/dev:plan-slice`, from § After 033's carry list and groups C and D. It
+  absorbs ANS-84. The ModernAppTemplate repos stay out of it, and its push-everything-once
+  check is ruled below.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still

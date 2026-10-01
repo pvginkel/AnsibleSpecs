@@ -102,10 +102,15 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed during planning: report.md Q11 marked superseded",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
       "ruling": {
         "words": "fixed during planning — report.md Q11 marked superseded, its migration paragraph and the five Appendix A rows updated.",
-        "did": null,
+        "did": "fixed during planning: report.md Q11 marked superseded",
         "date": "2026-09-30"
       }
     },
@@ -262,8 +267,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P6",
@@ -758,10 +772,15 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "deleted 2026-10-01; the clone was clean and level with origin/main",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
       "ruling": {
         "words": "I reviewed the docs, performed the actions and reviewed the decisions. We're good from my end.",
-        "did": null,
+        "did": "deleted 2026-10-01; the clone was clean and level with origin/main",
         "date": "2026-10-01"
       }
     },
@@ -814,8 +833,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A3",

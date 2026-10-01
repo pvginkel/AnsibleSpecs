@@ -1,7 +1,10 @@
 {
   "store": 1,
   "slice": "033_jenkins_library_safety_net_and_declarative_trial",
-  "closed": null,
+  "closed": {
+    "date": "2026-10-01",
+    "words": "Agreed."
+  },
   "entries": [
     {
       "id": "P1",
@@ -23,8 +26,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded as ANS-169",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "2026-09-30 — raised as ANS-169 (operator's go).",
+        "did": "carded as ANS-169",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A1",
@@ -57,8 +69,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "pushed on the operator's go, 2026-09-30",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": "4a6be3de"
+      },
+      "ruling": {
+        "words": "2026-09-30 — Replay done: #559 green, pod and stages match #558 (V03 pass), pin commit e705c1f synced to kubecoder-dev. Pushed on the operator's go (KubeCoder 4a6be3de); #560, the build the push started, went green with the same pod and stages; V02 pass.",
+        "did": "pushed on the operator's go, 2026-09-30",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A2",
@@ -95,8 +116,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "V04 pass in verification.json, 2026-09-30",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "2026-09-30 — verdict given: migrate all (V04 pass). Recorded in reviews/2026-09-jenkinsfile-review/plan.md §3 and report.md J08; the migration is the next cut's, not yet filed.",
+        "did": "V04 pass in verification.json, 2026-09-30",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A3",
@@ -118,8 +148,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "settled 2026-10-01: IaC/IaC Docker Image #240-#242 ran Jenkinsfile.iac-image after the library push, all SUCCESS; V09 pass in verification.json",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": "settled 2026-10-01: IaC/IaC Docker Image #240-#242 ran Jenkinsfile.iac-image after the library push, all SUCCESS; V09 pass in verification.json",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B1",
@@ -149,8 +188,17 @@
           "Checked the trigger (fault) in the code: it holds. Every caller of cicd.writeVersionPins under /work and /work/scratch names paths through mappings only: images.<name> in each app's Jenkinsfile, controllerConfig.images.worker/vsix in KubeCoder's, and images.<name> or relay.image in every DockerImages */deploy-pins.json. So no pin today resolves through a sequence entry. To reach it, a caller has to write a path through a YAML list, which applyPins' own doc comment calls the caller's bug: a misconfiguration, as the label says. The signal is silent, as labelled: the value is written and committed without an error. Nothing changed."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "T1",
@@ -237,8 +285,17 @@
           "Checked the trigger (future-change): it holds. The controller's job tree (GET /api/json, read 2026-09-30) has no DesignAssistant or Archived folder. DesignAssistant's Jenkinsfile:13 and Jenkinsfile.deploy-uat:13 on main (read through gitblit) call containerTemplates.canon('canon'), which vars/containerTemplates.groovy no longer defines. The saved configs under /work/scratch/jenkins-config/xml-deleted/Archived/DesignAssistant/ run exactly those two scripts. No job runs them, so nothing fails until somebody restores a job: a change to the controller, not something ordinary operation produces. A restored job would then fail its build at podTemplate with a missing-method error, which is loud, as labelled."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-01",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "DesignAssistant has been archived and I don't know if I'll ever un-archive it. You don't have to take it into account.",
+        "did": "closed by the operator, 2026-10-01",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E1",
@@ -262,8 +319,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "I1",
@@ -288,8 +354,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "2026-09-30 — carried into the declarative migration (handovers/triage_2026-09-30.md, § After 033), which retires the describables and the duplicate with them.",
+        "did": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B3",
@@ -319,8 +394,17 @@
           "Checked the signal (loud) in the kubernetes plugin the controller runs, 4557.ve746270f672f. A declarative kubernetes agent runs the podTemplate step (KubernetesDeclarativeAgentScript.groovy:50). The step parses the agent's yaml (PodTemplateUtils.validateYamlContainerNames) and, when a container name does not match [a-z0-9]([-a-z0-9]*[a-z0-9])?, aborts the build before any pod is requested (PodTemplateStepExecution.java:152-160) with 'Container Names MUST match RFC 1123 - They can only contain lowercase letters, numbers or dashes: my_tool'. So the build fails at once with the offending name in its log: loud holds. podYaml's only caller today, KubeCoder's held Jenkinsfile, uses the names k8s, modern-app-toolchain, golang and node, all valid. Nothing changed."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033).",
+        "did": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B4",
@@ -350,8 +434,17 @@
           "Checked the trigger (fault): it holds. podYaml's only caller, KubeCoder's held Jenkinsfile at 4a6be3de, passes no env on any images entry, so no build today renders one. To reach it, a pipeline has to pass null (an unset variable or parameter) as an env value, which podYaml's documented input (env: name -> value) does not provide for: a misuse by the caller, as the label says. The signal is silent, as labelled. Nothing changed."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "2026-09-30 — reopened for the declarative migration, where podYaml becomes the main pod builder (handovers/triage_2026-09-30.md, § After 033).",
+        "did": "folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A4",
@@ -373,8 +466,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "deleted, 2026-09-30",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "2026-09-30 — deleted after the push; the clone was clean and level with origin/main.",
+        "did": "deleted, 2026-09-30",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E2",
@@ -423,8 +525,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P3",
@@ -476,8 +587,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E4",
@@ -526,8 +646,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E5",
@@ -576,8 +705,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     }
   ]
 }

@@ -98,10 +98,11 @@
       "area": "R4 \u2014 J18 utils.hasChanges @NonCPS",
       "description": "One run of a caller verifies `hasChanges` after the library push: \"`DockerImages/Jenkinsfile` and `Ansible/Jenkinsfile.iac-image`; either one's next build is the verification run.\"",
       "owed_after": "the next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac-image after the library push",
-      "verdict": "owed",
-      "rationale": "Next build of DockerImages/Jenkinsfile or Ansible/Jenkinsfile.iac-image after the library push (pushed 2026-09-30).",
+      "verdict": "pass",
+      "rationale": "Settled 2026-10-01: IaC/IaC Docker Image #240 (2026-09-30 23:38), #241 and #242 (2026-10-01 03:09, 03:14) ran Ansible/Jenkinsfile.iac-image after the library push (JenkinsPipelineUtils e5c62bd/c33e64a, 2026-09-30 13:30-13:41); all three SUCCESS, #240's log free of CPS or serialization errors.",
       "evidence": [
-        "DockerImages/Jenkinsfile:82 and Ansible/Jenkinsfile.iac-image:65-70 \u2014 the callers"
+        "DockerImages/Jenkinsfile:82 and Ansible/Jenkinsfile.iac-image:65-70 \u2014 the callers",
+        "Jenkins IaC/IaC Docker Image #240-#242, SUCCESS"
       ]
     },
     {
