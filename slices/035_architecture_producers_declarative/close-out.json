@@ -163,6 +163,82 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P4",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "AnsibleSpecs review report.md J16 note: says each producer is about 40 lines; 50 of the 78 are 62 lines or more",
+      "body": [
+        "reviews/2026-09-jenkinsfile-review/report.md:807-809 (J16's Delivered note, added in P5) reads 'Each producer stays a full declarative file of about 40 lines: header, library line, and pipeline {} ... The operator accepted that length.' The committed files are 47 lines (single-model app files, Ansible), 59 (the three monorepos, DockerImages), 62 (48 deploy files), 69/70 (ArgoCDDeploy, KubeCoderDeploy) and 93 (IoTSupport). The ~40 figure is Ruling D2's estimate (plan.md:91), and the note restates it as the files' measured length."
+      ],
+      "consequence": "A reader of the review's record takes the producers to be about 40 lines long, when most are 62 lines or more.",
+      "evidence": "read",
+      "author": "code-reviewer, P5, r1, phases/P5/code_review_r1.md F1",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "miscounted: 51 of the 78 files are 62 lines or more, not 50; re-entered with the count corrected",
+        "by": "code-reviewer P5 r1",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": null
+    },
+    {
+      "id": "P5",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "AnsibleSpecs review report.md J16 note: says each producer is about 40 lines; 51 of the 78 are 62 lines or more",
+      "body": [
+        "reviews/2026-09-jenkinsfile-review/report.md:807-809 (J16's Delivered note, added in P5) reads 'Each producer stays a full declarative file of about 40 lines: header, library line, and pipeline {} ... The operator accepted that length.' The committed files are 47 lines (22 single-model app files and Ansible's), 59 (the three monorepos, DockerImages), 62 (48 deploy files), 69/70 (ArgoCDDeploy, KubeCoderDeploy) and 93 (IoTSupport). The ~40 figure is Ruling D2's estimate (plan.md:91), and the note restates it as the files' measured length."
+      ],
+      "consequence": "A reader of the review's record takes the producers to be about 40 lines long, when most are 62 lines or more.",
+      "evidence": "read",
+      "author": "code-reviewer, P5, r1, phases/P5/code_review_r1.md F1",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (protocol_failure) in P5",
+      "body": [
+        "The driver's bail (`protocol_failure`), as it recorded it:",
+        "",
+        "> the driver's own run record was committed onto phase/035-P5 (a `git add -A` in /work/AnsibleSpecs): slices/035_architecture_producers_declarative/phases/P5/code_review_r1.md, slices/035_architecture_producers_declarative/phases/P5/review_result_r1.json. Rewrite the branch without those paths, then resume.",
+        "",
+        "Stopped 2026-10-01 13:08; resumed 2026-10-01 13:09."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
