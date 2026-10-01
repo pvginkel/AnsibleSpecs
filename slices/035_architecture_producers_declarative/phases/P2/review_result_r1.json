@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "All 50 deploy-repo producers are the deploy-architecture reference file with each old file's stage and producer id kept and FILE-3 headers matching every job's live config.xml; 50/50 pass the controller linter (re-run independently). Each of the 49 repos holds exactly one clean commit on main whose parent is origin's current head, matching the ledger. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
