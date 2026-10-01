@@ -6,277 +6,9 @@
 Run: 2026-09-30 17:47 → 22:25 · 11 phases · 3 bail-outs (1 operator question) · 1 test round ·
 doc phase done · wrap-up landed · $94.01 (planner 17 %, research 2 %, rework 5 %)
 
-## Comes to you
-
-### I3 — PipelinesDeploy architecture.yaml: pipelines.home is not listed under webUi, so the homeapps launcher shows no tile for the docs site
-
-The judgment layer's `webUi:` key marks the exposed hosts that are browser-facing UIs; the homeapps launcher tiles each one (`gen-architecture --help`). argocd.home, grafana.home, git.home, headlamp.home and jenkins.webathome.org are listed. pipelines.home serves a landing page at `/` and the style guide under `/docs/`, but P8's plan does not ask for a tile, so `architecture.yaml` has no `webUi:` entry. Adding one is `webUi: [pipelines.home]` in PipelinesDeploy's `architecture.yaml`.
-
-**Consequence:** The docs site is reached by typing pipelines.home or following a link; the homeapps launcher that tiles the estate's other web UIs does not show it.
-
-**Triage:** improvement · a user is better off · felt in use · adds something · one edit · a
-product call · in PipelinesDeploy
-**Provenance:** witnessed — code-writer, P8, r1, PipelinesDeploy architecture.yaml
-**Route:** to you — an improvement
-**Disposition:**
-
-### I4 — KubeCoder manual image: the pages' .md copies are served as application/octet-stream, and llms.txt without a charset
-
-The manual's nginx.conf (manual/nginx.conf) includes mime.types, which has no .md entry, so every per-page Markdown copy that llms.txt links goes out as application/octet-stream; llms.txt goes out as text/plain with no charset (curl -sI https://kubecoder.home/help/index.md and …/llms.txt, 2026-09-30). A browser downloads a page's copy instead of showing it, and a client that decodes text/plain without a charset can garble the em dashes. pipelines.home's docs/nginx.conf (JenkinsPipelineUtils, slice 034 P9) serves the same surfaces as text/markdown; charset=utf-8 and text/plain; charset=utf-8 with a location ~ \.md$ { types { } default_type text/markdown; } block and charset utf-8 + charset_types; the same lines would carry over.
-
-**Consequence:** Opening a KubeCoder manual page's .md copy in a browser downloads a file instead of showing it; agents fetching it get an untyped body.
-
-**Triage:** improvement · a user is better off · felt in use · adjusts what exists · one edit ·
-a product call · prevents a degradation · in KubeCoder
-**Provenance:** witnessed — code-writer, P9 r1, curl -sI against kubecoder.home/help and the P9 test build of the pipelines-home image
-**Route:** to you — an improvement
-**Disposition:**
-
-## Card requests
-
-### P3 — Ansible .aiworkflowrc: its header says 'the driver pushes', but with the test phase enabled the test agent pushes and the driver only checks · nit
-
-Ansible .aiworkflowrc lines 4-7: 'Same values, so the loop behaves exactly as before: both phases run, the driver pushes, and no devlock is taken'. The same file sets [test_phase] strategy, so the test phase runs. The dev plugin's docs/project-contract.md:75-77 says 'With a test phase, that phase's procedure doc pushes and the driver checks it happened; with no test phase the driver pushes'. run-loop.md § The push check says the same. The comment describes the no-test-phase mode.
-
-**Consequence:** A session reading the project's workflow config expects the driver to push a slice's repos, while the test agent actually owns the push and the driver only checks it and bails 'unpushed'.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
-**Provenance:** read — plan-reviewer, planning r1, Ansible .aiworkflowrc:4-7 and dev 0.9.61 docs/project-contract.md:75-77
-**Route:** card request — the fix lives in Ansible, which the slice did not touch
-**Disposition:**
-
-## Closed
-
-### B1 — JenkinsPipelineUtils gitUtils.getTreeHashFile: the version argument never reaches the cache-key file, so changing it does not invalidate a cache · minor
-
-<details><summary>body</summary>
-
-vars/gitUtils.groovy:8 builds `awk '{print $3}$version'`, splicing `version` into the awk program after the action, where awk reads it as a pattern. A non-zero number ('-2', KitchenDisplay's value) makes the file also carry git ls-tree's whole line, the same line whatever the number; any other value (e.g. 'v2', an unset awk variable) leaves the file as the bare id. So a bump from '-2' to '-3' yields the identical file and arbitraryFileCache keeps the old cache; the doc comment's 'optionally suffixed with a version string' is not what happens. Witnessed: `echo '160000 commit abc123<TAB>lib/curl' | awk '{print $3}-2'` prints the id then the whole line; `... | awk '{print $3}v2'` prints the id alone. The one change: `awk -v v='$version' '{print $3 v}'`. Not changed in slice 034 (V19: no var changes what it does); the var is KitchenDisplay-only and goes or is rebuilt with ANS-93 (report.md J10/J20). vars/gitUtils.md documents the behaviour as it is.
-
-wrap-up, 2026-09-30 — relabelled (trigger: ordinary-condition → future-change, fix: one-edit → several-places): Read the code and its one caller. getTreeHashFile's only caller is Firmware/KitchenDisplay's Jenkinsfile (no other hit in gitblit's index or the library), which passes a fixed '-2'; with that value the cache-key file carries the submodule's id, so the cache is still dropped when the submodule moves. The miss needs a change to that argument, in a job that is disabled and cannot run as it stands (it clones the decommissioned HelmCharts for an SSH key that no longer exists; inventory T13, J10). The fix is two places: the awk line in vars/gitUtils.groovy, and vars/gitUtils.md, whose paragraph documents the behaviour as it is and would become false.
-
-wrap-up, 2026-09-30 — looked and left it: Beyond my bar, and unlikely. The library's gate (root: the vars compiled through the CPS transform, and the @NonCPS functions the test classes call) does not run getTreeHashFile's sh step, so what the change turns on (Groovy GString escaping of $3 and '$version' inside an sh string) is shown only by a Jenkins build of KitchenDisplay, which is disabled and broken for other reasons. The change would also make a var do something other than it does, which slice 034's V19 records did not happen ('no library var changes what it does'). The problem shows only if someone revives KitchenDisplay as it is and bumps the version argument; the review plan keeps gitUtils.groovy until ANS-93 decides whether KitchenDisplay is deleted or rebuilt (reviews/2026-09-jenkinsfile-review/plan.md J20), and that is where the fix belongs.
-
-</details>
-
-**Consequence:** If Firmware/KitchenDisplay's pipeline is revived as it stands, bumping a getTreeHashFile version to force a dependency rebuild keeps the old cache, and the firmware builds against stale library output with no message.
-
-**Triage:** defect · needs a future change · breaks a flow · silent · fix is known, in several
-places · in JenkinsPipelineUtils
-**Provenance:** witnessed — code-writer, P3, r1; vars/gitUtils.md
-**Route:** closed — the wrap-up looked and left it
-**Disposition:**
-
-### T1 — JenkinsPipelineUtils docs/check_site.py: its typed-Groovy guard catches only a plain ```groovy fence · minor
-
-<details><summary>body</summary>
-
-GROOVY_BLOCK (docs/check_site.py:32-34) requires the fence line to be exactly ```groovy plus blanks. Probed in the reviewer's run: ```groovy title="Jenkinsfile", ``` groovy, ~~~groovy and ```Groovy are not matched, while SuperFences renders each as highlighted Groovy. A Groovy example typed into a guide page under one of them is published unchecked, and lint_examples.py never sees it. Every guide block today is a plain ```groovy include, so nothing is wrong yet.
-
-</details>
-
-**Consequence:** Once a page edit uses a titled or tilde fence for a Groovy recipe, the site publishes an example the linter never checked while kc project test stays green, and the guide's 'every example passes the linter' is quietly false.
-
-**Triage:** test gap · needs a future change · degrades · silent · fix unknown · in
-JenkinsPipelineUtils
-**Provenance:** witnessed — code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
-**Route:** closed — it cannot show with the code as it is
-**Disposition:**
-
-### I1 — KubeCoderConfig jenkins-pipelines skill: nothing holds its one-line rule summaries and rule ids to the style guide in JenkinsPipelineUtils
-
-<details><summary>body</summary>
-
-The skill (kubecoder/skills/jenkins-pipelines/SKILL.md, plugin 0.9.0) names every guide rule by id with a one-line summary and links each topic page's Markdown copy on pipelines.home. The guide lives in JenkinsPipelineUtils/docs/pages/guide/, a different repo, and neither repo's gate compares the two. A rule reworded, renumbered or added in the guide leaves the skill summarising the old rule, and every session that writes a Jenkinsfile reads the stale line first. A check could live on the library side (a test that the ids in the skill are exactly the guide's rule anchors), or a line in the library's CLAUDE.md could name the skill as a file a guide change also edits.
-
-</details>
-
-**Consequence:** After a guide rule changes, sessions writing Jenkinsfiles are handed the old rule by the skill until somebody edits KubeCoderConfig by hand; the guide page stays right.
-
-**Triage:** improvement · the code is better off · felt after a change · adds something ·
-several places · prevents a degradation · in JenkinsPipelineUtils
-**Provenance:** witnessed — code-writer, P7, r1, kubecoder/skills/jenkins-pipelines/SKILL.md
-**Route:** closed — it adds something for a benefit that is not felt in use
-**Disposition:**
-
-### B3 — MyDownloadsClient's Jenkinsfile: copyArtifactPermission names MyDownloads only, but Webathome copies its apk too · nit
-
-<details><summary>body</summary>
-
-MyDownloadsClient/Jenkinsfile (master) declares properties([copyArtifactPermission('MyDownloads')]); Webathome/Jenkinsfile copies from 'MyDownloads/MyDownloadsClient' (copyArtifacts, lastSuccessful). Webathome #242 logged 'Copied 1 artifact from "MyDownloads » MyDownloadsClient" build number 69', so the controller does not enforce the list today. PROP-2 has the file name the job that copies it.
-
-wrap-up, 2026-09-30 — looked and left it: Checked the trigger on the live controller (read-only API, 2026-09-30); the label holds, and the mechanism is not the one the Consequence line names. The Copy Artifact plugin (795.ve8e151429b_27) is already in Production mode, not Migration mode (Configure Global Security, Copy Artifact, Compatibility mode). No Authorize Project plugin is installed, so builds run as SYSTEM, and for a SYSTEM build the plugin accepts a copy when the source job's property names the copier, or when an authenticated user can read the source job (CopyArtifact.canReadFrom tests AUTHENTICATED_ANONYMOUS for Item.READ). The authorization strategy is 'Logged-in users can do anything' (anonymous read is off: the job's API answers 403 without a login), so every authenticated user can read MyDownloads/MyDownloadsClient, and Webathome's copy passes whatever the property lists. The job's stored property is copyArtifactPermission ['MyDownloads'] as the Jenkinsfile sets it. The failure needs a change to the controller's security setup, a matrix strategy or Authorize Project that takes read on that job away from the copying build: a future change. Then the step aborts with 'Unable to find project for artifact copy' and fails Webathome's build, as loud as the label says.
-
-</details>
-
-**Consequence:** If the controller starts enforcing Copy Artifact permissions, Webathome's build fails at its copyArtifacts step until MyDownloadsClient's file names Webathome as well.
-
-**Triage:** defect · needs a future change · breaks a flow · loud · fix is one edit · in
-MyDownloadsClient
-**Provenance:** witnessed — executor, P6, r1, Jenkins Webathome #242 console
-**Route:** closed — the fix lives in MyDownloadsClient, which the slice did not touch
-**Disposition:**
-
-### P6 — AnsibleSpecs slice 034 rulings.md §3 (stage granularity): no option lists the inventory variants it would retire · nit
-
-<details><summary>body</summary>
-
-P4 asks each rulings-page topic for the variants its rule would retire, taken from the inventory (plan.md:432). §3 (rulings.md:130-168) gives options A, B and C with trade-offs but no retire list for any of them; only its opening line points at the inventory's 'Stage granularity' section (rulings.md:133-134), which holds the coarse and fine variants.
-
-wrap-up, 2026-09-30 — looked and left it: The operator has already ruled §3, without the lists: 'A is fine … I suggest it's followed strictly' (rulings.md, §3 Operator response), and the guide's stage-granularity page carries A. So the Consequence, a ruling taken without the retire lists, has already happened, and nobody rules from this page again. The fix also isn't one decided edit: the entry does not give the lists, and writing one for each of A, B and C means working out from the inventory's 'Stage granularity' section which files each option would rewrite. Doing that now would also add to a page the operator ruled on something he was never shown. Nothing is left that a fix would change for anyone.
-
-</details>
-
-**Consequence:** The operator rules on granularity without the page saying which files each option rewrites; the list is one link away in the inventory.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in AnsibleSpecs
-**Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md (F4)
-**Route:** closed — the wrap-up looked and left it
-**Disposition:**
+Closed: 2026-10-01 — I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
 
 ## Record
-
-### E1 — Run stopped (plugin_version) outside any phase
-
-<details><summary>kept for the record</summary>
-
-The driver's bail (`plugin_version`), as it recorded it:
-
-> this loop runs plugin 0.9.60 from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.60/tools; the installed plugin is 0.9.61, which the agents it dispatches load, so driver and agents disagree on what they hand each other. Relaunch from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.61/tools/run_loop.py with the same arguments plus --resume (a run loop resumes from state.json).
-
-Stopped 2026-09-30 17:47; resumed 2026-09-30 17:47.
-
-**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E2 — Run paused for an operator question in P5
-
-<details><summary>kept for the record</summary>
-
-The question, as the driver recorded it:
-
-> The run's planned pause: the operator's rulings on the rulings page /work/AnsibleSpecs/slices/034_jenkins_pipeline_style_guide/rulings.md are missing. All 14 'Operator response' slots are still unfilled placeholders (§1 types, §2 stage labels, §3 granularity A/B/C, §4 checkout, §5 pod definition incl. sidecars a1/a2/b, §6 secrets/withVault, §7 timeouts, §8 post/notify incl. aborts a/b/c, §9 job-properties, §10 naming/headers, §11 library A/B/C, §12 helper-type form, §13 generators, §14 new-repo recipe), and plan.md's Requirements / rulings has none of them. Please rule on each slot and record…
-
-Stopped 2026-09-30 19:22; resumed 2026-09-30 20:04.
-
-**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E3 — Red row accepted by ruling: github:pvginkel/KubeCoderConfig lint
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoderConfig lint — no `frontend` tool container here; the P7 executor runs the same Prettier check through `modern-app` (ruling D5)`
-
-wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the run's record: the KubeCoderConfig lint row is red only because its lint is 'cexec frontend npm run format:check' and this environment has no frontend tool container (cexec: tool "frontend" is not available in this environment; the tools it has are: aac-tools, go, iac, java, modern-app). The check itself ran and passed: P7's executor ran the same Prettier check through modern-app, 'All matched files use Prettier code style!' (phases/P7 gate_r2.log, V16 pass). The event describes no problem with what the slice hands over.
-
-**Consequence:** `kc project lint` is red for github:pvginkel/KubeCoderConfig in the tree this slice leaves; the driver let it through on the ruling.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's sweep, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E4 — prd authorized by ruling: ../ArgoCDDeploy
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- prd ../ArgoCDDeploy — the pipelines app's registration, auto-synced, deploys the new site to prd (ruling D6)`
-
-wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: it pushed ArgoCDDeploy a854420 after the site build was green; within about a minute, with no Argo action by anyone, https://pipelines.home/, /docs/ and /docs/llms.txt answered 200 (V12 pass). Outcome clean, V01-V20 pass, no deploy-owed operator step. The authorization was used as ruled (D6), and nothing went wrong.
-
-**Consequence:** the test phase was told pushing and rolling prd for ../ArgoCDDeploy is its own; what it did there is in its verdict and verification.json.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E5 — prd authorized by ruling: github:pvginkel/PipelinesDeploy
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- prd github:pvginkel/PipelinesDeploy — the site's deploy repo; its pins reach prd through Argo's auto-sync (ruling D6)`
-
-wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: PipelinesDeploy was pushed with JenkinsPipelineUtils; IaC/JenkinsPipelineUtils #1 wrote its pin (302b1a0), AaC/PipelinesDeploy #1 and #2 succeeded with the pipelines-deploy.yaml artifact, and Argo's auto-sync rolled the site to prd (V13, V14 pass). Outcome clean, no deploy-owed operator step. The authorization was used as ruled (D6), and nothing went wrong.
-
-**Consequence:** the test phase was told pushing and rolling prd for github:pvginkel/PipelinesDeploy is its own; what it did there is in its verdict and verification.json.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E6 — prd authorized by ruling: ../Architecture
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- prd ../Architecture — the producer registration's push redeploys the architecture viewer in prd (ruling F1)`
-
-wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: the Architecture registration 574b7fe ('Registry: the pipelines-deploy producer') was pushed after AaC/PipelinesDeploy's builds were green (V14 pass). Outcome clean, V01-V20 pass, no deploy-owed operator step. The authorization was used as ruled (F1), and nothing went wrong.
-
-**Consequence:** the test phase was told pushing and rolling prd for ../Architecture is its own; what it did there is in its verdict and verification.json.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E7 — prd authorized by ruling: ../JenkinsPipelineUtils
-
-<details><summary>kept for the record</summary>
-
-`plan.md`'s `## Driver rulings` section: `- prd ../JenkinsPipelineUtils — the library push starts the site build, whose pin reaches prd through PipelinesDeploy (ruling F1)`
-
-wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: the library push 973257a started IaC/JenkinsPipelineUtils #1 by its hook, which succeeded, pushed the image and wrote pin commit 302b1a0 into PipelinesDeploy; pipelines.home and /docs/ are live and all 14 examples appear verbatim in the served llms-full.txt (V11, V13 pass). Outcome clean, no deploy-owed operator step. The authorization was used as ruled (F1), and nothing went wrong.
-
-**Consequence:** the test phase was told pushing and rolling prd for ../JenkinsPipelineUtils is its own; what it did there is in its verdict and verification.json.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
-**Route:** the record
-**Disposition:**
-
-</details>
-
-### E8 — Run stopped (blocked) in the doc phase
-
-<details><summary>kept for the record</summary>
-
-The driver's bail (`blocked`), as it recorded it:
-
-> The session ended mid-survey: no doc edit was made or committed, and no gate ran. Still owed, all grounded but not written: (1) Ansible docs/runbooks/argocd.md — the new-app registration entry needs no autoSync (manual first sync only when taking over running resources; close-out P2); the producer section's Jenkinsfile.architecture follows the guide's deploy-architecture reference file (podYaml aac-tools, checkout scm, archive in Generate, then Validate); AaC/<Repo> is created through the Jenkins API with GitHubPushTrigger (NEW-1/2), and registration is a direct commit, not a PR (close-out P1…
-
-Stopped 2026-09-30 22:05; resumed 2026-09-30 22:05.
-
-**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
-
-**Triage:** event · nothing that could show · no impact
-**Provenance:** witnessed — the driver's bail record in state.json
-**Route:** the record
-**Disposition:**
-
-</details>
 
 ### ~~A1 — Delete the throwaway GitHub repo pvginkel/jenkins-trigger-test (slice 034 P1's §6a webhook test)~~ — done by the operator, 2026-10-01 — gh repo view pvginkel/jenkins-trigger-test: could not resolve to a repository; struck by the operator's ruling
 
@@ -326,6 +58,25 @@ Deleting it is safe once the slice's commits are on origin — the push check be
 
 </details>
 
+### ~~B1 — JenkinsPipelineUtils gitUtils.getTreeHashFile: the version argument never reaches the cache-key file, so changing it does not invalidate a cache · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+vars/gitUtils.groovy:8 builds `awk '{print $3}$version'`, splicing `version` into the awk program after the action, where awk reads it as a pattern. A non-zero number ('-2', KitchenDisplay's value) makes the file also carry git ls-tree's whole line, the same line whatever the number; any other value (e.g. 'v2', an unset awk variable) leaves the file as the bare id. So a bump from '-2' to '-3' yields the identical file and arbitraryFileCache keeps the old cache; the doc comment's 'optionally suffixed with a version string' is not what happens. Witnessed: `echo '160000 commit abc123<TAB>lib/curl' | awk '{print $3}-2'` prints the id then the whole line; `... | awk '{print $3}v2'` prints the id alone. The one change: `awk -v v='$version' '{print $3 v}'`. Not changed in slice 034 (V19: no var changes what it does); the var is KitchenDisplay-only and goes or is rebuilt with ANS-93 (report.md J10/J20). vars/gitUtils.md documents the behaviour as it is.
+
+wrap-up, 2026-09-30 — relabelled (trigger: ordinary-condition → future-change, fix: one-edit → several-places): Read the code and its one caller. getTreeHashFile's only caller is Firmware/KitchenDisplay's Jenkinsfile (no other hit in gitblit's index or the library), which passes a fixed '-2'; with that value the cache-key file carries the submodule's id, so the cache is still dropped when the submodule moves. The miss needs a change to that argument, in a job that is disabled and cannot run as it stands (it clones the decommissioned HelmCharts for an SSH key that no longer exists; inventory T13, J10). The fix is two places: the awk line in vars/gitUtils.groovy, and vars/gitUtils.md, whose paragraph documents the behaviour as it is and would become false.
+
+wrap-up, 2026-09-30 — looked and left it: Beyond my bar, and unlikely. The library's gate (root: the vars compiled through the CPS transform, and the @NonCPS functions the test classes call) does not run getTreeHashFile's sh step, so what the change turns on (Groovy GString escaping of $3 and '$version' inside an sh string) is shown only by a Jenkins build of KitchenDisplay, which is disabled and broken for other reasons. The change would also make a var do something other than it does, which slice 034's V19 records did not happen ('no library var changes what it does'). The problem shows only if someone revives KitchenDisplay as it is and bumps the version argument; the review plan keeps gitUtils.groovy until ANS-93 decides whether KitchenDisplay is deleted or rebuilt (reviews/2026-09-jenkinsfile-review/plan.md J20), and that is where the fix belongs.
+
+**Consequence:** If Firmware/KitchenDisplay's pipeline is revived as it stands, bumping a getTreeHashFile version to force a dependency rebuild keeps the old cache, and the firmware builds against stale library output with no message.
+
+**Triage:** defect · needs a future change · breaks a flow · silent · fix is known, in several
+places · in JenkinsPipelineUtils
+**Provenance:** witnessed — code-writer, P3, r1; vars/gitUtils.md
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
 ### ~~B2 — Four in-scope Jenkinsfiles carry small defects: unused pod containers (Home, Ansible's Jenkinsfile.architecture), a stale header (TerraformRegistry), a stage label naming the wrong artifact (GitblitMCPSupportPlugin) · nit~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet); struck by the operator's ruling
 
 <details><summary>struck — kept for the record</summary>
@@ -338,6 +89,23 @@ Found while building the inventory (reviews/2026-09-jenkinsfile-review/inventory
 in Home
 **Provenance:** witnessed — code-writer, P4, r1, inventory.md (Pod definition; File naming and header comments; Stage labels)
 **Disposition:** Agreed. — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)
+
+</details>
+
+### ~~B3 — MyDownloadsClient's Jenkinsfile: copyArtifactPermission names MyDownloads only, but Webathome copies its apk too · nit~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+MyDownloadsClient/Jenkinsfile (master) declares properties([copyArtifactPermission('MyDownloads')]); Webathome/Jenkinsfile copies from 'MyDownloads/MyDownloadsClient' (copyArtifacts, lastSuccessful). Webathome #242 logged 'Copied 1 artifact from "MyDownloads » MyDownloadsClient" build number 69', so the controller does not enforce the list today. PROP-2 has the file name the job that copies it.
+
+wrap-up, 2026-09-30 — looked and left it: Checked the trigger on the live controller (read-only API, 2026-09-30); the label holds, and the mechanism is not the one the Consequence line names. The Copy Artifact plugin (795.ve8e151429b_27) is already in Production mode, not Migration mode (Configure Global Security, Copy Artifact, Compatibility mode). No Authorize Project plugin is installed, so builds run as SYSTEM, and for a SYSTEM build the plugin accepts a copy when the source job's property names the copier, or when an authenticated user can read the source job (CopyArtifact.canReadFrom tests AUTHENTICATED_ANONYMOUS for Item.READ). The authorization strategy is 'Logged-in users can do anything' (anonymous read is off: the job's API answers 403 without a login), so every authenticated user can read MyDownloads/MyDownloadsClient, and Webathome's copy passes whatever the property lists. The job's stored property is copyArtifactPermission ['MyDownloads'] as the Jenkinsfile sets it. The failure needs a change to the controller's security setup, a matrix strategy or Authorize Project that takes read on that job away from the copying build: a future change. Then the step aborts with 'Unable to find project for artifact copy' and fails Webathome's build, as loud as the label says.
+
+**Consequence:** If the controller starts enforcing Copy Artifact permissions, Webathome's build fails at its copyArtifacts step until MyDownloadsClient's file names Webathome as well.
+
+**Triage:** defect · needs a future change · breaks a flow · loud · fix is one edit · in
+MyDownloadsClient
+**Provenance:** witnessed — executor, P6, r1, Jenkins Webathome #242 console
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
 
 </details>
 
@@ -429,6 +197,155 @@ P8's plan says PipelinesDeploy is shaped like ChartsDeploy. Four places differ, 
 
 </details>
 
+### ~~E1 — Run stopped (plugin_version) outside any phase~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The driver's bail (`plugin_version`), as it recorded it:
+
+> this loop runs plugin 0.9.60 from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.60/tools; the installed plugin is 0.9.61, which the agents it dispatches load, so driver and agents disagree on what they hand each other. Relaunch from /home/ubuntu/.claude/plugins/cache/aiworkflow/dev/0.9.61/tools/run_loop.py with the same arguments plus --resume (a run loop resumes from state.json).
+
+Stopped 2026-09-30 17:47; resumed 2026-09-30 17:47.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E2 — Run paused for an operator question in P5~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The question, as the driver recorded it:
+
+> The run's planned pause: the operator's rulings on the rulings page /work/AnsibleSpecs/slices/034_jenkins_pipeline_style_guide/rulings.md are missing. All 14 'Operator response' slots are still unfilled placeholders (§1 types, §2 stage labels, §3 granularity A/B/C, §4 checkout, §5 pod definition incl. sidecars a1/a2/b, §6 secrets/withVault, §7 timeouts, §8 post/notify incl. aborts a/b/c, §9 job-properties, §10 naming/headers, §11 library A/B/C, §12 helper-type form, §13 generators, §14 new-repo recipe), and plan.md's Requirements / rulings has none of them. Please rule on each slot and record…
+
+Stopped 2026-09-30 19:22; resumed 2026-09-30 20:04.
+
+**Consequence:** none the loop acts on — the answer was in before the run resumed where it paused; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E3 — Red row accepted by ruling: github:pvginkel/KubeCoderConfig lint~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- accept github:pvginkel/KubeCoderConfig lint — no `frontend` tool container here; the P7 executor runs the same Prettier check through `modern-app` (ruling D5)`
+
+wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the run's record: the KubeCoderConfig lint row is red only because its lint is 'cexec frontend npm run format:check' and this environment has no frontend tool container (cexec: tool "frontend" is not available in this environment; the tools it has are: aac-tools, go, iac, java, modern-app). The check itself ran and passed: P7's executor ran the same Prettier check through modern-app, 'All matched files use Prettier code style!' (phases/P7 gate_r2.log, V16 pass). The event describes no problem with what the slice hands over.
+
+**Consequence:** `kc project lint` is red for github:pvginkel/KubeCoderConfig in the tree this slice leaves; the driver let it through on the ruling.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's sweep, against `plan.md`'s `## Driver rulings`
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E4 — prd authorized by ruling: ../ArgoCDDeploy~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- prd ../ArgoCDDeploy — the pipelines app's registration, auto-synced, deploys the new site to prd (ruling D6)`
+
+wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: it pushed ArgoCDDeploy a854420 after the site build was green; within about a minute, with no Argo action by anyone, https://pipelines.home/, /docs/ and /docs/llms.txt answered 200 (V12 pass). Outcome clean, V01-V20 pass, no deploy-owed operator step. The authorization was used as ruled (D6), and nothing went wrong.
+
+**Consequence:** the test phase was told pushing and rolling prd for ../ArgoCDDeploy is its own; what it did there is in its verdict and verification.json.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E5 — prd authorized by ruling: github:pvginkel/PipelinesDeploy~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- prd github:pvginkel/PipelinesDeploy — the site's deploy repo; its pins reach prd through Argo's auto-sync (ruling D6)`
+
+wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: PipelinesDeploy was pushed with JenkinsPipelineUtils; IaC/JenkinsPipelineUtils #1 wrote its pin (302b1a0), AaC/PipelinesDeploy #1 and #2 succeeded with the pipelines-deploy.yaml artifact, and Argo's auto-sync rolled the site to prd (V13, V14 pass). Outcome clean, no deploy-owed operator step. The authorization was used as ruled (D6), and nothing went wrong.
+
+**Consequence:** the test phase was told pushing and rolling prd for github:pvginkel/PipelinesDeploy is its own; what it did there is in its verdict and verification.json.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E6 — prd authorized by ruling: ../Architecture~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- prd ../Architecture — the producer registration's push redeploys the architecture viewer in prd (ruling F1)`
+
+wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: the Architecture registration 574b7fe ('Registry: the pipelines-deploy producer') was pushed after AaC/PipelinesDeploy's builds were green (V14 pass). Outcome clean, V01-V20 pass, no deploy-owed operator step. The authorization was used as ruled (F1), and nothing went wrong.
+
+**Consequence:** the test phase was told pushing and rolling prd for ../Architecture is its own; what it did there is in its verdict and verification.json.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E7 — prd authorized by ruling: ../JenkinsPipelineUtils~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+`plan.md`'s `## Driver rulings` section: `- prd ../JenkinsPipelineUtils — the library push starts the site build, whose pin reaches prd through PipelinesDeploy (ruling F1)`
+
+wrap-up, 2026-09-30 — relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the test phase's verdict and verification.json: the library push 973257a started IaC/JenkinsPipelineUtils #1 by its hook, which succeeded, pushed the image and wrote pin commit 302b1a0 into PipelinesDeploy; pipelines.home and /docs/ are live and all 14 examples appear verbatim in the served llms-full.txt (V11, V13 pass). Outcome clean, no deploy-owed operator step. The authorization was used as ruled (F1), and nothing went wrong.
+
+**Consequence:** the test phase was told pushing and rolling prd for ../JenkinsPipelineUtils is its own; what it did there is in its verdict and verification.json.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~E8 — Run stopped (blocked) in the doc phase~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The driver's bail (`blocked`), as it recorded it:
+
+> The session ended mid-survey: no doc edit was made or committed, and no gate ran. Still owed, all grounded but not written: (1) Ansible docs/runbooks/argocd.md — the new-app registration entry needs no autoSync (manual first sync only when taking over running resources; close-out P2); the producer section's Jenkinsfile.architecture follows the guide's deploy-architecture reference file (podYaml aac-tools, checkout scm, archive in Generate, then Validate); AaC/<Repo> is created through the Jenkins API with GitHubPushTrigger (NEW-1/2), and registration is a direct commit, not a PR (close-out P1…
+
+Stopped 2026-09-30 22:05; resumed 2026-09-30 22:05.
+
+**Consequence:** none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.
+
+**Triage:** event · nothing that could show · no impact
+**Provenance:** witnessed — the driver's bail record in state.json
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
+### ~~I1 — KubeCoderConfig jenkins-pipelines skill: nothing holds its one-line rule summaries and rule ids to the style guide in JenkinsPipelineUtils~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+The skill (kubecoder/skills/jenkins-pipelines/SKILL.md, plugin 0.9.0) names every guide rule by id with a one-line summary and links each topic page's Markdown copy on pipelines.home. The guide lives in JenkinsPipelineUtils/docs/pages/guide/, a different repo, and neither repo's gate compares the two. A rule reworded, renumbered or added in the guide leaves the skill summarising the old rule, and every session that writes a Jenkinsfile reads the stale line first. A check could live on the library side (a test that the ids in the skill are exactly the guide's rule anchors), or a line in the library's CLAUDE.md could name the skill as a file a guide change also edits.
+
+**Consequence:** After a guide rule changes, sessions writing Jenkinsfiles are handed the old rule by the skill until somebody edits KubeCoderConfig by hand; the guide page stays right.
+
+**Triage:** improvement · the code is better off · felt after a change · adds something ·
+several places · prevents a degradation · in JenkinsPipelineUtils
+**Provenance:** witnessed — code-writer, P7, r1, kubecoder/skills/jenkins-pipelines/SKILL.md
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
+
+</details>
+
 ### ~~I2 — KubeCoderConfig jenkins-pipelines skill: it gives no guidance for a Jenkinsfile that predates the guide, though every existing file does until the migration~~ — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet); struck by the operator's ruling
 
 <details><summary>struck — kept for the record</summary>
@@ -441,6 +358,36 @@ SKILL.md:11-16 tells every session that each Jenkinsfile in the estate follows t
 product call · prevents a degradation · in KubeCoderConfig
 **Provenance:** read — code-reviewer, P7, r1, phases/P7/code_review_r1.md F1
 **Disposition:** Agreed. — folded into the declarative migration's carry list, handovers/triage_2026-09-30.md § After 033 (the migration slice is not filed yet)
+
+</details>
+
+### ~~I3 — PipelinesDeploy architecture.yaml: pipelines.home is not listed under webUi, so the homeapps launcher shows no tile for the docs site~~ — carded as ANS-174; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The judgment layer's `webUi:` key marks the exposed hosts that are browser-facing UIs; the homeapps launcher tiles each one (`gen-architecture --help`). argocd.home, grafana.home, git.home, headlamp.home and jenkins.webathome.org are listed. pipelines.home serves a landing page at `/` and the style guide under `/docs/`, but P8's plan does not ask for a tile, so `architecture.yaml` has no `webUi:` entry. Adding one is `webUi: [pipelines.home]` in PipelinesDeploy's `architecture.yaml`.
+
+**Consequence:** The docs site is reached by typing pipelines.home or following a link; the homeapps launcher that tiles the estate's other web UIs does not show it.
+
+**Triage:** improvement · a user is better off · felt in use · adds something · one edit · a
+product call · in PipelinesDeploy
+**Provenance:** witnessed — code-writer, P8, r1, PipelinesDeploy architecture.yaml
+**Disposition:** I3: Ok, so, I've created an icon for the pipeline site and just added it to the Architecture site as `pipelines`, and I added the icon to the pipelines site already. And it has become the default icon in the Architecture site. If I'm not mistaken, that means that it will also become the icon for Home. I'm fine with the suggestion. — carded as ANS-174
+
+</details>
+
+### ~~I4 — KubeCoder manual image: the pages' .md copies are served as application/octet-stream, and llms.txt without a charset~~ — carded as KC-118; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The manual's nginx.conf (manual/nginx.conf) includes mime.types, which has no .md entry, so every per-page Markdown copy that llms.txt links goes out as application/octet-stream; llms.txt goes out as text/plain with no charset (curl -sI https://kubecoder.home/help/index.md and …/llms.txt, 2026-09-30). A browser downloads a page's copy instead of showing it, and a client that decodes text/plain without a charset can garble the em dashes. pipelines.home's docs/nginx.conf (JenkinsPipelineUtils, slice 034 P9) serves the same surfaces as text/markdown; charset=utf-8 and text/plain; charset=utf-8 with a location ~ \.md$ { types { } default_type text/markdown; } block and charset utf-8 + charset_types; the same lines would carry over.
+
+**Consequence:** Opening a KubeCoder manual page's .md copy in a browser downloads a file instead of showing it; agents fetching it get an untyped body.
+
+**Triage:** improvement · a user is better off · felt in use · adjusts what exists · one edit ·
+a product call · prevents a degradation · in KubeCoder
+**Provenance:** witnessed — code-writer, P9 r1, curl -sI against kubecoder.home/help and the P9 test build of the pipelines-home image
+**Disposition:** I4: Agreed. — carded as KC-118
 
 </details>
 
@@ -472,6 +419,20 @@ docs/runbooks/argocd.md § 'Registering, undeploying and unregistering an app' (
 
 </details>
 
+### ~~P3 — Ansible .aiworkflowrc: its header says 'the driver pushes', but with the test phase enabled the test agent pushes and the driver only checks · nit~~ — fixed in Ansible 56896ea; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Ansible .aiworkflowrc lines 4-7: 'Same values, so the loop behaves exactly as before: both phases run, the driver pushes, and no devlock is taken'. The same file sets [test_phase] strategy, so the test phase runs. The dev plugin's docs/project-contract.md:75-77 says 'With a test phase, that phase's procedure doc pushes and the driver checks it happened; with no test phase the driver pushes'. run-loop.md § The push check says the same. The comment describes the no-test-phase mode.
+
+**Consequence:** A session reading the project's workflow config expects the driver to push a slice's repos, while the test agent actually owns the push and the driver only checks it and bails 'unpushed'.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
+**Provenance:** read — plan-reviewer, planning r1, Ansible .aiworkflowrc:4-7 and dev 0.9.61 docs/project-contract.md:75-77
+**Disposition:** P3: Agreed. — fixed in Ansible 56896ea
+
+</details>
+
 ### ~~P4 — AnsibleSpecs Jenkins review report.md still says the five ModernAppTemplate repos are edited in place (Q11), against the skip ruled in slice 034's plan review · minor~~ — fixed during planning: report.md Q11 marked superseded; struck by the operator's ruling
 
 <details><summary>struck — kept for the record</summary>
@@ -498,6 +459,22 @@ docs/runbooks/argocd.md § Webhooks: 'The pod's GitHub token can list hooks (cex
 **Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in Ansible
 **Provenance:** witnessed — code-writer, P1, r1, report.md Appendix A R1 note (C 2026-09-30)
 **Disposition:**
+
+</details>
+
+### ~~P6 — AnsibleSpecs slice 034 rulings.md §3 (stage granularity): no option lists the inventory variants it would retire · nit~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+P4 asks each rulings-page topic for the variants its rule would retire, taken from the inventory (plan.md:432). §3 (rulings.md:130-168) gives options A, B and C with trade-offs but no retire list for any of them; only its opening line points at the inventory's 'Stage granularity' section (rulings.md:133-134), which holds the coarse and fine variants.
+
+wrap-up, 2026-09-30 — looked and left it: The operator has already ruled §3, without the lists: 'A is fine … I suggest it's followed strictly' (rulings.md, §3 Operator response), and the guide's stage-granularity page carries A. So the Consequence, a ruling taken without the retire lists, has already happened, and nobody rules from this page again. The fix also isn't one decided edit: the entry does not give the lists, and writing one for each of A, B and C means working out from the inventory's 'Stage granularity' section which files each option would rewrite. Doing that now would also add to a page the operator ruled on something he was never shown. Nothing is left that a fix would change for anyone.
+
+**Consequence:** The operator rules on granularity without the page saying which files each option rewrites; the list is one link away in the inventory.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is one edit · in AnsibleSpecs
+**Provenance:** read — code-reviewer, P4, r1, phases/P4/code_review_r1.md (F4)
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
 
 </details>
 
@@ -611,5 +588,20 @@ Architecture .claude/architecture/producer-manual.md, § Registration in the fed
 in Architecture
 **Provenance:** witnessed — doc-writer, doc phase, r1, gh pr list -R pvginkel/Architecture --state all; git -C /work/Architecture log --first-parent main
 **Disposition:**
+
+</details>
+
+### ~~T1 — JenkinsPipelineUtils docs/check_site.py: its typed-Groovy guard catches only a plain ```groovy fence · minor~~ — closed with the report, 2026-10-01
+
+<details><summary>struck — kept for the record</summary>
+
+GROOVY_BLOCK (docs/check_site.py:32-34) requires the fence line to be exactly ```groovy plus blanks. Probed in the reviewer's run: ```groovy title="Jenkinsfile", ``` groovy, ~~~groovy and ```Groovy are not matched, while SuperFences renders each as highlighted Groovy. A Groovy example typed into a guide page under one of them is published unchecked, and lint_examples.py never sees it. Every guide block today is a plain ```groovy include, so nothing is wrong yet.
+
+**Consequence:** Once a page edit uses a titled or tilde fence for a Groovy recipe, the site publishes an example the linter never checked while kc project test stays green, and the guide's 'every example passes the linter' is quietly false.
+
+**Triage:** test gap · needs a future change · degrades · silent · fix unknown · in
+JenkinsPipelineUtils
+**Provenance:** witnessed — code-reviewer, P5, r1, phases/P5/code_review_r1.md F2
+**Disposition:** I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.
 
 </details>

@@ -1,7 +1,10 @@
 {
   "store": 1,
   "slice": "034_jenkins_pipeline_style_guide",
-  "closed": null,
+  "closed": {
+    "date": "2026-10-01",
+    "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed."
+  },
   "entries": [
     {
       "id": "P1",
@@ -79,8 +82,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "fixed in Ansible 56896ea",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": "56896ea"
+      },
+      "ruling": {
+        "words": "P3: Agreed.",
+        "did": "fixed in Ansible 56896ea",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P4",
@@ -136,8 +148,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "A1",
@@ -243,8 +264,17 @@
           "Beyond my bar, and unlikely. The library's gate (root: the vars compiled through the CPS transform, and the @NonCPS functions the test classes call) does not run getTreeHashFile's sh step, so what the change turns on (Groovy GString escaping of $3 and '$version' inside an sh string) is shown only by a Jenkins build of KitchenDisplay, which is disabled and broken for other reasons. The change would also make a var do something other than it does, which slice 034's V19 records did not happen ('no library var changes what it does'). The problem shows only if someone revives KitchenDisplay as it is and bumps the version argument; the review plan keeps gitUtils.groovy until ANS-93 decides whether KitchenDisplay is deleted or rebuilt (reviews/2026-09-jenkinsfile-review/plan.md J20), and that is where the fix belongs."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "B2",
@@ -306,8 +336,17 @@
           "The operator has already ruled §3, without the lists: 'A is fine … I suggest it's followed strictly' (rulings.md, §3 Operator response), and the guide's stage-granularity page carries A. So the Consequence, a ruling taken without the retire lists, has already happened, and nobody rules from this page again. The fix also isn't one decided edit: the entry does not give the lists, and writing one for each of A, B and C means working out from the inventory's 'Stage granularity' section which files each option would rewrite. Doing that now would also add to a page the operator ruled on something he was never shown. Nothing is left that a fix would change for anyone."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P7",
@@ -452,8 +491,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "D1",
@@ -536,8 +584,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P10",
@@ -685,8 +742,17 @@
           "Checked the trigger on the live controller (read-only API, 2026-09-30); the label holds, and the mechanism is not the one the Consequence line names. The Copy Artifact plugin (795.ve8e151429b_27) is already in Production mode, not Migration mode (Configure Global Security, Copy Artifact, Compatibility mode). No Authorize Project plugin is installed, so builds run as SYSTEM, and for a SYSTEM build the plugin accepts a copy when the source job's property names the copier, or when an authenticated user can read the source job (CopyArtifact.canReadFrom tests AUTHENTICATED_ANONYMOUS for Item.READ). The authorization strategy is 'Logged-in users can do anything' (anonymous read is off: the job's API answers 403 without a login), so every authenticated user can read MyDownloads/MyDownloadsClient, and Webathome's copy passes whatever the property lists. The job's stored property is copyArtifactPermission ['MyDownloads'] as the Jenkinsfile sets it. The failure needs a change to the controller's security setup, a matrix strategy or Authorize Project that takes read on that job away from the copying build: a future change. Then the step aborts with 'Unable to find project for artifact copy' and fails Webathome's build, as loud as the label says."
         ]
       },
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P11",
@@ -807,8 +873,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "I2",
@@ -935,8 +1010,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded as ANS-174",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok, so, I've created an icon for the pipeline site and just added it to the Architecture site as `pipelines`, and I added the icon to the pipelines site already. And it has become the default icon in the Architecture site. If I'm not mistaken, that means that it will also become the icon for Home. I'm fine with the suggestion.",
+        "did": "carded as ANS-174",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "I4",
@@ -961,8 +1045,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded as KC-118",
+        "by": "the operator's ruling",
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I4: Agreed.",
+        "did": "carded as KC-118",
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E3",
@@ -1004,8 +1097,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E4",
@@ -1047,8 +1149,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E5",
@@ -1090,8 +1201,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E6",
@@ -1133,8 +1253,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E7",
@@ -1176,8 +1305,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "E8",
@@ -1201,8 +1339,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed with the report, 2026-10-01",
+        "by": null,
+        "date": "2026-10-01",
+        "commit": null
+      },
+      "ruling": {
+        "words": "I3: Ok [...] I'm fine with the suggestion. I4: Agreed. P3: Agreed.",
+        "did": null,
+        "date": "2026-10-01"
+      }
     },
     {
       "id": "P13",
