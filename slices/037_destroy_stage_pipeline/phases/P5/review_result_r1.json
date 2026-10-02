@@ -1,0 +1,11 @@
+{"outcome": "signoff",
+ "summary": "Jenkinsfile.destroy-stage meets P5's outcome: the guard checks the registry and live Applications (single- and multi-source) and REPO's GitHub spelling, the Job is P4's destroy mode in argocd-hooks run as destroy-stage, and APPLY=false is a dry run that pushes nothing. The file follows the style guide and passes the controller's linter, and the job exists with no builds. Three advisory findings, nothing blocking.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "A destroy Job past its 1800 s deadline, or whose pod never starts, fails the build in waitForJobContainer before the log is saved; the getJobFailReason branch cannot catch it (close-out B3)"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "The GitHub-spelling check assumes the state folder carries GitHub's spelling; a registry entry spelled otherwise (none today) would make an apply a silent no-op that still removes config/<stage>/ (close-out I3)"},
+  {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "JenkinsPipelineUtils types/index.md says every job is of a listed type; IaC/Destroy Stage is of none (noted on close-out P4)"}
+ ]}

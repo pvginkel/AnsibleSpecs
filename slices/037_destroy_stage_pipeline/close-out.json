@@ -350,6 +350,66 @@
         "fix": "several-places",
         "repo": "JenkinsPipelineUtils"
       },
+      "notes": [
+        {
+          "by": "code-reviewer P5 r1",
+          "date": "2026-10-03",
+          "text": [
+            "The same omission in the pipeline types index: types/index.md opens 'Every Jenkins job in the estate but those at the end of this page is of one of these types', and IaC/Destroy Stage fits none of its 13 types and is not listed at the end (review P5 r1 F3)."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "ArgoCDTools Jenkinsfile.destroy-stage: a destroy Job that overruns its deadline or never starts fails the build with no Job log and no reason",
+      "body": [
+        "runDestroyJob (Jenkinsfile.destroy-stage:129-142) calls kubectl.waitForJobContainer before it saves the pod's log. When the Job passes activeDeadlineSeconds (1800, :112) the Job controller deletes its pod, and waitForJobContainer exits 1 with 'Pod … no longer exists while waiting …' (JenkinsPipelineUtils vars/kubectl.groovy:70-73). When the pod never starts (image pull failure, a missing Secret), it waits out the same 30 minutes and ends the same way, or with 'Job … failed before pod was created' (:55-61). Either way the step throws at :129, savePodLogs (:131) never runs, and finally deletes the Job (:144). The getJobFailReason branch (:135-137) cannot catch this. It runs only when a terminated container has no exit code, and a container that has terminated always has one. If the pod is gone, getContainerExitCode's kubectl call fails before that branch is reached."
+      ],
+      "consequence": "A destroy that is killed at its 30-minute deadline leaves no record in the build of what it had destroyed, and a Job whose pod never starts fails after 30 minutes with a generic line that does not say why.",
+      "proposal": "card — the first target's destroy takes seconds and the build does fail loudly, so nothing waits on it; it is worth fixing before a long destroy is run.",
+      "evidence": "read",
+      "author": "code-reviewer, P5 r1, phases/P5/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "design",
+        "area": "plain",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "I3",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "Make IaC/Destroy Stage reach a stage whose state folder is spelled as its registry entry spelled the repo, not as GitHub does?",
+      "body": [
+        "The hook files a stage's state under hook.repo, which is the registry entry's repo URL as written (ArgoCDDeploy releases/templates/applications.yaml, $entry.repo). The schema does not hold that URL to GitHub's spelling (releases/values.schema.json:46-50, pattern [A-Za-z0-9._-]+). The guard requires REPO to equal GitHub's .name (Jenkinsfile.destroy-stage:228-232). Suppose an entry ever spells a repo otherwise. Its state then lies under argocd/<registry spelling>/, and the guard refuses that spelling and tells the operator to run with GitHub's. The Job then reports 'the backend holds no state … nothing to destroy' and exits 0, and an apply removes config/<stage>/. Today all 49 registry repos, and the 48 argocd/ folders in TerraformState, match GitHub's spelling exactly (gh api, 2026-10-03), so nothing goes wrong now."
+      ],
+      "consequence": "None today. If a registry entry is ever spelled unlike its GitHub repo, a Destroy Stage apply of that stage reports success, removes config/<stage>/, and leaves its resources and state behind.",
+      "proposal": "card — low odds, since every entry matches today, but the failure is silent and lands exactly where this pipeline exists to clean up; pinning the spelling where an entry is added would be cheapest.",
+      "evidence": "witnessed",
+      "author": "code-reviewer, P5 r1: gh api names of every registry repo, TerraformState argocd/ listing; phases/P5/code_review_r1.md F2",
+      "labels": {
+        "benefit": "operations",
+        "felt": "after-change",
+        "change": "add",
+        "size": "design",
+        "product-call": "no",
+        "prevents": "broken",
+        "area": "plain",
+        "repo": "ArgoCDTools"
+      },
       "notes": [],
       "wrap_up": null,
       "strike": null,
