@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "KubeCoder/Jenkinsfile (commit 0b6ced99) is an image build to the guide. It keeps every gate command, the eight images and their tags, the pin map and the load-bearing stage order, and it passes the controller's linter. R17's P6 line names Validate architecture. Two advisory findings: four stale stage-label citations, and a pre-existing vacuous order test.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "Four KubeCoder comments/docs still cite the old stage labels (package-extension.sh x2, go-codegen.md:56, mkdocs.yml:86); the doc phase does not see this repo"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+   "summary": "publish.test.ts's package-before-manual-image assertion matches a comment at Jenkinsfile:124 and cannot fail (pre-existing; mutation survives)"}
+ ]}

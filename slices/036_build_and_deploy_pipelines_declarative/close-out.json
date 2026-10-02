@@ -342,6 +342,53 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P9",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "KubeCoder: four comments and docs still cite Build-Main's old stage labels, which P8's commit renamed",
+      "body": [
+        "Commit 0b6ced99 renamed most references to the old stage labels, but these four still cite them as the stage's name: vscode-desktop/scripts/package-extension.sh:9 (stage('Build kubecoder-manual'), now Build kubecoder-manual image), worker/scripts/package-extension.sh:7 (stage('Build kubecoder-vsix'), now Build kubecoder-vsix image), packages/kubecoder-contracts/docs/go-codegen.md:56 (the Contracts drift gate stage, now Validate contracts) and manual/mkdocs.yml:86 (\"CLI reference drift gate\", now Validate CLI reference). The constraint each one states still holds. The doc phase does not see this repo."
+      ],
+      "consequence": "none: a reader searching the Jenkinsfile for a quoted label finds no stage by that name; the ordering and gate each comment describes are still true.",
+      "evidence": "read",
+      "author": "code-reviewer, P8, round 1, phases/P8/code_review_r1.md F1",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "several-places",
+        "repo": "KubeCoder"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "KubeCoder vscode-desktop/test/publish.test.ts: the package-before-manual-image assertion matches a Jenkinsfile comment and cannot fail",
+      "body": [
+        "publish.test.ts:103 takes indexOf('vscode-desktop/scripts/package-extension.sh'). The first match is the comment inside the Validate contracts stage (Jenkinsfile:124), not the packaging step (:219), so the 'packaged < manualImage' assertion holds wherever the packaging stage sits. A mutation that moved Build kubecoder-desktop.vsix after Build kubecoder-manual image kept the comparison true (6768 < 20611), with the real step at 21208. The gap predates slice 036: the old file had the same comment at :101. The order is correct today."
+      ],
+      "consequence": "If a later edit moves the desktop packaging after the manual image build, the suite stays green, and the manual image publishes the previous build's desktop artifacts with nothing failing.",
+      "evidence": "witnessed",
+      "author": "code-reviewer, P8, round 1, phases/P8/code_review_r1.md F2 (mutation replicated with node)",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "KubeCoder"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
