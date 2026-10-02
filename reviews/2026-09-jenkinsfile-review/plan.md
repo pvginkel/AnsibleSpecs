@@ -132,6 +132,11 @@ subagent.
   *(10-02, evening)* G1 and G3 fixed and pushed on the operator's "Fix now"; every build they
   started is green (`carry-over.md` §1). Nothing of the review is open beyond 036's close-out tail
   and the items left open by ruling.
+
+  *(10-02, night)* ANS-187 P1 is done: `report.md` and `inventory.md` carry 036's status notes.
+  036's V24 is settled (IaC/Apply #6, after the srvvault1 reset); V25 waits only on Scheduled
+  Update's Sunday cron. J14's IDF version is each firmware file's `idf` image tag, not an
+  `idfVersion` argument (036 S1, P2).
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still

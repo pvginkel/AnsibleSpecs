@@ -23,11 +23,21 @@ environment" in [plan.md](plan.md).
 > describe the files before that, and the topic sections count the 114 files as they stood on
 > 2026-09-30.
 
+> *Updated 2026-10-02 by slice 036 (ANS-181):* the 41 typed T3–T12 files and the five
+> ModernAppTemplate apps' build `Jenkinsfile`s are declarative files to the style guide, so the
+> second slice above is done. The guide types the five apps as its `Modern app build`, on the
+> library's `modernApp.test` step (036 Ruling D1); this page leaves them untyped. T13
+> (Firmware/KitchenDisplay, ANS-93) and ModernAppTemplate's own template are left out by ruling.
+> T3–T13 below, and the topic sections, still describe the files before the migration.
+
 ## Skipped: the ModernAppTemplate repos (ruling F2)
 
 > *Overruled 2026-10-01:* "MAT itself must be skipped, the downstream repos not." The ten jobs
 > below are migrated (slice 035 takes the five producers, the second slice the five builds). This
 > section is kept as written in slice 034.
+>
+> *(2026-10-02)* Slice 036 migrated the five builds, so all ten jobs below are declarative files
+> to the guide.
 
 The operator, in slice 034's plan review (2026-09-30): "Please completely skip the
 moderapptemplate repos. I'll get them fixed when we do the next sync." DHCPApp,
@@ -157,6 +167,10 @@ AaC/Zigbee2mqttDeploy.
 
 ### T3 — Image build (16)
 
+> *Migrated 2026-10-02 (slice 036):* all 16 are declarative image builds on `helmCharts.kaniko2`
+> and `podYaml`, with `checkout scm` where a file cloned itself. KubeCoder/Build-Main is in line
+> with the guide (036 P8), and IaC/IaC Docker Image is the guide's `change-detection.groovy`.
+
 Each checks out, builds its image(s) with a `helmCharts.kaniko*` call in the inherited `kaniko`
 container, and then, in a `Write image pins` stage, runs `cicd.writeVersionPins` in the `k8s`
 container (argo-cd D53). The pin commit is a rollout through Argo: prd for all but
@@ -183,6 +197,10 @@ container (argo-cd D53). The pin commit is a rollout through Argo: prd for all b
 
 ### T4 — Artifact build for a downstream job (5)
 
+> *Migrated 2026-10-02 (slice 036):* all five are declarative files. The four client and server
+> repos and their jobs are on `main` (J26); each of their jobs was built once by hand from `main`
+> (036 Ruling R2).
+
 | Job | Builds | Hands it on by |
 |---|---|---|
 | MyDownloads/MyDownloadsClient (branch `master`) | a signed apk in `androidsdk`, with the keystore password from OpenBao | archive; `build job: 'MyDownloads'` and `build job: 'Webathome'`, `wait: false` |
@@ -195,6 +213,10 @@ The four client and server files declare `copyArtifactPermission` for the job th
 them.
 
 ### T5 — ESP-IDF firmware (8)
+
+> *Migrated 2026-10-02 (slice 036):* all eight are declarative files on `espFirmware.build` and
+> `.upload` (J14). Each names its own `espressif/idf` image in its agent, `withVault` sits inside
+> the upload step, and the forwarded `containerEnvVar`s are gone (J17). All eight built green.
 
 A `withVault` block (`kv/jenkins/iotsupport-pipeline-oidc`) wraps a `jenkins-agent-large` pod,
 which has an inline `idf` container (`espressif/idf:v5.5.3`, both secrets forwarded as
@@ -213,6 +235,8 @@ which has an inline `idf` container (`espressif/idf:v5.5.3`, both secrets forwar
 
 ### T6 — Validation Job (1): SSEGateway/SSEGateway
 
+> *Migrated 2026-10-02 (slice 036):* the file is the guide's `validation-job.groovy`.
+
 It builds a validation image from `Dockerfile.validation` and runs it as a Kubernetes Job with a
 rabbitmq sidecar (`kubectl.startJob`, `activeDeadlineSeconds: 600`). It extracts the JUnit XML
 from the log, sets the build description, and runs `kubectl.deleteJob` in a `finally`. It then
@@ -220,6 +244,10 @@ builds `ssegateway`, pushes `HEAD:stable` with the GitHub credential, and pins t
 deploy repos. The five skipped template apps have this shape too; J15 was their helper.
 
 ### T7 — iac-controller job (6)
+
+> *Migrated 2026-10-02 (slice 036):* all six follow the guide's iac-controller reference (Scheduled
+> Calico Rollout is `iac-controller.groovy`): a 4-hour timeout and an `aborted` marker (J12), no
+> `buildDiscarder`. IaC/Apply #6 ran green on its file; Scheduled Update's first cron run is owed.
 
 Declarative, with `agent { label 'iac-controller' }` (srviac's single executor). Every step is an
 `iac -c '…'` call, and each call clones the repo itself. Every file declares
@@ -239,6 +267,9 @@ deliberate.
 
 ### T8 — Configuration apply (1): YouTrack/YouTrackConfiguration
 
+> *Migrated 2026-10-02 (slice 036):* the file is the guide's `configuration-apply.groovy`;
+> `withVault` wraps only the steps that use the tokens (J17).
+
 A `withVault` block (`kv/jenkins/youtrack`) wraps the pod. Stages: `Cloning repo`, `Setup`
 (`uv sync`), `Lint and test` (ruff, ruff format, pytest), then `Apply` (`ytconfig apply`), which
 changes the live YouTrack. The last three run inside one `container('python')`. The
@@ -246,12 +277,19 @@ changes the live YouTrack. The last three run inside one `container('python')`. 
 
 ### T9 — Promotion (1): KubeCoder/Promote-PRD
 
+> *Migrated 2026-10-02 (slice 036):* the file is the guide's `promotion.groovy`, plus one refusal
+> the reference lacks; KubeCoder/Promote-PRD #12 ran it green.
+
 `KubeCoderDeploy/Jenkinsfile.promote` is started by hand, with a `commit` parameter validated
 against a SHA pattern. It clones its own repo with the GitHub credential and retags `dev-<n>` to
 `prd-<n>` with crane. It then fast-forwards `prd` and pushes a `release-<m>` tag. Every stage runs
 inside one `container('k8s')`.
 
 ### T10 — Image matrix (1): DockerImages
+
+> *Migrated 2026-10-02 (slice 036):* the file is the guide's `image-matrix.groovy`: one `Build
+> images` stage with the generated stages inside it, `Write image pins` under `when {}`, a
+> 180-minute timeout, and no per-image kaniko bound.
 
 `tools/collect-internal-dependencies.py` lists the image variants, 49 on 2026-09-30. The file
 builds the closure of the changed images, their descendants and those the `image` parameter
@@ -261,6 +299,10 @@ image's `deploy-pins.json` gets one pin commit. `image=all` rebuilds everything.
 
 ### T11 — Architecture collector (1): AaC/Architecture
 
+> *Migrated 2026-10-02 (slice 036):* the file is the guide's `architecture-collector.groovy`, its
+> triggers set in a `Set triggers` stage (PROP-8). The upstream list was the same before and
+> after the push.
+
 After the checkout, it reads `pipeline-producers.yaml` and sets its own triggers:
 `githubPush()` plus `upstream(...)` on every producer's job, except itself and those marked
 `trigger: false`. The list spans 77 jobs. It then copies every producer's last successful
@@ -268,12 +310,20 @@ artifact, runs the collector, builds `architecture_viewer` and pins it into Weba
 
 ### T12 — Scheduled snapshot producer (1): AaC/Home Assistant Fleet
 
+> *Migrated 2026-10-02 (slice 036):* the file is the guide's `snapshot-producer.groovy`. It
+> declares its cron and guard (J02), and `withVault` wraps only the generation (J17). `HA_URL`
+> stays global (Q6).
+
 `Architecture/Jenkinsfile.ha-fleet` runs daily on a cron that is set in the UI (J02). A
 `withVault` block (`kv/jenkins/home-automation-fleet`) wraps the pod. The file reads the global
 `HA_URL`, generates the fleet snapshot from Home Assistant, validates it with the repo's own
 `arch-validate.py` and archives it.
 
 ### T13 — Kiosk cross-build (1): Firmware/KitchenDisplay
+
+> *Not migrated (slice 036, its S6):* the job stays parked under ANS-93, and the library keeps
+> `containerTemplates.rsync` and `dockbuild` for it. The `jenkins-pipelines` skill names this
+> file as one that predates the guide on purpose.
 
 The job is disabled. The file cross-builds with dockcross, using `arbitraryFileCache` keyed by
 `gitUtils.getTreeHashFile`. It clones HelmCharts, now decommissioned, for an SSH key that no longer

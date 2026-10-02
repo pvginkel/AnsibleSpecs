@@ -81,6 +81,7 @@ None of these loses an operator ruling. Each is a thing the report asked for tha
   notes stop at slice 035 (J01, J16, J24, Q9). J02, J11, J12, J14, J15, J17, J21, J26 and Q6 carry
   no 036 note. Home: ANS-187 (the doc-drift card, 036 close-out P1, `slices/completed/036_build_and_deploy_pipelines_declarative/close-out.md:459-472`).
   `plan.md` is current. Not a gap, but ANS-187 must include `report.md`'s status notes.
+  *Fixed 2026-10-02 (ANS-187 P1):* `report.md` and `inventory.md` carry 036's status notes.
 
 **Settled or still owed from slice criteria (for the record)**
 

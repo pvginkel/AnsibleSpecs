@@ -326,6 +326,13 @@ accept
 > § Cut: slice 035): the build and deploy pipelines, AaC/Architecture, AaC/Home Assistant Fleet's
 > cron (J02), the §2 job-settings rulings, and closing ANS-84.
 
+> *Done for the build and deploy pipelines (2026-10-02, slice 036):* every remaining file declares
+> its own guard, trigger and parameters (the guide's PROP-3, PROP-6, PROP-7), and AaC/Architecture
+> sets its triggers in a `Set triggers` stage (PROP-8). The §2 per-job sheet was not written (036
+> Ruling D2). Instead the slice diffed every job's `config.xml` before and after the push, and its
+> `closing-diff.md` records what the UI still holds; no UI copy was stripped. ANS-84 is closed as
+> absorbed under ANS-181. Firmware/KitchenDisplay stays parked (ANS-93).
+
 ### J02 — Put the Home Assistant Fleet cron into `Jenkinsfile.ha-fleet`
 
 - **What** — `properties([disableConcurrentBuilds(), pipelineTriggers([cron('H 4 * * *')])])`
@@ -343,6 +350,11 @@ accept
 **Operator response:** <!-- accept | modify | reject | discuss -->
 accept
 >
+
+> *Done (2026-10-02, slice 036):* `Architecture/Jenkinsfile.ha-fleet`, now the guide's
+> snapshot-producer file, declares `cron('H 4 * * *')` and its guard, and the comments that gave
+> the schedule to the job config are gone. AaC/Home Assistant Fleet #123, started by hand, ran it
+> green; a timer-started run is not in 036's records.
 
 ### J03 — Scheduled Jenkins config drift check
 
@@ -594,6 +606,12 @@ an exception with the evidence; the per-job ruling comes later.
 accept
 >
 
+> *Done (2026-10-02, slice 036), in the guide's form:* every pod pipeline declares `timeout(time:
+> 60, unit: 'MINUTES')` in its pipeline-level `options {}` (TIME-1), not inside `node(POD_LABEL)`.
+> DockerImages has 180 minutes (TIME-3). The 90-minute ElectronicsInventory and IoTSupport
+> candidates were not granted (longest recent builds ~46 and ~41 minutes), and the old
+> kaniko-only stage bounds are gone (TIME-4).
+
 ### J12 — Backstop timeout on the iac-controller jobs, with an aborted marker
 
 > *(2026-09-30 refresh)* `HelmCharts/Jenkinsfile` is gone, so J12 covers the six declarative `Ansible/Jenkinsfile.iac-*` files only.
@@ -627,6 +645,11 @@ accept
 **Operator response:** <!-- accept | modify | reject | discuss -->
 accept
 >
+
+> *Done (2026-10-02, slice 036):* the six `Ansible/Jenkinsfile.iac-*` declare `timeout(time: 4,
+> unit: 'HOURS')` and the `post { aborted { … } }` marker. IaC/Apply #6 and Scheduled Drift, Calico
+> Rollout and Certs ran their migrated files green; Scheduled Update's first run, on its Sunday
+> cron, is still owed (036 V25).
 
 ### J13 — Build-discarder standard
 
@@ -720,6 +743,12 @@ accept, but the version must be a parameter. I'm not updating all ESP-IDF versio
 > `espFirmware(name: 'PaperClock', idfVersion: 'v5.5.3', …)` and `containerTemplates.idf(version)`
 > — so each repo's Jenkinsfile states its own IDF version and a bump is one repo's commit.
 
+> *Done (2026-10-02, slice 036), as steps:* `espFirmware.build` and `.upload`, called from each
+> firmware file's own stages (036 S1, the shape J16 took). The IDF version is not a step argument:
+> each file names its `espressif/idf:<version>` image in its own agent, so a bump is still one
+> repo's commit. `withVault` sits inside `upload`. All eight built green after the push, which
+> proves the upload, not that the devices flashed (036 Ruling P4).
+
 ### J15 — One validation-Job helper for the monorepo apps
 
 > *(2026-09-30 refresh)* Mostly overtaken. The monorepo apps are five now, FieldnotesApp included, and they render their `Jenkinsfile` from ModernAppTemplate's root template (v0.1.2). None Helm-deploys. See Q11 for whether J15 is withdrawn or re-aimed at the template.
@@ -750,6 +779,11 @@ accept, but the version must be a parameter. I'm not updating all ESP-IDF versio
 **Operator response:** <!-- accept | modify | reject | discuss -->
 accept
 >
+
+> *Delivered (2026-10-02, slice 036), reversing its closure:* with the five apps back in scope,
+> 036 Ruling D1 ("Agree") made the validation-Job block the library step `modernApp.test`, called
+> from each app's own Test stage. The guide gained a `Modern app build` type page and reference
+> file. All five apps built green. ModernAppTemplate's template was not changed.
 
 ### J16 — Architecture-producer helper for the `Jenkinsfile.architecture` copies
 
@@ -839,6 +873,11 @@ accept
 **Operator response:** <!-- accept | modify | reject | discuss -->
 accept
 >
+
+> *Done for the rest (2026-10-02, slice 036):* the `containerEnvVar` lines are gone from the eight
+> firmware files and `Jenkinsfile.ha-fleet`. `withVault` wraps only the step that uses the secret:
+> the firmware upload (inside `espFirmware.upload`), the HA fleet snapshot's generation and
+> YouTrackConfiguration's apply.
 
 ### J18 — `utils.hasChanges` → `@NonCPS`
 
@@ -950,6 +989,11 @@ accept
 accept
 >
 
+> *Done (2026-10-02, slice 036), under the guide's name:* every image build calls
+> `helmCharts.kaniko2(…)` (LIB-6) rather than a renamed `kaniko(Map)` (036 S2), and the positional
+> `helmCharts.kaniko(…)` is deleted from the library. That breaks ModernAppTemplate's template
+> (accepted) and the archived CanonApp, which has no job.
+
 ### J22 — Library docs and a self-test job
 
 > *(2026-09-30 refresh)* The compile gate's `groovy-cps.version` pin (4376) trails the controller, which runs `workflow-cps` 4383 since before 09-30. Bump it with J22 or on its own. The compile half exists: slice 027 (which absorbed ANS-89) added `tests/`, and `kc project test` compiles every `vars/*.groovy` through the controller's CPS transform, pre-push, with controls for a syntax error and a `synchronized` block. It asserts no behaviour, and no Jenkins job builds the repo. Still open: the docs (§4) and asserting the pure functions. Whether that needs a Jenkins job, or `kc project test` is enough, is for `/dev:plan-slice`.
@@ -1053,6 +1097,12 @@ accept
 > after the next KubeCoder/Promote-PRD. The other files under **Where** are build pipelines, left
 > to the second slice (the firmware ones inside J14).
 
+> *Done for the build pipelines (2026-10-02, slice 036):* `checkout scm` replaced the self-clones
+> of the four firmware files, DockerImages, IntercomServer, TerraformRegistry, Charts, ArgoCDTools,
+> HomelabTerraformProvider, MyDownloadsClient, ScanToPdfClient and ScanToPdfServer. Secondary repos
+> are still cloned explicitly. CanonApp (no job) and KitchenDisplay (parked, ANS-93) were not
+> touched.
+
 ### J25 — Dead imports, whitespace, stale comments
 
 - **What** — Remove `import org.jenkinsci.plugins.pipeline.modeldefinition.Utils` where
@@ -1090,6 +1140,10 @@ accept
 **Operator response:** <!-- accept | modify | reject | discuss -->
 accept
 >
+
+> *Done (2026-10-02, slice 036, its Ruling D3):* the four repos default to `main` and the eight
+> jobs build `*/main`. Their polls still compared against the old `master` revision, so the push
+> started none of them; each was built once by hand from `main` (Ruling R2), all eight green.
 
 ### J27 — Keycloak client secret inline in the IoTSupport validation Job
 
@@ -1160,6 +1214,9 @@ branch the job builds.
 **Operator response:** <!-- accept | modify | reject | discuss -->
 Leave this. Keep it at the test branch.
 >
+
+> *Done (2026-10-02, slice 036):* TrelloMcp's migrated `Jenkinsfile` landed on `test`, and
+> TrelloMcp #12 built it green.
 
 **Q3 — copyartifact mode.** The global page shows the *Migration mode* monitor active and
 `AaC/Architecture` copies from 30 producers that declare no `copyArtifactPermission`, which only
@@ -1245,6 +1302,11 @@ Is HA_URL still used? I got rid of the notifier. If the script is still in use s
 >
 > **Operator (2026-09-21, in conversation):** "Leave HA_URL where it is please. I don't put
 > endpoints into OpenBao." → `HA_URL` stays a global env var; the rest as above.
+
+> *Done for IoTSupport (2026-10-02, slice 036):* its two Jenkinsfiles write the three
+> `KEYCLOAK_TEST_*` values and `KEYCLOAK_OIDC_TOKEN_URL` inline, and the four globals were deleted
+> after IoTSupport/IoTSupport #151 and AaC/IoTSupport #46 built green. `HA_URL` stays. The four
+> dead globals were not 036's; they went the same day as a small change (plan §1a).
 
 **Q7 — Container cap 3.** Deliberate (node capacity), or historical? It sets the queue
 behaviour every mass push sees and where J11's timeout may sit. Either way it should be
@@ -1376,6 +1438,10 @@ build, and `FieldnotesApp`'s duplicate is deleted now as a small change.
 ---
 
 ## Appendix A — ANS-84 move inventory
+
+> *Superseded (2026-10-02):* not executed as written. Slices 035 and 036 put each job's guard and
+> trigger into its declarative file, to the guide's PROP rules, instead of these scripted
+> `properties([...])` calls. 036's `closing-diff.md` is the closing re-dump (see J01's notes).
 
 Rules for the executor (no judgement needed beyond these):
 
