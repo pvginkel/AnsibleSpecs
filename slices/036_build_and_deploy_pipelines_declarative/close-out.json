@@ -311,6 +311,37 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P8",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Architecture seed-architecture skill (.claude/skills/seed-architecture/SKILL.md:154) says to PR pipeline-producers.yaml; the producer manual registers a producer by a commit to main",
+      "body": [
+        "Step 6 of the seed-architecture skill ends: 'Confirm one build archives + validates, then PR `pipeline-producers.yaml` in pvginkel/Architecture'. The producer manual's Registration section says 'One commit to `pipeline-producers.yaml` on pvginkel/Architecture's `main`', since Architecture 2d06907 (slice 034 close-out P13), and its step 6 reads 'commit to `pipeline-producers.yaml` on pvginkel/Architecture's `main`'. P7 edited the same Step 6 paragraph for ARCH-17 and left this sentence alone: registration is outside the phase's Jenkins scope. The fix is the one word: 'commit to … main' for 'PR'."
+      ],
+      "consequence": "A session seeding a producer with the skill opens a pull request for the registration where the manual has it commit to main; the registration still lands once the PR is merged.",
+      "evidence": "witnessed",
+      "author": "executor, P7, r1, Architecture .claude/skills/seed-architecture/SKILL.md:154 against .claude/architecture/producer-manual.md § Registration",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Architecture"
+      },
+      "notes": [
+        {
+          "by": "executor, P7 r1",
+          "date": "2026-10-02",
+          "text": [
+            "The sentence is at SKILL.md:155 on Architecture 525781b (phase/036-P7), whose Step 6 edit added a line above it; :154 is the line before that commit."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

@@ -814,6 +814,35 @@ Both files in `/work/Architecture` are migrated per
   file from the guide, on `architectureProducer`'s steps. This is ARCH-17's change, which was
   filed as a card at slice 035's close-out because no phase of 035 targeted Architecture.
 
+**Done (P7).** `Jenkinsfile` is `architecture-collector.groovy` and `Jenkinsfile.ha-fleet` is
+`snapshot-producer.groovy`, each as published (section markers dropped). The producer manual,
+`USAGE.md` and the seed-architecture skill describe a producer's file as its architecture type's
+reference file on `architectureProducer`'s steps (ARCH-17). Architecture `525781b` on
+`phase/036-P7`; both files pass the controller's linter; `kc project test` green.
+
+Later phases:
+- P11: neither file differs from its reference file, so there is nothing to take over. The
+  commit calls no describable and no positional `kaniko`, and the repo's docs name neither.
+- Test phase (V03): the live AaC/Architecture upstream trigger lists 78 jobs, exactly what
+  `Set triggers` computes from today's `pipeline-producers.yaml` (in order). The jobs it leaves
+  out are AaC/Architecture (self) and AaC/WebathomeOrgDeploy (`trigger: false`).
+
+Record:
+- Live `config.xml`, read-only: both jobs build `*/main` of pvginkel/Architecture, script paths
+  `Jenkinsfile` and `Jenkinsfile.ha-fleet`, so the reference headers hold as written. Both hold
+  `abortPrevious` `true` in the UI, as both files declare. HA Fleet's UI cron is `H 4 * * *`,
+  the file's. AaC/Architecture carries the scripted `properties` tracker for its triggers.
+- Behaviour kept: the same image and tags, the same WebathomeOrgDeploy pin, the same archived
+  `producer-artifacts.tgz` and `validation-report.json`. HA Fleet now archives its snapshot in
+  `Generate architecture`, before validating. AaC/Architecture copies only a last successful
+  build, so a snapshot that fails validation still never reaches it. `python:slim` is still
+  pulled `Always` (podYaml).
+- Ruling P5, beyond the plan's four: `tools/ha-fleet/README.md` (schedule in the job config,
+  `HA_URL` forwarded, validate-then-archive), `Dockerfile:90` (the `Run collector` stage, now
+  `Validate architecture`) and `.kubecoder/config.yaml:22` (`helmCharts.kaniko`, now
+  `kaniko2`). The public-repo rule keeps `pipelines.home` out: the manual names the guide as
+  JenkinsPipelineUtils' `docs/`.
+
 ### P8 — KubeCoder's build file is in line with the guide
 
 Target: root
