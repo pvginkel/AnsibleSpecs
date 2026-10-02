@@ -717,6 +717,18 @@ Record:
 - podYaml renders every new call (groovy-all 2.4.21). Pre-036 HelmCharts-deploy lines in five
   repos are left: close-out P5.
 
+Settled in review r1 (read live and in the plugin's source):
+- The controller's `jenkins-agent-large` pod template has no containers, only YAML: a required
+  nodeAffinity on `homelab.local/performance=high` and a toleration for that taint. Only `srvk8s4`
+  carries them. The template's strategy is Override, with "inherit yaml merge strategy" off.
+- The kubernetes plugin, 4557.ve746270f672f, defaults to Override and keeps only the last YAML.
+  So a declarative agent that inherits `jenkins-agent-large` with its own `yaml podYaml(...)` and
+  no `yamlMergeStrategy merge()` drops the placement.
+- Four files are P5 review r1 F1. P4's eight firmware files and the guide's firmware references
+  have the same shape: close-out B2.
+- POD-3's premise that only `kaniko` is YAML only (`docs/pages/guide/pod.md:32`) does not hold
+  for `jenkins-agent-large`.
+
 ### P6 — The single-job types are their reference files: SSEGateway, YouTrackConfiguration, Promote-PRD and DockerImages
 
 Target: root

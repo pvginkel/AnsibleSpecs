@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "The 19 image and artifact builds are faithful declarative conversions: all 23 files pass the controller's linter, and each keeps its images, pins, artifacts, triggered jobs and push. One blocking defect: the four files that inherit `jenkins-agent-large` without `yamlMergeStrategy merge()` drop that template's only content, its affinity and toleration for the high-performance node, so those builds move silently to the small nodes.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "MyDownloadsClient, MyDownloadsServer, ScanToPdfClient and HomelabTerraformProvider inherit the YAML-only jenkins-agent-large without yamlMergeStrategy merge(); under the plugin's default Override only podYaml's YAML survives, so the nodeAffinity/toleration for homelab.local/performance=high (srvk8s4) is dropped and the builds run on srvk8s1-3"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "HomelabTerraformProvider README.md:23 and :37 name the `Publish to provider registry` and `Vet and unit tests` stages that a0300c2 renamed to `Publish provider`, `Lint` and `Test`"}
+ ]}

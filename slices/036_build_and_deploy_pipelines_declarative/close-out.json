@@ -229,6 +229,61 @@
         "fix": "several-places",
         "repo": "TerraformRegistry"
       },
+      "notes": [
+        {
+          "by": "code-reviewer, P5 r1",
+          "date": "2026-10-02",
+          "text": [
+            "One more line of this class: Home .kubecoder/config.yaml:80-81 (\"job `Home`, kaniko → HelmCharts redeploy\")."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "major",
+      "headline": "JenkinsPipelineUtils guide and P4's firmware files: a declarative agent on jenkins-agent-large without yamlMergeStrategy merge() drops that template's node affinity and toleration",
+      "body": [
+        "The controller's jenkins-agent-large pod template is YAML only: a required nodeAffinity on homelab.local/performance=high and a toleration for that taint, Override, with inheritYamlMergeStrategy off. Only srvk8s4 carries the label and taint. Under the kubernetes plugin's default Override (4557.ve746270f672f: PodTemplateUtils.combine :484-486 and :511-513, Overrides.merge :20-24), a declarative agent that inherits it with its own podYaml YAML and no yamlMergeStrategy keeps only its own YAML. The build then lands on srvk8s1-3. The guide's POD-3 (docs/pages/guide/pod.md:32) names only kaniko as YAML only. docs/examples/firmware.groovy:15 and firmware-versions.groovy:14 inherit jenkins-agent-large without merge(), and so do P4's eight firmware files (e.g. /work/scratch/PaperClock/Jenkinsfile:14). The old scripted podTemplate had no YAML of its own, so the parent's was kept and the builds ran on srvk8s4. P5's four files with the same shape are review r1 F1, a fix-round item; this entry covers the rest."
+      ],
+      "consequence": "After the push, the eight ESP-IDF firmware builds run on the 3-CPU, 13 GiB nodes that carry prd workloads instead of the high-performance node, slower and competing with prd, with nothing saying so.",
+      "evidence": "witnessed",
+      "author": "| code-reviewer, P5, r1, phases/P5/code_review_r1.md (F1, outside P5)",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P6",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "HomelabTerraformProvider README.md:23 and :37 name the Publish to provider registry and Vet and unit tests stages, which P5's commit renamed",
+      "body": [
+        "Commit a0300c2 (slice 036 P5) renamed the stages to Publish provider, and split the second into Lint and Test (Jenkinsfile). The README still names the old labels. HomelabTerraformProvider is not one of the run's own targets, so the doc phase does not see it."
+      ],
+      "consequence": "none: a reader of the README finds the publish and the vet/test steps under other labels in the stage view; the README's account of what they do still holds.",
+      "evidence": "witnessed",
+      "author": "| code-reviewer, P5, r1, phases/P5/code_review_r1.md F2",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "HomelabTerraformProvider"
+      },
       "notes": [],
       "wrap_up": null,
       "strike": null,
