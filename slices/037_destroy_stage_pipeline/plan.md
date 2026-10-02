@@ -477,6 +477,34 @@ The registry and Applications carry `FieldnotesDeploy` (ArgoCDDeploy `releases/v
 So a guard that compares `REPO` case-sensitively passes such a build, even against a deployed
 stage. The build's step 3 then removes that stage's `config/<stage>/`.
 
+**Done (P5).** `Jenkinsfile.destroy-stage` is at ArgoCDTools' root: `fa32363` on `phase/037-P5`;
+the controller's declarative linter validates it, `kc project test` is green. The job
+https://jenkins.webathome.org/job/IaC/job/Destroy%20Stage/ exists (`createItem`, `<properties/>`,
+ArgoCDTools `*/main`, Script Path `Jenkinsfile.destroy-stage`) and has no builds.
+
+Later phases:
+- Test phase: once `main` carries the file, the registration build is `POST
+  …/job/IaC/job/Destroy%20Stage/build` (#1). It fails in `Check stage is undeployed` with `REPO is
+  empty: …`, before any kubectl call. Dry runs: `buildWithParameters?REPO=FieldnotesDeploy&STAGE=dev`
+  (then `STAGE=prd`); `APPLY` defaults to false.
+- Test phase: a dry run runs `Checkout`, `Check stage is undeployed`, `Plan destroy`; `Destroy
+  Terraform resources and state` and `Remove config folder` are skipped. The Job is
+  `argocd-hooks/destroy-stage-<build#>`, deleted when its stage ends; its log is in the build, then
+  `An apply removes config/dev/ from pvginkel/FieldnotesDeploy's main. …`. The prd build fails with
+  `prd of pvginkel/FieldnotesDeploy is still deployed, by the registry entry
+  apps.fieldnotes.stages.prd … and the live Application argocd-prd/fieldnotes-prd. …`.
+- P6: `REPO` is spelled as GitHub spells it; the guard refuses another case (`GitHub spells
+  pvginkel/<REPO> as <Name> …: run with REPO=<Name>`).
+
+The guard compares repo URLs case-insensitively, `.git` and a trailing `/` dropped; an Application
+counts when any source is `REPO` and any carries `hook.stage` = `STAGE`; one failure lists both
+checks' findings. Review P4 r1's gap: the GitHub API's `repos/pvginkel/<REPO>` `.name` must equal
+`REPO`. `main`'s SHA is `commits/main`; both calls take the GitHub credential (FieldnotesDeploy is
+private). A dry run names `config/<stage>/` from the contents API at that SHA, so no clone of the
+deploy repo sits outside the stage that pushes (CHK-2, CHK-3). `serviceAccount 'destroy-stage'` is
+a `kubernetes {}` field (`podYaml` takes none). `finally` deletes the Job, so an abort stops the
+run (close-out B2). Helpers exercised by hand under Groovy 2.4.21 only (close-out T3).
+
 ### P6 — The argocd runbook: destroying a retired stage
 
 Target: root
@@ -487,7 +515,10 @@ covers:
 - when the procedure applies: after the registry entry is deleted and the Application is pruned,
   the steps in § "Registering, undeploying and unregistering an app";
 - the `IaC/Destroy Stage` build: `APPLY=false` first, what its output shows, then `APPLY=true`;
-- what the guard refuses;
+  a dry run runs `Plan destroy`, an apply `Destroy Terraform resources and state` then
+  `Remove config folder` (P5's done-record);
+- what the guard refuses: a stage the registry or a live Application still deploys, and a
+  `REPO` not spelled as GitHub spells it, since TerraformState's paths are case-sensitive;
 - the namespaced objects the build forgets rather than destroys, and the Secrets a namespace that
   outlived its Application keeps (Ruling review r1 F1);
 - re-running a build that stopped halfway;

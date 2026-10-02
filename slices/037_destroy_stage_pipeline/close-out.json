@@ -280,6 +280,80 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "T3",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "ArgoCDTools Jenkinsfile.destroy-stage: no committed test pins the guard's registry and Application matching or its REPO spelling refusal",
+      "body": [
+        "The guard's helpers (repoKey, registryEntries, liveApplications) and the GitHub-spelling check are Groovy in the Jenkinsfile. The only gate a Jenkinsfile meets is the controller's declarative linter, which checks syntax. P5 exercised the helpers once by hand under Groovy 2.4.21 against the live argocd-prd Applications and the registry on main (harness at /work/scratch/p5-groovy/harness.groovy): FieldnotesDeploy prd, KeycloakDeploy dev, CephCsiRbdDeploy prd (multi-source) and ArgoCDDeploy prd are found; FieldnotesDeploy dev is not. The test phase's prd dry run covers one single-source case live. ArgoCDTools has no Groovy harness to commit this to."
+      ],
+      "consequence": "An edit that breaks the guard's matching, say for multi-source Applications, passes every gate, and a Destroy Stage build then destroys a stage that is still deployed.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-writer, P5, r1, /work/scratch/p5-groovy/harness.groovy",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "severe",
+        "signal": "silent",
+        "fix": "design",
+        "area": "plain",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "ArgoCDTools argocd-hook: a terminated hook Job kills Terraform with SIGKILL, since python3 is PID 1 and handles no SIGTERM",
+      "body": [
+        "The image's entrypoint, sync and destroy alike, is python3 as the container's PID 1 (Dockerfile:103; the destroy Job overrides only the module). presync/proc.py runs terraform through subprocess.run, and nothing in presync installs a SIGTERM handler. PID 1 ignores a signal it does not handle, so when a hook Job's pod is terminated (activeDeadlineSeconds, a deleted Job), the grace period runs out and every process gets SIGKILL. Terraform never shuts down gracefully, and an apply cut off that way leaves its state lock held and the state possibly behind what it destroyed. IaC/Destroy Stage deletes its Job when the build ends, an aborted build included, as the validation-job reference does, so a hand abort during an apply is one such termination. Read from the code, not run."
+      ],
+      "consequence": "After a destroy or sync Job is killed mid-apply, the next run of that stage likely fails on the held state lock until somebody force-unlocks it.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-writer, P5, r1, argocd-hook/presync/proc.py, argocd-hook/Dockerfile:103",
+      "labels": {
+        "trigger": "fault",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "design",
+        "area": "sensitive",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P4",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils style guide: PROP-3's table of plain disableConcurrentBuilds() jobs omits IaC/Destroy Stage",
+      "body": [
+        "docs/pages/guide/job-properties.md PROP-3 lists the jobs that declare plain disableConcurrentBuilds(), as 'Today that is these jobs; every other job declares abortPrevious: true'. IaC/Destroy Stage (ArgoCDTools Jenkinsfile.destroy-stage) declares plain disableConcurrentBuilds() and the abort marker: an apply to a live system. Its row is the 'An apply to a live system' one. docs/pages/types/index.md says every job but those it names is of one of its types; Destroy Stage, started by hand and applying through a Job, matches none of them closely."
+      ],
+      "consequence": "A reader or checker of the style guide is told IaC/Destroy Stage aborts a running build on a new one, which it does not.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-writer, P5, r1, JenkinsPipelineUtils docs/pages/guide/job-properties.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
