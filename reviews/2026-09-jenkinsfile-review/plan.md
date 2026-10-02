@@ -119,6 +119,15 @@ subagent.
   Left open after the project, by ruling: J03 (ANS-92, Later), J10 and KitchenDisplay's library
   code (ANS-93, Later), ModernAppTemplate's reconciliation with the five apps (done by an agent
   at its next sync), and the docs site's launcher tile (ANS-174).
+
+  *(10-02, later)* Items 2 and 3 are done (operator: "Please action 2 and 3 now"). J07 and Q6's
+  four globals were applied through the Script Console and verified by
+  `MyDownloads/MyDownloadsClient` #73; Q7 is Ansible `596249a`. The audit is
+  [`carry-over.md`](carry-over.md): every item has a home, and two small gaps are left for the
+  operator. **G1:** J25's stale comment and dead cache env vars in MyDownloadsClient,
+  ScanToPdfClient and MyDownloadsServer, which 036 never took up. **G3:** J20's keep-or-drop on
+  the caller-free `kubectl.waitForJob` and `readFileFromPod`. Item 1, 036's close-out tail, is the
+  operator's (ANS-187 carries the review records).
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
@@ -274,7 +283,7 @@ that day.
   (ANS-166) holds §3 (J08) and §6 (J22's self-test and the pin bump, J18, J20). Everything else
   stays unfiled in `handovers/triage_2026-09-30.md` until 033's outcome is known. *(10-02)* The
   rest was cut one slice at a time: 034, 035, 036.
-- [ ] **C** Small-changes runbook. Items too small to carry a slice's overhead do not become
+- [x] **C** Small-changes runbook. Items too small to carry a slice's overhead do not become
   slices and do not go back to ad-hoc work either: they go into one runbook in this folder
   (`small-changes.md`), each with its exact steps, its verification and its undo, run **before**
   the slices. Triage decides what is small; the candidates the review sees:
@@ -295,10 +304,12 @@ that day.
 
   Everything in the runbook keeps the standing rules: a push, a Replay and a Jenkins API write
   each need the operator's OK. *(10-02)* What is left of it: J07, Q7 and Q6's four globals (the
-  pin bump went into 033, §6a into 034). See "What is left" at the top.
-- [ ] **op** Rule on the slice cut and on the runbook's contents *(10-02: the cut was ruled slice
-  by slice; the runbook is still open)*
-- [ ] **C** Carry-over check, after triage *(10-02: now the closing audit, after 036)*: every accepted item and side ask of `report.md`
+  pin bump went into 033, §6a into 034). See "What is left" at the top. *(10-02)* Done
+  directly, without a runbook file: `carry-over.md` §4 has the steps, verification and undo.
+- [x] **op** Rule on the slice cut and on the runbook's contents *(10-02: the cut was ruled slice
+  by slice; the runbook items were given a go on 10-02)*
+- [x] **C** Carry-over check, after triage *(10-02: now the closing audit, after 036; result in
+  [`carry-over.md`](carry-over.md))*: every accepted item and side ask of `report.md`
   traced to exactly one slice, to the runbook, or to a stated reason for leaving it out. A
   completeness check, not a second opinion on the slices. What it looks for in particular:
   - the operator's modifications — J14's IDF version per repo, J08 as a KubeCoder-only trial
@@ -430,17 +441,18 @@ next Jenkinsfile.
 - [x] **C** J20 — remove the dead library code (needs J09 and §6's self-test). The
   KitchenDisplay-only code (`ssh`/`scp`/`rsync`, `containerTemplates.rsync` and `dockbuild`,
   `gitUtils.groovy`) stays until ANS-93 is worked. *(09-30)* Slice 033.
-- [ ] **C** Q6 — delete the dead global env vars (`ELASTICSEARCH_CLUSTER_URL`,
+- [x] **C** Q6 — delete the dead global env vars (`ELASTICSEARCH_CLUSTER_URL`,
   `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`, `ANDROID_HOME`; all nine still set on 09-30) after saving the global
   config; verify with one `MyDownloads/MyDownloadsClient` build (`ANDROID_HOME` comes from the
   `android-35` image). The IoTSupport `KEYCLOAK_*` four go after §9 inlines them. `HA_URL` stays
   global (ruled): endpoints do not go into OpenBao, and Architecture is public, so it cannot be
   inlined either. *(10-02)* The IoTSupport four are deleted (slice 036, after #151 built green);
-  the four dead ones are still open.
-- [ ] **C** J07 — built-in node executors 2 → 0 (API; J04 was its other home and is rejected).
-  Verify with one pod build and one `IaC/Build-Main`.
-- [ ] **C** Q7 — the container cap of 3 is deliberate: say so in
-  `/work/Ansible/docs/live-infra-access.md`, with what it means for a mass push.
+  the four dead ones were deleted on 10-02 (`carry-over.md` §4).
+- [x] **C** J07 — built-in node executors 2 → 0 (API; J04 was its other home and is rejected).
+  Verify with one pod build and one `IaC/Build-Main`. *(10-02)* Done; `carry-over.md` §4.
+- [x] **C** Q7 — the container cap of 3 is deliberate: say so in
+  `/work/Ansible/docs/live-infra-access.md`, with what it means for a mass push. *(10-02)* Ansible
+  `596249a`.
 - ~~**C** Q4 — trivy warning de-duplication in `DockerImages/Jenkinsfile` through a
   `trivy-state.json` carried forward in the job's own artifacts; a warning only for CVE ids
   that are new for that image. Early: the operator already reads the warnings as noise.~~
