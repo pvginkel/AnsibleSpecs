@@ -662,6 +662,52 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A6",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the scratch clone /work/scratch/YouTrackConfiguration once the slice is done",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/YouTrackConfiguration` for `Target: github:pvginkel/YouTrackConfiguration`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.",
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P12",
+      "kind": "prose",
+      "grade": "cosmetic",
+      "headline": "YouTrackConfiguration youtrack.yaml: XF's colour entry names no project; the run could not read XF's name",
+      "body": [
+        "P13 added colours for AU (#494B57, Automation), IS (#7BCCCF, IoTSupport) and XF (#893E13). Every other entry's comment names its project. XF's name is in no file the run could read (the specs repo, the scratch clones, gitblit), and this environment holds no token YouTrack's REST API accepts, so XF's comment reads only 'added after the Triage import; picked here'. The fix is XF's project name added to that comment (youtrack.yaml:31). The three colours are also the run's own picks from the palette's unused ones."
+      ],
+      "consequence": "none: a reader of youtrack.yaml cannot tell from the file which project XF is; its colour applies the same either way.",
+      "evidence": "witnessed",
+      "author": "code-writer, P13, r1; YouTrackConfiguration 23cb808 on phase/036-P13",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "YouTrackConfiguration"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

@@ -1161,6 +1161,25 @@ same way). V18 needs every build the push started SUCCESS.
 - The repo's own lint/tests pass (`uv run ytconfig` validation as the Jenkinsfile's lint stage runs it).
 - The push of this commit starts YouTrack/YouTrackConfiguration; the test phase reads that build.
 
+**Done (P13).** `youtrack.yaml`'s `colors:` has AU, IS and XF, in key order and in the file's
+form. YouTrackConfiguration `23cb808` on `phase/036-P13`. `kc project test` and `kc project lint`
+are green, and an offline load of the file finds all 22 colours on the palette with none repeated.
+
+Later phases:
+- Test phase: YouTrackConfiguration's push carries `23cb808` (one commit on top of P6's
+  `c878458`). Its build is the only check against the live instance: no YouTrack token reaches this
+  environment, so `ytconfig validate`/`plan` did not run here. With `check` past, the apply goes
+  on to plan webhooks for every project, AU, IS and XF included. `webhooks: all:` gives each of
+  them the fieldnotes hook URLs, which the job writes with its webhook token. If the
+  webhook-triggers app is not attached to one of the three, the build fails on `The … app has no
+  configuration for <key>` (`sync.plan_webhooks`). Attaching the app is a step in YouTrack, not
+  in this repo.
+
+Record:
+- Colours, each from the palette's unused backgrounds: AU `#494B57` (Automation), IS `#7BCCCF`
+  (IoTSupport), XF `#893E13`. XF's name could not be read here, so its comment names no project
+  (close-out P12).
+
 ### P14 — ElectronicsInventory's build passes its validation: the "Role gating — editor role" Playwright case
 
 Target: github:pvginkel/ElectronicsInventory
