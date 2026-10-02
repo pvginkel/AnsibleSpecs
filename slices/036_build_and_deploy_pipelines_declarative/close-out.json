@@ -389,6 +389,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P10",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Ansible runbooks name two iac stage labels that P9's commit renamed: iac-agent.md:62 (Building iac image) and step-ca-root-rotation.md:36 (Homelab CA root drift)",
+      "body": [
+        "P9 brought the seven Jenkinsfile.iac-* files to the guide's labels. docs/runbooks/iac-agent.md:62 says a push that changes nothing the image builds from reports the `Building iac image` stage as skipped; the stage is now `Build iac image`, skipped by its `when {}`. docs/runbooks/step-ca-root-rotation.md:36 names the `Homelab CA root drift` stage of Jenkinsfile.iac-scheduled-drift; it is now `Check homelab CA root drift`. No other doc in the repo quotes a renamed iac label. Left for the doc phase, which sees Ansible's diff (rule 3)."
+      ],
+      "consequence": "none: a reader of either runbook finds the stage under its new label in the stage view; what each runbook says the stage does still holds.",
+      "evidence": "witnessed",
+      "author": "executor, P9, r1, Ansible commit 90d69a0",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "several-places",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

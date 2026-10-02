@@ -917,6 +917,39 @@ Seven files in this repo are migrated per
 - Only the push starts IaC/Build-Main. Nobody in the run starts any other iac job (Ordering
   constraints).
 
+**Done (P9).** The seven `Jenkinsfile.iac-*` files are declarative files to the guide. Scheduled
+Calico Rollout is `iac-controller.groovy` and IaC Docker Image is `change-detection.groovy`, each
+as published (section markers dropped). The other five follow the iac-controller reference. All
+seven pass the controller's linter. Ansible `90d69a0` on `phase/036-P9`; `kc project test
+--project root` green.
+
+Later phases:
+- P11: neither reference job's file differs from its reference file. LABEL-3's iac examples
+  `Apply site-k8s (k8s dev)` and `Check drift (k8s prd)` name no stage in the files, which use
+  `Apply site-k8s and site-ceph (srvk8sdev)` and `Check Ansible drift (k8s prd)`.
+- Test phase: the push builds only IaC/Build-Main (now `Checkout`, `Lint`, `Validate Terraform`,
+  `Plan Terraform and check destroys (prd)`) and IaC/IaC Docker Image. The other five iac jobs
+  run their new files only on their own next run (V24, V25), so the closing diff shows their
+  `config.xml` as it was before the push.
+
+Record:
+- Every file has `disableConcurrentBuilds()`, `skipDefaultCheckout()`, `timeout` (4 hours, or
+  60 minutes for the image build), `timestamps()`, a `Checkout` stage and the abort marker. None
+  declares `buildDiscarder`. Each options block has the PROP-3 comment naming why it is plain.
+  For Build-Main and Drift, that reason is the abort marker.
+- The triggers are as before: `githubPush()` on Build-Main and the image build, cron
+  `H 4 * * 3`/`0`/`5` and `H 11 * * *` on the scheduled jobs (as the live jobs hold), none on
+  Apply. The `Controller config:` blocks name the live job paths and drop the trigger lines.
+- Dev stages follow POST-2: `notify.warning(message)` then `unstable(message)`. The
+  `DEV_STAGE_FAILED` flag and the `post { unstable }` blocks are gone. The texts of Calico's,
+  Update's and Apply's warnings now carry the exit code. Drift's two dev warnings now open with
+  the unstable message (`dev k8s/ceph drift check reported changes or failed on srvk8sdev (exit
+  N)`) above the same drift entry.
+- Apply's dev stage stays one stage with site-k8s and site-ceph in one `iac` call. Split, site-ceph
+  would run after a failed site-k8s on srvk8sdev, which it does not today.
+- Drift's `prdCheck`/`recordDrift` stage names follow the new labels, so the build description
+  and the warnings name the stage as the stage view does.
+
 ### P10 — The pipelines skill says how to treat a file that predates the guide
 
 Target: github:pvginkel/KubeCoderConfig
