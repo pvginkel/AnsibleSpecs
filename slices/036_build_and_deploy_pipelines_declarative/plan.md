@@ -143,6 +143,12 @@ quotes of each; the core of each is carried here.
   removes — `NewsFilter/README.md:116` and `DHCPApp/docs/slice-test-plan.md:15`
   (`helmCharts.kaniko(...)`) — in the same commit; `Home/docs/plan.md` is a plan record and is
   left as written.
+- **Ruling R1 (2026-10-02, run bail P14), operator: "Gate on Jenkins".** — to: P14's target,
+  ElectronicsInventory, has no local test gate in this environment: its `kc project test` needs
+  s3storage on localhost:9000, and the Ansible environment runs no such service. Its gate is
+  ElectronicsInventory's Jenkins build that the push starts. The code reviewer reviews the fix, and
+  the test phase must see that build finish SUCCESS, including the image builds and `Write image
+  pins`, as V18 already requires.
 
 #### Settled by the session (refinement.md § Settled)
 
@@ -339,6 +345,7 @@ library-step pattern (the five apps' validation Job) that the guide gains a type
 - prd root — the one-go push of every repo the slice touches rolls prd apps through the pin writers, KubeCoder's dev, and re-flashes the firmware devices (Ruling P1)
 - prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)
 - prd ../Architecture — its push pins `architecture_viewer` into WebathomeOrgDeploy, a prd roll (Ruling P1)
+- gate github:pvginkel/ElectronicsInventory — the push's ElectronicsInventory Jenkins build, SUCCESS through the image builds and pin write — `kc project test` needs s3storage on localhost:9000, which this environment lacks (Ruling R1)
 
 ### P1 — podYaml has the python, helm and iac-toolchain sidecars, and refuses a null env value and a container name Kubernetes would refuse ✅ DONE 2026-10-02
 
