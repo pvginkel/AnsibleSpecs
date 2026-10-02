@@ -546,6 +546,8 @@ Later phases:
 - Test phase (V19): the section is `#destroying-a-retired-stage`; "until D28 is designed" is gone.
 - Doc phase: the runbook section is written; it quotes the log lines of P4's `destroy.py` and P5's
   Jenkinsfile verbatim, so a reworded message there needs the same edit here.
+- Doc phase (review P6 r1): `docs/runbooks/kubecoder-cutover.md:988` still cites D28 ("nothing
+  prunes a state"); the states it names are `helm-charts/…`, which Destroy Stage does not reach.
 
 Record:
 - A failed plan is diagnosed from Terraform's error above the last `presync:` line, never from

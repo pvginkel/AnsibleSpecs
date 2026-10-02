@@ -457,6 +457,78 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P5",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ansible argocd runbook: § The webhook restores the surviving stage's hook by a push to the branch it tracks, which for KubeCoderDeploy prd breaks promotion",
+      "body": [
+        "docs/runbooks/argocd.md:577-580 says to set manage_webhook = true in the surviving stage's tfvars 'after the destroy, on the branch it tracks, push'. The case it names is KubeCoderDeploy prd, which tracks the prd branch (ArgoCDDeploy releases/values.yaml:172-174). argo-cd D35 (decisions.md:594) says prd never carries a commit main doesn't, and KubeCoderDeploy's promote job refuses a move that is not a fast-forward (README.md:30-33) and has no force-move (D47). Unreachable today: KubeCoderDeploy's destroy fails at the plan (I2)."
+      ],
+      "consequence": "Once KubeCoderDeploy's stages can be destroyed (I2), an operator who restores prd's webhook as the runbook says commits straight to the prd branch, and KubeCoder's promote job then refuses every promotion until prd is reconciled by hand.",
+      "proposal": "fix now — say the edit lands on main and reaches a stage that tracks another branch through its promotion (D35); one sentence in the runbook.",
+      "evidence": "read",
+      "author": "code-reviewer, P6, r1, phases/P6/code_review_r1.md F1",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P6",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ansible argocd runbook: § A build that fails at the plan says nothing is written, but an apply has already state-rm'd the namespaced objects",
+      "body": [
+        "docs/runbooks/argocd.md:553-554: a root that needs more 'fails the Job at init or plan, before anything is written'. On an apply, presync/destroy.py:143-145 runs terraform state rm on the namespaced objects against the stored state before the plan at :149, and the runbook's own apply log list (:455-456) shows that order. True for a dry run only."
+      ],
+      "consequence": "An operator whose APPLY=true build fails at the plan reads that nothing was written, while the stage's namespaced objects are already gone from its stored state; the re-run that follows is unaffected.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-reviewer, P6, r1, phases/P6/code_review_r1.md F2",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P7",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Ansible argocd runbook: the undeploy paragraph's 'what stays' no longer names a hand-made webhook",
+      "body": [
+        "docs/runbooks/argocd.md:391-396 defines what stays after an undeploy as 'what the stage's Terraform made' and lists 'the deploy repo's GitHub webhook if the stage manages it'; the old text named the webhook unconditionally. A repo whose hook was made by hand (§ Webhooks) keeps it after an unregister, unnamed. The same sentence takes in the stage's namespaced Terraform objects, which go with the namespace (§ What the build forgets)."
+      ],
+      "consequence": "An operator who unregisters an app whose webhook was made by hand is not told the hook stays on the deploy repo, where it keeps sending pushes to the relay for a repo nothing deploys.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-reviewer, P6, r1, phases/P6/code_review_r1.md F3",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

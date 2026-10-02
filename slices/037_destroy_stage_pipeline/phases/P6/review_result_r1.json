@@ -1,0 +1,13 @@
+{
+  "outcome": "signoff",
+  "summary": "The runbook section meets P6's outcome and V19: every quoted log line, stage name, anchor and KubeCoderDeploy claim matches ArgoCDTools main. Three advisory prose findings: the webhook remedy would commit to KubeCoderDeploy's prd branch against D35 (reachable only after I2); an apply that fails at the plan has already state-rm'd; the undeploy inventory omits a hand-made webhook.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+     "summary": "§ The webhook's remedy ('on the branch it tracks, push') commits to KubeCoderDeploy's prd branch, which D35 forbids and the promote job then refuses as non-fast-forward; unreachable until I2"},
+    {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+     "summary": "§ A build that fails at the plan says 'before anything is written', but an apply state-rm's the namespaced objects before the plan (destroy.py:143-149)"},
+    {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+     "summary": "Undeploy paragraph's 'what stays' no longer names a hand-made webhook, and takes in namespaced Terraform objects that go with the namespace"}
+  ]
+}
