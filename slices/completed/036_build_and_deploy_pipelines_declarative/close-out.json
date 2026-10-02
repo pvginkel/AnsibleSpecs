@@ -103,10 +103,15 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "ran KubeCoder/Promote-PRD #12 on the migrated Jenkinsfile.promote: SUCCESS, release-12 at 60c601bb; V23 settled, 2026-10-02",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
       "ruling": {
         "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
-        "did": null,
+        "did": "ran KubeCoder/Promote-PRD #12 on the migrated Jenkinsfile.promote: SUCCESS, release-12 at 60c601bb; V23 settled, 2026-10-02",
         "date": "2026-10-02"
       }
     },
@@ -128,7 +133,15 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "IaC/Apply #5 (2026-10-02, on 9b9e339) ran the migrated file: Apply Terraform (prd) green with no changes, Apply site green, Apply site-openbao failed on srvvault1 only ('Failed to update apt cache after 5 retries'), so site-k8s (prd) and site-k8s/site-ceph (srvk8sdev) were skipped. Cause is on the host, not the file: srvvault1 has had no working DNS stub since the 2026-10-01 06:32 unattended systemd upgrade, because the old systemd-resolved (pid 548) and systemd-udevd have been stuck in D state in kvm_async_pf_task_wait_schedule since boot (2026-09-25) and still hold 127.0.0.53:53. Needs a reboot of srvvault1; V24 is not settled until a run after it."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": {
@@ -155,7 +168,22 @@
         "impact": "unknown",
         "signal": "unknown"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "2026-10-02: Scheduled Drift #124 (cron, on 90d69a0) green on the migrated file; AaC/Home Assistant Fleet #123 (manual) green. Scheduled Certs #17 (manual, on 9b9e339) ran all four stages of the migrated file but failed on srvvault1's apt cache, the same host fault as A3 (also failed #16 this morning, before the migration). Calico and Update pending."
+          ]
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "IaC/Scheduled Calico Rollout #16 (manual, on 9b9e339) green, both stages. Left: Certs (blocked on srvvault1, see A3) and Update (Sunday cron)."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": {

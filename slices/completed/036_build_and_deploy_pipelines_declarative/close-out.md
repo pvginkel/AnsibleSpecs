@@ -9,24 +9,13 @@ test rounds · doc phase done · wrap-up landed · $102.40 (planner 18 %, resear
 
 ## Comes to you
 
-### A2 — Settle V23 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …
-
-V23 — KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.
-
-`verification.json` marks V23 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which no role in the run starts. The run cannot take that action; settle the criterion once it has happened.
-
-**Consequence:** V23 stays unproven until then; the test phase does not settle it.
-
-**Triage:** action · trigger unknown · impact unknown · signal unknown
-**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
-**Route:** to you — an action
-**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results.
-
 ### A3 — Settle V24 after the operator's next IaC/Apply run
 
 V24 — IaC/Apply runs the migrated `Ansible/Jenkinsfile.iac-apply` green. The job is hand-started and converges real infrastructure, so only the operator starts it.
 
 `verification.json` marks V24 owed after: the operator's next IaC/Apply run. The run cannot take that action; settle the criterion once it has happened.
+
+close-out session, 2026-10-02 — IaC/Apply #5 (2026-10-02, on 9b9e339) ran the migrated file: Apply Terraform (prd) green with no changes, Apply site green, Apply site-openbao failed on srvvault1 only ('Failed to update apt cache after 5 retries'), so site-k8s (prd) and site-k8s/site-ceph (srvk8sdev) were skipped. Cause is on the host, not the file: srvvault1 has had no working DNS stub since the 2026-10-01 06:32 unattended systemd upgrade, because the old systemd-resolved (pid 548) and systemd-udevd have been stuck in D state in kvm_async_pf_task_wait_schedule since boot (2026-09-25) and still hold 127.0.0.53:53. Needs a reboot of srvvault1; V24 is not settled until a run after it.
 
 **Consequence:** V24 stays unproven until then; the test phase does not settle it.
 
@@ -40,6 +29,10 @@ V24 — IaC/Apply runs the migrated `Ansible/Jenkinsfile.iac-apply` green. The j
 V25 — IaC/Scheduled Calico Rollout, IaC/Scheduled Certs, IaC/Scheduled Drift, IaC/Scheduled Update and AaC/Home Assistant Fleet each run their migrated file green on their next cron. The push starts none of them.
 
 `verification.json` marks V25 owed after: each job's next scheduled run. The run cannot take that action; settle the criterion once it has happened.
+
+close-out session, 2026-10-02 — 2026-10-02: Scheduled Drift #124 (cron, on 90d69a0) green on the migrated file; AaC/Home Assistant Fleet #123 (manual) green. Scheduled Certs #17 (manual, on 9b9e339) ran all four stages of the migrated file but failed on srvvault1's apt cache, the same host fault as A3 (also failed #16 this morning, before the migration). Calico and Update pending.
+
+close-out session, 2026-10-02 — IaC/Scheduled Calico Rollout #16 (manual, on 9b9e339) green, both stages. Left: Certs (blocked on srvvault1, see A3) and Update (Sunday cron).
 
 **Consequence:** V25 stays unproven until then; the test phase does not settle it.
 
@@ -329,6 +322,22 @@ close-out session, 2026-10-02 — Checked 2026-10-02: P7 is on Architecture orig
 **Triage:** action · shows in normal use · degrades · silent · fix is one edit · in Architecture
 **Provenance:** read — plan-writer r2, planning; plan.md P7 and Ruling P5, slices/completed/035_architecture_producers_declarative/close-out.md P2
 **Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results. — ARCH-17 closed as Done/Resolved, citing Architecture 525781b (036 P7), 2026-10-02
+
+</details>
+
+### ~~A2 — Settle V23 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …~~ — ran KubeCoder/Promote-PRD #12 on the migrated Jenkinsfile.promote: SUCCESS, release-12 at 60c601bb; V23 settled, 2026-10-02; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+V23 — KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.
+
+`verification.json` marks V23 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which no role in the run starts. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V23 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results. — ran KubeCoder/Promote-PRD #12 on the migrated Jenkinsfile.promote: SUCCESS, release-12 at 60c601bb; V23 settled, 2026-10-02
 
 </details>
 

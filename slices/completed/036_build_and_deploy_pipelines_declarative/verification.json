@@ -225,10 +225,11 @@
       "area": "Promote-PRD on its migrated file",
       "description": "KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.",
       "owed_after": "the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which no role in the run starts",
-      "verdict": "owed",
-      "rationale": "Run settles after the operator next runs KubeCoder/Promote-PRD (no post-push build).",
+      "verdict": "pass",
+      "rationale": "KubeCoder/Promote-PRD #12 (2026-10-02, close-out A2) ran the migrated Jenkinsfile.promote from main: SUCCESS, release-12 at 60c601bb.",
       "evidence": [
-        "Run settles after the operator next runs KubeCoder/Promote-PRD (no post-push build)."
+        "Run settles after the operator next runs KubeCoder/Promote-PRD (no post-push build).",
+        "KubeCoder/Promote-PRD #12 (2026-10-02, close-out A2) ran the migrated Jenkinsfile.promote from main: SUCCESS, release-12 at 60c601bb."
       ]
     },
     {
