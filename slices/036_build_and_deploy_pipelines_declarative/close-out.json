@@ -288,6 +288,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P7",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "KubeCoder docs/operations/deploy-operations.md:150 names Promote-PRD's Recording the release stage, which P6's commit renamed Tag release",
+      "body": [
+        "Commit c9dfe03 (slice 036 P6) gave KubeCoderDeploy/Jenkinsfile.promote the promotion reference's stages: Checkout, Validate commit, Retag images, Advance prd, Tag release. KubeCoder's deploy-operations.md:150 still says a run that fails at *Recording the release* has already moved prd. KubeCoder is not one of the run's own targets, so the doc phase does not see it; P8 commits to the same /work/scratch/KubeCoder clone. Ansible's docs/runbooks/kubecoder-cutover.md:780-784 names *Advancing prd*, *Recording the release* and *Resolving the commit* in the same way; Ansible is a run target, so that one is the doc phase's."
+      ],
+      "consequence": "none: a reader of the runbook finds the last stage under the label Tag release in the stage view; what the runbook says happens there still holds.",
+      "evidence": "witnessed",
+      "author": "| code-reviewer, P6, r1, phases/P6/code_review_r1.md F1",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "KubeCoder"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

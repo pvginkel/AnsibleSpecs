@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "The four single-job files (DockerImages, YouTrackConfiguration, Promote-PRD, SSEGateway) are their type's reference files, each one unpushed commit on main and in the ledger. All four pass the controller's linter, and each keeps its live job's effects. One advisory prose finding: two docs name Promote-PRD's old stage names.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "KubeCoder deploy-operations.md:150 and Ansible kubecoder-cutover.md:780-784 name Promote-PRD's old stage names (Recording the release, Advancing prd, Resolving the commit)"}
+ ]}
