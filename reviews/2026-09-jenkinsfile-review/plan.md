@@ -128,6 +128,10 @@ subagent.
   ScanToPdfClient and MyDownloadsServer, which 036 never took up. **G3:** J20's keep-or-drop on
   the caller-free `kubectl.waitForJob` and `readFileFromPod`. Item 1, 036's close-out tail, is the
   operator's (ANS-187 carries the review records).
+
+  *(10-02, evening)* G1 and G3 fixed and pushed on the operator's "Fix now"; every build they
+  started is green (`carry-over.md` §1). Nothing of the review is open beyond 036's close-out tail
+  and the items left open by ruling.
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still

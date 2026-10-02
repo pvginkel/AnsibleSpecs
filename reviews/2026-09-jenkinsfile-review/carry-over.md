@@ -35,6 +35,12 @@ None of these loses an operator ruling. Each is a thing the report asked for tha
   for "J25", "GRADLE_USER_HOME", "30.0.3": no hits). `inventory.md:421` and `:510` list both items
   as J25 work.
 - Suggested home: the small-changes list (two comment lines, three env lines, three repos).
+- *Fixed 2026-10-02 (operator: "Fix now").* MyDownloadsClient `4057912` and ScanToPdfClient
+  `987f158` drop the comment and `GRADLE_USER_HOME` (both apps target SDK 35, which the image
+  carries; the container is root, so Gradle's default home is writable). MyDownloadsServer
+  `e943ed8` drops `MAVEN_CONFIG`, which `mvn` never reads (`-Duser.home` places the cache). Built
+  green from the push: MyDownloadsClient #74, ScanToPdfClient #55, MyDownloadsServer #37, and
+  downstream MyDownloads #115, ScanToPdf #45, Webathome #249.
 
 **G2. Q5's install line was not carried into `modernApp`.**
 
@@ -61,6 +67,9 @@ None of these loses an operator ruling. Each is a thing the report asked for tha
   which does not mention either method. Both are still caller-free (`/work/JenkinsPipelineUtils/vars/kubectl.groovy:38`
   and `:281`; no call site in `vars/*.groovy`).
 - Suggested home: a one-line decision in the small-changes list (keep, with a reason, or delete).
+- *Fixed 2026-10-02 (operator: "Fix now").* JenkinsPipelineUtils `5643c70` deletes both, with
+  their rows in `vars/kubectl.md`; no caller in any gitblit repo or scratch clone. `kc project
+  lint` and `test` green; IaC/JenkinsPipelineUtils #8 SUCCESS, pipelines-prd Synced and Healthy.
 
 **Record inconsistencies (not delivery gaps)**
 
@@ -211,7 +220,7 @@ Run on the operator's go ("Please action 2 and 3 now"). Before-state saved in
 - **Q7** done: Ansible `596249a`, a paragraph in `docs/live-infra-access.md` (the cap is deliberate,
   and what it means for a mass push). Not pushed yet.
 
-Still open from section 1: G1 (J25 residue) and G3 (J20 leftover), both for the operator.
+G1 (J25 residue) and G3 (J20 leftover) from section 1 were fixed the same day; see there.
 
 ## 5. Left open by ruling (not gaps)
 
