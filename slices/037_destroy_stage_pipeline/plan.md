@@ -322,7 +322,7 @@ Record:
   (apiGroup, resource, verb) set must equal the pinned one. No binding may reach
   `jenkins-prd/default` by ServiceAccount, user or group. Eight mutations turned it red.
 
-### P4 — The argocd-hook image's destroy mode
+### P4 — The argocd-hook image's destroy mode ✅ DONE 2026-10-02
 
 Target: ../ArgoCDTools
 
