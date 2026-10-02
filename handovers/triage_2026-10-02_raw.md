@@ -522,3 +522,45 @@ To decide:
 Comment 1/1 · 7-5135 · jeeves · 2026-09-27 01:01Z
 
 Card pass 2026-09-27: outside the lane — the ask is decided: it is a list of decisions (availability, break-glass credentials, cold-start chain) that touch secrets and cluster objects.
+
+## ANS-147 — chat discussion, 2026-10-02 (a separate triage run, scoped to ANS-147 alone)
+
+Operator, verbatim:
+
+> Can you give me a proper design for ANS-147? If I'm not mistaken, the RBD resource was just removed from the TF template. Yes or no? Is it now hanging? How does this work?
+
+Session findings given in answer (session-authored, checked live 2026-10-02):
+
+- FieldnotesDeploy `c592e49` (2026-09-30, "destroy the old RBD volume fieldnotes-prd-data") removed `module "data"` from `terraform/main.tf`, which both stages share. prd's PreSync hook applied it: `fieldnotes-prd-data-pv` is gone, `tf-presync-fieldnotes-prd` Complete.
+- dev is orphaned, not stuck: `argocd/FieldnotesDeploy/dev/terraform.tfstate` (8120 bytes) still exists in TerraformState; `fieldnotes-dev-data-pv` is `Released`; no dev Application, no `fieldnotes-dev` namespace. Nothing will apply dev again.
+- `prevent_destroy` is config-side, so removing the module block lifted it. A plain apply against dev now would also create a dev `cache` volume (that module is in config).
+- The srviac `iac` container holds the TerraformState age key but not the deploy repos' provider credentials (Ceph, prd kube, Postgres/Keycloak admin); those live only in `argocd-hook-credentials` (argocd-hooks). `tf-presync`'s ClusterRole has `delete` on persistentvolumes. JenkinsPipelineUtils' `kubectl` var runs and follows a Job from a pipeline; the Jenkins agent SA (`jenkins-prd/default`) holds Role `jenkins-agent-jobs` (jobs create/delete, pods/log get, pods/exec) in `jenkins-prd` only.
+
+Operator, verbatim:
+
+> I am looking for a permanent fix, but I would accept e.g. running a script in the ArgoCDTools repo against maybe a *Deploy repo; not sure. Why do I say this? What you're describing isn't just a job. It's a few actions that all need to be done. What I'm looking for is some way of saying: I want the dangling resource for this *Deploy repo permanently deleted, as one script. I would even accept something like a Jenkins pipeline taking a repo. You know? I'm thinking that actually has my preference. That has access to the iac agent so it must be possible to implement this in some way.
+
+Session's proposed design in answer (session-authored, verbatim):
+
+> **Design: `Destroy Stage` pipeline, parameters `REPO` and `STAGE`**
+>
+> 1. **Guard.** Fail if an Argo Application still deploys this repo and stage, or if its namespace still exists. A live stage can't be destroyed by mistake.
+> 2. **Plan.** Start a hook Job running `presync destroy --plan <repo> <main-sha> <stage>`. It clones, starts the backend and inits, the same as a sync. It then plans the destroy against **a configuration with no resources in it**: only the deploy repo's `providers.tf`. That makes every resource in the state an orphan, so `prevent_destroy` no longer blocks it. This is the deliberate override that retiring a stage needs. It doesn't depend on someone first removing modules from `main.tf`, which a live prd stage may still need. The build shows the list of resources to destroy.
+> 3. **Approve.** A Jenkins `input` step showing that list. It's the only manual step.
+> 4. **Destroy.** A second Job runs `presync destroy --approve` with the approved resource list. It plans again, fails if the plan differs from the list, and otherwise applies.
+> 5. **Delete the state.** The same Job checks that the state is now empty, then `git rm`s `argocd/<repo>/<stage>/` in TerraformState. The hook's token already pushes there.
+> 6. **Remove the stage's config.** Jenkins commits `git rm -r config/<stage>` to the deploy repo.
+>
+> For ANS-147 that's one build: `REPO=FieldnotesDeploy STAGE=dev`, plus your approval. It should show exactly the image and the PV.
+>
+> **What changes where:** ArgoCDTools: the hook gets a `destroy` mode, and the pipeline goes in as `Jenkinsfile.destroy-stage`. ArgoCDDeploy: the Role/RoleBinding for the Jenkins agent. AnsibleSpecs: D28 gets this as its design. Argo runbook: a section on the pipeline.
+>
+> This only covers a stage being retired. A resource dropped from a live stage's config is already destroyed by that stage's next sync, as prd's RBD image just was.
+>
+> **Open questions for plan-slice:** Should the Job wait inside one pod for the approval, so a saved plan is applied? Or keep two Jobs that compare resource lists, as above? I lean towards two Jobs. Should the guard read Argo Applications? That needs a read grant on `argocd-prd`. The alternative is only checking that the namespace is gone.
+
+Operator, verbatim:
+
+> And please give it an APPLY parameter.
+>
+> Yes, send this to triage please.
