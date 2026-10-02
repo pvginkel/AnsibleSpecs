@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "Fixed six prose entries, one commit each: P1, P3 and P8 in ArgoCDTools, P5, P6 and P7 in the Ansible argocd runbook. Checked the closing triggers of T2 and B2, which hold, and left both. Noted what the code shows under the operator's risks B1 and T3, adding a card proposal to T3, whose author gave none.",
+ "fixed": ["P1", "P3", "P5", "P6", "P7", "P8"], "folded": [], "cards": [], "left": ["T2", "B2", "B1", "T3"],
+ "relabelled": []}
