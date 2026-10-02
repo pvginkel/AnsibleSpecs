@@ -40,9 +40,18 @@ Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handov
 
 
 
-Triaged 2026-10-02 from ANS-147 (the record: `handovers/triage_2026-10-02_raw.md`, open — the rest of the ANS queue is still being triaged):
+Triaged 2026-10-02 from ANS-147 (the record: `handovers/triage_2026-10-02_raw.md` at `c5f3cbd`):
 
 - **037** — Destroy Stage pipeline: a Jenkins pipeline (`REPO`, `STAGE`, `APPLY`, dry run by default) that permanently destroys a retired deploy-repo stage's Terraform resources and state through the argocd-hook image, FieldnotesDeploy `dev` first
+
+Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026-10-02_raw.md` at `c5f3cbd`):
+
+- **038** — Argo CD render gate and Terraform-only pushes: the readonly-account gate refuses a widened `role:readonly`, and a FieldnotesDeploy push touching only `terraform/` reaches `terraform apply`
+- **039** — Cold boot: Keycloak and charts.home: Keycloak availability, break-glass and cold-start chain; the vendored homelab-shared tarballs reverted for a documented by-hand charts.home bootstrap
+- **040** — Alerting and log access: alerts for the 2026-09-25 failure modes, an out-of-cluster dead-man's switch, and a read-only `filebeat-*` Elasticsearch user in OpenBao
+- **041** — aac-tools validation and container wires: type errors show the source line, generated YAML quotes number-like strings, and an `upstream:` wire can be scoped per container
+- **042** — HelmCharts leftovers: KitchenDisplay's deploy key becomes a Jenkins SSH credential, and the openbao role's unconditional writes report changed honestly
+- **043** — Gitblit idle CPU: find what `gitblit-app` spends 0.5–0.8 core on while idle and bring it to near-idle
 
 ## Completed
 
