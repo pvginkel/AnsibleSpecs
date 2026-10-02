@@ -786,7 +786,7 @@ Record:
 - Ruling P5: SSEGateway's `.kubecoder/project.yaml:11` now names `helmCharts.kaniko2(...)`. The
   other three repos name no describable and no positional kaniko.
 
-### P7 — The architecture collector and the Home Assistant Fleet producer are declarative files, and the producer docs describe the guide's form
+### P7 — The architecture collector and the Home Assistant Fleet producer are declarative files, and the producer docs describe the guide's form ✅ DONE 2026-10-02
 
 Target: ../Architecture
 
