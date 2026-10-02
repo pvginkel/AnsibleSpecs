@@ -525,8 +525,8 @@ Constraints:
 **Done (P3).** `vars/modernApp` has `test`, with its page and `ModernAppTest`. The guide has the
 `Modern app build` type (`types/modern-app.md`, reference `docs/examples/modern-app.groovy`, from
 ElectronicsInventory), its types-index row, the J15 row, SEC-1's exception and the validation-Job
-page's "No helper" bullet on it. JenkinsPipelineUtils `02989a1` on `phase/036-P3`; `kc project
-test` and the docs lint green.
+page's "No helper" bullet on it. JenkinsPipelineUtils `521fac6` on `phase/036-P3` (review r1 F1
+fixed); `kc project test` and the docs lint green.
 
 Later phases:
 - The call: `modernApp.test(job:, install:, run:, suites:, services:, env:, secrets:)` in `Test`,
@@ -548,9 +548,11 @@ Record:
 - The Job is a map (`jobManifest`) written with `writeYaml` and `kubectl apply`, not
   `kubectl.startJob`, whose `readYaml text:` stores the manifest with the build. Its image is
   read from `podYaml.sidecars()['modern-app-toolchain']` at call time.
-- `secrets`: a `sh` under `set +x` fails naming any variable that is not set, then pipes
-  `NAME=value` lines into `kubectl set env --local -c validation -e - -o yaml | kubectl apply -f -`.
-  Verified locally on kubectl 1.35.9, with a value holding quotes, spaces and colons.
+- `secrets` (`secretsScript`): a `sh` under `set +x` fails naming any variable that is not set,
+  then passes each as a `NAME=value` argument to `kubectl set env --local -c validation -o yaml |
+  kubectl apply -f -`. Not `-e -`, whose reader cuts a value at `#` and splits it at a line break
+  (r1 F1). `ModernAppTest` runs the script under `sh -xe` on a recording fake kubectl; real kubectl
+  1.35.9 checked by hand with `#`, line breaks and trailing newlines.
 - The summary, the description, the archive, the JUnit report, the exit-code errors and the
   `finally` delete keep the old block's text. The Validation Job index row now reads "Builds a
   validation image and runs it as a Kubernetes Job", to tell it from the new row.
