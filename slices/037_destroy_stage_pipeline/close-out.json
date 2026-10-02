@@ -24,7 +24,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in ArgoCDTools 53accbe: README § The argocd-hook image says Terraform is pinned by TERRAFORM_VERSION and bumped with support/iac-image and kube-coder-iac-toolchain (both pin 1.16.3); kc project test --project argocd-hook green",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "53accbe"
+      },
       "ruling": null
     },
     {
@@ -72,7 +77,14 @@
         "repo": "JenkinsDeploy"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "Read in JenkinsDeploy 1c7d8d6. chart/templates/jenkins-clusterrole.yaml grants apiGroups [\"\"], resources *, verbs *. jenkins-clusterrolebinding.yaml binds it cluster-wide to jenkins-admin, and only the controller Deployment uses that ServiceAccount (jenkins-deployment.yaml:28). It has been unchanged since the HelmCharts migration (8c1eb07). It reaches further than the entry says: RBAC's * resource also matches subresources, so besides every Secret it covers pods/exec into any pod and serviceaccounts/token for any ServiceAccount, including one bound to cluster-admin. It is reached by code execution in the controller (the script console, a plugin). No pipeline needs it: every Jenkinsfile's kubectl, JenkinsPipelineUtils' kubectl var included, runs in an agent pod as jenkins-prd's default ServiceAccount (Role jenkins-agent-jobs) or as destroy-stage. So the controller's role serves only the Kubernetes plugin's agent pods. A fix replaces the ClusterRole and its binding with a Role in jenkins-prd for that lifecycle: pods, pods/exec, pods/log, events. The exact set, and the namespace the cloud creates agents in, live in the controller's own configuration, not in the repo, and are to be established first. The fix is proved only by every pod pipeline running green after the deploy. The author's card proposal stands."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -266,7 +278,14 @@
         "repo": "ArgoCDTools"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "Checked the trigger, future-change: it holds. Gitblit indexes all 49 deploy repos the ArgoCDDeploy registry names, and none declares a kubernetes_manifest in any .tf on main, while the same index finds their kubernetes_persistent_volume_v1 resources. Only a deploy repo that adds one reaches the read. The signal holds too: a namespaced kubernetes_manifest that _namespace misses is not forgotten, its refresh at the plan gets 403, and the Job fails on Terraform's error before anything is destroyed (destroy.py:137 for a dry run, :149 for an apply)."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -299,7 +318,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in ArgoCDTools 3b8e30a: _declared's last line now reads 'terraform <init|plan> failed on terraform/ reduced to its terraform, provider and variable blocks (Terraform's error above names the cause)', naming the step, not a cause; the three test_destroy assertions that pinned the old wording and README § A destroy run's quote follow it. The Ansible runbook already reads the cause from Terraform's error, not this line (P6 r1 note), so it needs no change. kc project test --project argocd-hook and kc project lint --project root green",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "3b8e30a"
+      },
       "ruling": null
     },
     {
@@ -311,7 +335,7 @@
         "The guard's helpers (repoKey, registryEntries, liveApplications) and the GitHub-spelling check are Groovy in the Jenkinsfile. The only gate a Jenkinsfile meets is the controller's declarative linter, which checks syntax. P5 exercised the helpers once by hand under Groovy 2.4.21 against the live argocd-prd Applications and the registry on main (harness at /work/scratch/p5-groovy/harness.groovy): FieldnotesDeploy prd, KeycloakDeploy dev, CephCsiRbdDeploy prd (multi-source) and ArgoCDDeploy prd are found; FieldnotesDeploy dev is not. The test phase's prd dry run covers one single-source case live. ArgoCDTools has no Groovy harness to commit this to."
       ],
       "consequence": "An edit that breaks the guard's matching, say for multi-source Applications, passes every gate, and a Destroy Stage build then destroys a stage that is still deployed.",
-      "proposal": null,
+      "proposal": "card — commit the P5 harness's cases as a test a gate runs. The guard is all that stands between an APPLY build and a deployed stage, and a break in it is silent. Where the test runs is a design call that adds a toolchain or reshapes the pipeline, so it is not a wrap-up fix: JenkinsPipelineUnit in the java sidecar, as JenkinsPipelineUtils does, or a Python port under ArgoCDTools' unittest gate.",
       "evidence": "witnessed",
       "author": "code-writer, P5, r1, /work/scratch/p5-groovy/harness.groovy",
       "labels": {
@@ -323,7 +347,14 @@
         "repo": "ArgoCDTools"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "Read in ArgoCDTools 3e0a371. repoKey, registryEntries and liveApplications are @NonCPS methods in Jenkinsfile.destroy-stage itself (:28-81), and the REPO spelling check is inline in its stage (:228-232). ArgoCDTools' gates are ruff and Python unittest in the iac sidecar, which carries no Groovy or Java, so nothing committed loads the Jenkinsfile; the controller's linter checks syntax only. An edit to those methods reaches the gap, for example one for a source shape Argo adds. A miss is silent: the guard reports the stage undeployed and an APPLY build goes on to destroy it. A fix needs the helpers somewhere a gate runs them. One way moves them to a file JenkinsPipelineUnit can load, tested in the java sidecar as JenkinsPipelineUtils' tests/ are, which is a new toolchain and gate for ArgoCDTools. The other ports them to Python under the existing unittest gate, run by the build, which changes the pipeline's shape. The fixtures exist uncommitted in /work/scratch/p5-groovy: the live applications.json, the registry, and the harness's five cases."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -348,7 +379,14 @@
         "repo": "ArgoCDTools"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "Checked the trigger, fault: it holds. The facts are as the entry reads them. Neither Job runs an init: the image's ENTRYPOINT is python3 -m presync, Jenkinsfile.destroy-stage:123 sets command python3 -m presync.destroy, and homelab-shared's _tf-presync-hook.tpl sets no shareProcessNamespace. presync installs no SIGTERM handler, so a terminated pod's Terraform gets SIGKILL when the grace period ends. Only a fault or a misuse terminates a Job mid-apply, never ordinary operation: the 30-minute activeDeadlineSeconds of both Jobs, on an apply that hangs; a hand abort of an apply build, which the argocd runbook forbids ('Do not abort an apply while its Job runs'); a node drain coinciding with an apply, and update.yml drains only at the operator's hand (decisions.md § OS updates). The signal holds: the next run fails on Terraform's 'Error acquiring the state lock', which the runbook's § A build that stopped halfway names, with the force-unlock."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -484,7 +522,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in Ansible 7917165: § Destroying a retired stage › The webhook now sets manage_webhook = true in a commit on main, and says a stage that tracks another branch gets it through its promotion (D35), KubeCoderDeploy's prd through KubeCoder/Promote-PRD, never by a commit to prd; refresh once it is on the stage's branch. kc project test --project root green; lint and build declare nothing for root (exit 3)",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "7917165"
+      },
       "ruling": null
     },
     {
@@ -508,7 +551,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in Ansible 0232f1a: § A build that fails at the plan no longer says nothing is written; a dry run and a failed init write nothing, and an apply that fails at its plan has already dropped the namespaced objects with terraform state rm (destroy.py runs it before the plan), which the re-run does not miss. kc project test --project root green; lint and build declare nothing for root (exit 3)",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "0232f1a"
+      },
       "ruling": null
     },
     {
@@ -532,7 +580,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in Ansible 4738da4: the undeploy paragraph's 'what stays' is now what the stage's Terraform made outside its namespace, and Unregister says a webhook made by hand (§ Webhooks) stays on the deploy repo, sending pushes to the relay, with no build to delete it: removing it is a separate act, by hand. kc project test --project root green; lint and build declare nothing for root (exit 3)",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "4738da4"
+      },
       "ruling": null
     },
     {
@@ -556,7 +609,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in ArgoCDTools 3e0a371: § Not wired yet deleted whole — its one bullet that could still hold does not: Jenkins shows AaC/ArgoCDDeploy (#24) and AaC/KubeCoderDeploy (#13) green, and Architecture registers both producers (c95e5ee, 0cdd563); kc project test --project argocd-hook green",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "3e0a371"
+      },
       "ruling": null
     },
     {
