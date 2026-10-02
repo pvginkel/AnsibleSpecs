@@ -1007,7 +1007,7 @@ Record:
 - (review r1 F1) The SEC-1 brief allowed no `withVault` around a test; it now excepts "the one
   step that runs a test which itself needs the secret", as the guide's secrets page does.
 
-### P11 — The library drops the describables and the positional kaniko that nothing calls
+### P11 — The library drops the describables and the positional kaniko that nothing calls ✅ DONE 2026-10-02
 
 Target: ../JenkinsPipelineUtils
 
