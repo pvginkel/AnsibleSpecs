@@ -104,6 +104,33 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "I1",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "Tell the operator, before a Destroy Stage build, that it deletes a repo's webhook which another deployed stage still relies on",
+      "body": [
+        "Nothing is wrong today. Argo-cd D66 (decisions.md:464-465) and D39 as amended (:699-701) say that the webhook goes with the stage that manages it (manage_webhook). Neither says what happens to a stage of the same repo that stays deployed: it loses its push trigger. In KubeCoderDeploy the webhook belongs to dev (config/dev/terraform.tfvars manage_webhook = true; prd false, on both main and prd). A build against KubeCoderDeploy dev passes the guard, because the guard checks only REPO's STAGE. It deletes the repo's only hook, and prd's pushes then reach Argo only through D6's 30-minute refresh (ArgoCDDeploy config/prd/values.yaml:24). Nothing reports that the hook is gone. Two ways to cover it: a runbook note (P6 already covers the webhook bullet, and the plan now carries this fact for it), which tells the operator to move manage_webhook to the surviving stage and sync it before destroying the owner; or a guard or dry-run warning in Jenkinsfile.destroy-stage."
+      ],
+      "consequence": "Destroying KubeCoderDeploy dev while prd stays deployed deletes the repo's webhook without a word, and prd's deploys then start up to 30 minutes after a push instead of on the push.",
+      "proposal": "close — P6's runbook can say it, from the fact recorded in its plan section. A guard is worth it only if more repos put the webhook on a stage that is retired first.",
+      "evidence": "read",
+      "author": "code-reviewer, P1, r1 — phases/P1/code_review_r1.md F1; KubeCoderDeploy origin/main 5b23a28 and origin/prd config/*/terraform.tfvars",
+      "labels": {
+        "benefit": "operations",
+        "felt": "after-change",
+        "change": "add",
+        "size": "one-edit",
+        "product-call": "no",
+        "prevents": "degraded",
+        "area": "plain",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

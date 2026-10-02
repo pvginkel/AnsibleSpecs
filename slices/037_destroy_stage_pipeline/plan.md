@@ -388,6 +388,12 @@ covers:
 - re-running a build that stopped halfway;
 - the repo's webhook going with the stage that manages it.
 
+Review P1 r1 (fact): KubeCoderDeploy's webhook belongs to `dev`, not `prd`. Its
+`config/dev/terraform.tfvars` has `manage_webhook = true` and `config/prd/terraform.tfvars` has
+`false`, on both `main` and `prd`. Destroying `dev` while `prd` stays deployed deletes the hook,
+and the guard does not refuse it. After that, `prd`'s pushes reach Argo only through D6's
+30-minute refresh.
+
 The undeploy paragraph says that nothing prunes the state file "until D28 is designed"
 (`docs/runbooks/argocd.md:387`). It now points to the new path and cites argo-cd D66.
 
