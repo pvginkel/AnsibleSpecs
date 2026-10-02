@@ -1077,6 +1077,51 @@ Record:
   podYaml's comment and page. Three PodYamlTest methods named after the describables were
   renamed.
 
+### P12 — The firmware builds keep the large node: POD-3 and the firmware references declare the YAML merge, and so do the eight firmware files
+
+Target: ../JenkinsPipelineUtils
+
+Added by the run's consult 1, from close-out B2 (P5 review r1, F1 outside P5). The old scripted
+firmware files ran on srvk8s4, the one node with the `homelab.local/performance=high` label and
+its taint. The controller's `jenkins-agent-large` template is YAML only: a required node affinity
+on that label and a toleration for the taint. The kubernetes plugin's default strategy, Override,
+keeps only the last YAML (P5, "Settled in review r1"). So a declarative agent that inherits
+`jenkins-agent-large` with its own `yaml podYaml(...)` and no `yamlMergeStrategy merge()` drops
+the placement. Its build then lands on srvk8s1-3, beside prd's workloads, and nothing says so. P4's
+eight firmware files have that shape, because the guide's two firmware reference files have it:
+`docs/examples/firmware.groovy:15` and `firmware-versions.groovy:14`. POD-3's **Why**
+(`docs/pages/guide/pod.md:32`) says only `kaniko` is YAML only. P5's four `jenkins-agent-large`
+files were fixed in its round 2. This phase fixes the rest before the one push (R18), because a
+firmware push after it is one more OTA re-flash of that repo's devices and one more push for the
+operator to approve.
+
+- **The guide.**
+  - POD-3 requires `yamlMergeStrategy merge()` on an agent that inherits `jenkins-agent-large`, as
+    it does for `kaniko`. Its **Why** says that template is YAML only and what it holds, and what
+    the build loses without the merge.
+  - podYaml's page section "Combining with inherited pod templates" (`vars/podYaml.md:113-128`)
+    names `jenkins-agent-large` beside `kaniko`.
+  - The firmware type page's template bullet (`docs/pages/types/firmware.md:9`) names the merge,
+    as the image-build type page's `kaniko` bullet does (`docs/pages/types/image-build.md:9`).
+  - `espFirmware`'s agent snippet (`vars/espFirmware.md:21-26`) and both firmware reference files
+    declare it.
+  - Any other page the executor finds that names `jenkins-agent-large` without the merge follows.
+- **The eight firmware files** (P4's ledger rows, CalendarDisplay to UnderfloorHeatingController)
+  follow their reference file. PaperClock's and Intercom's are again `firmware.groovy` and
+  `firmware-versions.groovy` as published, section markers dropped, and the other six take the same
+  agent. Each clone's one commit is amended, as P5's round 2 amended its four. The clone stays
+  exactly one commit ahead of origin on `main`, unpushed. The ledger's eight rows carry the new
+  SHAs.
+- **Nothing else moves.** The image, the `idf` container, the steps, the stages and the options
+  stay as P4 left them. The four P5 files already declare the merge and are not touched.
+- **The witness.** For one firmware file, the live template combined with the file's podYaml
+  output keeps the affinity and the toleration and the same containers. Compute it the way P5's
+  round 2 did: in the Script Console, computation only, through `PodTemplateUtils.unwrap`.
+- **The gates.** JenkinsPipelineUtils' `kc project test` and the docs lint, which needs
+  `JENKINS_TOKEN`, as in P2. The eight firmware files pass the controller's declarative linter.
+- **The push.** This commit rides the test phase's one push with JenkinsPipelineUtils' other
+  phases.
+
 ## Not in scope
 
 - ModernAppTemplate itself (R2), and CanonApp (archived, no job).
