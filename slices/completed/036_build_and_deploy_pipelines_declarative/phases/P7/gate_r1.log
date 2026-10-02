@@ -1,0 +1,6 @@
+root: cexec modern-app sh -c 'cd tooling && for f in ../docs/architecture/*.yaml; do poetry run python validate.py "$f" || exit 1; done'    [  OK  ]
+root: cexec modern-app sh -c 'cd tooling && poetry run python validate.py views'    [  OK  ]
+tooling: cexec modern-app poetry run python validate.py meta    [  OK  ]
+tooling: cexec modern-app poetry run pytest    [  OK  ]
+viewer: cexec modern-app npm test    [  OK  ]
+service: cexec modern-app npm test    [  OK  ]

@@ -1,0 +1,2 @@
+tooling: cexec modern-app poetry run python validate.py meta    [  OK  ]
+tooling: cexec modern-app poetry run pytest    [  OK  ]

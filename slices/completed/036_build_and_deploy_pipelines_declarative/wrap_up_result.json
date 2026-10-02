@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "Fixed B1 (JenkinsPipelineUtils 07f1d70) and P8 (Architecture e990381). B3 was struck after reading that the eight renamed-repo jobs now build from main. E2, E3, E4 and E8 were relabelled as events that describe no problem. P12 was left, because XF's project name cannot be read from this environment.",
+ "fixed": ["B1", "P8", "B3"], "folded": [], "cards": [], "left": ["P12"],
+ "relabelled": ["E2", "E3", "E4", "E8"]}

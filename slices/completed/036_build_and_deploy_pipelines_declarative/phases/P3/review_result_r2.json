@@ -1,0 +1,7 @@
+{"outcome": "signoff",
+ "summary": "r1 F1 is resolved. secretsScript passes each secret to kubectl as a NAME=value argument, and the value arrives whole: run under busybox ash with real kubectl 1.35.9, with #, line breaks, trailing newlines, backslashes and $ in the value. The two new tests catch a dropped set +x and the loss of trailing newlines. One advisory nit remains: the step page's Internals list leaves out secretsScript.",
+ "details": "code_review_r2.md",
+ "findings": [
+   {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+    "summary": "vars/modernApp.md:141-143 lists modernApp's internals without the new secretsScript (vars/modernApp.groovy:157)"}
+ ]}

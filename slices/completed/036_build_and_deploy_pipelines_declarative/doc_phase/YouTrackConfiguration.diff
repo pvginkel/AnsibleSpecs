@@ -1,0 +1,33 @@
+/work/scratch/YouTrackConfiguration — P13: git diff c87845885342..23cb808741df
+
+youtrack.yaml | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/youtrack.yaml b/youtrack.yaml
+index 36c2c00..668c4c4 100644
+--- a/youtrack.yaml
++++ b/youtrack.yaml
+@@ -11,6 +11,7 @@ colors:
+   AIWF: "#039BA1"   # AIWorkflow
+   ANS: "#E20F86"    # Ansible
+   ARCH: "#FFAF0F"   # Architecture
++  AU: "#494B57"     # Automation -- added after the Triage import; picked here
+   DA: "#3574F0"     # DHCPApp -- picked here
+   DI: "#DB3B4B"     # DockerImages
+   EPIC: "#8b0d55"   # Epics -- not on Triage; picked here
+@@ -19,6 +20,7 @@ colors:
+   HC: "#E56D17"     # HelmCharts
+   HOME: "#C01173"   # Home
+   ICOMSRV: "#27498a"  # IntercomServer
++  IS: "#7BCCCF"     # IoTSupport -- added after the Triage import; picked here
+   ISD: "#A2BEF8"    # InfraStatisticsDisplay -- added after the Triage import; picked here
+   KC: "#208A3C"     # KubeCoder
+   KDSP: "#C9CCD6"   # KitchenDisplay
+@@ -26,6 +28,7 @@ colors:
+   MST: "#068287"    # mcp-server-trello -- Triage shared DockerImages' red; picked here
+   SSEGW: "#B95716"  # SSEGateway
+   TMPL: "#818594"   # Template -- not on Triage; picked here
++  XF: "#893E13"     # added after the Triage import; picked here
+   YTMCP: "#FCC3E2"  # YouTrackMCPServer
+ 
+ # Webhooks sent by YouTrack's bundled webhook-triggers app. Keys are project keys,

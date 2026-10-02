@@ -1,0 +1,2822 @@
+/work/JenkinsPipelineUtils — P1: git diff e62b3dca34f2..15812f97eb3a
+
+docs/pages/guide/pod.md                                         |   4 +-
+ docs/pages/types/architecture-collector.md                      |   3 -
+ docs/pages/types/configuration-apply.md                         |   3 -
+ docs/pages/types/image-matrix.md                                |   3 -
+ .../java/org/webathome/jenkinspipelineutils/PodYamlTest.java    | 137 ++++++++++++++++++++--------
+ vars/containerTemplates.md                                      |   6 +-
+ vars/podYaml.groovy                                             |  60 +++++++-----
+ vars/podYaml.md                                                 |  63 +++++++------
+ 8 files changed, 173 insertions(+), 106 deletions(-)
+
+diff --git a/docs/pages/guide/pod.md b/docs/pages/guide/pod.md
+index 9127b1f..c26f2a1 100644
+--- a/docs/pages/guide/pod.md
++++ b/docs/pages/guide/pod.md
+@@ -43,8 +43,8 @@ Every container the pod adds MUST come from
+ - Every `images:` entry MUST be a map with an explicit `name:`, the name `container('<name>')`
+   uses: `[image: 'espressif/idf:v5.5.3', name: 'idf']`. An `images:` entry is never a string.
+ 
+-**Why.** With `name:`, the container's name stands next to its image in the file. A name derived
+-from the image can be one Kubernetes refuses, and the build then fails when the pod is created
++**Why.** With `name:`, the container's name stands next to its image in the file. `podYaml`
++refuses an entry without one, and a name Kubernetes would refuse, when the agent is evaluated
+ ([`podYaml`](../reference/podYaml.md#container-names)).
+ 
+ ### POD-5 — A library sidecar comes from its template { #pod-5 }
+diff --git a/docs/pages/types/architecture-collector.md b/docs/pages/types/architecture-collector.md
+index 2c7f903..b592547 100644
+--- a/docs/pages/types/architecture-collector.md
++++ b/docs/pages/types/architecture-collector.md
+@@ -12,9 +12,6 @@ succeeds.
+   build, and archives them all as the collector's inputs.
+ - **`abortPrevious: true`** ([PROP-3](../guide/job-properties.md#prop-3)): a newer build collects
+   every producer again.
+-- **The `python` sidecar.** `podYaml` has no `python` template yet. By
+-  [POD-5](../guide/pod.md#pod-5), it gets one, as `containerTemplates.python` declares it, before
+-  a file names it. The linter does not evaluate the agent, so this file passes it.
+ 
+ ## Recipe: triggers computed from YAML
+ 
+diff --git a/docs/pages/types/configuration-apply.md b/docs/pages/types/configuration-apply.md
+index 9e5b9b8..c530d5c 100644
+--- a/docs/pages/types/configuration-apply.md
++++ b/docs/pages/types/configuration-apply.md
+@@ -13,9 +13,6 @@ applies it to the service. Today this is YouTrack/YouTrackConfiguration.
+   token ([SEC-1](../guide/secrets.md#sec-1)).
+ - **Plain `disableConcurrentBuilds()` and the abort marker**: an apply to a live system
+   ([PROP-3](../guide/job-properties.md#prop-3)).
+-- **The `python` sidecar.** `podYaml` has no `python` template yet. By
+-  [POD-5](../guide/pod.md#pod-5), it gets one, as `containerTemplates.python` declares it, before
+-  a file names it. The linter does not evaluate the agent, so this file passes it.
+ 
+ ## The reference file
+ 
+diff --git a/docs/pages/types/image-matrix.md b/docs/pages/types/image-matrix.md
+index e8bfba3..edb6da9 100644
+--- a/docs/pages/types/image-matrix.md
++++ b/docs/pages/types/image-matrix.md
+@@ -13,9 +13,6 @@ parameter names; `image=all` builds every image.
+   ([TIME-3](../guide/timeouts.md#time-3)).
+ - **Plain `disableConcurrentBuilds()` and the abort marker**: the build decides from its change
+   sets what to build ([PROP-3](../guide/job-properties.md#prop-3)).
+-- **The `python` sidecar.** `podYaml` has no `python` template yet. By
+-  [POD-5](../guide/pod.md#pod-5), it gets one, as `containerTemplates.python` declares it, before
+-  a file names it. The linter does not evaluate the agent, so this file passes it.
+ 
+ ## Recipe: a stage per image variant
+ 
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
+index 26b6488..b2a2c06 100644
+--- a/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
+@@ -22,8 +22,8 @@ import org.junit.jupiter.params.provider.MethodSource;
+  * podYaml, which renders a declarative Kubernetes agent's pod spec from library sidecars and
+  * pipeline-chosen images. It is {@code @NonCPS}, so the CPS transform leaves its body to run as
+  * plain Groovy here. The sidecars' reference is KubeCoder/Build-Main #558's pod, as the kubernetes
+- * plugin printed it from containerTemplates.k8s and modern_app_toolchain, and
+- * containerTemplates.aac_tools for aac-tools.
++ * plugin printed it from containerTemplates.k8s and modern_app_toolchain, and the containerTemplates
++ * describable of the same name for each other sidecar.
+  */
+ class PodYamlTest {
+ 
+@@ -109,45 +109,97 @@ class PodYamlTest {
+         assertEquals(expected, render(Map.of("templates", List.of("aac-tools"))));
+     }
+ 
++    // Neither sets a uid or env.
+     @Test
+-    void anImageReferenceRunsLikeASidecar() throws Exception {
++    void theHelmAndPythonSidecarsAreTheirContainerTemplates() throws Exception {
+         String expected = HEADER + """
+-                  - name: "node"
+-                    image: "node:24-bookworm"
++                  - name: "helm"
++                    image: "alpine/helm:3.9.1"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                  - name: "python"
++                    image: "registry:5000/python"
+                     imagePullPolicy: Always
+                     command:
+                     - sleep
+                     args:
+                     - infinity
+                 """;
+-        assertEquals(expected, render(Map.of("images", List.of("node:24-bookworm"))));
++        assertEquals(expected, render(Map.of("templates", List.of("helm", "python"))));
+     }
+ 
+-    static Stream<Arguments> imageNames() {
+-        return Stream.of(
+-                Arguments.of("node:24-bookworm", "node"),
+-                Arguments.of("registry:5000/kube-coder-go-toolchain:latest", "kube-coder-go-toolchain"),
+-                // A registry port is not a tag.
+-                Arguments.of("registry:5000/python", "python"),
+-                Arguments.of("espressif/idf:v5.3.1", "idf"),
+-                Arguments.of("espressif/idf@sha256:0123abcd", "idf"),
+-                Arguments.of("espressif/idf:v5.3.1@sha256:0123abcd", "idf"));
++    // The agent's uid, and terraform's plugin cache off.
++    @Test
++    void theIacToolchainSidecarRunsAsTheAgentUserWithAnEmptyPluginCacheDir() throws Exception {
++        String expected = HEADER + """
++                  - name: "iac-toolchain"
++                    image: "registry:5000/kube-coder-iac-toolchain"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                    securityContext:
++                      runAsUser: 1000
++                    env:
++                    - name: "TF_PLUGIN_CACHE_DIR"
++                      value: ""
++                """;
++        assertEquals(expected, render(Map.of("templates", List.of("iac-toolchain"))));
+     }
+ 
+-    @ParameterizedTest(name = "{0} -> {1}")
+-    @MethodSource("imageNames")
+-    void anImageReferenceIsNamedAfterItsLastPathSegment(String image, String name) throws Exception {
+-        String rendered = render(Map.of("images", List.of(image)));
+-        assertEquals("  - name: \"" + name + "\"", rendered.lines().toList().get(4));
++    @Test
++    void anImageAndANameRunLikeASidecar() throws Exception {
++        String expected = HEADER + """
++                  - name: "node"
++                    image: "node:24-bookworm"
++                    imagePullPolicy: Always
++                    command:
++                    - sleep
++                    args:
++                    - infinity
++                """;
++        assertEquals(expected, render(Map.of("images", List.of(Map.of("image", "node:24-bookworm", "name", "node")))));
+     }
+ 
+-    // A pipeline interpolates the version it needs: "esp-idf:${version}" is a GString, not a String.
++    // A pipeline interpolates the version it needs: "espressif/idf:${version}" is a GString, not a String.
+     @Test
+     void anInterpolatedImageReferenceIsAnImageReference() throws Exception {
+         Object image = new GStringImpl(new Object[] {"v5.3.1"}, new String[] {"espressif/idf:", ""});
+         assertEquals(
+-                render(Map.of("images", List.of("espressif/idf:v5.3.1"))),
+-                render(Map.of("images", List.of(image))));
++                render(Map.of("images", List.of(Map.of("image", "espressif/idf:v5.3.1", "name", "idf")))),
++                render(Map.of("images", List.of(Map.of("image", image, "name", "idf")))));
++    }
++
++    static Stream<String> containerNames() {
++        return Stream.of("a", "0", "idf", "esp-idf", "node24", "9-a", "a".repeat(63));
++    }
++
++    @ParameterizedTest(name = "{0}")
++    @MethodSource("containerNames")
++    void aNameKubernetesTakesIsTheContainersName(String name) throws Exception {
++        String rendered = render(Map.of("images", List.of(Map.of("image", "node:24-bookworm", "name", name))));
++        assertEquals("  - name: \"" + name + "\"", rendered.lines().toList().get(4));
++    }
++
++    // Kubernetes takes an RFC 1123 label: [a-z0-9]([-a-z0-9]*[a-z0-9])?, at most 63 characters.
++    static Stream<String> refusedContainerNames() {
++        return Stream.of("my_tool", "kube.coder", "Node", "-node", "node-", "idf v5", "a".repeat(64));
++    }
++
++    @ParameterizedTest(name = "{0}")
++    @MethodSource("refusedContainerNames")
++    void aNameKubernetesWouldRefuseIsRefused(String name) {
++        Map<String, Object> args = Map.of("images", List.of(Map.of("image", "registry:5000/my_tool:1", "name", name)));
++        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> render(args));
++        assertEquals(
++                "podYaml: the images entry for 'registry:5000/my_tool:1' names its container '" + name
++                        + "', which is not an RFC 1123 label: at most 63 lowercase letters, digits and '-',"
++                        + " starting and ending with a letter or digit",
++                refused.getMessage());
+     }
+ 
+     @Test
+@@ -187,14 +239,6 @@ class PodYamlTest {
+         assertEquals(expected, render(Map.of("images", List.of(esp))));
+     }
+ 
+-    // What a map entry does not override, it takes from the string form.
+-    @Test
+-    void aMapEntryWithOnlyAnImageIsTheStringForm() throws Exception {
+-        assertEquals(
+-                render(Map.of("images", List.of("node:24-bookworm"))),
+-                render(Map.of("images", List.of(Map.of("image", "node:24-bookworm")))));
+-    }
+-
+     static Stream<Arguments> envValues() {
+         return Stream.of(
+                 // Unquoted, YAML reads these as null, a boolean and an integer.
+@@ -210,7 +254,8 @@ class PodYamlTest {
+     @ParameterizedTest(name = "value: {1}")
+     @MethodSource("envValues")
+     void anEnvValueStaysTheStringGiven(String value, String scalar) throws Exception {
+-        String rendered = render(Map.of("images", List.of(Map.of("image", "node", "env", Map.of("V", value)))));
++        String rendered = render(
++                Map.of("images", List.of(Map.of("image", "node", "name", "node", "env", Map.of("V", value)))));
+         assertEquals("      value: " + scalar, rendered.lines().toList().getLast());
+     }
+ 
+@@ -266,14 +311,26 @@ class PodYamlTest {
+                 expected,
+                 render(ordered(
+                         "templates", List.of("k8s", "modern-app-toolchain"),
+-                        "images", List.of(golang, "node:24-bookworm"))));
++                        "images", List.of(golang, Map.of("image", "node:24-bookworm", "name", "node")))));
+     }
+ 
+     static Stream<Arguments> refusals() {
+         return Stream.of(
+                 Arguments.of(
+-                        Map.of("templates", List.of("k8s", "helm")),
+-                        "podYaml: the library has no template 'helm'; it has aac-tools, k8s, modern-app-toolchain"),
++                        Map.of("templates", List.of("k8s", "idf")),
++                        "podYaml: the library has no template 'idf'; it has aac-tools, helm, iac-toolchain, k8s,"
++                                + " modern-app-toolchain, python"),
++                Arguments.of(
++                        Map.of("images", List.of("node:24-bookworm")),
++                        "podYaml: an images entry is a map with image and name; got 'node:24-bookworm'"),
++                Arguments.of(
++                        Map.of("images", List.of(Map.of("image", "registry:5000/my_tool:1"))),
++                        "podYaml: the images entry for 'registry:5000/my_tool:1' gives its container no name"),
++                // A Groovy map literal holds a null the pipeline meant as a value: [HOME: env.MISSING].
++                Arguments.of(
++                        Map.of("images", List.of(ordered(
++                                "image", "node:24-bookworm", "name", "node", "env", ordered("CI", "1", "HOME", null)))),
++                        "podYaml: the images entry for 'node:24-bookworm' sets env HOME to null"),
+                 Arguments.of(
+                         Map.of("images", List.of(ordered("image", "node:24-bookworm", "cpu", "2"))),
+                         "podYaml: an images entry takes image, name, resources, runAsUser and env; got cpu"),
+@@ -281,17 +338,21 @@ class PodYamlTest {
+                         Map.of("images", List.of(Map.of("name", "node"))),
+                         "podYaml: an images entry names no image: [name:node]"),
+                 Arguments.of(
+-                        Map.of("images", List.of(Map.of("image", "node", "resources", Map.of("limit", Map.of("cpu", "1"))))),
++                        Map.of("images", List.of(Map.of(
++                                "image", "node", "name", "node", "resources", Map.of("limit", Map.of("cpu", "1"))))),
+                         "podYaml: resources takes requests and limits; got 'limit'"),
+                 Arguments.of(
+                         Map.of("image", List.of("node:24-bookworm")),
+                         "podYaml: takes templates and images; got image"),
+                 // A library sidecar and an image of the same name.
+                 Arguments.of(
+-                        Map.of("templates", List.of("k8s"), "images", List.of("registry:5000/k8s:1.36.0")),
++                        Map.of("templates", List.of("k8s"),
++                                "images", List.of(Map.of("image", "registry:5000/k8s:1.36.0", "name", "k8s"))),
+                         "podYaml: two containers are named 'k8s'"),
+                 Arguments.of(
+-                        Map.of("images", List.of("node:24-bookworm", "node:22-bookworm")),
++                        Map.of("images", List.of(
++                                Map.of("image", "node:24-bookworm", "name", "node"),
++                                Map.of("image", "node:22-bookworm", "name", "node"))),
+                         "podYaml: two containers are named 'node'"),
+                 Arguments.of(
+                         Map.of("templates", List.of("k8s", "k8s")),
+diff --git a/vars/containerTemplates.md b/vars/containerTemplates.md
+index f8562bc..9c25178 100644
+--- a/vars/containerTemplates.md
++++ b/vars/containerTemplates.md
+@@ -12,11 +12,11 @@ declarative file uses it ([POD-5](../guide/pod.md#pod-5)).
+ 
+ | Call                         | Image and settings                                                                                 | Carries                                                                         | In `podYaml`                                                                                                                 |
+ | ---------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+-| `helm(name)`                 | `alpine/helm:3.9.1`                                                                                | the Helm CLI                                                                    | none yet ([POD-5](../guide/pod.md#pod-5))                                                                                     |
++| `helm(name)`                 | `alpine/helm:3.9.1`                                                                                | the Helm CLI                                                                    | `templates: ['helm']`                                                                                                        |
+ | `k8s(name)`                  | `registry:5000/k8s:1.35.5`                                                                         | kubectl, crane                                                                  | `templates: ['k8s']`                                                                                                         |
+-| `python(name)`               | `registry:5000/python`                                                                             | Python (slim)                                                                   | none yet ([POD-5](../guide/pod.md#pod-5))                                                                                    |
++| `python(name)`               | `registry:5000/python`                                                                             | Python (slim)                                                                   | `templates: ['python']`                                                                                                      |
+ | `aac_tools(name)`            | `registry:5000/aac-tools`                                                                          | the architecture-as-code tools (`gen-architecture`, `arch-validate`)            | `templates: ['aac-tools']`                                                                                                   |
+-| `iac_toolchain(name)`        | `registry:5000/kube-coder-iac-toolchain`, uid 1000, `TF_PLUGIN_CACHE_DIR` empty                    | the image `cexec iac` runs in a KubeCoder environment: terraform, helm, kubectl, bao, step, promtool, python3 with poetry and uv, git | none yet ([POD-5](../guide/pod.md#pod-5)) |
++| `iac_toolchain(name)`        | `registry:5000/kube-coder-iac-toolchain`, uid 1000, `TF_PLUGIN_CACHE_DIR` empty                    | the image `cexec iac` runs in a KubeCoder environment: terraform, helm, kubectl, bao, step, promtool, python3 with poetry and uv, git | `templates: ['iac-toolchain']` |
+ | `modern_app_toolchain(name)` | `registry:5000/kube-coder-modern-app-toolchain:node-24`, uid 1000                                  | KubeCoder's full-stack tool image: Node 24 with npm, pnpm and bun, poetry, ruff, uv, git | `templates: ['modern-app-toolchain']`                                                                                         |
+ | `rsync(name)`                | `eeacms/rsync`                                                                                     | rsync                                                                           | none: kept only for `Firmware/KitchenDisplay`                                                                                |
+ | `dockbuild(name, image)`     | `image`, with `BUILDER_UID`/`BUILDER_GID` 1000 and `BUILDER_USER`/`BUILDER_GROUP` `jenkins`      | a dockbuild or dockcross cross-compiler                                         | none: kept only for `Firmware/KitchenDisplay`                                                                                |
+diff --git a/vars/podYaml.groovy b/vars/podYaml.groovy
+index f6e6d1b..0dbb859 100644
+--- a/vars/podYaml.groovy
++++ b/vars/podYaml.groovy
+@@ -5,7 +5,7 @@
+  *     agent {
+  *         kubernetes {
+  *             inheritFrom 'jenkins-agent'
+- *             yaml podYaml(templates: ['k8s'], images: ['node:24-bookworm'])
++ *             yaml podYaml(templates: ['k8s'], images: [[image: 'node:24-bookworm', name: 'node']])
+  *         }
+  *     }
+  *
+@@ -15,13 +15,14 @@
+  * Declarative evaluates an agent's parameters on the controller before any agent exists, so this
+  * and everything it calls is @NonCPS and calls no step.
+  *
+- * @param templates  Library sidecars by name: `aac-tools` (gen-architecture, arch-validate), `k8s`
+- *                   (kubectl, crane) and `modern-app-toolchain` (KubeCoder's full-stack tool image:
+- *                   Node 24, pnpm, bun, poetry, uv).
+- * @param images     Any other container, as an image reference, named after the image's last
+- *                   path segment without its tag (`node:24-bookworm` runs as `node`), or as a map
+- *                   with `image` and any of `name`, `resources` (`requests` and `limits`, each
+- *                   resource name -> quantity), `runAsUser` and `env` (name -> value).
++ * @param templates  Library sidecars by name: `aac-tools` (gen-architecture, arch-validate), `helm`
++ *                   (the Helm CLI), `iac-toolchain` (the image `cexec iac` runs: terraform, helm,
++ *                   kubectl, bao, step), `k8s` (kubectl, crane), `modern-app-toolchain`
++ *                   (KubeCoder's full-stack tool image: Node 24, pnpm, bun, poetry, uv) and
++ *                   `python`.
++ * @param images     Any other container, as a map with `image`, `name` and any of `resources`
++ *                   (`requests` and `limits`, each resource name -> quantity), `runAsUser` and
++ *                   `env` (name -> value).
+  */
+ @NonCPS
+ String call(Map args) {
+@@ -42,12 +43,10 @@ String call(Map args) {
+         containers.add([name: name] + library[name])
+     }
+     (args.images ?: []).each { entry ->
+-        if (entry instanceof Map) {
+-            containers.add(imageContainer(entry))
+-        } else {
+-            String image = entry.toString()
+-            containers.add([name: containerName(image), image: image])
++        if (!(entry instanceof Map)) {
++            throw new IllegalArgumentException("podYaml: an images entry is a map with image and name; got '${entry}'")
+         }
++        containers.add(imageContainer(entry))
+     }
+ 
+     Set<String> names = []
+@@ -65,13 +64,19 @@ String call(Map args) {
+ /**
+  * The sidecars `templates` names, as `containerTemplates` declares them for a scripted
+  * podTemplate. uid 1000 is the agent's own user: git refuses a checkout another uid owns.
++ * The iac toolchain image points TF_PLUGIN_CACHE_DIR at a KubeCoder home overlay an agent pod
++ * lacks, and terraform reports a missing cache dir as a CLI configuration error on every run; an
++ * empty value leaves the cache off.
+  */
+ @NonCPS
+ Map<String, Map> sidecars() {
+     return [
+         'aac-tools': [image: 'registry:5000/aac-tools'],
++        'helm': [image: 'alpine/helm:3.9.1'],
++        'iac-toolchain': [image: 'registry:5000/kube-coder-iac-toolchain', runAsUser: 1000, env: [TF_PLUGIN_CACHE_DIR: '']],
+         'k8s': [image: 'registry:5000/k8s:1.35.5'],
+         'modern-app-toolchain': [image: 'registry:5000/kube-coder-modern-app-toolchain:node-24', runAsUser: 1000],
++        'python': [image: 'registry:5000/python'],
+     ]
+ }
+ 
+@@ -91,9 +96,18 @@ Map imageContainer(Map entry) {
+     if (!given.image) {
+         throw new IllegalArgumentException("podYaml: an images entry names no image: ${entry}")
+     }
+-
+     String image = given.image.toString()
+-    Map container = [name: given.name ? given.name.toString() : containerName(image), image: image]
++    if (!given.name) {
++        throw new IllegalArgumentException("podYaml: the images entry for '${image}' gives its container no name")
++    }
++    String name = given.name.toString()
++    if (!(name ==~ /[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/)) {
++        throw new IllegalArgumentException(
++            "podYaml: the images entry for '${image}' names its container '${name}', which is not an RFC 1123 label: " +
++            "at most 63 lowercase letters, digits and '-', starting and ending with a letter or digit")
++    }
++
++    Map container = [name: name, image: image]
+ 
+     if (given.resources) {
+         Map<String, Map<String, String>> resources = [:]
+@@ -112,21 +126,17 @@ Map imageContainer(Map entry) {
+     }
+     if (given.env) {
+         Map<String, String> env = [:]
+-        given.env.each { name, value -> env[name.toString()] = value.toString() }
++        given.env.each { variable, value ->
++            if (value == null) {
++                throw new IllegalArgumentException("podYaml: the images entry for '${image}' sets env ${variable} to null")
++            }
++            env[variable.toString()] = value.toString()
++        }
+         container.env = env
+     }
+     return container
+ }
+ 
+-/**
+- * The image's last path segment without its tag or digest:
+- * `registry:5000/kube-coder-go-toolchain:latest` -> `kube-coder-go-toolchain`.
+- */
+-@NonCPS
+-String containerName(String image) {
+-    return image.substring(image.lastIndexOf('/') + 1).split(/[:@]/)[0]
+-}
+-
+ @NonCPS
+ List<String> containerLines(Map container) {
+     List<String> lines = [
+diff --git a/vars/podYaml.md b/vars/podYaml.md
+index c1d896d..3272f1c 100644
+--- a/vars/podYaml.md
++++ b/vars/podYaml.md
+@@ -50,34 +50,39 @@ optional. Any other argument fails the build.
+ 
+ Library sidecars, by name. The container takes the template's name.
+ 
+-| Template               | Image                                                             | What it carries                                                                  |
+-| ---------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+-| `aac-tools`            | `registry:5000/aac-tools`                                         | the architecture-as-code tools: `gen-architecture`, `arch-validate`              |
+-| `k8s`                  | `registry:5000/k8s:1.35.5`                                        | kubectl, crane                                                                   |
+-| `modern-app-toolchain` | `registry:5000/kube-coder-modern-app-toolchain:node-24`, uid 1000 | KubeCoder's full-stack tool image: Node 24 with npm, pnpm and bun, poetry, ruff, uv, git |
+-
+-`modern-app-toolchain` runs as uid 1000, the agent's own user: git refuses a checkout that another
+-uid owns. A template name the library does not have fails the build, and the error lists the ones
+-it has.
++| Template               | Image                                                                            | What it carries                                                                                                       |
++| ---------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
++| `aac-tools`            | `registry:5000/aac-tools`                                                        | the architecture-as-code tools: `gen-architecture`, `arch-validate`                                                   |
++| `helm`                 | `alpine/helm:3.9.1`                                                              | the Helm CLI                                                                                                          |
++| `iac-toolchain`        | `registry:5000/kube-coder-iac-toolchain`, uid 1000, `TF_PLUGIN_CACHE_DIR` empty | the image `cexec iac` runs in a KubeCoder environment: terraform, helm, kubectl, bao, step, promtool, python3 with poetry and uv, git |
++| `k8s`                  | `registry:5000/k8s:1.35.5`                                                       | kubectl, crane                                                                                                        |
++| `modern-app-toolchain` | `registry:5000/kube-coder-modern-app-toolchain:node-24`, uid 1000                | KubeCoder's full-stack tool image: Node 24 with npm, pnpm and bun, poetry, ruff, uv, git                              |
++| `python`               | `registry:5000/python`                                                           | Python (slim)                                                                                                         |
++
++`iac-toolchain` and `modern-app-toolchain` run as uid 1000, the agent's own user: git refuses a
++checkout that another uid owns. `iac-toolchain` sets `TF_PLUGIN_CACHE_DIR` to the empty string. The
++image points it at a KubeCoder home overlay that an agent pod lacks, and terraform reports a missing
++cache directory as a CLI configuration error on every run; the empty value leaves the cache off.
++
++A template name the library does not have fails the build, and the error lists the ones it has.
+ 
+ ### images
+ 
+-Every other container, one entry each, in one of two forms. The style guide takes the map form
+-with an explicit `name:` only ([POD-4](../guide/pod.md#pod-4)).
+-
+-**A string** is an image reference. The container is named after the image's last path segment,
+-without its tag or digest: `node:24-bookworm` runs as `node`, and
+-`registry:5000/kube-coder-go-toolchain:latest` as `kube-coder-go-toolchain`.
++Every other container, one map each, with `image` and `name` and any of the other keys below, as
++the style guide requires ([POD-4](../guide/pod.md#pod-4)). A string entry, a map without `image` or
++`name`, and any other key fail the build.
+ 
+-**A map** takes `image` and any of the other keys below. Any other key fails the build.
++| Key         | Required | What it sets                                                                         |
++| ----------- | -------- | ------------------------------------------------------------------------------------ |
++| `image`     | yes      | The image reference.                                                                 |
++| `name`      | yes      | The container's name, the one `container('<name>')` takes ([below](#container-names)). |
++| `resources` | no       | `requests` and `limits`, each a map of resource name → quantity.                     |
++| `runAsUser` | no       | The container's `securityContext.runAsUser`.                                         |
++| `env`       | no       | Environment variables, name → value.                                                 |
+ 
+-| Key         | Required | What it sets                                                                    |
+-| ----------- | -------- | ------------------------------------------------------------------------------- |
+-| `image`     | yes      | The image reference.                                                            |
+-| `name`      | no       | The container's name. Default: derived from the image, as for a string entry.   |
+-| `resources` | no       | `requests` and `limits`, each a map of resource name → quantity.                |
+-| `runAsUser` | no       | The container's `securityContext.runAsUser`.                                    |
+-| `env`       | no       | Environment variables, name → value.                                            |
++Each `env` value is rendered as the string it is: `true`, `1000` and the empty string stay strings.
++A `null` value, such as an unset `env.X` in a map literal, fails the build, and the error names the
++entry's image and the variable. It never reaches the container as the string `null`.
+ 
+ ```groovy
+ yaml podYaml(templates: ['k8s'], images: [
+@@ -89,12 +94,12 @@ yaml podYaml(templates: ['k8s'], images: [
+ 
+ ### Container names
+ 
+-The name derived from a string entry is not checked against RFC 1123. Image repository names may
+-hold `.` and `_`, which container names may not: `registry:5000/my_tool:1` derives `my_tool`.
+-`podYaml` accepts it. The build then fails when the agent's pod template is parsed, before any pod
+-is requested, with `Container Names MUST match RFC 1123 - They can only contain lowercase letters,
+-numbers or dashes: my_tool`. An image whose last path segment is not a valid container name takes
+-the map form, with an explicit `name:`.
++Kubernetes takes a container name only as an RFC 1123 label: at most 63 lowercase letters, digits
++and `-`, starting and ending with a letter or digit. `podYaml` refuses any other `name:` when the
++agent is evaluated, before any pod is requested, and the error names the entry's image:
++`podYaml: the images entry for 'registry:5000/my_tool:1' names its container 'my_tool', which is
++not an RFC 1123 label: …`. Image repository names may hold `.` and `_`, so the image's own name is
++not always a valid container name.
+ 
+ Two containers with the same name fail the build, whether they are two images or a template and an
+ image.
+
+/work/JenkinsPipelineUtils — P2: git diff 15812f97eb3a..47cff67e300c
+
+docs/examples/firmware-versions.groovy                          |  46 ++---------
+ docs/examples/firmware.groovy                                   |  25 +-----
+ docs/mkdocs.yml                                                 |   1 +
+ docs/pages/guide/library.md                                     |   5 +-
+ docs/pages/guide/secrets.md                                     |  11 ++-
+ docs/pages/types/firmware.md                                    |  15 ++--
+ .../org/webathome/jenkinspipelineutils/EspFirmwareTest.java     | 116 ++++++++++++++++++++++++++++
+ vars/espFirmware.groovy                                         | 107 +++++++++++++++++++++++++
+ vars/espFirmware.md                                             |  96 +++++++++++++++++++++++
+ 9 files changed, 350 insertions(+), 72 deletions(-)
+
+diff --git a/docs/examples/firmware-versions.groovy b/docs/examples/firmware-versions.groovy
+index 0c6ed7a..cc001f1 100644
+--- a/docs/examples/firmware-versions.groovy
++++ b/docs/examples/firmware-versions.groovy
+@@ -47,62 +47,32 @@ pipeline {
+         // before the next version's build overwrites it.
+         stage('Build firmware (v1)') {
+             steps {
+-                dir('Intercom') {
+-                    container('idf') {
+-                        // The idf image cannot run as the agent's uid, and git refuses a checkout
+-                        // another uid owns.
+-                        sh 'git config --global --add safe.directory \'*\''
+-                        sh '/opt/esp/entrypoint.sh idf.py -DHARDWARE_VERSION=1 build'
+-                    }
++                script {
++                    espFirmware.build(dir: 'Intercom', hardwareVersion: 1)
+                 }
+             }
+         }
+ 
+         stage('Deploy firmware (v1)') {
+             steps {
+-                dir('Intercom') {
+-                    container('idf') {
+-                        sh 'chmod +x scripts/upload.sh'
+-                        withVault([vaultSecrets: [
+-                            [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
+-                                [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
+-                                [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
+-                            ]],
+-                        ]]) {
+-                            sh 'scripts/upload.sh https://iot.ginbov.nl'
+-                        }
+-                    }
++                script {
++                    espFirmware.upload(dir: 'Intercom')
+                 }
+             }
+         }
+ 
+         stage('Build firmware (v2)') {
+             steps {
+-                dir('Intercom') {
+-                    container('idf') {
+-                        // The idf image cannot run as the agent's uid, and git refuses a checkout
+-                        // another uid owns.
+-                        sh 'git config --global --add safe.directory \'*\''
+-                        sh '/opt/esp/entrypoint.sh idf.py -DHARDWARE_VERSION=2 build'
+-                    }
++                script {
++                    espFirmware.build(dir: 'Intercom', hardwareVersion: 2)
+                 }
+             }
+         }
+ 
+         stage('Deploy firmware (v2)') {
+             steps {
+-                dir('Intercom') {
+-                    container('idf') {
+-                        sh 'chmod +x scripts/upload.sh'
+-                        withVault([vaultSecrets: [
+-                            [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
+-                                [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
+-                                [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
+-                            ]],
+-                        ]]) {
+-                            sh 'scripts/upload.sh https://iot.ginbov.nl'
+-                        }
+-                    }
++                script {
++                    espFirmware.upload(dir: 'Intercom')
+                 }
+             }
+         }
+diff --git a/docs/examples/firmware.groovy b/docs/examples/firmware.groovy
+index 1a5f3b3..ac97eb1 100644
+--- a/docs/examples/firmware.groovy
++++ b/docs/examples/firmware.groovy
+@@ -50,36 +50,19 @@ pipeline {
+ 
+         stage('Build firmware') {
+             steps {
+-                dir('PaperClock') {
+-                    container('idf') {
+-                        // The idf image cannot run as the agent's uid, and git refuses a checkout
+-                        // another uid owns.
+-                        sh 'git config --global --add safe.directory \'*\''
+-                        sh '/opt/esp/entrypoint.sh idf.py build'
+-                    }
++                script {
++                    espFirmware.build(dir: 'PaperClock')
+                 }
+             }
+         }
+ 
+-        // --8<-- [start:deploy]
+         stage('Deploy firmware') {
+             steps {
+-                dir('PaperClock') {
+-                    container('idf') {
+-                        sh 'chmod +x scripts/upload.sh'
+-                        withVault([vaultSecrets: [
+-                            [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
+-                                [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
+-                                [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
+-                            ]],
+-                        ]]) {
+-                            sh 'scripts/upload.sh https://iot.ginbov.nl'
+-                        }
+-                    }
++                script {
++                    espFirmware.upload(dir: 'PaperClock')
+                 }
+             }
+         }
+-        // --8<-- [end:deploy]
+     }
+ 
+     // --8<-- [start:post]
+diff --git a/docs/mkdocs.yml b/docs/mkdocs.yml
+index b1a5bdc..d30bf4d 100644
+--- a/docs/mkdocs.yml
++++ b/docs/mkdocs.yml
+@@ -121,6 +121,7 @@ nav:
+       - architectureProducer: reference/architectureProducer.md
+       - cicd: reference/cicd.md
+       - containerTemplates: reference/containerTemplates.md
++      - espFirmware: reference/espFirmware.md
+       - gitUtils: reference/gitUtils.md
+       - helmCharts: reference/helmCharts.md
+       - kubectl: reference/kubectl.md
+diff --git a/docs/pages/guide/library.md b/docs/pages/guide/library.md
+index c692220..8256f9e 100644
+--- a/docs/pages/guide/library.md
++++ b/docs/pages/guide/library.md
+@@ -58,7 +58,7 @@ so a push to it changes every consumer at once, on each one's next build.
+ 
+ | Case | Test | Outcome |
+ | --- | --- | --- |
+-| J14: `espFirmware(…)` for the eight ESP-IDF firmware jobs, with a required `idfVersion` | the type's whole pipeline ([LIB-1](#lib-1)); the ESP-IDF version per repo ([LIB-3](#lib-3)) | accepted, not yet in the library |
++| J14: `espFirmware`'s steps for the eight ESP-IDF firmware jobs | how a firmware is built and uploaded to the devices ([LIB-1](#lib-1)); the repo's directory and hardware version per repo ([LIB-3](#lib-3)), and the ESP-IDF version in each file's own agent | in the library ([`espFirmware`](../reference/espFirmware.md)) |
+ | J16: `architectureProducer`'s steps for the architecture producers, 28 app and 50 deploy-repo files | how a producer's model is generated, validated and archived for AaC/Architecture ([LIB-1](#lib-1)); the stage, the producer id and the model files per repo ([LIB-3](#lib-3)) | in the library ([`architectureProducer`](../reference/architectureProducer.md)) |
+ | J21: one kaniko API, `helmCharts.kaniko2(…)` | how an image is built and labelled | in the library ([LIB-6](#lib-6)) |
+ | J15: the validation-Job helper | the whole-pipeline fence ([LIB-4](#lib-4)): with the five apps it was for rendered from a template, it serves one job, SSEGateway | not built |
+@@ -66,9 +66,6 @@ so a push to it changes every consumer at once, on each one's next build.
+ | J01: a `jobDefaults()` var for the job properties | nothing the file should show ([LIB-2](#lib-2)) | ruled against: it "would hide exactly the lines the move exists to surface" |
+ | A constant for the registry host, `registry:5000` | no contract: the host is the same in every image reference | ruled against: it would make the files "less readable to save nothing" |
+ 
+-Until J14's helper is in the library, [the firmware type's reference file](../types/firmware.md) is
+-the full declarative file.
+-
+ ## The calls a file uses
+ 
+ ### LIB-6 — One kaniko API { #lib-6 }
+diff --git a/docs/pages/guide/secrets.md b/docs/pages/guide/secrets.md
+index 4240157..8695ea7 100644
+--- a/docs/pages/guide/secrets.md
++++ b/docs/pages/guide/secrets.md
+@@ -53,12 +53,17 @@ global because the file that reads it is in a public repo, and OpenBao holds sec
+ 
+ ## Recipe
+ 
+-The firmware upload is the one step that uses the IoTSupport client secret, so `withVault` wraps
+-that step alone. The `chmod` before it needs no secret and stays outside.
++The Home Assistant Fleet snapshot's generation is the one step that uses the Home Assistant token,
++so `withVault` wraps that step alone. The `pip install` before it needs no secret and stays
++outside.
+ 
+ ```groovy
+---8<-- "firmware.groovy:deploy"
++--8<-- "snapshot-producer.groovy:generate"
+ ```
+ 
++A library step that uses a secret reads it the same way, inside the step: `espFirmware.upload`
++wraps the firmware upload alone in the IoTSupport client secret
++([`espFirmware`](../reference/espFirmware.md#upload)), so a firmware file names no secret.
++
+ A push takes the GitHub credential with `withCredentials`, around the clone and the push alone
+ ([SEC-3](#sec-3)): see the [Checkout recipe](checkout.md#recipe).
+diff --git a/docs/pages/types/firmware.md b/docs/pages/types/firmware.md
+index 5f9e740..5087ca4 100644
+--- a/docs/pages/types/firmware.md
++++ b/docs/pages/types/firmware.md
+@@ -7,16 +7,19 @@ the air, through IoTSupport. Today these are the eight jobs
+ ## What is specific to this type
+ 
+ - **The `jenkins-agent-large` template** ([POD-3](../guide/pod.md#pod-3)), and the ESP-IDF image
+-  as a named `images:` entry ([POD-4](../guide/pod.md#pod-4)).
++  as a named `images:` entry, `idf` ([POD-4](../guide/pod.md#pod-4)). The image's tag is the
++  file's own ESP-IDF version, so a version bump is one repo's commit.
+ - **`esp-libs` beside the repo**, both cloned in `Checkout`, each in its own directory
+   ([CHK-2](../guide/checkout.md#chk-2)). A repo that needs another library clones it there too.
+-- **The upload holds the secret.** `Deploy firmware` reads the IoTSupport client secret with
+-  `withVault` around the upload alone ([SEC-1](../guide/secrets.md#sec-1)).
++- **The library's steps.** [`espFirmware`](../reference/espFirmware.md) carries what every
++  firmware build shares: the `idf.py` command line, the upload, and the IoTSupport client secret,
++  which it reads with `withVault` around the upload alone ([SEC-1](../guide/secrets.md#sec-1)).
++  The file still writes out every stage and calls `build` in `Build firmware` and `upload` in
++  `Deploy firmware`, in `script {}` ([LIB-6](../guide/library.md#lib-6)). Its own values are the
++  directory it checks its repo out into and, for a repo with several, the hardware version
++  ([LIB-3](../guide/library.md#lib-3)).
+ - **Plain `disableConcurrentBuilds()` and the abort marker**: an upload cut off by an abort leaves
+   the devices on two firmware versions ([PROP-3](../guide/job-properties.md#prop-3)).
+-- **The accepted helper.** J14's `espFirmware(…)`, with its required `idfVersion`, is not in the
+-  library, so a firmware file is this full file
+-  ([The library](../guide/library.md#the-estates-cases)).
+ 
+ ## The reference file
+ 
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/EspFirmwareTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/EspFirmwareTest.java
+new file mode 100644
+index 0000000..8ee2db2
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/EspFirmwareTest.java
+@@ -0,0 +1,116 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.util.LinkedHashMap;
++import java.util.Map;
++import java.util.stream.Stream;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++
++/**
++ * Where espFirmware's steps run and what build runs there: buildStep is the directory and the
++ * command build runs in the idf container, uploadDirectory the directory upload runs the repo's
++ * upload script in. Both are {@code @NonCPS}, so the CPS transform leaves their bodies to run as
++ * plain Groovy here.
++ */
++class EspFirmwareTest {
++
++    private static GroovyClassLoader loader;
++    private static Object espFirmware;
++    private static Method buildStep;
++    private static Method uploadDirectory;
++
++    @BeforeAll
++    static void loadEspFirmware() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("espFirmware");
++        espFirmware = type.getDeclaredConstructor().newInstance();
++        buildStep = type.getMethod("buildStep", Map.class);
++        uploadDirectory = type.getMethod("uploadDirectory", Map.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    private static Object invoke(Method step, Map<String, Object> args) throws Exception {
++        try {
++            return step.invoke(espFirmware, args);
++        } catch (InvocationTargetException e) {
++            if (e.getCause() instanceof IllegalArgumentException refused) {
++                throw refused;
++            }
++            throw e;
++        }
++    }
++
++    /** Keys and values alternate; the map keeps their order, as a Groovy map literal does. */
++    private static Map<String, Object> ordered(Object... pairs) {
++        Map<String, Object> map = new LinkedHashMap<>();
++        for (int i = 0; i < pairs.length; i += 2) {
++            map.put((String) pairs[i], pairs[i + 1]);
++        }
++        return map;
++    }
++
++    @Test
++    void buildRunsIdfPyBuildInTheRepoDirectory() throws Exception {
++        assertEquals(
++                Map.of("dir", "PaperClock", "command", "/opt/esp/entrypoint.sh idf.py build"),
++                invoke(buildStep, Map.of("dir", "PaperClock")));
++    }
++
++    @Test
++    void buildPassesTheHardwareVersionToIdfPy() throws Exception {
++        assertEquals(
++                Map.of("dir", "Intercom", "command", "/opt/esp/entrypoint.sh idf.py -DHARDWARE_VERSION=2 build"),
++                invoke(buildStep, ordered("dir", "Intercom", "hardwareVersion", 2)));
++    }
++
++    @Test
++    void uploadRunsInTheRepoDirectory() throws Exception {
++        assertEquals("ThermostatProxy", invoke(uploadDirectory, Map.of("dir", "ThermostatProxy")));
++    }
++
++    static Stream<Arguments> refusals() {
++        return Stream.of(
++                Arguments.of(
++                        buildStep, Map.of(),
++                        "espFirmware.build: dir is required"),
++                Arguments.of(
++                        buildStep, Map.of("dir", ""),
++                        "espFirmware.build: dir is required"),
++                Arguments.of(
++                        buildStep, ordered("dir", "PaperClock", "idfVersion", "v5.5.3"),
++                        "espFirmware.build: takes dir and hardwareVersion; got idfVersion"),
++                Arguments.of(
++                        buildStep, ordered("dir", "Intercom", "hardwareVersion", "v2"),
++                        "espFirmware.build: hardwareVersion is a number; got 'v2'"),
++                Arguments.of(
++                        buildStep, ordered("dir", "Intercom", "hardwareVersion", null),
++                        "espFirmware.build: hardwareVersion is a number; got 'null'"),
++                Arguments.of(
++                        uploadDirectory, Map.of(),
++                        "espFirmware.upload: dir is required"),
++                Arguments.of(
++                        uploadDirectory, ordered("dir", "Intercom", "hardwareVersion", 1),
++                        "espFirmware.upload: takes dir; got hardwareVersion"));
++    }
++
++    @ParameterizedTest(name = "{2}")
++    @MethodSource("refusals")
++    void aCallWithAMissingEmptyOrUnknownArgumentFailsNamingIt(Method step, Map<String, Object> args, String message) {
++        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> invoke(step, args));
++        assertEquals(message, refused.getMessage());
++    }
++}
+diff --git a/vars/espFirmware.groovy b/vars/espFirmware.groovy
+new file mode 100644
+index 0000000..9aa679f
+--- /dev/null
++++ b/vars/espFirmware.groovy
+@@ -0,0 +1,107 @@
++/**
++ * The steps an ESP-IDF firmware file's stages call. `build` builds the firmware and `upload`
++ * uploads it to the devices over the air, through IoTSupport. Both run in the `idf` container,
++ * which the pod declares as a named `images:` entry with the file's own ESP-IDF image:
++ * `podYaml(images: [[image: 'espressif/idf:v5.5.3', name: 'idf']])`. Each is a call on the var's
++ * method, so a declarative stage runs it in `script {}`:
++ *
++ *     stage('Build firmware') {
++ *         steps {
++ *             script {
++ *                 espFirmware.build(dir: 'PaperClock')
++ *             }
++ *         }
++ *     }
++ *
++ * `dir` is required, with no default; `build` also takes an optional `hardwareVersion`. A missing,
++ * empty or unknown argument fails the build, and the error names it.
++ */
++
++/**
++ * Runs `idf.py build` in the repo's directory, with `-DHARDWARE_VERSION=<n>` when the call gives
++ * a hardware version.
++ *
++ * @param dir              The directory the file's Checkout stage checked the repo out into.
++ * @param hardwareVersion  Optional: the hardware version to build the firmware for.
++ */
++def build(Map args) {
++    Map<String, String> invocation = buildStep(args)
++    dir(invocation.dir) {
++        container('idf') {
++            // The idf image cannot run as the agent's uid, and git refuses a checkout another uid
++            // owns.
++            sh "git config --global --add safe.directory '*'"
++            sh invocation.command
++        }
++    }
++}
++
++/**
++ * Runs the repo's `scripts/upload.sh` against IoTSupport, which hands the firmware the build made
++ * to the devices. The IoTSupport client secret exists only while the upload runs.
++ *
++ * @param dir  The directory the file's Checkout stage checked the repo out into.
++ */
++def upload(Map args) {
++    String directory = uploadDirectory(args)
++    dir(directory) {
++        container('idf') {
++            sh 'chmod +x scripts/upload.sh'
++            withVault([vaultSecrets: [
++                [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
++                    [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
++                    [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
++                ]],
++            ]]) {
++                sh 'scripts/upload.sh https://iot.ginbov.nl'
++            }
++        }
++    }
++}
++
++/**
++ * The directory `build` runs in and the command it runs there, as `dir` and `command`.
++ */
++@NonCPS
++Map<String, String> buildStep(Map args) {
++    Map<String, Object> given = arguments('build', args, ['dir'], ['hardwareVersion'])
++    String flags = ''
++    if (given.containsKey('hardwareVersion')) {
++        String version = String.valueOf(given.hardwareVersion)
++        if (!(version ==~ /[0-9]+/)) {
++            throw new IllegalArgumentException("espFirmware.build: hardwareVersion is a number; got '${version}'")
++        }
++        flags = "-DHARDWARE_VERSION=${version} "
++    }
++    return [
++        dir: given.dir.toString(),
++        command: "/opt/esp/entrypoint.sh idf.py ${flags}build".toString(),
++    ]
++}
++
++@NonCPS
++String uploadDirectory(Map args) {
++    return arguments('upload', args, ['dir'], []).dir.toString()
++}
++
++/**
++ * `args` with every key a String, once it holds each of `required`, non-empty, and nothing beyond
++ * `required` and `optional`.
++ */
++@NonCPS
++Map<String, Object> arguments(String step, Map args, List<String> required, List<String> optional) {
++    Map<String, Object> given = [:]
++    args.each { key, value -> given[key.toString()] = value }
++
++    List<String> names = required + optional
++    def unknown = given.keySet() - names
++    if (unknown) {
++        throw new IllegalArgumentException("espFirmware.${step}: takes ${names.join(' and ')}; got ${unknown.join(', ')}")
++    }
++    required.each { name ->
++        if (!given[name]) {
++            throw new IllegalArgumentException("espFirmware.${step}: ${name} is required")
++        }
++    }
++    return given
++}
+diff --git a/vars/espFirmware.md b/vars/espFirmware.md
+new file mode 100644
+index 0000000..565c60f
+--- /dev/null
++++ b/vars/espFirmware.md
+@@ -0,0 +1,96 @@
++# espFirmware
++
++The steps an ESP-IDF firmware file's stages call. `build` builds the firmware with `idf.py`, and
++`upload` uploads it to the devices over the air, through IoTSupport. The steps carry what is the
++same in every firmware build: the container the build runs in, git's safe-directory setting, the
++`idf.py` command line, the upload target and the IoTSupport client secret. A value that differs per
++repo is an argument with no default: the directory the repo is checked out into and, for a repo
++that builds for several hardware versions, the version.
++
++**A Replay is an OTA deploy.** Every build of a firmware job ends in `upload`, so a Replay or a
++rebuild re-flashes the devices over the air. There is no dry run.
++
++The pod declares the `idf` container as a named `images:` entry ([`podYaml`](podYaml.md)), on the
++`jenkins-agent-large` template. The ESP-IDF version is the file's own, in that image's tag, so a
++version bump is one repo's commit. The steps do not clone: the file's `Checkout` stage checks out
++the repo, `esp-libs` beside it and any other repo the build reads, each into a directory of its
++own. Each step is a call on the var's method, so a declarative stage runs it in `script {}`. The
++file still writes out its every stage; the steps go inside them.
++
++```groovy
++agent {
++    kubernetes {
++        inheritFrom 'jenkins-agent-large'
++        yaml podYaml(images: [[image: 'espressif/idf:v5.5.3', name: 'idf']])
++    }
++}
++
++stages {
++    stage('Checkout') {
++        steps {
++            dir('PaperClock') {
++                checkout scm
++            }
++            dir('esp-libs') {
++                git url: 'https://github.com/pvginkel/esp-libs.git', branch: 'main',
++                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10'
++            }
++        }
++    }
++
++    stage('Build firmware') {
++        steps {
++            script {
++                espFirmware.build(dir: 'PaperClock')
++            }
++        }
++    }
++
++    stage('Deploy firmware') {
++        steps {
++            script {
++                espFirmware.upload(dir: 'PaperClock')
++            }
++        }
++    }
++}
++```
++
++## Steps
++
++`dir` is required. A missing argument, an empty one or one the step does not take fails the build,
++and the error names it.
++
++### build
++
++`espFirmware.build(dir: '<dir>')` runs, in the `idf` container and in the directory `dir`,
++`git config --global --add safe.directory '*'` and then `idf.py build`, through the image's
++`/opt/esp/entrypoint.sh`. The ESP-IDF image does not run as the agent's uid, and git refuses a
++checkout another uid owns; the setting lets the build read the repo's git state.
++
++`espFirmware.build(dir: '<dir>', hardwareVersion: <n>)` builds for hardware version `n`:
++`idf.py -DHARDWARE_VERSION=<n> build`. Each version builds into the one `build/` directory, so a
++file that builds several uploads each before it builds the next.
++
++| Argument          | What it is                                                                 |
++| ----------------- | -------------------------------------------------------------------------- |
++| `dir`             | The directory the file's `Checkout` stage checked the repo out into.       |
++| `hardwareVersion` | Optional: the hardware version to build for, a whole number such as `2`.   |
++
++### upload
++
++`espFirmware.upload(dir: '<dir>')` runs, in the `idf` container and in the directory `dir`, the
++repo's `scripts/upload.sh https://iot.ginbov.nl`, which uploads the firmware the last `build` made
++to IoTSupport for the devices. The step reads the IoTSupport client secret,
++`kv/jenkins/iotsupport-pipeline-oidc`, with `withVault` around the upload alone
++([SEC-1](../guide/secrets.md#sec-1)), into `IOTSUPPORT_CLIENT_ID` and `IOTSUPPORT_CLIENT_SECRET`.
++The file names no secret, and none reaches the pod spec ([SEC-2](../guide/secrets.md#sec-2)).
++
++| Argument | What it is                                                           |
++| -------- | -------------------------------------------------------------------- |
++| `dir`    | The directory the file's `Checkout` stage checked the repo out into. |
++
++## Internals
++
++`buildStep`, `uploadDirectory` and `arguments` check the arguments and work out where the steps run
++and what `build` runs. They are not part of what `espFirmware` offers a Jenkinsfile.
+
+/work/JenkinsPipelineUtils — P3: git diff 47cff67e300c..521fac6015a4
+
+docs/examples/modern-app.groovy                                 | 140 +++++++++
+ docs/mkdocs.yml                                                 |   2 +
+ docs/pages/guide/library.md                                     |   2 +-
+ docs/pages/guide/secrets.md                                     |   8 +-
+ docs/pages/types/index.md                                       |   6 +-
+ docs/pages/types/modern-app.md                                  |  35 +++
+ docs/pages/types/validation-job.md                              |   5 +-
+ .../java/org/webathome/jenkinspipelineutils/ModernAppTest.java  | 439 ++++++++++++++++++++++++++++
+ vars/modernApp.groovy                                           | 347 ++++++++++++++++++++++
+ vars/modernApp.md                                               | 143 +++++++++
+ vars/podYaml.groovy                                             |   3 +-
+ vars/podYaml.md                                                 |   3 +
+ 12 files changed, 1125 insertions(+), 8 deletions(-)
+
+diff --git a/docs/examples/modern-app.groovy b/docs/examples/modern-app.groovy
+new file mode 100644
+index 0000000..7eff140
+--- /dev/null
++++ b/docs/examples/modern-app.groovy
+@@ -0,0 +1,140 @@
++// Tests ElectronicsInventory's backend and frontend in a Kubernetes Job, then builds the
++// electronics-inventory, electronics-inventory-ui and electronics-inventory-docs images and pins
++// the first two into ElectronicsInventoryDeploy, which Argo CD syncs to prd.
++//
++// The images are built from the tree the suite passed on, so `latest` is tagged at build time and
++// there is no promote stage.
++//
++// Controller config:
++//   - Job: ElectronicsInventory/ElectronicsInventory
++//   - SCM: pvginkel/ElectronicsInventory, branch main
++//   - Script Path: Jenkinsfile
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++pipeline {
++    agent {
++        kubernetes {
++            inheritFrom 'jenkins-agent kaniko'
++            yamlMergeStrategy merge()
++            yaml podYaml(templates: ['k8s'])
++        }
++    }
++
++    options {
++        disableConcurrentBuilds(abortPrevious: true)
++        skipDefaultCheckout()
++        timeout(time: 60, unit: 'MINUTES')
++        timestamps()
++    }
++
++    triggers {
++        githubPush()
++    }
++
++    stages {
++        stage('Checkout') {
++            steps {
++                checkout scm
++            }
++        }
++
++        stage('Test') {
++            steps {
++                script {
++                    // S3 comes from a RustFS sidecar rather than shared storage: the backend's test
++                    // fixtures abort without a real S3 API, and a throwaway bucket per run keeps
++                    // builds from tripping over each other. The backend creates the bucket itself.
++                    modernApp.test(
++                        job: 'electronics-inventory-validation',
++                        install: 'poetry install --no-interaction --without dev',
++                        run: 'poetry run',
++                        suites: ['backend', 'frontend'],
++                        services: [
++                            [name: 's3storage', image: 'rustfs/rustfs:latest', env: [
++                                RUSTFS_ACCESS_KEY: 's3storage',
++                                RUSTFS_SECRET_KEY: 's3storage',
++                            ]],
++                        ],
++                        env: [
++                            S3_ENDPOINT_URL: 'http://localhost:9000',
++                            S3_ACCESS_KEY_ID: 's3storage',
++                            S3_SECRET_ACCESS_KEY: 's3storage',
++                            S3_BUCKET_NAME: 'electronics-inventory-validation',
++                        ],
++                        secrets: [],
++                    )
++                }
++            }
++        }
++
++        stage('Build electronics-inventory image') {
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko2(
++                            dockerfile: 'backend/Dockerfile',
++                            context: 'backend',
++                            destinations: [
++                                "registry:5000/electronics-inventory:${currentBuild.number}",
++                                'registry:5000/electronics-inventory:latest',
++                            ]
++                        )
++                    }
++                }
++            }
++        }
++
++        stage('Build electronics-inventory-ui image') {
++            steps {
++                // The frontend shows the commit it was built from, and its build context holds no
++                // .git to read it from.
++                sh 'git rev-parse HEAD > frontend/git-rev'
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko2(
++                            dockerfile: 'frontend/Dockerfile',
++                            context: 'frontend',
++                            destinations: [
++                                "registry:5000/electronics-inventory-ui:${currentBuild.number}",
++                                'registry:5000/electronics-inventory-ui:latest',
++                            ]
++                        )
++                    }
++                }
++            }
++        }
++
++        stage('Build electronics-inventory-docs image') {
++            steps {
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko2(
++                            dockerfile: 'frontend/Dockerfile.docs',
++                            context: 'frontend',
++                            destinations: [
++                                "registry:5000/electronics-inventory-docs:${currentBuild.number}",
++                                'registry:5000/electronics-inventory-docs:latest',
++                            ]
++                        )
++                    }
++                }
++            }
++        }
++
++        stage('Write image pins') {
++            steps {
++                container('k8s') {
++                    script {
++                        cicd.writeVersionPins(repo: 'pvginkel/ElectronicsInventoryDeploy', pins: [
++                            'config/prd/values.yaml': [
++                                'images.electronicsInventory': ":${currentBuild.number}",
++                                'images.electronicsInventoryUI': ":${currentBuild.number}",
++                            ],
++                        ])
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/docs/mkdocs.yml b/docs/mkdocs.yml
+index d30bf4d..814c5b0 100644
+--- a/docs/mkdocs.yml
++++ b/docs/mkdocs.yml
+@@ -111,6 +111,7 @@ nav:
+       - Artifact build: types/artifact-build.md
+       - ESP-IDF firmware: types/firmware.md
+       - Validation Job: types/validation-job.md
++      - Modern app build: types/modern-app.md
+       - iac-controller job: types/iac-controller.md
+       - Configuration apply: types/configuration-apply.md
+       - Promotion: types/promotion.md
+@@ -125,6 +126,7 @@ nav:
+       - gitUtils: reference/gitUtils.md
+       - helmCharts: reference/helmCharts.md
+       - kubectl: reference/kubectl.md
++      - modernApp: reference/modernApp.md
+       - notify: reference/notify.md
+       - podYaml: reference/podYaml.md
+       - utils: reference/utils.md
+diff --git a/docs/pages/guide/library.md b/docs/pages/guide/library.md
+index 8256f9e..dcfecb1 100644
+--- a/docs/pages/guide/library.md
++++ b/docs/pages/guide/library.md
+@@ -61,7 +61,7 @@ so a push to it changes every consumer at once, on each one's next build.
+ | J14: `espFirmware`'s steps for the eight ESP-IDF firmware jobs | how a firmware is built and uploaded to the devices ([LIB-1](#lib-1)); the repo's directory and hardware version per repo ([LIB-3](#lib-3)), and the ESP-IDF version in each file's own agent | in the library ([`espFirmware`](../reference/espFirmware.md)) |
+ | J16: `architectureProducer`'s steps for the architecture producers, 28 app and 50 deploy-repo files | how a producer's model is generated, validated and archived for AaC/Architecture ([LIB-1](#lib-1)); the stage, the producer id and the model files per repo ([LIB-3](#lib-3)) | in the library ([`architectureProducer`](../reference/architectureProducer.md)) |
+ | J21: one kaniko API, `helmCharts.kaniko2(…)` | how an image is built and labelled | in the library ([LIB-6](#lib-6)) |
+-| J15: the validation-Job helper | the whole-pipeline fence ([LIB-4](#lib-4)): with the five apps it was for rendered from a template, it serves one job, SSEGateway | not built |
++| J15: `modernApp.test`, the validation Job of the five [modern app builds](../types/modern-app.md) | how an app's suite runs in a Kubernetes Job, on the image of `podYaml`'s `modern-app-toolchain` template ([LIB-1](#lib-1)); the Job's name, the install and run commands, the services, the environment, the secrets and the suites per app ([LIB-3](#lib-3)). SSEGateway's suite runs from an image it builds, a different body, and keeps its own `Test` stage | in the library ([`modernApp`](../reference/modernApp.md)) |
+ | J19: an `iac` helper for the iac-controller dev stages | the iac-controller jobs' own workflow | ruled against: "Keep the duplication; the style guide says it is deliberate" ([LIB-7](#lib-7)) |
+ | J01: a `jobDefaults()` var for the job properties | nothing the file should show ([LIB-2](#lib-2)) | ruled against: it "would hide exactly the lines the move exists to surface" |
+ | A constant for the registry host, `registry:5000` | no contract: the host is the same in every image reference | ruled against: it would make the files "less readable to save nothing" |
+diff --git a/docs/pages/guide/secrets.md b/docs/pages/guide/secrets.md
+index 8695ea7..66b1c7c 100644
+--- a/docs/pages/guide/secrets.md
++++ b/docs/pages/guide/secrets.md
+@@ -8,8 +8,14 @@ A secret from OpenBao MUST be read with `withVault` inside the `steps` of the st
+ around only the steps that use it. `withVault` MUST NOT wrap `pipeline {}`, the agent, the
+ checkout, a lint or a test.
+ 
++The one exception is a test that itself needs a secret: `withVault` MAY wrap the step that runs
++that test, and nothing else. Today that is IoTSupport's `Test` stage. Its suite needs the Keycloak
++admin client, and `withVault` wraps only its call to `modernApp.test`, which hands the secret to
++the suite by name ([`modernApp`](../reference/modernApp.md#secrets)).
++
+ **Why.** The secret then exists only while the steps that need it run. A secret around the whole
+-build is in reach of every step, including ones that run code from the repo under test.
++build is in reach of every step, including ones that run code from the repo under test. A suite
++that needs a secret cannot run without it, so the secret is around that one step.
+ 
+ ### SEC-2 — No secret in the pod { #sec-2 }
+ 
+diff --git a/docs/pages/types/index.md b/docs/pages/types/index.md
+index 1bf0857..e093322 100644
+--- a/docs/pages/types/index.md
++++ b/docs/pages/types/index.md
+@@ -12,7 +12,8 @@ controller's declarative linter. A new pipeline starts from its type's reference
+ | [Image build](image-build.md) | Builds an image with kaniko, then pins it into a deploy repo. | Ginbov; IaC/IaC Docker Image for a build that detects its changes |
+ | [Artifact build](artifact-build.md) | Builds an artifact that another job uses, archives it, and starts that job. | ScanToPdf/ScanToPdfServer |
+ | [ESP-IDF firmware](firmware.md) | Builds a device's firmware and uploads it over the air. | Firmware/PaperClock; Firmware/Intercom for several hardware versions |
+-| [Validation Job](validation-job.md) | Runs the test suite as a Kubernetes Job, then builds, pushes and pins. | SSEGateway/SSEGateway |
++| [Validation Job](validation-job.md) | Builds a validation image and runs it as a Kubernetes Job, then builds, pushes and pins. | SSEGateway/SSEGateway |
++| [Modern app build](modern-app.md) | Tests a backend and frontend repo in a Kubernetes Job, then builds its images and pins them into a deploy repo. | ElectronicsInventory/ElectronicsInventory |
+ | [iac-controller job](iac-controller.md) | Runs `iac` calls on srviac: lint, apply, drift checks, scheduled rolls. | IaC/Scheduled Calico Rollout |
+ | [Configuration apply](configuration-apply.md) | Lints and tests a configuration, then applies it to a live service. | YouTrack/YouTrackConfiguration |
+ | [Promotion](promotion.md) | Started by hand: retags images and advances a deploy branch. | KubeCoder/Promote-PRD |
+@@ -25,6 +26,3 @@ controller's declarative linter. A new pipeline starts from its type's reference
+ - **Firmware/KitchenDisplay** cross-builds a kiosk and deploys it over SSH, the one job of its type.
+   Its job is disabled and its deploy path is gone, so the type has no reference file. ANS-93
+   decides whether it is deleted or rebuilt.
+-- **DHCPApp, ElectronicsInventory, FieldnotesApp, IoTSupport and ZigbeeControl** render their
+-  `Jenkinsfile` from ModernAppTemplate's template, and this guide leaves those five jobs out. Their
+-  architecture producers, the jobs `AaC/<App>`, are [app architecture producers](app-architecture.md).
+diff --git a/docs/pages/types/modern-app.md b/docs/pages/types/modern-app.md
+new file mode 100644
+index 0000000..35bff25
+--- /dev/null
++++ b/docs/pages/types/modern-app.md
+@@ -0,0 +1,35 @@
++# Modern app build
++
++The build of an app with a backend and a frontend in one repo, the shape ModernAppTemplate
++renders. It runs the app's test suite in a Kubernetes Job, on the tree it checked out, then builds
++the app's images with kaniko and pins them into the app's deploy repo, which Argo CD syncs. Today
++these are DHCPApp, ElectronicsInventory, FieldnotesApp, IoTSupport and ZigbeeControl. Their files
++were first rendered from ModernAppTemplate's template; a file of this type follows the reference
++file below, not the template.
++
++## What is specific to this type
++
++- **The library's step.** [`modernApp.test`](../reference/modernApp.md) carries what every app's
++  test run shares: the Job on the image of `podYaml`'s `modern-app-toolchain` template, the copy of
++  the tree into it, the summary per suite, the JUnit report and the build's description. The file
++  still writes out every stage and calls the step in `Test`, in `script {}`
++  ([LIB-6](../guide/library.md#lib-6)). Its own values are the Job's name, the install and run
++  commands, the services beside the suite, the suite's environment and secrets, and the suites the
++  summary counts ([LIB-3](../guide/library.md#lib-3)).
++- **The `kaniko` template and the `k8s` sidecar**, as in an [image build](image-build.md): the step
++  runs kubectl in the `k8s` container, and so does the pin write ([POD-3](../guide/pod.md#pod-3)).
++- **`Test`, a stage per image, then `Write image pins`**
++  ([GRAN-2](../guide/stage-granularity.md#gran-2), [GRAN-3](../guide/stage-granularity.md#gran-3),
++  [GRAN-4](../guide/stage-granularity.md#gran-4)). The images are built from the tree the suite
++  passed on.
++- **A suite that needs a secret** gets it through the step's `secrets`, with `withVault` around the
++  step's call alone: [SEC-1](../guide/secrets.md#sec-1)'s one exception. Today that is IoTSupport,
++  whose suite needs the Keycloak admin client.
++
++## The reference file
++
++The `ElectronicsInventory/ElectronicsInventory` job's `Jenkinsfile`:
++
++```groovy
++--8<-- "modern-app.groovy"
++```
+diff --git a/docs/pages/types/validation-job.md b/docs/pages/types/validation-job.md
+index 853e676..a33c141 100644
+--- a/docs/pages/types/validation-job.md
++++ b/docs/pages/types/validation-job.md
+@@ -16,7 +16,10 @@ and hands it on. Today this is SSEGateway/SSEGateway.
+   the gate and the image ([GRAN-6](../guide/stage-granularity.md#gran-6)).
+ - **Plain `disableConcurrentBuilds()` and the abort marker**: a push, then another change
+   ([PROP-3](../guide/job-properties.md#prop-3)).
+-- **No helper.** J15's validation-Job helper is not built: it would serve one job
++- **No helper.** The `Test` stage is the file's own. SSEGateway's suite runs from the validation
++  image the build pushes and writes its JUnit files into its log. That is a different body from
++  [`modernApp.test`](../reference/modernApp.md)'s, which streams the checked-out tree into its Job
++  for the [modern app builds](modern-app.md), and a helper for it would serve one job
+   ([LIB-4](../guide/library.md#lib-4)).
+ 
+ ## The reference file
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/ModernAppTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/ModernAppTest.java
+new file mode 100644
+index 0000000..6c0e478
+--- /dev/null
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/ModernAppTest.java
+@@ -0,0 +1,439 @@
++package org.webathome.jenkinspipelineutils;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertFalse;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++import groovy.json.JsonSlurper;
++import groovy.lang.GroovyClassLoader;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.stream.Stream;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.io.TempDir;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.Arguments;
++import org.junit.jupiter.params.provider.MethodSource;
++
++/**
++ * What modernApp.test applies and reports: testArguments checks the call, jobManifest is the Job
++ * it applies, secretsScript is the shell that adds the secrets to it, and summary is the per-suite
++ * summary it writes. All four are {@code @NonCPS}, so the CPS transform leaves their bodies to run
++ * as plain Groovy here. The manifests are the Jobs the
++ * five apps' Jenkinsfiles applied before the step, FieldnotesApp's and IoTSupport's, with
++ * IoTSupport's Keycloak admin client left to the step's secrets.
++ */
++class ModernAppTest {
++
++    private static final String IMAGE = "registry:5000/kube-coder-modern-app-toolchain:node-24";
++
++    private static GroovyClassLoader loader;
++    private static Object modernApp;
++    private static Method testArguments;
++    private static Method jobManifest;
++    private static Method secretsScript;
++    private static Method summary;
++
++    @BeforeAll
++    static void loadModernApp() throws Exception {
++        loader = LibraryCompileTest.trustedLoader();
++        Class<?> type = loader.loadClass("modernApp");
++        modernApp = type.getDeclaredConstructor().newInstance();
++        testArguments = type.getMethod("testArguments", Map.class);
++        jobManifest = type.getMethod("jobManifest", Map.class, String.class, String.class, String.class, String.class);
++        secretsScript = type.getMethod("secretsScript");
++        summary = type.getMethod("summary", String.class, List.class);
++    }
++
++    @AfterAll
++    static void closeLoader() throws Exception {
++        loader.close();
++    }
++
++    private static Object invoke(Method method, Object... args) throws Exception {
++        try {
++            return method.invoke(modernApp, args);
++        } catch (InvocationTargetException e) {
++            if (e.getCause() instanceof IllegalArgumentException refused) {
++                throw refused;
++            }
++            throw e;
++        }
++    }
++
++    /** Keys and values alternate; the map keeps their order, as a Groovy map literal does. */
++    private static Map<String, Object> ordered(Object... pairs) {
++        Map<String, Object> map = new LinkedHashMap<>();
++        for (int i = 0; i < pairs.length; i += 2) {
++            map.put((String) pairs[i], pairs[i + 1]);
++        }
++        return map;
++    }
++
++    private static Map<String, Object> fieldnotes() {
++        return ordered(
++                "job", "fieldnotes-validation",
++                "install", "uv sync --locked --no-dev",
++                "run", "uv run --no-sync",
++                "suites", List.of("backend", "frontend"),
++                "services", List.of(),
++                "env", Map.of(),
++                "secrets", List.of());
++    }
++
++    private static Map<String, Object> iotSupport() {
++        return ordered(
++                "job", "iot-support-validation",
++                "install", "poetry install --no-interaction --without dev",
++                "run", "poetry run",
++                "suites", List.of("backend", "frontend"),
++                "services", List.of(
++                        ordered(
++                                "name", "s3storage",
++                                "image", "rustfs/rustfs:latest",
++                                "env", ordered("RUSTFS_ACCESS_KEY", "s3storage", "RUSTFS_SECRET_KEY", "s3storage")),
++                        ordered(
++                                "name", "opensearch",
++                                "image", "opensearchproject/opensearch:2",
++                                "resources", ordered(
++                                        "requests", Map.of("memory", "640Mi"),
++                                        "limits", Map.of("memory", "640Mi")),
++                                "env", ordered(
++                                        "discovery.type", "single-node",
++                                        "plugins.security.disabled", "true",
++                                        "bootstrap.memory_lock", false))),
++                "env", ordered(
++                        "S3_ENDPOINT_URL", "http://localhost:9000",
++                        "S3_BUCKET_NAME", "iot-support-validation",
++                        "KEYCLOAK_REALM", "iotsupport"),
++                "secrets", List.of("KEYCLOAK_ADMIN_CLIENT_ID", "KEYCLOAK_ADMIN_CLIENT_SECRET"));
++    }
++
++    @SuppressWarnings("unchecked")
++    private static Map<String, Object> manifest(Map<String, Object> call) throws Exception {
++        Map<String, Object> given = (Map<String, Object>) invoke(testArguments, call);
++        return (Map<String, Object>) invoke(jobManifest, given, "app-validation-42", "jenkins", "42", IMAGE);
++    }
++
++    /**
++     * The expected manifest, from JSON: every string a String and every number an Integer, so a
++     * GString or a number written as a string in the manifest fails the comparison.
++     */
++    private static Object json(String text) {
++        return new JsonSlurper().parseText(text);
++    }
++
++    private static final String SUITE_SCRIPT_START = """
++            mkdir -p /work/staging /work/results
++            echo "Waiting for code upload..."
++            while [ ! -f /work/staging/ready ]; do sleep 1; done
++            echo "Code received, extracting..."
++            tar xzf /work/staging/context.tar.gz -C /work
++            rm -rf /work/staging
++            """;
++
++    private static String suiteScript(String install, String run) {
++        return SUITE_SCRIPT_START
++                + "cd /work && " + install + "\n"
++                + run + " run-suite --output-mode full --junitxml-dir /work/results --retries 2\n"
++                + "echo $? > /work/results/exit-code\n"
++                + "sleep infinity\n";
++    }
++
++    private static String quoted(String text) {
++        return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
++    }
++
++    private static String manifestJson(String name, String script, String suiteEnv, String services) {
++        return """
++                {
++                  "apiVersion": "batch/v1",
++                  "kind": "Job",
++                  "metadata": {
++                    "name": "app-validation-42",
++                    "namespace": "jenkins",
++                    "labels": {
++                      "app.kubernetes.io/name": "%s",
++                      "app.kubernetes.io/managed-by": "jenkins",
++                      "jenkins/build-number": "42"
++                    }
++                  },
++                  "spec": {
++                    "backoffLimit": 0,
++                    "activeDeadlineSeconds": 3600,
++                    "ttlSecondsAfterFinished": 3600,
++                    "template": {
++                      "metadata": {"labels": {"job-name": "app-validation-42"}},
++                      "spec": {
++                        "restartPolicy": "Never",
++                        "tolerations": [
++                          {"key": "size", "operator": "Equal", "value": "large", "effect": "PreferNoSchedule"}
++                        ],
++                        "volumes": [{"name": "work", "emptyDir": {}}],
++                        "containers": [
++                          {
++                            "name": "validation",
++                            "image": "%s",
++                            "imagePullPolicy": "Always",
++                            "securityContext": {"runAsUser": 1000, "runAsGroup": 1000},
++                            "volumeMounts": [{"name": "work", "mountPath": "/work"}],
++                            "command": ["sh", "-c"],
++                            "args": [%s],
++                            "resources": {"requests": {"cpu": "1", "memory": "3584Mi"}}%s
++                          }%s
++                        ]
++                      }
++                    }
++                  }
++                }
++                """.formatted(name, IMAGE, quoted(script), suiteEnv, services);
++    }
++
++    @Test
++    void aSuiteWithoutServicesRunsAloneInTheToolchainImage() throws Exception {
++        assertEquals(
++                json(manifestJson("fieldnotes-validation", suiteScript("uv sync --locked --no-dev", "uv run --no-sync"), "", "")),
++                manifest(fieldnotes()));
++    }
++
++    @Test
++    void servicesAndTheSuitesEnvironmentAreRenderedButNoSecret() throws Exception {
++        String suiteEnv = """
++                ,
++                "env": [
++                  {"name": "S3_ENDPOINT_URL", "value": "http://localhost:9000"},
++                  {"name": "S3_BUCKET_NAME", "value": "iot-support-validation"},
++                  {"name": "KEYCLOAK_REALM", "value": "iotsupport"}
++                ]
++                """;
++        String services = """
++                ,
++                {
++                  "name": "s3storage",
++                  "image": "rustfs/rustfs:latest",
++                  "env": [
++                    {"name": "RUSTFS_ACCESS_KEY", "value": "s3storage"},
++                    {"name": "RUSTFS_SECRET_KEY", "value": "s3storage"}
++                  ]
++                },
++                {
++                  "name": "opensearch",
++                  "image": "opensearchproject/opensearch:2",
++                  "env": [
++                    {"name": "discovery.type", "value": "single-node"},
++                    {"name": "plugins.security.disabled", "value": "true"},
++                    {"name": "bootstrap.memory_lock", "value": "false"}
++                  ],
++                  "resources": {"requests": {"memory": "640Mi"}, "limits": {"memory": "640Mi"}}
++                }
++                """;
++        assertEquals(
++                json(manifestJson(
++                        "iot-support-validation",
++                        suiteScript("poetry install --no-interaction --without dev", "poetry run"),
++                        suiteEnv,
++                        services)),
++                manifest(iotSupport()));
++    }
++
++    @Test
++    void theSecretsAreNamesOnly() throws Exception {
++        @SuppressWarnings("unchecked")
++        Map<String, Object> given = (Map<String, Object>) invoke(testArguments, iotSupport());
++        assertEquals(List.of("KEYCLOAK_ADMIN_CLIENT_ID", "KEYCLOAK_ADMIN_CLIENT_SECRET"), given.get("secrets"));
++    }
++
++    /** What a run of secretsScript under {@code sh -xe}, as the sh step runs it, left behind. */
++    private record ShellRun(int exit, String trace, List<String> setEnv, String applied) {}
++
++    /**
++     * Runs secretsScript in {@code dir} with {@code environment} added, on a kubectl that records
++     * its arguments and reads its input: {@code set} answers with a manifest, {@code apply} saves
++     * what it read.
++     */
++    private static ShellRun runSecretsScript(Path dir, Map<String, String> environment) throws Exception {
++        Path bin = Files.createDirectories(dir.resolve("bin"));
++        Path kubectl = bin.resolve("kubectl");
++        Files.writeString(kubectl, """
++                #!/bin/sh
++                printf '%s\\0' "$@" > "$1.args"
++                if [ "$1" = set ]; then cat > /dev/null; echo 'kind: Job'; else cat > applied; fi
++                """);
++        assertTrue(kubectl.toFile().setExecutable(true));
++        Files.writeString(dir.resolve("secrets.sh"), (String) invoke(secretsScript));
++
++        ProcessBuilder shell = new ProcessBuilder("sh", "-xe", "secrets.sh")
++                .directory(dir.toFile())
++                .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")))
++                .redirectOutput(ProcessBuilder.Redirect.DISCARD);
++        shell.environment().putAll(environment);
++        shell.environment().put("PATH", bin + ":" + System.getenv("PATH"));
++        Process process = shell.start();
++        String trace = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
++        int exit = process.waitFor();
++
++        Path setEnv = dir.resolve("set.args");
++        Path applied = dir.resolve("applied");
++        return new ShellRun(
++                exit,
++                trace,
++                Files.exists(setEnv) ? List.of(Files.readString(setEnv).split("\0")) : List.of(),
++                Files.exists(applied) ? Files.readString(applied) : null);
++    }
++
++    @Test
++    void eachSecretReachesTheJobWholeAndStaysOutOfTheTrace(@TempDir Path dir) throws Exception {
++        String clientSecret = "ab#cd ef\"g:h $HOME `id` \\\nline2=oops\n\n";
++        ShellRun run = runSecretsScript(dir, Map.of(
++                "VALIDATION_SECRETS", "KEYCLOAK_ADMIN_CLIENT_ID KEYCLOAK_ADMIN_CLIENT_SECRET",
++                "KEYCLOAK_ADMIN_CLIENT_ID", "-iot#support",
++                "KEYCLOAK_ADMIN_CLIENT_SECRET", clientSecret));
++
++        assertEquals(0, run.exit(), run.trace());
++        assertEquals(
++                List.of("set", "env", "--local", "-f", "validation-job.yaml", "-c", "validation", "-o", "yaml",
++                        "KEYCLOAK_ADMIN_CLIENT_ID=-iot#support",
++                        "KEYCLOAK_ADMIN_CLIENT_SECRET=" + clientSecret),
++                run.setEnv());
++        assertEquals("kind: Job\n", run.applied());
++        assertFalse(run.trace().contains("iot#support"), run.trace());
++        assertFalse(run.trace().contains("ab#cd"), run.trace());
++    }
++
++    @Test
++    void aSecretNotInTheEnvironmentFailsNamingIt(@TempDir Path dir) throws Exception {
++        ShellRun run = runSecretsScript(dir, Map.of(
++                "VALIDATION_SECRETS", "KEYCLOAK_ADMIN_CLIENT_ID KEYCLOAK_ADMIN_CLIENT_SECRET",
++                "KEYCLOAK_ADMIN_CLIENT_ID", "iotsupport"));
++
++        assertEquals(1, run.exit());
++        assertTrue(
++                run.trace().contains("modernApp.test: KEYCLOAK_ADMIN_CLIENT_SECRET is not set in the build's environment"),
++                run.trace());
++        assertEquals(List.of(), run.setEnv());
++        assertEquals(null, run.applied());
++    }
++
++    @Test
++    void theSummaryCountsEachSuitesMarkersByStem() throws Exception {
++        String log = String.join("\n",
++                "collected 12 items",
++                "===SUITE_RESULT:backend:10:1:2===",
++                "===SUITE_RESULT:frontend-chromium:5:0:0===",
++                "===SUITE_RESULT:frontend-firefox:4:1:0===",
++                "===SUITE_RESULT:docs:3:0:0===",
++                "done");
++        assertEquals(
++                Map.of(
++                        "text", String.join("\n",
++                                "",
++                                "============================================",
++                                "  TEST SUMMARY",
++                                "============================================",
++                                "  backend       10 passed    1 failed    2 skipped",
++                                "  frontend       9 passed    1 failed    0 skipped",
++                                "--------------------------------------------",
++                                "  TOTAL         19 passed    2 failed    2 skipped",
++                                "============================================",
++                                ""),
++                        "passed", 19,
++                        "failed", 2,
++                        "skipped", 2),
++                invoke(summary, log, List.of("backend", "frontend")));
++    }
++
++    @Test
++    void aSuiteWithoutMarkersIsReportedAsUnknown() throws Exception {
++        assertEquals(
++                Map.of(
++                        "text", String.join("\n",
++                                "",
++                                "============================================",
++                                "  TEST SUMMARY",
++                                "============================================",
++                                "  backend        3 passed    0 failed    0 skipped",
++                                "  frontend     status unknown (no test results produced)",
++                                "--------------------------------------------",
++                                "  TOTAL          3 passed    0 failed    0 skipped",
++                                "============================================",
++                                ""),
++                        "passed", 3,
++                        "failed", 0,
++                        "skipped", 0),
++                invoke(summary, "===SUITE_RESULT:backend:3:0:0===\n", List.of("backend", "frontend")));
++    }
++
++    private static Map<String, Object> fieldnotesWith(String key, Object value) {
++        Map<String, Object> call = fieldnotes();
++        call.put(key, value);
++        return call;
++    }
++
++    private static Map<String, Object> fieldnotesWithout(String key) {
++        Map<String, Object> call = fieldnotes();
++        call.remove(key);
++        return call;
++    }
++
++    static Stream<Arguments> refusals() {
++        Map<String, Object> nullEnv = new LinkedHashMap<>();
++        nullEnv.put("S3_BUCKET_NAME", null);
++        return Stream.of(
++                Arguments.of(fieldnotesWithout("job"), "modernApp.test: job is required"),
++                Arguments.of(fieldnotesWith("install", ""), "modernApp.test: install is required"),
++                Arguments.of(fieldnotesWithout("run"), "modernApp.test: run is required"),
++                Arguments.of(fieldnotesWith("suites", List.of()), "modernApp.test: suites is required"),
++                Arguments.of(fieldnotesWithout("services"), "modernApp.test: services is required"),
++                Arguments.of(fieldnotesWithout("env"), "modernApp.test: env is required"),
++                Arguments.of(fieldnotesWithout("secrets"), "modernApp.test: secrets is required"),
++                Arguments.of(
++                        fieldnotesWith("image", "node:24"),
++                        "modernApp.test: takes job, install, run, suites, services, env and secrets; got image"),
++                Arguments.of(
++                        fieldnotesWith("suites", "backend"),
++                        "modernApp.test: suites takes a list of suite names; got 'backend'"),
++                Arguments.of(
++                        fieldnotesWith("env", List.of("S3_BUCKET_NAME=x")),
++                        "modernApp.test: env takes a map of name -> value; got '[S3_BUCKET_NAME=x]'"),
++                Arguments.of(fieldnotesWith("env", nullEnv), "modernApp.test: env sets S3_BUCKET_NAME to null"),
++                Arguments.of(
++                        fieldnotesWith("secrets", List.of("KEYCLOAK_ADMIN_CLIENT_ID; id")),
++                        "modernApp.test: secrets takes variable names; got 'KEYCLOAK_ADMIN_CLIENT_ID; id'"),
++                Arguments.of(
++                        fieldnotesWith("services", List.of("rustfs/rustfs:latest")),
++                        "modernApp.test: a services entry is a map with name and image; got 'rustfs/rustfs:latest'"),
++                Arguments.of(
++                        fieldnotesWith("services", List.of(Map.of("image", "rustfs/rustfs:latest"))),
++                        "modernApp.test: a services entry is a map with name and image; got '[image:rustfs/rustfs:latest]'"),
++                Arguments.of(
++                        fieldnotesWith("services", List.of(ordered(
++                                "name", "s3storage", "image", "rustfs/rustfs:latest", "runAsUser", 1000))),
++                        "modernApp.test: a services entry takes name, image, env and resources; got runAsUser"),
++                Arguments.of(
++                        fieldnotesWith("services", List.of(ordered(
++                                "name", "s3storage", "image", "rustfs/rustfs:latest", "env", nullEnv))),
++                        "modernApp.test: the service 's3storage' sets S3_BUCKET_NAME to null"),
++                Arguments.of(
++                        fieldnotesWith("services", List.of(ordered(
++                                "name", "opensearch",
++                                "image", "opensearchproject/opensearch:2",
++                                "resources", Map.of("request", Map.of("memory", "640Mi"))))),
++                        "modernApp.test: resources takes requests and limits; the service 'opensearch' has 'request'"));
++    }
++
++    @ParameterizedTest(name = "{1}")
++    @MethodSource("refusals")
++    void aCallWithAMissingEmptyOrUnknownArgumentFailsNamingIt(Map<String, Object> call, String message) {
++        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> invoke(testArguments, call));
++        assertEquals(message, refused.getMessage());
++    }
++}
+diff --git a/vars/modernApp.groovy b/vars/modernApp.groovy
+new file mode 100644
+index 0000000..be40b82
+--- /dev/null
++++ b/vars/modernApp.groovy
+@@ -0,0 +1,347 @@
++/**
++ * The step the Test stage of a ModernAppTemplate app's build calls. `test` runs the app's test
++ * suite in a Kubernetes Job, on a copy of the workspace, beside the services the suite needs. It
++ * runs kubectl in the `k8s` container, which the pod declares with `podYaml(templates: ['k8s'])`.
++ * It is a call on the var's method, so a declarative stage runs it in `script {}`:
++ *
++ *     stage('Test') {
++ *         steps {
++ *             script {
++ *                 modernApp.test(
++ *                     job: 'dhcp-app-validation',
++ *                     install: 'poetry install --no-interaction --without dev',
++ *                     run: 'poetry run',
++ *                     suites: ['backend', 'frontend'],
++ *                     services: [],
++ *                     env: [:],
++ *                     secrets: [],
++ *                 )
++ *             }
++ *         }
++ *     }
++ *
++ * Every argument is required, with no default; services, env and secrets may be empty. A missing,
++ * empty or unknown argument fails the build, and the error names it.
++ */
++
++/**
++ * Streams the workspace into a Job that runs podYaml's `modern-app-toolchain` image, installs the
++ * app there with `install` and runs `<run> run-suite`. Once the suite is done, copies its JUnit
++ * files out, summarises them per suite into validation-summary.log, archives the logs and the
++ * JUnit files, publishes the JUnit report and sets the build description. Fails the build on a
++ * missing or non-zero exit code. Deletes the Job whatever happened.
++ *
++ * @param job       The Job's name, to which the build number is appended, and its
++ *                  app.kubernetes.io/name label.
++ * @param install   The command that installs the app's dependencies at the root of the tree.
++ * @param run       The command run-suite runs under: `poetry run`, `uv run --no-sync`.
++ * @param suites    The suites the summary counts, by run-suite's JUnit file stems.
++ * @param services  The containers beside the suite: maps with name, image and any of env and
++ *                  resources.
++ * @param env       The suite's environment, name -> value. A secret goes in `secrets`.
++ * @param secrets   Variables of the build's environment the suite gets under the same name, such
++ *                  as the ones `withVault` sets.
++ */
++def test(Map args) {
++    Map<String, Object> given = testArguments(args)
++    String image = podYaml.sidecars()['modern-app-toolchain'].image
++    String build = currentBuild.number.toString()
++    String job = "${given.job}-${build}"
++
++    container('k8s') {
++        String namespace = kubectl.currentNamespace()
++        sh 'tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store .'
++
++        try {
++            writeYaml file: 'validation-job.yaml', data: jobManifest(given, job, namespace, build, image), overwrite: true
++            if (given.secrets) {
++                withEnv(["VALIDATION_SECRETS=${given.secrets.join(' ')}"]) {
++                    sh secretsScript()
++                }
++            } else {
++                sh 'kubectl apply -f validation-job.yaml'
++            }
++
++            String pod = kubectl.getJobPodName(job, namespace)
++            kubectl.waitForContainer(pod, 'validation', namespace)
++            sh "kubectl cp -n ${namespace} -c validation /tmp/context.tar.gz ${pod}:/work/staging/context.tar.gz"
++            sh "kubectl exec -n ${namespace} -c validation ${pod} -- touch /work/staging/ready"
++
++            // The suite's container outlives the suite (sleep infinity), so the results are
++            // copied out of it once the exit code is written.
++            kubectl.waitForFile(pod, 'validation', namespace, '/work/results/exit-code')
++            kubectl.savePodLogs(pod, 'validation', namespace, 'validation-raw.log')
++            utils.cleanLog('validation-raw.log', 'validation.log')
++            sh 'mkdir -p test-results'
++            sh "kubectl cp -n ${namespace} -c validation ${pod}:/work/results/. test-results/"
++
++            String exitCode = fileExists('test-results/exit-code') ? readFile('test-results/exit-code').trim() : ''
++            Map<String, Object> result = summary(readFile('validation.log'), given.suites)
++            writeFile file: 'validation-summary.log', text: result.text
++            sh 'rm -f validation-raw.log /tmp/context.tar.gz test-results/exit-code'
++
++            archiveArtifacts artifacts: 'validation*.log, test-results/*.xml', allowEmptyArchive: true
++            junit testResults: 'test-results/*.xml', allowEmptyResults: true
++            currentBuild.description = "exit=${exitCode ?: 'n/a'}, ${result.passed} passed, ${result.failed} failed, ${result.skipped} skipped"
++
++            if (!exitCode) {
++                String reason = kubectl.getJobFailReason(job, namespace)
++                error("Validation failed: no exit code recorded${reason ? " (job: ${reason})" : ''}")
++            } else if (exitCode != '0') {
++                error("Validation failed: exit code ${exitCode}")
++            }
++        } finally {
++            kubectl.deleteJob(job, namespace)
++        }
++    }
++}
++
++/**
++ * The Job `test` applies, named `job`. Its `validation` container runs the toolchain image as
++ * uid 1000, which cannot create /work at the filesystem root, so the pod mounts an emptyDir there.
++ */
++@NonCPS
++Map<String, Object> jobManifest(Map<String, Object> given, String job, String namespace, String build, String image) {
++    Map<String, Object> suite = [
++        name: 'validation',
++        image: image,
++        imagePullPolicy: 'Always',
++        securityContext: [runAsUser: 1000, runAsGroup: 1000],
++        volumeMounts: [[name: 'work', mountPath: '/work']],
++        command: ['sh', '-c'],
++        args: [suiteScript(given)],
++        resources: [requests: [cpu: '1', memory: '3584Mi']],
++    ]
++    if (given.env) {
++        suite.env = envList(given.env)
++    }
++
++    return [
++        apiVersion: 'batch/v1',
++        kind: 'Job',
++        metadata: [
++            name: job,
++            namespace: namespace,
++            labels: [
++                'app.kubernetes.io/name': given.job,
++                'app.kubernetes.io/managed-by': 'jenkins',
++                'jenkins/build-number': build,
++            ],
++        ],
++        spec: [
++            backoffLimit: 0,
++            activeDeadlineSeconds: 3600,
++            ttlSecondsAfterFinished: 3600,
++            template: [
++                metadata: [labels: ['job-name': job]],
++                spec: [
++                    restartPolicy: 'Never',
++                    tolerations: [[key: 'size', operator: 'Equal', value: 'large', effect: 'PreferNoSchedule']],
++                    volumes: [[name: 'work', emptyDir: [:]]],
++                    containers: [suite] + given.services,
++                ],
++            ],
++        ],
++    ]
++}
++
++/**
++ * The shell that applies the Job with each variable `VALIDATION_SECRETS` names added to the
++ * `validation` container's environment. A value goes from the shell's environment into kubectl's
++ * arguments, so it never enters a Groovy string or a step's arguments (SEC-4). kubectl takes an
++ * argument's value whole; its `-e -` reader cuts a value at `#` and splits it at a line break. The
++ * sh step's -x would trace the value into the log. The `.` keeps $(…) from stripping the value's
++ * trailing newlines, and `%?.` drops it with printenv's own.
++ */
++@NonCPS
++String secretsScript() {
++    return '''
++        set +x
++        set -euo pipefail
++        set --
++        for name in $VALIDATION_SECRETS; do
++            value=$(printenv "$name" && echo .) || {
++                echo "modernApp.test: $name is not set in the build's environment" >&2
++                exit 1
++            }
++            set -- "$@" "$name=${value%?.}"
++        done
++        kubectl set env --local -f validation-job.yaml -c validation -o yaml "$@" | kubectl apply -f -
++    '''
++}
++
++/**
++ * What the `validation` container runs: it waits for `test` to copy the tree in, installs and runs
++ * the suite, writes run-suite's exit code beside the JUnit files, and stays alive so that `test`
++ * can copy them out.
++ */
++@NonCPS
++String suiteScript(Map<String, Object> given) {
++    return [
++        'mkdir -p /work/staging /work/results',
++        'echo "Waiting for code upload..."',
++        'while [ ! -f /work/staging/ready ]; do sleep 1; done',
++        'echo "Code received, extracting..."',
++        'tar xzf /work/staging/context.tar.gz -C /work',
++        'rm -rf /work/staging',
++        "cd /work && ${given.install}",
++        "${given.run} run-suite --output-mode full --junitxml-dir /work/results --retries 2",
++        'echo $? > /work/results/exit-code',
++        'sleep infinity',
++    ].join('\n') + '\n'
++}
++
++/**
++ * The summary of the suite's log as `text`, a line per suite and a total, and the totals as
++ * `passed`, `failed` and `skipped`. run-suite logs `===SUITE_RESULT:<stem>:<passed>:<failed>:<skipped>===`
++ * for each JUnit file it writes; a suite counts each marker whose stem is its name or starts with
++ * `<name>-`.
++ */
++@NonCPS
++Map<String, Object> summary(String log, List<String> suites) {
++    List<List<String>> results = log.split('\n')
++        .findAll { it.startsWith('===SUITE_RESULT:') }
++        .collect { it.replace('===SUITE_RESULT:', '').replace('===', '').split(':') as List }
++
++    List<String> lines = []
++    int passed = 0, failed = 0, skipped = 0
++    suites.each { suite ->
++        List<List<String>> counted = results.findAll { it[0] == suite || it[0].startsWith("${suite}-") }
++        if (counted) {
++            int p = 0, f = 0, s = 0
++            counted.each { counts ->
++                p += counts[1] as int
++                f += counts[2] as int
++                s += counts[3] as int
++            }
++            passed += p
++            failed += f
++            skipped += s
++            lines << String.format('  %-12s %3d passed  %3d failed  %3d skipped', suite, p, f, s)
++        } else {
++            lines << String.format('  %-12s status unknown (no test results produced)', suite)
++        }
++    }
++
++    String rule = '============================================'
++    String text = (['', rule, '  TEST SUMMARY', rule] + lines + [
++        '--------------------------------------------',
++        String.format('  %-12s %3d passed  %3d failed  %3d skipped', 'TOTAL', passed, failed, skipped),
++        rule,
++    ]).join('\n') + '\n'
++    return [text: text, passed: passed, failed: failed, skipped: skipped]
++}
++
++/**
++ * `args` with every key a String and every value in the form `jobManifest` renders, once it holds
++ * each argument, `job`, `install`, `run` and `suites` non-empty, and nothing else.
++ */
++@NonCPS
++Map<String, Object> testArguments(Map args) {
++    Map<String, Object> given = [:]
++    args.each { key, value -> given[key.toString()] = value }
++
++    List<String> names = ['job', 'install', 'run', 'suites', 'services', 'env', 'secrets']
++    def unknown = given.keySet() - names
++    if (unknown) {
++        throw new IllegalArgumentException(
++            "modernApp.test: takes ${names[0..-2].join(', ')} and ${names[-1]}; got ${unknown.join(', ')}")
++    }
++    names.each { name ->
++        if (!given.containsKey(name) || (name in ['job', 'install', 'run', 'suites'] && !given[name])) {
++            throw new IllegalArgumentException("modernApp.test: ${name} is required")
++        }
++    }
++
++    if (!(given.suites instanceof List)) {
++        throw new IllegalArgumentException("modernApp.test: suites takes a list of suite names; got '${given.suites}'")
++    }
++    if (!(given.services instanceof List)) {
++        throw new IllegalArgumentException("modernApp.test: services takes a list of containers; got '${given.services}'")
++    }
++    if (!(given.env instanceof Map)) {
++        throw new IllegalArgumentException("modernApp.test: env takes a map of name -> value; got '${given.env}'")
++    }
++    if (!(given.secrets instanceof List)) {
++        throw new IllegalArgumentException("modernApp.test: secrets takes a list of variable names; got '${given.secrets}'")
++    }
++
++    List<String> secrets = given.secrets.collect { it.toString() }
++    secrets.each { name ->
++        if (!(name ==~ /[A-Za-z_][A-Za-z0-9_]*/)) {
++            throw new IllegalArgumentException("modernApp.test: secrets takes variable names; got '${name}'")
++        }
++    }
++
++    return [
++        job: given.job.toString(),
++        install: given.install.toString(),
++        run: given.run.toString(),
++        suites: given.suites.collect { it.toString() },
++        services: given.services.collect { service(it) },
++        env: environment('env', given.env),
++        secrets: secrets,
++    ]
++}
++
++/**
++ * A `services` entry as a container: `name` and `image`, then `env` and `resources` when given.
++ */
++@NonCPS
++Map<String, Object> service(entry) {
++    if (!(entry instanceof Map)) {
++        throw new IllegalArgumentException("modernApp.test: a services entry is a map with name and image; got '${entry}'")
++    }
++    Map<String, Object> given = [:]
++    entry.each { key, value -> given[key.toString()] = value }
++
++    def unknown = given.keySet() - ['name', 'image', 'env', 'resources']
++    if (unknown) {
++        throw new IllegalArgumentException(
++            "modernApp.test: a services entry takes name, image, env and resources; got ${unknown.join(', ')}")
++    }
++    if (!given.name || !given.image) {
++        throw new IllegalArgumentException("modernApp.test: a services entry is a map with name and image; got '${entry}'")
++    }
++
++    String name = given.name.toString()
++    Map<String, Object> container = [name: name, image: given.image.toString()]
++    if (given.env) {
++        container.env = envList(environment("the service '${name}'", given.env))
++    }
++    if (given.resources) {
++        Map<String, Map<String, String>> resources = [:]
++        given.resources.each { kind, quantities ->
++            if (!(kind.toString() in ['requests', 'limits'])) {
++                throw new IllegalArgumentException(
++                    "modernApp.test: resources takes requests and limits; the service '${name}' has '${kind}'")
++            }
++            Map<String, String> byResource = [:]
++            quantities.each { resource, quantity -> byResource[resource.toString()] = quantity.toString() }
++            resources[kind.toString()] = byResource
++        }
++        container.resources = resources
++    }
++    return container
++}
++
++/**
++ * An environment map with every name and value a String; `owner` names it in the error for a null
++ * value.
++ */
++@NonCPS
++Map<String, String> environment(String owner, Map variables) {
++    Map<String, String> env = [:]
++    variables.each { variable, value ->
++        if (value == null) {
++            throw new IllegalArgumentException("modernApp.test: ${owner} sets ${variable} to null")
++        }
++        env[variable.toString()] = value.toString()
++    }
++    return env
++}
++
++@NonCPS
++List<Map<String, String>> envList(Map<String, String> env) {
++    return env.collect { variable, value -> [name: variable, value: value] }
++}
+diff --git a/vars/modernApp.md b/vars/modernApp.md
+new file mode 100644
+index 0000000..39a5501
+--- /dev/null
++++ b/vars/modernApp.md
+@@ -0,0 +1,143 @@
++# modernApp
++
++The step the `Test` stage of a [modern app build](../types/modern-app.md) calls. `test` runs the
++app's test suite in a Kubernetes Job, on the tree the file's `Checkout` stage checked out, beside the
++services the suite needs, and reports the result to the build. The step carries what is the same in
++every app's test run: the Job and its toolchain image, the copy of the tree into it, the `run-suite`
++command line, the summary per suite, the JUnit report and the build's description. A value that
++differs per app is an argument with no default.
++
++The step runs kubectl in the `k8s` container, which the pod declares with
++`podYaml(templates: ['k8s'])` ([`podYaml`](podYaml.md)). It is a call on the var's method, so a
++declarative stage runs it in `script {}`. The file still writes out its every stage; the step goes
++inside `Test`.
++
++```groovy
++agent {
++    kubernetes {
++        inheritFrom 'jenkins-agent kaniko'
++        yamlMergeStrategy merge()
++        yaml podYaml(templates: ['k8s'])
++    }
++}
++
++stages {
++    stage('Checkout') {
++        steps {
++            checkout scm
++        }
++    }
++
++    stage('Test') {
++        steps {
++            script {
++                modernApp.test(
++                    job: 'dhcp-app-validation',
++                    install: 'poetry install --no-interaction --without dev',
++                    run: 'poetry run',
++                    suites: ['backend', 'frontend'],
++                    services: [],
++                    env: [:],
++                    secrets: [],
++                )
++            }
++        }
++    }
++}
++```
++
++## Steps
++
++Every argument is required. `services`, `env` and `secrets` may be empty; `job`, `install`, `run`
++and `suites` may not. A missing argument, an empty one where it may not be, or one the step does not
++take fails the build, and the error names it.
++
++### test
++
++`modernApp.test(…)`, in the `k8s` container:
++
++1. tars the workspace, leaving out `.git`, `node_modules`, `.venv`, `.pnpm-store` and
++   `test-results`;
++2. applies a Job named `<job>-<build number>`. Its `validation` container runs the image of
++   `podYaml`'s `modern-app-toolchain` template, as uid 1000, with an emptyDir at `/work`, and the
++   `services` run beside it. The Job's deadline is 60 minutes;
++3. copies the tar into the container, which unpacks it in `/work`, runs `install` there, then
++   `<run> run-suite --output-mode full --junitxml-dir /work/results --retries 2`, and writes
++   run-suite's exit code beside the JUnit files;
++4. once the exit code is written, saves the container's log as `validation.log` and copies the
++   JUnit files into `test-results/`;
++5. writes `validation-summary.log`, a line per suite and a total, archives the logs and the JUnit
++   files, publishes the JUnit report, and sets the build description to
++   `exit=<code>, <n> passed, <n> failed, <n> skipped`;
++6. fails the build when the exit code is missing or not `0`. The error for a missing one names the
++   Job's fail reason, when the Job has one.
++
++The Job is deleted whatever happened, the build's abort included.
++
++| Argument   | What it is                                                                                                                 |
++| ---------- | -------------------------------------------------------------------------------------------------------------------------- |
++| `job`      | The Job's name, to which the build number is appended, and its `app.kubernetes.io/name` label: `dhcp-app-validation`.      |
++| `install`  | The command that installs the app at the root of the tree: `poetry install --no-interaction --without dev`, `uv sync --locked --no-dev`. |
++| `run`      | The command `run-suite` runs under: `poetry run`, `uv run --no-sync`.                                                      |
++| `suites`   | The suites the summary counts. A suite counts each of run-suite's result lines whose JUnit file stem is its name or starts with `<name>-`. |
++| `services` | The containers beside the suite: maps with `name` and `image`, and any of `env` (name -> value) and `resources` (`requests` and `limits`, each resource name -> quantity). |
++| `env`      | The suite's environment, name -> value. A value is written in the file and is no secret ([SEC-5](../guide/secrets.md#sec-5)). |
++| `secrets`  | Variables of the build's environment that the suite gets under the same name.                                             |
++
++A service reaches the suite on `localhost`. ElectronicsInventory's suite needs an S3 API, which a
++RustFS container gives it:
++
++```groovy
++modernApp.test(
++    job: 'electronics-inventory-validation',
++    install: 'poetry install --no-interaction --without dev',
++    run: 'poetry run',
++    suites: ['backend', 'frontend'],
++    services: [
++        [name: 's3storage', image: 'rustfs/rustfs:latest', env: [
++            RUSTFS_ACCESS_KEY: 's3storage',
++            RUSTFS_SECRET_KEY: 's3storage',
++        ]],
++    ],
++    env: [
++        S3_ENDPOINT_URL: 'http://localhost:9000',
++        S3_ACCESS_KEY_ID: 's3storage',
++        S3_SECRET_ACCESS_KEY: 's3storage',
++        S3_BUCKET_NAME: 'electronics-inventory-validation',
++    ],
++    secrets: [],
++)
++```
++
++#### secrets
++
++A suite that needs a secret takes it from the build's environment, where `withVault` puts it. The
++file names the variables in `secrets`, and the step adds each to the suite's environment from a
++shell, so the value never enters a Groovy string or a step's arguments
++([SEC-4](../guide/secrets.md#sec-4)). A variable that is not set fails the build, naming it.
++
++`withVault` wraps the step's call and nothing else: [SEC-1](../guide/secrets.md#sec-1)'s one
++exception, for a test that itself needs a secret. IoTSupport's suite needs the Keycloak admin
++client:
++
++```groovy
++withVault([vaultSecrets: [
++    [path: 'kv/jenkins/keycloak-iotsupport-admin', engineVersion: 2, secretValues: [
++        [envVar: 'KEYCLOAK_ADMIN_CLIENT_ID', vaultKey: 'client_id'],
++        [envVar: 'KEYCLOAK_ADMIN_CLIENT_SECRET', vaultKey: 'client_secret'],
++    ]],
++]]) {
++    modernApp.test(
++        // ...
++        secrets: ['KEYCLOAK_ADMIN_CLIENT_ID', 'KEYCLOAK_ADMIN_CLIENT_SECRET'],
++    )
++}
++```
++
++The secret is in the Job's spec while the Job exists, and the step deletes the Job at its end.
++
++## Internals
++
++`testArguments`, `service`, `environment`, `envList`, `jobManifest`, `suiteScript` and `summary`
++check the arguments and work out the Job the step applies and the summary it writes. They are not
++part of what `modernApp` offers a Jenkinsfile.
+diff --git a/vars/podYaml.groovy b/vars/podYaml.groovy
+index 0dbb859..698a157 100644
+--- a/vars/podYaml.groovy
++++ b/vars/podYaml.groovy
+@@ -66,7 +66,8 @@ String call(Map args) {
+  * podTemplate. uid 1000 is the agent's own user: git refuses a checkout another uid owns.
+  * The iac toolchain image points TF_PLUGIN_CACHE_DIR at a KubeCoder home overlay an agent pod
+  * lacks, and terraform reports a missing cache dir as a CLI configuration error on every run; an
+- * empty value leaves the cache off.
++ * empty value leaves the cache off. modernApp.test runs its validation Job on the
++ * modern-app-toolchain image.
+  */
+ @NonCPS
+ Map<String, Map> sidecars() {
+diff --git a/vars/podYaml.md b/vars/podYaml.md
+index 3272f1c..5e6a4b5 100644
+--- a/vars/podYaml.md
++++ b/vars/podYaml.md
+@@ -64,6 +64,9 @@ checkout that another uid owns. `iac-toolchain` sets `TF_PLUGIN_CACHE_DIR` to th
+ image points it at a KubeCoder home overlay that an agent pod lacks, and terraform reports a missing
+ cache directory as a CLI configuration error on every run; the empty value leaves the cache off.
+ 
++[`modernApp.test`](modernApp.md) runs its validation Job on the `modern-app-toolchain` template's
++image, so a bump of the template's image reaches the Job too.
++
+ A template name the library does not have fails the build, and the error lists the ones it has.
+ 
+ ### images
+
+/work/JenkinsPipelineUtils — P11: git diff 521fac6015a4..a6d7836ea163
+
+docs/examples/artifact-build.groovy                             |  2 +-
+ docs/examples/promotion.groovy                                  | 10 ++++-
+ docs/pages/guide/pod.md                                         |  7 +---
+ docs/pages/guide/stage-labels.md                                |  4 +-
+ .../java/org/webathome/jenkinspipelineutils/PodYamlTest.java    | 13 +++----
+ vars/containerTemplates.groovy                                  | 57 -----------------------------
+ vars/containerTemplates.md                                      | 38 +++++--------------
+ vars/helmCharts.groovy                                          | 22 -----------
+ vars/helmCharts.md                                              | 13 -------
+ vars/podYaml.groovy                                             |  9 +++--
+ vars/podYaml.md                                                 |  5 ++-
+ 11 files changed, 37 insertions(+), 143 deletions(-)
+
+diff --git a/docs/examples/artifact-build.groovy b/docs/examples/artifact-build.groovy
+index bc38cd8..a4ebb34 100644
+--- a/docs/examples/artifact-build.groovy
++++ b/docs/examples/artifact-build.groovy
+@@ -3,7 +3,7 @@
+ //
+ // Controller config:
+ //   - Job: ScanToPdf/ScanToPdfServer
+-//   - SCM: pvginkel/ScanToPdfServer, branch master
++//   - SCM: pvginkel/ScanToPdfServer, branch main
+ //   - Script Path: Jenkinsfile
+ 
+ library identifier: 'JenkinsPipelineUtils', changelog: false
+diff --git a/docs/examples/promotion.groovy b/docs/examples/promotion.groovy
+index 0456195..294db75 100644
+--- a/docs/examples/promotion.groovy
++++ b/docs/examples/promotion.groovy
+@@ -12,7 +12,8 @@
+ //
+ // A re-run for the commit prd already names finishes a promotion whose step 3 failed: when no
+ // release-* tag points at the commit, the job runs step 3 alone. A commit a release tag records
+-// has nothing left to promote.
++// has nothing left to promote. A run with `commit` empty refuses while no release tag records
++// prd's tip, and names it, so a bare re-run cannot pass over a stuck release.
+ //
+ // No rollback parameter and no force-move (D47): a rollback is a revert on main, promoted like
+ // any other commit (D36).
+@@ -127,6 +128,13 @@ pipeline {
+                         }
+                         recordOnly = true
+                     }
++                    // A run from defaults after main moved would pass over a promotion whose step 3
++                    // failed, and that commit could no longer be recorded by the job.
++                    if (!requested && current && current != promoted &&
++                            !sh(script: "git tag --list 'release-*' --points-at '${current}'", returnStdout: true).trim()) {
++                        error("prd is at ${current}, which no release-* tag records: re-run with " +
++                            "commit=${current} to record it before promoting main")
++                    }
+                     if (current && sh(script: "git merge-base --is-ancestor '${current}' '${promoted}'", returnStatus: true) != 0) {
+                         error("prd is at ${current}, which ${promoted} does not descend from: a promotion only " +
+                             'fast-forwards prd (D35), and a rollback is a revert on main, promoted (D36)')
+diff --git a/docs/pages/guide/pod.md b/docs/pages/guide/pod.md
+index c26f2a1..0dc0390 100644
+--- a/docs/pages/guide/pod.md
++++ b/docs/pages/guide/pod.md
+@@ -50,11 +50,8 @@ refuses an entry without one, and a name Kubernetes would refuse, when the agent
+ ### POD-5 — A library sidecar comes from its template { #pod-5 }
+ 
+ A container that runs one of the library's sidecar images MUST be named in `templates:`, never
+-written out under `images:`. The sidecars are the ones
+-[`containerTemplates`](../reference/containerTemplates.md) declares for scripted pipelines. A
+-sidecar that `podYaml` has no template for yet gets its template in `podYaml`, as
+-`containerTemplates` declares it, before a file uses it. `podYaml`'s page lists the templates it
+-has.
++written out under `images:`. The sidecars are `podYaml`'s templates, which
++[its page](../reference/podYaml.md#templates) lists.
+ 
+ **Why.** Each sidecar image and its settings, such as its uid and environment, are then declared
+ once, in the library. A new image tag reaches every file at once, and no file carries a copy that
+diff --git a/docs/pages/guide/stage-labels.md b/docs/pages/guide/stage-labels.md
+index 0c2f985..457da73 100644
+--- a/docs/pages/guide/stage-labels.md
++++ b/docs/pages/guide/stage-labels.md
+@@ -37,8 +37,8 @@ Any other stage picks its own imperative verb: `Apply configuration`, `Retag ima
+ ### LABEL-3 — The scope goes last, in parentheses { #label-3 }
+ 
+ A stage's scope or variant MUST go last, in parentheses: `(prd)`, `(k8s dev)`, `(v2)`, `(<tag>)`.
+-In an iac-controller file: `Apply Terraform (prd)`, `Apply site-k8s (k8s dev)`,
+-`Check drift (k8s prd)`.
++In an iac-controller file: `Apply Terraform (prd)`, `Restart calico-node (k8s dev)`,
++`Check Ansible drift (k8s prd)`.
+ 
+ **Why.** The action reads the same across scopes, and the stages of one action line up.
+ 
+diff --git a/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java b/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
+index b2a2c06..b137134 100644
+--- a/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
++++ b/tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java
+@@ -21,9 +21,8 @@ import org.junit.jupiter.params.provider.MethodSource;
+ /**
+  * podYaml, which renders a declarative Kubernetes agent's pod spec from library sidecars and
+  * pipeline-chosen images. It is {@code @NonCPS}, so the CPS transform leaves its body to run as
+- * plain Groovy here. The sidecars' reference is KubeCoder/Build-Main #558's pod, as the kubernetes
+- * plugin printed it from containerTemplates.k8s and modern_app_toolchain, and the containerTemplates
+- * describable of the same name for each other sidecar.
++ * plain Groovy here. The k8s and modern-app-toolchain sidecars render as KubeCoder/Build-Main
++ * #558's pod, as the kubernetes plugin printed it.
+  */
+ class PodYamlTest {
+ 
+@@ -72,7 +71,7 @@ class PodYamlTest {
+     }
+ 
+     @Test
+-    void librarySidecarsCarryTheirContainerTemplateSettings() throws Exception {
++    void librarySidecarsCarryTheirTemplateSettings() throws Exception {
+         String expected = HEADER + """
+                   - name: "k8s"
+                     image: "registry:5000/k8s:1.35.5"
+@@ -94,9 +93,9 @@ class PodYamlTest {
+         assertEquals(expected, render(Map.of("templates", List.of("k8s", "modern-app-toolchain"))));
+     }
+ 
+-    // The architecture producers' sidecar, as containerTemplates.aac_tools declares it: no uid.
++    // The architecture producers' sidecar: no uid.
+     @Test
+-    void theAacToolsSidecarIsContainerTemplatesAacTools() throws Exception {
++    void theAacToolsSidecarSetsNoUid() throws Exception {
+         String expected = HEADER + """
+                   - name: "aac-tools"
+                     image: "registry:5000/aac-tools"
+@@ -111,7 +110,7 @@ class PodYamlTest {
+ 
+     // Neither sets a uid or env.
+     @Test
+-    void theHelmAndPythonSidecarsAreTheirContainerTemplates() throws Exception {
++    void theHelmAndPythonSidecarsSetNoUidOrEnv() throws Exception {
+         String expected = HEADER + """
+                   - name: "helm"
+                     image: "alpine/helm:3.9.1"
+diff --git a/vars/containerTemplates.groovy b/vars/containerTemplates.groovy
+index d443682..ca2274b 100644
+--- a/vars/containerTemplates.groovy
++++ b/vars/containerTemplates.groovy
+@@ -6,63 +6,6 @@
+  * Use container('name') { ... } in pipeline stages to execute commands inside.
+  */
+ 
+-/**
+- * Helm CLI container (alpine/helm).
+- */
+-def helm(String name) {
+-    return containerTemplate(name: name, image: 'alpine/helm:3.9.1', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+-}
+-
+-/**
+- * Kubernetes tools container (kubectl, crane, etc.).
+- */
+-def k8s(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/k8s:1.35.5', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+-}
+-
+-/**
+- * Python slim container.
+- */
+-def python(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/python', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+-}
+-
+-/**
+- * Architecture-as-code tools container (gen-architecture, arch-validate).
+- */
+-def aac_tools(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/aac-tools', command: 'sleep', args: 'infinity', alwaysPullImage: true)
+-}
+-
+-/**
+- * KubeCoder IaC toolchain container: the image `cexec iac` runs in a KubeCoder environment
+- * (terraform, helm, kubectl, bao, step, promtool, python3 with poetry and uv, git).
+- * Runs as uid 1000, the agent's own user, so the checkout and whatever the container writes
+- * into the workspace share an owner (git refuses a repository another uid owns).
+- * The image points TF_PLUGIN_CACHE_DIR at a KubeCoder home overlay an agent pod lacks, and
+- * terraform reports a missing cache dir as a CLI configuration error on every run; an empty
+- * value leaves the cache off.
+- */
+-def iac_toolchain(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/kube-coder-iac-toolchain', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000', envVars: [
+-        containerEnvVar(key: 'TF_PLUGIN_CACHE_DIR', value: ''),
+-    ])
+-}
+-
+-/**
+- * KubeCoder modern-app toolchain container: the image a full-stack KubeCoder environment runs
+- * as its tool sidecar (Node 24 with npm, corepack/pnpm and bun, the Playwright OS deps but no
+- * browser, poetry, ruff, uv, git).
+- * Runs as uid 1000, the agent's own user, so the checkout and whatever the container writes
+- * into the workspace share an owner (git refuses a repository another uid owns).
+- * The image points COREPACK_HOME and PNPM_HOME at KubeCoder home overlays an agent pod lacks;
+- * uid 1000 owns /home/ubuntu in the image, so corepack and pnpm create them there, empty on
+- * every build.
+- */
+-def modern_app_toolchain(String name) {
+-    return containerTemplate(name: name, image: 'registry:5000/kube-coder-modern-app-toolchain:node-24', command: 'sleep', args: 'infinity', alwaysPullImage: true, runAsUser: '1000')
+-}
+-
+ /**
+  * Rsync container for file synchronization.
+  */
+diff --git a/vars/containerTemplates.md b/vars/containerTemplates.md
+index 9c25178..9113eb3 100644
+--- a/vars/containerTemplates.md
++++ b/vars/containerTemplates.md
+@@ -1,37 +1,17 @@
+ # containerTemplates
+ 
+-Sidecar containers for a scripted pipeline's pod. Each method returns a `containerTemplate` for
+-`podTemplate(containers: [...])`, with the container named by the `name` argument. The container is
+-kept alive by `sleep infinity` and its image is pulled on every build (`alwaysPullImage`).
++Sidecar containers for a scripted pipeline's pod, kept only for `Firmware/KitchenDisplay`. Each
++method returns a `containerTemplate` for `podTemplate(containers: [...])`, with the container named
++by the `name` argument. Its image is pulled on every build (`alwaysPullImage`).
+ `container('<name>') { ... }` runs steps in it.
+ 
+-Only a scripted `podTemplate` takes these. A declarative pipeline's `kubernetes` agent takes pod
+-YAML, which [`podYaml`](podYaml.md) renders. The last column gives the `podYaml` template that
+-declares the same container. A sidecar that has none yet gets its template in `podYaml` before a
+-declarative file uses it ([POD-5](../guide/pod.md#pod-5)).
++A declarative pipeline's `kubernetes` agent takes pod YAML, which [`podYaml`](podYaml.md) renders.
++The library's sidecars are `podYaml`'s templates ([POD-5](../guide/pod.md#pod-5)).
+ 
+-| Call                         | Image and settings                                                                                 | Carries                                                                         | In `podYaml`                                                                                                                 |
+-| ---------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+-| `helm(name)`                 | `alpine/helm:3.9.1`                                                                                | the Helm CLI                                                                    | `templates: ['helm']`                                                                                                        |
+-| `k8s(name)`                  | `registry:5000/k8s:1.35.5`                                                                         | kubectl, crane                                                                  | `templates: ['k8s']`                                                                                                         |
+-| `python(name)`               | `registry:5000/python`                                                                             | Python (slim)                                                                   | `templates: ['python']`                                                                                                      |
+-| `aac_tools(name)`            | `registry:5000/aac-tools`                                                                          | the architecture-as-code tools (`gen-architecture`, `arch-validate`)            | `templates: ['aac-tools']`                                                                                                   |
+-| `iac_toolchain(name)`        | `registry:5000/kube-coder-iac-toolchain`, uid 1000, `TF_PLUGIN_CACHE_DIR` empty                    | the image `cexec iac` runs in a KubeCoder environment: terraform, helm, kubectl, bao, step, promtool, python3 with poetry and uv, git | `templates: ['iac-toolchain']` |
+-| `modern_app_toolchain(name)` | `registry:5000/kube-coder-modern-app-toolchain:node-24`, uid 1000                                  | KubeCoder's full-stack tool image: Node 24 with npm, pnpm and bun, poetry, ruff, uv, git | `templates: ['modern-app-toolchain']`                                                                                         |
+-| `rsync(name)`                | `eeacms/rsync`                                                                                     | rsync                                                                           | none: kept only for `Firmware/KitchenDisplay`                                                                                |
+-| `dockbuild(name, image)`     | `image`, with `BUILDER_UID`/`BUILDER_GID` 1000 and `BUILDER_USER`/`BUILDER_GROUP` `jenkins`      | a dockbuild or dockcross cross-compiler                                         | none: kept only for `Firmware/KitchenDisplay`                                                                                |
+-
+-## The toolchain containers run as uid 1000
+-
+-`iac_toolchain` and `modern_app_toolchain` run as uid 1000, the agent's own user. The checkout and
+-whatever the container writes into the workspace then share an owner: git refuses a repository that
+-another uid owns.
+-
+-`iac_toolchain` sets `TF_PLUGIN_CACHE_DIR` to the empty string. The image points it at a KubeCoder
+-home overlay that an agent pod lacks, and terraform reports a missing cache directory as a CLI
+-configuration error on every run. The empty value leaves the cache off. `modern_app_toolchain`'s
+-image points `COREPACK_HOME` and `PNPM_HOME` at such overlays too; uid 1000 owns `/home/ubuntu` in
+-the image, so corepack and pnpm create them there, empty on every build.
++| Call                     | Image and settings                                                                            | Carries                                  |
++| ------------------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------- |
++| `rsync(name)`            | `eeacms/rsync`, kept alive by `sleep infinity`                                                | rsync                                    |
++| `dockbuild(name, image)` | `image`, with `BUILDER_UID`/`BUILDER_GID` 1000 and `BUILDER_USER`/`BUILDER_GROUP` `jenkins` | a dockbuild or dockcross cross-compiler |
+ 
+ ## Kept only for `Firmware/KitchenDisplay`
+ 
+diff --git a/vars/helmCharts.groovy b/vars/helmCharts.groovy
+index cc5ea5b..f991234 100644
+--- a/vars/helmCharts.groovy
++++ b/vars/helmCharts.groovy
+@@ -4,28 +4,6 @@
+ 
+ import groovy.json.JsonOutput
+ 
+-/**
+- * Builds a container image using Kaniko with insecure registry support.
+- * Must be called inside a container('kaniko') block.
+- *
+- * Legacy positional signature, kept so existing callers need no change. It
+- * delegates to kaniko2, so every build now carries the version-poller labels.
+- * Callers that need to stamp version-poller `params` should call kaniko2.
+- *
+- * @param dockerfile   Path to the Dockerfile (default: 'Dockerfile').
+- * @param context      Build context directory (default: '.').
+- * @param destinations List of image tags to push (e.g. ['registry:5000/app:1']).
+- * @param buildArgs    Map of build arguments to pass (default: [:]).
+- */
+-def kaniko(String dockerfile = 'Dockerfile', String context = '.', List<String> destinations, Map<String, String> buildArgs = [:]) {
+-    kaniko2(
+-        dockerfile: dockerfile,
+-        context: context,
+-        destinations: destinations,
+-        buildArgs: buildArgs,
+-    )
+-}
+-
+ /**
+  * Builds a container image using Kaniko with insecure registry support, and
+  * stamps the version-poller labels (rebuild-at, tracking-tag, pipeline, and
+diff --git a/vars/helmCharts.md b/vars/helmCharts.md
+index 9d4883f..c8edbd3 100644
+--- a/vars/helmCharts.md
++++ b/vars/helmCharts.md
+@@ -75,19 +75,6 @@ stage('Build charts-home image') {
+ 
+ In a declarative stage, a call on a var's method runs inside `script { }`.
+ 
+-## kaniko
+-
+-```groovy
+-helmCharts.kaniko(String dockerfile = 'Dockerfile', String context = '.',
+-                  List<String> destinations, Map<String, String> buildArgs = [:])
+-```
+-
+-The positional form. It hands its four arguments to `kaniko2`, so its images carry the same labels.
+-It cannot pass `trackingTag`, `params`, `depends` or `rebuildDays`. Groovy drops defaulted
+-parameters from the right, so the call forms are `kaniko(destinations)`,
+-`kaniko(dockerfile, destinations)`, `kaniko(dockerfile, context, destinations)` and
+-`kaniko(dockerfile, context, destinations, buildArgs)`.
+-
+ ## rsync and ssh: kept only for `Firmware/KitchenDisplay`
+ 
+ ```groovy
+diff --git a/vars/podYaml.groovy b/vars/podYaml.groovy
+index 698a157..910f075 100644
+--- a/vars/podYaml.groovy
++++ b/vars/podYaml.groovy
+@@ -62,12 +62,13 @@ String call(Map args) {
+ }
+ 
+ /**
+- * The sidecars `templates` names, as `containerTemplates` declares them for a scripted
+- * podTemplate. uid 1000 is the agent's own user: git refuses a checkout another uid owns.
++ * The library's sidecars, by the name `templates` takes. uid 1000 is the agent's own user: git
++ * refuses a checkout another uid owns.
+  * The iac toolchain image points TF_PLUGIN_CACHE_DIR at a KubeCoder home overlay an agent pod
+  * lacks, and terraform reports a missing cache dir as a CLI configuration error on every run; an
+- * empty value leaves the cache off. modernApp.test runs its validation Job on the
+- * modern-app-toolchain image.
++ * empty value leaves the cache off. The modern-app toolchain image points COREPACK_HOME and
++ * PNPM_HOME at such overlays too; uid 1000 owns /home/ubuntu in the image, so corepack and pnpm
++ * create them there. modernApp.test runs its validation Job on the modern-app-toolchain image.
+  */
+ @NonCPS
+ Map<String, Map> sidecars() {
+diff --git a/vars/podYaml.md b/vars/podYaml.md
+index 5e6a4b5..9e580ad 100644
+--- a/vars/podYaml.md
++++ b/vars/podYaml.md
+@@ -63,6 +63,9 @@ Library sidecars, by name. The container takes the template's name.
+ checkout that another uid owns. `iac-toolchain` sets `TF_PLUGIN_CACHE_DIR` to the empty string. The
+ image points it at a KubeCoder home overlay that an agent pod lacks, and terraform reports a missing
+ cache directory as a CLI configuration error on every run; the empty value leaves the cache off.
++`modern-app-toolchain`'s image points `COREPACK_HOME` and `PNPM_HOME` at such overlays too; uid
++1000 owns `/home/ubuntu` in the image, so corepack and pnpm create them there, empty on every
++build.
+ 
+ [`modernApp.test`](modernApp.md) runs its validation Job on the `modern-app-toolchain` template's
+ image, so a bump of the template's image reaches the Job too.
+@@ -132,5 +135,3 @@ and everything it calls is `@NonCPS` and runs no step, so the call works there.
+ 
+ `sidecars`, `imageContainer`, `containerName`, `containerLines` and `quoted` are its internals.
+ They are not part of what `podYaml` offers a Jenkinsfile.
+-
+-A scripted pipeline declares the same sidecars with [`containerTemplates`](containerTemplates.md).
+
+/work/JenkinsPipelineUtils — P12: git diff 1fa9853a0c2a..0a0d4729ea31
+
+docs/examples/firmware-versions.groovy |  1 +
+ docs/examples/firmware.groovy          |  1 +
+ docs/pages/guide/pod.md                | 17 +++++++++++------
+ docs/pages/types/firmware.md           |  7 ++++---
+ vars/espFirmware.md                    | 10 ++++++----
+ vars/podYaml.md                        | 11 +++++++----
+ 6 files changed, 30 insertions(+), 17 deletions(-)
+
+diff --git a/docs/examples/firmware-versions.groovy b/docs/examples/firmware-versions.groovy
+index cc001f1..5128c35 100644
+--- a/docs/examples/firmware-versions.groovy
++++ b/docs/examples/firmware-versions.groovy
+@@ -12,6 +12,7 @@ pipeline {
+     agent {
+         kubernetes {
+             inheritFrom 'jenkins-agent-large'
++            yamlMergeStrategy merge()
+             yaml podYaml(images: [[image: 'espressif/idf:v5.5.3', name: 'idf']])
+         }
+     }
+diff --git a/docs/examples/firmware.groovy b/docs/examples/firmware.groovy
+index ac97eb1..8c466ee 100644
+--- a/docs/examples/firmware.groovy
++++ b/docs/examples/firmware.groovy
+@@ -13,6 +13,7 @@ pipeline {
+     agent {
+         kubernetes {
+             inheritFrom 'jenkins-agent-large'
++            yamlMergeStrategy merge()
+             yaml podYaml(images: [[image: 'espressif/idf:v5.5.3', name: 'idf']])
+         }
+     }
+diff --git a/docs/pages/guide/pod.md b/docs/pages/guide/pod.md
+index 0dc0390..c74560d 100644
+--- a/docs/pages/guide/pod.md
++++ b/docs/pages/guide/pod.md
+@@ -26,12 +26,17 @@ MyDownloads/MyDownloads, MyDownloads/MyDownloadsClient, MyDownloads/MyDownloadsS
+ ScanToPdf/ScanToPdf and ScanToPdf/ScanToPdfClient. A new job starts from
+ [its type's reference file](../types/index.md), which names the template its type uses.
+ 
+-It MUST add `kaniko` only when the build runs a kaniko step, and then MUST also declare
+-`yamlMergeStrategy merge()`: `inheritFrom 'jenkins-agent kaniko'`.
+-
+-**Why.** The `kaniko` template is YAML only. Under the default YAML merge strategy, the Kubernetes
+-plugin keeps only the last YAML, this file's, and drops the `kaniko` container
+-([`podYaml`](../reference/podYaml.md#combining-with-inherited-pod-templates)). A build that runs no
++It MUST add `kaniko` only when the build runs a kaniko step: `inheritFrom 'jenkins-agent kaniko'`.
++An agent that inherits `kaniko` or `jenkins-agent-large` MUST also declare
++`yamlMergeStrategy merge()`.
++
++**Why.** The `kaniko` and `jenkins-agent-large` templates are YAML only: `kaniko` holds the
++`kaniko` container, and `jenkins-agent-large` holds a required node affinity on the
++`homelab.local/performance=high` label and a toleration for that label's taint. Under the default
++YAML merge strategy, the Kubernetes plugin keeps only the last YAML, this file's, and drops the
++inherited one ([`podYaml`](../reference/podYaml.md#combining-with-inherited-pod-templates)). An
++image build then has no `kaniko` container. A large build loses its placement and runs on a node
++without that label, beside prd's workloads, and nothing in the build says so. A build that runs no
+ kaniko step does not need that container ([POD-6](#pod-6)).
+ 
+ ### POD-4 — Every other container from `podYaml`, each named { #pod-4 }
+diff --git a/docs/pages/types/firmware.md b/docs/pages/types/firmware.md
+index 5087ca4..b5b8b5b 100644
+--- a/docs/pages/types/firmware.md
++++ b/docs/pages/types/firmware.md
+@@ -6,9 +6,10 @@ the air, through IoTSupport. Today these are the eight jobs
+ 
+ ## What is specific to this type
+ 
+-- **The `jenkins-agent-large` template** ([POD-3](../guide/pod.md#pod-3)), and the ESP-IDF image
+-  as a named `images:` entry, `idf` ([POD-4](../guide/pod.md#pod-4)). The image's tag is the
+-  file's own ESP-IDF version, so a version bump is one repo's commit.
++- **The `jenkins-agent-large` template**, inherited with `yamlMergeStrategy merge()`
++  ([POD-3](../guide/pod.md#pod-3)), and the ESP-IDF image as a named `images:` entry, `idf`
++  ([POD-4](../guide/pod.md#pod-4)). The image's tag is the file's own ESP-IDF version, so a version
++  bump is one repo's commit.
+ - **`esp-libs` beside the repo**, both cloned in `Checkout`, each in its own directory
+   ([CHK-2](../guide/checkout.md#chk-2)). A repo that needs another library clones it there too.
+ - **The library's steps.** [`espFirmware`](../reference/espFirmware.md) carries what every
+diff --git a/vars/espFirmware.md b/vars/espFirmware.md
+index 565c60f..b72c84d 100644
+--- a/vars/espFirmware.md
++++ b/vars/espFirmware.md
+@@ -11,16 +11,18 @@ that builds for several hardware versions, the version.
+ rebuild re-flashes the devices over the air. There is no dry run.
+ 
+ The pod declares the `idf` container as a named `images:` entry ([`podYaml`](podYaml.md)), on the
+-`jenkins-agent-large` template. The ESP-IDF version is the file's own, in that image's tag, so a
+-version bump is one repo's commit. The steps do not clone: the file's `Checkout` stage checks out
+-the repo, `esp-libs` beside it and any other repo the build reads, each into a directory of its
+-own. Each step is a call on the var's method, so a declarative stage runs it in `script {}`. The
++`jenkins-agent-large` template, inherited with `yamlMergeStrategy merge()`
++([`podYaml`](podYaml.md#combining-with-inherited-pod-templates)). The ESP-IDF version is the
++file's own, in that image's tag, so a version bump is one repo's commit. The steps do not clone:
++the file's `Checkout` stage checks out the repo, `esp-libs` beside it and any other repo the build
++reads, each into a directory of its own. Each step is a call on the var's method, so a declarative stage runs it in `script {}`. The
+ file still writes out its every stage; the steps go inside them.
+ 
+ ```groovy
+ agent {
+     kubernetes {
+         inheritFrom 'jenkins-agent-large'
++        yamlMergeStrategy merge()
+         yaml podYaml(images: [[image: 'espressif/idf:v5.5.3', name: 'idf']])
+     }
+ }
+diff --git a/vars/podYaml.md b/vars/podYaml.md
+index 94414e8..9fb6fdc 100644
+--- a/vars/podYaml.md
++++ b/vars/podYaml.md
+@@ -113,10 +113,13 @@ image.
+ ## Combining with inherited pod templates
+ 
+ `inheritFrom` names the controller's pod templates the agent's pod builds on. An image build also
+-inherits `kaniko`, whose `kaniko` container `helmCharts.kaniko2` runs in. The `kaniko` template is
+-YAML only. Under the default YAML merge strategy the plugin keeps only the last YAML, which is this
+-one, and drops the `kaniko` container with its `busybox-share-init` init container and its
+-`busybox` volume. An agent that inherits `kaniko` therefore declares `yamlMergeStrategy merge()`:
++inherits `kaniko`, whose `kaniko` container `helmCharts.kaniko2` runs in, and a build that needs
++the large node inherits `jenkins-agent-large`. Both templates are YAML only. Under the default YAML
++merge strategy the plugin keeps only the last YAML, which is this one, and drops the inherited
++YAML: from `kaniko`, the `kaniko` container with its `busybox-share-init` init container and its
++`busybox` volume; from `jenkins-agent-large`, the required node affinity on the
++`homelab.local/performance=high` label and the toleration for that label's taint, so the pod runs
++on another node. An agent that inherits either therefore declares `yamlMergeStrategy merge()`:
+ 
+ ```groovy
+ agent {

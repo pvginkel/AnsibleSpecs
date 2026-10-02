@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "podYaml gains helm, iac-toolchain and python templates matching their describables, and refuses at evaluation a null env value, an unnamed or string images entry, and a non-RFC-1123 container name; the tests use exact assertions that a dropped check would fail. One advisory stale line on podYaml's page.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "vars/podYaml.md:130 lists containerName among podYaml's internals, but P1 deleted containerName()"}]}

@@ -1,0 +1,1 @@
+docs: kaniko --context .. --dockerfile docs/Dockerfile --destination registry:5000/pipelines-home:local --no-push    [  OK  ]

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "youtrack.yaml's colors: gains AU, IS and XF, each on YouTrack's palette and none reused, in the file's form and key order. Nothing blocking; only the live build can show the webhook-app attachment on the three projects, and the plan already gives that to the test phase.",
+ "details": "code_review_r1.md",
+ "findings": []}

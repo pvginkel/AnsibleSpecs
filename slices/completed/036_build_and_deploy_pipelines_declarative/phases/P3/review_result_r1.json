@@ -1,0 +1,15 @@
+{
+  "outcome": "issues",
+  "summary": "modernApp.test reproduces the five apps' validation block faithfully, keeps one image declaration and keeps secret values out of Groovy; the guide follows Ruling D1 and P3 and every example passes the controller's linter. One blocking defect: the secrets handoff through `kubectl set env -e -` silently truncates a value at `#` and splits it at a newline.",
+  "details": "code_review_r1.md",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Major",
+      "impact": "blocking",
+      "category": "functional",
+      "anchor": "repro-trace",
+      "summary": "modernApp.test's secrets handoff (vars/modernApp.groovy:71-73) silently truncates a secret at '#' and splits it at a newline: kubectl set env -e - parses '#' as a comment, so the suite gets a wrong value with no error"
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+/work/scratch/KubeCoderConfig — P10: git diff e04701cffc51..890da41973bb
+
+kubecoder/.claude-plugin/plugin.json        |  2 +-
+ kubecoder/skills/jenkins-pipelines/SKILL.md | 22 +++++++++++++++++++++-
+ kubecoder/skills/onboard/SKILL.md           | 34 +++++++++++++++++-----------------
+ kubecoder/skills/youtrack-usage/SKILL.md    |  8 ++++----
+ 4 files changed, 43 insertions(+), 23 deletions(-)
+
+diff --git a/kubecoder/.claude-plugin/plugin.json b/kubecoder/.claude-plugin/plugin.json
+index 714e066..026a7fd 100644
+--- a/kubecoder/.claude-plugin/plugin.json
++++ b/kubecoder/.claude-plugin/plugin.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "kubecoder",
+   "description": "Claude plugin for KubeCoder",
+-  "version": "0.10.0",
++  "version": "0.10.2",
+   "author": {
+     "name": "Pieter van Ginkel"
+   },
+diff --git a/kubecoder/skills/jenkins-pipelines/SKILL.md b/kubecoder/skills/jenkins-pipelines/SKILL.md
+index 1bc65d2..a719ef6 100644
+--- a/kubecoder/skills/jenkins-pipelines/SKILL.md
++++ b/kubecoder/skills/jenkins-pipelines/SKILL.md
+@@ -28,6 +28,25 @@ reference Jenkinsfile that applies every rule, on its page at
+ https://pipelines.home/docs/types/index.md, names the types and which job each
+ reference file comes from. A new pipeline starts from its type's reference file.
+ 
++**Two files predate the guide, on purpose.** Both are scripted
++`podTemplate`/`node` files, so neither is a model for a new file: a new file
++starts from its type's reference file. How to treat each:
++
++- ModernAppTemplate's own template, `root/template/Jenkinsfile.jinja`. It is
++  brought to the guide at the template's next sync, when an agent reconciles the
++  template with the apps it renders: DHCPApp, ElectronicsInventory,
++  FieldnotesApp, IoTSupport and ZigbeeControl, whose `Jenkinsfile` are on the
++  guide's
++  [modern app build](https://pipelines.home/docs/types/modern-app/index.md)
++  type. Until that sync, an app rendered from the template does not build: the
++  file calls `containerTemplates.k8s` and the positional `helmCharts.kaniko(…)`,
++  which the library no longer has.
++- KitchenDisplay's `Jenkinsfile`, the job `Firmware/KitchenDisplay`. The job is
++  disabled, and the file waits with it for the decision on the display's future
++  (ANS-93, parked). Leave it as it is. The library keeps the code it calls:
++  `containerTemplates.rsync` and `dockbuild`, `helmCharts.ssh` and `rsync`, and
++  `gitUtils`. Its `Jenkinsfile.architecture` is on the guide.
++
+ ## The hard rules
+ 
+ ### [Files and headers](https://pipelines.home/docs/guide/file-layout/index.md)
+@@ -92,7 +111,8 @@ reference file comes from. A new pipeline starts from its type's reference file.
+ 
+ - `withVault` goes inside the `steps` of the stage that uses the secret, around
+   only the steps that use it; never around `pipeline {}`, the agent, the
+-  checkout, a lint or a test (SEC-1). No secret in the pod spec (SEC-2).
++  checkout, a lint or a test, except the one step that runs a test which itself
++  needs the secret (SEC-1). No secret in the pod spec (SEC-2).
+ - The one Jenkins credential is GitHub's,
+   `5f6fbd66-b41c-405f-b107-85ba6fd97f10`. A shell that pushes gets it from
+   `withCredentials([usernamePassword(…)])` around that shell only (SEC-3).
+diff --git a/kubecoder/skills/onboard/SKILL.md b/kubecoder/skills/onboard/SKILL.md
+index 4a60f73..4250b3b 100644
+--- a/kubecoder/skills/onboard/SKILL.md
++++ b/kubecoder/skills/onboard/SKILL.md
+@@ -1601,11 +1601,11 @@ While making it green, port the tooling that needs a live environment:
+   slot and then times out with a message saying so — `kaniko -h` has the rest.
+   `docker run` style scripts (`run.sh`, `stop.sh`) do not carry over: in the
+   pod, apps run as processes, not containers. Leave the Jenkins
+-  `helmCharts.kaniko(...)` path untouched.
++  `helmCharts.kaniko2(...)` path untouched.
+ 
+   **A repo with no chain to port still needs a decision here.** Where CI already
+-  builds everything with `helmCharts.kaniko(...)` and nothing builds locally, do
+-  not reflexively wire the Dockerfiles into `build:` — a repo with six images
++  builds everything with `helmCharts.kaniko2(...)` and nothing builds locally,
++  do not reflexively wire the Dockerfiles into `build:` — a repo with six images
+   turns the default sweep into minutes, and that sweep is the AI workflow's
+   per-task gate. Wire none, note the omission and the one-liner in a
+   `project.yaml` comment, and **still execute one build by hand** so the
+@@ -1647,18 +1647,18 @@ While making it green, port the tooling that needs a live environment:
+     the host `node_modules`. It costs twice over: the client filters the tar
+     with the same file, so a missing one also streams every one of those bytes
+     to the builder. The size and duration the client reports on each build is
+-    how you notice. A repo whose CI already builds with `helmCharts.kaniko(...)`
+-    may have **no `.dockerignore` at all**, and CI never noticed because it
+-    builds from a clean clone — so check for the file's existence, not only for
+-    its placement when the context is a subdirectory. NewsFilter's context is
+-    the repository root and had none. The context therefore included `.git`, the
+-    gitignored `store/` directory that grows with every scored article, and a
+-    `.env` holding a live API key. Adding one took the context from 648 KiB on
+-    disk to 125 KiB sent. Measure the effect rather than asserting it: a second
+-    `--no-push` build with the file moved aside costs seconds (the base image is
+-    cached by then) and turns "keeps the context lean" into
+-    `138.5 KiB → 21.0 KiB` — or `7.6 MiB → 3.7 MiB`, `.git` alone half the
+-    context, on a repo whose CI had been happy for years
++    how you notice. A repo whose CI already builds with
++    `helmCharts.kaniko2(...)` may have **no `.dockerignore` at all**, and CI
++    never noticed because it builds from a clean clone — so check for the file's
++    existence, not only for its placement when the context is a subdirectory.
++    NewsFilter's context is the repository root and had none. The context
++    therefore included `.git`, the gitignored `store/` directory that grows with
++    every scored article, and a `.env` holding a live API key. Adding one took
++    the context from 648 KiB on disk to 125 KiB sent. Measure the effect rather
++    than asserting it: a second `--no-push` build with the file moved aside
++    costs seconds (the base image is cached by then) and turns "keeps the
++    context lean" into `138.5 KiB → 21.0 KiB` — or `7.6 MiB → 3.7 MiB`, `.git`
++    alone half the context, on a repo whose CI had been happy for years
+     (GitblitMCPSupportPlugin). Take the "before" build **before** any deletion
+     and in the foreground: backgrounding it is the obvious move, and it races
+     the context tar against your own edits. Weigh the context against what the
+@@ -1672,8 +1672,8 @@ While making it green, port the tooling that needs a live environment:
+     build input into one, and the first got 91 % and 99 % of the win on the run
+     that drew the distinction (ElectronicsInventory). A merged monorepo can end
+     up with its only `.dockerignore` at the repo root, read by nothing, while
+-    both Dockerfiles build from `backend/` and `frontend/` — read the context
+-    arguments out of `helmCharts.kaniko(<dockerfile>, <context>, …)` and test
++    both Dockerfiles build from `backend/` and `frontend/` — read the `context:`
++    arguments out of `helmCharts.kaniko2(dockerfile: …, context: …, …)` and test
+     each context directory. A root file that excludes exactly the right paths is
+     the most convincing and the easiest to mistake for coverage: delete it
+     rather than leave it looking authoritative. And where one context has a
+diff --git a/kubecoder/skills/youtrack-usage/SKILL.md b/kubecoder/skills/youtrack-usage/SKILL.md
+index 6e887c4..1a54ff8 100644
+--- a/kubecoder/skills/youtrack-usage/SKILL.md
++++ b/kubecoder/skills/youtrack-usage/SKILL.md
+@@ -47,10 +47,10 @@ want to file against — your own or another environment's — has no project,
+ **stop**: tell the operator there is no project and do not continue. Do not file
+ the issue somewhere else instead. The operator then settles the name and the key
+ with you. Two rulings stand: **KubeCoderConfig has no project and files in
+-`KC`** — it lives in KubeCoder's environment and is worked from there — and
+-**an IaC (`*Deploy`) repo without a clear home of its own files in `ANS`**.
+-Those are the operator's rulings, not rules to extend: any other repo without a
+-project still stops.
++`KC`** — it lives in KubeCoder's environment and is worked from there — and **an
++IaC (`*Deploy`) repo without a clear home of its own files in `ANS`**. Those are
++the operator's rulings, not rules to extend: any other repo without a project
++still stops.
+ 
+ **Identities.** The MCP server writes as **Jeeves** (`jeeves`) — every session
+ issue, comment and edit lands under that name. The operator is **Pieter van

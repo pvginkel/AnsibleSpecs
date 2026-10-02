@@ -1,0 +1,672 @@
+/work/Architecture — P7: git diff 5ce9e2d34ca6..525781bf76d0
+
+.claude/architecture/producer-manual.md   |  89 ++++++++++---------
+ .claude/skills/seed-architecture/SKILL.md |  14 +--
+ .kubecoder/config.yaml                    |   2 +-
+ Dockerfile                                |   2 +-
+ Jenkinsfile                               | 242 +++++++++++++++++++++++---------------------------
+ Jenkinsfile.ha-fleet                      | 120 +++++++++++--------------
+ USAGE.md                                  |   9 +-
+ tools/ha-fleet/README.md                  |  17 ++--
+ 8 files changed, 233 insertions(+), 262 deletions(-)
+
+diff --git a/.claude/architecture/producer-manual.md b/.claude/architecture/producer-manual.md
+index 4929924..446258d 100644
+--- a/.claude/architecture/producer-manual.md
++++ b/.claude/architecture/producer-manual.md
+@@ -656,8 +656,9 @@ Validate with `arch-validate` from the **aac-tools toolchain**, the
+ `arch-validate.py` beside this manual byte for byte, so this repo keeps
+ no copy of the script:
+ 
+-- **Jenkins:** run it in the container `containerTemplates.aac_tools`
+-  declares (see Jenkins integration).
++- **Jenkins:** the producer's pipeline runs it through the
++  JenkinsPipelineUtils `architectureProducer` steps (see Jenkins
++  integration).
+ - **KubeCoder:** declare the toolchain in `.kubecoder/config.yaml`
+   (`- use: aac-tools` under `tools:`) and run it through
+   `cexec aac-tools`.
+@@ -688,61 +689,65 @@ merge time in the Architecture pipeline.
+ 
+ ## Jenkins integration
+ 
+-The validator runs in the aac-tools container, which the pod template
+-declares through the JenkinsPipelineUtils shared library:
++A producer's pipeline is a file of its own, `Jenkinsfile.architecture`,
++run by a job of its own, `AaC/<Repo>`. It is written to
++the estate's Jenkins pipeline style guide, which JenkinsPipelineUtils
++publishes from its `docs/`: the file is the guide's reference file for
++the producer's architecture type, with this repo's own values.
++
++- **App architecture producer**, for a hand-authored model; the
++  reference file is `AaC/Ginbov`'s. One `Validate architecture` stage
++  after the checkout validates the files and archives them.
++- **Deploy-repo architecture producer**, for a model generated from a
++  deploy repo's chart; the reference file is `AaC/ChartsDeploy`'s.
++  `Generate architecture` generates the file and archives it, then
++  `Validate architecture` validates it.
++
++The pod declares the aac-tools container with the library's `podYaml`
++template `aac-tools`, and the stages call the library's
++`architectureProducer` steps, which carry what every producer shares:
++the container the tools run in, their command lines, and an archive
++the Architecture pipeline collects:
+ 
+ ```groovy
+-library identifier: 'JenkinsPipelineUtils', changelog: false
+-
+-podTemplate(inheritFrom: 'jenkins-agent', containers: [
+-    containerTemplates.aac_tools('aac-tools')
+-]) {
+-    node(POD_LABEL) {
+-        // clone this repo, then the steps below
++stage('Validate architecture') {
++    steps {
++        script {
++            architectureProducer.validate(files: ['docs/architecture/*.yaml'])
++            architectureProducer.archive(files: ['docs/architecture/*.yaml'])
++        }
+     }
+ }
+ ```
+ 
+-Two steps in this repo's `Jenkinsfile`. Both use a directory glob so
+-they work whether this repo emits one YAML or several:
+-
+-1. **Validate** as a build step. Fail the build on non-zero exit:
+-
+-   ```groovy
+-   stage('Validate architecture artifacts') {
+-       container('aac-tools') {
+-           sh 'arch-validate docs/architecture/*.yaml'
+-       }
+-   }
+-   ```
+-
+-2. **Archive** so the Architecture pipeline can pull every YAML via
+-   `copyArtifacts`:
++- `validate(files: [...])` runs `arch-validate` on the files; a model
++  the service rejects fails the build.
++- `archive(files: [...])` archives them, fingerprinted. Each pattern
++  ends in `.yaml` under a path segment named `architecture`, which the
++  Architecture pipeline's filter matches.
++- `generate(stage: '<stage>', producer: '<id>')` runs the toolchain's
++  `gen-architecture` for a deploy repo's stage.
+ 
+-   ```groovy
+-   stage('Archive architecture artifacts') {
+-       archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
+-   }
+-   ```
++A directory glob keeps the file working whether this repo emits one
++YAML or several.
+ 
+ The Architecture pipeline calls `copyArtifacts` with
+ `filter: '**/architecture/**/*.yaml'` and no `flatten`, so the YAMLs
+ land under `producer-artifacts/<producer-id>/` with their original
+ repo-relative paths preserved. The collector walks the producer
+ directory recursively, so subdirectory layout (and any same-basename
+-files in different subdirs) is fine.
++files in different subdirs) is fine. It copies a producer's last
++successful build, so a model that fails validation never reaches it,
++archived or not.
+ 
+ The Jenkins agent must have outbound HTTPS to
+ `architecture.webathome.org` so the validator can reach the service.
+ 
+-**Generated producers** add a **generate** step first and do **not**
+-commit the YAML — regenerate, validate, archive:
+-
+-```groovy
+-stage('Generate') { sh 'python tools/gen-architecture.py' }   // may need helm/etc. on the agent
+-stage('Validate') { container('aac-tools') { sh 'arch-validate docs/architecture/*.yaml' } }
+-stage('Archive')  { archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true }
+-```
++**Generated producers** do **not** commit the YAML: a
++`Generate architecture` stage regenerates it and archives what it
++writes, then `Validate architecture` validates it. A deploy repo
++generates with `architectureProducer.generate`; any other generator
++runs as the repo's own command in that stage.
+ 
+ No first-build bootstrap deadlock: `arch-validate` doesn't resolve
+ cross-producer refs (that's merge-time), so build order only affects
+@@ -928,8 +933,8 @@ up.
+ 3. **Author** the architecture YAML(s) under `docs/architecture/`.
+    Iterate against `cexec aac-tools arch-validate docs/architecture/*.yaml`
+    until clean.
+-4. **Wire CI**: add the validate + archive steps to this repo's
+-   Jenkinsfile.
++4. **Wire CI**: write this repo's `Jenkinsfile.architecture` (see
++   Jenkins integration).
+ 5. **Verify**: trigger one build. Confirm every file archives and
+    the validation step passes.
+ 6. **Register**: commit to `pipeline-producers.yaml` on
+diff --git a/.claude/skills/seed-architecture/SKILL.md b/.claude/skills/seed-architecture/SKILL.md
+index 5189620..10c0f97 100644
+--- a/.claude/skills/seed-architecture/SKILL.md
++++ b/.claude/skills/seed-architecture/SKILL.md
+@@ -142,12 +142,14 @@ diff** — a clean producer is byte-identical (catches non-deterministic ids).
+ 
+ ## Step 6 — Wire CI and register (point, don't do blindly)
+ 
+-Per the manual's **Jenkins integration** and **Registration** sections: add
+-validate + archive steps (generated producers add a generate step first and
+-don't commit the YAML, ideally in a dedicated `Jenkinsfile.architecture`
+-isolated from the deploy pipeline), with the validate step running
+-`arch-validate` in the aac-tools toolchain's container
+-(`containerTemplates.aac_tools`); the repo keeps no copy of the validator.
++Per the manual's **Jenkins integration** and **Registration** sections: write
++the repo's `Jenkinsfile.architecture`, which a job of its own runs apart from
++the deploy pipeline, from the pipeline style guide's reference file for the
++producer's architecture type. Its stages call the JenkinsPipelineUtils
++`architectureProducer` steps: `validate` and `archive`, and for a generated
++producer a generate stage first, which does not commit the YAML. The steps
++run `arch-validate` in the aac-tools toolchain's container; the repo keeps no
++copy of the validator.
+ Push the seeded commits once the operator approves: the central update
+ refuses a clone with unpushed commits.
+ Confirm one build archives + validates, then PR `pipeline-producers.yaml` in
+diff --git a/.kubecoder/config.yaml b/.kubecoder/config.yaml
+index cc87547..f0ec3de 100644
+--- a/.kubecoder/config.yaml
++++ b/.kubecoder/config.yaml
+@@ -19,7 +19,7 @@ tools:
+   - use: aac-tools
+ 
+ # The deliverable is a container image that is not built locally otherwise —
+-# Jenkins builds it with helmCharts.kaniko. This is here so a Dockerfile change
++# Jenkins builds it with helmCharts.kaniko2. This is here so a Dockerfile change
+ # can be smoke-tested in-env:
+ #   kaniko --destination registry:5000/architecture:dev
+ # Deliberately not wired into `kc project build`, because it cannot pass: the
+diff --git a/Dockerfile b/Dockerfile
+index 07ee4aa..305b90e 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -87,7 +87,7 @@ RUN npm run build && npm test
+ #
+ # --relaxed tolerates dangling cross-producer refs while the federation is
+ # still onboarding (apps whose owning producer isn't emitting yet). This must
+-# match the Jenkinsfile's preview "Run collector" stage — the two runs are
++# match the Jenkinsfile's "Validate architecture" stage — the two runs are
+ # byte-identical only when given the same flags. Drop --relaxed from both once
+ # every referenced producer is online so dangling refs fail the build again.
+ FROM check-schemas AS run-collector
+diff --git a/Jenkinsfile b/Jenkinsfile
+index f344a89..84123dd 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -1,157 +1,141 @@
+-// Architecture-rebuild pipeline.
++// Collects the architecture model of every producer registered in pipeline-producers.yaml,
++// validates the federation with the collector, builds the architecture_viewer image that serves it,
++// and pins that image into WebathomeOrgDeploy, which Argo CD syncs to prd. It also sets the job's
++// own triggers.
+ //
+-// 1. Checkout the Architecture repo.
+-// 2. Read pipeline-producers.yaml — the registered producer list. Every
+-//    producer names the `jenkinsJob` that archives its artifact; the one
+-//    marked `self: true` is this repo, whose job is this very pipeline.
+-// 3. For each registered producer:
+-//    - copyArtifacts from <jenkinsJob> lastSuccessful into
+-//      producer-artifacts/<producer-id>/;
+-//    - for the self-producer, copy docs/architecture/ of this checkout
+-//      into producer-artifacts/<producer-id>/ instead: its last
+-//      successful build is the previous run of this pipeline, not the
+-//      commit being built.
+-// 4. Bundle producer-artifacts/ into producer-artifacts.tgz and
+-//    archive it as a build artifact, before the collector runs, so
+-//    the raw inputs are available for debugging even on failure.
+-// 5. Run the collector (`tooling/collect.py`) in a Python sidecar to
+-//    archive validation-report.json as a Jenkins build artifact.
+-// 6. Clear the `producer-artifacts/` line in .dockerignore so kaniko
+-//    sees the populated directory.
+-// 7. Kaniko-build the multi-stage Dockerfile. The Dockerfile's
+-//    `run-collector` stage reruns collect.py against the same inputs
+-//    inside the image; output is byte-identical to step 5 by the
+-//    collector's determinism guarantee.
+-// 8. Pin the image into WebathomeOrgDeploy, which Argo CD syncs.
++// The job builds on a push to this repo, and when any registered producer's job succeeds, except
++// its own (the self-producer) and those marked `trigger: false`: WebathomeOrgDeploy's, which the
++// pin write starts. triggers {} cannot hold a list read at run time, so the Set triggers stage sets
++// them, and the build of the commit that registers a producer wires its trigger.
+ //
+-// Triggers wired below:
+-//   - SCM push to this repo (the default poll-or-webhook).
+-//   - Upstream success of every registered producer's Jenkins job
+-//     except the self-producer's, which is this pipeline, and those
+-//     marked `trigger: false`: WebathomeOrgDeploy, which the image pin
+-//     below writes into. Registering a producer wires its trigger on the
+-//     next run of this Jenkinsfile.
+-//   - Manual "Build Now" in the Jenkins UI is always available.
++// Controller config:
++//   - Job: AaC/Architecture
++//   - SCM: pvginkel/Architecture, branch main
++//   - Script Path: Jenkinsfile
+ 
+ library identifier: 'JenkinsPipelineUtils', changelog: false
+ 
+-podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+-    containerTemplates.k8s('k8s'),
+-    containerTemplates.python('python')
+-]) {
+-    node(POD_LABEL) {
+-        stage('Checkout') {
+-            checkout scm
++pipeline {
++    agent {
++        kubernetes {
++            inheritFrom 'jenkins-agent kaniko'
++            yamlMergeStrategy merge()
++            yaml podYaml(templates: ['k8s', 'python'])
+         }
++    }
+ 
+-        // Triggers wiring derived from pipeline-producers.yaml.
+-        def producersDoc = readYaml(file: 'pipeline-producers.yaml')
+-        def producers = producersDoc.producers ?: []
+-        def upstreamJobs = producers.findAll { !it.self && it.trigger != false }.collect { it.jenkinsJob }.join(', ')
++    options {
++        disableConcurrentBuilds(abortPrevious: true)
++        skipDefaultCheckout()
++        timeout(time: 60, unit: 'MINUTES')
++        timestamps()
++    }
+ 
+-        def triggers = [githubPush()]
+-        if (upstreamJobs) {
+-            triggers << upstream(threshold: hudson.model.Result.SUCCESS,
+-                                 upstreamProjects: upstreamJobs)
++    stages {
++        stage('Checkout') {
++            steps {
++                checkout scm
++            }
+         }
+-        properties([pipelineTriggers(triggers)])
+ 
+-        stage('Copy producer artifacts') {
+-            sh 'mkdir -p producer-artifacts'
+-            producers.each { p ->
+-                if (p.self) {
+-                    // Self-producer: its artifact is this checkout's
+-                    // docs/architecture/, not its jenkinsJob's archive
+-                    // (that is this pipeline's previous run). Mirror the
+-                    // directory into producer-artifacts/<id>/ so the
+-                    // collector's rglob walk picks the files up the same
+-                    // way it does for upstream producers.
+-                    sh """
+-                        set -eu
+-                        mkdir -p producer-artifacts/${p.id}/docs/architecture
+-                        cp docs/architecture/*.yaml producer-artifacts/${p.id}/docs/architecture/
+-                    """
+-                } else {
+-                    copyArtifacts(
+-                        projectName: p.jenkinsJob,
+-                        selector: lastSuccessful(),
+-                        filter: '**/architecture/**/*.yaml',
+-                        target: "producer-artifacts/${p.id}",
+-                        fingerprintArtifacts: true
+-                    )
++        // The estate's one properties step. Declarative leaves alone the triggers its
++        // triggers {} did not declare, so the next build keeps these.
++        stage('Set triggers') {
++            steps {
++                script {
++                    List producers = readYaml(file: 'pipeline-producers.yaml').producers ?: []
++                    String upstreamJobs = producers.findAll { !it.self && it.trigger != false }.collect { it.jenkinsJob }.join(', ')
++                    List jobTriggers = [githubPush()]
++                    if (upstreamJobs) {
++                        jobTriggers << upstream(threshold: hudson.model.Result.SUCCESS, upstreamProjects: upstreamJobs)
++                    }
++                    properties([pipelineTriggers(jobTriggers)])
+                 }
+             }
+         }
+ 
+-        stage('Archive collected artifacts') {
+-            // Debugging aid: bundle the raw producer-artifacts/ tree
+-            // and expose it as a build artifact before the collector
+-            // runs, so the inputs are available even if collection
+-            // fails downstream.
+-            sh '''
+-                set -eu
+-                tar -czf producer-artifacts.tgz producer-artifacts
+-            '''
+-            archiveArtifacts(
+-                artifacts: 'producer-artifacts.tgz',
+-                fingerprint: true,
+-                allowEmptyArchive: false
+-            )
++        stage('Collect producer artifacts') {
++            steps {
++                script {
++                    List producers = readYaml(file: 'pipeline-producers.yaml').producers ?: []
++                    for (producer in producers) {
++                        if (producer.self) {
++                            // The self-producer's artifact is this checkout's docs/architecture/:
++                            // its job's last successful build is this job's previous build.
++                            sh """
++                                set -eu
++                                mkdir -p 'producer-artifacts/${producer.id}/docs/architecture'
++                                cp docs/architecture/*.yaml 'producer-artifacts/${producer.id}/docs/architecture/'
++                            """
++                        } else {
++                            copyArtifacts(
++                                projectName: producer.jenkinsJob,
++                                selector: lastSuccessful(),
++                                filter: '**/architecture/**/*.yaml',
++                                target: "producer-artifacts/${producer.id}",
++                                fingerprintArtifacts: true
++                            )
++                        }
++                    }
++                }
++                // The collector's inputs, archived before it runs, so that a failed collection can be
++                // replayed from them.
++                sh 'tar -czf producer-artifacts.tgz producer-artifacts'
++                archiveArtifacts artifacts: 'producer-artifacts.tgz', fingerprint: true
++            }
+         }
+ 
+-        stage('Run collector') {
+-            container('python') {
+-                sh '''
+-                    set -eu
+-                    pip install --quiet --no-cache-dir poetry
+-                    cd tooling
+-                    poetry install --no-root --without dev
+-                    poetry run python collect.py \
+-                        --producers "${WORKSPACE}/pipeline-producers.yaml" \
+-                        --in "${WORKSPACE}/producer-artifacts" \
+-                        --out "${WORKSPACE}/dist" \
+-                        --relaxed
+-                    # --relaxed tolerates dangling cross-producer refs while the
+-                    # federation is still onboarding (apps whose owning producer
+-                    # isn't emitting yet). The Dockerfile's run-collector stage
+-                    # carries the same flag (the two runs must match); drop it
+-                    # from BOTH once every referenced producer is online so
+-                    # dangling refs fail the build again.
+-                '''
++        stage('Validate architecture') {
++            steps {
++                container('python') {
++                    // --relaxed tolerates dangling references between producers while the
++                    // federation is onboarding. The Dockerfile's run-collector stage passes the same
++                    // flag, and the two runs must match.
++                    sh '''
++                        set -eu
++                        pip install --quiet --no-cache-dir poetry
++                        cd tooling
++                        poetry install --no-root --without dev
++                        poetry run python collect.py \
++                            --producers "$WORKSPACE/pipeline-producers.yaml" \
++                            --in "$WORKSPACE/producer-artifacts" \
++                            --out "$WORKSPACE/dist" \
++                            --relaxed
++                    '''
++                }
++                archiveArtifacts artifacts: 'dist/data/v0.1/validation-report.json', fingerprint: true
+             }
+-            archiveArtifacts(
+-                artifacts: 'dist/data/v0.1/validation-report.json',
+-                fingerprint: true,
+-                allowEmptyArchive: false
+-            )
+         }
+ 
+-        stage('Build container image') {
+-            // The pipeline opts in to bundling producer-artifacts/ by
+-            // dropping its exclusion from .dockerignore. The collector
+-            // step above already validated everything.
+-            sh '''
+-                set -eu
+-                if [ -f .dockerignore ]; then
++        stage('Build architecture_viewer image') {
++            steps {
++                // The image bundles producer-artifacts/, which .dockerignore keeps out of every other
++                // build of the Dockerfile.
++                sh '''
++                    set -eu
+                     grep -v '^producer-artifacts/$' .dockerignore > .dockerignore.tmp || true
+                     mv .dockerignore.tmp .dockerignore
+-                fi
+-            '''
+-            container('kaniko') {
+-                helmCharts.kaniko([
+-                    "registry:5000/architecture_viewer:${currentBuild.number}",
+-                    'registry:5000/architecture_viewer:latest'
+-                ])
++                '''
++                container('kaniko') {
++                    script {
++                        helmCharts.kaniko2(destinations: [
++                            "registry:5000/architecture_viewer:${currentBuild.number}",
++                            'registry:5000/architecture_viewer:latest',
++                        ])
++                    }
++                }
+             }
+         }
+ 
+-        // The build hands its image to Argo CD by pinning it in the deploy repo (argo-cd D53);
+-        // Argo syncs the commit. HelmCharts no longer deploys this app.
+         stage('Write image pins') {
+-            container('k8s') {
+-                cicd.writeVersionPins(repo: 'pvginkel/WebathomeOrgDeploy', pins: [
+-                    'config/prd/values.yaml': ['images.architecture_viewer': ":${currentBuild.number}"]
+-                ])
++            steps {
++                container('k8s') {
++                    script {
++                        cicd.writeVersionPins(repo: 'pvginkel/WebathomeOrgDeploy', pins: [
++                            'config/prd/values.yaml': ['images.architecture_viewer': ":${currentBuild.number}"],
++                        ])
++                    }
++                }
+             }
+         }
+     }
+diff --git a/Jenkinsfile.ha-fleet b/Jenkinsfile.ha-fleet
+index eb4477d..acb282b 100644
+--- a/Jenkinsfile.ha-fleet
++++ b/Jenkinsfile.ha-fleet
+@@ -1,89 +1,69 @@
+-// home-automation-fleet — scheduled producer pipeline.
++// Generates the home-automation-fleet architecture snapshot from the live Home Assistant every day,
++// validates it against the architecture service, and archives it as the producer's artifact, which
++// AaC/Architecture collects. It only reads Home Assistant.
+ //
+-// A STANDALONE, daily-scheduled job (separate from the main Architecture-rebuild
+-// pipeline). It is the only job that touches Home Assistant. It:
++// The producer is registered in pipeline-producers.yaml as home-automation-fleet, with this job and
++// no repo, so AaC/Architecture copies this job's last successful artifact. HA_URL is a global
++// environment variable of the controller. HA_TOKEN, a Home Assistant long-lived access token, is in
++// OpenBao.
+ //
+-//   1. Checks out this repo (the generator lives in tools/ha-fleet/).
+-//   2. Runs gen-ha-fleet.py against the live HA WebSocket API, using HA_URL (an
+-//      ambient global Jenkins env var) + HA_TOKEN (from OpenBao), to emit
+-//      tools/ha-fleet/out/architecture/home-automation-fleet.yaml.
+-//   3. Validates that artifact against the validation service (arch-validate.py);
+-//      a non-zero exit fails the build BEFORE the archive stage, so a bad
+-//      snapshot is never published.
+-//   4. Archives the artifact. The main pipeline's `copyArtifacts` (filter
+-//      **/architecture/**/*.yaml) pulls it into producer-artifacts/
+-//      home-automation-fleet/ on its next run — same contract as every other
+-//      producer; no commit-back.
+-//
+-// The Jenkins job is AaC/Home Assistant Fleet:
+-//   - "Pipeline script from SCM", repo = this one, Script Path = Jenkinsfile.ha-fleet.
+-//   - HA_TOKEN comes from OpenBao via the withVault block below, stored at
+-//     KV-v2 path `kv/jenkins/home-automation-fleet`, key `ha_token` (a HA
+-//     long-lived access token; not a firmware MQTT user — those are ACL-scoped
+-//     and don't see DSMR/Ecowitt/SLZB/WiFi). The controller-level Vault config
+-//     supplies the address + auth (same as every other pipeline).
+-//   - HA_URL is read from the ambient global Jenkins environment, forwarded
+-//     into the build container below.
+-//   - The schedule lives in the job config (Build Triggers → Build
+-//     periodically), not here: this pipeline declares no trigger.
+-//   - The producer is registered in pipeline-producers.yaml as
+-//     home-automation-fleet with this job and no `repo`, so the main pipeline
+-//     copies this job's last successful artifact and the central architecture
+-//     update leaves the producer alone (see tools/ha-fleet/README.md).
++// Controller config:
++//   - Job: AaC/Home Assistant Fleet
++//   - SCM: pvginkel/Architecture, branch main
++//   - Script Path: Jenkinsfile.ha-fleet
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
+ 
+-library('JenkinsPipelineUtils') _
++pipeline {
++    agent {
++        kubernetes {
++            inheritFrom 'jenkins-agent'
++            yaml podYaml(images: [[image: 'python:slim', name: 'python']])
++        }
++    }
+ 
+-withVault([vaultSecrets: [
+-    [path: 'kv/jenkins/home-automation-fleet', engineVersion: 2, secretValues: [
+-        [envVar: 'HA_TOKEN', vaultKey: 'ha_token'],
+-    ]],
+-]]) {
+-    // The python sidecar doesn't inherit the build env, so forward HA_TOKEN
+-    // (from Vault) and HA_URL (ambient global env) into it explicitly — same
+-    // containerEnvVar pattern the other Vault-backed pipelines use.
+-    podTemplate(inheritFrom: 'jenkins-agent', containers: [
+-        containerTemplate(name: 'python', image: 'python:slim', command: 'sleep', args: 'infinity',
+-            alwaysPullImage: true, envVars: [
+-                containerEnvVar(key: 'HA_TOKEN', value: '$HA_TOKEN'),
+-                containerEnvVar(key: 'HA_URL', value: '$HA_URL'),
+-            ])
+-    ]) {
+-        node(POD_LABEL) {
+-            // No trigger declared here — the schedule is owned by the Jenkins
+-            // job config (Build Triggers → Build periodically).
++    options {
++        disableConcurrentBuilds(abortPrevious: true)
++        skipDefaultCheckout()
++        timeout(time: 60, unit: 'MINUTES')
++        timestamps()
++    }
+ 
+-            stage('Checkout') {
++    triggers {
++        cron('H 4 * * *')
++    }
++
++    stages {
++        stage('Checkout') {
++            steps {
+                 checkout scm
+             }
++        }
+ 
+-            stage('Generate HA fleet snapshot') {
++        stage('Generate architecture') {
++            steps {
+                 container('python') {
+-                    sh '''
+-                        set -eu
+-                        pip install --quiet --no-cache-dir websocket-client pyyaml
+-                        python3 tools/ha-fleet/gen-ha-fleet.py
+-                    '''
++                    sh 'pip install --quiet --no-cache-dir websocket-client pyyaml'
++                    withVault([vaultSecrets: [
++                        [path: 'kv/jenkins/home-automation-fleet', engineVersion: 2, secretValues: [
++                            [envVar: 'HA_TOKEN', vaultKey: 'ha_token'],
++                        ]],
++                    ]]) {
++                        sh 'python3 tools/ha-fleet/gen-ha-fleet.py'
++                    }
+                 }
++                archiveArtifacts artifacts: 'tools/ha-fleet/out/architecture/home-automation-fleet.yaml', fingerprint: true
+             }
++        }
+ 
+-            stage('Validate') {
++        // AaC/Architecture copies a producer's last successful build, so a snapshot that fails here
++        // never reaches it, archived or not.
++        stage('Validate architecture') {
++            steps {
+                 container('python') {
+-                    // arch-validate.py is stdlib-only and submits to the
+-                    // validation service. Exit 1 = invalid model, 2 =
+-                    // transport/server error; either fails the build here,
+-                    // before the archive stage, so an invalid snapshot is never
+-                    // published.
+                     sh 'python3 .claude/architecture/arch-validate.py tools/ha-fleet/out/architecture/home-automation-fleet.yaml'
+                 }
+             }
+-
+-            stage('Archive artifact') {
+-                archiveArtifacts(
+-                    artifacts: 'tools/ha-fleet/out/architecture/home-automation-fleet.yaml',
+-                    fingerprint: true,
+-                    allowEmptyArchive: false
+-                )
+-            }
+         }
+     }
+ }
+diff --git a/USAGE.md b/USAGE.md
+index bd44997..f6d2910 100644
+--- a/USAGE.md
++++ b/USAGE.md
+@@ -135,10 +135,11 @@ curl -sS \
+ ## `arch-validate` CLI
+ 
+ The dev-facing artifact. Producers run it from the aac-tools toolchain, the
+-`registry:5000/aac-tools` image ArgoCDTools publishes: in Jenkins in the
+-container `containerTemplates.aac_tools` declares, in a KubeCoder environment
+-that declares the toolchain through `cexec aac-tools`. A producer repo keeps no
+-copy of the script.
++`registry:5000/aac-tools` image ArgoCDTools publishes: in Jenkins through the
++JenkinsPipelineUtils `architectureProducer` steps, which run it in the
++toolchain's container (see the producer manual's *Jenkins integration*), in a
++KubeCoder environment that declares the toolchain through `cexec aac-tools`. A
++producer repo keeps no copy of the script.
+ 
+ ```bash
+ # from a producer repo's KubeCoder environment
+diff --git a/tools/ha-fleet/README.md b/tools/ha-fleet/README.md
+index 8a84dfe..56407e7 100644
+--- a/tools/ha-fleet/README.md
++++ b/tools/ha-fleet/README.md
+@@ -73,17 +73,17 @@ state; the gap report goes to stderr.
+ ## Scheduled Jenkins job
+ 
+ The pipeline is `Jenkinsfile.ha-fleet` (at the repo root): a standalone job,
+-separate from the main AaC pipeline, that runs the generator, validates the
+-output against the validation service (`.claude/architecture/arch-validate.py` —
+-fails without publishing on a non-zero exit), and archives
++separate from the main AaC pipeline, that runs the generator, archives
+ `out/architecture/home-automation-fleet.yaml` (under an `architecture/` path so
+ the main pipeline's `copyArtifacts` filter `**/architecture/**/*.yaml` picks it
+-up — same contract as every other producer; no commit-back).
++up — same contract as every other producer; no commit-back), and validates it
++against the validation service (`.claude/architecture/arch-validate.py`). A
++non-zero exit fails the build, and the main pipeline copies only the job's last
++successful build, so an invalid snapshot is never published.
+ 
+ The job is `AaC/Home Assistant Fleet`: *Pipeline script from SCM*, repo = this
+-one, **Script Path = `Jenkinsfile.ha-fleet`**, with the daily schedule in the
+-job config (Build Triggers → Build periodically) — the pipeline itself declares
+-**no trigger**.
++one, **Script Path = `Jenkinsfile.ha-fleet`**. The pipeline declares its daily
++schedule itself: `triggers { cron('H 4 * * *') }`.
+ 
+ Secrets:
+ - **`HA_TOKEN`** comes from OpenBao via `withVault` (same pattern as the other
+@@ -92,8 +92,7 @@ Secrets:
+   are ACL-scoped, do **not** reuse one; the HA token is the only source that sees
+   DSMR/Ecowitt/SLZB/WiFi, not just Zigbee. The controller-level Vault config
+   supplies the address + auth.
+-- **`HA_URL`** is read from the ambient global Jenkins environment (already set),
+-  forwarded into the build container by the Jenkinsfile.
++- **`HA_URL`** is read from the ambient global Jenkins environment (already set).
+ 
+ The producer is registered in `pipeline-producers.yaml` as
+ `home-automation-fleet` with that job and **no `repo:`** — its artifact comes

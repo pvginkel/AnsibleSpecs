@@ -1,0 +1,22 @@
+root: no test statements — skipped
+backend: cd .. && cexec modern-app poetry run run-suite --suite backend    [FAILED]
+ * Installing backend dependencies... (1s)                               [ OK ]
+ * Running backend tests... (2s)                                         [FAIL]
+
+Detailed results written to /work/scratch/ElectronicsInventory/test_results.md
+
+ElectronicsInventory: FAILURES
+  backend pytest: failed [120 MB peak] (see test_results.md)
+
+frontend: cd .. && cexec modern-app poetry run run-suite --suite frontend    [FAILED]
+ * Installing backend dependencies... (1s)                               [ OK ]
+ * Installing npm dependencies... (1s)                                   [ OK ]
+ * Building frontend... (26s)                                            [ OK ]
+ * Installing Playwright browser... (1s)                                 [ OK ]
+ * Running frontend playwright tests... (12s)                            [FAIL]
+
+Detailed results written to /work/scratch/ElectronicsInventory/test_results.md
+
+ElectronicsInventory: FAILURES
+  frontend playwright: failed [434 MB peak] (see test_results.md)
+

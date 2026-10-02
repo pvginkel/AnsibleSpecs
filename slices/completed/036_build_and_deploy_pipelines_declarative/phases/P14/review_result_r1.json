@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The editor-role case is split into 12 tests, one per domain, as the reader-role describe is. The 43 assertions are unchanged, nothing is skipped and no timeout is raised; the validation Job's resources match the pre-migration block. Lint and typecheck are clean; under Ruling R1 the push's Jenkins build is the gate.",
+ "details": "code_review_r1.md",
+ "findings": []}
