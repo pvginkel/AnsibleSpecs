@@ -843,7 +843,7 @@ Record:
   `kaniko2`). The public-repo rule keeps `pipelines.home` out: the manual names the guide as
   JenkinsPipelineUtils' `docs/`.
 
-### P8 — KubeCoder's build file is in line with the guide
+### P8 — KubeCoder's build file is in line with the guide ✅ DONE 2026-10-02
 
 Target: root
 
