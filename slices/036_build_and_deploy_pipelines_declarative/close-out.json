@@ -408,7 +408,15 @@
         "fix": "several-places",
         "repo": "Ansible"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "code-reviewer, P9 round 1",
+          "date": "2026-10-02",
+          "text": [
+            "A third living doc cites the drift stage's old label: AnsibleSpecs decisions.md:165 (the fingerprint-set doctrine bullet) and :175 (the to-do item) name it \"Homelab CA root drift\"; P9's commit renamed it Check homelab CA root drift (Jenkinsfile.iac-scheduled-drift:346). Same kind and consequence as the two runbooks."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
