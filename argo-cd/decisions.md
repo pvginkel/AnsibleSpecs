@@ -63,6 +63,15 @@ and falls back to 3m below it, while the generator's own field is returned verba
 > ApplicationSets at the switch (D64). ArgoCDDeploy's only GitHub hook delivers to Jenkins; the
 > operator adds its relay hook in the switch runbook, and until then a push to ArgoCDDeploy
 > reaches no Argo component.
+>
+> **Amended 2026-10-02 (operator, ANS-154): webhook-first, with a slow backstop.** The webhook
+> stays the trigger, and `timeout.reconciliation` goes from `0s` to `30m`; nothing else changes
+> (the jitter stays `0s`). Push-only cost more than the dropped-webhook case it accepted: Argo CD
+> 3.x ignores `/status`-only resource updates and leaves recomputing health to the periodic
+> refresh, so with it off, apps stayed Progressing long after their rollouts finished, until
+> someone opened them in the UI. A 30-minute refresh bounds both: a missed push deploys within
+> half an hour, and health catches up on the same beat. The ApplicationSet half of the question
+> is moot — the ApplicationSets went at the registry switch (D64).
 
 **D7 — Notifications on from day one, to Alertmanager.** Decided (qa Q6; closes the review's
 deploy-wait-swallows-failures notifications gap; target pinned 2026-08-12, gate-1 review). At minimum `on-sync-failed` and `on-health-degraded`.

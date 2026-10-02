@@ -295,9 +295,10 @@ They render the same Applications as above; D64's equivalence check compares the
 spec. ArgoCDDeploy's `releases.owner` (`config/prd/values.yaml`) chooses the ApplicationSets or
 `releases`, never both; the switch flips it to `releases` and removes the ApplicationSets.
 
-## Webhooks — push-only, through the relay
+## Webhooks — webhook-first, through the relay
 
-Polling is off everywhere (D6). Argo CD is not published: **every hook
+The webhook is the trigger, and a 30-minute periodic refresh is the only backstop (D6, as
+amended 2026-10-02). Argo CD is not published: **every hook
 registers one URL**, `https://deploy-hooks.webathome.org/api/webhook`, the public endpoint of the
 webhook relay, which verifies GitHub's signature and forwards each verified delivery to
 argocd-server (D49).
@@ -339,11 +340,11 @@ annotation are ArgoCDDeploy chart content. Its image is a `registry:5000/webhook
 pinned in ArgoCDDeploy's `config/prd/values.yaml`, where every relay build writes it (D53); each
 such build leaves `argocd-prd`, synced by hand (D3), out of sync until the operator syncs it.
 
-**The consequence to respect:** a dropped webhook is not a delay — it is stale-but-green,
-followed by the deploy landing at an arbitrary later moment when an unrelated refresh
-re-resolves the branch. Accepted deliberately (D6); Triage **#507** revisits a slow fallback
-poll; GitHub's *Recent Deliveries* page is where a miss is visible and redeliverable — for both
-receivers, which is what both-or-`502` buys.
+**The consequence to respect:** a dropped webhook is stale-but-green until the next periodic
+refresh, up to 30 minutes later, re-resolves the branch and the deploy lands then (D6). The same
+refresh recomputes health, which Argo CD 3.x does not do on `/status`-only updates. GitHub's
+*Recent Deliveries* page is where a miss is visible and redeliverable — for both receivers, which
+is what both-or-`502` buys.
 
 ## Sync semantics
 
@@ -607,11 +608,11 @@ registration, and a handover's register-then-flip order — is
 - **Argo will not touch what it does not track.** The controller-created env pods and their
   LoadBalancer Services sit outside Argo's reach; the tracking marker is the whole protection.
   Self-heal OFF is not what saves them — it earns its place keeping debug edits alive (D5).
-- **A dropped webhook is stale-but-green, then a surprise deploy** — the webhook section above;
-  accepted (D6), revisited as Triage #507.
-- **The relay sits in every trigger path** (D49). If it is down, no push triggers anything —
-  but visibly: GitHub records the delivery failed, where it stays redeliverable. Renders and
-  manual syncs are unaffected; Argo reads git without any webhook.
+- **A dropped webhook is stale-but-green for up to 30 minutes** — the webhook section above;
+  the periodic refresh is the backstop (D6).
+- **The relay sits in every trigger path** (D49). If it is down, no push triggers anything until
+  the next 30-minute refresh — but visibly: GitHub records the delivery failed, where it stays
+  redeliverable. Renders and manual syncs are unaffected; Argo reads git without any webhook.
 - **`helm` stops being the way to inspect a migrated app.** No release, no `helm history`, no
   `helm rollback`; inspection is the Argo UI, rollback is git or Argo's own history. (Argo's
   rollback refuses while auto-sync is on — flip the registry's `autoSync` off first.)
