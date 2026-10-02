@@ -522,6 +522,39 @@ Constraints:
 - The var's page comes in the same commit (LIB-5). Run the docs lint before handing back, as in
   P2.
 
+**Done (P3).** `vars/modernApp` has `test`, with its page and `ModernAppTest`. The guide has the
+`Modern app build` type (`types/modern-app.md`, reference `docs/examples/modern-app.groovy`, from
+ElectronicsInventory), its types-index row, the J15 row, SEC-1's exception and the validation-Job
+page's "No helper" bullet on it. JenkinsPipelineUtils `02989a1` on `phase/036-P3`; `kc project
+test` and the docs lint green.
+
+Later phases:
+- The call: `modernApp.test(job:, install:, run:, suites:, services:, env:, secrets:)` in `Test`,
+  in `script {}`, with no `container()` around it (the step runs in `k8s`). All seven are
+  required; `services`, `env` and `secrets` may be `[]`/`[:]`. `job` is today's Job name without
+  `-${BUILD_NUMBER}`. `install` is today's command after `cd /work && `, `run` the prefix before
+  `run-suite`: `poetry install --no-interaction --without dev` / `poetry run`, FieldnotesApp
+  `uv sync --locked --no-dev` / `uv run --no-sync`.
+- A service is `[name:, image:, env: [..], resources: [requests: [..], limits: [..]]]`, with no
+  pull policy: Kubernetes' default keeps today's (`Always` for `rustfs:latest`, `IfNotPresent` for
+  `opensearch:2`). `env` maps are name -> value.
+- IoTSupport: `withVault` wraps only the call, which passes
+  `secrets: ['KEYCLOAK_ADMIN_CLIENT_ID', 'KEYCLOAK_ADMIN_CLIENT_SECRET']`; the two leave `env`.
+- ElectronicsInventory's file is the reference file. Its frontend image stage writes
+  `frontend/git-rev` with `sh 'git rev-parse HEAD > frontend/git-rev'`, in place of
+  `scmVars.GIT_COMMIT`.
+
+Record:
+- The Job is a map (`jobManifest`) written with `writeYaml` and `kubectl apply`, not
+  `kubectl.startJob`, whose `readYaml text:` stores the manifest with the build. Its image is
+  read from `podYaml.sidecars()['modern-app-toolchain']` at call time.
+- `secrets`: a `sh` under `set +x` fails naming any variable that is not set, then pipes
+  `NAME=value` lines into `kubectl set env --local -c validation -e - -o yaml | kubectl apply -f -`.
+  Verified locally on kubectl 1.35.9, with a value holding quotes, spaces and colons.
+- The summary, the description, the archive, the JUnit report, the exit-code errors and the
+  `finally` delete keep the old block's text. The Validation Job index row now reads "Builds a
+  validation image and runs it as a Kubernetes Job", to tell it from the new row.
+
 ### P4 — The eight firmware files and the five apps' files are declarative files on the new steps
 
 Target: root
@@ -544,13 +577,15 @@ Thirteen build files, one in each of thirteen repos, are migrated per
   - Each declares plain `disableConcurrentBuilds()` and the abort marker (PROP-3, POST-3).
 - **The five apps' `Jenkinsfile`** (R2) become P3's type, each calling P3's step from its `Test`
   stage. The timeout is 60 minutes, with no 90-minute exception (S3).
+  - ElectronicsInventory is the type's reference job: its file is `docs/examples/modern-app.groovy`.
   - The concurrency guard is `abortPrevious: true`: these jobs write pins and are not on PROP-3's
     table.
   - FieldnotesApp's `properties()` call goes (PROP-8, S4).
   - The unused `Utils` import goes (FILE-6).
   - IoTSupport's `Test` stage is where SEC-1's exception applies, and nowhere else (Ruling P3).
-    `withVault` (`kv/jenkins/keycloak-iotsupport-admin`) wraps only the call to P3's step. Today
-    it wraps the whole validation block (`IoTSupport/Jenkinsfile:27-32`).
+    `withVault` (`kv/jenkins/keycloak-iotsupport-admin`) wraps only the call to P3's step, which
+    names the two variables in `secrets:`, not `env:`. Today it wraps the whole validation block
+    (`IoTSupport/Jenkinsfile:27-32`).
   - DHCPApp's `docs/slice-test-plan.md:15` stops saying the job builds with
     `helmCharts.kaniko(...)` (Ruling P5; attachment § What the commit also carries).
   - ModernAppTemplate gets no commit (R2).
