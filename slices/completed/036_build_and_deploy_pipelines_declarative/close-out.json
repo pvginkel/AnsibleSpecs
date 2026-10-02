@@ -140,6 +140,13 @@
           "text": [
             "IaC/Apply #5 (2026-10-02, on 9b9e339) ran the migrated file: Apply Terraform (prd) green with no changes, Apply site green, Apply site-openbao failed on srvvault1 only ('Failed to update apt cache after 5 retries'), so site-k8s (prd) and site-k8s/site-ceph (srvk8sdev) were skipped. Cause is on the host, not the file: srvvault1 has had no working DNS stub since the 2026-10-01 06:32 unattended systemd upgrade, because the old systemd-resolved (pid 548) and systemd-udevd have been stuck in D state in kvm_async_pf_task_wait_schedule since boot (2026-09-25) and still hold 127.0.0.53:53. Needs a reboot of srvvault1; V24 is not settled until a run after it."
           ]
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "IaC/Apply #6 (2026-10-02 17:49Z, after the srvvault1 reboot) green on the migrated file, all stages run: Terraform (prd) no changes, site, site-openbao, site-k8s (prd) and the srvk8sdev plays all failed=0. Only change: microk8s 'Reconcile node taints' set homelab.local/performance=high:NoSchedule on srvk8s4 (taint present on the node afterwards). srvvault1 fix: graceful qm reboot 913 timed out after 240 s on the D-state processes, so hard qm reset; afterwards a single systemd-resolved, no D-state processes, DNS resolves, OpenBao unsealed standby (srvvault2 stayed leader). srvvault2/3 checked: not affected. V24 is settled green."
+          ]
         }
       ],
       "wrap_up": null,
@@ -181,6 +188,13 @@
           "date": "2026-10-02",
           "text": [
             "IaC/Scheduled Calico Rollout #16 (manual, on 9b9e339) green, both stages. Left: Certs (blocked on srvvault1, see A3) and Update (Sunday cron)."
+          ]
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "IaC/Scheduled Certs #18 (manual, 2026-10-02 17:45Z, after the srvvault1 reboot) green on the migrated file: every host failed=0 unreachable=0, srvvault1 included; renewed certs on srviac, srvk8s1, srvk8s2. Left: only IaC/Scheduled Update (Sunday cron); the 2026-10-04 timer 3f6e7d7f checks it."
           ]
         }
       ],
