@@ -1,0 +1,157 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 one action",
+      "description": "Permanent fix, as one action: a Jenkins pipeline that takes a deploy repo. One `IaC/Destroy Stage` build, given a deploy repo and a stage, permanently deletes what that retired stage left: its Terraform resources, its state in TerraformState and its `config/<stage>/`. No other step is needed.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R2.1 guard (Ruling D2)",
+      "description": "The guard fails the build before any Job starts if ArgoCDDeploy's registry on `main` (`releases/values.yaml`; e.g. `fieldnotes` → `https://github.com/pvginkel/FieldnotesDeploy.git` with stage `prd`, `releases/values.yaml:99-102`) has an entry deploying REPO's STAGE, or if a live Application in `argocd-prd` sources REPO with Helm parameter `hook.stage` = STAGE. Single-source and multi-source (`spec.sources[]`) Applications both count. The failure names what still deploys the stage. There is no namespace check.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "R2.2 the Job and the empty configuration",
+      "description": "The pipeline runs the argocd-hook image as a one-off Job in `argocd-hooks`, with the `tf-presync` ServiceAccount and the `argocd-hook-credentials` Secret, under a name no `tf-presync-<namespace>` sync Job can take (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:38`). Its destroy mode clones the deploy repo at a SHA, starts the state backend and inits against `argocd/<repo>/<stage>/terraform.tfstate` (`argocd-hook/presync/backend.py:52-54`). It then plans against a configuration that holds only the root's provider, backend and variable declarations, with the stage's tfvars, so every resource in state is an orphan planned for deletion and `prevent_destroy` no longer binds. A repo whose declarations do not init or plan this way fails the build loudly.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "R2.3–R2.4 destroy and state removal",
+      "description": "With `APPLY=true` the Job destroys from the plan it saved, checks that the state lists no resources, and then `git rm`s `argocd/<repo>/<stage>/` from TerraformState, using the hook's own `GITHUB_TOKEN`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "R2.5 config removal",
+      "description": "With `APPLY=true`, once the Job has succeeded, Jenkins commits `git rm -r config/<stage>` to the deploy repo's `main` with the GitHub credential it uses for version pins (JenkinsPipelineUtils `vars/cicd.groovy:66`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "R2 where it lands",
+      "description": "Each part lands where R2 and Ruling D1 put it: the destroy mode and `Jenkinsfile.destroy-stage` in ArgoCDTools, the grants in ArgoCDDeploy, the dedicated ServiceAccount in JenkinsDeploy, the design as an argo-cd decision in AnsibleSpecs, and a section on the pipeline in this repo's argocd runbook.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "R3 APPLY and the dry run",
+      "description": "An `APPLY` parameter; `APPLY=false` is a dry run. `APPLY` defaults to false. A dry run plans and stops: it shows the destroy plan and names the state file and `config/<stage>/` it would delete. It changes nothing: no resource, no TerraformState commit, no deploy-repo commit. `APPLY=true` plans and destroys inside the same Job, from the saved plan, with no `input` step.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "R4 / Ruling D3 dev dry run",
+      "description": "FieldnotesDeploy `dev` is the first stage it destroys. The test phase starts `IaC/Destroy Stage` with `APPLY=false` against FieldnotesDeploy `dev`. The plan shows exactly the RBD image `fieldnotes-dev-data` and the PV `fieldnotes-dev-data-pv` for deletion. The build names `argocd/FieldnotesDeploy/dev/` (TerraformState holds `argocd/FieldnotesDeploy/dev/terraform.tfstate`, 8120 bytes, at `1b32f10`) and `config/dev/` as what an apply would delete. Afterwards, both are still present.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "Ruling D3 prd guard",
+      "description": "The test phase starts `IaC/Destroy Stage` once with `APPLY=false` against FieldnotesDeploy `prd`, and the guard fails the build. The registry entry `fieldnotes`/`prd` and the live `fieldnotes-prd` Application, whose `hook.stage` is `prd`, both still deploy that stage.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "R4 the real destroy",
+      "description": "The operator's `APPLY=true` build against FieldnotesDeploy `dev` leaves the RBD image `fieldnotes-dev-data`, the PV `fieldnotes-dev-data-pv` and `argocd/FieldnotesDeploy/dev/` in TerraformState gone, and `config/dev/` deleted from FieldnotesDeploy (ANS-147's done-when).",
+      "owed_after": "the operator's APPLY=true build of IaC/Destroy Stage against FieldnotesDeploy dev (Ruling D3)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "Ruling Q1 decision",
+      "description": "A new argo-cd decision records the Destroy Stage design and supersedes D28 (`argo-cd/decisions.md:382`), which carries the supersession marker. It carries the narrow overrule of D1 and D33/D41 for this operator-started pipeline only. No existing entry (D1, D27 as amended, D31, D33, D39, D41) is left contradicting it.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V12",
+      "area": "Ruling D1 identity",
+      "description": "The pipeline's cluster work runs as a dedicated ServiceAccount in `jenkins-prd`. It is defined in JenkinsDeploy and named by `Jenkinsfile.destroy-stage`'s pod spec. It is bound to a Role in `argocd-hooks` that holds only what the pipeline's Job lifecycle uses, and to a read-only Role on `argoproj.io` Applications in `argocd-prd`. The shared agent ServiceAccount `jenkins-prd/default` (JenkinsDeploy `chart/templates/jenkins-agent-jobs-rolebinding.yaml:9`) gains nothing. ArgoCDDeploy's render gate pins both grants.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V13",
+      "area": "Grants live",
+      "description": "The dedicated ServiceAccount and both of its grants are live on prd before the test phase's dry runs. JenkinsDeploy's `jenkins-prd` Application auto-syncs. ArgoCDDeploy's chart reaches prd only through a sync of `argocd-prd`, which is not auto-synced (`releases/values.yaml:30`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V14",
+      "area": "Sync hook untouched",
+      "description": "The destroy mode is a separate entry point of the hook image. The sync hook's four-positional contract (`argocd-hook/presync/cli.py:16-26`), `tests/test_cli.py`'s `ArgumentContractTests`, the Charts render gate and the Charts `hook.imageTag` pin (`\"10\"`, `charts/homelab-shared/values.yaml:7`) are all unchanged. The pipeline runs `registry:5000/argocd-hook:latest`.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V15",
+      "area": "Idempotent re-runs",
+      "description": "Re-runs are idempotent. An already-empty state skips the destroy, and a state file or `config/<stage>/` folder that is already gone is skipped. A run against a stage with no state file creates none, and a build that stopped halfway is finished by running it again. The hook's unittest suite covers the dry run, the apply, the re-runs and an empty configuration that does not plan.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V16",
+      "area": "Webhook",
+      "description": "The repository webhook goes with the stage whose state manages it (`manage_webhook`, argo-cd D39). FieldnotesDeploy `dev` does not manage it (`config/dev/terraform.tfvars:4`, `manage_webhook = false`), so its plan shows no webhook.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V17",
+      "area": "Jenkins job",
+      "description": "The job `IaC/Destroy Stage` exists in the `IaC/` folder, created through the Jenkins API. It carries its parameters from creation, has no triggers and allows no concurrent builds. The run starts no build of it except Ruling D3's two dry runs.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V18",
+      "area": "Style guide",
+      "description": "`Jenkinsfile.destroy-stage` follows the estate's Jenkins pipeline style guide (https://pipelines.home/docs/).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V19",
+      "area": "Runbook",
+      "description": "This repo's argocd runbook has a section on destroying a retired stage with the pipeline: when it applies (after undeploy), the dry run first, then the apply, what the guard refuses, and re-running. The undeploy paragraph no longer says that nothing prunes the state (`docs/runbooks/argocd.md:387`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
