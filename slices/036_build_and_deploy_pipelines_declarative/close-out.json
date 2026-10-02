@@ -141,6 +141,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P2",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils vars/podYaml.md:130 lists containerName among podYaml's internals; P1 deleted containerName()",
+      "body": [
+        "The 'Evaluated on the controller' section of podYaml's reference page names `sidecars`, `imageContainer`, `containerName`, `containerLines` and `quoted` as its internals. Slice 036 P1 removed derived container names and deleted `containerName()` from `vars/podYaml.groovy`. The page now names a function that does not exist. The fix is to drop `containerName` from that sentence."
+      ],
+      "consequence": "none: a reader of pipelines.home's podYaml page who looks for a containerName helper finds none in vars/podYaml.groovy; internals are off-limits to a Jenkinsfile, so no caller depends on it.",
+      "evidence": "read",
+      "author": "code reviewer, 036 P1, round 1, phases/P1/code_review_r1.md F1",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

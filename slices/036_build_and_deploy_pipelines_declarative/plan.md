@@ -378,6 +378,10 @@ Later phases:
   container's name, an RFC 1123 label). There is no derived name any more. A string entry fails
   the build, so P8's conversion of `KubeCoder/Jenkinsfile:28` is required, not cosmetic.
 - An `env` value that is `null` (an unset `env.X` in a map literal) fails the build.
+- (P1 review r1) `IoTSupport/Jenkinsfile.architecture:22`, which P4 edits, writes the library's
+  python image under `images:` (`[image: 'registry:5000/python', name: 'python']`). podYaml now
+  has a `python` template for that image, and POD-5 names a library sidecar in `templates:`. The
+  file still renders, since it does not also name the template.
 
 Record:
 - Refusal messages name the entry by its image: `podYaml: the images entry for '<image>' gives
