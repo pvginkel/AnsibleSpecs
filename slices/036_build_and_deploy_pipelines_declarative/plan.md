@@ -599,6 +599,39 @@ Thirteen build files, one in each of thirteen repos, are migrated per
   - The globals themselves are deleted by the test phase (Ordering constraints).
   - `HA_URL` is not touched.
 
+**Done (P4).** The eight firmware files and the five apps' `Jenkinsfile` are declarative files on
+`espFirmware` and `modernApp.test`, and IoTSupport's two files write the Keycloak settings inline.
+One commit in each of the 13 `/work/scratch` clones, on `main`, unpushed; `migration-ledger.md` is
+open with their 14 rows. All 14 files pass the controller's linter; `kc project test --project
+root` green (no Ansible commit).
+
+Later phases:
+- Ledger columns: Repo, Job, Clone, Branch, File, Commit (full SHA). A repo with two files has a
+  row per file on its one commit. P5, P6 and P8 append their rows to the same table.
+- No P4 file differs from its reference file: PaperClock's and Intercom's are `firmware.groovy`
+  and `firmware-versions.groovy` as published, ElectronicsInventory's is `modern-app.groovy`. P11
+  has nothing to take over from P4.
+- The four `KEYCLOAK_*` globals the test phase deletes are `KEYCLOAK_TEST_BASE_URL`, `_REALM`,
+  `_OIDC_TOKEN_URL` and `KEYCLOAK_OIDC_TOKEN_URL`; `KEYCLOAK_KENSHO_TEST_REALM` and `HA_URL` stay.
+
+Record:
+- Headers from each job's live `config.xml`: all thirteen build `*/main` from `Jenkinsfile` on a
+  push, with no parameters. FieldnotesApp's job is top-level `FieldnotesApp`; DHCPApp's is
+  `DHCP/DHCPApp`.
+- Firmware: `checkout scm` replaces the four self-clones. The old `git` step initialised no
+  submodules and no job has a submodule option, so the `.gitmodules` of CalendarDisplay,
+  InfraStatisticsDisplay and PaperClock stay uninitialised, as before.
+- Apps: each file's call, run by hand through `testArguments`/`jobManifest` (groovy-all 2.4.21),
+  gives the containers the old block applied; IoTSupport's admin client is in `secrets:`.
+- IoTSupport's `Jenkinsfile.architecture` also names `python` in `templates:` in place of the
+  `images:` entry (POD-5; P1 review r1's note), which renders the same container.
+- Ruling P5 lines fixed in the same commits: positional `helmCharts.kaniko(...)` in config
+  comments, `.dockerignore` headers and slice test plans (DHCPApp, ElectronicsInventory,
+  IoTSupport, ZigbeeControl); ElectronicsInventory's `Run validation` stage name; six firmware
+  `.kubecoder` comments that said the Jenkinsfile spells `/opt/esp/entrypoint.sh`; "markers the
+  Jenkinsfile parses" in DHCPApp's and FieldnotesApp's `project.yaml`. Three repos' docs still
+  describe a Helm deploy: close-out entry P4.
+
 ### P5 — The image builds and artifact builds are declarative files
 
 Target: root

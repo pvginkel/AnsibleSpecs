@@ -187,6 +187,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P4",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "IoTSupport, ZigbeeControl and ElectronicsInventory docs say the build ends in a Helm deploy; it pins the images into the deploy repo, which Argo CD syncs",
+      "body": [
+        "IoTSupport docs/slice-test-plan.md:14-16 says the Jenkinsfile builds iot-support and iot-support-frontend and then runs cicd.helmDeploy(); ZigbeeControl docs/slice-test-plan.md:14-15 says its final stage is cicd.helmDeploy(); ElectronicsInventory docs/architecture.md:67-68 says the build ends in a Helm deploy. Since the Argo CD migration each build ends in cicd.writeVersionPins into its deploy repo (IotDeploy, Zigbee2mqttDeploy, ElectronicsInventoryDeploy), and IoTSupport's images are iotsupport-app and iotsupport-ui. The lines predate slice 036 and name nothing P11 removes, so P4 left them; it changed only the kaniko call they name (helmCharts.kaniko -> kaniko2) in IoTSupport's."
+      ],
+      "consequence": "A session planning a slice in these repos reads that the push runs a Helm deploy and looks for one; the push still reaches prd, through the deploy repo's pin commit.",
+      "evidence": "witnessed",
+      "author": "| executor, P4, r1, /work/scratch/IoTSupport/docs/slice-test-plan.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "IoTSupport"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
