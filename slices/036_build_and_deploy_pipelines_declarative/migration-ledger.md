@@ -35,12 +35,12 @@ before the test phase, and each commit is rebased onto its origin when it is.
 | TerraformRegistry | IaC/TerraformRegistry | `/work/scratch/TerraformRegistry` | `main` | `Jenkinsfile` | `8a2eea941395dc6528365eafcdc3c61740dcb89b` |
 | Charts | IaC/Charts | `/work/Charts` | `main` | `Jenkinsfile` | `d7794a76c18776d775b7ae695d5ec10ea0ad1f8e` |
 | ArgoCDTools | IaC/ArgoCDTools | `/work/ArgoCDTools` | `main` | `Jenkinsfile` | `d972709ce4c410dff630998006b2b3187cab721c` |
-| MyDownloadsClient | MyDownloads/MyDownloadsClient | `/work/scratch/MyDownloadsClient` | `master`, pushed to `main` | `Jenkinsfile` | `f3ba7717b0110aba2c1c3c6a2694348f051e6d12` |
-| MyDownloadsClient | AaC/MyDownloadsClient | `/work/scratch/MyDownloadsClient` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `f3ba7717b0110aba2c1c3c6a2694348f051e6d12` |
-| MyDownloadsServer | MyDownloads/MyDownloadsServer | `/work/scratch/MyDownloadsServer` | `master`, pushed to `main` | `Jenkinsfile` | `62827f163072c43d80338d7c21a5a9987c90e829` |
-| MyDownloadsServer | AaC/MyDownloadsServer | `/work/scratch/MyDownloadsServer` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `62827f163072c43d80338d7c21a5a9987c90e829` |
-| ScanToPdfClient | ScanToPdf/ScanToPdfClient | `/work/scratch/ScanToPdfClient` | `master`, pushed to `main` | `Jenkinsfile` | `c9769caf56567df646559af6dee2400baa9bb649` |
-| ScanToPdfClient | AaC/ScanToPdfClient | `/work/scratch/ScanToPdfClient` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `c9769caf56567df646559af6dee2400baa9bb649` |
+| MyDownloadsClient | MyDownloads/MyDownloadsClient | `/work/scratch/MyDownloadsClient` | `master`, pushed to `main` | `Jenkinsfile` | `5512a55e1abb76688e8b381839bd8946eba91e9d` |
+| MyDownloadsClient | AaC/MyDownloadsClient | `/work/scratch/MyDownloadsClient` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `5512a55e1abb76688e8b381839bd8946eba91e9d` |
+| MyDownloadsServer | MyDownloads/MyDownloadsServer | `/work/scratch/MyDownloadsServer` | `master`, pushed to `main` | `Jenkinsfile` | `86eb8f96fd674c8dc9f55083ce54e707427763e5` |
+| MyDownloadsServer | AaC/MyDownloadsServer | `/work/scratch/MyDownloadsServer` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `86eb8f96fd674c8dc9f55083ce54e707427763e5` |
+| ScanToPdfClient | ScanToPdf/ScanToPdfClient | `/work/scratch/ScanToPdfClient` | `master`, pushed to `main` | `Jenkinsfile` | `5fac9582a1904346713bb7cc338f57bb12400edb` |
+| ScanToPdfClient | AaC/ScanToPdfClient | `/work/scratch/ScanToPdfClient` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `5fac9582a1904346713bb7cc338f57bb12400edb` |
 | ScanToPdfServer | ScanToPdf/ScanToPdfServer | `/work/scratch/ScanToPdfServer` | `master`, pushed to `main` | `Jenkinsfile` | `8341ddf9b73527fa785b9a2b559c6bc9c8474be1` |
 | ScanToPdfServer | AaC/ScanToPdfServer | `/work/scratch/ScanToPdfServer` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `8341ddf9b73527fa785b9a2b559c6bc9c8474be1` |
-| HomelabTerraformProvider | IaC/HomelabTerraformProvider | `/work/HomelabTerraformProvider` | `main` | `Jenkinsfile` | `a0300c283a68c8ee080c10e910782fd06baacc7e` |
+| HomelabTerraformProvider | IaC/HomelabTerraformProvider | `/work/HomelabTerraformProvider` | `main` | `Jenkinsfile` | `160ad9bfbf202b0e5b799ec1254561f744bd5d64` |

@@ -726,6 +726,13 @@ Settled in review r1 (read live and in the plugin's source):
   no `yamlMergeStrategy merge()` drops the placement.
 - Four files are P5 review r1 F1. P4's eight firmware files and the guide's firmware references
   have the same shape: close-out B2.
+- F1 fixed: MyDownloadsClient, MyDownloadsServer, ScanToPdfClient and HomelabTerraformProvider
+  declare `yamlMergeStrategy merge()` after `inheritFrom 'jenkins-agent-large'`, with a comment,
+  since POD-3 names `merge()` only for `kaniko`. Each repo's one commit is amended and the ledger
+  carries the new SHAs. Witness: the Script Console (computation only) combined the live template
+  with each file's podYaml output through `PodTemplateUtils.unwrap`. Without a strategy, no
+  affinity and no toleration; with `Merge`, both, and the same containers. All four pass the
+  linter.
 - POD-3's premise that only `kaniko` is YAML only (`docs/pages/guide/pod.md:32`) does not hold
   for `jenkins-agent-large`.
 
