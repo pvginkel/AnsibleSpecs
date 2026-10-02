@@ -420,6 +420,50 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A5",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.",
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "KubeCoderConfig's Prettier gate was red on origin/main (youtrack-usage/SKILL.md, from 3417992); P10's commit rewrapped that file",
+      "body": [
+        "kc project lint failed on kubecoder/skills/youtrack-usage/SKILL.md, which P10 does not otherwise touch: origin/main's 3417992 (youtrack-usage 0.9.1) left lines 50-53 unwrapped. V15 needs the gate green, so P10's commit 4cdca35 carries the Prettier rewrap of that paragraph, wording unchanged, under the same 0.10.1 bump."
+      ],
+      "consequence": "none: the gate is green on the phase branch; the rewrap changes no wording.",
+      "evidence": "witnessed",
+      "author": "code-writer, P10, r1, kc project lint output in /work/scratch/KubeCoderConfig",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

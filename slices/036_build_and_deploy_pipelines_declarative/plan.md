@@ -981,6 +981,29 @@ line names the positional form only as one a file must not call, and that stays 
 
 The repo's own conventions apply: its `CLAUDE.md`, and its Prettier check as the gate.
 
+**Done (P10).** The pipelines skill has a paragraph, "Two files predate the guide, on purpose",
+naming ModernAppTemplate's `root/template/Jenkinsfile.jinja` and KitchenDisplay's `Jenkinsfile`,
+and how a session treats each. The onboard skill names `helmCharts.kaniko2(...)` at its four
+mentions. KubeCoderConfig `4cdca35` on `phase/036-P10`, plugin 0.10.1; `kc project lint` green.
+
+Later phases:
+- P11: nothing to take over. The skill says MAT's template "calls `containerTemplates.k8s` and the
+  positional `helmCharts.kaniko(…)`, which the library no longer has", and that the library keeps
+  `containerTemplates.rsync`/`dockbuild`, `helmCharts.ssh`/`rsync` and `gitUtils` for
+  KitchenDisplay. Both hold once P11 lands as planned. The library has no `helmCharts.scp`,
+  despite S6's wording.
+- Test phase: KubeCoderConfig is one of the repos the one-go push carries.
+
+Record:
+- Treatment, as the rulings give it: MAT's template is brought to the guide at its next sync,
+  aligned with the five apps' migrated files on the modern-app type. Until then, an app rendered
+  from it does not build. KitchenDisplay's file waits with its disabled job (ANS-93), left as it
+  is; its `Jenkinsfile.architecture` is on the guide. Neither is a model for a new file.
+- onboard `:1676` reads "the `context:` arguments out of `helmCharts.kaniko2(dockerfile: …,
+  context: …, …)`" (the named-argument form), not just the new name.
+- The gate was red on origin/main (`youtrack-usage/SKILL.md`, from 3417992). The same commit
+  rewraps that file without changing its wording (close-out E1).
+
 ### P11 — The library drops the describables and the positional kaniko that nothing calls
 
 Target: ../JenkinsPipelineUtils
