@@ -99,8 +99,8 @@
     },
     {
       "id": "V13",
-      "area": "Grants live",
-      "description": "The dedicated ServiceAccount and both of its grants are live on prd before the test phase's dry runs. JenkinsDeploy's `jenkins-prd` Application auto-syncs. ArgoCDDeploy's chart reaches prd only through a sync of `argocd-prd`, which is not auto-synced (`releases/values.yaml:30`).",
+      "area": "Grants live (Ruling D4)",
+      "description": "The dedicated ServiceAccount and both of its grants are live on prd before the test phase's dry runs. JenkinsDeploy's `jenkins-prd` Application auto-syncs (live `syncPolicy.automated`). ArgoCDDeploy's chart reaches prd only through a sync of `argocd-prd`, which is not auto-synced (`releases/values.yaml:30`, `autoSync: false`). The test phase syncs `argocd-prd` itself, once, through the elevated `~/.kube/config-prd-write`, and only after a diff of `argocd-prd`'s live state against the pushed ArgoCDDeploy revision shows nothing but this slice's Roles and RoleBindings (on 2026-10-02 `argocd-prd` was `Synced` at `9334541`, ArgoCDDeploy's `origin/main`). If anything else differs it does not sync, and this criterion, V08 and V09 are left owed to the operator.",
       "verdict": null,
       "rationale": "",
       "evidence": []

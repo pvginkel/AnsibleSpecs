@@ -5,3 +5,15 @@
      `close_out.py show <id>` prints an entry in full. -->
 
 Run: <not yet stamped>
+
+## For the wrap-up
+
+### P1 — ArgoCDTools README says the argocd-hook image's Terraform is unpinned; the Dockerfile pins 1.16.3 · minor
+
+**Proposal:** fix now — one line in README.md:155, saying 'pinned (TERRAFORM_VERSION), bumped
+with the other two images'.
+
+**Consequence:** A reader of the ArgoCDTools README is told that a rebuild of the hook image picks up whatever Terraform the suite serves, when it is pinned and must be bumped together with iac and kube-coder-iac-toolchain.
+
+**Route:** the wrap-up — fix
+**Disposition:**
