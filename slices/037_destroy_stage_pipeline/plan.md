@@ -535,6 +535,29 @@ and the guard does not refuse it. After that, `prd`'s pushes reach Argo only thr
 The undeploy paragraph says that nothing prunes the state file "until D28 is designed"
 (`docs/runbooks/argocd.md:387`). It now points to the new path and cites argo-cd D66.
 
+**Done (P6).** `docs/runbooks/argocd.md` has `## Destroying a retired stage`, right after
+§ "Registering, undeploying and unregistering an app", with five `###` subsections: the guard,
+what the build forgets, a build that stopped halfway, a build that fails at the plan, the
+webhook. The undeploy paragraph now names what stays (D29) and links there, citing D66. The
+Facts table gains a `Destroy Stage` row. Ansible `849a09b` on `phase/037-P6`; the root gate is
+green (unit tests only; nothing lints the markdown).
+
+Later phases:
+- Test phase (V19): the section is `#destroying-a-retired-stage`; "until D28 is designed" is gone.
+- Doc phase: the runbook section is written; it quotes the log lines of P4's `destroy.py` and P5's
+  Jenkinsfile verbatim, so a reworded message there needs the same edit here.
+
+Record:
+- A failed plan is diagnosed from Terraform's error above the last `presync:` line, never from
+  that line: close-out P3 may reword it (note added on P3).
+- Re-run after an abort or the 30-minute deadline: the lock may stay held (B2); the runbook names
+  the branch `locks/argocd/<REPO>/<STAGE>/terraform.tfstate` and cites AnsibleSpecs
+  `decisions.md` "Concurrency control" for force-unlock by deleting it. The deadline case's log
+  is pointed to Kibana, unconfirmed as that section says (B3).
+- Webhook: the surviving stage gets the hook back by setting `manage_webhook = true` *after* the
+  destroy, since GitHub refuses a second hook (§ Webhooks); note added on I1.
+- The build reads and edits `main` only, whatever branch the stage tracks (D34): close-out I4.
+
 ## Not in scope
 
 - Undeploying a stage (deleting the registry entry, pruning the Application). That is the

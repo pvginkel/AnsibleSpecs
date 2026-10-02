@@ -127,7 +127,15 @@
         "area": "plain",
         "repo": "Ansible"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "code-writer, P6 r1",
+          "date": "2026-10-03",
+          "text": [
+            "P6's runbook (docs/runbooks/argocd.md § Destroying a retired stage › The webhook) says it: the guard does not refuse destroying the stage that owns the hook, and the surviving stage gets it back by setting manage_webhook = true after the destroy and syncing, not before, since GitHub refuses a second hook with the same URL."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -276,7 +284,15 @@
         "fix": "unknown",
         "repo": "ArgoCDTools"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "code-writer, P6 r1",
+          "date": "2026-10-03",
+          "text": [
+            "P6's runbook (§ Destroying a retired stage › A build that fails at the plan) names the cause from Terraform's error above the last presync line, not from that line, so rewording the message leaves the runbook right."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -407,6 +423,33 @@
         "size": "design",
         "product-call": "no",
         "prevents": "broken",
+        "area": "plain",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "I4",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "Make IaC/Destroy Stage read and clean the branch a stage tracked, not main only?",
+      "body": [
+        "Jenkinsfile.destroy-stage resolves the deploy repo's main to the SHA the Job clones, and Remove config folder clones main and git rm's config/<stage>/ there. A registry stage may track another branch: KubeCoderDeploy's prd has targetRevision: prd (ArgoCDDeploy releases/values.yaml:172-174, D34). A destroy of such a stage plans with main's config/<stage>/*.tfvars, not the tracked branch's, and leaves config/<stage>/ on the tracked branch until a promotion carries main's deletion there. The empty configuration declares no resources, so the tfvars feed only provider configuration and variables. P6's runbook states that the build reads and edits main only."
+      ],
+      "consequence": "None today: KubeCoderDeploy prd is the only stage that tracks another branch, and its destroy fails at the plan (I2). Once it can run, its config/prd/ stays on the prd branch after the destroy, until the next promotion.",
+      "proposal": "close — or fold into I2's card when a KubeCoderDeploy stage is retired; reading the stage's targetRevision from the registry is the change.",
+      "evidence": "read",
+      "author": "code-writer, P6, r1, ArgoCDTools Jenkinsfile.destroy-stage (Check stage is undeployed, Remove config folder), ArgoCDDeploy releases/values.yaml:172-174",
+      "labels": {
+        "benefit": "operations",
+        "felt": "after-change",
+        "change": "adjust",
+        "size": "design",
+        "product-call": "no",
+        "prevents": "nothing",
         "area": "plain",
         "repo": "ArgoCDTools"
       },
