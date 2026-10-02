@@ -131,6 +131,55 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "The driver left a scratch clone at /work/scratch/JenkinsDeploy (`Target: github:pvginkel/JenkinsDeploy`)",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/JenkinsDeploy` for `Target: github:pvginkel/JenkinsDeploy`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. The close-out session removes it then and says so under this entry; nothing is asked of the operator. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none — the clone is where the run works; left behind, it takes disk space and a sync in every later preflight, until the close-out session removes it.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "JenkinsDeploy: no gate pins that jenkins-prd/destroy-stage holds no grant in jenkins-prd",
+      "body": [
+        "P2 adds chart/templates/destroy-stage-serviceaccount.yaml with no RoleBinding. JenkinsDeploy's test gate only renders the chart (helm template, tf-check, gen-architecture); it asserts nothing about RBAC, unlike ArgoCDDeploy's tests/render-chart.py, which P3 extends to pin the identity's two grants. If someone later binds destroy-stage in jenkins-prd, or adds it to the jenkins-agent-jobs RoleBinding beside default, the gate stays green."
+      ],
+      "consequence": "A later edit that widens the Destroy Stage identity inside jenkins-prd passes JenkinsDeploy's gate without a word; only review would catch it.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-writer, P2, r1, /work/scratch/JenkinsDeploy/.kubecoder/project.yaml",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "design",
+        "area": "sensitive",
+        "repo": "JenkinsDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

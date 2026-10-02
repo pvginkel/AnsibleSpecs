@@ -255,11 +255,31 @@ Stage pipeline (Ruling D1). It holds no grant in `jenkins-prd`. The shared agent
 This ServiceAccount's grants are P3's, in ArgoCDDeploy; a comment says so and cites argo-cd
 D66. The done-record gives the ServiceAccount's name, which P3 binds and P5 runs as.
 
+**Done (P2).** The ServiceAccount is **`jenkins-prd/destroy-stage`**, defined in JenkinsDeploy
+`chart/templates/destroy-stage-serviceaccount.yaml`. It has no RoleBinding in the chart, and
+`jenkins-agent-jobs` (Role and RoleBinding) is untouched. JenkinsDeploy `80dc52a` on
+`phase/037-P2`.
+
+Later phases:
+- P3 binds subject `{kind: ServiceAccount, name: destroy-stage, namespace: jenkins-prd}`.
+- P5's agent pod spec sets `serviceAccountName: destroy-stage`. The token is mounted (the chart
+  does not set `automountServiceAccountToken`), so `kubectl` in `container('k8s')` runs as it.
+- The SA is not live until JenkinsDeploy is pushed and its `jenkins-prd` Application syncs. On
+  2026-10-02, `jenkins-prd` held only `default` and `jenkins-admin`.
+
+Record:
+- The header is a Helm comment (`{{/* */}}`, as `namespace.yaml` has), so nothing of it renders.
+  It cites argo-cd D66, says the grants are ArgoCDDeploy's Roles in `argocd-hooks` and
+  `argocd-prd`, and says (D41 as amended) that any pod in `jenkins-prd` may name it.
+- Gate: `kc project test` and `kc project lint` green. `helm template` renders the SA.
+- Close-out: T1 (JenkinsDeploy's gate pins no RBAC, so it does not hold the SA to "no grant in
+  `jenkins-prd`").
+
 ### P3 — The pipeline identity's grants in argocd-hooks and argocd-prd
 
 Target: ../ArgoCDDeploy
 
-ArgoCDDeploy's chart binds P2's ServiceAccount, by the name P2's done-record gives, to two
+ArgoCDDeploy's chart binds P2's ServiceAccount, `jenkins-prd/destroy-stage`, to two
 namespaced Roles and nothing else (Ruling D1):
 
 - **in `argocd-hooks`:** exactly what the pipeline's Job lifecycle uses through
@@ -356,10 +376,11 @@ parameters `REPO`, `STAGE` and `APPLY`, which defaults to false, and does three 
    the way `cicd.writeVersionPins` does (JenkinsPipelineUtils `vars/cicd.groovy:66`). If the
    folder is already gone, it skips this step.
 
-The agent pod runs as P2's ServiceAccount, named in this pipeline's pod spec (Ruling D1). It never
-runs as the shared default. `APPLY=true` destroys with no `input` step (R3). Only the operator
-starts the pipeline: it has no triggers and allows no concurrent builds. It follows the pipeline
-style guide (`kubecoder:jenkins-pipelines` skill; https://pipelines.home/docs/).
+The agent pod runs as P2's ServiceAccount, `destroy-stage`, named in this pipeline's pod spec
+(Ruling D1). It never runs as the shared default. `APPLY=true` destroys with no `input` step
+(R3). Only the operator starts the pipeline: it has no triggers and allows no concurrent builds.
+It follows the pipeline style guide (`kubecoder:jenkins-pipelines` skill;
+https://pipelines.home/docs/).
 
 The phase creates the job through the Jenkins API, to the style guide (Ruling review r1 A1). It
 uses `createItem` with the guide's `config.xml` template and `$JENKINS_TOKEN` (JenkinsPipelineUtils
