@@ -641,6 +641,27 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E6",
+      "kind": "event",
+      "grade": null,
+      "headline": "Test phase r1: CalendarDisplay hook returned 502 at push; redelivered once",
+      "body": [
+        "GitHub delivery for CalendarDisplay got 502 while Jenkins was loaded; redelivery started Firmware/CalendarDisplay #61 and AaC/CalendarDisplay #13, both SUCCESS. Home #41 failed (old file vs new library, before Home's push), superseded by #42."
+      ],
+      "consequence": "none",
+      "evidence": "witnessed",
+      "author": "test, r1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
