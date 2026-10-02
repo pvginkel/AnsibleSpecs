@@ -759,6 +759,33 @@ file does that the reference does not.
   the operator's next promotion.
 - **SSEGateway** keeps its own `Test` stage (P3).
 
+**Done (P6).** The four files are their type's reference files: DockerImages `image-matrix.groovy`,
+YouTrackConfiguration `configuration-apply.groovy`, KubeCoderDeploy `Jenkinsfile.promote`
+`promotion.groovy`, SSEGateway `validation-job.groovy`, each as published (section markers
+dropped). One commit in each of the four repos, on `main`, unpushed; four ledger rows. All four
+pass the controller's linter; `kc project test --project root` green (no Ansible commit).
+
+Later phases:
+- P11: Promote-PRD's file differs from `promotion.groovy` in one check the reference lacks. In
+  `Validate commit`, a run with `commit` empty refuses while no `release-*` tag points at prd's tip
+  (`!requested && current && current != promoted`), and names that commit. The header has one
+  more sentence saying so. KubeCoderDeploy's README describes this refusal. The other three files
+  match their references.
+
+Record:
+- Live `config.xml`: all four build `*/main`. Three are push-triggered and Promote-PRD has no
+  trigger. None has SCM extensions, so `checkout scm` fetches every branch and tag, which
+  Promote-PRD's gate reads. The UI holds `abortPrevious` `false` on DockerImages and Promote-PRD
+  and `true` on YouTrackConfiguration and SSEGateway. All four files declare plain
+  `disableConcurrentBuilds()` (PROP-3; G3, S12).
+- DockerImages' per-image 30-minute kaniko bound is gone (TIME-4): 034's §7 ruling retired it
+  ("agree"). Nothing in DockerImages parses its stage labels. `track_build.py` reads only
+  Promote-PRD's handoff lines, and those are unchanged.
+- YouTrackConfiguration's tests set fake tokens (`tests/test_cli.py`), so only the apply holds
+  `kv/jenkins/youtrack`.
+- Ruling P5: SSEGateway's `.kubecoder/project.yaml:11` now names `helmCharts.kaniko2(...)`. The
+  other three repos name no describable and no positional kaniko.
+
 ### P7 — The architecture collector and the Home Assistant Fleet producer are declarative files, and the producer docs describe the guide's form
 
 Target: ../Architecture

@@ -44,3 +44,7 @@ before the test phase, and each commit is rebased onto its origin when it is.
 | ScanToPdfServer | ScanToPdf/ScanToPdfServer | `/work/scratch/ScanToPdfServer` | `master`, pushed to `main` | `Jenkinsfile` | `8341ddf9b73527fa785b9a2b559c6bc9c8474be1` |
 | ScanToPdfServer | AaC/ScanToPdfServer | `/work/scratch/ScanToPdfServer` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `8341ddf9b73527fa785b9a2b559c6bc9c8474be1` |
 | HomelabTerraformProvider | IaC/HomelabTerraformProvider | `/work/HomelabTerraformProvider` | `main` | `Jenkinsfile` | `160ad9bfbf202b0e5b799ec1254561f744bd5d64` |
+| DockerImages | DockerImages | `/work/DockerImages` | `main` | `Jenkinsfile` | `df3906de3098819682aa67e245247fcaccd203df` |
+| YouTrackConfiguration | YouTrack/YouTrackConfiguration | `/work/scratch/YouTrackConfiguration` | `main` | `Jenkinsfile` | `c87845885342ddb757cee923233b6b12fe13e1fc` |
+| KubeCoderDeploy | KubeCoder/Promote-PRD | `/work/scratch/KubeCoderDeploy` | `main` | `Jenkinsfile.promote` | `c9dfe03d759d3425f5a7da41a2daca3dd3f515de` |
+| SSEGateway | SSEGateway/SSEGateway | `/work/scratch/SSEGateway` | `main` | `Jenkinsfile` | `a3aa6bc00e06155bf4eaf82b0bf1f60a3c9e736d` |
