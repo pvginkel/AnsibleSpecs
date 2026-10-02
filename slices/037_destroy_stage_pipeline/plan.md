@@ -211,6 +211,37 @@ when destroy eventually exists"), and D1, D33 and D41 where Ruling Q1 overrules 
 the file's own amendment marker, as D63 and its blockquotes do. None is left contradicting the
 new decision. The done-record names the new id.
 
+**Done (P1).** The new decision is **argo-cd D66** — "A retired stage is destroyed by one
+operator-started build of `IaC/Destroy Stage`" — in `argo-cd/decisions.md` § Sync, lifecycle and
+teardown, right after D29. It supersedes D28, which carries the `> **Superseded 2026-10-02 by
+D66 …**` marker, and amends D1, D27, D31, D33, D39 and D41 with dated blockquotes. AnsibleSpecs
+`ffdaeeb` on `phase/037-P1`.
+
+Later phases:
+- Cite the design as **argo-cd D66**. P2's, P3's and P6's text now say D66 where they said "P1's
+  decision".
+- P2/P3: D66 and D41 as amended name no ServiceAccount, so P2's choice of name needs no edit here.
+  D41's amendment states that Kubernetes does not hold the ServiceAccount to the pipeline: any pod
+  in `jenkins-prd` may name it. P2 and P3 change nothing for that (close-out D1 puts it to the
+  operator).
+
+Record:
+- Placed by topic beside D28/D29, as D46 and D63 are, not at the end of the file. D1, D33 and D41
+  carry Ruling Q1 in the operator's words: "one dedicated identity, used only by this
+  operator-started pipeline".
+- Not amended, because nothing in them is false under D66: D29 (teardown still never destroys;
+  D66 says `prevent_destroy` does not bind its own plan), D30 and D32 (D66 cites both), D63.
+- Settled beyond the plan: D41's amendment says plainly that the identity's exclusivity is a
+  convention. On prd there is no ValidatingAdmissionPolicy and no webhook that checks
+  `serviceAccountName`, and `jenkins-prd/default` can create Jobs in `jenkins-prd`
+  (`jenkins-agent-jobs`).
+- Close-out: B1 (the controller's live `jenkins-admin` ClusterRole is `*` on every core resource
+  cluster-wide), D1 (whether to enforce the identity's exclusivity).
+- For the doc phase: `argo-cd/design.md:539` (the lifecycle table's *Destroyed* row) and
+  `argo-cd/phases.md:131,339` still call destroy undesigned (D28).
+- Gate: AnsibleSpecs has none. Checked by script that no decision id is duplicated, every cited
+  `Dn` exists, and no added line runs past 100 columns.
+
 ### P2 — A ServiceAccount in jenkins-prd for the Destroy Stage pipeline alone
 
 Target: github:pvginkel/JenkinsDeploy
@@ -221,8 +252,8 @@ JenkinsDeploy is not checked out under `/work`. The driver adopts the clean clon
 JenkinsDeploy's chart defines a ServiceAccount in `jenkins-prd` that exists only for the Destroy
 Stage pipeline (Ruling D1). It holds no grant in `jenkins-prd`. The shared agent identity
 `jenkins-prd/default` (`chart/templates/jenkins-agent-jobs-rolebinding.yaml:9`) gains nothing.
-This ServiceAccount's grants are P3's, in ArgoCDDeploy; a comment says so and cites P1's
-decision. The done-record gives the ServiceAccount's name, which P3 binds and P5 runs as.
+This ServiceAccount's grants are P3's, in ArgoCDDeploy; a comment says so and cites argo-cd
+D66. The done-record gives the ServiceAccount's name, which P3 binds and P5 runs as.
 
 ### P3 — The pipeline identity's grants in argocd-hooks and argocd-prd
 
@@ -237,7 +268,7 @@ namespaced Roles and nothing else (Ruling D1):
 - **in `argocd-prd`:** read-only on `argoproj.io` Applications, for the guard.
 
 `argocd-hooks` is defined in `chart/templates/hook-namespace.yaml`, whose header calls it the
-namespace's complete inventory (D33). That inventory stays true and cites P1's decision.
+namespace's complete inventory (D33). That inventory stays true and cites argo-cd D66.
 
 The render gate (`tests/render-chart.py`) pins both grants: their verbs, their namespaces and
 their one subject. A grant that widens, or that reaches `jenkins-prd/default`, turns the gate red.
@@ -358,7 +389,7 @@ covers:
 - the repo's webhook going with the stage that manages it.
 
 The undeploy paragraph says that nothing prunes the state file "until D28 is designed"
-(`docs/runbooks/argocd.md:387`). It now points to the new path and cites P1's decision.
+(`docs/runbooks/argocd.md:387`). It now points to the new path and cites argo-cd D66.
 
 ## Not in scope
 

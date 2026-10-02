@@ -50,6 +50,60 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "major",
+      "headline": "JenkinsDeploy: the controller's jenkins-admin ClusterRole grants every verb on every core resource cluster-wide, Secrets included",
+      "body": [
+        "Live on prd, ClusterRole `jenkins-admin` is `[{apiGroups: [\"\"], resources: [\"*\"], verbs: [\"*\"]}]`, bound by ClusterRoleBinding `jenkins-admin` to `jenkins-prd/jenkins-admin`, the controller's ServiceAccount (JenkinsDeploy `chart/templates/jenkins-clusterrole.yaml`, `jenkins-deployment.yaml:28`). It reads every Secret in the cluster (`argocd-hook-credentials` in `argocd-hooks`, Argo's repo credential and OIDC client secret in `argocd-prd`) and creates pods in any namespace. argo-cd D1 says Jenkins holds no cluster credential, and D33/D41 bind the hook credentials to Argo's sync; Ruling Q1 overruled them narrowly for one dedicated identity, which reaches less than the controller already does. Seen while writing D66 in P1; the register says nothing about it. What the Kubernetes plugin actually needs (pods, pods/exec, pods/log in jenkins-prd, perhaps more) is not established."
+      ],
+      "consequence": "Code execution in the Jenkins controller (an admin's script console, a compromised plugin) reads every Secret in the cluster, the hook's credentials among them, while the argo-cd register states that Jenkins holds no cluster credential.",
+      "proposal": "card — scope the controller's role to what the Kubernetes plugin needs; a security change that needs its own proof across every pipeline, not this slice's.",
+      "evidence": "witnessed",
+      "author": "code-writer, P1, r1 — kubectl --context prd get clusterrole/clusterrolebinding jenkins-admin; JenkinsDeploy f3ee7df chart/templates/jenkins-clusterrole.yaml",
+      "labels": {
+        "trigger": "fault",
+        "impact": "severe",
+        "signal": "silent",
+        "fix": "design",
+        "area": "sensitive",
+        "repo": "JenkinsDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D1",
+      "kind": "decision",
+      "grade": null,
+      "headline": "Keep the Destroy Stage ServiceAccount's exclusivity a convention, or enforce it?",
+      "body": [
+        "In effect, and recorded in D66 and D41 as amended (P1): only `Jenkinsfile.destroy-stage`'s pod spec names the dedicated ServiceAccount in `jenkins-prd` (Ruling D1), and nothing enforces that. prd has no ValidatingAdmissionPolicy and no webhook that checks `serviceAccountName` (only the cnpg, ESO and metallb webhooks), so any Jenkinsfile's pod spec can name it, and `jenkins-prd/default` can create Jobs in `jenkins-prd` (Role `jenkins-agent-jobs`) whose pods name it. Holding it means creating Jobs in `argocd-hooks` under `tf-presync` with `argocd-hook-credentials`.",
+        "Options:",
+        "- Keep the convention (in effect): costs nothing; whoever writes a Jenkinsfile in the estate can reach the hook's credentials.",
+        "- Enforce in the cluster: a ValidatingAdmissionPolicy in `jenkins-prd` that admits the ServiceAccount only on pods carrying something the pipeline alone sets. Nothing a Jenkinsfile cannot also set exists today, so this takes design, a JenkinsDeploy change and a test.",
+        "- Enforce in Jenkins: a Kubernetes cloud or pod-template restriction that only this job may use. Design in JenkinsDeploy's controller configuration."
+      ],
+      "consequence": "Write access to any Jenkinsfile in the estate reaches the hook's whole credential set through that ServiceAccount, which Ruling D1 meant to keep to one pipeline.",
+      "proposal": "keep — every Jenkinsfile that could name it lives in the operator's own repos, and the controller's jenkins-admin ClusterRole already reaches further; revisit with that defect's card.",
+      "evidence": "witnessed",
+      "author": "code-writer, P1, r1 — kubectl --context prd get validatingadmissionpolicies / validatingwebhookconfigurations; JenkinsDeploy chart/templates/jenkins-agent-jobs-role.yaml",
+      "labels": {
+        "trigger": "fault",
+        "impact": "severe",
+        "signal": "silent",
+        "fix": "design",
+        "area": "sensitive",
+        "repo": "JenkinsDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
