@@ -851,6 +851,27 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E11",
+      "kind": "event",
+      "grade": null,
+      "headline": "Test phase r2: P13/P14 pushed; the eight renamed-repo jobs started once by hand (Ruling R2); all builds SUCCESS",
+      "body": [
+        "Pushed ElectronicsInventory 0eb150ab and YouTrackConfiguration 23cb808. YouTrackConfiguration #10 and ElectronicsInventory #263 SUCCESS (pins written). The eight renamed-repo jobs built SUCCESS from main (R2). YouTrackConfiguration #10 waited ~12 min for an agent pod before scheduling; it then passed."
+      ],
+      "consequence": "none",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r2, Jenkins builds",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
