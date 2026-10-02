@@ -177,6 +177,11 @@ JenkinsDeploy, and it sets a new pattern (a Jenkins-started hook Job, overruling
   (`/work/ArgoCDTools/Jenkinsfile:32,71-72`). P3's grants need a sync of `argocd-prd`, which has
   no automated sync policy (ArgoCDDeploy `releases/values.yaml:30`, `autoSync: false`; live
   `argocd-prd` has no `syncPolicy.automated`). The test phase syncs it per Ruling D4.
+- The job's registration build (Ruling review r1 A1) is the test phase's, before its dry runs. P5
+  cannot start it. The build reads `Jenkinsfile.destroy-stage` from ArgoCDTools `main` and runs
+  its agent pod as P2's ServiceAccount. The driver pushes no code phase: pushing is the test
+  phase's job (dev plugin `docs/run-loop.md:255-257`). So the build needs the pushed ArgoCDTools
+  and the live ServiceAccount, and neither exists while P5 runs.
 
 ### P1 — The Destroy Stage design recorded as an argo-cd decision that supersedes D28
 
@@ -188,6 +193,9 @@ records:
 
 - the operator-started pipeline (R1–R3) and its guard (Ruling D2);
 - the hook image's separate destroy entry point and its empty configuration;
+- the stage's namespaced Kubernetes objects, dropped from state rather than destroyed, with no new
+  grant, and the leftover this accepts in a namespace that outlived its Application (Ruling review
+  r1 F1);
 - what the build removes and who removes it: the state inside the Job, `config/<stage>/` by
   Jenkins;
 - the idempotent re-run, and the webhook going with the stage that manages it;
@@ -252,25 +260,43 @@ does the following:
 - **Prepare.** It clones the deploy repo at the SHA, mints the kubeconfig and starts the state
   backend, as a sync does. It inits against the stage's existing state key
   (`presync/backend.py:52-54`).
+- **Forget the namespaced objects (Ruling review r1 F1).** Every Kubernetes object in the stage's
+  state that lives in a namespace is taken out of the destroy: it is dropped from state and never
+  deleted. Such an object lived in the stage's own namespace and went with it at the prune. The
+  run's identity can no longer reach it, and a refresh of it fails with `403`. That identity's
+  only namespaced grant is `tf-presync-app` (Secrets), which the sync binds in the app's own
+  namespace and nowhere else (ArgoCDDeploy `chart/templates/hook-namespace.yaml:106-125`, Charts
+  `_tf-presync-hook.tpl:42-59`). Cluster-scoped objects such as the PVs stay in state and are
+  destroyed for real, as is everything outside Kubernetes: databases, buckets, RBD images, the
+  webhook. The run gets no new grant.
 - **Plan.** It plans against an empty configuration: the clone's root `terraform/` reduced to its
   provider requirements, provider configurations, backend block and variable declarations. It has
-  no resources, data sources, modules or outputs. The run passes `config/<stage>/*.tfvars` as a
-  sync passes them. Per G4, FieldnotesDeploy's `providers.tf` is self-contained, while
-  KubeCoderDeploy's depends on its separate `variables.tf`. A repo whose declarations do not init
-  or plan this way fails the run and says why. The run never guesses.
-- **Dry run.** It prints the plan and names what an apply would remove from TerraformState
+  no resources, data sources, modules or outputs. The run passes the stage's
+  `config/<stage>/*.tfvars` when that folder exists, and plans without them when it does not
+  (Ruling review r1 A2). The sync's own helper refuses a clone without the folder
+  (`argocd-hook/presync/terraform.py:35-37`), and it keeps refusing it for the sync. Per G4,
+  FieldnotesDeploy's `providers.tf` is self-contained, while KubeCoderDeploy's depends on its
+  separate `variables.tf`. A repo whose declarations do not init or plan this way fails the run
+  and says why. The run never guesses.
+- **Dry run.** It prints the plan and lists the forgotten objects separately, as already gone with
+  the namespace. It names what an apply would remove from TerraformState
   (`argocd/<repo>/<stage>/`). Then it exits, having written nothing: no state, no TerraformState
-  commit.
-- **Apply.** It applies the saved plan and confirms that the state lists no resources. Then it
-  removes `argocd/<repo>/<stage>/` from TerraformState with the run's own `GITHUB_TOKEN`.
+  commit. The forgetting is not stored either, yet the plan it prints is the one an apply would
+  run after forgetting.
+- **Apply.** It drops the forgotten objects from the stored state before it plans. It applies the
+  saved plan and confirms that the state lists no resources. Then it removes
+  `argocd/<repo>/<stage>/` from TerraformState with the run's own `GITHUB_TOKEN`.
 - **Re-runs.** An already-empty state skips the destroy, and a state file that is already gone
-  skips its removal. A run never creates a state file for a stage that has none, so a run that
-  stopped halfway is finished by running it again.
+  skips its removal. A missing `config/<stage>/` does not stop the run before those checks. A run
+  never creates a state file for a stage that has none, so a run that stopped halfway is finished
+  by running it again.
 
 The run's output and exit code are the pipeline's evidence. P5 shows the Job's log in the build,
-so the plan and what the run would remove are read there. The hook's unittest suite covers the
-destroy mode using its existing fakes (`tests/support.py`): a dry run against an apply, the
-idempotent re-runs, and an empty configuration that does not plan.
+so the plan, the forgotten objects and what the run would remove are read there. The hook's
+unittest suite covers the destroy mode on its fakes (`tests/support.py`). It covers a dry run
+against an apply, and a state that holds a namespaced Secret beside a PV and a resource outside
+Kubernetes. It also covers the idempotent re-runs, a clone without `config/<stage>/`, and an
+empty configuration that does not plan.
 
 ### P5 — Jenkinsfile.destroy-stage and the IaC/Destroy Stage job
 
@@ -280,7 +306,7 @@ Target: ../ArgoCDTools
 Jenkins job `IaC/Destroy Stage` runs it from pvginkel/ArgoCDTools `main`. One build takes the
 parameters `REPO`, `STAGE` and `APPLY`, which defaults to false, and does three things:
 
-1. **Guard (Ruling D2).** Before anything else, the build fails if ArgoCDDeploy's registry on
+1. **Guard (Ruling D2).** Before any Job starts, the build fails if ArgoCDDeploy's registry on
    `main` (`releases/values.yaml`) has an entry deploying REPO's STAGE, or if a live Application
    in `argocd-prd` sources REPO with `hook.stage` STAGE. Both single-source and multi-source
    (`spec.sources[]`) Applications count (G6). The failure names what still deploys the stage.
@@ -304,11 +330,16 @@ runs as the shared default. `APPLY=true` destroys with no `input` step (R3). Onl
 starts the pipeline: it has no triggers and allows no concurrent builds. It follows the pipeline
 style guide (`kubecoder:jenkins-pipelines` skill; https://pipelines.home/docs/).
 
-The phase creates the job through the Jenkins API: `createItem` with a `config.xml`, as
-JenkinsPipelineUtils `docs/pages/guide/new-repo.md` describes, using `$JENKINS_TOKEN`. The job
-carries its parameters from the moment it is created, so no build ever runs with `APPLY` unset.
-The phase starts no build; the first builds are the test phase's dry runs (Ruling D3). The
-done-record gives the job's URL.
+The phase creates the job through the Jenkins API, to the style guide (Ruling review r1 A1). It
+uses `createItem` with the guide's `config.xml` template and `$JENKINS_TOKEN` (JenkinsPipelineUtils
+`docs/pages/guide/new-repo.md:45-56`, `:87`). That configuration holds only the job, its SCM and
+its Script Path (`job-properties.md:3-5`). The parameters, the absence of triggers and the
+concurrency come from the file, through the job's first build. A build whose `REPO` or `STAGE` is
+empty fails before any cluster call and changes nothing. The job's first build carries no
+parameters, so it is such a build: it only registers them. Besides Ruling D3's dry runs, it is the
+only build the run starts. The phase starts no build itself, because the file reaches ArgoCDTools
+`main` only when the test phase pushes it (Ordering constraints). The done-record gives the job's
+URL.
 
 ### P6 — The argocd runbook: destroying a retired stage
 
@@ -321,6 +352,8 @@ covers:
   the steps in § "Registering, undeploying and unregistering an app";
 - the `IaC/Destroy Stage` build: `APPLY=false` first, what its output shows, then `APPLY=true`;
 - what the guard refuses;
+- the namespaced objects the build forgets rather than destroys, and the Secrets a namespace that
+  outlived its Application keeps (Ruling review r1 F1);
 - re-running a build that stopped halfway;
 - the repo's webhook going with the stage that manages it.
 
@@ -332,6 +365,9 @@ The undeploy paragraph says that nothing prunes the state file "until D28 is des
 - Undeploying a stage (deleting the registry entry, pruning the Application). That is the
   operator's existing procedure; the pipeline only cleans up after it.
 - The namespace check (Ruling D2).
+- Any grant for the Job's identity in a pruned stage's namespace. Deleting the Secrets of a
+  namespace that outlived its Application is out of scope too: that is the risk Ruling review r1
+  F1 accepts.
 - Running `APPLY=true` against any stage. That is the operator's keystroke.
 - Bumping the Charts `hook.imageTag` pin, or changing the sync hook's contract.
 - Removing a whole deploy repo (its GitHub repo, its Jenkins jobs) beyond what its stages'

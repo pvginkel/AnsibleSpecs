@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 one action",
-      "description": "Permanent fix, as one action: a Jenkins pipeline that takes a deploy repo. One `IaC/Destroy Stage` build, given a deploy repo and a stage, permanently deletes what that retired stage left: its Terraform resources, its state in TerraformState and its `config/<stage>/`. No other step is needed.",
+      "description": "Permanent fix, as one action: a Jenkins pipeline that takes a deploy repo. One `IaC/Destroy Stage` build, given a deploy repo and a stage, permanently deletes what that retired stage left: its Terraform resources, its state in TerraformState and its `config/<stage>/`. No other step is needed. That holds whatever the stage's state holds: the namespaced Kubernetes objects in it, already gone with the pruned namespace, are dropped from state rather than deleted (Ruling review r1 F1, V20).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R2.2 the Job and the empty configuration",
-      "description": "The pipeline runs the argocd-hook image as a one-off Job in `argocd-hooks`, with the `tf-presync` ServiceAccount and the `argocd-hook-credentials` Secret, under a name no `tf-presync-<namespace>` sync Job can take (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:38`). Its destroy mode clones the deploy repo at a SHA, starts the state backend and inits against `argocd/<repo>/<stage>/terraform.tfstate` (`argocd-hook/presync/backend.py:52-54`). It then plans against a configuration that holds only the root's provider, backend and variable declarations, with the stage's tfvars, so every resource in state is an orphan planned for deletion and `prevent_destroy` no longer binds. A repo whose declarations do not init or plan this way fails the build loudly.",
+      "description": "The pipeline runs the argocd-hook image as a one-off Job in `argocd-hooks`, with the `tf-presync` ServiceAccount and the `argocd-hook-credentials` Secret, under a name no `tf-presync-<namespace>` sync Job can take (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:38`). Its destroy mode clones the deploy repo at a SHA, starts the state backend and inits against `argocd/<repo>/<stage>/terraform.tfstate` (`argocd-hook/presync/backend.py:52-54`). It sets the stage's namespaced Kubernetes objects aside (V20) and plans against a configuration that holds only the root's provider, backend and variable declarations. It passes the stage's tfvars when `config/<stage>/` exists (Ruling review r1 A2). So every other resource in state is an orphan planned for deletion, and `prevent_destroy` no longer binds. A repo whose declarations do not init or plan this way fails the build loudly.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -51,7 +51,7 @@
     {
       "id": "V07",
       "area": "R3 APPLY and the dry run",
-      "description": "An `APPLY` parameter; `APPLY=false` is a dry run. `APPLY` defaults to false. A dry run plans and stops: it shows the destroy plan and names the state file and `config/<stage>/` it would delete. It changes nothing: no resource, no TerraformState commit, no deploy-repo commit. `APPLY=true` plans and destroys inside the same Job, from the saved plan, with no `input` step.",
+      "description": "An `APPLY` parameter; `APPLY=false` is a dry run. `APPLY` defaults to false. A dry run plans and stops: it shows the destroy plan, lists separately the namespaced Kubernetes objects an apply would forget (Ruling review r1 F1), and names the state file and `config/<stage>/` it would delete. It changes nothing: no resource, no state write, no TerraformState commit, no deploy-repo commit. `APPLY=true` plans and destroys inside the same Job, from the saved plan, with no `input` step.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,7 +59,7 @@
     {
       "id": "V08",
       "area": "R4 / Ruling D3 dev dry run",
-      "description": "FieldnotesDeploy `dev` is the first stage it destroys. The test phase starts `IaC/Destroy Stage` with `APPLY=false` against FieldnotesDeploy `dev`. The plan shows exactly the RBD image `fieldnotes-dev-data` and the PV `fieldnotes-dev-data-pv` for deletion. The build names `argocd/FieldnotesDeploy/dev/` (TerraformState holds `argocd/FieldnotesDeploy/dev/terraform.tfstate`, 8120 bytes, at `1b32f10`) and `config/dev/` as what an apply would delete. Afterwards, both are still present.",
+      "description": "FieldnotesDeploy `dev` is the first stage it destroys. The test phase starts `IaC/Destroy Stage` with `APPLY=false` against FieldnotesDeploy `dev`. The plan shows exactly the RBD image `fieldnotes-dev-data` and the PV `fieldnotes-dev-data-pv` for deletion, and the build lists nothing as forgotten. The build names `argocd/FieldnotesDeploy/dev/` (TerraformState holds `argocd/FieldnotesDeploy/dev/terraform.tfstate`, 8120 bytes, at `1b32f10`) and `config/dev/` as what an apply would delete. Afterwards, both are still present.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -116,7 +116,7 @@
     {
       "id": "V15",
       "area": "Idempotent re-runs",
-      "description": "Re-runs are idempotent. An already-empty state skips the destroy, and a state file or `config/<stage>/` folder that is already gone is skipped. A run against a stage with no state file creates none, and a build that stopped halfway is finished by running it again. The hook's unittest suite covers the dry run, the apply, the re-runs and an empty configuration that does not plan.",
+      "description": "Re-runs are idempotent. An already-empty state skips the destroy, and a state file or `config/<stage>/` folder that is already gone is skipped. Without `config/<stage>/` the Job still reaches its state checks (Ruling review r1 A2), although the sync's own helper refuses such a clone (`argocd-hook/presync/terraform.py:35-37`). A run against a stage with no state file creates none, and a build that stopped halfway is finished by running it again. The hook's unittest suite covers the dry run, the apply, the re-runs, a clone without `config/<stage>/` and an empty configuration that does not plan.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -132,7 +132,7 @@
     {
       "id": "V17",
       "area": "Jenkins job",
-      "description": "The job `IaC/Destroy Stage` exists in the `IaC/` folder, created through the Jenkins API. It carries its parameters from creation, has no triggers and allows no concurrent builds. The run starts no build of it except Ruling D3's two dry runs.",
+      "description": "The job `IaC/Destroy Stage` exists in the `IaC/` folder, created through the Jenkins API to the style guide (Ruling review r1 A1). Its configuration holds only the job, its SCM and its Script Path (JenkinsPipelineUtils `docs/pages/guide/job-properties.md:3-5`). Its parameters come from `Jenkinsfile.destroy-stage` through one parameter-less registration build, and so do its lack of triggers and its refusal of concurrent builds. That build fails on the empty `REPO` before any cluster call and changes nothing. Once registered, the job has no triggers, allows no concurrent builds, and defaults `APPLY` to false. The run starts no build of it except that registration build and Ruling D3's two dry runs.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -149,6 +149,14 @@
       "id": "V19",
       "area": "Runbook",
       "description": "This repo's argocd runbook has a section on destroying a retired stage with the pipeline: when it applies (after undeploy), the dry run first, then the apply, what the guard refuses, and re-running. The undeploy paragraph no longer says that nothing prunes the state (`docs/runbooks/argocd.md:387`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V20",
+      "area": "Ruling review r1 F1 namespaced objects",
+      "description": "Before planning, the destroy mode drops every Kubernetes object in the stage's state that lives in a namespace from state, without deleting it. Such an object went with the namespace when the Application was pruned, and the Job's identity has no grant left on it. Its only namespaced grant, `tf-presync-app` on Secrets, is bound in the app's own namespace alone (ArgoCDDeploy `chart/templates/hook-namespace.yaml:106-125`, Charts `charts/homelab-shared/templates/_tf-presync-hook.tpl:42-59`). Cluster-scoped objects such as PVs stay in the plan and are destroyed for real, and so is everything outside Kubernetes: databases, buckets, RBD images. A dry run lists the forgotten objects separately, as already gone with the namespace, and still writes nothing. An apply forgets them and destroys the rest. `tf-presync` gains no grant. The hook's unittest suite covers a state that holds a namespaced Secret beside a PV and a resource outside Kubernetes.",
       "verdict": null,
       "rationale": "",
       "evidence": []
