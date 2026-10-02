@@ -14,10 +14,10 @@
       "id": "V02",
       "area": "R2 \u2014 the five ModernAppTemplate apps",
       "description": "\"The five ModernAppTemplate apps' `Jenkinsfile` are migrated; ModernAppTemplate itself is not.\" The build `Jenkinsfile` of DHCPApp, ElectronicsInventory, FieldnotesApp, IoTSupport and ZigbeeControl is a declarative file to the guide whose `Test` stage calls the library's validation step (Ruling D1), in place of the ~130-line block each carries today (`FieldnotesApp/Jenkinsfile:26-169`). ModernAppTemplate has no commit from this slice.",
-      "verdict": "fail",
-      "rationale": "FieldnotesApp, DHCPApp, IoTSupport, ZigbeeControl built green on the migrated file, but ElectronicsInventory #262 FAILED on a frontend Playwright case (P14).",
+      "verdict": "pass",
+      "rationale": "ElectronicsInventory #263 SUCCESS (1393 passed, 0 failed) through image builds and pin write to ElectronicsInventoryDeploy (132d857, config/prd/values.yaml), after P14 pushed; the other four built green earlier.",
       "evidence": [
-        "FieldnotesApp, DHCPApp, IoTSupport, ZigbeeControl built green on the migrated file, but ElectronicsInventory #262 FAILED on a frontend Playwright case (P14)."
+        "ElectronicsInventory #263 SUCCESS (1393 passed, 0 failed) through image builds and pin write to ElectronicsInventoryDeploy (132d857, config/prd/values.yaml), after P14 pushed; the other four built green earlier."
       ]
     },
     {
@@ -104,10 +104,10 @@
       "id": "V11",
       "area": "R11 \u2014 J26 master to main",
       "description": "\"J26: `master` \u2192 `main` for the four remaining repos.\" MyDownloadsClient, MyDownloadsServer, ScanToPdfClient and ScanToPdfServer default to `main` on GitHub, and the eight jobs (`MyDownloads/*`, `ScanToPdf/*` and their `AaC/*` twins) build `*/main`. Each job's `config.xml` was saved before the change (Ruling D3). No file in those repos names `master` as the job's branch: today `MyDownloadsClient/Jenkinsfile:17`, `ScanToPdfClient/Jenkinsfile:17` and `ScanToPdfServer/Jenkinsfile:13` clone `master`, and the four `Jenkinsfile.architecture` headers say `branch master` (`:7`). The eight jobs' builds after the push are green from `main`. `opentherm_library` is left on `master`.",
-      "verdict": "fail",
-      "rationale": "Renames done on GitHub and the eight jobs read */main (config.xml), but none of the eight jobs (MyDownloads/MyDownloadsClient|Server, ScanToPdf/ScanToPdfClient|Server, AaC twins) built after the push: webhook deliveries returned 200 and a redelivery changed nothing; no build exists on main. Plan forbids hand-starting.",
+      "verdict": "pass",
+      "rationale": "After P13/P14 push, each of the eight jobs started once by hand from main (Ruling R2) and finished SUCCESS: MyDownloads/MyDownloadsClient #72, MyDownloadsServer #36, ScanToPdf/ScanToPdfClient #54, ScanToPdfServer #24, AaC/MyDownloadsClient #14, MyDownloadsServer #5, AaC/ScanToPdfClient #11, AaC/ScanToPdfServer #16.",
       "evidence": [
-        "Renames done on GitHub and the eight jobs read */main (config.xml), but none of the eight jobs (MyDownloads/MyDownloadsClient|Server, ScanToPdf/ScanToPdfClient|Server, AaC twins) built after the push: webhook deliveries returned 200 and a redelivery changed nothing; no build exists on main. Plan forbids hand-starting."
+        "After P13/P14 push, each of the eight jobs started once by hand from main (Ruling R2) and finished SUCCESS: MyDownloads/MyDownloadsClient #72, MyDownloadsServer #36, ScanToPdf/ScanToPdfClient #54, ScanToPdfServer #24, AaC/MyDownloadsClient #14, MyDownloadsServer #5, AaC/ScanToPdfClient #11, AaC/ScanToPdfServer #16."
       ]
     },
     {
@@ -174,10 +174,10 @@
       "id": "V18",
       "area": "R18 \u2014 push once, check once",
       "description": "\"How the change is pushed and checked\": \"change everything and push it all out in one go, and then stop.\" Starting the run is the operator's OK for that push (Ruling P1). Every repo the slice committed to is pushed in one go, JenkinsPipelineUtils first, and no consumer before it is on origin. AaC/Architecture was disabled before the first push, re-enabled once the queue was quiet and built once by hand (Ruling P2). Until then its live file calls `containerTemplates.k8s`/`python` and the positional `helmCharts.kaniko` (`/work/Architecture/Jenkinsfile:39-40, 141`). No other build was started by hand, except one build each of the eight renamed-repo jobs on `main` (Ruling R2). Quiet is an empty queue and no running builds. An item that waited on \"nodes offline\" past about 60 minutes was checked against the Kubernetes cloud's provisioning counter and the live agents before any reset (Ruling T1). The check is one Jenkins API pull of every job's `lastBuild` against the push time. Every build the push started finished SUCCESS, and so did AaC/Architecture's one build. That includes the eight OTA uploads, the prd app rollouts through the pin writers and KubeCoder's dev rollout (S8).",
-      "verdict": "fail",
-      "rationale": "Pushed in order (JPU first), AaC/Architecture paused/resumed and built once, quiet reached. But not every build finished SUCCESS: ElectronicsInventory #262 FAILURE (P14), YouTrackConfiguration #9 FAILURE (P13), and eight jobs never built (V11).",
+      "verdict": "pass",
+      "rationale": "All pushes done in order; AaC/Architecture built once; YouTrack/YouTrackConfiguration #10 SUCCESS (P13), ElectronicsInventory #263 SUCCESS (P14), eight renamed-repo jobs SUCCESS by hand per Ruling R2.",
       "evidence": [
-        "Pushed in order (JPU first), AaC/Architecture paused/resumed and built once, quiet reached. But not every build finished SUCCESS: ElectronicsInventory #262 FAILURE (P14), YouTrackConfiguration #9 FAILURE (P13), and eight jobs never built (V11)."
+        "All pushes done in order; AaC/Architecture built once; YouTrack/YouTrackConfiguration #10 SUCCESS (P13), ElectronicsInventory #263 SUCCESS (P14), eight renamed-repo jobs SUCCESS by hand per Ruling R2."
       ]
     },
     {
@@ -204,10 +204,10 @@
       "id": "V21",
       "area": "Behaviour kept",
       "description": "Each migrated job still does what it did, apart from what a requirement changes. It builds the same images and tags. It writes the same pins: deploy repo, values file and keys. It archives the same artifacts and starts the same downstream jobs. It makes the same `stable` push, the same OTA uploads and the same applies.",
-      "verdict": "fail",
-      "rationale": "Not shown for ElectronicsInventory (no images/pins written, #262), YouTrackConfiguration (no apply) and the eight unbuilt jobs; the rest built and wrote pins green.",
+      "verdict": "pass",
+      "rationale": "The previously unproven builds now pass: ElectronicsInventory #263 wrote images and pins; YouTrackConfiguration #10 applied SUCCESS; the eight renamed-repo jobs built SUCCESS.",
       "evidence": [
-        "Not shown for ElectronicsInventory (no images/pins written, #262), YouTrackConfiguration (no apply) and the eight unbuilt jobs; the rest built and wrote pins green."
+        "The previously unproven builds now pass: ElectronicsInventory #263 wrote images and pins; YouTrackConfiguration #10 applied SUCCESS; the eight renamed-repo jobs built SUCCESS."
       ]
     },
     {
