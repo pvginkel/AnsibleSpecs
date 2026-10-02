@@ -26,6 +26,13 @@ the goal.
 **D1 — Argo CD owns CD; Jenkins reduces to CI.** Decided (CR). Jenkins builds, pushes, and
 commits version pins; it holds no cluster credential afterwards.
 
+> **Amended 2026-10-02 (operator, slice 037 Ruling Q1): one exception, narrowly.** The Destroy
+> Stage pipeline (D66) is a Jenkins pipeline that holds a cluster credential: a ServiceAccount in
+> `jenkins-prd` dedicated to it, which can run a one-off Job in `argocd-hooks` and read the
+> Applications in `argocd-prd`. The exception is that one identity, used only by that
+> operator-started pipeline, which deploys nothing: it deletes what a retired stage left. D1
+> stands for everything else.
+
 **D2 — One Argo CD instance, on the prd cluster; no remote cluster registration.** Decided (CR
 decision 9; plan vocabulary). `srvk8sdev` is excluded. Stages are namespaces on prd, so both
 KubeCoder stages migrate; "dev excluded" excludes a cluster, never a stage.
@@ -379,9 +386,20 @@ neither — leaving *undeployed* stays a human decision until D28 gets a design.
 > Terraform-made resources and state survive with its deploy repo (D29), and D28's design has to
 > find them there.
 
+> **Amended 2026-10-02 (D66, slice 037): *destroyed* has its design.** D66 finds a retired
+> stage's Terraform-made resources and state where its deploy repo and the state repo keep them.
+> After the undeploy (the entry deleted, the Application pruned), one `IaC/Destroy Stage` build
+> takes the stage from *undeployed* to *destroyed*: its resources, its state file and its
+> `config/<stage>/` are gone. Leaving *undeployed* stays a human decision: the build destroys only
+> when the operator starts it with `APPLY=true`.
+
 **D28 — Destroy is a named follow-up phase, with no design yet.** Decided 2026-08-12 (operator,
 restructure session). phases.md names the phase; nobody designs it in this project. Interlocks
 with the separately tracked decommission path, Trello **#66**.
+
+> **Superseded 2026-10-02 by D66 (operator, slice 037 Ruling Q1).** Destroy has its design: one
+> operator-started build of the Jenkins job `IaC/Destroy Stage` per retired stage. Removing a
+> whole deploy repo, the decommission path of Trello **#66**, stays outside it.
 
 **D29 — Teardown never runs `terraform destroy`.** Decided (CR; plan). Hooks fire on sync, not
 delete, so undeploy cannot destroy; the ZFS dataset carries `prevent_destroy` as belt and
@@ -390,6 +408,71 @@ braces. Consequence: the `Retain` PV goes `Released` on every teardown, and the 
 reattach runs in the hook itself, under its scoped ServiceAccount (D33), against the namespace
 the Job is handed as an argument — the same `<app>-<stage>` expression Argo computes for the
 Application's destination, so the filter is the sync's own namespace and nothing is re-derived.
+
+**D66 — A retired stage is destroyed by one operator-started build of `IaC/Destroy Stage`.**
+Decided 2026-10-02 (operator, slice 037: "I would even accept something like a Jenkins pipeline
+taking a repo. You know? I'm thinking that actually has my preference."; Rulings Q1, D1, D2 and
+review r1 F1; ANS-147). Supersedes D28. Amends D1, D27, D31, D33, D39 and D41.
+
+- *What it is for.* An undeployed stage's Terraform-made resources and state survive it (D27 as
+  amended, D29). One build of the Jenkins job `IaC/Destroy Stage`, which runs ArgoCDTools'
+  `Jenkinsfile.destroy-stage`, permanently deletes what one retired stage of one deploy repo left:
+  its Terraform resources, its state in the state repo and its `config/<stage>/`. It cleans up
+  after an undeploy and never undeploys: the operator deletes the registry entry and prunes the
+  Application first (D63). Removing a whole deploy repo is not its job. FieldnotesDeploy's `dev`
+  is the first stage it destroys (ANS-147).
+- *Parameters.* `REPO`, `STAGE` and `APPLY`, which defaults to false. `APPLY=false` is a dry run:
+  it plans and stops, shows the destroy plan, names the state file and `config/<stage>/` an apply
+  would delete, and changes nothing. `APPLY=true` plans and destroys in the same Job, from the
+  saved plan, with no `input` step. The job has no triggers and allows no concurrent builds; only
+  the operator starts it, and a build with `APPLY=true` against real infrastructure is the
+  operator's keystroke.
+- *The guard* (Ruling D2). Before any Job starts, the build fails if ArgoCDDeploy's registry on
+  `main` has an entry deploying `REPO`'s `STAGE`, or if a live Application in `argocd-prd` sources
+  `REPO` with the Helm parameter `hook.stage` set to `STAGE`, single-source or multi-source (D18).
+  The failure names what still deploys the stage. Whether the stage's namespace still exists is
+  not checked.
+- *The Job.* The build resolves the deploy repo's `main` to a SHA and runs the argocd-hook image
+  (D31) at that SHA as a one-off Job in `argocd-hooks`, under `tf-presync` and with
+  `argocd-hook-credentials` (D33), with a name no sync Job's `tf-presync-<namespace>` can take.
+  The destroy mode is a separate entry point of the image, and the sync's four-argument contract
+  (D30) is untouched. The pipeline runs the image's `latest` build, not the library chart's pin.
+- *The empty configuration.* The run inits against the stage's own state key (D32) and plans
+  against the deploy repo's root `terraform/` reduced to its provider requirements, provider
+  configurations, backend block and variable declarations: no resources, data sources, modules or
+  outputs. It passes the stage's `config/<stage>/*.tfvars` when that folder exists. Every resource
+  left in state is then an orphan planned for deletion, and `prevent_destroy` (D29) no longer binds:
+  the guard, the dry run and the operator's `APPLY` stand in its place. A repo whose declarations
+  do not init or plan this way fails the build, which says why; the run never guesses.
+- *Namespaced objects are forgotten, not destroyed* (Ruling review r1 F1). The prune took the
+  stage's namespace with everything in it, the `tf-presync-app` RoleBinding included, which is the
+  run's only namespaced grant (D33), so a refresh of such an object fails with `403`. Before
+  planning, the run drops every Kubernetes object in the stage's state that lives in a namespace
+  from state, without deleting it, and a dry run lists them separately, as already gone with the
+  namespace. Cluster-scoped objects such as PVs, and everything outside Kubernetes (databases,
+  buckets, RBD images, the webhook), are destroyed for real. `tf-presync` gains no grant. Accepted
+  risk: a namespace that outlived its Application keeps those objects, its Secrets among them, as
+  leftovers.
+- *What an apply removes, and who.* The Job destroys from the saved plan, confirms that the state
+  lists no resources, and then removes `argocd/<repo>/<stage>/` from the state repo with the
+  hook's own git token (D41). Once the Job has succeeded, Jenkins commits `git rm -r
+  config/<stage>` to the deploy repo's `main` with the GitHub credential it writes version pins
+  with (D45).
+- *Re-runs are idempotent.* An already-empty state skips the destroy, and a state file or
+  `config/<stage>/` that is already gone is skipped. A run never creates a state file for a stage
+  that has none. A build that stopped halfway is finished by running it again.
+- *The webhook* (D39) goes with the stage whose state manages it (`manage_webhook`); destroying
+  any other stage of the repo leaves it.
+- *The identity* (Ruling D1). The build's cluster work runs as a ServiceAccount in `jenkins-prd`
+  dedicated to this pipeline, defined in JenkinsDeploy and named by `Jenkinsfile.destroy-stage`'s
+  pod spec; never as the shared agent identity `jenkins-prd/default`. ArgoCDDeploy binds it to two
+  Roles and nothing else: one in `argocd-hooks` for the Job's lifecycle (start it, follow its pod,
+  read its log and exit code, delete it), and one in `argocd-prd`, read-only on `argoproj.io`
+  Applications, for the guard. ArgoCDDeploy's render gate pins both.
+- *The overrule* (Ruling Q1). D1 gives Jenkins no cluster credential, and D33 and D41 bind the
+  hook's credentials to Argo's sync. The identity above starts a run with them from Jenkins, and
+  the operator accepted that narrowly: one dedicated identity, used only by this operator-started
+  pipeline. D1, D33 and D41 carry the exception.
 
 ## Terraform and the PreSync hook
 
@@ -425,6 +508,13 @@ The `iac` image stays untouched and gains no Argo-specific anything; nothing rid
 detail and lifecycle's "PreSync runs `deploy apply`" — HelmCharts' deploy CLI is not in the
 path. Image contents, tagging, its build pipeline and the Job template's home are design.md's to
 specify.
+
+> **Amended 2026-10-02 (D66, slice 037): the image runs a second job.** It carries the destroy
+> mode, a separate entry point that the Destroy Stage pipeline's one-off Job runs (D66), beside
+> the sync's unchanged one; "exactly what the job needs" reads as what the two jobs need. A
+> destroy run clones the deploy repo at the SHA the pipeline resolved rather than one Argo is
+> syncing, and, besides what the backend writes, removes the stage's state file from the state
+> repo.
 
 **D32 — State backend unchanged; migrated apps get a new state key, moved deliberately.**
 Decided (CR; amended 2026-08-12 — lifecycle's "the state key never changes" died with D14).
@@ -471,6 +561,15 @@ is never granted: Argo applies each app's chart-owned Namespace before it create
 (design.md), so no run creates one, and a grant would let any app's Terraform delete every other
 app's namespace. ArgoCDDeploy's render gate refuses a rule naming it, and refuses `secrets` in the
 cluster-wide role.
+
+> **Amended 2026-10-02 (operator, slice 037 Ruling Q1): the hook namespace also runs the Destroy
+> Stage Job.** Argo's sync is not the only thing that starts a Job here any more. The Destroy
+> Stage pipeline (D66) starts a one-off Job in this namespace under `tf-presync` and with
+> `argocd-hook-credentials`, from a ServiceAccount in `jenkins-prd` dedicated to it, whose Role
+> here covers that Job's lifecycle and nothing else. That Job's manifest is not app-authored: it
+> comes from ArgoCDTools' `Jenkinsfile.destroy-stage`. `tf-presync`'s RBAC is unchanged: a destroy
+> forgets the objects of a stage's pruned namespace rather than reaching into it (D66). The
+> exception is narrow: one dedicated identity, used only by that operator-started pipeline.
 
 ## Promotion and CI
 
@@ -596,6 +695,10 @@ repo-scoped and the states per-stage (D32).
 > creates the Application; that Application's first sync runs PreSync and creates the deploy
 > repo's hook as before. HelmCharts' manually created registry hook serves nothing after the
 > switch.
+
+> **Amended 2026-10-02 (D66, slice 037): destroy exists.** The webhook is removed when the
+> Destroy Stage pipeline destroys the stage whose state manages it (`manage_webhook`), like any
+> other resource in that state. Destroying another stage of the repo leaves it.
 
 **D49 — One public endpoint: GitHub delivers to a relay, and Argo CD stays off the internet.**
 Decided 2026-08-17 (operator, 009's planning session; consult and slice 015 — closes O3). Every
@@ -768,6 +871,16 @@ would bound a run by the KV prefix that role can read, which spans every app's h
 enumerated Secret is the tighter of the two, on D33's own terms. Accepted — and strictly smaller
 again than what the same access bought under the srviac design, where it was code execution on
 the estate's IaC control host.
+
+> **Amended 2026-10-02 (operator, slice 037 Ruling Q1): a second way in.** A deploy repo branch
+> is no longer the only path to what bounds a hook run. The Destroy Stage pipeline's
+> ServiceAccount in `jenkins-prd` (D66) creates Jobs in `argocd-hooks`, and a Job there can run
+> any image under `tf-presync` with `argocd-hook-credentials`: holding that identity is holding
+> everything above. The operator accepted it narrowly, as one dedicated identity used only by
+> that operator-started pipeline. Stated plainly, what keeps it to that pipeline is that nothing
+> else names it: Kubernetes lets any pod in `jenkins-prd` run as any ServiceAccount there, so
+> another Jenkinsfile's pod spec, or a Job the shared agent identity creates in `jenkins-prd`,
+> could run as it too.
 
 ## Migration and endgame
 
