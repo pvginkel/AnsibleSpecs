@@ -139,7 +139,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by the wrap-up (JenkinsPipelineUtils 07f1d70): podYaml refuses a null resources quantity and a runAsUser that is not a number when the agent is evaluated, each message naming the entry's image, as the env refusal does; vars/podYaml.md says so; two refusal cases added to PodYamlTest; kc project test --project root (41 tests, 0 failed) and --project docs green",
+        "by": "wrap-up",
+        "date": "2026-10-02",
+        "commit": "JenkinsPipelineUtils 07f1d70"
+      },
       "ruling": null
     },
     {
@@ -355,7 +360,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by the wrap-up (Architecture e990381): seed-architecture Step 6 now says to commit to pipeline-producers.yaml on pvginkel/Architecture's main, as the producer manual's Registration section does; kc project test --project root green",
+        "by": "wrap-up",
+        "date": "2026-10-02",
+        "commit": "Architecture e990381"
+      },
       "ruling": null
     },
     {
@@ -551,11 +561,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-02",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read what the test phase did under the ruling: the one-go push of every repo (JenkinsPipelineUtils first) and every build it started finished SUCCESS, the eight OTA uploads, the prd app rollouts through the pin writers and KubeCoder's dev rollout among them (verification.json V18 and V21 pass, test_phase_result r1 and r2). On 2026-10-02 after the run, all 52 Argo CD applications on prd read Synced and Healthy (kubectl --context prd get applications.argoproj.io -A). The ruling took effect and nothing went wrong under it: an event that describes no problem."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -572,11 +604,33 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-02",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read what the test phase did under the ruling: JenkinsPipelineUtils was pushed first, IaC/JenkinsPipelineUtils #6 (2026-10-02 11:52 CEST) built the pipelines.home site image and pinned it, SUCCESS, and the consumers built green on the new library (verification.json V18 pass). On 2026-10-02 after the run, the Argo CD application pipelines-prd reads Synced and Healthy. The ruling took effect and nothing went wrong under it: an event that describes no problem."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -593,11 +647,40 @@
       "evidence": "witnessed",
       "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-02",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read what the test phase did under the ruling: AaC/Architecture was paused before the push, re-enabled once the queue was quiet and built once by hand, #2407 SUCCESS (Ruling P2; verification.json V18 pass); its later builds, through #2416 at 15:27 CEST, are SUCCESS too. On 2026-10-02 after the run, the Argo CD application webathome-org-prd, which syncs the architecture_viewer pin, reads Synced and Healthy. The ruling took effect and nothing went wrong under it: an event that describes no problem."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        },
+        {
+          "by": "wrap-up",
+          "date": "2026-10-02",
+          "text": [
+            "Correction to the relabel note above: of AaC/Architecture's builds after #2407, #2408 and #2412–#2414 ended NOT_BUILT, each superseded by the next build (\"Superseded by #2415\" in #2414's log); #2409–#2411, #2415 and #2416 are SUCCESS, and none failed. The labels stand."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -638,7 +721,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by the test phase r2 under Ruling R2, as consult 4's note set out; no commit, the fix was the one hand build each from main. Read in the Jenkins API on 2026-10-02: each of the eight jobs' lastBuild is SUCCESS from 14:58–14:59 CEST (MyDownloads/MyDownloadsClient #72, MyDownloadsServer #36, ScanToPdf/ScanToPdfClient #54, ScanToPdfServer #24, AaC/MyDownloadsClient #14, AaC/MyDownloadsServer #5, AaC/ScanToPdfClient #11, AaC/ScanToPdfServer #16), and each recorded lastBuiltRevision refs/remotes/origin/main for its repo. A hook poll now compares against main, not the deleted master, so the next push to those repos starts them; verification.json V11 passes",
+        "by": "wrap-up",
+        "date": "2026-10-02",
+        "commit": null
+      },
       "ruling": null
     },
     {
@@ -725,7 +813,14 @@
         "repo": "YouTrackConfiguration"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-02",
+        "text": [
+          "The fix is a project name, and nothing I can reach gives XF's. The YouTrack REST API refuses the environment's YOUTRACK_MCP_TOKEN (401 Invalid token on /api/admin/projects), this session has no YouTrack MCP tool, and the apply log of YouTrack/YouTrackConfiguration #10 names XF only by key (Slices/XF, Triage/XF, 'XF: not configured yet'). A search of the pvginkel GitHub repos for XF- issue keys finds nothing. A guessed name would be a wrong comment, so youtrack.yaml:31 stays as it is. Somebody who can see YouTrack's project list can add the name in one edit. Nothing changes until then: the colour applies the same either way."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -798,11 +893,33 @@
       "evidence": "witnessed",
       "author": "the driver's phase gate, against `plan.md`'s `## Driver rulings`",
       "labels": {
-        "trigger": "unknown",
-        "impact": "unknown",
-        "signal": "unknown"
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-02",
+          "text": [
+            "relabelled (trigger: unknown → none, impact: unknown → none, signal: unknown → none): Read the substitute: ElectronicsInventory/ElectronicsInventory #263, the build of the P14 push (0eb150ab), finished SUCCESS. Its Test stage ran the library's validation Job (electronics-inventory-validation-263), 1393 passed and 0 failed per verification.json V02, then built the three images and wrote the pins to ElectronicsInventoryDeploy (132d857). On 2026-10-02 after the run, electronics-inventory-prd reads Synced and Healthy in Argo CD. So the repo's suite did run, in the Jenkins validation Job instead of the driver's kc project test, and passed. Why the driver's gate cannot run in this environment is E7's. An event that describes no problem."
+          ],
+          "relabel": {
+            "trigger": [
+              "unknown",
+              "none"
+            ],
+            "impact": [
+              "unknown",
+              "none"
+            ],
+            "signal": [
+              "unknown",
+              "none"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
