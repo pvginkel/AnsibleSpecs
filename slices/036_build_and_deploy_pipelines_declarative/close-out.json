@@ -500,7 +500,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 2 (KubeCoderConfig 9e26934, plugin 0.10.3): the jenkins-pipelines skill's POD-3 brief has an agent that inherits kaniko or jenkins-agent-large declare yamlMergeStrategy merge(); kc project lint re-run green",
+        "by": "consult 2",
+        "date": "2026-10-02",
+        "commit": null
+      },
       "ruling": null
     },
     {
