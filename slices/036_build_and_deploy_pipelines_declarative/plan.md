@@ -632,7 +632,7 @@ Record:
   Jenkinsfile parses" in DHCPApp's and FieldnotesApp's `project.yaml`. Three repos' docs still
   describe a Helm deploy: close-out entry P4.
 
-### P5 — The image builds and artifact builds are declarative files
+### P5 — The image builds and artifact builds are declarative files ✅ DONE 2026-10-02
 
 Target: root
 
