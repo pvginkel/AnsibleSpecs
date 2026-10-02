@@ -242,7 +242,7 @@ Record:
 - Gate: AnsibleSpecs has none. Checked by script that no decision id is duplicated, every cited
   `Dn` exists, and no added line runs past 100 columns.
 
-### P2 — A ServiceAccount in jenkins-prd for the Destroy Stage pipeline alone
+### P2 — A ServiceAccount in jenkins-prd for the Destroy Stage pipeline alone ✅ DONE 2026-10-02
 
 Target: github:pvginkel/JenkinsDeploy
 
