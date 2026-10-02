@@ -533,6 +533,93 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E2",
+      "kind": "event",
+      "grade": null,
+      "headline": "prd authorized by ruling: root",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- prd root — the one-go push of every repo the slice touches rolls prd apps through the pin writers, KubeCoder's dev, and re-flashes the firmware devices (Ruling P1)`"
+      ],
+      "consequence": "the test phase was told pushing and rolling prd for root is its own; what it did there is in its verdict and verification.json.",
+      "evidence": "witnessed",
+      "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "prd authorized by ruling: ../JenkinsPipelineUtils",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)`"
+      ],
+      "consequence": "the test phase was told pushing and rolling prd for ../JenkinsPipelineUtils is its own; what it did there is in its verdict and verification.json.",
+      "evidence": "witnessed",
+      "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E4",
+      "kind": "event",
+      "grade": null,
+      "headline": "prd authorized by ruling: ../Architecture",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- prd ../Architecture — its push pins `architecture_viewer` into WebathomeOrgDeploy, a prd roll (Ruling P1)`"
+      ],
+      "consequence": "the test phase was told pushing and rolling prd for ../Architecture is its own; what it did there is in its verdict and verification.json.",
+      "evidence": "witnessed",
+      "author": "the driver's test-phase dispatch, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": "major",
+      "headline": "Jenkins MyDownloads/*, ScanToPdf/* and AaC twins: no build started after the push to main on the renamed repos",
+      "body": [
+        "The four repos were renamed master→main and the eight jobs' branch spec changed to */main before the push. GitHub hook deliveries at 09:52:48–09:53:01 returned 200, and a redelivery at ~10:56 did too, but none of the eight jobs built (lastBuild predates the push). The jobs' BuildData only holds refs/remotes/origin/master, and /git/notifyCommit needs a token. Not hand-started: the plan allows one hand build. V11 not earned."
+      ],
+      "consequence": "Those eight jobs have never run their migrated file; the next push to those repos may be the first, and any fault in them shows then.",
+      "evidence": "witnessed",
+      "author": "test, r1, Jenkins API + GitHub deliveries",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

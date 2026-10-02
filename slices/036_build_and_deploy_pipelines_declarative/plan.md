@@ -1146,6 +1146,37 @@ Record:
 - The four P5 files keep their comment over `merge()`, which the reference files do not carry:
   close-out I1.
 
+### P13 — YouTrackConfiguration builds green: the projects AU, IS and XF get a colour
+
+Target: github:pvginkel/YouTrackConfiguration
+
+Added by the test phase (r1). YouTrack/YouTrackConfiguration #9, the one build the push started on
+P6's migrated file, failed in the apply: `error: No colour is configured for AU, IS, XF. Every
+project needs one under colors: in the configuration.` The file ran as migrated (checkout, lint,
+`withVault` around `uv run ytconfig apply`); the failure is the repo's `youtrack.yaml`, which has
+no entry for those three projects (earlier colour commits, e.g. `f436026`, added DHCPApp's the
+same way). V18 needs every build the push started SUCCESS.
+
+- `youtrack.yaml`'s `colors:` gains an entry for AU, IS and XF, in the file's existing form.
+- The repo's own lint/tests pass (`uv run ytconfig` validation as the Jenkinsfile's lint stage runs it).
+- The push of this commit starts YouTrack/YouTrackConfiguration; the test phase reads that build.
+
+### P14 — ElectronicsInventory's build passes its validation: the "Role gating — editor role" Playwright case
+
+Target: github:pvginkel/ElectronicsInventory
+
+Added by the test phase (r1). ElectronicsInventory/ElectronicsInventory #262, the build the push
+started on P4's migrated file, ran the library's validation step end to end (Job created, context
+copied, results collected, 1381 passed) and failed on one frontend case: `Role gating — editor
+role › editor sees all gated controls across domains FAILED  Test timeout of 30000ms exceeded.`
+The build stopped before the image builds and `Write image pins`, so the app was not rolled. V18
+needs every build the push started SUCCESS, and that includes the image build and pin write.
+
+- Find why that case times out in the validation Job (a wait that never resolves, a Job resource
+  limit, or the case itself) and fix it in the app's tests or code. Do not skip the case.
+- The suite passes locally/in the validation Job.
+- The push of this commit starts the job; the test phase reads that build to SUCCESS, with the three images built and the pins written.
+
 ## Not in scope
 
 - ModernAppTemplate itself (R2), and CanonApp (archived, no job).
