@@ -753,7 +753,15 @@
         "area": "plain",
         "repo": "AnsibleSpecs"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "executor, P14 fix round 1",
+          "date": "2026-10-02",
+          "text": [
+            "Witnessed again in fix round 1 (gate_r1.log): the backend suite exits on 'S3 storage is not reachable at http://localhost:9000', and the frontend suite's global setup fails loading the seed dataset on 'Could not connect to the endpoint URL: \"http://localhost:9000/electronics-inventory-part-attachments/...\"'. kc env describe lists no s3storage or postgres service in this environment. Round 1 handed back blocked; ElectronicsInventory 0eb150ab is unchanged."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
