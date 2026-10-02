@@ -89,6 +89,39 @@ the run then delivers a pipeline that was never executed.
 **If this is wrong.** A plan holds the dev state lock for a minute; nothing is destroyed.
 **Operator.** Yes, looks fine.
 
+## D4 — Who makes the pipeline's new grants live on prd before the run's dry runs
+
+**Context.** The plan stands at six phases: the new decision, a dedicated ServiceAccount in
+Jenkins' namespace, that account's grants in the hooks and Argo namespaces (in Argo CD's own
+deploy repo), the hook's destroy mode, the pipeline file with its Jenkins job, and the runbook
+section. In D3 you ruled that the run's test phase starts the two dry runs itself — fieldnotes dev,
+expecting the image and the volume in the plan, and fieldnotes prd, expecting the guard to refuse.
+Both need the grants live on prd: without them each build fails on its first cluster call with
+"forbidden" and proves nothing.
+**The ask.** Something has to sync the grants onto prd between the run's push and its dry runs;
+this decides whether that is the run or you.
+**Background.** The ServiceAccount half goes live on its own: Jenkins' deploy repo auto-syncs on
+push. The grants do not: Argo CD's own deploy repo is deployed by its self-managing Application,
+which a standing decision keeps on manual sync — a self-sync can restart Argo's controller or
+repo-server mid-sync, so it syncs at a moment you pick. That Application is Synced today at the
+repo's current head, so a sync after the slice's push would carry the slice's change and nothing
+else.
+**Why yours.** A sync of that Application is a write to production the standing decision reserves
+to you.
+**Recommendation.** The test phase syncs the self-managing Application itself, once, and only after
+a diff against the pushed revision shows nothing but the slice's Roles and RoleBindings; if anything
+else differs it does not sync and leaves the dry runs owed to you. The sync goes through the
+elevated prd-write credential, since the agent's own Argo account is read-only. Trade-off: an agent
+performs the sync the standing decision reserves to you — acceptable here because the change is
+additive namespaced RBAC that touches no controller, repo-server or CRD, so the restart hazard the
+reservation exists for cannot fire.
+**The other way.** The run pushes and stops at its test phase asking you to sync; you sync and
+resume, and the dry runs then run — it costs the unattended run a halt partway and a resume on
+your side.
+**If this is wrong.** An unexpected change rides the sync — the diff check is there to prevent it;
+worst case is a mis-scoped Role, which is revertible.
+**Operator.** Agree
+
 ## Open facts — questions only you can answer
 
 None.

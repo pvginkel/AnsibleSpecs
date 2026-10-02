@@ -54,6 +54,10 @@
   and the PV, and the dry run to list the state file and `config/dev/` it would delete — and once
   against FieldnotesDeploy `prd`, where the guard must fail it. It never starts `APPLY=true`; the
   real destroy of FieldnotesDeploy `dev` is the operator's close-out action.
+- Ruling D4 (2026-10-02, "Agree"): the test phase syncs `argocd-prd` itself, once, through the
+  elevated `~/.kube/config-prd-write`, and only when a diff of `argocd-prd`'s live state against
+  the pushed ArgoCDDeploy revision shows nothing but this slice's Roles and RoleBindings. If
+  anything else differs it does not sync, and the dry runs are left owed to the operator.
 
 #### Settled by the session (refinement.md § Settled; corrected by the operator on reading)
 
@@ -73,7 +77,8 @@
   `dev` does not), matching argo-cd D39.
 - The run creates the Jenkins job itself in the `IaC/` folder through the Jenkins API (the
   estate's only job-creation path); it starts no build except Ruling D3's dry runs.
-- Pushing ArgoCDDeploy and JenkinsDeploy rolls the additive grants to prd on their next sync.
+- Pushing JenkinsDeploy makes the ServiceAccount live (its `jenkins-prd` Application
+  auto-syncs); ArgoCDDeploy's grants go live only through a sync of `argocd-prd` — Ruling D4.
 - The new decision records the design, supersedes D28, and carries the narrow overrule of D1.
 - The pipeline follows the estate's Jenkins pipeline style guide (`kubecoder:jenkins-pipelines`
   skill; https://pipelines.home/docs/).
@@ -154,7 +159,7 @@ JenkinsDeploy, and it sets a new pattern (a Jenkins-started hook Job, overruling
   `IaC/ArgoCDTools` build of the pushed P4 that has moved `registry:5000/argocd-hook:latest`
   (`/work/ArgoCDTools/Jenkinsfile:32,71-72`). P3's grants need a sync of `argocd-prd`, which has
   no automated sync policy (ArgoCDDeploy `releases/values.yaml:30`, `autoSync: false`; live
-  `argocd-prd` has no `syncPolicy.automated`). Who syncs it is open: plan_questions_r1.md Q1.
+  `argocd-prd` has no `syncPolicy.automated`). The test phase syncs it per Ruling D4.
 
 ### P1 — The Destroy Stage design recorded as an argo-cd decision that supersedes D28
 
