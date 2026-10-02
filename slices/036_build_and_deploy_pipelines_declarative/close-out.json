@@ -117,6 +117,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils podYaml: a null resources quantity renders as the string \"null\", the case 033 B4 fixed for env",
+      "body": [
+        "imageContainer() turns each resources quantity into quantity.toString() (vars/podYaml.groovy, the resources block), so [limits: [cpu: null]] renders `\"cpu\": \"null\"`. Kubernetes refuses the quantity only when the pod is created, not when podYaml evaluates the agent. P1 refused a null env value (033 B4) and left resources alone as outside its text. No file in the estate passes a null quantity today. Likewise a runAsUser that is not a number fails with Long.parseLong's NumberFormatException, which names no entry."
+      ],
+      "consequence": "A Jenkinsfile that passes a null quantity fails at pod creation with Kubernetes' quantity error instead of podYaml's message naming the entry; nothing does so today.",
+      "evidence": "witnessed",
+      "author": "code-writer, P1, r1, vars/podYaml.groovy imageContainer()",
+      "labels": {
+        "trigger": "fault",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

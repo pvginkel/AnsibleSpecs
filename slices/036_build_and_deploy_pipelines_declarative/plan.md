@@ -365,6 +365,33 @@ toolchain runs as uid 1000 with `TF_PLUGIN_CACHE_DIR` set to the empty string
 - The library's tests cover the three templates and both refusals
   (`tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java`).
 
+**Done (P1).** podYaml has the `helm`, `iac-toolchain` and `python` templates, and refuses at
+agent evaluation a string `images:` entry, a map without `name:`, a name that is not an RFC 1123
+label, and a null `env` value. JenkinsPipelineUtils `15812f9` on `phase/036-P1`; `kc project test`
+green (PodYamlTest 39).
+
+Later phases:
+- Template names are dashed: `templates: ['helm']`, `['iac-toolchain']`, `['python']`, beside
+  `aac-tools`, `k8s`, `modern-app-toolchain`. `iac-toolchain` is uid 1000 with
+  `TF_PLUGIN_CACHE_DIR` empty, so a file sets neither.
+- podYaml enforces POD-4: every `images:` entry MUST be a map with `image` and `name` (the
+  container's name, an RFC 1123 label). There is no derived name any more. A string entry fails
+  the build, so P8's conversion of `KubeCoder/Jenkinsfile:28` is required, not cosmetic.
+- An `env` value that is `null` (an unset `env.X` in a map literal) fails the build.
+
+Record:
+- Refusal messages name the entry by its image: `podYaml: the images entry for '<image>' gives
+  its container no name` / `names its container '<n>', which is not an RFC 1123 label: …` / `sets
+  env <VAR> to null`; a string entry: `podYaml: an images entry is a map with image and name; got
+  '<entry>'`. The pattern is `[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?`.
+- `containerName()` is deleted. Estate check before deciding: every live `podYaml(` call is
+  templates-only or named maps, except KubeCoder's one string entry (P8).
+- Pages: `vars/podYaml.md` lists six templates, says why `iac-toolchain` sets the empty
+  `TF_PLUGIN_CACHE_DIR`, and requires `name:`; its `#container-names` anchor stays. POD-4's
+  **Why** (`docs/pages/guide/pod.md:46-48`) says podYaml refuses at evaluation, not at pod
+  creation. `vars/containerTemplates.md`'s `In podYaml` column names the three new templates.
+  The three type pages' python-sidecar bullet is deleted, not reworded.
+
 ### P2 — The firmware build and upload are library steps, and the guide's firmware pages are written on them
 
 Target: ../JenkinsPipelineUtils
@@ -608,7 +635,9 @@ Target: root
 - it gets a header, the timeout and `timestamps()`, and a `Checkout` stage;
 - its stage labels follow the LABEL rules;
 - its eight positional `helmCharts.kaniko(` calls become `kaniko2` (S2);
-- its string `images:` entry becomes a named map (`Jenkinsfile:28`, POD-4).
+- its string `images:` entry becomes a named map (`Jenkinsfile:28`, POD-4). Since P1, podYaml
+  refuses a string entry and a map without `name:`, so the file fails at agent evaluation
+  until this lands.
 
 The build keeps its gates, its eight images and its pins into KubeCoderDeploy. Its push rolls
 `kubecoder@dev` (S8).
@@ -698,7 +727,9 @@ Once the check holds:
 - **The pages follow.** These pages present the describables as the sidecars' source or
   document the overload:
   - POD-5 (`docs/pages/guide/pod.md:50-57`);
-  - podYaml's code comment (`vars/podYaml.groovy:65-67`) and page (`vars/podYaml.md:128`);
+  - podYaml's code comment (`vars/podYaml.groovy:64-70`) and page (`vars/podYaml.md:133`);
+  - `PodYamlTest`'s class comment, which names the describables as its reference
+    (`tests/src/test/java/org/webathome/jenkinspipelineutils/PodYamlTest.java:23-25`, `:97`);
   - `vars/containerTemplates.md`;
   - `vars/helmCharts.md:81-89`.
 - **The reference files match their jobs.** Where P4–P9's done-records name a difference
