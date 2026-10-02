@@ -1146,7 +1146,7 @@ Record:
 - The four P5 files keep their comment over `merge()`, which the reference files do not carry:
   close-out I1.
 
-### P13 — YouTrackConfiguration builds green: the projects AU, IS and XF get a colour
+### P13 — YouTrackConfiguration builds green: the projects AU, IS and XF get a colour ✅ DONE 2026-10-02
 
 Target: github:pvginkel/YouTrackConfiguration
 
