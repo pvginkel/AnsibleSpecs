@@ -895,7 +895,7 @@ Record:
   `pipeline-dependencies.md:18`, `test_contracts_drift_mirror.py`, `clidocs.go`. Informal "CI's Go
   stage" mentions stay, still true. The ingress comment's 660s is nginx.conf's 3900s.
 
-### P9 — Ansible's iac-controller files and its image build are to the guide
+### P9 — Ansible's iac-controller files and its image build are to the guide ✅ DONE 2026-10-02
 
 Target: root
 
