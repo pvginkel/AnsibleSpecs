@@ -48,3 +48,4 @@ before the test phase, and each commit is rebased onto its origin when it is.
 | YouTrackConfiguration | YouTrack/YouTrackConfiguration | `/work/scratch/YouTrackConfiguration` | `main` | `Jenkinsfile` | `c87845885342ddb757cee923233b6b12fe13e1fc` |
 | KubeCoderDeploy | KubeCoder/Promote-PRD | `/work/scratch/KubeCoderDeploy` | `main` | `Jenkinsfile.promote` | `c9dfe03d759d3425f5a7da41a2daca3dd3f515de` |
 | SSEGateway | SSEGateway/SSEGateway | `/work/scratch/SSEGateway` | `main` | `Jenkinsfile` | `a3aa6bc00e06155bf4eaf82b0bf1f60a3c9e736d` |
+| KubeCoder | KubeCoder/Build-Main | `/work/scratch/KubeCoder` | `main` | `Jenkinsfile` | `0b6ced99e3e1b92365447db175d332c8251708d5` |

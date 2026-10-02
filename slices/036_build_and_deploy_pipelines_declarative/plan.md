@@ -865,6 +865,36 @@ R17's P6 rides the same commit: `docs/operations/pipeline-dependencies.md:27` ci
 producer's `stage('Architecture')`, which slice 035 replaced with `Checkout` and
 `Validate architecture`. The line names what the producer runs now.
 
+**Done (P8).** `KubeCoder/Jenkinsfile` is an image build to the guide: header, `timeout` and
+`timestamps()`, `Checkout`, `helmCharts.kaniko2` for the eight images, and
+`[image: 'node:24-bookworm', name: 'node']`. Same commands, images and pins; it passes the
+controller's linter. `pipeline-dependencies.md:27` names `Validate architecture` (R17's P6). One
+commit in `/work/scratch/KubeCoder` on `main`, unpushed; one ledger row. `kc project test --project
+root` green (no Ansible commit).
+
+Later phases:
+- Test phase: Build-Main's stage view has 20 stages where it had 16 (below).
+  `vscode-desktop/test/publish.test.ts` now finds `stage('Build kubecoder-manual image')`; the suite
+  passes locally (484/484) on the new file, and the push's build runs it.
+- P11: KubeCoder calls no positional `kaniko` and no describable, and its docs name `kaniko2`.
+
+Record:
+- Stages, by GRAN-2/GRAN-3 and LABEL-1–4: `Checkout`, `Lint` (ruff, and the worker's `gofmt -l .`
+  and `go vet ./...`), `Test root`, `Validate contracts`, `Test vscode-extension`,
+  `Build extension.vsix`, `Test vscode-desktop`, `Build kubecoder-desktop.vsix`, `Build worker`,
+  `Test worker`, `Validate CLI reference`, eight `Build kubecoder-<image> image`, `Write image pins`.
+  The `Test <component>` names are `.kubecoder/project.yaml`'s components. The load-bearing order is
+  kept: the contracts stage's `npm ci` before both suites, each suite before its packaging, the
+  desktop packaging before the manual image, `Test worker` before `Validate CLI reference`.
+- `GOFLAGS=-buildvcs=false` is on every stage that runs go commands under it, as before.
+- `kaniko2` takes `dockerfile:` and `destinations:`; the tracking tag derives to `dev-latest`, as
+  the positional call's delegation did.
+- The commit renames the stage references in KubeCoder's docs, comments and that one test (the doc
+  phase does not see this repo): `ci-gates.md`, `uv-workspace.md`, `operator-manual.md`,
+  `manual/README.md`, `pyproject.toml`, `.kubecoder/project.yaml` (and its `helmCharts.kaniko(...)`),
+  `pipeline-dependencies.md:18`, `test_contracts_drift_mirror.py`, `clidocs.go`. Informal "CI's Go
+  stage" mentions stay, still true. The ingress comment's 660s is nginx.conf's 3900s.
+
 ### P9 — Ansible's iac-controller files and its image build are to the guide
 
 Target: root
