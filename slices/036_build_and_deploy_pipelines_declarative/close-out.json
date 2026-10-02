@@ -616,7 +616,15 @@
         "area": "plain",
         "repo": "Ansible"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "consult 3",
+          "date": "2026-10-02",
+          "text": [
+            "Cause witnessed, and the Consequence understates it: no future push starts these jobs either. Each job's GitHub Hook Log (`<job>/GitHubPollLog/`, read for MyDownloads/MyDownloadsClient, MyDownloads/MyDownloadsServer, ScanToPdf/ScanToPdfServer, AaC/ScanToPdfClient and AaC/MyDownloadsServer) shows the 10:57 redelivery's poll: `[poll] Last Built Revision: … (refs/remotes/origin/master)`, `git ls-remote -h` finds only `main` (MyDownloadsServer: main and three side branches), `No changes`. A Pipeline job polls with the SCMs its last successful build recorded, here the old file's `*/master` checkout, not the job's new `*/main` definition. `master` no longer exists on GitHub, so every hook poll finds nothing to build, whatever is pushed, until one build runs on `main` and records the new checkout. Each lastBuild is still the pre-rename build of 2026-10-01 ~13:17. The only starts that re-baseline them are by hand (Build Now, or `/git/notifyCommit` with `sha1=`), which the plan's Ordering constraints and V18 forbid beyond AaC/Architecture's one build."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -762,6 +770,52 @@
           ]
         }
       ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E8",
+      "kind": "event",
+      "grade": null,
+      "headline": "Gate waived by ruling: github:pvginkel/ElectronicsInventory — the push's ElectronicsInventory Jenkins build, SUCCESS through the image builds and pin write",
+      "body": [
+        "`plan.md`'s `## Driver rulings` section: `- gate github:pvginkel/ElectronicsInventory — the push's ElectronicsInventory Jenkins build, SUCCESS through the image builds and pin write — `kc project test` needs s3storage on localhost:9000, which this environment lacks (Ruling R1)`"
+      ],
+      "consequence": "the driver never verified github:pvginkel/ElectronicsInventory's tests in this run; the substitute's result is the only evidence.",
+      "evidence": "witnessed",
+      "author": "the driver's phase gate, against `plan.md`'s `## Driver rulings`",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E9",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (blocked) in P14",
+      "body": [
+        "The driver's bail (`blocked`), as it recorded it:",
+        "",
+        "> The gate can't pass in this environment, whatever the change: ElectronicsInventory's `kc project test` needs the s3storage service on localhost:9000 and the Ansible environment has none. The backend suite exits on 'S3 storage is not reachable at http://localhost:9000', the frontend global setup fails loading the seed dataset from the same endpoint, and `kc env describe` lists no s3storage or postgres service (close-out E7, noted this round). The fix (0eb150ab) is unchanged and passed in the development-namespace validation Job (backend 1137/0, frontend 256/0); to gate it, either the environme…",
+        "",
+        "Stopped 2026-10-02 13:39; resumed 2026-10-02 14:08."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
       "wrap_up": null,
       "strike": null,
       "ruling": null
