@@ -149,6 +149,13 @@ quotes of each; the core of each is carried here.
   ElectronicsInventory's Jenkins build that the push starts. The code reviewer reviews the fix, and
   the test phase must see that build finish SUCCESS, including the image builds and `Write image
   pins`, as V18 already requires.
+- **Ruling R2 (2026-10-02, completion consult bail on V11), operator: "Start all 8 once".** — to:
+  the eight renamed-repo jobs (`MyDownloads/*`, `ScanToPdf/*` and their `AaC/*` twins) never
+  built after the push. Their SCM polling still compares against the old `master` revision from
+  their last build, finds only `main`, and answers "No changes", so no push starts them. The
+  test phase starts each of the eight once by hand from `main`, after P13 and P14 are pushed, and
+  each build must finish SUCCESS. V11 and V18 are checked against those builds. Their builds roll
+  the MyDownloads/ScanToPdf apps to prd through the pin writers, as a push build would.
 
 #### Settled by the session (refinement.md § Settled)
 
@@ -335,8 +342,9 @@ library-step pattern (the five apps' validation Job) that the guide gains a type
   9. **The closing diff** (Ruling D2): every job's `config.xml` is re-dumped and diffed against
      the snapshot. What the UI still holds, per job, is recorded in the slice folder. No property
      is stripped through the API (S12).
-- **AaC/Architecture's build is the only one started by hand.** Otherwise the push starts what it
-  starts. IaC/Apply, KubeCoder/Promote-PRD and the scheduled jobs prove their files on their own
+- **Two sets of builds are started by hand** (Ruling R2): AaC/Architecture's, and one build each
+  of the eight renamed-repo jobs (`MyDownloads/*`, `ScanToPdf/*` and their `AaC/*` twins) on
+  `main`, once P13 and P14 are pushed. Otherwise the push starts what it starts. IaC/Apply, KubeCoder/Promote-PRD and the scheduled jobs prove their files on their own
   next run (the `owed_after` criteria). IaC/Apply is the operator's keystroke in any case
   (CLAUDE.md).
 
