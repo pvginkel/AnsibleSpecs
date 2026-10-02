@@ -183,7 +183,7 @@ JenkinsDeploy, and it sets a new pattern (a Jenkins-started hook Job, overruling
   phase's job (dev plugin `docs/run-loop.md:255-257`). So the build needs the pushed ArgoCDTools
   and the live ServiceAccount, and neither exists while P5 runs.
 
-### P1 — The Destroy Stage design recorded as an argo-cd decision that supersedes D28
+### P1 — The Destroy Stage design recorded as an argo-cd decision that supersedes D28 ✅ DONE 2026-10-02
 
 Target: ../AnsibleSpecs
 
