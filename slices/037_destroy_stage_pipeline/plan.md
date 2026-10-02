@@ -505,7 +505,7 @@ deploy repo sits outside the stage that pushes (CHK-2, CHK-3). `serviceAccount '
 a `kubernetes {}` field (`podYaml` takes none). `finally` deletes the Job, so an abort stops the
 run (close-out B2). Helpers exercised by hand under Groovy 2.4.21 only (close-out T3).
 
-### P6 — The argocd runbook: destroying a retired stage
+### P6 — The argocd runbook: destroying a retired stage ✅ DONE 2026-10-03
 
 Target: root
 
