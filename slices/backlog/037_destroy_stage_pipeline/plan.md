@@ -58,6 +58,21 @@
   elevated `~/.kube/config-prd-write`, and only when a diff of `argocd-prd`'s live state against
   the pushed ArgoCDDeploy revision shows nothing but this slice's Roles and RoleBindings. If
   anything else differs it does not sync, and the dry runs are left owed to the operator.
+- Ruling review r1 F1 (2026-10-02, "Agree"): before planning, the destroy mode drops the stage's
+  namespaced Kubernetes objects from state without deleting them (`terraform state rm`) — they
+  went with the namespace when the Application was pruned, and the Job's identity has no grant
+  left on them (the per-app `tf-presync-app` RoleBinding went with the namespace; a refresh would
+  `403`). The dry run lists them separately as forgotten, already gone with the namespace.
+  Everything else in state (databases, buckets, images, PVs) is still destroyed for real. No new
+  grant. Accepted risk: a namespace that outlived its Application keeps its Secrets as leftovers.
+- Ruling review r1 A1 (2026-10-02, "Agree"): the Jenkins job is created to the style guide —
+  `config.xml` holds only Job, SCM and Script Path; the parameters arrive through one
+  parameter-less registration build, which fails on the empty `REPO` before any cluster call and
+  changes nothing.
+- Ruling review r1 A2 (2026-10-02, "Agree"): the destroy mode does not require
+  `config/<stage>/`; it passes the stage's `*.tfvars` only when the folder exists, so a re-run
+  after the folder is gone (or a stage whose folder was removed by hand) still reaches the state
+  checks.
 
 #### Settled by the session (refinement.md § Settled; corrected by the operator on reading)
 
@@ -65,7 +80,8 @@
   contract (`python3 -m presync <repo> <revision> <stage> <namespace>`) and the Charts render
   gate that asserts it are untouched.
 - The empty configuration is the deploy repo's root provider and variable declarations only,
-  with the stage's `config/<stage>/*.tfvars` passed as a sync passes them; a repo where that does
+  with the stage's `config/<stage>/*.tfvars` passed when the folder exists (Ruling review r1 A2);
+  a repo where that does
   not init/plan fails the build loudly rather than guessing.
 - The pipeline runs the latest ArgoCDTools hook image build, not the Charts pin.
 - The state file is removed from TerraformState inside the Job with the hook's own
@@ -76,7 +92,8 @@
 - The repository webhook goes with whichever stage manages it (`manage_webhook`; FieldnotesDeploy
   `dev` does not), matching argo-cd D39.
 - The run creates the Jenkins job itself in the `IaC/` folder through the Jenkins API (the
-  estate's only job-creation path); it starts no build except Ruling D3's dry runs.
+  estate's only job-creation path); it starts no build except the registration build (Ruling
+  review r1 A1) and Ruling D3's dry runs.
 - Pushing JenkinsDeploy makes the ServiceAccount live (its `jenkins-prd` Application
   auto-syncs); ArgoCDDeploy's grants go live only through a sync of `argocd-prd` — Ruling D4.
 - The new decision records the design, supersedes D28, and carries the narrow overrule of D1.
