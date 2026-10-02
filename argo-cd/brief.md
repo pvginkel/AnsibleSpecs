@@ -28,8 +28,8 @@ convention against convenience, convention wins unless the deviation is made vis
 
 2. **The app's end-to-end lifecycle is managed from GitOps** — from the initial creation of its
    Terraform resources, through deploying and undeploying, eventually to destroying the
-   resources. Destroy is a named follow-up phase with no design yet; the invariant that holds
-   from day one is that **undeploy never destroys data**.
+   resources. Destroy is its own act, one operator-started build per retired stage (D66); the
+   invariant that holds from day one is that **undeploy never destroys data**.
 
 3. **We adopt GitOps in best-practice form, as best we can.** Where we deviate from standard
    industry practice, the deviation is made visible and decided — never slipped in. (Worked
@@ -44,7 +44,8 @@ convention against convenience, convention wins unless the deviation is made vis
 - One Argo CD instance, on the prd cluster. The `srvk8sdev` chart-debugging cluster is excluded
   (CR decision 9). Application *stages* are namespaces on the prd cluster — `kubecoder-dev`
   included — so "dev excluded" excludes a cluster, never a stage.
-- Jenkins reduces to CI: build, push, commit version pins. Argo owns CD.
+- Jenkins reduces to CI: build, push, commit version pins. Argo owns CD. The one exception is the
+  operator-started pipeline that destroys a retired stage (D66).
 - This project migrates one app end to end (KubeCoder) and produces the procedure for the rest.
   Whether the remaining apps then move gradually or in bulk is deliberately undecided.
 - Endgame: **HelmCharts is deleted** once the last app has migrated. What replaces its residual

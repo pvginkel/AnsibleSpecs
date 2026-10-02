@@ -341,6 +341,23 @@ of the build it copies, so it is in no series; cleanup keeps every one, and roll
 through every promotion while the copies accumulate. Reading what is deployed stayed out of scope:
 "If our continuous rebuilds work, there will always be a fresh image."
 
+## Destroy: a named follow-up → one operator-started Jenkins build (D28 → D66)
+
+D28 named destroy as the lifecycle's missing transition and gave it no design. So an undeploy left
+a stage's Terraform-made resources, its state and its `config/<stage>/` behind (D29), and nothing
+removed them. FieldnotesDeploy's retired `dev` stage made that concrete: its RBD image, its
+`Released` PV and its state outlived the prune. The operator wanted the fix as one action: "I want
+the dangling resource for this *Deploy repo permanently deleted, as one script. I would even accept
+something like a Jenkins pipeline taking a repo. You know? I'm thinking that actually has my
+preference." Slice 037 built that pipeline from rulings of 2026-10-02, and it moved D1. Jenkins,
+reduced to CI with no cluster credential, holds one again for this pipeline alone: a
+ServiceAccount of its own, never the agents' shared identity. The operator accepted that narrowly
+(Ruling Q1). Two narrower rulings shaped the rest. The guard dropped its namespace check (Ruling
+D2): a stage counts as undeployed when neither the registry nor a live Application deploys it. And
+a destroy forgets the objects of a pruned namespace rather than granting the hook a way back into
+it (review r1 F1), accepting that a namespace which outlived its Application keeps its Secrets.
+Removing a whole deploy repo stays outside the design.
+
 ## The restructure itself
 
 `plan.md` grew as one document interleaving decision, rationale and phase work per topic; when

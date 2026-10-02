@@ -127,8 +127,8 @@ Terraform precondition, so the sync failure and the hook failure are provoked in
 rather than improvised at drill time. "Delete both afterwards" is three things, not two: the
 registry entry, the GitHub repository, **and** the repo's line in `/work/Ansible`'s
 `.kubecoder/config.yaml`, since a clone that no longer resolves breaks the environment. The
-Terraform state the drill writes under `argocd/ProofDeploy/prd/` survives all three — nothing
-prunes state for an unregistered app until D28 is designed.
+Terraform state the drill writes under `argocd/ProofDeploy/prd/` survives all three: Destroy
+Stage (D66) removes a stage's state only while its deploy repo still exists.
 
 - [x] A registry push visibly regenerates (applicationset-controller receiver); a deploy-repo
       push visibly refreshes (argocd-server receiver).
@@ -336,9 +336,11 @@ stay operator keystrokes), cutover runbook. The wrinkles B hits become its check
 
 ## Named follow-ups (not designed here)
 
-- **Destroy** (D28): the lifecycle's missing transition — `terraform destroy` from
-  *undeployed*, webhook removal, unregistration. No design exists; leaving *undeployed* stays a
-  human decision until this phase is designed and built. Interlocks: Trello **#66**.
+- **Destroy** (D66) — done: the lifecycle's last transition, from *undeployed* to *destroyed*,
+  is one operator-started build of `IaC/Destroy Stage`, built by slice 037. It destroys a retired
+  stage's Terraform resources, the webhook among them where that stage manages it, its state and
+  its `config/<stage>/`. Removing a whole deploy repo, its GitHub repository and Jenkins jobs, is
+  not designed here.
 - **Remaining apps** (O1): decided bulk, without the plugin first (D51); the run is [`bulk-migration.md`](bulk-migration.md). The post-render
   charts (`grafana`, `prometheus`, `external-secrets`) migrate late regardless (D18).
 - **`recommend-resources` reworked to span deploy repos** (D65; from slice 008's close-out, B5) —

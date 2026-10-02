@@ -31,7 +31,7 @@ stages migrate — "dev excluded" excludes the `srvk8sdev` cluster, never a stag
 | --- | --- |
 | `<App>Deploy` (per app) | The app's complete deployment: chart, Terraform, stage config (D11) |
 | `ArgoCDDeploy` | Argo CD's own deploy repo — Argo manages itself (D3) — and the registry (D63) |
-| `ArgoCDTools` | The presync scripts and the dedicated hook image built from them (D15, D31); also `aac-tools` |
+| `ArgoCDTools` | The presync scripts and the dedicated hook image built from them (D15, D31), and the Destroy Stage pipeline that runs the image's destroy mode (D66); also `aac-tools` |
 | `Charts` | Source of the library chart; publishes the static chart repo `https://charts.home` (D17) |
 | `HelmCharts` | Migration era only: the three parked apps (D60), and the live registry until the switch (D64); archived afterwards (D43) |
 
@@ -112,10 +112,14 @@ dedicated hook image: Terraform, terraform-backend-git, git, the scripts and the
 they run under, plus what Terraform cannot resolve or execute the estate's own provider without —
 `librados2`/`librbd1` for the cgo `pvginkel/homelab` binary, the CLI config routing that provider
 to the private mirror, and the step-ca root the mirror's chain needs; nothing general-purpose
-(D31). CI publishes `registry:5000/argocd-hook:<n>` from a kaniko stage of its own. The
-**default tag pin lives in the library chart** — one bump point for the whole estate — with the
+(D31). CI publishes `registry:5000/argocd-hook:<n>` and `:latest` from a kaniko stage of its own.
+The **default tag pin lives in the library chart** — one bump point for the whole estate — with the
 option to override per app while debugging. A tools release therefore reaches each app as it next
 re-renders, which is the GitOps-consistent behaviour.
+
+The image has a second entry point, `python3 -m presync.destroy`, the destroy mode the Destroy
+Stage pipeline runs (Lifecycle, below). That pipeline takes `:latest`, not the library chart's pin,
+and the sync's entry point and four-argument contract are untouched by it.
 
 The repo's other folder builds `aac-tools`, the architecture-as-code commands a deploy repo's
 checkout runs. It is not Argo CD's and nothing in this design depends on it; what it does for the
@@ -489,6 +493,7 @@ include the template: no hook, no cost.
 | Secret `argocd-hook-credentials` | Everything a run's environment carries beyond its own Job arguments: what ESO fetches from enumerated leaves, plus the non-secret per-cluster provider configuration as `template` literals |
 | Git token | A classic PAT with `repo` on every private repository the operator owns — read-write on the state repo and the deploy repos alike. Not the per-repo scoping D41 first specified: fine-grained tokens do not cross resource owners and the estate's repos do not sit under one. It is the dominant term in a hook run's blast radius (D41), and D39's webhook creation rides the same scope |
 | State encryption key | terraform-backend-git's age keypair — `iac`'s own, read from the one leaf holding it, because both sides write the same state repo (D32) |
+| Role and RoleBinding `destroy-stage` | The Destroy Stage pipeline's Job lifecycle (D66): `jobs` get, create and delete, `pods` get and list, `pods/log` get; no patch, exec or watch. Bound to `jenkins-prd/destroy-stage` alone, because creating a Job here is running as `tf-presync` with `argocd-hook-credentials` (D41 as amended). That identity's only other grant is a read of the Applications in `argocd-prd`, for the pipeline's guard |
 | ServiceAccount `tf-presync` | The whole lifecycle on the two core kinds a deploy repo's Terraform reaches through the kubernetes provider — `persistentvolumes` and `secrets` — and no wildcard; never `namespaces`, which each app's chart creates before the hook runs. Split by where each grant reaches (D33): `persistentvolumes`, cluster-scoped, by a **ClusterRoleBinding** to ClusterRole `tf-presync`; `secrets` by ClusterRole `tf-presync-app`, which ArgoCDDeploy defines and binds nowhere, while `homelab-shared`'s hook include binds it in the app's own `<app>-<stage>` namespace with a **RoleBinding** that is itself a PreSync hook one wave ahead of the Job, so it exists on a first sync. It is also the identity the entrypoint builds the kubeconfig from, so a run has one identity and not two |
 
 The hook itself holds no OpenBao credential and never authenticates to OpenBao. ESO resolves the
@@ -512,7 +517,7 @@ Per-app scope throughout (decisions.md scope note); this is what **KubeCoder** d
   the tags per stage values file `{values file → {YAML path → tag}}`, and makes one
   JenkinsPipelineUtils call (D45): clone KubeCoderDeploy, write `config/dev/values.yaml` at
   `dev-<n>` and `config/prd/values.yaml` at `prd-<n>` in one commit, push `main` (D47). The webhook fires; the dev stage syncs.
-  `cicd.helmDeploy()` is gone from the job; Jenkins holds no cluster credential (D1).
+  `cicd.helmDeploy()` is gone from the job, which holds no cluster credential (D1).
 - **Promotion** advances `prd` to a validated `main` commit (D35) — a fast-forward by
   construction, since `prd` never carries a commit `main` doesn't. KubeCoderDeploy's promote job
   (`Jenkinsfile.promote`, run by hand) performs it, each step only once the one before it
@@ -536,15 +541,27 @@ All states are git states (D27 as amended, from the registry switch, D64):
 | --- | --- | --- |
 | **Deployed** | the stage is in the registry | Application rendered; PreSync applies Terraform; chart syncs |
 | **Undeployed** | the stage's entry deleted, then pruned from `releases` by the operator | Application deleted → cascade: namespace and all tracked resources go; Terraform-made resources survive (D29) |
-| *Destroyed* | *not implemented* | *The named follow-up phase (D28); leaving* undeployed *stays a human decision until it exists* |
+| **Destroyed** | the stage's state file and `config/<stage>/` removed, by one `IaC/Destroy Stage` build the operator starts with `APPLY=true` once the stage is undeployed | The stage's Terraform-made resources destroyed (D66) |
 
 Between the registry commit and the prune the Application shows as requiring pruning and keeps
-running. The registry keeps no undeployed stage on record; its Terraform state and deploy repo
-remain. Until the switch, HelmCharts' `deployed` flag expresses the states, as D27 first had
-them.
+running. The registry keeps no undeployed stage on record; its Terraform state and its
+`config/<stage>/` remain until the stage is destroyed. Until the switch, HelmCharts' `deployed`
+flag expresses the states, as D27 first had them.
 
 Undeploy never destroys data — hooks fire on sync, not delete, and the ZFS datasets carry
 `prevent_destroy` besides (D29).
+
+Destroy is a separate act, started by hand (D66): the Jenkins job
+`IaC/Destroy Stage`, ArgoCDTools' `Jenkinsfile.destroy-stage`, with the parameters `REPO`, `STAGE`
+and `APPLY`. `APPLY` is false by default, and that build is a dry run that writes nothing. The
+build refuses a stage the registry or a live Application still deploys, then runs the hook image's
+destroy mode as a one-off Job in `argocd-hooks` under `tf-presync`. The Job plans against the
+deploy repo's root reduced to its `terraform`, `provider` and `variable` blocks, so every resource
+in the state is an orphan and `prevent_destroy` binds nothing. The stage's namespaced Kubernetes
+objects went with its namespace, and the Job drops them from the state rather than destroying
+them. The build's own cluster calls run as `jenkins-prd/destroy-stage`, a ServiceAccount dedicated
+to this pipeline (D1 and D41 as amended). The operator's procedure is
+`/work/Ansible/docs/runbooks/argocd.md`'s "Destroying a retired stage".
 
 ## Coexisting with Jenkins during the migration
 

@@ -534,6 +534,54 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P8",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "ArgoCDTools README: § Not wired yet says the hook runs nowhere yet and authenticates with a fine-grained PAT",
+      "body": [
+        "The README's last section, Not wired yet, predates the migration's Phase B and is stale throughout, not from this slice: it says the standup that runs the hook is not shipped and that no app syncs through the hook yet, while every migrated app's sync runs it (Ansible docs/runbooks/argocd.md). It says the run's GitHub PAT is fine-grained, while argo-cd design.md's credentials inventory records a classic PAT with repo on every private repository. Its first bullet, that AaC/ArgoCDDeploy and AaC/KubeCoderDeploy are the operator's to create, the doc phase did not check against Jenkins. The doc phase reconciled the README with the destroy mode and left this section as it found it."
+      ],
+      "consequence": "A reader of the ArgoCDTools README is told the hook runs no app yet and is credentialed with a fine-grained PAT, while every migrated app syncs through it on a classic PAT.",
+      "proposal": "fix now: delete § Not wired yet, keeping only a bullet that a check against Jenkins shows still true.",
+      "evidence": "witnessed",
+      "author": "doc-writer, doc phase, ArgoCDTools README.md § Not wired yet",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P9",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils style guide: the pipeline types page places IaC/Destroy Stage under no type and not among the jobs without a reference file",
+      "body": [
+        "docs/pages/types/index.md opens with: Every Jenkins job in the estate but those at the end of this page is of one of these types. IaC/Destroy Stage (ArgoCDTools Jenkinsfile.destroy-stage) is none of the listed types: it is started by hand, guards, runs the argocd-hook image as a Kubernetes Job in another namespace and pushes a commit. It is not under Jobs without a reference file either. JenkinsPipelineUtils is not a repo this slice touched, so the doc phase made no commit there. P4 is the same job missing from PROP-3's table on another page of the same guide."
+      ],
+      "consequence": "A reader of the pipeline style guide finds no type for IaC/Destroy Stage, though the page says it covers every job in the estate.",
+      "proposal": "fix now: list IaC/Destroy Stage under Jobs without a reference file, in the same commit as P4's PROP-3 row.",
+      "evidence": "witnessed",
+      "author": "doc-writer, doc phase, JenkinsPipelineUtils docs/pages/types/index.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

@@ -4,9 +4,27 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: <not yet stamped>
+Run: 2026-10-02 22:57 → 2026-10-03 00:56 · 6 phases · 0 bail-outs · 1 test round · doc phase at
+stage writer · run docs
 
 ## Comes to you
+
+### B1 — JenkinsDeploy: the controller's jenkins-admin ClusterRole grants every verb on every core resource cluster-wide, Secrets included · major
+
+**Proposal:** card — scope the controller's role to what the Kubernetes plugin needs; a security
+change that needs its own proof across every pipeline, not this slice's.
+
+**Consequence:** Code execution in the Jenkins controller (an admin's script console, a compromised plugin) reads every Secret in the cluster, the hook's credentials among them, while the argo-cd register states that Jenkins holds no cluster credential.
+
+**Route:** to you — a risk: severe, in place of a close
+**Disposition:**
+
+### T3 — ArgoCDTools Jenkinsfile.destroy-stage: no committed test pins the guard's registry and Application matching or its REPO spelling refusal · minor
+
+**Consequence:** An edit that breaks the guard's matching, say for multi-source Applications, passes every gate, and a Destroy Stage build then destroys a stage that is still deployed.
+
+**Route:** to you — a risk: severe, in place of a close
+**Disposition:**
 
 ### A1 — Settle V10 after the operator's APPLY=true build of IaC/Destroy Stage against …
 
@@ -15,6 +33,46 @@ Run: <not yet stamped>
 **Consequence:** V10 stays unproven until then; the test phase does not settle it.
 
 **Route:** to you — an action
+**Disposition:**
+
+### D1 — Keep the Destroy Stage ServiceAccount's exclusivity a convention, or enforce it?
+
+**Proposal:** keep — every Jenkinsfile that could name it lives in the operator's own repos, and
+the controller's jenkins-admin ClusterRole already reaches further; revisit with that defect's
+card.
+
+**Consequence:** Write access to any Jenkinsfile in the estate reaches the hook's whole credential set through that ServiceAccount, which Ruling D1 meant to keep to one pipeline.
+
+**Route:** to you — a decision
+**Disposition:**
+
+### I2 — Give KubeCoderDeploy's root variables defaults, so IaC/Destroy Stage can destroy its stages?
+
+**Proposal:** card — take it when a KubeCoderDeploy stage is retired; defaults on its root
+variables are the smaller change and leave the run's contract alone.
+
+**Consequence:** A Destroy Stage build against a KubeCoderDeploy stage fails at the plan and destroys nothing, until KubeCoderDeploy's declarations or the run change.
+
+**Route:** to you — an improvement
+**Disposition:**
+
+### I4 — Make IaC/Destroy Stage read and clean the branch a stage tracked, not main only?
+
+**Proposal:** close — or fold into I2's card when a KubeCoderDeploy stage is retired; reading
+the stage's targetRevision from the registry is the change.
+
+**Consequence:** None today: KubeCoderDeploy prd is the only stage that tracks another branch, and its destroy fails at the plan (I2). Once it can run, its config/prd/ stays on the prd branch after the destroy, until the next promotion.
+
+**Route:** to you — an improvement
+**Disposition:**
+
+## Card requests
+
+### P4 — JenkinsPipelineUtils style guide: PROP-3's table of plain disableConcurrentBuilds() jobs omits IaC/Destroy Stage · nit
+
+**Consequence:** A reader or checker of the style guide is told IaC/Destroy Stage aborts a running build on a new one, which it does not.
+
+**Route:** card request — the fix lives in JenkinsPipelineUtils, which the slice did not touch
 **Disposition:**
 
 ## For the wrap-up
@@ -28,3 +86,75 @@ with the other two images'.
 
 **Route:** the wrap-up — fix
 **Disposition:**
+
+### P3 — ArgoCDTools argocd-hook destroy: every init or plan failure is reported as 'the empty configuration … does not init/plan' · minor
+
+**Proposal:** fix now — word the last line after the step that failed, not the configuration,
+before P6 writes it into the runbook; one message in destroy.py.
+
+**Consequence:** An operator whose Destroy Stage build fails on an infrastructure error is told the deploy repo's declarations do not plan alone, and a runbook written from the done-record sends them to the wrong place first.
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### P5 — Ansible argocd runbook: § The webhook restores the surviving stage's hook by a push to the branch it tracks, which for KubeCoderDeploy prd breaks promotion · minor
+
+**Proposal:** fix now — say the edit lands on main and reaches a stage that tracks another
+branch through its promotion (D35); one sentence in the runbook.
+
+**Consequence:** Once KubeCoderDeploy's stages can be destroyed (I2), an operator who restores prd's webhook as the runbook says commits straight to the prd branch, and KubeCoder's promote job then refuses every promotion until prd is reconciled by hand.
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### P6 — Ansible argocd runbook: § A build that fails at the plan says nothing is written, but an apply has already state-rm'd the namespaced objects · minor
+
+**Consequence:** An operator whose APPLY=true build fails at the plan reads that nothing was written, while the stage's namespaced objects are already gone from its stored state; the re-run that follows is unaffected.
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### P7 — Ansible argocd runbook: the undeploy paragraph's 'what stays' no longer names a hand-made webhook · nit
+
+**Consequence:** An operator who unregisters an app whose webhook was made by hand is not told the hook stays on the deploy repo, where it keeps sending pushes to the relay for a repo nothing deploys.
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+## Closed
+
+### B2 — ArgoCDTools argocd-hook: a terminated hook Job kills Terraform with SIGKILL, since python3 is PID 1 and handles no SIGTERM · minor
+
+**Route:** closed — it needs a fault
+**Disposition:**
+
+### B3 — ArgoCDTools Jenkinsfile.destroy-stage: a destroy Job that overruns its deadline or never starts fails the build with no Job log and no reason · minor
+
+**Route:** closed — it needs a fault
+**Disposition:**
+
+### T1 — JenkinsDeploy: no gate pins that jenkins-prd/destroy-stage holds no grant in jenkins-prd · minor
+
+**Route:** closed — it cannot show with the code as it is
+**Disposition:**
+
+### T2 — argocd-hook destroy: the kubernetes_manifest namespace read is pinned only against a hand-written state · minor
+
+**Route:** closed — it cannot show with the code as it is
+**Disposition:**
+
+### I1 — Tell the operator, before a Destroy Stage build, that it deletes a repo's webhook which another deployed stage still relies on
+
+**Route:** closed — it adds something for a benefit that is not felt in use
+**Disposition:**
+
+### I3 — Make IaC/Destroy Stage reach a stage whose state folder is spelled as its registry entry spelled the repo, not as GitHub does?
+
+**Route:** closed — it adds something for a benefit that is not felt in use
+**Disposition:**
+
+## Record
+
+### E1 — The driver left a scratch clone at /work/scratch/JenkinsDeploy (`Target: github:pvginkel/JenkinsDeploy`)
+
+### ~~P2 — ArgoCDDeploy render gate: check_hook_namespace's docstring says argocd-hooks holds only the hook's credentials and identity · nit~~ — resolved by consult 1 (ArgoCDDeploy b8d1a0c): check_hook_namespace's docstring now names the Destroy Stage grant (D66); kc project test re-run green; struck by consult 1
