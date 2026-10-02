@@ -75,7 +75,8 @@ quotes of each; the core of each is carried here.
   whole thing, and when everything's quiet (i.e. the Jenkins build queue goes empty), check the
   results." Quiet is an empty queue **and** no running builds; the check is one Jenkins API pull
   of every job's `lastBuild` against the push time. On verification: "it's not necessary to do
-  the replay like this. Pushing a new version, and checking the result is fine."
+  the replay like this. Pushing a new version, and checking the result is fine." And: "Each push
+  still needs the operator's OK." (Given for this slice's one push by Ruling P1.)
 
 #### Rulings
 
@@ -104,6 +105,44 @@ quotes of each; the core of each is carried here.
   the four `master` → `main` default-branch renames on GitHub and the eight jobs' branch specs,
   before the one-go push; the four IoTSupport `KEYCLOAK_*` global variables deleted after
   IoTSupport's build is green. No per-write confirmation.
+- **Ruling P1 (2026-10-01, plan review r1 Q1), operator: "Agree".** — to: **starting
+  `/dev:run-slice` on 036 is the operator's OK for the one push.** The run edits everything, then
+  its test phase pushes JenkinsPipelineUtils first and every repo the slice touched in one go
+  (rebased onto origin), and does not stop to ask mid-way. This authorises the run to push every
+  repo the slice touches, including repos that are not a phase's `Target:`, and to roll prd
+  through those pushes: about 21 prd app rollouts through the pin writers, KubeCoder's dev
+  rollout, the eight firmware OTA re-flashes, and pipelines.home through JenkinsPipelineUtils.
+- **Ruling P2 (2026-10-01, plan review r1 B1), operator: "Agree".** — to: **pause
+  `AaC/Architecture` for the push, as slice 035 did.** The run disables it before the first push
+  (JenkinsPipelineUtils' included), re-enables it once the queue is quiet, and builds it once by
+  hand — the one hand-started build this slice allows. Disabling, re-enabling and that build are
+  Jenkins writes under Ruling D3's authority. Ground: the collector is downstream of every
+  `AaC/*` producer with `abortPrevious: true`, and until Architecture's own push lands its live
+  file calls `containerTemplates.k8s`/`python` and the positional `helmCharts.kaniko`, which
+  P11's library no longer has.
+- **Ruling P3 (2026-10-01, plan review r1 Q2), operator: "Agree".** — to: **SEC-1 gains one narrow
+  exception in the guide**: a test that itself needs a secret may run with `withVault` around only
+  the step that runs that test. IoTSupport's validation suite needs the Keycloak admin client
+  (`KEYCLOAK_ADMIN_CLIENT_ID`/`_SECRET`, handed to its validation Job); the operator rejected J27
+  (moving that secret out of the Job manifest), so the secret stays in the Job, and the
+  validation-Job step's call in IoTSupport's Test stage is the one place the exception applies.
+  The guide's secrets page states the exception; no other SEC rule changes.
+- **Ruling P4 (2026-10-01, plan review r1 Q3), operator: "Agree".** — to: **accept that the
+  firmware files are not "a few lines"**: each keeps the guide's header, `pipeline {}`, agent,
+  options, triggers, checkout and stages, on the library's build and upload steps, near the
+  firmware reference file's length (as 035's producers were). V01 reads "on the library steps, to
+  the guide's firmware reference", not "a few lines". V04's claim becomes "green, so the upload
+  to IoTSupport succeeded", not that the devices flashed.
+- **Ruling P5 (2026-10-01, plan review r1 A1–A3), operator: "Agree".** — to: (A1) P11's
+  precondition reads the slice's local commits (the ledger and the run's own targets) for every
+  file the slice migrates, and origin only for files outside the slice; a caller found outside
+  the slice's files stops P11 and is reported, not worked around. (A2) The KubeCoder push rolls
+  `kubecoder@dev` outside KubeCoder's own devlock, which this run cannot take; the risk is
+  accepted, and the operator does not run a KubeCoder slice's test phase alongside 036's push.
+  (A3) A consumer phase that edits a repo also fixes that repo's living docs naming what P11
+  removes — `NewsFilter/README.md:116` and `DHCPApp/docs/slice-test-plan.md:15`
+  (`helmCharts.kaniko(...)`) — in the same commit; `Home/docs/plan.md` is a plan record and is
+  left as written.
 
 #### Settled by the session (refinement.md § Settled)
 
@@ -280,6 +319,12 @@ library-step pattern (the five apps' validation Job) that the guide gains a type
 - **No job is started by hand to prove a file.** The push starts what it starts. IaC/Apply,
   KubeCoder/Promote-PRD and the scheduled jobs prove their files on their own next run (the
   `owed_after` criteria). IaC/Apply is the operator's keystroke in any case (CLAUDE.md).
+
+## Driver rulings
+
+- prd root — the one-go push of every repo the slice touches rolls prd apps through the pin writers, KubeCoder's dev, and re-flashes the firmware devices (Ruling P1)
+- prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)
+- prd ../Architecture — its push pins `architecture_viewer` into WebathomeOrgDeploy, a prd roll (Ruling P1)
 
 ### P1 — podYaml has the python, helm and iac-toolchain sidecars, and refuses a null env value and a container name Kubernetes would refuse
 
