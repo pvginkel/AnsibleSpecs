@@ -9,17 +9,6 @@ test rounds · doc phase done · wrap-up landed · $102.40 (planner 18 %, resear
 
 ## Comes to you
 
-### A1 — Close ARCH-17 once slice 036 ships: its P7 brings Architecture's producer manual, USAGE.md and the seed-architecture skill to the guide's producer form
-
-ARCH-17 was filed as a card at slice 035's close-out (its P2) because no phase of 035 targeted Architecture: the producer manual's § Jenkins integration (.claude/architecture/producer-manual.md:689-752) shows a scripted podTemplate producer calling containerTemplates.aac_tools (:697-698), and :659-660, USAGE.md:139 and .claude/skills/seed-architecture/SKILL.md:150 send a producer to that describable. Slice 036's P11 removes containerTemplates.aac_tools, and Ruling P5 (A3) has a phase that edits a repo also fix that repo's living docs naming what P11 removes. P7 edits Architecture, so P7 now makes those passages describe a producer's file as its architecture type's reference file on architectureProducer's steps. That is the whole of ARCH-17's change; the card itself is not touched by the run.
-
-**Consequence:** ARCH-17 stays open for a change that has shipped, and whoever picks it up redoes or re-checks work already done.
-
-**Triage:** action · shows in normal use · degrades · silent · fix is one edit · in Architecture
-**Provenance:** read — plan-writer r2, planning; plan.md P7 and Ruling P5, slices/completed/035_architecture_producers_declarative/close-out.md P2
-**Route:** to you — an action
-**Disposition:**
-
 ### A2 — Settle V23 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …
 
 V23 — KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.
@@ -31,7 +20,7 @@ V23 — KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as mig
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:**
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results.
 
 ### A3 — Settle V24 after the operator's next IaC/Apply run
 
@@ -44,7 +33,7 @@ V24 — IaC/Apply runs the migrated `Ansible/Jenkinsfile.iac-apply` green. The j
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:**
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results.
 
 ### A4 — Settle V25 after each job's next scheduled run
 
@@ -57,102 +46,7 @@ V25 — IaC/Scheduled Calico Rollout, IaC/Scheduled Certs, IaC/Scheduled Drift, 
 **Triage:** action · trigger unknown · impact unknown · signal unknown
 **Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
 **Route:** to you — an action
-**Disposition:**
-
-### A5 — Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done
-
-The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.
-
-Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
-
-**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
-
-**Triage:** action · nothing that could show · no impact
-**Provenance:** witnessed — the driver's target resolution
-**Route:** to you — an action
-**Disposition:**
-
-### A6 — Delete the scratch clone /work/scratch/YouTrackConfiguration once the slice is done
-
-The driver cloned (or adopted) `/work/scratch/YouTrackConfiguration` for `Target: github:pvginkel/YouTrackConfiguration`; the slice's phases for that repo are branched, merged and pushed there.
-
-Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
-
-**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
-
-**Triage:** action · nothing that could show · no impact
-**Provenance:** witnessed — the driver's target resolution
-**Route:** to you — an action
-**Disposition:**
-
-### A7 — Delete the scratch clone /work/scratch/ElectronicsInventory once the slice is done
-
-The driver cloned (or adopted) `/work/scratch/ElectronicsInventory` for `Target: github:pvginkel/ElectronicsInventory`; the slice's phases for that repo are branched, merged and pushed there.
-
-Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
-
-**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
-
-**Triage:** action · nothing that could show · no impact
-**Provenance:** witnessed — the driver's target resolution
-**Route:** to you — an action
-**Disposition:**
-
-## Card requests
-
-### P1 — AnsibleSpecs reviews/2026-09-jenkinsfile-review: inventory.md, report.md and plan.md will still describe the build and deploy pipelines as before slice 036; no requirement of 036 updates them · minor
-
-Slice 035 brought the review's three records up to date in a phase of its own (its P5, on its Settled S5): inventory.md's 'Migrated' notes, report.md's dated status notes under J01, J16, J24 and Q9, plan.md's 'Where things stand'. Slice 036's requirements (slice.md 1-18) and rulings ask for no such update, so its plan has no phase for it. After 036 ships, inventory.md still says T3-T13 and the five apps' build files are as on 2026-09-30 (its top note says the second slice takes them), report.md still shows J14, J17, J21, J11, J12, J02, J26, Q2, Q6 and section 2/9 without a closing status, and plan.md's 'Where things stand' ends at slice 035. The closing config.xml diff (Ruling D2) goes to 036's slice folder, not to the review.
-
-**Consequence:** A reader of the review's records after 036 finds the build and deploy pipelines described as unmigrated and those items without a closing status.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in AnsibleSpecs
-**Provenance:** read — plan-writer r1, planning; reviews/2026-09-jenkinsfile-review/inventory.md:18-24 and slice 035's plan.md P5
-**Route:** card request — the fix lives in AnsibleSpecs, which the slice did not touch
-**Disposition:**
-
-### P4 — IoTSupport, ZigbeeControl and ElectronicsInventory docs say the build ends in a Helm deploy; it pins the images into the deploy repo, which Argo CD syncs · minor
-
-IoTSupport docs/slice-test-plan.md:14-16 says the Jenkinsfile builds iot-support and iot-support-frontend and then runs cicd.helmDeploy(); ZigbeeControl docs/slice-test-plan.md:14-15 says its final stage is cicd.helmDeploy(); ElectronicsInventory docs/architecture.md:67-68 says the build ends in a Helm deploy. Since the Argo CD migration each build ends in cicd.writeVersionPins into its deploy repo (IotDeploy, Zigbee2mqttDeploy, ElectronicsInventoryDeploy), and IoTSupport's images are iotsupport-app and iotsupport-ui. The lines predate slice 036 and name nothing P11 removes, so P4 left them; it changed only the kaniko call they name (helmCharts.kaniko -> kaniko2) in IoTSupport's.
-
-**Consequence:** A session planning a slice in these repos reads that the push runs a Helm deploy and looks for one; the push still reaches prd, through the deploy repo's pin commit.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in IoTSupport
-**Provenance:** witnessed — | executor, P4, r1, /work/scratch/IoTSupport/docs/slice-test-plan.md
-**Route:** card request — the fix lives in IoTSupport, which the slice did not touch
-**Disposition:**
-
-### P5 — Ginbov, Home, YouTrackMCPServer, TerraformRegistry and HomelabTerraformProvider docs say the image build ends in a HelmCharts deploy; it pins the image into its deploy repo, which Argo CD syncs · minor
-
-Ginbov .kubecoder/project.yaml:16 ("kaniko image build + cicd.helmDeploy()"); Home CLAUDE.md:143-144 ("triggers a HelmCharts redeploy via cicd.helmDeploy()") and README.md:21; YouTrackMCPServer docs/deployment.md:11-13 and docs/slice-test-plan.md:98-99 ("triggers IaC/HelmCharts"); TerraformRegistry Dockerfile:4 and README.md:19-20, 26-27 ("HelmCharts redeploys the tfmirror release", "triggers IaC/HelmCharts"); HomelabTerraformProvider README.md:15 ("nginx image → HelmCharts release"). Since the Argo CD migration each of these builds ends in cicd.writeVersionPins into its deploy repo (GinbovNlDeploy, HomeappsDeploy, YoutrackMcpDeploy, TfmirrorDeploy). The lines predate slice 036 and name nothing P11 removes, so P5 left them; it fixed only the sentences that named helmCharts.kaniko or a containerTemplates describable (Home .kubecoder/project.yaml:49's sentence now says the pin into HomeappsDeploy), and the Jenkinsfile comments it rewrote (TerraformRegistry's header, HomelabTerraformProvider's publish comment). Same class as P4's entry, in other repos; the repo label names the one with the most lines.
-
-code-reviewer, P5 r1, 2026-10-02 — One more line of this class: Home .kubecoder/config.yaml:80-81 ("job `Home`, kaniko → HelmCharts redeploy").
-
-**Consequence:** A session planning work in these repos reads that the push runs a HelmCharts deploy and looks for one; the push still reaches prd, through the deploy repo's pin commit.
-
-**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
-in TerraformRegistry
-**Provenance:** witnessed — | executor, P5, r1, /work/scratch/TerraformRegistry/README.md
-**Route:** card request — the fix lives in TerraformRegistry, which the slice did not touch
-**Disposition:**
-
-### E7 — P14's gate, kc project test in /work/scratch/ElectronicsInventory, cannot run in the Ansible environment: it has no s3storage or postgres service
-
-ElectronicsInventory's `kc project test` runs `run-suite` for the backend and the frontend. Both suites need an S3 endpoint at `localhost:9000`, which ElectronicsInventory's own environment provides as its `s3storage` service. Its setup also needs `postgres` at `localhost:5432`. This environment (pvginkel-ansible-011d6a) has neither; `kc env describe` lists terraform-backend-git, iac, go, aac-tools, java, modern-app, python, frontend, document-conversion and image-builder. In this run the backend suite exits with `S3 storage is not reachable at http://localhost:9000`. The frontend's global setup fails in `initialize-sqlite-database.sh` with `Could not connect to the endpoint URL: "http://localhost:9000/..."`. `kc project setup` stops at `init-dev-database.py` (`connection to server at "127.0.0.1", port 5432 failed`). These failures do not depend on the change.
-
-The suite was run instead in a Job in prd's `development` namespace. The Job uses the library's validation-Job manifest (`modernApp.jobManifest`): the same toolchain image, the rustfs service, the Jenkinsfile's S3 env and the same resources. It runs the same `poetry run run-suite --output-mode full --junitxml-dir /work/results --retries 2` on the committed tree. Results: backend 1137 passed, 0 failed; frontend 256 passed, 0 failed, 2 skipped; no retries. `kc project lint --project frontend` is green here.
-
-executor, P14 fix round 1, 2026-10-02 — Witnessed again in fix round 1 (gate_r1.log): the backend suite exits on 'S3 storage is not reachable at http://localhost:9000', and the frontend suite's global setup fails loading the seed dataset on 'Could not connect to the endpoint URL: "http://localhost:9000/electronics-inventory-part-attachments/..."'. kc env describe lists no s3storage or postgres service in this environment. Round 1 handed back blocked; ElectronicsInventory 0eb150ab is unchanged.
-
-**Consequence:** The driver's re-run of P14's gate fails in this environment on 'S3 storage is not reachable at http://localhost:9000' whatever the change; the evidence that the change works is the development-namespace run and the push's build.
-
-**Triage:** event · shows in normal use · breaks a flow · loud · fix needs design · in
-AnsibleSpecs
-**Provenance:** witnessed — executor, P14, r1, phases/P14/executor_result_r1.json
-**Route:** card request — the fix lives in AnsibleSpecs, which the slice did not touch
-**Disposition:**
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results.
 
 ## Closed
 
@@ -422,6 +316,70 @@ Pushed ElectronicsInventory 0eb150ab and YouTrackConfiguration 23cb808. YouTrack
 
 </details>
 
+### ~~A1 — Close ARCH-17 once slice 036 ships: its P7 brings Architecture's producer manual, USAGE.md and the seed-architecture skill to the guide's producer form~~ — ARCH-17 closed as Done/Resolved, citing Architecture 525781b (036 P7), 2026-10-02; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+ARCH-17 was filed as a card at slice 035's close-out (its P2) because no phase of 035 targeted Architecture: the producer manual's § Jenkins integration (.claude/architecture/producer-manual.md:689-752) shows a scripted podTemplate producer calling containerTemplates.aac_tools (:697-698), and :659-660, USAGE.md:139 and .claude/skills/seed-architecture/SKILL.md:150 send a producer to that describable. Slice 036's P11 removes containerTemplates.aac_tools, and Ruling P5 (A3) has a phase that edits a repo also fix that repo's living docs naming what P11 removes. P7 edits Architecture, so P7 now makes those passages describe a producer's file as its architecture type's reference file on architectureProducer's steps. That is the whole of ARCH-17's change; the card itself is not touched by the run.
+
+close-out session, 2026-10-02 — Checked 2026-10-02: P7 is on Architecture origin/main as 525781b; producer-manual.md, USAGE.md and seed-architecture/SKILL.md no longer name containerTemplates or aac_tools. ARCH-17 is still New.
+
+**Consequence:** ARCH-17 stays open for a change that has shipped, and whoever picks it up redoes or re-checks work already done.
+
+**Triage:** action · shows in normal use · degrades · silent · fix is one edit · in Architecture
+**Provenance:** read — plan-writer r2, planning; plan.md P7 and Ruling P5, slices/completed/035_architecture_producers_declarative/close-out.md P2
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results. — ARCH-17 closed as Done/Resolved, citing Architecture 525781b (036 P7), 2026-10-02
+
+</details>
+
+### ~~A5 — Delete the scratch clone /work/scratch/KubeCoderConfig once the slice is done~~ — deleted /work/scratch/KubeCoderConfig after checking it was clean, with nothing unpushed and no stash, 2026-10-02; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The driver cloned (or adopted) `/work/scratch/KubeCoderConfig` for `Target: github:pvginkel/KubeCoderConfig`; the slice's phases for that repo are branched, merged and pushed there.
+
+Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
+
+**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
+
+**Triage:** action · nothing that could show · no impact
+**Provenance:** witnessed — the driver's target resolution
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results. — deleted /work/scratch/KubeCoderConfig after checking it was clean, with nothing unpushed and no stash, 2026-10-02
+
+</details>
+
+### ~~A6 — Delete the scratch clone /work/scratch/YouTrackConfiguration once the slice is done~~ — deleted /work/scratch/YouTrackConfiguration after checking it was clean, with nothing unpushed and no stash, 2026-10-02; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The driver cloned (or adopted) `/work/scratch/YouTrackConfiguration` for `Target: github:pvginkel/YouTrackConfiguration`; the slice's phases for that repo are branched, merged and pushed there.
+
+Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
+
+**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
+
+**Triage:** action · nothing that could show · no impact
+**Provenance:** witnessed — the driver's target resolution
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results. — deleted /work/scratch/YouTrackConfiguration after checking it was clean, with nothing unpushed and no stash, 2026-10-02
+
+</details>
+
+### ~~A7 — Delete the scratch clone /work/scratch/ElectronicsInventory once the slice is done~~ — deleted /work/scratch/ElectronicsInventory after checking it was clean, with nothing unpushed and no stash, 2026-10-02; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+The driver cloned (or adopted) `/work/scratch/ElectronicsInventory` for `Target: github:pvginkel/ElectronicsInventory`; the slice's phases for that repo are branched, merged and pushed there.
+
+Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo.
+
+**Consequence:** none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.
+
+**Triage:** action · nothing that could show · no impact
+**Provenance:** witnessed — the driver's target resolution
+**Disposition:** All A's you can do yourself. You have green light to run all these pipelines and check the results. — deleted /work/scratch/ElectronicsInventory after checking it was clean, with nothing unpushed and no stash, 2026-10-02
+
+</details>
+
 ### ~~B1 — JenkinsPipelineUtils podYaml: a null resources quantity renders as the string "null", the case 033 B4 fixed for env · nit~~ — resolved by the wrap-up (JenkinsPipelineUtils 07f1d70): podYaml refuses a null resources quantity and a runAsUser that is not a number when the agent is evaluated, each message naming the entry's image, as the env refusal does; vars/podYaml.md says so; two refusal cases added to PodYamlTest; kc project test --project root (41 tests, 0 failed) and --project docs green; struck by wrap-up
 
 <details><summary>struck — kept for the record</summary>
@@ -470,6 +428,42 @@ consult 4, 2026-10-02 — Ruling R2 (operator, after consult 3's bail) now cover
 
 </details>
 
+### ~~E7 — P14's gate, kc project test in /work/scratch/ElectronicsInventory, cannot run in the Ansible environment: it has no s3storage or postgres service~~ — closed by the operator, 2026-10-02; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+ElectronicsInventory's `kc project test` runs `run-suite` for the backend and the frontend. Both suites need an S3 endpoint at `localhost:9000`, which ElectronicsInventory's own environment provides as its `s3storage` service. Its setup also needs `postgres` at `localhost:5432`. This environment (pvginkel-ansible-011d6a) has neither; `kc env describe` lists terraform-backend-git, iac, go, aac-tools, java, modern-app, python, frontend, document-conversion and image-builder. In this run the backend suite exits with `S3 storage is not reachable at http://localhost:9000`. The frontend's global setup fails in `initialize-sqlite-database.sh` with `Could not connect to the endpoint URL: "http://localhost:9000/..."`. `kc project setup` stops at `init-dev-database.py` (`connection to server at "127.0.0.1", port 5432 failed`). These failures do not depend on the change.
+
+The suite was run instead in a Job in prd's `development` namespace. The Job uses the library's validation-Job manifest (`modernApp.jobManifest`): the same toolchain image, the rustfs service, the Jenkinsfile's S3 env and the same resources. It runs the same `poetry run run-suite --output-mode full --junitxml-dir /work/results --retries 2` on the committed tree. Results: backend 1137 passed, 0 failed; frontend 256 passed, 0 failed, 2 skipped; no retries. `kc project lint --project frontend` is green here.
+
+executor, P14 fix round 1, 2026-10-02 — Witnessed again in fix round 1 (gate_r1.log): the backend suite exits on 'S3 storage is not reachable at http://localhost:9000', and the frontend suite's global setup fails loading the seed dataset on 'Could not connect to the endpoint URL: "http://localhost:9000/electronics-inventory-part-attachments/..."'. kc env describe lists no s3storage or postgres service in this environment. Round 1 handed back blocked; ElectronicsInventory 0eb150ab is unchanged.
+
+**Consequence:** The driver's re-run of P14's gate fails in this environment on 'S3 storage is not reachable at http://localhost:9000' whatever the change; the evidence that the change works is the development-namespace run and the push's build.
+
+**Triage:** event · shows in normal use · breaks a flow · loud · fix needs design · in
+AnsibleSpecs
+**Provenance:** witnessed — executor, P14, r1, phases/P14/executor_result_r1.json
+**Disposition:** E7 is a non-issue. I'm not expecting you to be able to run those tests here. — closed by the operator, 2026-10-02
+
+</details>
+
+### ~~P1 — AnsibleSpecs reviews/2026-09-jenkinsfile-review: inventory.md, report.md and plan.md will still describe the build and deploy pipelines as before slice 036; no requirement of 036 updates them · minor~~ — carded with P1, P4 and P5 together as ANS-187; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Slice 035 brought the review's three records up to date in a phase of its own (its P5, on its Settled S5): inventory.md's 'Migrated' notes, report.md's dated status notes under J01, J16, J24 and Q9, plan.md's 'Where things stand'. Slice 036's requirements (slice.md 1-18) and rulings ask for no such update, so its plan has no phase for it. After 036 ships, inventory.md still says T3-T13 and the five apps' build files are as on 2026-09-30 (its top note says the second slice takes them), report.md still shows J14, J17, J21, J11, J12, J02, J26, Q2, Q6 and section 2/9 without a closing status, and plan.md's 'Where things stand' ends at slice 035. The closing config.xml diff (Ruling D2) goes to 036's slice folder, not to the review.
+
+close-out session, 2026-10-02 — Still holds 2026-10-02: inventory.md:21,29 and plan.md:54,83-84 still call 036 'the second slice' to come.
+
+**Consequence:** A reader of the review's records after 036 finds the build and deploy pipelines described as unmigrated and those items without a closing status.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in AnsibleSpecs
+**Provenance:** read — plan-writer r1, planning; reviews/2026-09-jenkinsfile-review/inventory.md:18-24 and slice 035's plan.md P5
+**Disposition:** The P's I'd like one card for. It's all cross repo doc changes. Let's just do that from here. — carded with P1, P4 and P5 together as ANS-187
+
+</details>
+
 ### ~~P2 — JenkinsPipelineUtils vars/podYaml.md:130 lists containerName among podYaml's internals; P1 deleted containerName() · nit~~ — resolved by consult 1 (JenkinsPipelineUtils 1fa9853): vars/podYaml.md's internals line no longer names containerName; kc project lint re-run green; struck by consult 1
 
 <details><summary>struck — kept for the record</summary>
@@ -495,6 +489,42 @@ The step page's Internals section names testArguments, service, environment, env
 **Triage:** prose · shows in normal use · no impact · fix is one edit · in JenkinsPipelineUtils
 **Provenance:** read — code-reviewer, P3, round 2, phases/P3/code_review_r2.md F1
 **Disposition:**
+
+</details>
+
+### ~~P4 — IoTSupport, ZigbeeControl and ElectronicsInventory docs say the build ends in a Helm deploy; it pins the images into the deploy repo, which Argo CD syncs · minor~~ — carded with P1, P4 and P5 together as ANS-187; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+IoTSupport docs/slice-test-plan.md:14-16 says the Jenkinsfile builds iot-support and iot-support-frontend and then runs cicd.helmDeploy(); ZigbeeControl docs/slice-test-plan.md:14-15 says its final stage is cicd.helmDeploy(); ElectronicsInventory docs/architecture.md:67-68 says the build ends in a Helm deploy. Since the Argo CD migration each build ends in cicd.writeVersionPins into its deploy repo (IotDeploy, Zigbee2mqttDeploy, ElectronicsInventoryDeploy), and IoTSupport's images are iotsupport-app and iotsupport-ui. The lines predate slice 036 and name nothing P11 removes, so P4 left them; it changed only the kaniko call they name (helmCharts.kaniko -> kaniko2) in IoTSupport's.
+
+close-out session, 2026-10-02 — Still holds 2026-10-02: IoTSupport docs/slice-test-plan.md:16 and ZigbeeControl docs/slice-test-plan.md:15 still name cicd.helmDeploy().
+
+**Consequence:** A session planning a slice in these repos reads that the push runs a Helm deploy and looks for one; the push still reaches prd, through the deploy repo's pin commit.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in IoTSupport
+**Provenance:** witnessed — | executor, P4, r1, /work/scratch/IoTSupport/docs/slice-test-plan.md
+**Disposition:** The P's I'd like one card for. It's all cross repo doc changes. Let's just do that from here. — carded with P1, P4 and P5 together as ANS-187
+
+</details>
+
+### ~~P5 — Ginbov, Home, YouTrackMCPServer, TerraformRegistry and HomelabTerraformProvider docs say the image build ends in a HelmCharts deploy; it pins the image into its deploy repo, which Argo CD syncs · minor~~ — carded with P1, P4 and P5 together as ANS-187; struck by the operator's ruling
+
+<details><summary>struck — kept for the record</summary>
+
+Ginbov .kubecoder/project.yaml:16 ("kaniko image build + cicd.helmDeploy()"); Home CLAUDE.md:143-144 ("triggers a HelmCharts redeploy via cicd.helmDeploy()") and README.md:21; YouTrackMCPServer docs/deployment.md:11-13 and docs/slice-test-plan.md:98-99 ("triggers IaC/HelmCharts"); TerraformRegistry Dockerfile:4 and README.md:19-20, 26-27 ("HelmCharts redeploys the tfmirror release", "triggers IaC/HelmCharts"); HomelabTerraformProvider README.md:15 ("nginx image → HelmCharts release"). Since the Argo CD migration each of these builds ends in cicd.writeVersionPins into its deploy repo (GinbovNlDeploy, HomeappsDeploy, YoutrackMcpDeploy, TfmirrorDeploy). The lines predate slice 036 and name nothing P11 removes, so P5 left them; it fixed only the sentences that named helmCharts.kaniko or a containerTemplates describable (Home .kubecoder/project.yaml:49's sentence now says the pin into HomeappsDeploy), and the Jenkinsfile comments it rewrote (TerraformRegistry's header, HomelabTerraformProvider's publish comment). Same class as P4's entry, in other repos; the repo label names the one with the most lines.
+
+code-reviewer, P5 r1, 2026-10-02 — One more line of this class: Home .kubecoder/config.yaml:80-81 ("job `Home`, kaniko → HelmCharts redeploy").
+
+close-out session, 2026-10-02 — Still holds 2026-10-02 on each repo's main: Ginbov project.yaml:16, YouTrackMCPServer deployment.md:12 and slice-test-plan.md:98-99, TerraformRegistry README.md:20,27 and Dockerfile:4, HomelabTerraformProvider README.md:15.
+
+**Consequence:** A session planning work in these repos reads that the push runs a HelmCharts deploy and looks for one; the push still reaches prd, through the deploy repo's pin commit.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in TerraformRegistry
+**Provenance:** witnessed — | executor, P5, r1, /work/scratch/TerraformRegistry/README.md
+**Disposition:** The P's I'd like one card for. It's all cross repo doc changes. Let's just do that from here. — carded with P1, P4 and P5 together as ANS-187
 
 </details>
 

@@ -21,10 +21,27 @@
         "fix": "several-places",
         "repo": "AnsibleSpecs"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "Still holds 2026-10-02: inventory.md:21,29 and plan.md:54,83-84 still call 036 'the second slice' to come."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded with P1, P4 and P5 together as ANS-187",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "The P's I'd like one card for. It's all cross repo doc changes. Let's just do that from here.",
+        "did": "carded with P1, P4 and P5 together as ANS-187",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "A1",
@@ -44,10 +61,27 @@
         "fix": "one-edit",
         "repo": "Architecture"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "Checked 2026-10-02: P7 is on Architecture origin/main as 525781b; producer-manual.md, USAGE.md and seed-architecture/SKILL.md no longer name containerTemplates or aac_tools. ARCH-17 is still New."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "ARCH-17 closed as Done/Resolved, citing Architecture 525781b (036 P7), 2026-10-02",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": "ARCH-17 closed as Done/Resolved, citing Architecture 525781b (036 P7), 2026-10-02",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "A2",
@@ -70,7 +104,11 @@
       "notes": [],
       "wrap_up": null,
       "strike": null,
-      "ruling": null
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": null,
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "A3",
@@ -93,7 +131,11 @@
       "notes": [],
       "wrap_up": null,
       "strike": null,
-      "ruling": null
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": null,
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "A4",
@@ -116,7 +158,11 @@
       "notes": [],
       "wrap_up": null,
       "strike": null,
-      "ruling": null
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": null,
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "B1",
@@ -221,10 +267,27 @@
         "fix": "several-places",
         "repo": "IoTSupport"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "Still holds 2026-10-02: IoTSupport docs/slice-test-plan.md:16 and ZigbeeControl docs/slice-test-plan.md:15 still name cicd.helmDeploy()."
+          ]
+        }
+      ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded with P1, P4 and P5 together as ANS-187",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "The P's I'd like one card for. It's all cross repo doc changes. Let's just do that from here.",
+        "did": "carded with P1, P4 and P5 together as ANS-187",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "P5",
@@ -251,11 +314,27 @@
           "text": [
             "One more line of this class: Home .kubecoder/config.yaml:80-81 (\"job `Home`, kaniko → HelmCharts redeploy\")."
           ]
+        },
+        {
+          "by": "close-out session",
+          "date": "2026-10-02",
+          "text": [
+            "Still holds 2026-10-02 on each repo's main: Ginbov project.yaml:16, YouTrackMCPServer deployment.md:12 and slice-test-plan.md:98-99, TerraformRegistry README.md:20,27 and Dockerfile:4, HomelabTerraformProvider README.md:15."
+          ]
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "carded with P1, P4 and P5 together as ANS-187",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "The P's I'd like one card for. It's all cross repo doc changes. Let's just do that from here.",
+        "did": "carded with P1, P4 and P5 together as ANS-187",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "B2",
@@ -471,8 +550,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "deleted /work/scratch/KubeCoderConfig after checking it was clean, with nothing unpushed and no stash, 2026-10-02",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": "deleted /work/scratch/KubeCoderConfig after checking it was clean, with nothing unpushed and no stash, 2026-10-02",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "E1",
@@ -791,8 +879,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "deleted /work/scratch/YouTrackConfiguration after checking it was clean, with nothing unpushed and no stash, 2026-10-02",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": "deleted /work/scratch/YouTrackConfiguration after checking it was clean, with nothing unpushed and no stash, 2026-10-02",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "P12",
@@ -844,8 +941,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "deleted /work/scratch/ElectronicsInventory after checking it was clean, with nothing unpushed and no stash, 2026-10-02",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "All A's you can do yourself. You have green light to run all these pipelines and check the results.",
+        "did": "deleted /work/scratch/ElectronicsInventory after checking it was clean, with nothing unpushed and no stash, 2026-10-02",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "E7",
@@ -878,8 +984,17 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "closed by the operator, 2026-10-02",
+        "by": "the operator's ruling",
+        "date": "2026-10-02",
+        "commit": null
+      },
+      "ruling": {
+        "words": "E7 is a non-issue. I'm not expecting you to be able to run those tests here.",
+        "did": "closed by the operator, 2026-10-02",
+        "date": "2026-10-02"
+      }
     },
     {
       "id": "E8",
