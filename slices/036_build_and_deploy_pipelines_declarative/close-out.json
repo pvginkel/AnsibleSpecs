@@ -708,6 +708,55 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A7",
+      "kind": "action",
+      "grade": null,
+      "headline": "Delete the scratch clone /work/scratch/ElectronicsInventory once the slice is done",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/ElectronicsInventory` for `Target: github:pvginkel/ElectronicsInventory`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none in this run — the clone is where the run works; left behind, it only takes disk space and a sync in every later preflight.",
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E7",
+      "kind": "event",
+      "grade": null,
+      "headline": "P14's gate, kc project test in /work/scratch/ElectronicsInventory, cannot run in the Ansible environment: it has no s3storage or postgres service",
+      "body": [
+        "ElectronicsInventory's `kc project test` runs `run-suite` for the backend and the frontend. Both suites need an S3 endpoint at `localhost:9000`, which ElectronicsInventory's own environment provides as its `s3storage` service. Its setup also needs `postgres` at `localhost:5432`. This environment (pvginkel-ansible-011d6a) has neither; `kc env describe` lists terraform-backend-git, iac, go, aac-tools, java, modern-app, python, frontend, document-conversion and image-builder. In this run the backend suite exits with `S3 storage is not reachable at http://localhost:9000`. The frontend's global setup fails in `initialize-sqlite-database.sh` with `Could not connect to the endpoint URL: \"http://localhost:9000/...\"`. `kc project setup` stops at `init-dev-database.py` (`connection to server at \"127.0.0.1\", port 5432 failed`). These failures do not depend on the change.",
+        "",
+        "The suite was run instead in a Job in prd's `development` namespace. The Job uses the library's validation-Job manifest (`modernApp.jobManifest`): the same toolchain image, the rustfs service, the Jenkinsfile's S3 env and the same resources. It runs the same `poetry run run-suite --output-mode full --junitxml-dir /work/results --retries 2` on the committed tree. Results: backend 1137 passed, 0 failed; frontend 256 passed, 0 failed, 2 skipped; no retries. `kc project lint --project frontend` is green here."
+      ],
+      "consequence": "The driver's re-run of P14's gate fails in this environment on 'S3 storage is not reachable at http://localhost:9000' whatever the change; the evidence that the change works is the development-namespace run and the push's build.",
+      "evidence": "witnessed",
+      "author": "executor, P14, r1, phases/P14/executor_result_r1.json",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "design",
+        "area": "plain",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

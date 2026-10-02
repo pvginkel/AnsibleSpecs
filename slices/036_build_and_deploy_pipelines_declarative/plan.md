@@ -1196,6 +1196,26 @@ needs every build the push started SUCCESS, and that includes the image build an
 - The suite passes locally/in the validation Job.
 - The push of this commit starts the job; the test phase reads that build to SUCCESS, with the three images built and the pins written.
 
+**Done (P14).** The cause was the case itself. It made 11 navigations in one test under
+Playwright's 30s test timeout: 17–28s in builds #256–#261, and 30.7, 33.6 and 31.4s in #262's three
+attempts, each cut off on its last navigation (`/types`). The Job's image and resources are the
+old block's. The editor-role describe is now 12 tests, one per domain like the reader-role
+describe, with the same 43 assertions. ElectronicsInventory `0eb150ab` on `phase/036-P14`. The suite
+passes in the validation Job's setup, and `kc project lint --project frontend` is green.
+`kc project test` cannot run here (close-out E7).
+
+Later phases:
+- Test phase: ElectronicsInventory's push carries `0eb150ab`, one commit on top of P4's
+  `4bcc459a`, which origin/main already has. The validation summary now counts 256 frontend
+  passes, where #262 counted 244 and 1 failure.
+
+Record:
+- The suite run is a Job in prd `development` on `modernApp.jobManifest`'s manifest: the toolchain
+  image, rustfs, the Jenkinsfile's S3 env, cpu 1 / 3584Mi, and `run-suite … --retries 2` on the
+  committed tree. Backend 1137/0, frontend 256/0 (2 skipped), no retries; each editor test
+  2.5–3.5s. The Job is deleted.
+- In #262 no other case without its own `test.setTimeout` came near 30s: the slowest took 21.4s.
+
 ## Not in scope
 
 - ModernAppTemplate itself (R2), and CanonApp (archived, no job).
