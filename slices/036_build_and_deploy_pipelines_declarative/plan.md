@@ -736,7 +736,7 @@ Settled in review r1 (read live and in the plugin's source):
 - POD-3's premise that only `kaniko` is YAML only (`docs/pages/guide/pod.md:32`) does not hold
   for `jenkins-agent-large`.
 
-### P6 — The single-job types are their reference files: SSEGateway, YouTrackConfiguration, Promote-PRD and DockerImages
+### P6 — The single-job types are their reference files: SSEGateway, YouTrackConfiguration, Promote-PRD and DockerImages ✅ DONE 2026-10-02
 
 Target: root
 
