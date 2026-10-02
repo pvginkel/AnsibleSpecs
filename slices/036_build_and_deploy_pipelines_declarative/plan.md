@@ -557,7 +557,7 @@ Record:
   `finally` delete keep the old block's text. The Validation Job index row now reads "Builds a
   validation image and runs it as a Kubernetes Job", to tell it from the new row.
 
-### P4 — The eight firmware files and the five apps' files are declarative files on the new steps
+### P4 — The eight firmware files and the five apps' files are declarative files on the new steps ✅ DONE 2026-10-02
 
 Target: root
 
