@@ -466,7 +466,7 @@ Record:
   extension.
 - The sentence after the library page's table (`:69`) is deleted.
 
-### P3 — The five apps' validation Job is a library step, the guide has a type page and reference file for those apps, and SEC-1 has its one exception
+### P3 — The five apps' validation Job is a library step, the guide has a type page and reference file for those apps, and SEC-1 has its one exception ✅ DONE 2026-10-02
 
 Target: ../JenkinsPipelineUtils
 
