@@ -396,7 +396,7 @@ Record:
   creation. `vars/containerTemplates.md`'s `In podYaml` column names the three new templates.
   The three type pages' python-sidecar bullet is deleted, not reworded.
 
-### P2 — The firmware build and upload are library steps, and the guide's firmware pages are written on them
+### P2 — The firmware build and upload are library steps, and the guide's firmware pages are written on them ✅ DONE 2026-10-02
 
 Target: ../JenkinsPipelineUtils
 
