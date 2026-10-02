@@ -4,8 +4,8 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: 2026-10-02 22:57 → 2026-10-03 00:56 · 6 phases · 0 bail-outs · 1 test round · doc phase at
-stage writer · run docs
+Run: 2026-10-02 22:57 → 2026-10-03 01:22 · 6 phases · 0 bail-outs · 1 test round · doc phase at
+stage gate · wrap-up landed · run docs
 
 ## Comes to you
 
@@ -20,6 +20,12 @@ change that needs its own proof across every pipeline, not this slice's.
 **Disposition:**
 
 ### T3 — ArgoCDTools Jenkinsfile.destroy-stage: no committed test pins the guard's registry and Application matching or its REPO spelling refusal · minor
+
+**Proposal:** card — commit the P5 harness's cases as a test a gate runs. The guard is all that
+stands between an APPLY build and a deployed stage, and a break in it is silent. Where the test
+runs is a design call that adds a toolchain or reshapes the pipeline, so it is not a wrap-up
+fix: JenkinsPipelineUnit in the java sidecar, as JenkinsPipelineUtils does, or a Python port
+under ArgoCDTools' unittest gate.
 
 **Consequence:** An edit that breaks the guard's matching, say for multi-source Applications, passes every gate, and a Destroy Stage build then destroys a stage that is still deployed.
 
@@ -75,50 +81,14 @@ the stage's targetRevision from the registry is the change.
 **Route:** card request — the fix lives in JenkinsPipelineUtils, which the slice did not touch
 **Disposition:**
 
-## For the wrap-up
+### P9 — JenkinsPipelineUtils style guide: the pipeline types page places IaC/Destroy Stage under no type and not among the jobs without a reference file · nit
 
-### P1 — ArgoCDTools README says the argocd-hook image's Terraform is unpinned; the Dockerfile pins 1.16.3 · minor
+**Proposal:** fix now: list IaC/Destroy Stage under Jobs without a reference file, in the same
+commit as P4's PROP-3 row.
 
-**Proposal:** fix now — one line in README.md:155, saying 'pinned (TERRAFORM_VERSION), bumped
-with the other two images'.
+**Consequence:** A reader of the pipeline style guide finds no type for IaC/Destroy Stage, though the page says it covers every job in the estate.
 
-**Consequence:** A reader of the ArgoCDTools README is told that a rebuild of the hook image picks up whatever Terraform the suite serves, when it is pinned and must be bumped together with iac and kube-coder-iac-toolchain.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
-### P3 — ArgoCDTools argocd-hook destroy: every init or plan failure is reported as 'the empty configuration … does not init/plan' · minor
-
-**Proposal:** fix now — word the last line after the step that failed, not the configuration,
-before P6 writes it into the runbook; one message in destroy.py.
-
-**Consequence:** An operator whose Destroy Stage build fails on an infrastructure error is told the deploy repo's declarations do not plan alone, and a runbook written from the done-record sends them to the wrong place first.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
-### P5 — Ansible argocd runbook: § The webhook restores the surviving stage's hook by a push to the branch it tracks, which for KubeCoderDeploy prd breaks promotion · minor
-
-**Proposal:** fix now — say the edit lands on main and reaches a stage that tracks another
-branch through its promotion (D35); one sentence in the runbook.
-
-**Consequence:** Once KubeCoderDeploy's stages can be destroyed (I2), an operator who restores prd's webhook as the runbook says commits straight to the prd branch, and KubeCoder's promote job then refuses every promotion until prd is reconciled by hand.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
-### P6 — Ansible argocd runbook: § A build that fails at the plan says nothing is written, but an apply has already state-rm'd the namespaced objects · minor
-
-**Consequence:** An operator whose APPLY=true build fails at the plan reads that nothing was written, while the stage's namespaced objects are already gone from its stored state; the re-run that follows is unaffected.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
-### P7 — Ansible argocd runbook: the undeploy paragraph's 'what stays' no longer names a hand-made webhook · nit
-
-**Consequence:** An operator who unregisters an app whose webhook was made by hand is not told the hook stays on the deploy repo, where it keeps sending pushes to the relay for a repo nothing deploys.
-
-**Route:** the wrap-up — fix
+**Route:** card request — the fix lives in JenkinsPipelineUtils, which the slice did not touch
 **Disposition:**
 
 ## Closed
@@ -157,4 +127,16 @@ branch through its promotion (D35); one sentence in the runbook.
 
 ### E1 — The driver left a scratch clone at /work/scratch/JenkinsDeploy (`Target: github:pvginkel/JenkinsDeploy`)
 
+### ~~P1 — ArgoCDTools README says the argocd-hook image's Terraform is unpinned; the Dockerfile pins 1.16.3 · minor~~ — fixed in ArgoCDTools 53accbe: README § The argocd-hook image says Terraform is pinned by TERRAFORM_VERSION and bumped with support/iac-image and kube-coder-iac-toolchain (both pin 1.16.3); kc project test --project argocd-hook green; struck by wrap-up
+
 ### ~~P2 — ArgoCDDeploy render gate: check_hook_namespace's docstring says argocd-hooks holds only the hook's credentials and identity · nit~~ — resolved by consult 1 (ArgoCDDeploy b8d1a0c): check_hook_namespace's docstring now names the Destroy Stage grant (D66); kc project test re-run green; struck by consult 1
+
+### ~~P3 — ArgoCDTools argocd-hook destroy: every init or plan failure is reported as 'the empty configuration … does not init/plan' · minor~~ — fixed in ArgoCDTools 3b8e30a: _declared's last line now reads 'terraform <init|plan> failed on terraform/ reduced to its terraform, provider and variable blocks (Terraform's error above names the cause)', naming the step, not a cause; the three test_destroy assertions that pinned the old wording and README § A destroy run's quote follow it. The Ansible runbook already reads the cause from Terraform's error, not this line (P6 r1 note), so it needs no change. kc project test --project argocd-hook and kc project lint --project root green; struck by wrap-up
+
+### ~~P5 — Ansible argocd runbook: § The webhook restores the surviving stage's hook by a push to the branch it tracks, which for KubeCoderDeploy prd breaks promotion · minor~~ — fixed in Ansible 7917165: § Destroying a retired stage › The webhook now sets manage_webhook = true in a commit on main, and says a stage that tracks another branch gets it through its promotion (D35), KubeCoderDeploy's prd through KubeCoder/Promote-PRD, never by a commit to prd; refresh once it is on the stage's branch. kc project test --project root green; lint and build declare nothing for root (exit 3); struck by wrap-up
+
+### ~~P6 — Ansible argocd runbook: § A build that fails at the plan says nothing is written, but an apply has already state-rm'd the namespaced objects · minor~~ — fixed in Ansible 0232f1a: § A build that fails at the plan no longer says nothing is written; a dry run and a failed init write nothing, and an apply that fails at its plan has already dropped the namespaced objects with terraform state rm (destroy.py runs it before the plan), which the re-run does not miss. kc project test --project root green; lint and build declare nothing for root (exit 3); struck by wrap-up
+
+### ~~P7 — Ansible argocd runbook: the undeploy paragraph's 'what stays' no longer names a hand-made webhook · nit~~ — fixed in Ansible 4738da4: the undeploy paragraph's 'what stays' is now what the stage's Terraform made outside its namespace, and Unregister says a webhook made by hand (§ Webhooks) stays on the deploy repo, sending pushes to the relay, with no build to delete it: removing it is a separate act, by hand. kc project test --project root green; lint and build declare nothing for root (exit 3); struck by wrap-up
+
+### ~~P8 — ArgoCDTools README: § Not wired yet says the hook runs nowhere yet and authenticates with a fine-grained PAT · minor~~ — fixed in ArgoCDTools 3e0a371: § Not wired yet deleted whole — its one bullet that could still hold does not: Jenkins shows AaC/ArgoCDDeploy (#24) and AaC/KubeCoderDeploy (#13) green, and Architecture registers both producers (c95e5ee, 0cdd563); kc project test --project argocd-hook green; struck by wrap-up
