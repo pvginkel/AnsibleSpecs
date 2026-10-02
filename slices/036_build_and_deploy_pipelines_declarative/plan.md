@@ -438,6 +438,34 @@ Constraints:
 The phase's gate does not run the docs lint (`docs/lint_examples.py`, which sends every example
 to the controller's linter and needs `JENKINS_TOKEN`). Run it before handing back.
 
+**Done (P2).** `vars/espFirmware` has `build` and `upload`, with its page and `EspFirmwareTest`;
+the firmware type page, the library page's J14 row and both firmware reference files are on them.
+JenkinsPipelineUtils `47cff67` on `phase/036-P2`; `kc project test` and the docs lint green.
+
+Later phases:
+- The calls: `espFirmware.build(dir: '<Repo>')` in `Build firmware` and
+  `espFirmware.upload(dir: '<Repo>')` in `Deploy firmware`, each in `script {}`. Intercom adds
+  `hardwareVersion: 1` / `2` to `build` only (`upload` refuses it). `dir` is the directory the
+  file's `Checkout` stage checked the repo out into.
+- The steps run in the container named `idf`; the file declares it as
+  `podYaml(images: [[image: 'espressif/idf:v5.5.3', name: 'idf']])` on `jenkins-agent-large`.
+- A firmware file holds no `withVault`, no `chmod`, no `safe.directory` line and no
+  `/opt/esp/entrypoint.sh`: the steps carry them.
+
+Record:
+- `build` runs `git config --global --add safe.directory '*'` then
+  `/opt/esp/entrypoint.sh idf.py [-DHARDWARE_VERSION=<n> ]build`; `upload` runs `chmod +x
+  scripts/upload.sh`, then `scripts/upload.sh https://iot.ginbov.nl` inside `withVault`
+  (`kv/jenkins/iotsupport-pipeline-oidc`, `IOTSUPPORT_CLIENT_ID`/`_SECRET`), both in `dir(<dir>)`.
+- Refusals: `espFirmware.<step>: dir is required` / `takes dir and hardwareVersion; got <x>` /
+  `hardwareVersion is a number; got '<v>'` (a whole number; `null` is refused).
+- SEC-1's recipe (`docs/pages/guide/secrets.md`) cited `firmware.groovy:deploy`, whose `withVault`
+  moved into the library: it now cites `snapshot-producer.groovy:generate` and names
+  `espFirmware.upload`. The `deploy` section markers are gone from `firmware.groovy`.
+- The Replay warning is a bold paragraph on `vars/espFirmware.md`: the site has no admonition
+  extension.
+- The sentence after the library page's table (`:69`) is deleted.
+
 ### P3 — The five apps' validation Job is a library step, the guide has a type page and reference file for those apps, and SEC-1 has its one exception
 
 Target: ../JenkinsPipelineUtils
@@ -503,8 +531,10 @@ Thirteen build files, one in each of thirteen repos, are migrated per
 `Jenkinsfile.architecture` takes one edit too. This phase opens the ledger.
 
 - **The eight ESP-IDF firmware files** (inventory T5) become the firmware reference file on P2's
-  steps, near its length, not "a few lines" (Ruling P4). Intercom follows the several-versions
-  reference. Each keeps `espressif/idf:v5.5.3` in its own agent (S1). A file loses its inert
+  steps, near its length, not "a few lines" (Ruling P4): `espFirmware.build(dir: '<Repo>')` in
+  `Build firmware` and `espFirmware.upload(dir: '<Repo>')` in `Deploy firmware`, each in
+  `script {}`. Intercom follows the several-versions reference (`hardwareVersion: 1` / `2` on
+  `build`). Each keeps `espressif/idf:v5.5.3` in its own agent, in the container named `idf` (S1). A file loses its inert
   `containerEnvVar` lines and its `withVault` around the whole pod (J17;
   `PaperClock/Jenkinsfile:3-12`).
   - CalendarDisplay, DoorbellReceiver, GestureDevice and UnderfloorHeatingController stop cloning
