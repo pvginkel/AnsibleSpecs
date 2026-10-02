@@ -1239,8 +1239,9 @@ Record:
   uploaded tree (P3).
 - A per-job settings sheet (Ruling D2).
 - Stripping UI-held property copies through the API (S12).
-- Starting a job by hand to prove its file. AaC/Architecture's one build after the pause is the
-  exception (Ordering constraints, Ruling P2).
+- Starting a job by hand to prove its file. The exceptions are AaC/Architecture's one build after
+  the pause (Ruling P2) and one build each of the eight renamed-repo jobs on `main` (Ruling R2),
+  as the Ordering constraints list them.
 - The small-changes runbook (review plan §1a: J07, Q7, Q6's four dead globals) and review §10,
   controller-level config.
 - Plan and slice records that quote what P11 removes, such as `Home/docs/plan.md:270-283`
