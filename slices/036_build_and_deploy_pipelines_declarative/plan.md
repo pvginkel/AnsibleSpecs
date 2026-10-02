@@ -1077,7 +1077,7 @@ Record:
   podYaml's comment and page. Three PodYamlTest methods named after the describables were
   renamed.
 
-### P12 — The firmware builds keep the large node: POD-3 and the firmware references declare the YAML merge, and so do the eight firmware files
+### P12 — The firmware builds keep the large node: POD-3 and the firmware references declare the YAML merge, and so do the eight firmware files ✅ DONE 2026-10-02
 
 Target: ../JenkinsPipelineUtils
 
