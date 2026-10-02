@@ -6,6 +6,17 @@
 
 Run: <not yet stamped>
 
+## Comes to you
+
+### A1 — Settle V10 after the operator's APPLY=true build of IaC/Destroy Stage against …
+
+**Proposal:** When that has happened, say so: the session settles V10 in verification.json.
+
+**Consequence:** V10 stays unproven until then; the test phase does not settle it.
+
+**Route:** to you — an action
+**Disposition:**
+
 ## For the wrap-up
 
 ### P1 — ArgoCDTools README says the argocd-hook image's Terraform is unpinned; the Dockerfile pins 1.16.3 · minor

@@ -26,6 +26,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V10 after the operator's APPLY=true build of IaC/Destroy Stage against …",
+      "body": [
+        "V10 — The operator's `APPLY=true` build against FieldnotesDeploy `dev` leaves the RBD image `fieldnotes-dev-data`, the PV `fieldnotes-dev-data-pv` and `argocd/FieldnotesDeploy/dev/` in TerraformState gone, and `config/dev/` deleted from FieldnotesDeploy (ANS-147's done-when).",
+        "",
+        "`verification.json` marks V10 owed after: the operator's APPLY=true build of IaC/Destroy Stage against FieldnotesDeploy dev (Ruling D3). The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V10 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V10 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
