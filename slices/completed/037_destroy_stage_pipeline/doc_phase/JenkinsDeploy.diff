@@ -1,0 +1,21 @@
+/work/scratch/JenkinsDeploy — P2: git diff f3ee7df57c9b..80dc52adc948
+
+chart/templates/destroy-stage-serviceaccount.yaml | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/chart/templates/destroy-stage-serviceaccount.yaml b/chart/templates/destroy-stage-serviceaccount.yaml
+new file mode 100644
+index 0000000..719b834
+--- /dev/null
++++ b/chart/templates/destroy-stage-serviceaccount.yaml
+@@ -0,0 +1,10 @@
++{{/*
++The identity of the `IaC/Destroy Stage` pipeline's agent pod (argo-cd D66), named by its
++`Jenkinsfile.destroy-stage` in ArgoCDTools, and of nothing else. It holds no grant in this
++namespace; its only grants are ArgoCDDeploy's Roles in `argocd-hooks` and `argocd-prd`. Kubernetes
++does not hold it to that pipeline: any pod in this namespace may name it (argo-cd D41 as amended).
++*/}}
++apiVersion: v1
++kind: ServiceAccount
++metadata:
++  name: destroy-stage

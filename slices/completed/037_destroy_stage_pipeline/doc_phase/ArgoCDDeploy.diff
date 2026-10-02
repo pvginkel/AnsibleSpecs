@@ -1,0 +1,295 @@
+/work/ArgoCDDeploy — P3: git diff 93345410169f..784399133d76
+
+chart/templates/destroy-stage-guard.yaml |  30 ++++++++++++
+ chart/templates/hook-namespace.yaml      |  52 +++++++++++++++++++--
+ chart/values.yaml                        |   8 ++++
+ tests/render-chart.py                    | 128 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 213 insertions(+), 5 deletions(-)
+
+diff --git a/chart/templates/destroy-stage-guard.yaml b/chart/templates/destroy-stage-guard.yaml
+new file mode 100644
+index 0000000..f120868
+--- /dev/null
++++ b/chart/templates/destroy-stage-guard.yaml
+@@ -0,0 +1,30 @@
++{{/*
++The Destroy Stage pipeline's guard (D66) refuses a stage a live Application
++still deploys, so its identity reads the Applications here: get and list on
++Applications alone. No AppProject, no Secret, nothing that syncs or deletes. Its
++only other grant is the Job lifecycle in the hook namespace (hook-namespace.yaml).
++*/}}
++{{- $destroy := .Values.destroyStage }}
++apiVersion: rbac.authorization.k8s.io/v1
++kind: Role
++metadata:
++  name: {{ $destroy.serviceAccount }}
++  namespace: {{ .Release.Namespace }}
++rules:
++  - apiGroups: [argoproj.io]
++    resources: [applications]
++    verbs: [get, list]
++---
++apiVersion: rbac.authorization.k8s.io/v1
++kind: RoleBinding
++metadata:
++  name: {{ $destroy.serviceAccount }}
++  namespace: {{ .Release.Namespace }}
++roleRef:
++  apiGroup: rbac.authorization.k8s.io
++  kind: Role
++  name: {{ $destroy.serviceAccount }}
++subjects:
++  - kind: ServiceAccount
++    name: {{ $destroy.serviceAccount }}
++    namespace: {{ $destroy.namespace }}
+diff --git a/chart/templates/hook-namespace.yaml b/chart/templates/hook-namespace.yaml
+index 1a8d808..b5d2a3e 100644
+--- a/chart/templates/hook-namespace.yaml
++++ b/chart/templates/hook-namespace.yaml
+@@ -1,7 +1,9 @@
+ {{/*
+-argocd-hooks — the namespace a PreSync run lands in, and the complete inventory
+-of what it holds (D33): the one Secret that composes a run's whole environment,
+-the identity the Job runs under, and that identity's RBAC. A namespace of its own
++argocd-hooks — the namespace a PreSync run lands in, and the Destroy Stage
++pipeline's one-off Job with it (D66), and the complete inventory of what it holds
++(D33): the one Secret that composes a run's whole environment, the identity the
++Job runs under, that identity's RBAC, and the Role that lets the Destroy Stage
++pipeline's own identity run its Job here. A namespace of its own
+ rather than Argo's, because the AppProject has to permit it as a destination for
+ every app: were it Argo's, an app-authored manifest could land beside the control
+ plane and mount the repo credentials, the webhook secret and the OIDC client
+@@ -14,6 +16,7 @@ takes wholesale through envFrom, and the RoleBinding beside it the ClusterRole
+ it binds in the app's namespace.
+ */}}
+ {{- $hooks := .Values.hooks }}
++{{- $destroy := .Values.destroyStage }}
+ {{- $credentials := .Values.credentials }}
+ {{- $environment := $hooks.environment }}
+ {{- $leaves := required "hooks.environment.leaves is a stage fact: set it in config/{stage}/values.yaml" $environment.leaves }}
+@@ -123,3 +126,46 @@ rules:
+     resources:
+       - secrets
+     verbs: [get, list, watch, create, update, patch, delete]
++---
++{{/*
++The Destroy Stage pipeline's Job lifecycle (D66), and nothing more: the calls
++JenkinsPipelineUtils' kubectl steps make against a Job. startJob's `kubectl
++apply` gets and creates it; getJobPodName and waitForJobContainer get the Job and
++list and get its pod; getContainerExitCode reads the pod, getJobFailReason the
++Job, savePodLogs the pod's log; deleteJob deletes the Job and leaves its pods to
++the garbage collector. No patch: the Role cannot change a Job that already
++exists. No exec, no Secrets.
++
++Creating a Job here is running a pod as tf-presync with argocd-hook-credentials:
++this Role holds what a hook run holds, which is why it is bound to one identity
++alone.
++*/}}
++apiVersion: rbac.authorization.k8s.io/v1
++kind: Role
++metadata:
++  name: {{ $destroy.serviceAccount }}
++  namespace: {{ $hooks.namespace }}
++rules:
++  - apiGroups: [batch]
++    resources: [jobs]
++    verbs: [get, create, delete]
++  - apiGroups: [""]
++    resources: [pods]
++    verbs: [get, list]
++  - apiGroups: [""]
++    resources: [pods/log]
++    verbs: [get]
++---
++apiVersion: rbac.authorization.k8s.io/v1
++kind: RoleBinding
++metadata:
++  name: {{ $destroy.serviceAccount }}
++  namespace: {{ $hooks.namespace }}
++roleRef:
++  apiGroup: rbac.authorization.k8s.io
++  kind: Role
++  name: {{ $destroy.serviceAccount }}
++subjects:
++  - kind: ServiceAccount
++    name: {{ $destroy.serviceAccount }}
++    namespace: {{ $destroy.namespace }}
+diff --git a/chart/values.yaml b/chart/values.yaml
+index f3d8c82..8fba3f8 100644
+--- a/chart/values.yaml
++++ b/chart/values.yaml
+@@ -49,6 +49,14 @@ hooks:
+     # env key -> value
+     literals:
+ 
++# The Destroy Stage pipeline's identity (D66): the ServiceAccount JenkinsDeploy
++# defines and ArgoCDTools' Jenkinsfile.destroy-stage names in its agent pod spec.
++# Neither name is this chart's to choose. The chart grants it two Roles, the Job
++# lifecycle in the hook namespace and a read of the Applications in its own.
++destroyStage:
++  serviceAccount: destroy-stage
++  namespace: jenkins-prd
++
+ # Slice 015's webhook relay, deployed beside Argo because it serves nothing when
+ # Argo is absent (015 attachments/webhook-relay-consult.md §4).
+ relay:
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index 6eb3b35..8f32243 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -144,6 +144,26 @@ HOOK_APP_MANAGED = ("secrets",)
+ # grant would let any app's Terraform delete every other app's namespace.
+ HOOK_REFUSED = ("namespaces",)
+ LIFECYCLE = ("get", "list", "watch", "create", "update", "patch", "delete")
++# The Destroy Stage pipeline's identity (D66): JenkinsDeploy's ServiceAccount,
++# which ArgoCDTools' Jenkinsfile.destroy-stage names in its agent pod spec.
++DESTROY_STAGE = {"kind": "ServiceAccount", "name": "destroy-stage", "namespace": "jenkins-prd"}
++# The agent identity every other pipeline in jenkins-prd runs as. No grant in
++# this chart may reach it (Ruling D1).
++JENKINS_AGENT = ("jenkins-prd", "default")
++# Everything the identity holds, as (apiGroup, resource, verb), namespace by
++# namespace: exactly these, through one namespaced Role in each and nothing
++# else. In the hook namespace, the Job lifecycle JenkinsPipelineUtils' kubectl
++# steps call: startJob's apply, getJobPodName, waitForJobContainer,
++# getContainerExitCode, getJobFailReason, savePodLogs and deleteJob. In Argo's,
++# the guard's read of the live Applications.
++DESTROY_STAGE_GRANTS = {
++    HOOK_NAMESPACE: frozenset(
++        [("batch", "jobs", verb) for verb in ("get", "create", "delete")]
++        + [("", "pods", verb) for verb in ("get", "list")]
++        + [("", "pods/log", "get")]
++    ),
++    NAMESPACE: frozenset(("argoproj.io", "applications", verb) for verb in ("get", "list")),
++}
+ # The only literals this repo is allowed to commit into a credential Secret, per
+ # Secret: the repo credential's non-secret half, and the hook environment's
+ # per-cluster provider configuration — configuration, not credentials.
+@@ -1525,8 +1545,15 @@ def check_hook_namespace(docs):
+         if d["metadata"].get("namespace") == HOOK_NAMESPACE
+     )
+     check(
+-        tenants == [f"ExternalSecret/{HOOK_SECRET}", f"ServiceAccount/{HOOK_SERVICE_ACCOUNT}"],
+-        f"{HOOK_NAMESPACE} holds {tenants}, not the hook's credentials and identity alone (D33)",
++        tenants
++        == [
++            f"ExternalSecret/{HOOK_SECRET}",
++            f"Role/{DESTROY_STAGE['name']}",
++            f"RoleBinding/{DESTROY_STAGE['name']}",
++            f"ServiceAccount/{HOOK_SERVICE_ACCOUNT}",
++        ],
++        f"{HOOK_NAMESPACE} holds {tenants}, not the hook's credentials and identity and the "
++        f"Destroy Stage Job's grant alone (D33, D66)",
+     )
+ 
+ 
+@@ -1686,6 +1713,102 @@ def check_hook_rbac(docs):
+     check(not stray, f"ClusterRole/{HOOK_APP_ROLE} is bound in this chart by {stray!r}")
+ 
+ 
++def reaches(subject, namespace, name):
++    """Whether a binding subject takes in the ServiceAccount namespace/name."""
++    kind = subject.get("kind")
++    if kind == "ServiceAccount":
++        return (subject.get("namespace"), subject.get("name")) == (namespace, name)
++    if kind == "User":
++        return subject.get("name") == f"system:serviceaccount:{namespace}:{name}"
++    if kind == "Group":
++        return subject.get("name") in (
++            "system:authenticated",
++            "system:serviceaccounts",
++            f"system:serviceaccounts:{namespace}",
++        )
++    return False
++
++
++def bindings_reaching(docs, namespace, name):
++    return [
++        doc
++        for doc in docs
++        if doc["kind"] in ("ClusterRoleBinding", "RoleBinding")
++        and any(reaches(subject, namespace, name) for subject in doc.get("subjects", []))
++    ]
++
++
++def check_destroy_stage_rbac(docs):
++    """The Destroy Stage identity holds two namespaced grants and nothing else (D66, Ruling D1)."""
++    identity = f"{DESTROY_STAGE['namespace']}/{DESTROY_STAGE['name']}"
++    bindings = bindings_reaching(docs, DESTROY_STAGE["namespace"], DESTROY_STAGE["name"])
++    placed = sorted(
++        f"{binding['kind']}/{binding['metadata']['name']} -> "
++        f"{binding['metadata'].get('namespace') or 'cluster-wide'}"
++        for binding in bindings
++    )
++    check(
++        sorted((b["kind"], b["metadata"].get("namespace")) for b in bindings)
++        == sorted(("RoleBinding", namespace) for namespace in DESTROY_STAGE_GRANTS),
++        f"{identity} is bound by {placed}, not by one RoleBinding in each of "
++        f"{sorted(DESTROY_STAGE_GRANTS)}",
++    )
++    for binding in bindings:
++        namespace = binding["metadata"].get("namespace")
++        where = f"{binding['kind']}/{binding['metadata']['name']} in {namespace or 'no namespace'}"
++        check(
++            binding.get("subjects") == [DESTROY_STAGE],
++            f"{where} binds {binding.get('subjects')!r}, not {identity} alone",
++        )
++        ref = binding.get("roleRef", {})
++        role = next(
++            (
++                doc
++                for doc in docs
++                if doc["kind"] == "Role"
++                and doc["metadata"]["name"] == ref.get("name")
++                and doc["metadata"].get("namespace") == namespace
++            ),
++            None,
++        )
++        check(
++            ref.get("kind") == "Role" and role is not None,
++            f"{where} names {ref!r}, not a Role this chart creates beside it",
++        )
++        if ref.get("kind") != "Role" or role is None or namespace not in DESTROY_STAGE_GRANTS:
++            continue
++        held = {
++            (group, resource, verb)
++            for rule in role.get("rules", [])
++            for group in rule.get("apiGroups", [])
++            for resource in rule.get("resources", [])
++            for verb in rule.get("verbs", [])
++        }
++        wanted = DESTROY_STAGE_GRANTS[namespace]
++        check(
++            held == wanted,
++            f"Role/{ref['name']} in {namespace} grants {sorted(held - wanted)} beyond what the "
++            f"Destroy Stage pipeline uses and lacks {sorted(wanted - held)}",
++        )
++        shared = sorted(
++            doc["metadata"]["name"]
++            for doc in docs
++            if doc is not binding
++            and doc["kind"] == "RoleBinding"
++            and doc["metadata"].get("namespace") == namespace
++            and doc.get("roleRef", {}).get("kind") == "Role"
++            and doc["roleRef"].get("name") == ref["name"]
++        )
++        check(not shared, f"Role/{ref['name']} in {namespace} is also bound by {shared}")
++
++    agent = bindings_reaching(docs, *JENKINS_AGENT)
++    check(
++        not agent,
++        f"{[b['metadata']['name'] for b in agent]} reach {'/'.join(JENKINS_AGENT)}, the agent "
++        f"identity every pipeline shares (Ruling D1)",
++    )
++
++
+ def main():
+     docs = render(RELEASE, "chart", CONFIG)
+     states = {
+@@ -1719,6 +1842,7 @@ def main():
+     check_hook_namespace(docs)
+     check_hook_environment(docs, materialised)
+     check_hook_rbac(docs)
++    check_destroy_stage_rbac(docs)
+     check_nothing_secret_committed(docs, materialised)
+ 
+     if failures:

@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "Argo-cd D66 records the full Destroy Stage design as P1 asks. It supersedes D28 and amends D1, D27, D31, D33, D39 and D41, and nothing left in the register contradicts it. One advisory finding: the decision does not say that destroying a repo's webhook-owning stage (KubeCoderDeploy dev) deletes the push trigger of a stage that stays deployed.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "other", "anchor": "none",
+               "summary": "D66/D39 do not record that destroying the webhook-owning stage (KubeCoderDeploy dev) leaves the surviving prd stage on D6's 30-minute refresh"}]}

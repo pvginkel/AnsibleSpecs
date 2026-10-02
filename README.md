@@ -42,7 +42,6 @@ Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handov
 
 Triaged 2026-10-02 from ANS-147 (the record: `handovers/triage_2026-10-02_raw.md` at `c5f3cbd`):
 
-- **037** — Destroy Stage pipeline: a Jenkins pipeline (`REPO`, `STAGE`, `APPLY`, dry run by default) that permanently destroys a retired deploy-repo stage's Terraform resources and state through the argocd-hook image, FieldnotesDeploy `dev` first
 
 Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026-10-02_raw.md` at `c5f3cbd`):
 
@@ -111,6 +110,7 @@ Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026
 | [034 jenkins-pipeline-style-guide](slices/completed/034_jenkins_pipeline_style_guide/plan.md) | — | — | Jenkins pipeline style guide, its docs site and skill: one strict, example-driven guide for every pipeline type, published at `pipelines.home` beside the library's reference pages, and a skill that carries its rules into every session (improvement). |
 | [035 architecture-producers-declarative](slices/completed/035_architecture_producers_declarative/plan.md) | — | — | Architecture producers to declarative: the 77 `Jenkinsfile.architecture` producers onto the style guide's declarative form and an `architectureProducer` helper, with their job configuration moved into the files (cut 2026-10-01) |
 | [036 build-and-deploy-pipelines-declarative](slices/completed/036_build_and_deploy_pipelines_declarative/plan.md) | — | — | Build and deploy pipelines to declarative: T3–T13 and the five ModernAppTemplate apps' `Jenkinsfile` onto the style guide, with `espFirmware`, the podYaml fixes and the `containerTemplates` retirement, and the remaining job configuration moved into the files (cut 2026-10-01) |
+| [037 destroy-stage-pipeline](slices/completed/037_destroy_stage_pipeline/plan.md) | — | — | Destroy Stage pipeline: a Jenkins pipeline (`REPO`, `STAGE`, `APPLY`, dry run by default) that permanently destroys a retired deploy-repo stage's Terraform resources and state through the argocd-hook image, FieldnotesDeploy `dev` first |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

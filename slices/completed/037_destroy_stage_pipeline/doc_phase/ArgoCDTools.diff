@@ -1,0 +1,1895 @@
+/work/ArgoCDTools — P4: git diff b2fb04f01168..d7db58f44245
+
+argocd-hook/Dockerfile                 |   2 +-
+ argocd-hook/presync/__init__.py        |   5 +-
+ argocd-hook/presync/backend.py         |   7 +-
+ argocd-hook/presync/declarations.py    | 181 ++++++++++++++++
+ argocd-hook/presync/destroy.py         | 276 ++++++++++++++++++++++++
+ argocd-hook/presync/git.py             |  51 +++--
+ argocd-hook/tests/support.py           | 105 +++++++++-
+ argocd-hook/tests/test_declarations.py | 171 +++++++++++++++
+ argocd-hook/tests/test_destroy.py      | 602 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 9 files changed, 1368 insertions(+), 32 deletions(-)
+
+diff --git a/argocd-hook/Dockerfile b/argocd-hook/Dockerfile
+index 7f86edf..2f2d889 100644
+--- a/argocd-hook/Dockerfile
++++ b/argocd-hook/Dockerfile
+@@ -97,7 +97,7 @@ RUN getent passwd "$(id -u)" > /dev/null && \
+     terraform version && \
+     terraform-backend-git --help > /dev/null && \
+     git --version && \
+-    python3 -c "import presync.cli" && \
++    python3 -c "import presync.cli, presync.destroy" && \
+     python3 -c "import ctypes; ctypes.CDLL('librados.so.2'); ctypes.CDLL('librbd.so.1')"
+ 
+ ENTRYPOINT ["python3", "-m", "presync"]
+diff --git a/argocd-hook/presync/__init__.py b/argocd-hook/presync/__init__.py
+index 49f0cbf..ece9427 100644
+--- a/argocd-hook/presync/__init__.py
++++ b/argocd-hook/presync/__init__.py
+@@ -1,6 +1,9 @@
+ """The Terraform PreSync hook Argo CD runs before a migrated app syncs.
+ 
+-`python3 -m presync <repo> <revision> <stage> <namespace>` is the whole contract;
++`python3 -m presync <repo> <revision> <stage> <namespace>` is the hook's whole contract;
+ the library chart's hook Job template supplies the four arguments and the
+ `argocd-hook-credentials` Secret supplies the environment.
++
++`python3 -m presync.destroy` is the image's second entry point, the Destroy Stage run
++(`destroy.py`).
+ """
+diff --git a/argocd-hook/presync/backend.py b/argocd-hook/presync/backend.py
+index 8a7b2cb..b13304d 100644
+--- a/argocd-hook/presync/backend.py
++++ b/argocd-hook/presync/backend.py
+@@ -49,9 +49,14 @@ def repo_name(repo_url: str) -> str:
+     return name
+ 
+ 
++def state_dir(repo_url: str, stage: str) -> str:
++    """The stage's folder in the state repository, which holds its state and nothing else."""
++    return f"argocd/{repo_name(repo_url)}/{stage}"
++
++
+ def state_key(repo_url: str, stage: str) -> str:
+     """One key scheme for the estate, so a state moved into it has a predictable name."""
+-    return f"argocd/{repo_name(repo_url)}/{stage}/terraform.tfstate"
++    return f"{state_dir(repo_url, stage)}/terraform.tfstate"
+ 
+ 
+ def backend_url(addr: str, state: str) -> str:
+diff --git a/argocd-hook/presync/declarations.py b/argocd-hook/presync/declarations.py
+new file mode 100644
+index 0000000..cdc488e
+--- /dev/null
++++ b/argocd-hook/presync/declarations.py
+@@ -0,0 +1,181 @@
++"""The empty configuration a destroy plans against: a root module with only its declarations.
++
++Each root `*.tf` keeps its `terraform`, `provider` and `variable` blocks, verbatim, and
++loses every other block. With no resource, data source or module left, every resource in
++the state is an orphan Terraform plans to delete, `prevent_destroy` binds nothing, and
++the providers that delete them are configured as the deploy repo configures them.
++
++HCL's native syntax is read only as far as its top level: where a block starts, its
++header, and the brace that closes it. Strings, heredocs, template sequences and comments
++are skipped as units, so a brace inside one never counts.
++"""
++
++from __future__ import annotations
++
++import re
++from pathlib import Path
++from typing import NamedTuple
++
++from .errors import PresyncError
++from .proc import step
++
++KEPT = ("terraform", "provider", "variable")
++
++_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
++_HEREDOC = re.compile(r"<<-?([A-Za-z_][A-Za-z0-9_-]*)[ \t]*\r?\n")
++_SPACE = " \t\r\n"
++
++
++class Block(NamedTuple):
++    """One top-level block: its type, its header as written, and its whole text."""
++
++    type: str
++    header: str
++    text: str
++
++
++def reduce(work: Path) -> None:
++    """Rewrite every root `*.tf` in `work` to its declarations alone."""
++    tf_json = sorted(path.name for path in work.glob("*.tf.json"))
++    if tf_json:
++        raise PresyncError(
++            f"{', '.join(tf_json)}: the destroy reduces native-syntax *.tf only, "
++            "and planning without this file would plan without what it declares"
++        )
++    for source in sorted(work.glob("*.tf")):
++        found = blocks(source.read_text(), source.name)
++        kept = [block.text for block in found if block.type in KEPT]
++        dropped = ", ".join(block.header for block in found if block.type not in KEPT)
++        source.write_text("\n\n".join(kept) + "\n" if kept else "")
++        step(f"{source.name}: keeps {len(kept)} declaration(s), drops {dropped or 'none'}")
++
++
++def blocks(text: str, origin: str) -> list[Block]:
++    """Every top-level block of `text`, in order. Anything else at the top level is refused."""
++    found = []
++    i = _skip_space(text, 0, origin)
++    while i < len(text):
++        start = i
++        kind = _IDENTIFIER.match(text, i)
++        if not kind:
++            raise _unreadable(text, i, origin, "a block type")
++        i = _skip_space(text, kind.end(), origin)
++        while i < len(text) and text[i] != "{":
++            if text[i] == '"':
++                i = _quoted(text, i, origin)
++            elif label := _IDENTIFIER.match(text, i):
++                i = label.end()
++            else:
++                raise _unreadable(text, i, origin, "a block label or `{`")
++            i = _skip_space(text, i, origin)
++        if i == len(text):
++            raise _unreadable(text, start, origin, "a block body")
++        header = " ".join(text[start:i].split())
++        end = _braced(text, i, origin)
++        found.append(Block(kind.group(), header, text[start:end]))
++        i = _skip_space(text, end, origin)
++    return found
++
++
++def _braced(text: str, i: int, origin: str) -> int:
++    """The index just past the `}` that closes the `{` at `i`."""
++    opened = i
++    depth = 0
++    while i < len(text):
++        if text[i] == "{":
++            depth += 1
++            i += 1
++        elif text[i] == "}":
++            depth -= 1
++            i += 1
++            if depth == 0:
++                return i
++        elif text[i] == '"':
++            i = _quoted(text, i, origin)
++        elif text[i] == "#" or text.startswith("//", i):
++            i = _line_end(text, i)
++        elif text.startswith("/*", i):
++            i = _comment_end(text, i, origin)
++        elif text.startswith("<<", i) and (heredoc := _HEREDOC.match(text, i)):
++            i = _heredoc(text, heredoc, origin)
++        else:
++            i += 1
++    raise _unreadable(text, opened, origin, "the `}` that closes this `{`")
++
++
++def _quoted(text: str, i: int, origin: str) -> int:
++    """The index just past the closing quote of the quoted template opened at `i`."""
++    opened = i
++    i += 1
++    while i < len(text):
++        if text[i] == "\\":
++            i += 2
++        elif text[i] == '"':
++            return i + 1
++        elif text[i] == "\n":
++            break
++        else:
++            i = _template(text, i, origin)
++    raise _unreadable(text, opened, origin, "the closing quote of this string")
++
++
++def _heredoc(text: str, opener: re.Match[str], origin: str) -> int:
++    """The index just past the closing marker of the heredoc `opener` opened."""
++    marker = opener.group(1)
++    i = opener.end()
++    line_start = True
++    while i < len(text):
++        if line_start:
++            end = _line_end(text, i)
++            if text[i:end].strip() == marker:
++                return end
++            line_start = False
++        if text[i] == "\n":
++            i += 1
++            line_start = True
++        else:
++            i = _template(text, i, origin)
++    raise _unreadable(text, opener.start(), origin, f"the {marker} that closes this heredoc")
++
++
++def _template(text: str, i: int, origin: str) -> int:
++    """Past one unit of template text: an escaped sequence, an interpolation, or a character."""
++    if text.startswith(("$${", "%%{"), i):
++        return i + 3
++    if text.startswith(("${", "%{"), i):
++        return _braced(text, i + 1, origin)
++    return i + 1
++
++
++def _skip_space(text: str, i: int, origin: str) -> int:
++    while i < len(text):
++        if text[i] in _SPACE:
++            i += 1
++        elif text[i] == "#" or text.startswith("//", i):
++            i = _line_end(text, i)
++        elif text.startswith("/*", i):
++            i = _comment_end(text, i, origin)
++        else:
++            break
++    return i
++
++
++def _line_end(text: str, i: int) -> int:
++    end = text.find("\n", i)
++    return len(text) if end < 0 else end
++
++
++def _comment_end(text: str, i: int, origin: str) -> int:
++    end = text.find("*/", i + 2)
++    if end < 0:
++        raise _unreadable(text, i, origin, "the `*/` that closes this comment")
++    return end + 2
++
++
++def _unreadable(text: str, i: int, origin: str, expected: str) -> PresyncError:
++    line = text.count("\n", 0, i) + 1
++    found = text[i : _line_end(text, i)].strip()[:40]
++    return PresyncError(
++        f"{origin}:{line}: expected {expected} at {found!r}: "
++        "the destroy cannot reduce this file to its declarations"
++    )
+diff --git a/argocd-hook/presync/destroy.py b/argocd-hook/presync/destroy.py
+new file mode 100644
+index 0000000..d6cc8ca
+--- /dev/null
++++ b/argocd-hook/presync/destroy.py
+@@ -0,0 +1,276 @@
++"""`python3 -m presync.destroy <repo> <revision> <stage> [--apply]`: the Destroy Stage run.
++
++It deletes what a retired stage of a deploy repo left behind: the resources its Terraform
++state holds, then the stage's folder in the state repository (argo-cd D66). The Destroy
++Stage pipeline runs it as a one-off Job in `argocd-hooks`, under the sync hook's
++ServiceAccount and Secret. Its log and its exit code are the build's evidence.
++
++Without `--apply` it is a dry run, which writes nothing: no state, no state lock, no
++commit.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import re
++import socket
++import subprocess
++import sys
++import tempfile
++from pathlib import Path
++from typing import Any, NamedTuple
++
++from . import backend, declarations, kubeconfig, terraform
++from .environment import require
++from .errors import PresyncError
++from .git import clone_at_revision, clone_branch, push
++from .proc import run, step
++
++KUBERNETES = "registry.terraform.io/hashicorp/kubernetes"
++
++# An apply removes the state repository's argocd/<repo>/<stage>/, so the repo name and
++# the stage are each exactly one path segment.
++SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
++
++# Selects a local copy of the state for the dry run's plan, which therefore cannot
++# reach the state repository.
++DRY_RUN_OVERRIDE = "presync_dry_run_override.tf"
++
++
++class Forgotten(NamedTuple):
++    """A Kubernetes object in the state that lived in a namespace, and that namespace."""
++
++    address: str
++    namespace: str
++
++
++def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
++    """What the Destroy Stage pipeline's Job supplies."""
++    parser = argparse.ArgumentParser(
++        prog="presync.destroy",
++        description="Destroy what a retired stage of a deploy repo left behind.",
++    )
++    parser.add_argument("repo", help="clone URL of the deploy repo")
++    parser.add_argument("revision", help="the exact SHA to clone")
++    parser.add_argument("stage", help="the retired stage, e.g. dev")
++    parser.add_argument(
++        "--apply",
++        action="store_true",
++        help="destroy and remove the state; without it, a dry run that writes nothing",
++    )
++    return parser.parse_args(argv)
++
++
++def main(argv: list[str] | None = None) -> int:
++    args = parse_args(argv)
++    for segment in (backend.repo_name(args.repo), args.stage):
++        if not SEGMENT.fullmatch(segment):
++            raise PresyncError(f"{segment!r} is not one path segment, as a repo or stage is")
++    require("GIT_USERNAME")
++    require("GITHUB_TOKEN")
++    mode = "an apply" if args.apply else "a dry run, which writes nothing"
++    step(f"destroying {args.stage} of {args.repo}: {mode}")
++
++    run_dir = Path(tempfile.mkdtemp(prefix="presync-"))
++    kubeconfig.provide(run_dir / "kubeconfig")
++    # The stage's namespace went with its Application and is not an input of the run, so
++    # Terraform gets the stage alone.
++    os.environ["TF_VAR_stage"] = args.stage
++
++    clone = run_dir / "deploy"
++    clone_at_revision(args.repo, args.revision, clone)
++    work = terraform.working_dir(clone)
++    declarations.reduce(work)
++    tfvars = stage_tfvars(clone, args.stage)
++
++    key = backend.state_key(args.repo, args.stage)
++    url = backend.backend_url(backend.provide(), key)
++    _declared(work, "init", "-input=false", "-no-color", *backend.config_flags(url))
++    state = pull(work)
++    if state is None:
++        step(f"the backend holds no state at {key}: nothing to destroy")
++    elif args.apply:
++        destroy(work, state, tfvars, run_dir)
++    else:
++        dry_run(work, state, tfvars, run_dir)
++
++    remove_state_dir(args.repo, args.stage, args.apply, run_dir)
++    if not args.apply:
++        step("dry run: nothing was written")
++    return 0
++
++
++def stage_tfvars(clone: Path, stage: str) -> list[Path]:
++    """The stage's tfvars, or none once the clone no longer carries `config/<stage>/`."""
++    if not (clone / terraform.CONFIG_DIR / stage).is_dir():
++        step(f"the clone has no {terraform.CONFIG_DIR}/{stage}/: planning without its tfvars")
++        return []
++    return terraform.var_files(clone, stage)
++
++
++def pull(work: Path) -> dict[str, Any] | None:
++    """The stage's state as the backend holds it, or None where it holds none."""
++    pulled = json.loads(_terraform(work, "state", "pull", stdout=subprocess.PIPE).stdout)
++    # Where the http backend holds no state, `state pull` prints an empty one with no
++    # lineage, which every state Terraform has written carries.
++    return pulled if pulled["lineage"] else None
++
++
++def dry_run(work: Path, state: dict[str, Any], tfvars: list[Path], run_dir: Path) -> None:
++    """Show the plan an apply would make once it has forgotten the namespaced objects."""
++    forgotten = namespaced(state)
++    report(forgotten, "an apply forgets")
++    remaining = without(state, {item.address for item in forgotten})
++    if not remaining["resources"]:
++        step("the state lists no resources to destroy: an apply destroys nothing")
++        return
++
++    copy = run_dir / "dry-run.tfstate"
++    copy.write_text(json.dumps(remaining))
++    (work / DRY_RUN_OVERRIDE).write_text(
++        f'terraform {{\n  backend "local" {{\n    path = {json.dumps(str(copy))}\n  }}\n}}\n'
++    )
++    step(f"planning against {copy}: a local copy of the state, as an apply plans against it")
++    _declared(work, "init", "-input=false", "-no-color", "-reconfigure")
++    _declared(work, "plan", "-input=false", "-no-color", *_var_flags(tfvars))
++
++
++def destroy(work: Path, state: dict[str, Any], tfvars: list[Path], run_dir: Path) -> None:
++    """Forget the namespaced objects, destroy the rest, and confirm the state is empty."""
++    forgotten = namespaced(state)
++    report(forgotten, "forgetting")
++    if forgotten:
++        _terraform(work, "state", "rm", "-no-color", *[item.address for item in forgotten])
++
++    if without(state, {item.address for item in forgotten})["resources"]:
++        plan = run_dir / "destroy.tfplan"
++        _declared(work, "plan", "-input=false", "-no-color", f"-out={plan}", *_var_flags(tfvars))
++        _terraform(work, "apply", "-input=false", "-no-color", str(plan))
++    else:
++        step("the state lists no resources to destroy")
++
++    left = _terraform(work, "state", "list", "-no-color", stdout=subprocess.PIPE).stdout.split()
++    if left:
++        raise PresyncError(f"the state still lists {', '.join(left)}: its folder stays")
++    step("the state lists no resources")
++
++
++def remove_state_dir(repo: str, stage: str, apply: bool, run_dir: Path) -> None:
++    """Remove the stage's folder from the state repository, or name it in a dry run."""
++    folder = backend.state_dir(repo, stage)
++    clone = run_dir / "state"
++    clone_branch(backend.STATE_REPO_URL, backend.STATE_REPO_REF, clone)
++    if not (clone / folder).exists():
++        step(f"the state repository has no {folder}/: nothing to remove")
++        return
++    if not apply:
++        step(f"an apply removes {folder}/ from the state repository")
++        return
++
++    git = ["git", "-C", str(clone)]
++    run([*git, "rm", "-r", "--quiet", folder])
++    # Named after the pod, as terraform-backend-git's own commits to the repository are.
++    identity = [
++        "-c",
++        "user.name=argocd-hook",
++        "-c",
++        f"user.email=argocd-hook@{socket.gethostname()}",
++    ]
++    message = f"Remove {folder}/: {stage} of {backend.repo_name(repo)} destroyed"
++    run([*git, *identity, "commit", "--quiet", "-m", message])
++    push(clone, backend.STATE_REPO_REF)
++    step(f"removed {folder}/ from the state repository")
++
++
++def namespaced(state: dict[str, Any]) -> list[Forgotten]:
++    """The Kubernetes objects in `state` that lived in a namespace, by instance address.
++
++    Each lived in the stage's own namespace and went with it when the Application was
++    pruned. The run's ServiceAccount holds no grant there any more, so reading or
++    deleting one is refused with 403: a destroy drops them from the state instead.
++    """
++    found: dict[str, Forgotten] = {}
++    for resource in state["resources"]:
++        if resource["mode"] != "managed" or resource["provider"].split('"')[1] != KUBERNETES:
++            continue
++        for instance in resource["instances"]:
++            namespace = _namespace(instance["attributes"])
++            if namespace:
++                at = address(resource, instance)
++                found.setdefault(at, Forgotten(at, namespace))
++    return list(found.values())
++
++
++def without(state: dict[str, Any], addresses: set[str]) -> dict[str, Any]:
++    """`state` as `terraform state rm` leaves it once `addresses` are dropped."""
++    resources = []
++    for resource in state["resources"]:
++        instances = [i for i in resource["instances"] if address(resource, i) not in addresses]
++        if instances:
++            resources.append({**resource, "instances": instances})
++    return {**state, "resources": resources}
++
++
++def address(resource: dict[str, Any], instance: dict[str, Any]) -> str:
++    """The instance's address, as `terraform state list` prints it."""
++    at = f"{resource['type']}.{resource['name']}"
++    if resource["mode"] == "data":
++        at = f"data.{at}"
++    if resource.get("module"):
++        at = f"{resource['module']}.{at}"
++    if "index_key" in instance:
++        key = instance["index_key"]
++        at += f"[{key}]" if isinstance(key, int) else f"[{json.dumps(key)}]"
++    return at
++
++
++def report(forgotten: list[Forgotten], verb: str) -> None:
++    if not forgotten:
++        step("the state holds no namespaced Kubernetes object: nothing to forget")
++        return
++    step(
++        f"{verb} {len(forgotten)} namespaced Kubernetes object(s), already gone with "
++        "their namespace: dropped from the state, never deleted"
++    )
++    for item in forgotten:
++        step(f"  {item.address} (namespace {item.namespace})")
++
++
++def _namespace(attributes: dict[str, Any]) -> str:
++    # A typed resource carries its one `metadata` block; `kubernetes_manifest` carries
++    # the object it manages, which the state stores as a dynamic value.
++    metadata = attributes.get("metadata")
++    if metadata:
++        return metadata[0].get("namespace") or ""
++    managed = (attributes.get("object") or {}).get("value") or {}
++    return managed.get("metadata", {}).get("namespace") or ""
++
++
++def _var_flags(tfvars: list[Path]) -> list[str]:
++    return [f"-var-file={path.absolute()}" for path in tfvars]
++
++
++def _terraform(work: Path, *argv: str, **kwargs: Any) -> subprocess.CompletedProcess[str]:
++    return run(["terraform", f"-chdir={work}", *argv], **kwargs)
++
++
++def _declared(work: Path, *argv: str) -> None:
++    """Run `terraform <argv>`, whose failure means the empty configuration does not stand."""
++    try:
++        _terraform(work, *argv)
++    except PresyncError as error:
++        raise PresyncError(
++            f"the empty configuration, {terraform.TERRAFORM_DIR}/ reduced to its terraform, "
++            f"provider and variable blocks, does not {argv[0]} (Terraform's error is above): "
++            f"{error}"
++        ) from error
++
++
++if __name__ == "__main__":
++    try:
++        sys.exit(main())
++    except PresyncError as error:
++        print(f"presync: {error}", file=sys.stderr)
++        sys.exit(1)
+diff --git a/argocd-hook/presync/git.py b/argocd-hook/presync/git.py
+index 219d0b9..5419bb2 100644
+--- a/argocd-hook/presync/git.py
++++ b/argocd-hook/presync/git.py
+@@ -1,4 +1,8 @@
+-"""The run's only clone: the deploy repo at exactly the SHA Argo is syncing."""
++"""The run's clones: the deploy repo at exactly the SHA it is handed, and the state repo.
++
++A destroy run also clones the state repository at its branch tip and pushes the removal
++of the stage's state back to it.
++"""
+ 
+ from __future__ import annotations
+ 
+@@ -14,33 +18,34 @@ CREDENTIAL_HELPER = (
+     '!f() { printf "username=%s\\npassword=%s\\n" "$GIT_USERNAME" "$GITHUB_TOKEN"; }; f'
+ )
+ 
++# An empty value resets the helper list, so what authenticates a fetch or a push is this
++# helper and never one the run's HOME happens to configure ahead of it.
++AUTHENTICATED = ["-c", "credential.helper=", "-c", f"credential.helper={CREDENTIAL_HELPER}"]
++
+ 
+ def clone_at_revision(repo_url: str, revision: str, dest: Path) -> None:
+     """Check `repo_url` out at `revision` in `dest`, which must not exist yet."""
+-    step(f"cloning {repo_url} at {revision}")
++    _clone(repo_url, revision, dest)
++    head = run(["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True).stdout.strip()
++    if head != revision:
++        raise PresyncError(f"the clone is at {head}, not the {revision} it was handed")
++
++
++def clone_branch(repo_url: str, branch: str, dest: Path) -> None:
++    """Check out the tip of `repo_url`'s `branch` in `dest`, which must not exist yet."""
++    _clone(repo_url, branch, dest)
++
++
++def push(clone: Path, branch: str) -> None:
++    """Push `clone`'s HEAD to its origin's `branch`."""
++    run(["git", "-C", str(clone), *AUTHENTICATED, "push", "--quiet", "origin", f"HEAD:{branch}"])
++
++
++def _clone(repo_url: str, ref: str, dest: Path) -> None:
++    step(f"cloning {repo_url} at {ref}")
+     run(["git", "-c", "init.defaultBranch=main", "init", "--quiet", str(dest)])
+ 
+     git = ["git", "-C", str(dest)]
+     run([*git, "remote", "add", "origin", repo_url])
+-    run(
+-        [
+-            *git,
+-            # An empty value resets the helper list, so what authenticates the fetch is
+-            # this helper and never one the run's HOME happens to configure ahead of it.
+-            "-c",
+-            "credential.helper=",
+-            "-c",
+-            f"credential.helper={CREDENTIAL_HELPER}",
+-            "fetch",
+-            "--quiet",
+-            "--depth",
+-            "1",
+-            "origin",
+-            revision,
+-        ]
+-    )
++    run([*git, *AUTHENTICATED, "fetch", "--quiet", "--depth", "1", "origin", ref])
+     run([*git, "checkout", "--quiet", "--detach", "FETCH_HEAD"])
+-
+-    head = run([*git, "rev-parse", "HEAD"], capture_output=True).stdout.strip()
+-    if head != revision:
+-        raise PresyncError(f"the clone is at {head}, not the {revision} it was handed")
+diff --git a/argocd-hook/tests/support.py b/argocd-hook/tests/support.py
+index e15065e..2305718 100644
+--- a/argocd-hook/tests/support.py
++++ b/argocd-hook/tests/support.py
+@@ -259,16 +259,25 @@ class FakeApiserver:
+         return Handler
+ 
+ 
+-def fake_terraform(bin_dir: Path, log: Path, fails: str = "") -> Path:
++def fake_terraform(
++    bin_dir: Path, log: Path, fails: str = "", answers: dict[str, Path] | None = None
++) -> Path:
+     """A `terraform` on PATH that records each call, and fails the `fails` subcommand.
+ 
+     It records the environment the run selected as well as the arguments, because
+     what a hook run is judged on is carried by both: the backend flags and the
+     tfvars in the arguments, the kubeconfig it authenticates with and the release
+     identity it applies under in the environment.
++
++    `answers` maps a two-word command, such as `state pull`, to a file whose content
++    the call prints on stdout, as read when the call is made.
+     """
+     bin_dir.mkdir(parents=True, exist_ok=True)
+     script = bin_dir / "terraform"
++    printed = "".join(
++        f'if [ "$2 $3" = "{command}" ]; then cat "{answer}"; fi\n'
++        for command, answer in (answers or {}).items()
++    )
+     script.write_text(
+         "#!/bin/sh\n"
+         "{\n"
+@@ -280,12 +289,87 @@ def fake_terraform(bin_dir: Path, log: Path, fails: str = "") -> Path:
+         f'}} >> "{log}"\n'
+         # $2 is the subcommand: `terraform -chdir=<dir> <subcommand> ...`.
+         f'if [ "$2" = "{fails}" ]; then exit 1; fi\n'
++        f"{printed}"
+         "exit 0\n"
+     )
+     script.chmod(0o755)
+     return script
+ 
+ 
++class FakeStateBackend:
++    """Terraform's `http` backend protocol over one state held in memory.
++
++    terraform-backend-git speaks this protocol to Terraform, so a real `terraform`
++    pointed here through PRESYNC_TF_BACKEND runs exactly as it does in the pod, and
++    `received` shows every read, write and lock it made.
++    """
++
++    def __init__(self, cleanup, state: bytes | None = None) -> None:
++        self.state = state
++        self.received: list[str] = []
++        backend = self
++
++        class Handler(BaseHTTPRequestHandler):
++            protocol_version = "HTTP/1.1"
++
++            def do_GET(self) -> None:
++                backend.received.append("GET")
++                if backend.state is None:
++                    self._answer(404, b"")
++                else:
++                    self._answer(200, backend.state)
++
++            def do_POST(self) -> None:
++                backend.received.append("POST")
++                backend.state = self.rfile.read(int(self.headers["Content-Length"]))
++                self._answer(200, b"")
++
++            def do_LOCK(self) -> None:
++                self._consume("LOCK")
++
++            def do_UNLOCK(self) -> None:
++                self._consume("UNLOCK")
++
++            def _consume(self, method: str) -> None:
++                backend.received.append(method)
++                self.rfile.read(int(self.headers.get("Content-Length") or 0))
++                self._answer(200, b"")
++
++            def _answer(self, code: int, body: bytes) -> None:
++                self.send_response(code)
++                self.send_header("Content-Length", str(len(body)))
++                self.end_headers()
++                self.wfile.write(body)
++
++            def log_message(self, *args: Any) -> None:
++                """A test reports through its assertions, not through a server log."""
++
++        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
++        self._server.daemon_threads = True
++        threading.Thread(target=self._server.serve_forever, daemon=True).start()
++        cleanup(self.close)
++
++        self.addr = f"127.0.0.1:{self._server.server_address[1]}"
++
++    def close(self) -> None:
++        self._server.shutdown()
++        self._server.server_close()
++
++    def writes(self) -> list[str]:
++        """Every request that changed the state or its lock."""
++        return [method for method in self.received if method != "GET"]
++
++
++def make_state_repo(path: Path, files: dict[str, str]) -> str:
++    """A state repository at `path` holding `files` on `main`, which accepts pushes to it.
++
++    A push updates its working tree, so a test reads what a run removed off the disk.
++    """
++    make_deploy_repo(path, commits=1, files=files)
++    git(path, "config", "receive.denyCurrentBranch", "updateInstead")
++    return git(path, "rev-parse", "HEAD")
++
++
+ @contextlib.contextmanager
+ def quiet():
+     """Send this process's stdout to nowhere, its children's included.
+@@ -294,14 +378,23 @@ def quiet():
+     reports nothing — a real subprocess writes to the file descriptor and goes
+     straight past it.
+     """
+-    with open(os.devnull, "w") as sink:
+-        saved = os.dup(1)
+-        os.dup2(sink.fileno(), 1)
++    with redirected(os.devnull, 1):
++        yield
++
++
++@contextlib.contextmanager
++def redirected(path: str | Path, *descriptors: int):
++    """Send what is written to `descriptors`, children's writes included, into `path`."""
++    with open(path, "w") as sink:
++        saved = [(descriptor, os.dup(descriptor)) for descriptor in descriptors]
++        for descriptor in descriptors:
++            os.dup2(sink.fileno(), descriptor)
+         try:
+             yield
+         finally:
+-            os.dup2(saved, 1)
+-            os.close(saved)
++            for descriptor, copy in saved:
++                os.dup2(copy, descriptor)
++                os.close(copy)
+ 
+ 
+ def listening_address(cleanup) -> str:
+diff --git a/argocd-hook/tests/test_declarations.py b/argocd-hook/tests/test_declarations.py
+new file mode 100644
+index 0000000..5e2c8a6
+--- /dev/null
++++ b/argocd-hook/tests/test_declarations.py
+@@ -0,0 +1,171 @@
++"""The empty configuration: a root module's declarations, and nothing a brace could hide."""
++
++from __future__ import annotations
++
++import contextlib
++import io
++import shutil
++import tempfile
++import unittest
++from pathlib import Path
++
++from presync.declarations import blocks, reduce
++from presync.errors import PresyncError
++
++# Every way a brace can sit inside a block without opening or closing one.
++TRICKY = """\
++# A comment with a } and a {
++terraform {
++  required_providers {
++    github = {
++      source = "integrations/github"
++    }
++  }
++
++  backend "http" {}
++}
++
++resource "github_repository_webhook" "argocd" {
++  count = var.manage_webhook ? 1 : 0 // }
++
++  /* a { block comment
++     that } spans lines */
++  configuration {
++    url    = "https://example.invalid/}{"
++    secret = "${jsonencode({ a = "}" })}"
++    name   = "$${not_an_interpolation"
++    flag   = "%{ if var.manage_webhook }on%{ else }off%{ endif }"
++    quoted = "a \\" and a } after it"
++  }
++}
++
++data "github_repository" "this" {
++  full_name = <<EOT
++{
++}
++${var.repository} }
++EOT
++}
++
++locals {
++  policy = <<-POLICY
++    {"Statement": [{
++    }]}
++    POLICY
++}
++
++variable   "manage_webhook"   {
++  type    = bool
++  default = false
++}
++
++module "cache" { source = "./modules/cache" }
++
++output "url" {
++  value = "${local.policy}}"
++}
++
++provider "github" {
++  owner = "pvginkel"
++}
++"""
++
++
++class BlocksTests(unittest.TestCase):
++    def test_each_top_level_block_is_found_whole_whatever_its_body_holds(self) -> None:
++        found = blocks(TRICKY, "main.tf")
++
++        self.assertEqual(
++            [block.header for block in found],
++            [
++                "terraform",
++                'resource "github_repository_webhook" "argocd"',
++                'data "github_repository" "this"',
++                "locals",
++                'variable "manage_webhook"',
++                'module "cache"',
++                'output "url"',
++                'provider "github"',
++            ],
++        )
++        self.assertEqual(
++            found[4].text,
++            'variable   "manage_webhook"   {\n  type    = bool\n  default = false\n}',
++        )
++        self.assertEqual(found[7].text, 'provider "github" {\n  owner = "pvginkel"\n}')
++
++    def test_an_attribute_at_the_top_level_is_refused_by_file_and_line(self) -> None:
++        with self.assertRaises(PresyncError) as raised:
++            blocks('variable "a" {}\n\nname = "x"\n', "main.tf")
++
++        self.assertIn("main.tf:3:", str(raised.exception))
++
++    def test_a_block_that_never_closes_is_refused(self) -> None:
++        with self.assertRaises(PresyncError) as raised:
++            blocks('variable "a" {\n  default = "}"\n', "variables.tf")
++
++        self.assertIn("variables.tf:1:", str(raised.exception))
++
++    def test_a_heredoc_that_never_closes_is_refused(self) -> None:
++        with self.assertRaises(PresyncError):
++            blocks("locals {\n  a = <<EOT\n}\n", "main.tf")
++
++
++class ReduceTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.work = Path(tempfile.mkdtemp())
++        self.addCleanup(shutil.rmtree, self.work)
++
++    def reduce(self) -> str:
++        reported = io.StringIO()
++        with contextlib.redirect_stderr(reported):
++            reduce(self.work)
++        return reported.getvalue()
++
++    def test_every_root_file_keeps_its_terraform_provider_and_variable_blocks(self) -> None:
++        (self.work / "main.tf").write_text(TRICKY)
++
++        self.reduce()
++
++        kept = [block.header for block in blocks((self.work / "main.tf").read_text(), "main.tf")]
++        self.assertEqual(kept, ["terraform", 'variable "manage_webhook"', 'provider "github"'])
++
++    def test_declarations_split_across_files_are_each_kept_where_they_are(self) -> None:
++        # KubeCoderDeploy's layout: providers.tf reads variables variables.tf declares.
++        providers = (
++            'terraform {\n  backend "http" {}\n}\n\n'
++            'provider "homelab" {\n  zfs_pools = var.zfs_pools\n}\n'
++        )
++        variables = 'variable "zfs_pools" {\n  type = map(string)\n}\n'
++        (self.work / "providers.tf").write_text(providers)
++        (self.work / "variables.tf").write_text(variables)
++        (self.work / "storage.tf").write_text('resource "homelab_zfs_dataset" "this" {}\n')
++
++        reported = self.reduce()
++
++        self.assertEqual((self.work / "providers.tf").read_text(), providers)
++        self.assertEqual((self.work / "variables.tf").read_text(), variables)
++        self.assertEqual((self.work / "storage.tf").read_text(), "")
++        self.assertIn(
++            'storage.tf: keeps 0 declaration(s), drops resource "homelab_zfs_dataset" "this"',
++            reported,
++        )
++
++    def test_a_child_modules_files_are_left_alone(self) -> None:
++        module = self.work / "modules/data/main.tf"
++        module.parent.mkdir(parents=True)
++        module.write_text('resource "terraform_data" "this" {}\n')
++
++        self.reduce()
++
++        self.assertEqual(module.read_text(), 'resource "terraform_data" "this" {}\n')
++
++    def test_a_json_configuration_file_is_refused(self) -> None:
++        (self.work / "main.tf").write_text('variable "a" {}\n')
++        (self.work / "providers.tf.json").write_text("{}\n")
++
++        with self.assertRaises(PresyncError) as raised:
++            self.reduce()
++
++        self.assertIn("providers.tf.json", str(raised.exception))
++        self.assertEqual((self.work / "main.tf").read_text(), 'variable "a" {}\n')
+diff --git a/argocd-hook/tests/test_destroy.py b/argocd-hook/tests/test_destroy.py
+new file mode 100644
+index 0000000..9efe3f1
+--- /dev/null
++++ b/argocd-hook/tests/test_destroy.py
+@@ -0,0 +1,602 @@
++"""The Destroy Stage run: what it forgets, what it destroys, and what a dry run leaves alone."""
++
++from __future__ import annotations
++
++import contextlib
++import io
++import json
++import os
++import shutil
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from typing import Any
++from unittest import mock
++
++from presync import backend, kubeconfig
++from presync.destroy import DRY_RUN_OVERRIDE, address, main, namespaced, parse_args, without
++from presync.errors import PresyncError
++
++from .support import (
++    FakeStateBackend,
++    fake_terraform,
++    git,
++    listening_address,
++    make_deploy_repo,
++    make_state_repo,
++    redirected,
++    service_account,
++)
++
++REPO_ROOT = Path(__file__).resolve().parent.parent
++
++KUBERNETES = 'provider["registry.terraform.io/hashicorp/kubernetes"]'
++HOMELAB = 'provider["registry.terraform.io/pvginkel/homelab"]'
++
++
++def resource(
++    kind: str, name: str, provider: str, *instances: dict[str, Any], **extra: Any
++) -> dict[str, Any]:
++    """A resource as a version 4 state lists it."""
++    return {
++        "mode": "managed",
++        "type": kind,
++        "name": name,
++        "provider": provider,
++        "instances": list(instances),
++        **extra,
++    }
++
++
++def metadata(name: str, namespace: str = "") -> dict[str, Any]:
++    """A typed Kubernetes resource's attributes; cluster-scoped kinds carry no namespace."""
++    block: dict[str, Any] = {"name": name}
++    if namespace:
++        block["namespace"] = namespace
++    return {"attributes": {"metadata": [block]}}
++
++
++# The retired stage's state: an object in its namespace, a cluster-scoped volume, and an
++# RBD image outside Kubernetes.
++SECRET = resource(
++    "kubernetes_secret_v1",
++    "credentials",
++    KUBERNETES,
++    metadata("credentials", "fieldnotes-dev"),
++    module="module.data",
++)
++VOLUME = resource(
++    "kubernetes_persistent_volume_v1",
++    "this",
++    KUBERNETES,
++    metadata("fieldnotes-dev-data-pv"),
++    module="module.data",
++)
++IMAGE = resource(
++    "homelab_rbd_image",
++    "this",
++    HOMELAB,
++    {"attributes": {"name": "fieldnotes-dev-data"}},
++    module="module.data",
++)
++
++
++def state(*resources: dict[str, Any]) -> dict[str, Any]:
++    return {
++        "version": 4,
++        "terraform_version": "1.16.3",
++        "serial": 7,
++        "lineage": "5d3c2b1a-0f9e-8d7c-6b5a-493827161504",
++        "outputs": {},
++        "resources": list(resources),
++    }
++
++
++# What `terraform state pull` prints where the http backend holds no state.
++NO_STATE = {
++    "version": 4,
++    "terraform_version": "1.16.3",
++    "serial": 0,
++    "lineage": "",
++    "outputs": {},
++    "resources": [],
++    "check_results": None,
++}
++
++
++def addresses(listed: dict[str, Any]) -> set[str]:
++    return {address(r, i) for r in listed["resources"] for i in r["instances"]}
++
++
++class NamespacedTests(unittest.TestCase):
++    def test_only_the_object_that_lived_in_a_namespace_is_forgotten(self) -> None:
++        found = namespaced(state(SECRET, VOLUME, IMAGE))
++
++        self.assertEqual(
++            [(item.address, item.namespace) for item in found],
++            [("module.data.kubernetes_secret_v1.credentials", "fieldnotes-dev")],
++        )
++
++    def test_a_kubernetes_manifest_is_read_through_the_object_it_manages(self) -> None:
++        def manifest(name: str, namespace: str) -> dict[str, Any]:
++            meta = {"name": name, **({"namespace": namespace} if namespace else {})}
++            return {"attributes": {"object": {"value": {"metadata": meta}, "type": "dynamic"}}}
++
++        found = namespaced(
++            state(
++                resource("kubernetes_manifest", "config", KUBERNETES, manifest("c", "app-dev")),
++                resource("kubernetes_manifest", "role", KUBERNETES, manifest("r", "")),
++            )
++        )
++
++        self.assertEqual([item.address for item in found], ["kubernetes_manifest.config"])
++
++    def test_another_providers_resource_is_never_forgotten(self) -> None:
++        lookalike = resource("other_secret", "x", HOMELAB, metadata("x", "app-dev"))
++
++        self.assertEqual(namespaced(state(lookalike)), [])
++
++    def test_a_data_source_is_never_forgotten(self) -> None:
++        read = {**SECRET, "mode": "data"}
++
++        self.assertEqual(namespaced(state(read)), [])
++
++    def test_instances_are_named_by_their_keys(self) -> None:
++        counted = resource(
++            "kubernetes_secret_v1",
++            "counted",
++            KUBERNETES,
++            {"index_key": 0, **metadata("a", "app-dev")},
++        )
++        keyed = resource(
++            "kubernetes_secret_v1",
++            "keyed",
++            KUBERNETES,
++            {"index_key": "b", **metadata("b", "app-dev")},
++            module='module.apps["web"]',
++        )
++
++        self.assertEqual(
++            [item.address for item in namespaced(state(counted, keyed))],
++            [
++                "kubernetes_secret_v1.counted[0]",
++                'module.apps["web"].kubernetes_secret_v1.keyed["b"]',
++            ],
++        )
++
++    def test_without_drops_exactly_the_instances_named(self) -> None:
++        pair = resource(
++            "kubernetes_secret_v1",
++            "pair",
++            KUBERNETES,
++            {"index_key": 0, **metadata("a", "app-dev")},
++            {"index_key": 1, **metadata("b", "app-dev")},
++        )
++
++        left = without(
++            state(SECRET, pair, IMAGE), {address(SECRET, {}), "kubernetes_secret_v1.pair[1]"}
++        )
++
++        self.assertEqual(
++            addresses(left), {"kubernetes_secret_v1.pair[0]", "module.data.homelab_rbd_image.this"}
++        )
++
++
++class ArgumentContractTests(unittest.TestCase):
++    def test_a_dry_run_unless_apply_is_given(self) -> None:
++        args = parse_args(["https://github.com/pvginkel/FieldnotesDeploy.git", "abc123", "dev"])
++
++        self.assertEqual(args.repo, "https://github.com/pvginkel/FieldnotesDeploy.git")
++        self.assertEqual(args.revision, "abc123")
++        self.assertEqual(args.stage, "dev")
++        self.assertFalse(args.apply)
++
++    def test_apply_is_a_flag(self) -> None:
++        self.assertTrue(parse_args(["repo", "abc123", "dev", "--apply"]).apply)
++
++
++FIELDNOTES = {
++    "terraform/providers.tf": (
++        'terraform {\n  backend "http" {}\n}\n\n'
++        'variable "manage_webhook" {\n  type    = bool\n  default = false\n}\n'
++    ),
++    "terraform/main.tf": 'module "cache" {\n  source = "./modules/cache"\n}\n',
++    "terraform/modules/cache/main.tf": 'resource "terraform_data" "this" {}\n',
++    "config/dev/terraform.tfvars": "manage_webhook = false\n",
++}
++
++STATE_REPO = {
++    "argocd/FieldnotesDeploy/dev/terraform.tfstate": "ENC[the dev state]\n",
++    "argocd/FieldnotesDeploy/prd/terraform.tfstate": "ENC[the prd state]\n",
++}
++
++
++class DestroyRun:
++    """A destroy run's world: a deploy repo, a state repository, and an identity."""
++
++    files = FIELDNOTES
++
++    def setUp(self) -> None:
++        self.tmp = Path(tempfile.mkdtemp())
++        self.addCleanup(shutil.rmtree, self.tmp)
++        self.origin = self.tmp / "FieldnotesDeploy"
++        self.shas = make_deploy_repo(self.origin, files=self.files)
++        self.state_repo = self.tmp / "TerraformState"
++        self.state_head = make_state_repo(self.state_repo, STATE_REPO)
++        self.runs = 0
++        self.run_dir = self.tmp / "run-0"
++        self.run_dir.mkdir()
++        account = service_account(self.tmp / "serviceaccount")
++        self.environment = {
++            "GIT_USERNAME": "x-access-token",
++            "GITHUB_TOKEN": "the-pat",
++            "PRESYNC_TF_BACKEND": listening_address(self.addCleanup),
++            kubeconfig.SERVICE_ACCOUNT_ENV: str(account),
++            "KUBERNETES_SERVICE_HOST": "127.0.0.1",
++            "KUBERNETES_SERVICE_PORT": "6443",
++            "CHECKPOINT_DISABLE": "1",
++        }
++
++    def destroy(self, *argv: str, sha: str = "") -> str:
++        """Run a destroy of the origin at `sha` in a run dir of its own, returning what it
++        reported."""
++        if any(self.run_dir.iterdir()):
++            self.runs += 1
++            self.run_dir = self.tmp / f"run-{self.runs}"
++            self.run_dir.mkdir()
++        stderr = io.StringIO()
++        with contextlib.ExitStack() as stack:
++            stack.enter_context(mock.patch.dict("os.environ", self.environment))
++            stack.enter_context(mock.patch("tempfile.mkdtemp", return_value=str(self.run_dir)))
++            stack.enter_context(mock.patch.object(backend, "STATE_REPO_URL", str(self.state_repo)))
++            stack.enter_context(contextlib.redirect_stderr(stderr))
++            self.assertEqual(main([str(self.origin), sha or self.shas[0], *argv]), 0)
++        return stderr.getvalue()
++
++    def state_repo_head(self) -> str:
++        return git(self.state_repo, "rev-parse", "HEAD")
++
++    def without_config(self) -> str:
++        """A commit of the origin that no longer carries `config/dev/`."""
++        git(self.origin, "rm", "-r", "--quiet", "config/dev")
++        git(self.origin, "commit", "--quiet", "-m", "remove config/dev")
++        return git(self.origin, "rev-parse", "HEAD")
++
++
++class FlowTests(DestroyRun, unittest.TestCase):
++    def setUp(self) -> None:
++        super().setUp()
++        self.log = self.tmp / "terraform.log"
++        self.pulled = self.tmp / "pulled.json"
++        self.listed = self.tmp / "listed.txt"
++        self.listed.write_text("")
++        self.environment["PATH"] = f"{self.tmp / 'bin'}:{os.environ['PATH']}"
++
++    def with_terraform(self, pulled: dict[str, Any], fails: str = "") -> None:
++        self.pulled.write_text(json.dumps(pulled))
++        answers = {"state pull": self.pulled, "state list": self.listed}
++        fake_terraform(self.tmp / "bin", self.log, fails=fails, answers=answers)
++
++    def argvs(self) -> list[str]:
++        """Each terraform call's arguments, in order."""
++        lines = self.log.read_text().splitlines()
++        return [line.removeprefix("argv: ") for line in lines if line.startswith("argv: ")]
++
++    def calls(self) -> list[str]:
++        """Each terraform call's command, `state` taking its subcommand along."""
++        called = []
++        for argv in self.argvs():
++            words = argv.split()[1:]
++            called.append(" ".join(words[:2]) if words[0] == "state" else words[0])
++        return called
++
++    def argv_of(self, command: str) -> str:
++        return next(argv for argv in self.argvs() if f" {command} " in f"{argv} ")
++
++    def test_a_dry_run_plans_against_a_copy_of_the_state_without_what_it_forgets(self) -> None:
++        self.with_terraform(state(SECRET, VOLUME, IMAGE))
++
++        reported = self.destroy("dev")
++
++        self.assertEqual(self.calls(), ["init", "state pull", "init", "plan"])
++        self.assertIn("-reconfigure", self.argvs()[2].split())
++        copy = self.run_dir / "dry-run.tfstate"
++        self.assertEqual(
++            addresses(json.loads(copy.read_text())),
++            {
++                "module.data.kubernetes_persistent_volume_v1.this",
++                "module.data.homelab_rbd_image.this",
++            },
++        )
++        override = (self.run_dir / "deploy/terraform" / DRY_RUN_OVERRIDE).read_text()
++        self.assertIn(f'backend "local" {{\n    path = "{copy}"', override)
++        self.assertIn(
++            f"-var-file={self.run_dir}/deploy/config/dev/terraform.tfvars", self.argv_of("plan")
++        )
++        self.assertIn(
++            "module.data.kubernetes_secret_v1.credentials (namespace fieldnotes-dev)", reported
++        )
++        self.assertIn("an apply removes argocd/FieldnotesDeploy/dev/", reported)
++        self.assertIn("nothing was written", reported)
++
++    def test_a_dry_run_writes_nothing(self) -> None:
++        self.with_terraform(state(SECRET, VOLUME, IMAGE))
++
++        self.destroy("dev")
++
++        self.assertNotIn("state rm", self.calls())
++        self.assertNotIn("apply", self.calls())
++        self.assertEqual(self.state_repo_head(), self.state_head)
++        self.assertTrue((self.state_repo / "argocd/FieldnotesDeploy/dev").is_dir())
++
++    def test_the_empty_configuration_is_the_roots_declarations(self) -> None:
++        self.with_terraform(state(IMAGE))
++
++        reported = self.destroy("dev")
++
++        work = self.run_dir / "deploy/terraform"
++        self.assertEqual((work / "main.tf").read_text(), "")
++        self.assertEqual((work / "providers.tf").read_text(), FIELDNOTES["terraform/providers.tf"])
++        self.assertIn('main.tf: keeps 0 declaration(s), drops module "cache"', reported)
++
++    def test_an_apply_forgets_then_destroys_from_the_saved_plan(self) -> None:
++        self.with_terraform(state(SECRET, VOLUME, IMAGE))
++
++        self.destroy("dev", "--apply")
++
++        self.assertEqual(
++            self.calls(), ["init", "state pull", "state rm", "plan", "apply", "state list"]
++        )
++        forgotten = self.argv_of("rm").split(" rm ", 1)[1].split()
++        self.assertEqual(forgotten, ["-no-color", "module.data.kubernetes_secret_v1.credentials"])
++        plan = self.run_dir / "destroy.tfplan"
++        self.assertIn(f"-out={plan}", self.argv_of("plan"))
++        self.assertTrue(self.argv_of("apply").endswith(f" apply -input=false -no-color {plan}"))
++        self.assertFalse((self.run_dir / "deploy/terraform" / DRY_RUN_OVERRIDE).exists())
++
++    def test_an_apply_removes_the_stages_folder_and_nothing_else(self) -> None:
++        self.with_terraform(state(VOLUME, IMAGE))
++
++        reported = self.destroy("dev", "--apply")
++
++        self.assertFalse((self.state_repo / "argocd/FieldnotesDeploy/dev").exists())
++        self.assertTrue(
++            (self.state_repo / "argocd/FieldnotesDeploy/prd/terraform.tfstate").exists()
++        )
++        self.assertEqual(git(self.state_repo, "rev-parse", "HEAD~1"), self.state_head)
++        self.assertEqual(
++            git(self.state_repo, "log", "-1", "--format=%s"),
++            "Remove argocd/FieldnotesDeploy/dev/: dev of FieldnotesDeploy destroyed",
++        )
++        self.assertIn("removed argocd/FieldnotesDeploy/dev/", reported)
++
++    def test_a_state_that_still_lists_resources_keeps_its_folder(self) -> None:
++        self.with_terraform(state(VOLUME, IMAGE))
++        self.listed.write_text("module.data.homelab_rbd_image.this\n")
++
++        with self.assertRaises(PresyncError) as raised:
++            self.destroy("dev", "--apply")
++
++        self.assertIn("module.data.homelab_rbd_image.this", str(raised.exception))
++        self.assertEqual(self.state_repo_head(), self.state_head)
++
++    def test_an_empty_state_skips_the_destroy_and_still_removes_its_folder(self) -> None:
++        self.with_terraform(state())
++
++        self.destroy("dev", "--apply")
++
++        self.assertEqual(self.calls(), ["init", "state pull", "state list"])
++        self.assertFalse((self.state_repo / "argocd/FieldnotesDeploy/dev").exists())
++
++    def test_a_state_of_namespaced_objects_alone_is_forgotten_and_not_planned(self) -> None:
++        self.with_terraform(state(SECRET))
++
++        self.destroy("dev", "--apply")
++
++        self.assertEqual(self.calls(), ["init", "state pull", "state rm", "state list"])
++
++    def test_a_stage_with_no_state_gets_none_and_its_missing_folder_is_skipped(self) -> None:
++        self.with_terraform(NO_STATE)
++
++        reported = self.destroy("tst", "--apply")
++
++        self.assertEqual(self.calls(), ["init", "state pull"])
++        self.assertEqual(self.state_repo_head(), self.state_head)
++        self.assertIn("the backend holds no state at argocd/FieldnotesDeploy/tst/", reported)
++        self.assertIn("has no argocd/FieldnotesDeploy/tst/: nothing to remove", reported)
++
++    def test_a_clone_without_the_stages_config_still_reaches_the_state_checks(self) -> None:
++        self.with_terraform(state(VOLUME, IMAGE))
++
++        reported = self.destroy("dev", "--apply", sha=self.without_config())
++
++        self.assertNotIn("-var-file", self.argv_of("plan"))
++        self.assertEqual(self.calls()[-1], "state list")
++        self.assertFalse((self.state_repo / "argocd/FieldnotesDeploy/dev").exists())
++        self.assertIn("the clone has no config/dev/: planning without its tfvars", reported)
++
++    def test_terraform_runs_as_the_stage_and_no_namespace(self) -> None:
++        self.with_terraform(state(IMAGE))
++
++        self.destroy("dev")
++
++        recorded = self.log.read_text()
++        self.assertEqual(recorded.count("TF_VAR_stage=dev\n"), len(self.calls()))
++        self.assertEqual(recorded.count("TF_VAR_namespace=\n"), len(self.calls()))
++        self.assertIn(f"KUBE_CONFIG_PATH={self.run_dir / 'kubeconfig'}\n", recorded)
++
++    def test_an_empty_configuration_that_does_not_plan_fails_before_anything_is_destroyed(
++        self,
++    ) -> None:
++        self.with_terraform(state(VOLUME, IMAGE), fails="plan")
++
++        with self.assertRaises(PresyncError) as raised:
++            self.destroy("dev", "--apply")
++
++        self.assertIn("the empty configuration", str(raised.exception))
++        self.assertIn("does not plan", str(raised.exception))
++        self.assertNotIn("apply", self.calls())
++        self.assertEqual(self.state_repo_head(), self.state_head)
++
++    def test_a_stage_that_is_not_one_path_segment_is_refused_before_anything_runs(self) -> None:
++        self.with_terraform(state(IMAGE))
++
++        for stage in ("", "..", "dev/../prd"):
++            with self.subTest(stage=stage):
++                with self.assertRaises(PresyncError):
++                    self.destroy(stage, "--apply")
++
++        self.assertFalse(self.log.exists())
++        self.assertEqual(list(self.run_dir.iterdir()), [])
++
++    def test_a_missing_credential_fails_the_run_before_anything_is_cloned(self) -> None:
++        self.with_terraform(state(IMAGE))
++        self.environment["GITHUB_TOKEN"] = ""
++
++        with self.assertRaises(PresyncError) as raised:
++            self.destroy("dev")
++
++        self.assertIn("GITHUB_TOKEN", str(raised.exception))
++        self.assertEqual(list(self.run_dir.iterdir()), [])
++
++
++class ExitCodeTests(DestroyRun, unittest.TestCase):
++    """The run's verdict as the Job's container reports it: the process's exit code."""
++
++    def presync_destroy(self, *argv: str) -> subprocess.CompletedProcess[str]:
++        return subprocess.run(
++            [sys.executable, "-m", "presync.destroy", str(self.origin), self.shas[0], *argv],
++            cwd=REPO_ROOT,
++            # Where the run's own temporary directory goes, so the test's cleanup takes it.
++            env={**os.environ, **self.environment, "TMPDIR": str(self.tmp)},
++            text=True,
++            capture_output=True,
++        )
++
++    def test_a_run_that_cannot_plan_exits_non_zero_and_says_why(self) -> None:
++        pulled = self.tmp / "pulled.json"
++        pulled.write_text(json.dumps(state(IMAGE)))
++        fake_terraform(
++            self.tmp / "bin", self.tmp / "log", fails="plan", answers={"state pull": pulled}
++        )
++        self.environment["PATH"] = f"{self.tmp / 'bin'}:{os.environ['PATH']}"
++
++        completed = self.presync_destroy("dev", "--apply")
++
++        self.assertEqual(completed.returncode, 1)
++        report = completed.stderr.strip().splitlines()[-1]
++        self.assertTrue(report.startswith("presync: the empty configuration"))
++
++    def test_a_refused_stage_exits_non_zero(self) -> None:
++        completed = self.presync_destroy("../prd")
++
++        self.assertEqual(completed.returncode, 1)
++        self.assertIn("'../prd' is not one path segment", completed.stderr)
++
++
++REAL = {
++    "terraform/providers.tf": (
++        'terraform {\n  backend "http" {}\n}\n\n'
++        'variable "greeting" {\n  type    = string\n  default = "hello"\n}\n'
++    ),
++    "terraform/main.tf": (
++        'module "data" {\n  source   = "./modules/data"\n  greeting = var.greeting\n}\n\n'
++        'resource "terraform_data" "kept" {\n  input = var.greeting\n\n'
++        "  lifecycle {\n    prevent_destroy = true\n  }\n}\n\n"
++        'output "greeting" {\n  value = terraform_data.kept.output\n}\n'
++    ),
++    "terraform/modules/data/main.tf": (
++        'variable "greeting" {\n  type = string\n}\n\n'
++        'resource "terraform_data" "this" {\n  input = "${var.greeting} again"\n\n'
++        "  lifecycle {\n    prevent_destroy = true\n  }\n}\n"
++    ),
++    "config/dev/terraform.tfvars": 'greeting = "hello from dev"\n',
++}
++
++
++class RealTerraformTests(DestroyRun, unittest.TestCase):
++    """The run against the real `terraform`, which the image and the gate's toolchain carry.
++
++    What the destroy rests on is Terraform's: that a resource no configuration declares
++    is planned for deletion and its `prevent_destroy` no longer binds, how `state pull`
++    answers for a stage with no state, and that an override file moves the dry run's
++    plan onto a local copy. No double can witness those. The state holds
++    `terraform_data` alone, which needs no provider download.
++    """
++
++    files = REAL
++
++    def setUp(self) -> None:
++        super().setUp()
++        self.backend = FakeStateBackend(self.addCleanup)
++        self.environment["PRESYNC_TF_BACKEND"] = self.backend.addr
++        self.output = self.tmp / "terraform.out"
++
++        seed = self.tmp / "seed"
++        shutil.copytree(self.origin / "terraform", seed)
++        flags = backend.config_flags(f"http://{self.backend.addr}/")
++        tfvars = f"-var-file={self.origin / 'config/dev/terraform.tfvars'}"
++        for argv in (["init", *flags], ["apply", "-auto-approve", tfvars]):
++            subprocess.run(
++                ["terraform", f"-chdir={seed}", *argv, "-input=false", "-no-color"],
++                check=True,
++                capture_output=True,
++                env={**os.environ, "CHECKPOINT_DISABLE": "1"},
++            )
++        self.seeded = self.backend.state
++        self.backend.received.clear()
++
++    def destroy(self, *argv: str, sha: str = "") -> str:
++        with redirected(self.output, 1, 2):
++            return super().destroy(*argv, sha=sha)
++
++    def test_a_dry_run_plans_every_resource_for_deletion_and_writes_nothing(self) -> None:
++        self.destroy("dev")
++
++        planned = self.output.read_text()
++        self.assertIn("# module.data.terraform_data.this will be destroyed", planned)
++        self.assertIn("# terraform_data.kept will be destroyed", planned)
++        self.assertIn("Plan: 0 to add, 0 to change, 2 to destroy.", planned)
++        self.assertEqual(self.backend.writes(), [])
++        self.assertEqual(self.backend.state, self.seeded)
++        self.assertEqual(self.state_repo_head(), self.state_head)
++
++    def test_an_apply_empties_the_state_and_a_second_run_finishes_without_writing(self) -> None:
++        self.destroy("dev", "--apply")
++
++        self.assertEqual(json.loads(self.backend.state)["resources"], [])
++        self.assertIn("POST", self.backend.writes())
++        self.assertFalse((self.state_repo / "argocd/FieldnotesDeploy/dev").exists())
++
++        self.backend.received.clear()
++        reported = self.destroy("dev", "--apply")
++
++        self.assertEqual(self.backend.writes(), [])
++        self.assertIn("the state lists no resources to destroy", reported)
++        self.assertIn("has no argocd/FieldnotesDeploy/dev/: nothing to remove", reported)
++
++    def test_a_stage_with_no_state_is_given_none(self) -> None:
++        empty = FakeStateBackend(self.addCleanup)
++        self.environment["PRESYNC_TF_BACKEND"] = empty.addr
++
++        reported = self.destroy("tst", "--apply")
++
++        self.assertIn("the backend holds no state at argocd/FieldnotesDeploy/tst/", reported)
++        self.assertEqual(empty.writes(), [])
++        self.assertIsNone(empty.state)
++        self.assertEqual(self.state_repo_head(), self.state_head)
++
++    def test_a_declaration_that_needs_the_missing_tfvars_fails_the_plan_and_says_why(self) -> None:
++        providers = self.origin / "terraform/providers.tf"
++        providers.write_text(providers.read_text().replace('  default = "hello"\n', ""))
++        git(self.origin, "commit", "--quiet", "-am", "greeting without a default")
++
++        with self.assertRaises(PresyncError) as raised:
++            self.destroy("dev", "--apply", sha=self.without_config())
++
++        self.assertIn("does not plan", str(raised.exception))
++        self.assertIn("No value for required variable", self.output.read_text())
++        self.assertNotIn("POST", self.backend.writes())
++        self.assertEqual(self.state_repo_head(), self.state_head)
+
+/work/ArgoCDTools — P5: git diff d7db58f44245..fa3236385114
+
+Jenkinsfile.destroy-stage | 349 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 349 insertions(+)
+
+diff --git a/Jenkinsfile.destroy-stage b/Jenkinsfile.destroy-stage
+new file mode 100644
+index 0000000..94af5e6
+--- /dev/null
++++ b/Jenkinsfile.destroy-stage
+@@ -0,0 +1,349 @@
++// Destroys what a retired stage of a deploy repo left behind (argo-cd D66): the resources its
++// Terraform state still holds and its argocd/<repo>/<stage>/ folder in TerraformState, through the
++// argocd-hook image's destroy mode run as a Job in argocd-hooks, then its config/<stage>/ folder,
++// removed from the deploy repo's main. Started by hand, and a dry run unless APPLY is set.
++//
++// It cleans up after an undeployed stage and undeploys nothing: while ArgoCDDeploy's registry or a
++// live Application in argocd-prd still deploys the stage, the build fails before any Job starts. A
++// dry run plans the destroy, names the two folders an apply removes, and writes nothing. An apply
++// destroys from the plan it saved, in the same Job, with no input step. A re-run finishes what a
++// build that stopped halfway left.
++//
++// Its kubectl calls run as jenkins-prd/destroy-stage, never as the agents' shared default
++// ServiceAccount, which gains nothing from this job. destroy-stage may run Jobs in argocd-hooks and
++// read Applications in argocd-prd, and nothing else. The Job runs as the sync hook's own
++// tf-presync, with the hook's credentials.
++//
++// Controller config:
++//   - Job: IaC/Destroy Stage
++//   - SCM: pvginkel/ArgoCDTools, branch main
++//   - Script Path: Jenkinsfile.destroy-stage
++
++library identifier: 'JenkinsPipelineUtils', changelog: false
++
++/**
++ * A repository URL as the guard compares it. GitHub serves a repo under any case of its name, with
++ * or without `.git`, so a URL spelled any of those ways deploys the same repo.
++ */
++@NonCPS
++String repoKey(String url) {
++    String key = url.toLowerCase()
++    if (key.endsWith('/')) {
++        key = key.substring(0, key.length() - 1)
++    }
++    if (key.endsWith('.git')) {
++        key = key.substring(0, key.length() - '.git'.length())
++    }
++    return key
++}
++
++/**
++ * The entries of ArgoCDDeploy's registry that deploy `stage` of the repo `repoKey` names, as
++ * their YAML paths.
++ *
++ * @param values  releases/values.yaml, as readYaml parses it.
++ */
++@NonCPS
++List<String> registryEntries(Map values, String repo, String stage) {
++    List<String> found = []
++    Map apps = values.apps ?: [:]
++    apps.each { key, app ->
++        Map stages = app.stages ?: [:]
++        if (repoKey(app.repo ?: '') == repo && stages.containsKey(stage)) {
++            found << "apps.${key}.stages.${stage}".toString()
++        }
++    }
++    return found
++}
++
++/**
++ * The Applications that deploy `stage` of the repo `repoKey` names: one of their sources is the
++ * repo, and one carries the Helm parameter hook.stage set to `stage`. An upstream app's
++ * Application is multi-source, its hook parameters on its deploy repo's chart source.
++ *
++ * @param list  `kubectl get applications -o json`, as readJSON parses it.
++ */
++@NonCPS
++List<String> liveApplications(Map list, String repo, String stage) {
++    List<String> found = []
++    for (Map application in list.items) {
++        Map spec = application.spec
++        List sources = spec.source ? [spec.source] : (spec.sources ?: [])
++        boolean sourcesRepo = sources.any { source -> repoKey(source.repoURL ?: '') == repo }
++        boolean setsStage = sources.any { source ->
++            (source.helm?.parameters ?: []).any { parameter -> parameter.name == 'hook.stage' && parameter.value == stage }
++        }
++        if (sourcesRepo && setsStage) {
++            found << "${application.metadata.namespace}/${application.metadata.name}".toString()
++        }
++    }
++    return found
++}
++
++/**
++ * Runs the argocd-hook image's destroy mode for `stage` of pvginkel/`repo` at `revision`, as a
++ * one-off Job in argocd-hooks, shows its log, and fails the build unless the run exits 0.
++ *
++ * The destroy-stage Role in argocd-hooks grants Jobs get, create and delete, and pods and their
++ * logs read: no patch, exec or watch. So the Job's name is fresh per build, and only kubectl
++ * steps that get, list, create, delete or read logs drive it.
++ */
++void runDestroyJob(String repo, String stage, String revision, boolean apply) {
++    String namespace = 'argocd-hooks'
++    // tf-presync-<namespace> is the sync hook's name for its Jobs in the same namespace.
++    String job = "destroy-stage-${env.BUILD_NUMBER}"
++    String args = "\"https://github.com/pvginkel/${repo}.git\", \"${revision}\", \"${stage}\"" +
++        (apply ? ', "--apply"' : '')
++    try {
++        // The manifest names its namespace: startJob otherwise puts the Job in the agent's own,
++        // where destroy-stage holds nothing.
++        kubectl.startJob("""\
++            apiVersion: batch/v1
++            kind: Job
++            metadata:
++              name: ${job}
++              namespace: ${namespace}
++              labels:
++                app.kubernetes.io/name: destroy-stage
++                app.kubernetes.io/managed-by: jenkins
++            spec:
++              # A run that failed is run again by a new build, not retried inside this one.
++              backoffLimit: 0
++              activeDeadlineSeconds: 1800
++              template:
++                spec:
++                  serviceAccountName: tf-presync
++                  restartPolicy: Never
++                  containers:
++                    - name: destroy
++                      # The latest hook build: the Charts pin predates the destroy mode.
++                      image: registry:5000/argocd-hook:latest
++                      imagePullPolicy: Always
++                      # The image's entrypoint is the sync hook's.
++                      command: ["python3", "-m", "presync.destroy"]
++                      args: [${args}]
++                      envFrom:
++                        - secretRef:
++                            name: argocd-hook-credentials
++            """.stripIndent())
++        kubectl.waitForJobContainer(job, 'destroy', namespace)
++        String pod = kubectl.getJobPodName(job, namespace)
++        kubectl.savePodLogs(pod, 'destroy', namespace, 'destroy.log')
++        sh 'cat destroy.log'
++
++        String exitCode = kubectl.getContainerExitCode(pod, 'destroy', namespace)
++        if (!exitCode) {
++            String reason = kubectl.getJobFailReason(job, namespace)
++            error("The destroy Job ${job} ended without an exit code (pod ${pod}${reason ? ", reason ${reason}" : ''})")
++        } else if (exitCode != '0') {
++            // A failed run's last log line is `presync: <reason>`.
++            String[] lines = readFile('destroy.log').trim().split('\n')
++            error("The destroy Job ${job} failed with exit code ${exitCode}: ${lines[lines.length - 1]}")
++        }
++    } finally {
++        kubectl.deleteJob(job, namespace)
++    }
++}
++
++// Set by the Check stage is undeployed stage, read by the stages after it.
++String revision
++
++pipeline {
++    agent {
++        kubernetes {
++            inheritFrom 'jenkins-agent'
++            serviceAccount 'destroy-stage'
++            yaml podYaml(templates: ['k8s'])
++        }
++    }
++
++    options {
++        // Without abortPrevious: an abort between the destroy and the config/<stage>/ push leaves
++        // the stage half removed.
++        disableConcurrentBuilds()
++        skipDefaultCheckout()
++        timeout(time: 60, unit: 'MINUTES')
++        timestamps()
++    }
++
++    parameters {
++        string(name: 'REPO', defaultValue: '', trim: true,
++            description: 'The deploy repo, as GitHub spells it, e.g. FieldnotesDeploy.')
++        string(name: 'STAGE', defaultValue: '', trim: true,
++            description: 'The retired stage, e.g. dev. Its registry entry is deleted and its Application pruned.')
++        booleanParam(name: 'APPLY', defaultValue: false,
++            description: 'Destroy for real. Unset, the build is a dry run: it shows the destroy plan and what an apply removes, and writes nothing.')
++    }
++
++    stages {
++        stage('Checkout') {
++            steps {
++                dir('ArgoCDTools') {
++                    checkout scm
++                }
++                dir('ArgoCDDeploy') {
++                    git url: 'https://github.com/pvginkel/ArgoCDDeploy.git', branch: 'main',
++                        credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10'
++                }
++            }
++        }
++
++        stage('Check stage is undeployed') {
++            steps {
++                container('k8s') {
++                    script {
++                        if (!params.REPO) {
++                            error('REPO is empty: name the deploy repo as GitHub spells it, e.g. FieldnotesDeploy. ' +
++                                "A build without parameters, as the job's first is, only registers them.")
++                        }
++                        if (!params.STAGE) {
++                            error('STAGE is empty: name the retired stage, e.g. dev.')
++                        }
++                        // Each is one path segment: of the clone URL, of the Job's state folder and
++                        // of config/<stage>/.
++                        if (!(params.REPO ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) {
++                            error("REPO must be a repo name, as GitHub spells it; got '${params.REPO}'")
++                        }
++                        if (!(params.STAGE ==~ /[A-Za-z0-9][A-Za-z0-9._-]*/)) {
++                            error("STAGE must be a stage name, e.g. dev; got '${params.STAGE}'")
++                        }
++                        currentBuild.description = "${params.APPLY ? 'apply' : 'dry run'}: ${params.REPO} ${params.STAGE}"
++
++                        withCredentials([usernamePassword(
++                            credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++                            usernameVariable: 'GIT_USER',
++                            passwordVariable: 'GIT_TOKEN')]) {
++                            sh """
++                                set +x
++                                set -eu
++                                curl -fsS -H "Authorization: Bearer \$GIT_TOKEN" -o github-repo.json \\
++                                    'https://api.github.com/repos/pvginkel/${params.REPO}'
++                                curl -fsS -H "Authorization: Bearer \$GIT_TOKEN" -H 'Accept: application/vnd.github.sha' \\
++                                    -o github-main.sha 'https://api.github.com/repos/pvginkel/${params.REPO}/commits/main'
++                            """
++                        }
++                        // GitHub serves a repo under any case of its name, and TerraformState's paths
++                        // are case-sensitive: a REPO in another case finds no state, and an apply
++                        // would still remove config/<stage>/.
++                        String spelled = readJSON(file: 'github-repo.json', returnPojo: true).name
++                        if (spelled != params.REPO) {
++                            error("GitHub spells pvginkel/${params.REPO} as ${spelled}, the spelling the stage's " +
++                                "state is filed under: run with REPO=${spelled}")
++                        }
++                        revision = readFile('github-main.sha').trim()
++                        echo "pvginkel/${params.REPO}'s main is at ${revision}."
++
++                        String repo = repoKey("https://github.com/pvginkel/${params.REPO}".toString())
++                        List<String> deployedBy = []
++                        List<String> entries = registryEntries(
++                            readYaml(file: 'ArgoCDDeploy/releases/values.yaml'), repo, params.STAGE)
++                        for (int i = 0; i < entries.size(); i++) {
++                            deployedBy << "the registry entry ${entries[i]} in ArgoCDDeploy's releases/values.yaml on main".toString()
++                        }
++                        sh 'kubectl get applications -n argocd-prd -o json > applications.json'
++                        List<String> applications = liveApplications(
++                            readJSON(file: 'applications.json', returnPojo: true), repo, params.STAGE)
++                        for (int i = 0; i < applications.size(); i++) {
++                            deployedBy << "the live Application ${applications[i]}".toString()
++                        }
++                        if (deployedBy) {
++                            error("${params.STAGE} of pvginkel/${params.REPO} is still deployed, by " +
++                                "${deployedBy.join(' and ')}. This build cleans up after an undeployed stage: " +
++                                'delete its registry entry and prune its Application first.')
++                        }
++                        echo "Neither the registry nor a live Application deploys ${params.STAGE} of pvginkel/${params.REPO}."
++                    }
++                }
++            }
++        }
++
++        stage('Plan destroy') {
++            when {
++                expression { !params.APPLY }
++            }
++            steps {
++                container('k8s') {
++                    script {
++                        runDestroyJob(params.REPO, params.STAGE, revision, false)
++
++                        String status
++                        withCredentials([usernamePassword(
++                            credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++                            usernameVariable: 'GIT_USER',
++                            passwordVariable: 'GIT_TOKEN')]) {
++                            status = sh(script: """
++                                set +x
++                                set -eu
++                                curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer \$GIT_TOKEN" \\
++                                    'https://api.github.com/repos/pvginkel/${params.REPO}/contents/config/${params.STAGE}?ref=${revision}'
++                            """, returnStdout: true).trim()
++                        }
++                        if (status == '200') {
++                            echo "An apply removes config/${params.STAGE}/ from pvginkel/${params.REPO}'s main. This dry run pushed nothing."
++                        } else if (status == '404') {
++                            echo "pvginkel/${params.REPO} has no config/${params.STAGE}/ at ${revision}: an apply removes nothing there."
++                        } else {
++                            error("GitHub answered ${status} for config/${params.STAGE}/ of pvginkel/${params.REPO} at ${revision}")
++                        }
++                    }
++                }
++            }
++        }
++
++        stage('Destroy Terraform resources and state') {
++            when {
++                expression { params.APPLY }
++            }
++            steps {
++                container('k8s') {
++                    script {
++                        runDestroyJob(params.REPO, params.STAGE, revision, true)
++                    }
++                }
++            }
++        }
++
++        // After the Job has succeeded: until then the stage's state exists, and a re-run plans with
++        // the tfvars this folder holds.
++        stage('Remove config folder') {
++            when {
++                expression { params.APPLY }
++            }
++            steps {
++                container('k8s') {
++                    withCredentials([usernamePassword(
++                        credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
++                        usernameVariable: 'GIT_USER',
++                        passwordVariable: 'GIT_TOKEN')]) {
++                        // set +x: this is the line where the shell expands the token. The push
++                        // reuses the remote the clone stores, so nothing after it echoes the token.
++                        sh """
++                            set +x
++                            set -eu
++                            git clone --quiet --depth 1 --branch main \\
++                                "https://\$GIT_USER:\$GIT_TOKEN@github.com/pvginkel/${params.REPO}.git" deploy
++                            if [ ! -e 'deploy/config/${params.STAGE}' ]; then
++                                echo 'pvginkel/${params.REPO} has no config/${params.STAGE}/ on main: nothing to remove.'
++                                exit 0
++                            fi
++                            git -C deploy config user.name 'jenkins'
++                            git -C deploy config user.email 'jenkins@webathome.org'
++                            git -C deploy rm -r --quiet -- 'config/${params.STAGE}'
++                            git -C deploy commit --quiet -m 'Remove config/${params.STAGE}/: ${params.STAGE} destroyed by ${env.JOB_NAME} #${env.BUILD_NUMBER}'
++                            git -C deploy push --quiet origin HEAD:main
++                            echo "pvginkel/${params.REPO} \$(git -C deploy rev-parse HEAD) removes config/${params.STAGE}/."
++                        """
++                    }
++                }
++            }
++        }
++    }
++
++    post {
++        aborted {
++            script {
++                notify.error("${env.JOB_NAME} #${env.BUILD_NUMBER} aborted (timeout or hand)")
++            }
++        }
++    }
++}

@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The two Roles and RoleBindings bind jenkins-prd/destroy-stage alone, with verbs that a kubectl 1.35 trace shows suffice for the listed Job steps, and the render gate pins them (six mutations, all red). One advisory finding: a stale gate docstring.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "check_hook_namespace's docstring still says argocd-hooks holds the hook's credentials and identity and nothing else; the check now requires the destroy-stage Role and RoleBinding too"}]}

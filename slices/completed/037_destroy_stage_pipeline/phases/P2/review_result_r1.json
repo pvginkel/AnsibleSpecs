@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "JenkinsDeploy gains ServiceAccount jenkins-prd/destroy-stage. It has no binding in the chart, and no live binding reaches it beyond Kubernetes' stock discovery groups. jenkins-agent-jobs is untouched. The header comment's claims (D66, D41 as amended) match the decision record.",
+ "details": "code_review_r1.md",
+ "findings": []}

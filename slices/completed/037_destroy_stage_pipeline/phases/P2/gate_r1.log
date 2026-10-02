@@ -1,0 +1,5 @@
+root: cexec aac-tools chart-deps    [  OK  ]
+root: cexec iac helm template jenkins-prd chart --namespace jenkins-prd --values config/prd/values.yaml --set hook.repo=https://github.com/pvginkel/JenkinsDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=jenkins-prd    [  OK  ]
+root: cexec iac tf-check    [  OK  ]
+root: cexec aac-tools gen-architecture --stage prd --producer jenkins-deploy    [  OK  ]
+root: cexec aac-tools arch-validate docs/architecture/jenkins-deploy.yaml    [  OK  ]
