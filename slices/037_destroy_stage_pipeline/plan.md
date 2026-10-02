@@ -293,6 +293,35 @@ namespace's complete inventory (D33). That inventory stays true and cites argo-c
 The render gate (`tests/render-chart.py`) pins both grants: their verbs, their namespaces and
 their one subject. A grant that widens, or that reaches `jenkins-prd/default`, turns the gate red.
 
+**Done (P3).** Two Roles and two RoleBindings, all named `destroy-stage`, each binding
+`jenkins-prd/destroy-stage` alone. In `argocd-hooks`: `batch` `jobs` get/create/delete, `pods`
+get/list, `pods/log` get. In `argocd-prd`: `argoproj.io` `applications` get/list. ArgoCDDeploy
+`7843991` on `phase/037-P3`; `kc project test` green, the architecture artifact unchanged.
+
+Later phases:
+- P5: the Job manifest sets `metadata.namespace: argocd-hooks`. `startJob` otherwise lands it
+  in the agent's own `jenkins-prd`, where `destroy-stage` holds nothing.
+- P5: the Job name is fresh per build. The Role has no `patch`, so `kubectl apply` cannot change
+  a Job that already exists.
+- P5: in `argocd-hooks`, call only `startJob`, `getJobPodName`, `waitForJobContainer`,
+  `waitForContainer`, `getContainerExitCode`, `getJobFailReason`, `savePodLogs`, `deleteJob`, or
+  `kubectl logs` on the pod. Not `waitForFile`, `kubectl exec`/`cp`, `kubectl wait` or any
+  `watch`. The guard lists Applications in `argocd-prd` (`kubectl get applications -o json`).
+- Test phase (Ruling D4): the `argocd-prd` diff against the pushed ArgoCDDeploy should show
+  exactly these four objects.
+
+Record:
+- The `argocd-hooks` pair is in `chart/templates/hook-namespace.yaml`, whose "complete
+  inventory" header now names it and cites D66. The `argocd-prd` pair is in the new
+  `chart/templates/destroy-stage-guard.yaml`. The names come from a new `destroyStage:` block in
+  `chart/values.yaml`.
+- The verbs are what `vars/kubectl.groovy` (JenkinsPipelineUtils `5643c70`) runs. No step
+  watches, so Ruling D1's "create/watch/delete Jobs" is read as "follow".
+- The gate's `check_destroy_stage_rbac` requires one RoleBinding per namespace and no
+  ClusterRoleBinding, a sole subject, and a Role beside it that nothing else binds. Each Role's
+  (apiGroup, resource, verb) set must equal the pinned one. No binding may reach
+  `jenkins-prd/default` by ServiceAccount, user or group. Eight mutations turned it red.
+
 ### P4 — The argocd-hook image's destroy mode
 
 Target: ../ArgoCDTools
@@ -377,10 +406,12 @@ parameters `REPO`, `STAGE` and `APPLY`, which defaults to false, and does three 
    folder is already gone, it skips this step.
 
 The agent pod runs as P2's ServiceAccount, `destroy-stage`, named in this pipeline's pod spec
-(Ruling D1). It never runs as the shared default. `APPLY=true` destroys with no `input` step
-(R3). Only the operator starts the pipeline: it has no triggers and allows no concurrent builds.
-It follows the pipeline style guide (`kubecoder:jenkins-pipelines` skill;
-https://pipelines.home/docs/).
+(Ruling D1). It never runs as the shared default. It holds P3's two Roles and nothing else. So the
+Job manifest names `metadata.namespace: argocd-hooks`, the Job's name is fresh per build (the Role
+has no `patch`), and the build drives the Job only through the `kubectl` steps P3's done-record
+lists. `APPLY=true` destroys with no `input` step (R3). Only the operator starts the pipeline: it
+has no triggers and allows no concurrent builds. It follows the pipeline style guide
+(`kubecoder:jenkins-pipelines` skill; https://pipelines.home/docs/).
 
 The phase creates the job through the Jenkins API, to the style guide (Ruling review r1 A1). It
 uses `createItem` with the guide's `config.xml` template and `$JENKINS_TOKEN` (JenkinsPipelineUtils
