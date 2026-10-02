@@ -204,6 +204,58 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "I2",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "Give KubeCoderDeploy's root variables defaults, so IaC/Destroy Stage can destroy its stages?",
+      "body": [
+        "The destroy mode plans against the root's terraform, provider and variable blocks alone and exports TF_VAR_stage only: the stage's namespace went with its Application and is not an input of the run. KubeCoderDeploy declares `variable \"namespace\"` with no default (terraform/variables.tf), so a destroy of either of its stages fails at the plan with Terraform's \"No value for required variable\" and changes nothing. Once config/<stage>/ is gone, its zfs_dataset, zfs_quota, zfs_size and manage_webhook (no defaults either) fail the same way. FieldnotesDeploy's shared providers.tf (also KeycloakDeploy, StorageDeploy, JenkinsDeploy per grounding G4) defaults every variable. Options: defaults on KubeCoderDeploy's root variables, which nothing in the empty configuration reads; or the destroy run takes the stage's namespace as a fourth input."
+      ],
+      "consequence": "A Destroy Stage build against a KubeCoderDeploy stage fails at the plan and destroys nothing, until KubeCoderDeploy's declarations or the run change.",
+      "proposal": "card — take it when a KubeCoderDeploy stage is retired; defaults on its root variables are the smaller change and leave the run's contract alone.",
+      "evidence": "read",
+      "author": "(KubeCoderDeploy origin/main terraform/variables.tf) and witnessed (its root reduced by presync.declarations passes terraform validate; a required variable with no value failing the destroy's plan is tests/test_destroy.py RealTerraformTests), code-writer, P4, r1, ArgoCDTools d7db58f",
+      "labels": {
+        "benefit": "operations",
+        "felt": "after-change",
+        "change": "adjust",
+        "size": "design",
+        "product-call": "no",
+        "prevents": "broken",
+        "area": "plain",
+        "repo": "KubeCoderDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "T2",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "argocd-hook destroy: the kubernetes_manifest namespace read is pinned only against a hand-written state",
+      "body": [
+        "presync/destroy.py _namespace reads a kubernetes_manifest's namespace at attributes.object.value.metadata.namespace, the {\"value\", \"type\"} wrapping a version-4 state gives a dynamic attribute (cty's JSON encoding, read in source, not run). tests/test_destroy.py feeds a hand-written instance in that shape; no test or run has read one Terraform wrote, because creating one needs a cluster at plan time. No deploy repo's Terraform declares a kubernetes_manifest today (they hold PVs, RBD images, ZFS datasets, CephFS subvolumes and webhooks)."
+      ],
+      "consequence": "A destroy of a stage whose state holds a namespaced kubernetes_manifest, which no stage's does today, could try to delete it and fail with 403 instead of forgetting it, until the read is corrected.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-writer, P4, r1, ArgoCDTools d7db58f argocd-hook/presync/destroy.py",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

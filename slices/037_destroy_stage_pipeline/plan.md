@@ -378,6 +378,47 @@ against an apply, and a state that holds a namespaced Secret beside a PV and a r
 Kubernetes. It also covers the idempotent re-runs, a clone without `config/<stage>/`, and an
 empty configuration that does not plan.
 
+**Done (P4).** The image's second entry point is `python3 -m presync.destroy <repo> <revision>
+<stage> [--apply]` (`argocd-hook/presync/destroy.py`). Without `--apply` it is the dry run. The
+sync's contract, its `ENTRYPOINT` and `ArgumentContractTests` are unchanged. ArgoCDTools
+`d7db58f` on `phase/037-P4`; `kc project test` green, the image builds (`kaniko --no-push`).
+
+Later phases:
+- P5: the Job overrides the image's `ENTRYPOINT` (`python3 -m presync`) with `command:
+  ["python3", "-m", "presync.destroy"]` and `args: [<clone URL>, <SHA>, <STAGE>]`, plus
+  `"--apply"` when `APPLY=true`. The clone URL is `https://github.com/pvginkel/<REPO>.git`; the
+  state folder is named from it, `.git` stripped. The Job reads `argocd-hook-credentials` as the
+  sync does, and no namespace.
+- P5: exit 0 is done; otherwise the log's last line is `presync: <reason>`. The run refuses a
+  repo or stage that is not one path segment, but P5's own empty-`STAGE` check before any
+  cluster call still stands (Ruling review r1 A1). The Job touches only
+  `argocd/<repo>/<stage>/`; `config/<stage>/` stays Jenkins's to name and remove.
+- P6: the log reads, in order: the reduction (`<file>.tf: keeps N declaration(s), drops …`),
+  the forgotten objects (`an apply forgets N namespaced Kubernetes object(s), …`, one line each
+  with its namespace), Terraform's plan, then `an apply removes argocd/<repo>/<stage>/ from the
+  state repository` (or `… has no …: nothing to remove`); a dry run ends `dry run: nothing was
+  written`. A root whose declarations do not plan alone fails with `presync: the empty
+  configuration, … does not plan`. KubeCoderDeploy's does today (close-out I2).
+
+Record:
+- The empty configuration is the clone's root `terraform/*.tf` rewritten in place to their
+  `terraform`, `provider` and `variable` blocks, verbatim (`presync/declarations.py`, a
+  top-level HCL block reader). `locals` go too. A root `*.tf.json` or an unreadable top level
+  fails the run by file and line. Reduced FieldnotesDeploy and KubeCoderDeploy roots pass
+  `terraform validate`.
+- Forgotten: a managed `hashicorp/kubernetes` instance with `metadata[0].namespace`, or a
+  `kubernetes_manifest` with `object.value.metadata.namespace` (close-out T2). An apply
+  `state rm`s them, then `plan -out`, `apply <plan>`, and `state list` must be empty before
+  TerraformState is touched. A dry run plans against a local copy of the state without them,
+  through a `backend "local"` override file and `init -reconfigure`: no lock, no write.
+- On the http backend `terraform state pull` prints an empty state with `lineage: ""` where no
+  state exists, and `state list` then exits 1. The run reads an empty lineage as no state and
+  runs nothing that writes. Witnessed with real Terraform against `tests/support.py`'s
+  `FakeStateBackend`, as are the dry run, the apply and its re-run.
+- The TerraformState commit is `Remove argocd/<repo>/<stage>/: <stage> of <repo> destroyed` by
+  `argocd-hook@<pod>`, pushed to `main` with the run's credential helper. Terraform runs with
+  `-no-color` and `TF_VAR_stage`.
+
 ### P5 — Jenkinsfile.destroy-stage and the IaC/Destroy Stage job
 
 Target: ../ArgoCDTools
@@ -397,6 +438,9 @@ parameters `REPO`, `STAGE` and `APPLY`, which defaults to false, and does three 
    - the image `registry:5000/argocd-hook:latest`, not the Charts pin;
    - a name that no `tf-presync-<namespace>` hook Job can take
      (`/work/Charts/charts/homelab-shared/templates/_tf-presync-hook.tpl:38`);
+   - `command: ["python3", "-m", "presync.destroy"]`, overriding the image's sync `ENTRYPOINT`,
+     and `args: [https://github.com/pvginkel/<REPO>.git, <SHA>, <STAGE>]`, plus `--apply` when
+     `APPLY=true` (P4's done-record);
    - no retries, and a deadline.
 
    The build follows the Job, shows its log, and fails if the Job fails.
@@ -438,6 +482,8 @@ covers:
 - the namespaced objects the build forgets rather than destroys, and the Secrets a namespace that
   outlived its Application keeps (Ruling review r1 F1);
 - re-running a build that stopped halfway;
+- a repo whose root declarations do not plan on their own, which fails the build and destroys
+  nothing (KubeCoderDeploy's today, P4's done-record);
 - the repo's webhook going with the stage that manages it.
 
 Review P1 r1 (fact): KubeCoderDeploy's webhook belongs to `dev`, not `prd`. Its
