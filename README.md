@@ -40,6 +40,10 @@ Triaged 2026-09-30 from the 2026-09 Jenkins pipeline review (the record: `handov
 
 
 
+Triaged 2026-10-02 from ANS-147 (the record: `handovers/triage_2026-10-02_raw.md`, open — the rest of the ANS queue is still being triaged):
+
+- **037** — Destroy Stage pipeline: a Jenkins pipeline (`REPO`, `STAGE`, `APPLY`, dry run by default) that permanently destroys a retired deploy-repo stage's Terraform resources and state through the argocd-hook image, FieldnotesDeploy `dev` first
+
 ## Completed
 
 | Slice | Was | Depends on | Consumed by |

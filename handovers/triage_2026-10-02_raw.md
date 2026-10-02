@@ -564,3 +564,7 @@ Operator, verbatim:
 > And please give it an APPLY parameter.
 >
 > Yes, send this to triage please.
+
+## Rulings
+
+- ANS-147 (2026-10-02, a separate run scoped to this card): filed as slice 037 (ANS-188), card absorbed. Q1 "Agreed" (D1 overruled narrowly, D28 superseded); Q2 "Can the pipeline do a dry run? I was thinking APPLY=false does a dry run." Not open; the other cards in this dump are untouched by that run.
