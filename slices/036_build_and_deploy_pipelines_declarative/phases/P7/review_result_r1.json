@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "Architecture's Jenkinsfile and Jenkinsfile.ha-fleet are byte-identical to the guide's architecture-collector and snapshot-producer reference files (section markers aside), pass the controller's linter, and keep each job's images, tags, pin and artifacts. The producer manual, USAGE.md and the seed-architecture skill describe the producer file on architectureProducer's steps, as the library implements them. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
