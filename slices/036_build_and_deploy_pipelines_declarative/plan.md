@@ -340,7 +340,7 @@ library-step pattern (the five apps' validation Job) that the guide gains a type
 - prd ../JenkinsPipelineUtils — its push rebuilds the pipelines.home site and pins it into PipelinesDeploy, which Argo CD syncs to prd (Ruling P1)
 - prd ../Architecture — its push pins `architecture_viewer` into WebathomeOrgDeploy, a prd roll (Ruling P1)
 
-### P1 — podYaml has the python, helm and iac-toolchain sidecars, and refuses a null env value and a container name Kubernetes would refuse
+### P1 — podYaml has the python, helm and iac-toolchain sidecars, and refuses a null env value and a container name Kubernetes would refuse ✅ DONE 2026-10-02
 
 Target: ../JenkinsPipelineUtils
 
