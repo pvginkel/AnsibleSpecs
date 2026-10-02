@@ -180,6 +180,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P2",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "ArgoCDDeploy render gate: check_hook_namespace's docstring says argocd-hooks holds only the hook's credentials and identity",
+      "body": [
+        "tests/render-chart.py:1527 reads \"argocd-hooks holds a run's credentials and its identity, and nothing else (D33)\". The assertion under it (1546-1557) now also requires Role/destroy-stage and RoleBinding/destroy-stage there (D66). The failure message was updated; the docstring was not."
+      ],
+      "consequence": "none — a reader of the gate is told the hook namespace holds less than the check enforces; nothing behaves differently.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-reviewer, P3, r1, phases/P3/code_review_r1.md F1",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "ArgoCDDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
