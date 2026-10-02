@@ -210,6 +210,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P5",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ginbov, Home, YouTrackMCPServer, TerraformRegistry and HomelabTerraformProvider docs say the image build ends in a HelmCharts deploy; it pins the image into its deploy repo, which Argo CD syncs",
+      "body": [
+        "Ginbov .kubecoder/project.yaml:16 (\"kaniko image build + cicd.helmDeploy()\"); Home CLAUDE.md:143-144 (\"triggers a HelmCharts redeploy via cicd.helmDeploy()\") and README.md:21; YouTrackMCPServer docs/deployment.md:11-13 and docs/slice-test-plan.md:98-99 (\"triggers IaC/HelmCharts\"); TerraformRegistry Dockerfile:4 and README.md:19-20, 26-27 (\"HelmCharts redeploys the tfmirror release\", \"triggers IaC/HelmCharts\"); HomelabTerraformProvider README.md:15 (\"nginx image → HelmCharts release\"). Since the Argo CD migration each of these builds ends in cicd.writeVersionPins into its deploy repo (GinbovNlDeploy, HomeappsDeploy, YoutrackMcpDeploy, TfmirrorDeploy). The lines predate slice 036 and name nothing P11 removes, so P5 left them; it fixed only the sentences that named helmCharts.kaniko or a containerTemplates describable (Home .kubecoder/project.yaml:49's sentence now says the pin into HomeappsDeploy), and the Jenkinsfile comments it rewrote (TerraformRegistry's header, HomelabTerraformProvider's publish comment). Same class as P4's entry, in other repos; the repo label names the one with the most lines."
+      ],
+      "consequence": "A session planning work in these repos reads that the push runs a HelmCharts deploy and looks for one; the push still reaches prd, through the deploy repo's pin commit.",
+      "evidence": "witnessed",
+      "author": "| executor, P5, r1, /work/scratch/TerraformRegistry/README.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "several-places",
+        "repo": "TerraformRegistry"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

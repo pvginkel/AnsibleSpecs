@@ -677,6 +677,46 @@ KubeCoder/Build-Main (P8) and IaC/IaC Docker Image (P9). That is 19 files.
   `containerTemplates.aac_tools`. Both say what is true after this slice. The README change
   rides ArgoCDTools' one commit.
 
+**Done (P5).** The 19 T3/T4 files are declarative image and artifact builds to the guide, on
+`helmCharts.kaniko2` and `podYaml`. The four renamed repos' `Jenkinsfile.architecture` headers say
+`branch main`, and the Ruling P5 lines and both ArgoCDTools README passages are fixed. One commit
+in each of the 19 repos, unpushed; 23 ledger rows (each AaC header shares its repo's commit). All
+23 files pass the controller's linter; `kc project test --project root` green (no Ansible commit).
+
+Later phases:
+- The four renamed repos' commits sit on local `master` (ledger: "`master`, pushed to `main`"):
+  the test phase pushes each `master:main` after the GitHub rename, rebased onto `origin/main`.
+  TrelloMcp's commit is on local `test`.
+- P11: ScanToPdfServer's file differs from `docs/examples/artifact-build.groovy` only in its
+  header's `SCM: pvginkel/ScanToPdfServer, branch main` (the reference says `master`). Ginbov's file
+  is `image-build.groovy` as published. No P5 file calls a describable or positional `kaniko`.
+
+Record:
+- From live `config.xml`: all 19 are push-triggered, no parameters, no SCM extensions.
+  `abortPrevious: true` except the five artifact builds (plain, abort marker); Charts and
+  ArgoCDTools leave the UI's `false` (S5); MyDownloadsServer had no UI guard and now declares one.
+- Stage-level timeouts gone (TIME-4): Charts', TerraformRegistry's and ArgoCDTools' 10/15-minute
+  bounds named no hang (each repo's `git log`).
+- `checkout scm` replaces the self-clones (CHK-1) of IntercomServer, TerraformRegistry, Charts,
+  ArgoCDTools, HomelabTerraformProvider, both clients and ScanToPdfServer; no build reads a local
+  branch name (gradle, csproj and go scripts grepped).
+- GRAN-5: Home's VERSION, IntercomServer's `dotnet publish`, Charts' `tools/build-index.sh` and the
+  copied artifacts sit in their image's stage. GRAN-2: ArgoCDTools' looped `Test` is `Test
+  argocd-hook` and `Test aac-tools`; HomelabTerraformProvider's `Vet and unit tests` is `Lint` and
+  `Test`, still after `Build provider` (its apt headers); MyDownloadsServer's `mvn install` builds
+  and tests in one command, `Build and test jar`.
+- HomelabTerraformProvider keeps `dir('HomelabTerraformProvider')` (CHK-2: the publish clones
+  TerraformRegistry beside it); `version` is a file-level `String` set in `Build provider`, read
+  in `Publish provider`, as the promotion reference does.
+- Clients: `withVault` wraps only `apksigner` (SEC-1); the dead `mkdir -p ../../build/lib/<Client>`
+  is gone. Archive names are unchanged, so the copiers' filters match.
+- MyDownloadsServer's `mvn` keeps `runAsUser: 1000` and loses `runAsGroup: '1000'`, which podYaml
+  has no key for; uid 1000 owns what Maven writes, so jnlp (uid 1000) archives it.
+- Webathome copies MyDownloadsClient's apk without being named in `copyArtifactPermission`; the
+  plugin does not enforce it today (Webathome #245 copied from #71), so it stays as the UI has it.
+- podYaml renders every new call (groovy-all 2.4.21). Pre-036 HelmCharts-deploy lines in five
+  repos are left: close-out P5.
+
 ### P6 — The single-job types are their reference files: SSEGateway, YouTrackConfiguration, Promote-PRD and DockerImages
 
 Target: root

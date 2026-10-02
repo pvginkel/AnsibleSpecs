@@ -21,3 +21,26 @@ before the test phase, and each commit is rebased onto its origin when it is.
 | IoTSupport | IoTSupport/IoTSupport | `/work/scratch/IoTSupport` | `main` | `Jenkinsfile` | `9748ca1580e5bf05b2f0be381f252b41936940cc` |
 | IoTSupport | AaC/IoTSupport | `/work/scratch/IoTSupport` | `main` | `Jenkinsfile.architecture` | `9748ca1580e5bf05b2f0be381f252b41936940cc` |
 | ZigbeeControl | ZigbeeControl/ZigbeeControl | `/work/scratch/ZigbeeControl` | `main` | `Jenkinsfile` | `f60acf40411fd3808f0331c394a94b405c33db78` |
+| Ginbov | Ginbov | `/work/scratch/Ginbov` | `main` | `Jenkinsfile` | `486abc4e273e9bd78f6b84e49699a2a6a96dba50` |
+| GitblitMCPServer | Gitblit/GitblitMCPServer | `/work/scratch/GitblitMCPServer` | `main` | `Jenkinsfile` | `bd1dd5bb14b92ce7297bd2a042dccea697dc2045` |
+| GitblitMCPSupportPlugin | Gitblit/GitblitMCPSupportPlugin | `/work/scratch/GitblitMCPSupportPlugin` | `main` | `Jenkinsfile` | `83f8892617401cd119dda3c30af3278d5d98f5d1` |
+| Home | Home | `/work/scratch/Home` | `main` | `Jenkinsfile` | `f8d6ed7af844412adf651affc01cd4abe9565850` |
+| NewsFilter | NewsFilter | `/work/scratch/NewsFilter` | `main` | `Jenkinsfile` | `3fbb8d7861f0c9d882753f32f24cb55a1561587e` |
+| mcp-server-trello | TrelloMcp | `/work/scratch/mcp-server-trello` | `test` | `Jenkinsfile` | `745c4534290027f6c0c0e40706307a87b6609cf2` |
+| YouTrackMCPServer | YouTrack/YouTrackMCPServer | `/work/scratch/YouTrackMCPServer` | `main` | `Jenkinsfile` | `cf9e790ae7c5008dbe7859653bbf17748dba3c4f` |
+| Webathome | Webathome | `/work/scratch/Webathome` | `main` | `Jenkinsfile` | `910d87e4fed3a4460934d7381f441c5c04a7ddba` |
+| MyDownloads | MyDownloads/MyDownloads | `/work/scratch/MyDownloads` | `main` | `Jenkinsfile` | `6fa457cbb9e42a4a2290c59cff21761cb31b811c` |
+| ScanToPdf | ScanToPdf/ScanToPdf | `/work/scratch/ScanToPdf` | `main` | `Jenkinsfile` | `7872440ed85ca54fa6175c66f4a95e93c5fbd781` |
+| IntercomServer | Firmware/IntercomServer | `/work/scratch/IntercomServer` | `main` | `Jenkinsfile` | `4ca91371cf66639c831a6c11493711b15c30e2c1` |
+| TerraformRegistry | IaC/TerraformRegistry | `/work/scratch/TerraformRegistry` | `main` | `Jenkinsfile` | `8a2eea941395dc6528365eafcdc3c61740dcb89b` |
+| Charts | IaC/Charts | `/work/Charts` | `main` | `Jenkinsfile` | `d7794a76c18776d775b7ae695d5ec10ea0ad1f8e` |
+| ArgoCDTools | IaC/ArgoCDTools | `/work/ArgoCDTools` | `main` | `Jenkinsfile` | `d972709ce4c410dff630998006b2b3187cab721c` |
+| MyDownloadsClient | MyDownloads/MyDownloadsClient | `/work/scratch/MyDownloadsClient` | `master`, pushed to `main` | `Jenkinsfile` | `f3ba7717b0110aba2c1c3c6a2694348f051e6d12` |
+| MyDownloadsClient | AaC/MyDownloadsClient | `/work/scratch/MyDownloadsClient` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `f3ba7717b0110aba2c1c3c6a2694348f051e6d12` |
+| MyDownloadsServer | MyDownloads/MyDownloadsServer | `/work/scratch/MyDownloadsServer` | `master`, pushed to `main` | `Jenkinsfile` | `62827f163072c43d80338d7c21a5a9987c90e829` |
+| MyDownloadsServer | AaC/MyDownloadsServer | `/work/scratch/MyDownloadsServer` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `62827f163072c43d80338d7c21a5a9987c90e829` |
+| ScanToPdfClient | ScanToPdf/ScanToPdfClient | `/work/scratch/ScanToPdfClient` | `master`, pushed to `main` | `Jenkinsfile` | `c9769caf56567df646559af6dee2400baa9bb649` |
+| ScanToPdfClient | AaC/ScanToPdfClient | `/work/scratch/ScanToPdfClient` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `c9769caf56567df646559af6dee2400baa9bb649` |
+| ScanToPdfServer | ScanToPdf/ScanToPdfServer | `/work/scratch/ScanToPdfServer` | `master`, pushed to `main` | `Jenkinsfile` | `8341ddf9b73527fa785b9a2b559c6bc9c8474be1` |
+| ScanToPdfServer | AaC/ScanToPdfServer | `/work/scratch/ScanToPdfServer` | `master`, pushed to `main` | `Jenkinsfile.architecture` | `8341ddf9b73527fa785b9a2b559c6bc9c8474be1` |
+| HomelabTerraformProvider | IaC/HomelabTerraformProvider | `/work/HomelabTerraformProvider` | `main` | `Jenkinsfile` | `a0300c283a68c8ee080c10e910782fd06baacc7e` |
