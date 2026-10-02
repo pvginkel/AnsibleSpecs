@@ -433,7 +433,12 @@
         }
       ],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by the doc phase (Ansible 9b9e339): iac-agent.md names Build iac image and step-ca-root-rotation.md names Check homelab CA root drift, the labels P9's files give; decisions.md's two mentions of the drift stage renamed too",
+        "by": "doc phase",
+        "date": "2026-10-02",
+        "commit": "9b9e339"
+      },
       "ruling": null
     },
     {
