@@ -984,7 +984,8 @@ The repo's own conventions apply: its `CLAUDE.md`, and its Prettier check as the
 **Done (P10).** The pipelines skill has a paragraph, "Two files predate the guide, on purpose",
 naming ModernAppTemplate's `root/template/Jenkinsfile.jinja` and KitchenDisplay's `Jenkinsfile`,
 and how a session treats each. The onboard skill names `helmCharts.kaniko2(...)` at its four
-mentions. KubeCoderConfig `4cdca35` on `phase/036-P10`, plugin 0.10.1; `kc project lint` green.
+mentions, and its SEC-1 brief carries Ruling P3's exception. KubeCoderConfig `890da41` on
+`phase/036-P10`, plugin 0.10.2; `kc project lint` green.
 
 Later phases:
 - P11: nothing to take over. The skill says MAT's template "calls `containerTemplates.k8s` and the
@@ -1003,6 +1004,8 @@ Record:
   context: …, …)`" (the named-argument form), not just the new name.
 - The gate was red on origin/main (`youtrack-usage/SKILL.md`, from 3417992). The same commit
   rewraps that file without changing its wording (close-out E1).
+- (review r1 F1) The SEC-1 brief allowed no `withVault` around a test; it now excepts "the one
+  step that runs a test which itself needs the secret", as the guide's secrets page does.
 
 ### P11 — The library drops the describables and the positional kaniko that nothing calls
 
