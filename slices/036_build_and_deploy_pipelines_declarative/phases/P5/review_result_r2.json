@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "r1 F1 is fixed. The four jenkins-agent-large files declare yamlMergeStrategy merge(), and under Merge the plugin builds on the parent's spec, so the node affinity and toleration survive with the same containers. The amended commits change only those lines, the ledger carries the new SHAs, and all four pass the controller's linter. No new findings.",
+ "details": "code_review_r2.md",
+ "findings": []}
