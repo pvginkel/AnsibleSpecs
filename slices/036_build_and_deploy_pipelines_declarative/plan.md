@@ -1187,7 +1187,7 @@ Record:
   (IoTSupport), XF `#893E13`. XF's name could not be read here, so its comment names no project
   (close-out P12).
 
-### P14 — ElectronicsInventory's build passes its validation: the "Role gating — editor role" Playwright case
+### P14 — ElectronicsInventory's build passes its validation: the "Role gating — editor role" Playwright case ✅ DONE 2026-10-02
 
 Target: github:pvginkel/ElectronicsInventory
 
