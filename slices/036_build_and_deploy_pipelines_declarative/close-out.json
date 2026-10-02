@@ -620,6 +620,27 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E5",
+      "kind": "event",
+      "grade": null,
+      "headline": "Test phase r1: closing steps done; two failing builds became P13 and P14",
+      "body": [
+        "Snapshot, renames, AaC/Architecture pause, one-go push, resume + hand build #2406, quiet, KEYCLOAK_* globals deleted, closing-diff.md written. EI #262 and YouTrackConfiguration #9 failed."
+      ],
+      "consequence": "none",
+      "evidence": "witnessed",
+      "author": "test, r1",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
