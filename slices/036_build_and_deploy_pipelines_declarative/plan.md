@@ -1044,6 +1044,39 @@ Once the check holds:
   between a migrated file and its type's reference file, the reference takes it. Run the docs
   lint before handing back.
 
+**Done (P11).** The precondition held: no file an enabled job builds calls a removed describable
+or the positional `kaniko`. `containerTemplates` keeps only `rsync` and `dockbuild`, `helmCharts`
+has no positional `kaniko`, and the listed pages no longer name either. `artifact-build.groovy`
+and `promotion.groovy` match their jobs. JenkinsPipelineUtils `a6d7836` on `phase/036-P11`;
+`kc project test` and the docs lint green.
+
+Later phases:
+- Test phase: JenkinsPipelineUtils' push now carries P11. Only the slice's local commits keep
+  their jobs green against it, so no consumer goes before it and none without its slice commit
+  (G11). AaC/Architecture stays paused until its own push lands (Ruling P2). The accepted breaks
+  are ModernAppTemplate's template and CanonApp's file, neither built by a job.
+- Doc phase: LIB-6 (`docs/pages/guide/library.md:73-77`) still names the positional
+  `helmCharts.kaniko(…)` as what a file MUST NOT call. It is left as written: the rule still holds,
+  and MAT's template calls that form.
+
+Record:
+- The check, read-only: 126 jobs from the live job list, all SCM pipelines on the unpinned
+  library line. One is disabled, Firmware/KitchenDisplay, whose file calls only `dockbuild` and
+  `rsync`. 51 enabled files were read at the slice's commits: the ledger's 42 rows, Architecture
+  `525781b` (2) and Ansible `90d69a0` (7). The other 74, most `AaC/*` producers among them and
+  AaC/KubeCoderDeploy on `prd`, were read on origin at their job's branch. None calls
+  `containerTemplates.{helm,k8s,python,aac_tools,iac_toolchain,modern_app_toolchain}`, any
+  `helmCharts.kaniko(` or `load`. The same pattern hits DHCPApp's origin file and MAT's template.
+- Every reference file was diffed against its job's file, section markers dropped. Only the two
+  done-records' differences existed: ScanToPdfServer's header `branch main` and Promote-PRD's
+  refusal of an empty-`commit` run with an unrecorded prd tip, plus its header sentence.
+  All 15 now match.
+- P9's note: LABEL-3's iac examples are now `Apply Terraform (prd)`,
+  `Restart calico-node (k8s dev)` and `Check Ansible drift (k8s prd)`, stages the iac files have.
+- The modern-app toolchain's `COREPACK_HOME`/`PNPM_HOME` note moved from `containerTemplates` to
+  podYaml's comment and page. Three PodYamlTest methods named after the describables were
+  renamed.
+
 ## Not in scope
 
 - ModernAppTemplate itself (R2), and CanonApp (archived, no job).
