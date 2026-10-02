@@ -210,7 +210,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 1 (ArgoCDDeploy b8d1a0c): check_hook_namespace's docstring now names the Destroy Stage grant (D66); kc project test re-run green",
+        "by": "consult 1",
+        "date": "2026-10-03",
+        "commit": null
+      },
       "ruling": null
     },
     {
