@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "The destroy mode meets P4's outcome. It is a separate entry point that leaves the sync contract as it was, and its dry run writes nothing. An apply forgets the namespaced objects, applies the saved plan, checks that the state is empty and only then touches TerraformState, and re-runs are idempotent. The suite covers each case the plan names, with real Terraform where the destroy depends on Terraform's own behaviour. One advisory finding: the error message blames the empty configuration for any init or plan failure.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+               "summary": "_declared reports every init/plan failure, infrastructure errors included, as 'the empty configuration … does not init/plan'"}]}

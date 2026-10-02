@@ -256,6 +256,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P3",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "ArgoCDTools argocd-hook destroy: every init or plan failure is reported as 'the empty configuration … does not init/plan'",
+      "body": [
+        "presync/destroy.py _declared (:259-268) wraps every terraform init (:90, :136) and plan (:137, :149) in one message, whatever the cause. Most such failures do not come from the root's declarations: at init, the backend failing to read TerraformState; at plan, refreshing what is still in state against live systems (Ceph unreachable for an RBD image, a 403 on a cluster-scoped object tf-presync cannot read, the GitHub API on a webhook). The done-record hands P6 this message as what 'a root whose declarations do not plan alone' looks like (plan.md:396-401). Terraform's own error is printed above the message, which says so."
+      ],
+      "consequence": "An operator whose Destroy Stage build fails on an infrastructure error is told the deploy repo's declarations do not plan alone, and a runbook written from the done-record sends them to the wrong place first.",
+      "proposal": "fix now — word the last line after the step that failed, not the configuration, before P6 writes it into the runbook; one message in destroy.py.",
+      "evidence": "read",
+      "author": "code-reviewer, P4, r1, phases/P4/code_review_r1.md F1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "unknown",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

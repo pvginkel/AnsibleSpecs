@@ -468,6 +468,15 @@ only build the run starts. The phase starts no build itself, because the file re
 `main` only when the test phase pushes it (Ordering constraints). The done-record gives the job's
 URL.
 
+Review P4 r1 (fact): GitHub serves a repo under any case of its name, but TerraformState's paths
+are case-sensitive. `git ls-remote` on `https://github.com/pvginkel/fieldnotesdeploy.git` returns
+the same HEAD as `…/FieldnotesDeploy.git`. The destroy run names the state folder after the URL as
+given (`presync/backend.py:44-58`), so a `REPO` of `fieldnotesdeploy` finds no state. The Job then
+exits 0, reporting `the backend holds no state … nothing to destroy` (`presync/destroy.py:92-93`).
+The registry and Applications carry `FieldnotesDeploy` (ArgoCDDeploy `releases/values.yaml:100`).
+So a guard that compares `REPO` case-sensitively passes such a build, even against a deployed
+stage. The build's step 3 then removes that stage's `config/<stage>/`.
+
 ### P6 — The argocd runbook: destroying a retired stage
 
 Target: root
