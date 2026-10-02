@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The six describables and the positional kaniko are gone, podYaml's templates carry each with identical settings, and the listed pages follow. An independent read of all 125 enabled jobs' files (slice commits or origin per the live job list) finds no caller, and all 15 reference files match their jobs byte for byte with the docs lint green.",
+ "details": "code_review_r1.md",
+ "findings": []}
