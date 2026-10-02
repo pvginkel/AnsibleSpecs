@@ -88,6 +88,37 @@ subagent.
   and a ~60-minute "nodes offline" bound with the slot counter read before any reset. ANS-84 is
   closed as absorbed under ANS-181. *(10-02)* Planned: 11 phases, 26 criteria (rulings D1–D3,
   P1–P5 in its plan.md). Next step: `/dev:run-slice` on 036, the operator's OK for its one push.
+  *(10-02)* Run and complete; see below.
+- **Where things stand (2026-10-02, after 036).** Slice **036** (ANS-181) is complete, in
+  `slices/completed/`. Every pipeline in the estate is now a declarative file to the style guide:
+  122 files, ModernAppTemplate's template and KitchenDisplay's parked file the two named
+  exceptions (the `jenkins-pipelines` skill says how to treat each). It delivered J14
+  (firmware steps, `idfVersion` per repo), the five apps on a `modernApp` validation step
+  (Ruling D1, which brought J15 back as a step), J17, J21 (`kaniko2` only), J11/J12, J02, J26
+  (the four repos on `main`), Q2, Q6's `KEYCLOAK_*` part, 033 B3/B4/I1 (`containerTemplates`
+  keeps only KitchenDisplay's `rsync` and `dockbuild`), 034 B2/D3/I2, and 035 P6/P7. §2's
+  sheet was not written (Ruling D2): the slice's `closing-diff.md` records what the UI still
+  holds, and that closed ANS-84. One push of every repo, all builds green, 23 of 26 criteria
+  passed; V23–V25 wait on hand-started or scheduled runs. Its close-out (2026-10-02) has the
+  operator's rulings: Claude settles A1–A7 (the owed runs, ARCH-17, scratch clones), and the
+  doc drift in other repos (P1, P4, P5) goes on one card, including `report.md` and
+  `inventory.md`, which still describe T3–T13 as unmigrated.
+- **What is left (2026-10-02).** The migration is done. Before the project closes and the
+  freeze lifts, three things remain, none of them a slice:
+  1. **036's close-out tail**: V23–V25 settled from their next runs, and the doc-drift card,
+     which also brings `report.md` and `inventory.md` up to date.
+  2. **The small-changes runbook** (§1a, §5): J07 (built-in node executors 2 → 0), Q7 (the
+     3-pod cap documented in `docs/live-infra-access.md`), Q6's four dead globals
+     (`ELASTICSEARCH_CLUSTER_URL`, `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`,
+     `ANDROID_HOME`). Still waiting for the operator's go. It is three small steps, so they
+     can run directly, each API write with the operator's OK, without a runbook file.
+  3. **The carry-over check** (§1a), now as the closing audit: every accepted item and side ask
+     of `report.md` traced to the slice that delivered it, to the list above, or to a stated
+     reason for leaving it out.
+
+  Left open after the project, by ruling: J03 (ANS-92, Later), J10 and KitchenDisplay's library
+  code (ANS-93, Later), ModernAppTemplate's reconciliation with the five apps (done by an agent
+  at its next sync), and the docs site's launcher tile (ANS-174).
 - **How a converted Jenkinsfile is verified (ruled 2026-09-30).** A Replay is not required.
   Operator: "it's not necessary to do the replay like this. Pushing a new version, and checking
   the result is fine." Push the converted file and check the build it triggers. Each push still
@@ -223,7 +254,7 @@ Standing rules for every step:
 Agreed with the operator on 2026-09-21. Each step waits for the operator's go; none was started
 that day.
 
-- [ ] **op → C** `/dev:triage` over this review, run in the session that holds the review's
+- [x] **op → C** `/dev:triage` over this review, run in the session that holds the review's
   context, with three instructions that override the skill's defaults:
   - **The report is the adjudication record.** Every item already carries the operator's
     accept / modify / reject and, where asked, a ruling on Claude's reply. Triage does not redo
@@ -241,7 +272,8 @@ that day.
   *(09-30)* Ran. The operator took one slice, not the proposed three: "we do the safety net and
   the trial, and then see where we're at. I would not build new slices already." **Slice 033**
   (ANS-166) holds §3 (J08) and §6 (J22's self-test and the pin bump, J18, J20). Everything else
-  stays unfiled in `handovers/triage_2026-09-30.md` until 033's outcome is known.
+  stays unfiled in `handovers/triage_2026-09-30.md` until 033's outcome is known. *(10-02)* The
+  rest was cut one slice at a time: 034, 035, 036.
 - [ ] **C** Small-changes runbook. Items too small to carry a slice's overhead do not become
   slices and do not go back to ad-hoc work either: they go into one runbook in this folder
   (`small-changes.md`), each with its exact steps, its verification and its undo, run **before**
@@ -262,9 +294,11 @@ that day.
     *(09-30)* withdrawn: DI-13 removed the scan (operator, 2026-09-29: "don't dedup")
 
   Everything in the runbook keeps the standing rules: a push, a Replay and a Jenkins API write
-  each need the operator's OK.
-- [ ] **op** Rule on the slice cut and on the runbook's contents
-- [ ] **C** Carry-over check, after triage: every accepted item and side ask of `report.md`
+  each need the operator's OK. *(10-02)* What is left of it: J07, Q7 and Q6's four globals (the
+  pin bump went into 033, §6a into 034). See "What is left" at the top.
+- [ ] **op** Rule on the slice cut and on the runbook's contents *(10-02: the cut was ruled slice
+  by slice; the runbook is still open)*
+- [ ] **C** Carry-over check, after triage *(10-02: now the closing audit, after 036)*: every accepted item and side ask of `report.md`
   traced to exactly one slice, to the runbook, or to a stated reason for leaving it out. A
   completeness check, not a second opinion on the slices. What it looks for in particular:
   - the operator's modifications — J14's IDF version per repo, J08 as a KubeCoder-only trial
@@ -287,7 +321,7 @@ that day.
 
 ## 2. Per-job settings decision document
 
-- [ ] **C** Write `job-settings.md`: one row per job, with columns for disallow concurrent
+- ~~**C** Write `job-settings.md`: one row per job, with columns for disallow concurrent
   builds (yes/no), abort the previous build (yes/no), build retention, timeout, trigger and
   branch. Each row is pre-filled with the standard and today's value, and the report's
   candidates (A/S flags, retention and timeout exceptions, Q9) are marked with their evidence.
@@ -295,9 +329,12 @@ that day.
   its ruling (`abortPrevious: true`, in the file since 2026-09-23) — record it, do not re-ask.
   *(09-30)* 125 rows. `FieldnotesApp` declared `abortPrevious: true` itself (FN-18); record it
   like Build-Main. The five template apps are ruled per file like any other (Q11: edited in
-  place).
-- [ ] **op** Rule on it
-- [ ] **C** Fold the rulings into Appendix A, which becomes the §9 executor's spec
+  place).~~
+- ~~**op** Rule on it~~
+- ~~**C** Fold the rulings into Appendix A, which becomes the §9 executor's spec~~
+
+*(10-01)* Not written: slice 036's Ruling D2. The guide's job-property rules and their
+exceptions went into the files, and 036's `closing-diff.md` records what the UI still holds.
 
 ## 3. Declarative trial — KubeCoder (J08, as modified)
 
@@ -363,11 +400,12 @@ next Jenkinsfile.
   Choose a public hostname, or accept an internal link in public repos.~~ That constraint went
   with the link: the only pointer to the site is the skill, in a private repo, so a `.home`
   hostname is fine. Choose the host.
-- [ ] **C** Docs site in `JenkinsPipelineUtils/docs/`, built and published by the library's own
+- [x] **C** Docs site in `JenkinsPipelineUtils/docs/`, built and published by the library's own
   `Jenkinsfile`, alongside J22's self-test. Tool: Zensical. It is the Material for MkDocs team's
   successor, reads `mkdocs.yml`, and is the same path KubeCoder's MkDocs docs will need.
-  Starlight is the fallback if Zensical isn't stable by then.
-- [ ] **C** Write the style guide on the docs site, and the skill that carries its rules and
+  Starlight is the fallback if Zensical isn't stable by then. *(10-01)* Slice 034; published by
+  `IaC/JenkinsPipelineUtils` through PipelinesDeploy.
+- [x] **C** Write the style guide on the docs site, and the skill that carries its rules and
   points at it, from the rulings: J24 (`checkout scm` for the job's own repo),
   J23 (the one load line), J01 (the job-properties block and its placement; ~~J13~~ retention
   is the global build discarder, so files declare none), J08 (the declarative rule after §3),
@@ -375,9 +413,9 @@ next Jenkinsfile.
   those files stay self-contained), the §6a result
   (what a new repo needs for its push hook), non-secret settings inline rather than as global
   env vars (Q6; `HA_URL` is the ruled exception, and endpoints never go into OpenBao), `notify` use, `Jenkinsfile.*` naming, and header comments.
-- [ ] **C** Library reference pages (J22's docs half, replacing `vars/*.txt`), generated from or
+- [x] **C** Library reference pages (J22's docs half, replacing `vars/*.txt`), generated from or
   kept next to `vars/`
-- [ ] **op** Review the guide
+- [x] **op** Review the guide *(10-01: D1–D6 accepted, slice 034)*
 - ~~The header link itself is added to every Jenkinsfile in the §9 pass, so each repo is touched
   once. The site must therefore be live before §9.~~ No link (ruled above). The ordering
   stands for a different reason: the §9 executor works from the skill and the site it points
@@ -389,15 +427,16 @@ next Jenkinsfile.
   *(09-30)* The operator deleted `CanonApp` (Q12); `Archived/` and `FundaChecker` are gone
 - ~~**C** J10 — `Firmware/KitchenDisplay`, as Q1 decides (retire = delete the job)~~ Deferred,
   not rejected: ANS-93 (Later). The job stays disabled and is skipped by §9.
-- [ ] **C** J20 — remove the dead library code (needs J09 and §6's self-test). The
+- [x] **C** J20 — remove the dead library code (needs J09 and §6's self-test). The
   KitchenDisplay-only code (`ssh`/`scp`/`rsync`, `containerTemplates.rsync` and `dockbuild`,
-  `gitUtils.groovy`) stays until ANS-93 is worked.
+  `gitUtils.groovy`) stays until ANS-93 is worked. *(09-30)* Slice 033.
 - [ ] **C** Q6 — delete the dead global env vars (`ELASTICSEARCH_CLUSTER_URL`,
   `KEYCLOAK_KENSHO_TEST_REALM`, `S3_ENDPOINT_URL`, `ANDROID_HOME`; all nine still set on 09-30) after saving the global
   config; verify with one `MyDownloads/MyDownloadsClient` build (`ANDROID_HOME` comes from the
   `android-35` image). The IoTSupport `KEYCLOAK_*` four go after §9 inlines them. `HA_URL` stays
   global (ruled): endpoints do not go into OpenBao, and Architecture is public, so it cannot be
-  inlined either.
+  inlined either. *(10-02)* The IoTSupport four are deleted (slice 036, after #151 built green);
+  the four dead ones are still open.
 - [ ] **C** J07 — built-in node executors 2 → 0 (API; J04 was its other home and is rejected).
   Verify with one pod build and one `IaC/Build-Main`.
 - [ ] **C** Q7 — the container cap of 3 is deliberate: say so in
@@ -409,9 +448,11 @@ next Jenkinsfile.
 
 ## 6. Library safety net — before any library refactor
 
-- [ ] **C** J22 — a `Jenkinsfile` that loads the library at the pushed commit and asserts the pure
+- [x] **C** J22 — a `Jenkinsfile` that loads the library at the pushed commit and asserts the pure
   functions (shares the library's `Jenkinsfile` with the §4 docs build)
-- [ ] **op/C** J22 — create the `JenkinsPipelineUtils` job (a UI/API step)
+- [x] **op/C** J22 — create the `JenkinsPipelineUtils` job (a UI/API step) *(033 ran the self-test
+  in `kc project test` instead (its Ruling D1); 034 created `IaC/JenkinsPipelineUtils` for the
+  site)*
 - [x] ~~**C** ANS-89 (a real Groovy parse gate for the library, from slice 011's close-out) is the
   pre-push half of the same safety net; decide with the self-test whether it rides along here
   or stays its own card.~~ *(09-30)* Delivered by slice 027 (ANS-117, which absorbed ANS-89):
@@ -419,11 +460,13 @@ next Jenkinsfile.
   asserts no behaviour, so J22's pure-function asserts still stand. Whether they need a Jenkins
   job or ride `kc project test` is for plan-slice (the repo's `project.yaml` says no job builds
   it). Its `groovy-cps.version` pin (4376) already trails the controller's 4383 (§1a).
-- [ ] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
+- [x] **C** J18 — `@NonCPS` on `utils.hasChanges`, verified by the self-test and the next
   ~~`IaC/HelmCharts` run (or `DockerImages`, the other caller, once HelmCharts is gone)~~
-  *(09-30)* `DockerImages` or `IaC/IaC Docker Image` run, the two callers left
-- [ ] **C** J23 — standard library load line in the ~~3~~ *(09-30)* 2 odd files (`Home`,
-  `Jenkinsfile.ha-fleet`), folded into those files' next edit (J02 and §9)
+  *(09-30)* `DockerImages` or `IaC/IaC Docker Image` run, the two callers left. *(09-30)* Slice
+  033.
+- [x] **C** J23 — standard library load line in the ~~3~~ *(09-30)* 2 odd files (`Home`,
+  `Jenkinsfile.ha-fleet`), folded into those files' next edit (J02 and §9). *(10-02)* Both
+  migrated by slice 036.
 
 ## 6a. Does a file-declared `githubPush()` install the webhook? (your note on Appendix A R1)
 
@@ -448,20 +491,23 @@ written; it does not gate §9.
 Roughly seven phases. The slice owns the Replays, each of which needs your OK. It follows the §4
 style guide, and is written declaratively if §3 says "migrate all".
 
-- [ ] J17 — drop the inert `containerEnvVar` forwarding and scope `withVault`; proven by one
+- [x] J17 — drop the inert `containerEnvVar` forwarding and scope `withVault`; proven by one
   Replay of `AaC/Home Assistant Fleet`
-- [ ] J14 — `espFirmware(...)` for the 8 ESP-IDF pipelines, which absorbs J24 and J25 for those
+- [x] J14 — `espFirmware(...)` for the 8 ESP-IDF pipelines, which absorbs J24 and J25 for those
   files and J11's timeout inside the helper; one firmware Replay (a no-op re-flash). As
   modified: the IDF version is a required argument per repo (`idfVersion: 'v5.5.3'`), with no
-  default in the library, so versions move one repo at a time.
-- [ ] *(09-30: Q11 — likely withdrawn or re-aimed at ModernAppTemplate; the five monorepo apps
+  default in the library, so versions move one repo at a time. *(10-02)* Slice 036, as firmware
+  steps called from each file's own stages; all eight builds green.
+- [x] *(09-30: Q11 — likely withdrawn or re-aimed at ModernAppTemplate; the five monorepo apps
   render their `Jenkinsfile` from its root template now, and none Helm-deploys)* J15 —
   `validation.runSuiteJob(...)` for the 4 monorepo apps, with the `@NonCPS` suite
   parser and `poetry install --only main` as the one install line (Q5 — see the report).
   ~~J27 (a short-lived Secret)~~ rejected. *(refresh)* The deploy tail is a fourth difference
   now (ElectronicsInventory and ZigbeeControl write pins, DHCPApp and IoTSupport still
-  `helmDeploy`); the helper stops before it.
-- [ ] J21 — one kaniko API, applied only to files already touched here
+  `helmDeploy`); the helper stops before it. *(10-02)* Delivered by slice 036 as the `modernApp`
+  validation step for the five apps (its Ruling D1).
+- [x] J21 — one kaniko API, applied only to files already touched here *(10-02: slice 036;
+  `helmCharts.kaniko2` is the only form, the positional overload is gone)*
 - ~~J19 — `iac` var for the dev-stage idiom~~ ruled out: the duplication stays and the §4
   style guide says it is deliberate.
 - [x] J16 — `architectureProducer(...)` for the 57 `Jenkinsfile.architecture` copies, calling
@@ -478,16 +524,17 @@ style guide, and is written declaratively if §3 says "migrate all".
 
 ## 8. Timeouts — after the §2 rulings
 
-- [ ] **C** J12 — 4-hour backstop plus an `aborted` marker in the 6 declarative `iac-*` files
+- [x] **C** J12 — 4-hour backstop plus an `aborted` marker in the 6 declarative `iac-*` files
   ~~and `HelmCharts/Jenkinsfile` (skip it if HelmCharts' deletion lands first)~~ *(09-30:
   HelmCharts is gone)*; full linter
-  check; watch the next scheduled run
-- [ ] **C** J11 — pod-pipeline timeout. The §7 helpers already carry it; the remaining files get
-  it in the §9 pass, not in a push of their own.
+  check; watch the next scheduled run *(10-02: slice 036; the scheduled runs are its V25)*
+- [x] **C** J11 — pod-pipeline timeout. The §7 helpers already carry it; the remaining files get
+  it in the §9 pass, not in a push of their own. *(10-02)* Slice 036: 60 minutes, DockerImages
+  180.
 
 ## 9. ANS-84 — move job config into the Jenkinsfiles (mechanical, Sonnet, last)
 
-- [ ] **C** Brief a Sonnet agent from Appendix A, the `job-settings.md` rulings and the §4
+- [x] **C** *(superseded)* Brief a Sonnet agent from Appendix A, the `job-settings.md` rulings and the §4
   style guide. Include what rides along in the same files: ~~the style-guide header link~~
   (withdrawn 2026-09-23 — the guide is a skill, §4),
   ~~J13 retention~~ (rejected — the global build discarder stands, Appendix A's R4 is void),
@@ -499,13 +546,14 @@ style guide, and is written declaratively if §3 says "migrate all".
   `*/prd` and did on 09-23 too (the 09-23 text misread it), so `checkout scm` fits there as
   well. The brief also carries Appendix A's R8 (regenerate line numbers after slice 026; R6
   after each job's second build, per Q13) and Q11's ruling: the five template-generated files
-  are edited in place.
+  are edited in place. *(10-01)* Not needed: folded into the declarative migration, slices 035 and 036.
 - [x] **op** Q2 and J26 settled (2026-09-21): TrelloMcp stays on `test`, so its edit lands
   there; J26 accepted.
-- [ ] **C** J26 — rename `master` → `main` on the four MyDownloads/ScanToPdf client and server
+- [x] **C** J26 — rename `master` → `main` on the four MyDownloads/ScanToPdf client and server
   repos (GitHub API) and update the eight jobs' branch spec (API, `config.xml` saved first),
-  before the wave that touches them. Needs your OK as a push-class step.
-- [ ] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Ansible`,
+  before the wave that touches them. Needs your OK as a push-class step. *(10-02)* Slice 036
+  (Ruling D3); each job built once by hand on `main` to re-baseline its poll (Ruling R2).
+- [x] **S** Wave 1 — repos whose push only rebuilds cheap or read-only jobs: `Ansible`,
   ~~`HelmCharts` (if it still exists)~~, the AaC-only repos and *(refresh)* the ~~28~~
   *(09-30)* 48 deploy repos (49 jobs; KeycloakDeploy has two). Not before slice 026 closes: it
   pushes the same app and firmware repos.
@@ -513,22 +561,25 @@ style guide, and is written declaratively if §3 says "migrate all".
   WebathomeOrgDeploy.
   *(10-01)* Folded into the declarative migration: slice 035 put every architecture producer's
   guard and trigger in its own file. What remains of §9 belongs to the second slice.
-- [ ] **S** Wave 2 — app repos, in batches sized to the 3 pod slots. *(refresh)* 18 of them
+- [x] **S** Wave 2 — app repos, in batches sized to the 3 pod slots. *(refresh)* 18 of them
   end in a pin write, which is a prd rollout through Argo on every rebuild (new tag, deploy-repo
   commit, sync, pod restart) plus an `AaC/*Deploy` build; 6 end in a Helm deploy (no-op).
   *(09-30)* 22 pin writers (21 prd, `KubeCoder/Build-Main` dev); no Helm deploy is left. The
   five template apps go like the rest (Q11). Every job needs a second build before its config
   is clean (Q13). For a pin writer that is a second rollout, so let it be the next natural
   push rather than a forced one.
+  *(10-02)* Done by slice 036's one-go push.
   Q10 was re-asked on that basis and answered 2026-09-23: "Yes, they can still be pushed."
-- [ ] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
-  batches are still sized to the 3 pod slots.
-- [ ] **C** After each wave: re-dump `config.xml` (`jenkins-config/refresh.py`) and diff
+- [x] **S** Wave 3 — firmware repos. Q10: no waiting for J14 and no quiet-day scheduling; the
+  batches are still sized to the 3 pod slots. *(10-02)* Done by slice 036's one-go push.
+- [x] **C** After each wave: re-dump `config.xml` (`jenkins-config/refresh.py`) and diff
   against the snapshot *(09-30: take the snapshot right before the wave, into a fresh
   directory; `/work/scratch` does not survive an environment move)*. The only expected change is a `JobPropertyTrackerAction` plus the
-  ruled `abortPrevious` values.
-- [ ] **C** Close-out: all jobs re-dumped, the "Controller config" comments in the iac files
-  still accurate, ANS-84 closed
+  ruled `abortPrevious` values. *(10-02)* Slice 036's `closing-diff.md`: 43 of 127 changed,
+  the declarative bookkeeping plus the eight branch specs.
+- [x] **C** Close-out: all jobs re-dumped, the "Controller config" comments in the iac files
+  still accurate, ANS-84 closed *(10-01: ANS-84 closed as absorbed under ANS-181, which slice
+  036 delivered)*
 
 ## 10. Controller-level config — after §9
 
