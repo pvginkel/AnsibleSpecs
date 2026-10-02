@@ -162,7 +162,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 1 (JenkinsPipelineUtils 1fa9853): vars/podYaml.md's internals line no longer names containerName; kc project lint re-run green",
+        "by": "consult 1",
+        "date": "2026-10-02",
+        "commit": null
+      },
       "ruling": null
     },
     {
@@ -185,7 +190,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved by consult 1 (JenkinsPipelineUtils 1fa9853): vars/modernApp.md's internals list names secretsScript; kc project lint re-run green",
+        "by": "consult 1",
+        "date": "2026-10-02",
+        "commit": null
+      },
       "ruling": null
     },
     {
@@ -263,7 +273,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "absorbed by P12 (b6f69b8)",
+        "by": "consult 1",
+        "date": "2026-10-02",
+        "commit": null
+      },
       "ruling": null
     },
     {
@@ -459,6 +474,29 @@
         "trigger": "none",
         "impact": "none",
         "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P11",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "KubeCoderConfig jenkins-pipelines skill (SKILL.md:101-103) names yamlMergeStrategy merge() only for kaniko; P12 makes POD-3 require it for jenkins-agent-large too",
+      "body": [
+        "The skill's POD-3 brief reads: inheritFrom 'jenkins-agent', or jenkins-agent-large in the jobs the guide lists; kaniko only for a build that runs kaniko, and then with yamlMergeStrategy merge(). P12 (consult 1, from B2) changes POD-3 so an agent that inherits jenkins-agent-large declares the merge as well, because that template is YAML only (a node affinity on homelab.local/performance=high and a toleration) and the plugin's default Override drops it. P12 targets JenkinsPipelineUtils and the firmware clones; no phase after P10 targets KubeCoderConfig, so the brief keeps the old rule once P12 lands. The firmware reference files carry the merge after P12, so a session that starts from them, as the skill tells it to, gets it right."
+      ],
+      "consequence": "A session that writes a jenkins-agent-large agent from the skill's brief rather than its type's reference file leaves out the merge, and the build runs off the high-performance node, beside prd's workloads, with nothing saying so.",
+      "evidence": "read",
+      "author": "consult 1, after P11, /work/scratch/KubeCoderConfig/kubecoder/skills/jenkins-pipelines/SKILL.md:101-103 against plan.md P12",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "KubeCoderConfig"
       },
       "notes": [],
       "wrap_up": null,
