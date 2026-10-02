@@ -164,6 +164,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "P3",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "JenkinsPipelineUtils vars/modernApp.md:141-143 leaves secretsScript, added in P3's review fix, out of modernApp's internals",
+      "body": [
+        "The step page's Internals section names testArguments, service, environment, envList, jobManifest, suiteScript and summary as not part of what modernApp offers a Jenkinsfile. secretsScript (vars/modernApp.groovy:157), added by 521fac6 for r1 F1, is not on the list. The other var pages with an Internals section list every helper. P2 is the mirror case on podYaml.md."
+      ],
+      "consequence": "none: a reader of pipelines.home's modernApp page does not see secretsScript named as internal; no Jenkinsfile calls it.",
+      "evidence": "read",
+      "author": "code-reviewer, P3, round 2, phases/P3/code_review_r2.md F1",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "repo": "JenkinsPipelineUtils"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
