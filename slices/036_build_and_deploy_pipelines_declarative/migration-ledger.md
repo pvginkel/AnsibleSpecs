@@ -7,14 +7,14 @@ before the test phase, and each commit is rebased onto its origin when it is.
 
 | Repo | Job | Clone | Branch | File | Commit |
 | --- | --- | --- | --- | --- | --- |
-| CalendarDisplay | Firmware/CalendarDisplay | `/work/scratch/CalendarDisplay` | `main` | `Jenkinsfile` | `f2305bccbad14eb3ebf1484f379e59a84e79b6d0` |
-| DoorbellReceiver | Firmware/DoorbellReceiver | `/work/scratch/DoorbellReceiver` | `main` | `Jenkinsfile` | `e2c071367fce74b20f57474cc16d091c4bfb3f68` |
-| GestureDevice | Firmware/GestureDevice | `/work/scratch/GestureDevice` | `main` | `Jenkinsfile` | `4251d5459599cc5a2126e9970683565b586b934b` |
-| InfraStatisticsDisplay | Firmware/InfraStatisticsDisplay | `/work/scratch/InfraStatisticsDisplay` | `main` | `Jenkinsfile` | `8c771ec567e3ab037bf3b2c58c7bf9c90486a02b` |
-| Intercom | Firmware/Intercom | `/work/scratch/Intercom` | `main` | `Jenkinsfile` | `4ba47520334cbe2ad76070b992b1a87cdca79c9d` |
-| PaperClock | Firmware/PaperClock | `/work/scratch/PaperClock` | `main` | `Jenkinsfile` | `195fc05f3acbe5a6519e33018c1e3bef3cd1607b` |
-| ThermostatProxy | Firmware/ThermostatProxy | `/work/scratch/ThermostatProxy` | `main` | `Jenkinsfile` | `9c46c0dc3f726f36ad5243936b4aa114e854cd0f` |
-| UnderfloorHeatingController | Firmware/UnderfloorHeatingController | `/work/scratch/UnderfloorHeatingController` | `main` | `Jenkinsfile` | `9e01f6132b078c6e12935b55bbffc1c047845c45` |
+| CalendarDisplay | Firmware/CalendarDisplay | `/work/scratch/CalendarDisplay` | `main` | `Jenkinsfile` | `96ab9a82da98465b6f89cee67412a30e0349f7b9` |
+| DoorbellReceiver | Firmware/DoorbellReceiver | `/work/scratch/DoorbellReceiver` | `main` | `Jenkinsfile` | `4e533de1d8e74481acc40f8b0f9a0f5c71cbcbf2` |
+| GestureDevice | Firmware/GestureDevice | `/work/scratch/GestureDevice` | `main` | `Jenkinsfile` | `2583334f61ee250bc55324a44ff0a671f0ee3afc` |
+| InfraStatisticsDisplay | Firmware/InfraStatisticsDisplay | `/work/scratch/InfraStatisticsDisplay` | `main` | `Jenkinsfile` | `b353012c2b5f597d8f711cacf7d4c3d27f9b3de9` |
+| Intercom | Firmware/Intercom | `/work/scratch/Intercom` | `main` | `Jenkinsfile` | `b70f9f82d9e4663b2ff95a5dfa89d50150bbad00` |
+| PaperClock | Firmware/PaperClock | `/work/scratch/PaperClock` | `main` | `Jenkinsfile` | `fe9348e39deaab45a3141b32008c173f90df8012` |
+| ThermostatProxy | Firmware/ThermostatProxy | `/work/scratch/ThermostatProxy` | `main` | `Jenkinsfile` | `5f474eb41eb1d727042090e4d9017216f85513df` |
+| UnderfloorHeatingController | Firmware/UnderfloorHeatingController | `/work/scratch/UnderfloorHeatingController` | `main` | `Jenkinsfile` | `39bb16af59ffd7960c9bce00d6303b2c9abb76ec` |
 | DHCPApp | DHCP/DHCPApp | `/work/scratch/DHCPApp` | `main` | `Jenkinsfile` | `cca07a42086f3d3b8d6e561809ca4f9a7bb986e1` |
 | ElectronicsInventory | ElectronicsInventory/ElectronicsInventory | `/work/scratch/ElectronicsInventory` | `main` | `Jenkinsfile` | `4bcc459a6fed3beb474486ce8f121e628e8a5c32` |
 | FieldnotesApp | FieldnotesApp | `/work/scratch/FieldnotesApp` | `main` | `Jenkinsfile` | `6f323128a636bc7c93c6c5510d8e7ef06d6f68e1` |

@@ -1122,6 +1122,30 @@ operator to approve.
 - **The push.** This commit rides the test phase's one push with JenkinsPipelineUtils' other
   phases.
 
+**Done (P12).** POD-3 requires `yamlMergeStrategy merge()` on an agent that inherits `kaniko` or
+`jenkins-agent-large`, and says what each template holds and what a build loses without it. Both
+firmware reference files, `espFirmware`'s snippet, the firmware type page and podYaml's
+"Combining with inherited pod templates" declare it. The eight firmware files declare it too, with
+each clone's one commit amended and the ledger's eight rows on the new SHAs. JenkinsPipelineUtils
+`0a0d472` on `phase/036-P12`; `kc project test` and the docs lint green; the eight files pass the
+controller's linter.
+
+Later phases:
+- Test phase: JenkinsPipelineUtils' push carries P12. The eight firmware clones are each still one
+  commit ahead of `origin/main`, unpushed. PaperClock's and Intercom's files are again
+  `firmware.groovy` and `firmware-versions.groovy` as published (section markers dropped), and the
+  other six have the same agent.
+
+Record:
+- Witness (Script Console, computation only, `PodTemplateUtils.unwrap`): PaperClock's podYaml
+  output on the live template (no containers, Override, one YAML). No strategy: Override, no
+  affinity, no toleration. `Merge`: affinity `homelab.local/performance In [high]`, toleration
+  `homelab.local/performance=high:NoSchedule`. Both: the one container `idf`.
+- POD-3's job list still matches: MyDownloads, ScanToPdf and IntercomServer inherit
+  `jenkins-agent-large kaniko` with the merge (P5). No other page names the template.
+- The four P5 files keep their comment over `merge()`, which the reference files do not carry:
+  close-out I1.
+
 ## Not in scope
 
 - ModernAppTemplate itself (R2), and CanonApp (archived, no job).

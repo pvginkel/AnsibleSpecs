@@ -502,6 +502,32 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "I1",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "MyDownloadsClient, MyDownloadsServer, ScanToPdfClient and HomelabTerraformProvider Jenkinsfiles: the comment over yamlMergeStrategy merge() restates what POD-3 now requires",
+      "body": [
+        "P5's round 2 added a two-line comment over yamlMergeStrategy merge() in these four files (\"jenkins-agent-large is YAML only, a node affinity and a toleration; without merge() this file's YAML replaces it.\"), because POD-3 then named merge() only for kaniko. P12 made POD-3 require merge() for jenkins-agent-large and say why. The guide's reference files carry no comment over merge(), and MyDownloads, ScanToPdf and IntercomServer (jenkins-agent-large kaniko) carry none either. The comment is true; P12's plan kept the four files untouched. Dropping it is two lines in each file and one more amend per clone before the push, or a later commit in each repo."
+      ],
+      "consequence": "none: a reader of the four files sees a comment the other jenkins-agent-large files do not have; what it says is true.",
+      "evidence": "read",
+      "author": "code-writer, P12, r1; JenkinsPipelineUtils docs/pages/guide/pod.md POD-3, /work/scratch/MyDownloadsClient/Jenkinsfile:16-17",
+      "labels": {
+        "benefit": "code",
+        "felt": "not-observable",
+        "change": "remove",
+        "size": "several-places",
+        "product-call": "no",
+        "prevents": "nothing",
+        "area": "plain",
+        "repo": "MyDownloadsClient"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
