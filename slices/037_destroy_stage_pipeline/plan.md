@@ -275,7 +275,7 @@ Record:
 - Close-out: T1 (JenkinsDeploy's gate pins no RBAC, so it does not hold the SA to "no grant in
   `jenkins-prd`").
 
-### P3 — The pipeline identity's grants in argocd-hooks and argocd-prd
+### P3 — The pipeline identity's grants in argocd-hooks and argocd-prd ✅ DONE 2026-10-02
 
 Target: ../ArgoCDDeploy
 
