@@ -419,7 +419,7 @@ Record:
   `argocd-hook@<pod>`, pushed to `main` with the run's credential helper. Terraform runs with
   `-no-color` and `TF_VAR_stage`.
 
-### P5 — Jenkinsfile.destroy-stage and the IaC/Destroy Stage job
+### P5 — Jenkinsfile.destroy-stage and the IaC/Destroy Stage job ✅ DONE 2026-10-03
 
 Target: ../ArgoCDTools
 
