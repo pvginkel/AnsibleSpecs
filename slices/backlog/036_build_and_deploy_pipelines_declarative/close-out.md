@@ -5,6 +5,58 @@
 
 Run: <not yet stamped>
 
+## Comes to you
+
+### A1 — Close ARCH-17 once slice 036 ships: its P7 brings Architecture's producer manual, USAGE.md and the seed-architecture skill to the guide's producer form
+
+ARCH-17 was filed as a card at slice 035's close-out (its P2) because no phase of 035 targeted Architecture: the producer manual's § Jenkins integration (.claude/architecture/producer-manual.md:689-752) shows a scripted podTemplate producer calling containerTemplates.aac_tools (:697-698), and :659-660, USAGE.md:139 and .claude/skills/seed-architecture/SKILL.md:150 send a producer to that describable. Slice 036's P11 removes containerTemplates.aac_tools, and Ruling P5 (A3) has a phase that edits a repo also fix that repo's living docs naming what P11 removes. P7 edits Architecture, so P7 now makes those passages describe a producer's file as its architecture type's reference file on architectureProducer's steps. That is the whole of ARCH-17's change; the card itself is not touched by the run.
+
+**Consequence:** ARCH-17 stays open for a change that has shipped, and whoever picks it up redoes or re-checks work already done.
+
+**Triage:** action · shows in normal use · degrades · silent · fix is one edit · in Architecture
+**Provenance:** read — plan-writer r2, planning; plan.md P7 and Ruling P5, slices/completed/035_architecture_producers_declarative/close-out.md P2
+**Route:** to you — an action
+**Disposition:**
+
+### A2 — Settle V23 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …
+
+V23 — KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.
+
+`verification.json` marks V23 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which no role in the run starts. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V23 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
+### A3 — Settle V24 after the operator's next IaC/Apply run
+
+V24 — IaC/Apply runs the migrated `Ansible/Jenkinsfile.iac-apply` green. The job is hand-started and converges real infrastructure, so only the operator starts it.
+
+`verification.json` marks V24 owed after: the operator's next IaC/Apply run. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V24 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
+### A4 — Settle V25 after each job's next scheduled run
+
+V25 — IaC/Scheduled Calico Rollout, IaC/Scheduled Certs, IaC/Scheduled Drift, IaC/Scheduled Update and AaC/Home Assistant Fleet each run their migrated file green on their next cron. The push starts none of them.
+
+`verification.json` marks V25 owed after: each job's next scheduled run. The run cannot take that action; settle the criterion once it has happened.
+
+**Consequence:** V25 stays unproven until then; the test phase does not settle it.
+
+**Triage:** action · trigger unknown · impact unknown · signal unknown
+**Provenance:** read — `verification.json`'s `owed_after`, seeded by the plan loop
+**Route:** to you — an action
+**Disposition:**
+
 ## For the wrap-up
 
 ### P1 — AnsibleSpecs reviews/2026-09-jenkinsfile-review: inventory.md, report.md and plan.md will still describe the build and deploy pipelines as before slice 036; no requirement of 036 updates them · minor

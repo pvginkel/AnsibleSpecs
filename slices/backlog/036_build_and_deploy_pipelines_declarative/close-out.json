@@ -48,6 +48,75 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A2",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V23 after the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which …",
+      "body": [
+        "V23 — KubeCoder/Promote-PRD runs `KubeCoderDeploy/Jenkinsfile.promote`, as migrated, green from `main`. The job is started by hand, so the push does not run it.",
+        "",
+        "`verification.json` marks V23 owed after: the operator's next KubeCoder promotion (KubeCoder/Promote-PRD), which no role in the run starts. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V23 stays unproven until then; the test phase does not settle it.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A3",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V24 after the operator's next IaC/Apply run",
+      "body": [
+        "V24 — IaC/Apply runs the migrated `Ansible/Jenkinsfile.iac-apply` green. The job is hand-started and converges real infrastructure, so only the operator starts it.",
+        "",
+        "`verification.json` marks V24 owed after: the operator's next IaC/Apply run. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V24 stays unproven until then; the test phase does not settle it.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A4",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V25 after each job's next scheduled run",
+      "body": [
+        "V25 — IaC/Scheduled Calico Rollout, IaC/Scheduled Certs, IaC/Scheduled Drift, IaC/Scheduled Update and AaC/Home Assistant Fleet each run their migrated file green on their next cron. The push starts none of them.",
+        "",
+        "`verification.json` marks V25 owed after: each job's next scheduled run. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V25 stays unproven until then; the test phase does not settle it.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
