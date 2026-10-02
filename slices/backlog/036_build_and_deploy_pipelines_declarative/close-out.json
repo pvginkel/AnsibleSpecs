@@ -25,6 +25,29 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Close ARCH-17 once slice 036 ships: its P7 brings Architecture's producer manual, USAGE.md and the seed-architecture skill to the guide's producer form",
+      "body": [
+        "ARCH-17 was filed as a card at slice 035's close-out (its P2) because no phase of 035 targeted Architecture: the producer manual's § Jenkins integration (.claude/architecture/producer-manual.md:689-752) shows a scripted podTemplate producer calling containerTemplates.aac_tools (:697-698), and :659-660, USAGE.md:139 and .claude/skills/seed-architecture/SKILL.md:150 send a producer to that describable. Slice 036's P11 removes containerTemplates.aac_tools, and Ruling P5 (A3) has a phase that edits a repo also fix that repo's living docs naming what P11 removes. P7 edits Architecture, so P7 now makes those passages describe a producer's file as its architecture type's reference file on architectureProducer's steps. That is the whole of ARCH-17's change; the card itself is not touched by the run."
+      ],
+      "consequence": "ARCH-17 stays open for a change that has shipped, and whoever picks it up redoes or re-checks work already done.",
+      "evidence": "read",
+      "author": "plan-writer r2, planning; plan.md P7 and Ruling P5, slices/completed/035_architecture_producers_declarative/close-out.md P2",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "Architecture"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

@@ -35,6 +35,17 @@ a file reaches the test phase's one push.
   calls. A file calls only what P1–P3 put in the library, which the test phase pushes before any
   consumer.
 
+## What the commit also carries
+
+Ruling P5: the docs a repo keeps current say what is true after this slice. That covers READMEs,
+the repo's own docs, skills and the comments in its config files. The test phase pushes the repo
+once, and a repo outside the run's own targets is invisible to the doc phase, so a line that goes
+stale in this repo is fixed in the same commit. Such a line names a `containerTemplates`
+describable that P11 removes, or the positional `helmCharts.kaniko(...)` as the way the job
+builds. The plan names the lines it knows of, and the executor searches the repo for the rest.
+Plan and slice records, which describe what was true when they were written, stay as written.
+`Home/docs/plan.md` is one.
+
 ## Where the edit lands
 
 - **Repos this environment checks out are edited there**: `/work/Architecture`,

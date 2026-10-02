@@ -298,27 +298,41 @@ library-step pattern (the five apps' validation Job) that the guide gains a type
   of them in one go. Deploy repos, TerraformRegistry and KubeCoderDeploy take CI commits while the
   run works, so each commit is rebased onto its origin when it is pushed. A clone holding a commit
   that is not this slice's is not pushed, and the test phase reports it.
-- **Right before the push, the snapshot** (Rulings D2, D3): every job's `config.xml` and the
-  controller's global environment variables, read live. The dump under
-  `/work/scratch/jenkins-config/` predates slice 035 and lacks the global variables (G4).
-- **Then the renames, before those four repos are pushed** (R11, Ruling D3): MyDownloadsClient,
-  MyDownloadsServer, ScanToPdfClient and ScanToPdfServer default to `main` on GitHub, and the
-  eight jobs (`MyDownloads/*`, `ScanToPdf/*` and their `AaC/*` twins) build `*/main`, each job's
-  `config.xml` saved first. P5's commits for those repos then go to `main`.
-- **Quiet, then one check** (R18, Ruling T1). Quiet is an empty queue and no running builds. An
-  item that has waited on "nodes offline" for about 60 minutes is first checked against the
-  Kubernetes cloud's provisioning counter and the live agents (Script Console, read-only), and is
-  reset only if they disagree. The check is one Jenkins API pull of every job's `lastBuild`
-  against the push time.
-- **The `KEYCLOAK_*` globals go after IoTSupport is green** (R13, Ruling D3): both
-  IoTSupport/IoTSupport and AaC/IoTSupport must have built the inlined files green first.
-  `HA_URL` stays.
-- **Last, the closing diff** (Ruling D2): every job's `config.xml` is re-dumped once the queue is
-  quiet and diffed against the pre-push snapshot. What the UI still holds, per job, is recorded
-  in the slice folder. No property is stripped through the API (S12).
-- **No job is started by hand to prove a file.** The push starts what it starts. IaC/Apply,
-  KubeCoder/Promote-PRD and the scheduled jobs prove their files on their own next run (the
-  `owed_after` criteria). IaC/Apply is the operator's keystroke in any case (CLAUDE.md).
+- **Starting the run is the operator's OK for the one push** (Ruling P1). The test phase works
+  through the steps below in this order and does not stop to ask. Every Jenkins and GitHub write
+  in them is made under Ruling D3.
+  1. **The snapshot** (Rulings D2, D3), before any write: every job's `config.xml` and the
+     controller's global environment variables, read live. The dump under
+     `/work/scratch/jenkins-config/` predates slice 035 and lacks the global variables (G4).
+  2. **The renames** (R11): MyDownloadsClient, MyDownloadsServer, ScanToPdfClient and
+     ScanToPdfServer default to `main` on GitHub, and the eight jobs (`MyDownloads/*`,
+     `ScanToPdf/*` and their `AaC/*` twins) build `*/main`. P5's commits for those repos then go
+     to `main`.
+  3. **AaC/Architecture is paused** (Ruling P2): disabled before the first push, JenkinsPipelineUtils'
+     included. Until Architecture's own push lands, its live file calls `containerTemplates.k8s`,
+     `containerTemplates.python` and the positional `helmCharts.kaniko`
+     (`/work/Architecture/Jenkinsfile:39-40, 141`), which P11's library no longer has. Every
+     `AaC/*` producer that succeeds in the churn would also start it or abort its running build.
+  4. **The push.** JenkinsPipelineUtils goes first. Once it is on origin, every other repo the
+     slice committed to goes in one go, each rebased onto its origin. KubeCoder's push rolls
+     `kubecoder@dev` outside KubeCoder's own devlock, which this run cannot take. That risk is
+     accepted (Ruling P5), so the run neither takes nor waits for that lock.
+  5. **Quiet** (R18, Ruling T1): an empty queue and no running builds. An item that has waited on
+     "nodes offline" for about 60 minutes is first checked against the Kubernetes cloud's
+     provisioning counter and the live agents (Script Console, read-only). It is reset only if
+     they disagree.
+  6. **AaC/Architecture is resumed** (Ruling P2): re-enabled, then built once by hand, and the
+     run waits for quiet again.
+  7. **The check**: one Jenkins API pull of every job's `lastBuild` against the push time.
+  8. **The `KEYCLOAK_*` globals are deleted** (R13) once IoTSupport/IoTSupport and AaC/IoTSupport
+     have built the inlined files green. `HA_URL` stays.
+  9. **The closing diff** (Ruling D2): every job's `config.xml` is re-dumped and diffed against
+     the snapshot. What the UI still holds, per job, is recorded in the slice folder. No property
+     is stripped through the API (S12).
+- **AaC/Architecture's build is the only one started by hand.** Otherwise the push starts what it
+  starts. IaC/Apply, KubeCoder/Promote-PRD and the scheduled jobs prove their files on their own
+  next run (the `owed_after` criteria). IaC/Apply is the operator's keystroke in any case
+  (CLAUDE.md).
 
 ## Driver rulings
 
@@ -393,7 +407,7 @@ Constraints:
 The phase's gate does not run the docs lint (`docs/lint_examples.py`, which sends every example
 to the controller's linter and needs `JENKINS_TOKEN`). Run it before handing back.
 
-### P3 — The five apps' validation Job is a library step, and the guide has a type page and reference file for those apps
+### P3 — The five apps' validation Job is a library step, the guide has a type page and reference file for those apps, and SEC-1 has its one exception
 
 Target: ../JenkinsPipelineUtils
 
@@ -422,13 +436,19 @@ Constraints:
 - **One image declaration.** The Job's toolchain image is the image of podYaml's
   `modern-app-toolchain` template (`vars/podYaml.groovy:74`), so bumping it is one edit in the
   library (033 I1's concern).
-- **No secret in a string or a spec** (SEC-1, SEC-2, SEC-4). IoTSupport's Keycloak admin client
-  (`kv/jenkins/keycloak-iotsupport-admin`) must reach its suite without being interpolated into a
-  Groovy string and without sitting in the Job's manifest. Today it does both
-  (`IoTSupport/Jenkinsfile:102-105`). `kubectl.startJob` takes the manifest as a step argument,
-  which is stored with the build (`vars/kubectl.groovy:14-28`). The step must offer a way to
-  deliver a secret that keeps the secret out of both. `withVault` wraps only the steps that use
-  it.
+- **A test that needs a secret** (Ruling P3). IoTSupport's suite needs the Keycloak admin client
+  (`kv/jenkins/keycloak-iotsupport-admin`; the app reads `KEYCLOAK_ADMIN_CLIENT_ID`/`_SECRET`,
+  `backend/app/app_config.py:64-65`). The secret still reaches the suite through the Job, since
+  J27 was rejected, so the Job's spec may hold it. SEC-4 still applies: the secret is never
+  interpolated into a Groovy string, so it never enters a step argument Jenkins stores with the
+  build. Today it is interpolated into the manifest (`IoTSupport/Jenkinsfile:102-105`), which
+  `kubectl.startJob` takes as such an argument (`vars/kubectl.groovy:14-28`). So the step offers
+  a way to hand the suite a variable from the build's environment, where `withVault` puts it,
+  whose value never passes through Groovy. `withVault` wraps the step's call and nothing else.
+- **The guide's secrets page states the exception** (Ruling P3). SEC-1 bans `withVault` around a
+  test (`docs/pages/guide/secrets.md:5-9`). It gains one narrow exception: a test that itself
+  needs a secret may run with `withVault` around only the step that runs that test. No other SEC
+  rule changes.
 - **The guide.**
   - A type page and a reference file for these five builds, taken from one of the five jobs.
   - The types index types the five build jobs. It currently says the guide "leaves those five
@@ -452,9 +472,10 @@ Thirteen build files, one in each of thirteen repos, are migrated per
 `Jenkinsfile.architecture` takes one edit too. This phase opens the ledger.
 
 - **The eight ESP-IDF firmware files** (inventory T5) become the firmware reference file on P2's
-  steps. Intercom follows the several-versions reference. Each keeps `espressif/idf:v5.5.3` in
-  its own agent (S1). A file loses its inert `containerEnvVar` lines and its `withVault` around
-  the whole pod (J17; `PaperClock/Jenkinsfile:3-12`).
+  steps, near its length, not "a few lines" (Ruling P4). Intercom follows the several-versions
+  reference. Each keeps `espressif/idf:v5.5.3` in its own agent (S1). A file loses its inert
+  `containerEnvVar` lines and its `withVault` around the whole pod (J17;
+  `PaperClock/Jenkinsfile:3-12`).
   - CalendarDisplay, DoorbellReceiver, GestureDevice and UnderfloorHeatingController stop cloning
     themselves with `git` (CHK-1).
   - ThermostatProxy clones `opentherm_library` on `master` beside it, and that repo is left alone
@@ -466,6 +487,11 @@ Thirteen build files, one in each of thirteen repos, are migrated per
     table.
   - FieldnotesApp's `properties()` call goes (PROP-8, S4).
   - The unused `Utils` import goes (FILE-6).
+  - IoTSupport's `Test` stage is where SEC-1's exception applies, and nowhere else (Ruling P3).
+    `withVault` (`kv/jenkins/keycloak-iotsupport-admin`) wraps only the call to P3's step. Today
+    it wraps the whole validation block (`IoTSupport/Jenkinsfile:27-32`).
+  - DHCPApp's `docs/slice-test-plan.md:15` stops saying the job builds with
+    `helmCharts.kaniko(...)` (Ruling P5; attachment § What the commit also carries).
   - ModernAppTemplate gets no commit (R2).
 - **IoTSupport inlines its Keycloak settings** (R13, S10). These are `KEYCLOAK_TEST_BASE_URL`,
   `KEYCLOAK_TEST_REALM` and `KEYCLOAK_TEST_OIDC_TOKEN_URL` (`IoTSupport/Jenkinsfile:99,101,107`),
@@ -512,6 +538,8 @@ KubeCoder/Build-Main (P8) and IaC/IaC Docker Image (P9). That is 19 files.
     HelmCharts deploy (`TerraformRegistry/Jenkinsfile:3-6`).
   - GitblitMCPSupportPlugin's image stage is labelled for the image it builds,
     gitblit-initializer (`GitblitMCPSupportPlugin/Jenkinsfile:13`).
+- **NewsFilter's README** stops saying Jenkins builds with `helmCharts.kaniko(...)`
+  (`README.md:116`; Ruling P5, attachment § What the commit also carries).
 - **ArgoCDTools' README (R17's P7, S11).** Two passages name a `containerTemplates`
   describable. `README.md:272` names `containerTemplates.iac_toolchain` as the image the
   pipeline's tests run in. `:283-285` says Jenkins takes `aac-tools` through
@@ -541,7 +569,7 @@ file does that the reference does not.
   the operator's next promotion.
 - **SSEGateway** keeps its own `Test` stage (P3).
 
-### P7 — The architecture collector and the Home Assistant Fleet producer are declarative files
+### P7 — The architecture collector and the Home Assistant Fleet producer are declarative files, and the producer docs describe the guide's form
 
 Target: ../Architecture
 
@@ -560,6 +588,14 @@ Both files in `/work/Architecture` are migrated per
   - J17 (R7): `HA_TOKEN` is no longer forwarded through the pod (`:47`). It is read with
     `withVault` around only the steps that use it (SEC-1, SEC-2).
   - `HA_URL` stays a global, the one SEC-5 names (R13).
+- **The repo's docs on how a producer runs in Jenkins** (Ruling P5). They name
+  `containerTemplates.aac_tools`, which P11 removes. These are the producer manual
+  (`.claude/architecture/producer-manual.md:659-660`), its `## Jenkins integration` section,
+  whose scripted `podTemplate` snippet calls the describable (`:689-752`, `:697-698`),
+  `USAGE.md:139` and the seed-architecture skill (`.claude/skills/seed-architecture/SKILL.md:150`).
+  Each says what is true after this slice: a producer's file is its architecture type's reference
+  file from the guide, on `architectureProducer`'s steps. This is ARCH-17's change, which was
+  filed as a card at slice 035's close-out because no phase of 035 targeted Architecture.
 
 ### P8 — KubeCoder's build file is in line with the guide
 
@@ -627,6 +663,11 @@ The skill names them and says how a session treats each, in the terms the ruling
   but not now").
 - Neither is a model for a new file; a new file starts from its type's reference file.
 
+The onboard skill describes a repo's CI image build as `helmCharts.kaniko(...)`, the positional
+form P11 removes (`kubecoder/skills/onboard/SKILL.md:1604-1607`, `:1650`, `:1676`). It names
+`helmCharts.kaniko2(…)`, the one form after this slice (Ruling P5). The pipelines skill's LIB-6
+line names the positional form only as one a file must not call, and that stays true.
+
 The repo's own conventions apply: its `CLAUDE.md`, and its Prettier check as the gate.
 
 ### P11 — The library drops the describables and the positional kaniko that nothing calls
@@ -634,10 +675,21 @@ The repo's own conventions apply: its `CLAUDE.md`, and its Prettier check as the
 Target: ../JenkinsPipelineUtils
 
 R6 (033 I1) and R8 (J21, S2), once P4–P9 have moved every caller. The precondition is checked,
-not assumed: no Jenkinsfile on the branch that an enabled Jenkins job builds calls what this
-phase removes. The jobs' SCM and script path come from the live job list. ModernAppTemplate's
-template and CanonApp's file are the accepted breaks (R2, S2). KitchenDisplay calls only what
-stays (S6).
+not assumed: once the test phase's push lands, no Jenkinsfile that an enabled Jenkins job builds
+calls what this phase removes. Each job's repo, branch and script path come from the live job
+list, read-only. Nothing is pushed before the test phase, so origin still holds every
+unmigrated file (Ruling P5):
+
+- **A file the slice migrates is read from the slice's local commit**: the ledger's commit in
+  its clone, or the Architecture and Ansible commits P7 and P9 merged. For the four repos R11
+  renames, that commit is on local `master`, though the jobs will build `*/main` after the
+  rename.
+- **Every other file is read on origin**, on the branch its job builds.
+- **A caller outside the slice's files stops the phase.** It is reported, not worked around.
+- **The accepted breaks** are ModernAppTemplate's template and CanonApp's file (R2, S2).
+  KitchenDisplay calls only what stays (S6).
+
+Once the check holds:
 
 - **`containerTemplates`** loses `helm`, `k8s`, `python`, `aac_tools`, `iac_toolchain` and
   `modern_app_toolchain` (`vars/containerTemplates.groovy:9-64`). `rsync` and `dockbuild` stay
@@ -661,7 +713,9 @@ stays (S6).
   uploaded tree (P3).
 - A per-job settings sheet (Ruling D2).
 - Stripping UI-held property copies through the API (S12).
-- Starting a job by hand to prove its file (Ordering constraints).
+- Starting a job by hand to prove its file. AaC/Architecture's one build after the pause is the
+  exception (Ordering constraints, Ruling P2).
 - The small-changes runbook (review plan §1a: J07, Q7, Q6's four dead globals) and review §10,
   controller-level config.
-- The Architecture producer manual's snippet (ARCH-17).
+- Plan and slice records that quote what P11 removes, such as `Home/docs/plan.md:270-283`
+  (Ruling P5).

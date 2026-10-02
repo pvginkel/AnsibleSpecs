@@ -4,3 +4,21 @@
      lines are yours to write; everything else is overwritten by the next render. -->
 
 Run: <not yet stamped>
+
+## For the wrap-up
+
+### P1 — AnsibleSpecs reviews/2026-09-jenkinsfile-review: inventory.md, report.md and plan.md will still describe the build and deploy pipelines as before slice 036; no requirement of 036 updates them · minor
+
+<details><summary>body</summary>
+
+Slice 035 brought the review's three records up to date in a phase of its own (its P5, on its Settled S5): inventory.md's 'Migrated' notes, report.md's dated status notes under J01, J16, J24 and Q9, plan.md's 'Where things stand'. Slice 036's requirements (slice.md 1-18) and rulings ask for no such update, so its plan has no phase for it. After 036 ships, inventory.md still says T3-T13 and the five apps' build files are as on 2026-09-30 (its top note says the second slice takes them), report.md still shows J14, J17, J21, J11, J12, J02, J26, Q2, Q6 and section 2/9 without a closing status, and plan.md's 'Where things stand' ends at slice 035. The closing config.xml diff (Ruling D2) goes to 036's slice folder, not to the review.
+
+</details>
+
+**Consequence:** A reader of the review's records after 036 finds the build and deploy pipelines described as unmigrated and those items without a closing status.
+
+**Triage:** prose · shows in normal use · degrades · silent · fix is known, in several places ·
+in AnsibleSpecs
+**Provenance:** read — plan-writer r1, planning; reviews/2026-09-jenkinsfile-review/inventory.md:18-24 and slice 035's plan.md P5
+**Route:** the wrap-up — fix
+**Disposition:**

@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — every remaining pipeline declarative",
-      "description": "\"Every remaining pipeline becomes declarative per the style guide.\" Each file of the inventory's T3–T12 jobs (T3 16, T4 5, T5 8, T6 1, T7 6, T8–T12 one each) is a declarative `pipeline {}` file to the guide's rules, starting from its type's reference file, and passes the controller's declarative linter. Firmware/KitchenDisplay (T13) stays unconverted (Settled S6). \"The pipelines that can become a few lines\" (the firmware files) are a few lines on library steps. `KubeCoder/Jenkinsfile` is \"into line with the guide\": today it has no header, timeout or Checkout stage, makes 8 positional `helmCharts.kaniko(` calls and has a string `images:` entry (`KubeCoder/Jenkinsfile:28`). The six `Ansible/Jenkinsfile.iac-*` no longer declare `buildDiscarder` (today e.g. `Jenkinsfile.iac-apply:59`).",
+      "description": "\"Every remaining pipeline becomes declarative per the style guide.\" Each file of the inventory's T3–T12 jobs (T3 16, T4 5, T5 8, T6 1, T7 6, T8–T12 one each) is a declarative `pipeline {}` file to the guide's rules, starting from its type's reference file, and passes the controller's declarative linter. Firmware/KitchenDisplay (T13) stays unconverted (Settled S6). The firmware files are on the library steps, to the guide's firmware reference, near that file's length rather than \"a few lines\" (Ruling P4). `KubeCoder/Jenkinsfile` is \"into line with the guide\": today it has no header, timeout or Checkout stage, makes 8 positional `helmCharts.kaniko(` calls and has a string `images:` entry (`KubeCoder/Jenkinsfile:28`). The six `Ansible/Jenkinsfile.iac-*` no longer declare `buildDiscarder` (today e.g. `Jenkinsfile.iac-apply:59`).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -19,7 +19,7 @@
     {
       "id": "V03",
       "area": "R3 — the stage generators",
-      "description": "\"The stage generators\": `DockerImages/Jenkinsfile` generates its per-variant stages inside one `Build images` stage with `Write image pins` under `when {}` (image-matrix reference, S7). `Intercom/Jenkinsfile` writes out a Build and Deploy stage pair per hardware version, with no loop or `matrix` (today `for (hardwareVersion in [1, 2])` at `Intercom/Jenkinsfile:28`; S1, GRAN-7). `Architecture/Jenkinsfile` computes its triggers from `pipeline-producers.yaml` in a `Set triggers` stage (PROP-8). After its first build on the migrated file, AaC/Architecture's upstream trigger names the same producer jobs as the pre-push snapshot does.",
+      "description": "\"The stage generators\": `DockerImages/Jenkinsfile` generates its per-variant stages inside one `Build images` stage with `Write image pins` under `when {}` (image-matrix reference, S7). `Intercom/Jenkinsfile` writes out a Build and Deploy stage pair per hardware version, with no loop or `matrix` (today `for (hardwareVersion in [1, 2])` at `Intercom/Jenkinsfile:28`; S1, GRAN-7). `Architecture/Jenkinsfile` computes its triggers from `pipeline-producers.yaml` in a `Set triggers` stage (PROP-8). After its one build on the migrated file, the hand-started build after the pause (Ruling P2), AaC/Architecture's upstream trigger names the same producer jobs as the pre-push snapshot does.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -27,7 +27,7 @@
     {
       "id": "V04",
       "area": "R4 — J14 firmware helper",
-      "description": "\"J14: one firmware helper for the ESP-IDF pipelines, with the IDF version per repo.\" The library holds the firmware build and upload steps (S1), with a reference page that says a Replay is an OTA deploy. Each of the eight firmware files calls them, clones its repos in its own `Checkout` stage, and names its own `espressif/idf:<version>` image in its own agent: \"the version must be a parameter\", so a bump is one repo's commit. All eight pin `v5.5.3`, today inline at e.g. `PaperClock/Jenkinsfile:10`. The library's tests cover the steps. Each firmware job's build after the push is green, so its devices took the upload.",
+      "description": "\"J14: one firmware helper for the ESP-IDF pipelines, with the IDF version per repo.\" The library holds the firmware build and upload steps (S1), with a reference page that says a Replay is an OTA deploy. Each of the eight firmware files calls them, clones its repos in its own `Checkout` stage, and names its own `espressif/idf:<version>` image in its own agent: \"the version must be a parameter\", so a bump is one repo's commit. All eight pin `v5.5.3`, today inline at e.g. `PaperClock/Jenkinsfile:10`. The library's tests cover the steps. Each firmware job's build after the push is green, so the upload to IoTSupport succeeded (Ruling P4).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -139,7 +139,7 @@
     {
       "id": "V18",
       "area": "R18 — push once, check once",
-      "description": "\"How the change is pushed and checked\": \"change everything and push it all out in one go, and then stop.\" Every repo the slice committed to is pushed in one go, JenkinsPipelineUtils first, and no consumer before it is on origin. Quiet is an empty queue and no running builds. An item that waited on \"nodes offline\" past about 60 minutes was checked against the Kubernetes cloud's provisioning counter and the live agents before any reset (Ruling T1). The check is one Jenkins API pull of every job's `lastBuild` against the push time. Every build the push started finished SUCCESS. That includes the eight OTA re-flashes, the prd app rollouts through the pin writers and KubeCoder's dev rollout (S8).",
+      "description": "\"How the change is pushed and checked\": \"change everything and push it all out in one go, and then stop.\" Starting the run is the operator's OK for that push (Ruling P1). Every repo the slice committed to is pushed in one go, JenkinsPipelineUtils first, and no consumer before it is on origin. AaC/Architecture was disabled before the first push, re-enabled once the queue was quiet and built once by hand (Ruling P2). Until then its live file calls `containerTemplates.k8s`/`python` and the positional `helmCharts.kaniko` (`/work/Architecture/Jenkinsfile:39-40, 141`). No other build was started by hand. Quiet is an empty queue and no running builds. An item that waited on \"nodes offline\" past about 60 minutes was checked against the Kubernetes cloud's provisioning counter and the live agents before any reset (Ruling T1). The check is one Jenkins API pull of every job's `lastBuild` against the push time. Every build the push started finished SUCCESS, and so did AaC/Architecture's one build. That includes the eight OTA uploads, the prd app rollouts through the pin writers and KubeCoder's dev rollout (S8).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -171,7 +171,7 @@
     {
       "id": "V22",
       "area": "Secrets per the guide",
-      "description": "No migrated file and no new library step interpolates a secret into a Groovy string, or puts it in a pod spec or a Job manifest (SEC-2, SEC-4). `withVault` wraps only the steps that use its secret (SEC-1). Today IoTSupport's Keycloak admin client secret is interpolated into the validation Job's manifest (`IoTSupport/Jenkinsfile:102-105`), which `kubectl.startJob` takes as a step argument stored with the build (`vars/kubectl.groovy:14-28`).",
+      "description": "No migrated file and no new library step interpolates a secret into a Groovy string, so no secret enters a step argument Jenkins stores with the build (SEC-4). No secret reaches the agent pod through its spec (SEC-2). Today IoTSupport's Keycloak admin client secret is interpolated into the validation Job's manifest (`IoTSupport/Jenkinsfile:102-105`), which `kubectl.startJob` takes as a step argument stored with the build (`vars/kubectl.groovy:14-28`). The secret still reaches the suite through the Job (J27 rejected; Ruling P3). `withVault` wraps only the steps that use its secret (SEC-1). The one exception is IoTSupport's `Test` stage: there `withVault` wraps only the call to the validation step, because the suite itself needs the secret. Today it wraps the whole validation block (`IoTSupport/Jenkinsfile:27-32`). The guide's secrets page states that exception, and no other SEC rule changes (Ruling P3; SEC-1 today at `docs/pages/guide/secrets.md:5-9`).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -199,6 +199,14 @@
       "area": "Scheduled jobs on their migrated files",
       "description": "IaC/Scheduled Calico Rollout, IaC/Scheduled Certs, IaC/Scheduled Drift, IaC/Scheduled Update and AaC/Home Assistant Fleet each run their migrated file green on their next cron. The push starts none of them.",
       "owed_after": "each job's next scheduled run",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V26",
+      "area": "Ruling P5 — docs that name what the library drops",
+      "description": "The repos the slice commits to no longer present what P11 removes as current (Ruling P5). `NewsFilter/README.md:116` and `DHCPApp/docs/slice-test-plan.md:15` no longer say the job builds with `helmCharts.kaniko(...)`. Architecture's producer manual (`.claude/architecture/producer-manual.md:659-660` and its `## Jenkins integration` snippet, `:697-698`), `USAGE.md:139` and the seed-architecture skill (`.claude/skills/seed-architecture/SKILL.md:150`) no longer send a producer to `containerTemplates.aac_tools`; they describe the producer file to the guide, on `architectureProducer`'s steps (ARCH-17). KubeCoderConfig's onboard skill names `helmCharts.kaniko2(…)`, not the positional form (`kubecoder/skills/onboard/SKILL.md:1604-1607, 1650, 1676`). `Home/docs/plan.md`, a plan record, is left as written.",
       "verdict": null,
       "rationale": "",
       "evidence": []
