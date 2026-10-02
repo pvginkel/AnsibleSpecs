@@ -950,7 +950,7 @@ Record:
 - Drift's `prdCheck`/`recordDrift` stage names follow the new labels, so the build description
   and the warnings name the stage as the stage view does.
 
-### P10 — The pipelines skill says how to treat a file that predates the guide
+### P10 — The pipelines skill says how to treat a file that predates the guide ✅ DONE 2026-10-02
 
 Target: github:pvginkel/KubeCoderConfig
 
