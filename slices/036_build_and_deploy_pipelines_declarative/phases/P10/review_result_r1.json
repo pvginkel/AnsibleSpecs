@@ -1,0 +1,8 @@
+{"outcome": "issues",
+ "summary": "The predates-the-guide paragraph and the onboard kaniko2 renames are accurate against the repos, and the Prettier gate is green on 4cdca35. The skill's SEC-1 brief still bans withVault around a test, which contradicts Ruling P3's exception that the slice's own IoTSupport file relies on.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Major",
+               "impact": "blocking",
+               "category": "functional",
+               "anchor": "contradiction",
+               "summary": "jenkins-pipelines SKILL.md:112-114 SEC-1 brief bans withVault around a test; Ruling P3 / guide secrets.md:11-14 added the exception IoTSupport/Jenkinsfile:41-51 uses"}]}
