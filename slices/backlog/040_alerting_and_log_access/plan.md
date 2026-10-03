@@ -32,7 +32,9 @@
   healthchecks.io account; its notification goes to Telegram through healthchecks.io's own
   Telegram integration (@HealthchecksBot), configured in healthchecks.io by the operator. The plan
   gives the operator one step: create the check with the period/grace that match the heartbeat's
-  repeat interval, and `bao kv put` the ping URL at the path the plan names.
+  repeat interval, and `bao kv put` the ping URL at the path the plan names. Later on 2026-10-03
+  (EPIC-6): @HealthchecksBot posts into the homelab alerts group, where every alerting bot posts
+  under its own name. ANS-201 creates the group, so that step adds the bot to it.
 - Ruling D2 (2026-10-03, "agree"): **CrashLoopBackOff/ImagePullBackOff alerts cover every
   namespace on the production cluster, severity warning, after the condition holds 15 minutes,
   one alert per pod.** Node NotReady is critical, unscoped.
