@@ -185,7 +185,7 @@ collector.
 - P5 precedes P6 because the environment variable that carries the reader's password is P5's to
   name, and P6 wires it. No phase writes the image pin by hand.
 
-### P1 — srviac probes DHCP the way the relay does
+### P1 — srviac probes DHCP the way the relay does ✅ DONE 2026-10-03
 
 Target: ansible
 
