@@ -2,5 +2,52 @@
   "store": 1,
   "slice": "038_argocd_render_gate_and_terraform_only_pushes",
   "closed": null,
-  "entries": []
+  "entries": [
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Before /dev:run-slice: push slice 039's three unpushed commits — Charts cfae346, ChartsDeploy 69ecb9f, RegistryDeploy e53c36b",
+      "body": [
+        "Slice 039 was delivered ad hoc on 2026-10-03 and its commits in three repos were still ahead of origin when 038 was planned: Charts cfae346 (README: ChartsDeploy takes homelab-shared from charts.home) in /work/Charts, and the tarball reverts ChartsDeploy 69ecb9f and RegistryDeploy e53c36b in their /work/scratch clones. 038's P4 pushes Charts' main to publish the library (ruling D3), and P5 bumps both deploy repos in those clones, which the test phase then pushes. Left unpushed, 039's commits would go out inside 038's pushes, which no ruling of 038's authorizes, and P5's bump would not be the clone's only commit ahead."
+      ],
+      "consequence": "The run loop does not start while this is open; run anyway, 038's Charts publish and rollout pushes would carry slice 039's commits to origin with them.",
+      "proposal": "do it — push the three from their current clones (the 039 session's own pushes), then strike this entry.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r2, plan.md Ordering constraints and P5",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "broken",
+        "signal": "loud"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P1",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "AnsibleSpecs argo-cd/decisions.md D17 still tells the charts deploy repo to vendor the library, which slice 039 reverted",
+      "body": [
+        "D17 (argo-cd/decisions.md:188-189): 'Trap for when Charts itself migrates: its chart must not consume the library it serves — vendor the helper there or keep it helper-free.' Slice 039 (2026-10-03) reverted the vendoring in ChartsDeploy and RegistryDeploy, and argo-cd/design.md:133-141 now says no deploy repo commits the library tarball and a rebuilt cluster brings charts.home back by hand (Ansible docs/runbooks/cluster-bootstrap.md). design.md moved; the decision register did not."
+      ],
+      "consequence": "A reader of D17 is told to vendor the library into ChartsDeploy — the shape slice 039 deliberately removed — with nothing in the register pointing at the by-hand bootstrap.",
+      "proposal": "fix now — one '> **Amended 2026-10-03 (slice 039)**' note under D17 in the register's own style, pointing at design.md and the cluster-bootstrap runbook.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r2, argo-cd/decisions.md D17 against design.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "one-edit",
+        "repo": "AnsibleSpecs"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
 }

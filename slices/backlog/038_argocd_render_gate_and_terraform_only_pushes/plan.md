@@ -99,6 +99,9 @@ planning is transcription.
 
 ## Ordering constraints
 
+- Slice 039's unpushed commits — Charts `cfae346`, ChartsDeploy `69ecb9f`, RegistryDeploy
+  `e53c36b` — are on origin before the run starts (close-out action): otherwise P4's Charts push
+  and the rollout's pushes carry them.
 - P1 lands before P3: the library template's comment cites the decision P1 records, by the id
   P1's done-record gives.
 - The library change is published to charts.home before any deploy repo pins the new version: a
@@ -114,6 +117,9 @@ planning is transcription.
   daily) has its bump rebased onto it, and its at-risk check (P5) is re-read just before its
   push; an app that turns at-risk in between is reported in the test phase's record beside P5's
   list.
+- ChartsDeploy is the rollout's last push, in a batch of its own: every other app's next render
+  fetches the library from charts.home, so charts-prd's sync has to leave it serving every
+  version (V08).
 - ArgoCDDeploy (P2) may be pushed at any point: it syncs only by manual sync (argo-cd D3).
 
 ### P1 — The Argo CD decision register records that every deploy-repo push syncs and runs the Terraform hook
@@ -215,10 +221,11 @@ planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumped.
 - **Where the edits land.** Each repo's clone under `/work/scratch/<Repo>` (cloned there when
   absent), on `main`, brought to origin's head first; one commit, its only one ahead of origin.
   Nothing is pushed: the test phase pushes after P4's live proof (Ordering constraints).
-- **ChartsDeploy** commits its homelab-shared tarball in `chart/charts/` (what deploys
-  charts.home must not need charts.home, argo-cd D17), so its bump carries the new tarball and
-  its own `tests/check-deps.sh` holds. Its change stays the pin and the tarball: backlog slice
-  039 works in that repo.
+- **ChartsDeploy and RegistryDeploy** take homelab-shared from charts.home like every other
+  deploy repo — no deploy repo commits the library tarball (AnsibleSpecs `argo-cd/design.md:140`)
+  — so theirs is the same bump. At planning their clones each carry an unpushed commit of slice
+  039's (ChartsDeploy `69ecb9f`, RegistryDeploy `e53c36b`); it is on origin before the run starts
+  (close-out action), which keeps the bump each clone's only commit ahead.
 - **KubeCoderDeploy** takes its commit on `main` as well: kubecoder-dev syncs from it, and
   kubecoder-prd tracks the `prd` branch (`releases/values.yaml:172-174`, D34), which only the
   operator's KubeCoder/Promote-PRD moves.

@@ -35,7 +35,7 @@
     {
       "id": "V05",
       "area": "D1 library publish",
-      "description": "The new homelab-shared version is served by https://charts.home, its tarball committed in Charts dist/, and every previously published version is still served unchanged (`tests/publish.sh` green).",
+      "description": "The new homelab-shared version is served by https://charts.home before any deploy repo pins it, published from Charts' reviewed `main` (ruling D3); its tarball is committed in Charts dist/, and every previously published version is still served unchanged (`tests/publish.sh` green).",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -51,7 +51,7 @@
     {
       "id": "V07",
       "area": "D2 estate rollout",
-      "description": "Before pushing, every app whose terraform/ or config/*/*.tfvars changed since its last sync operation (a commit the defect left unapplied) is listed, since the bump push applies it; those apps are reported in the rollout phase's done-record.",
+      "description": "Before pushing, every app whose terraform/ or config/*/*.tfvars changed since its last sync operation (a commit the defect left unapplied) is listed, since the bump push applies it; those apps are reported in the rollout phase's done-record. Each repo's pending-Terraform status is re-checked just before its push (ruling D4), and an app that turned at-risk in between is reported in the test phase's record.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,7 +59,7 @@
     {
       "id": "V08",
       "area": "D2 estate rollout",
-      "description": "ChartsDeploy's bump carries the new homelab-shared tarball in chart/charts/ and changes nothing but the pin and that tarball; its tests/check-deps.sh is green and charts-prd syncs at the bump commit.",
+      "description": "ChartsDeploy's bump is the same pin-and-lock change as every other deploy repo's — no deploy repo commits the library tarball (AnsibleSpecs argo-cd/design.md:140); charts-prd syncs at the bump commit, its PreSync hook runs, and afterwards https://charts.home/index.yaml still lists every published homelab-shared version, the new one included.",
       "verdict": null,
       "rationale": "",
       "evidence": []
