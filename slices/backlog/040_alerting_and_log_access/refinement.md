@@ -38,7 +38,7 @@ again.
 **If this is wrong.** Low: the receiver swap is small; the cost is one more operator setup done
 for nothing.
 
-**Operator.** _agree, or comment here_
+**Operator.** agree (2026-10-03, in chat)
 
 ## D2 — How wide the pod-health alerts reach: every namespace, or an allow-list of infrastructure namespaces
 
@@ -71,14 +71,14 @@ Argo CD, Prometheus, storage): quiet, but a new critical app is silent until som
 
 **If this is wrong.** Noise, or a missed pod; the scope is one rule line to change.
 
-**Operator.** _agree, or comment here_
+**Operator.** agree (2026-10-03, in chat)
 
 ## Open facts — questions only you can answer
 
 **F1.** Do you already have a healthchecks.io account, and should its notification go to the same
 Telegram chat Alertmanager uses? Settles the operator procedure under D1.
 
-**Operator.** _answer here_
+**Operator.** "I just created an account. Telegram is fine." (2026-10-03, in chat) — healthchecks.io's own Telegram integration, set up in healthchecks.io.
 
 ## Settled
 
