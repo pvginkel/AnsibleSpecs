@@ -169,6 +169,30 @@ the service as the strings it is. Today it dumps with plain `yaml.safe_dump` inl
 - **No new dependency.** Its Jenkins job installs only `websocket-client` and `pyyaml`
   (`Jenkinsfile.ha-fleet:46`).
 
+**Done (P2).** Architecture `b641dc9` (branch `phase/041-P2`): `gen-ha-fleet.py` writes through
+`dump_yaml(doc)`, a `yaml.dump` with `Yaml12SafeDumper` (a `yaml.SafeDumper` with two extra
+implicit resolvers) and the old `sort_keys=False, width=120, allow_unicode=True`; number-like
+strings come out single-quoted, everything else byte-identical to `yaml.safe_dump`.
+
+Later phases:
+- P3: use P2's two resolver regexes, not IoTSupport's — they cover js-yaml 4's extensions too:
+  int `^[-+]?(?:0b[01_]+|0o[0-7_]+|0x[0-9a-fA-F_]+|[0-9][0-9_]*)(?<!_)$` (first chars
+  `-+0123456789`), float `^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)(?:[eE][-+]?[0-9]+)?(?<!_)$`
+  (first chars `-+.0123456789`). `.inf`/`.nan` need nothing; PyYAML's 1.1 resolver already quotes them.
+
+Record:
+- Coverage witnessed against the service's own reader (`service/node_modules/js-yaml` 4.1.1):
+  779,152 strings (every string ≤5 chars over `019_.eE+-boxaf`, plus 200k random 6-10 char ones)
+  dumped by `dump_yaml` all `load` back as the identical string. 2,608 of them did not under plain
+  `safe_dump`. 187 are quoted though js-yaml would read them plain as strings (`+.5`, `-.0e1`:
+  YAML 1.2 core floats js-yaml lacks). The task allows over-quoting.
+- js-yaml's grammar, read from `lib/type/int.js`/`float.js`: `_` anywhere after the first digit
+  but not trailing, `0b` binary, a sign on every base, leading-zero decimals (`089`). A float may
+  end in `.` (`1.`).
+- Tests (`tooling/tests/test_ha_fleet.py`): a parametrized quoting/round-trip case per number
+  form, and a mixed document (non-number-like strings, int, float, inf, bool, null, list) whose
+  `dump_yaml` output equals `yaml.safe_dump`'s.
+
 ### P3 — aac-tools ships the new arch-validate and quotes strings YAML 1.2 reads as numbers
 
 Target: aac-tools
@@ -178,8 +202,8 @@ Target: aac-tools
   byte for byte. The pinned `CANONICAL_ARCH_VALIDATE_MD5` (`tests/test_image.py:20`, checked at
   `:74-78`) is that file's hash, `766f6ec529466c321bf79cef1507e0db`. The copy is never edited or reformatted here (`tests/test_image.py:16-19`).
 - **`gen-architecture` writes every string that a YAML 1.2 reader would take for a number in
-  quotes.** It has a single write site (`image/gen_architecture.py:1242-1245`). The reference
-  pattern and the unchanged-otherwise rule are P2's. The image installs only `python3-yaml` beside
+  quotes.** It has a single write site (`image/gen_architecture.py:1242-1245`). The resolver
+  regexes (P2's done-record, not IoTSupport's narrower ones) and the unchanged-otherwise rule are P2's. The image installs only `python3-yaml` beside
   the standard library (`tests/test_image.py:22-25`).
 
 ### P4 — FieldnotesDeploy stops pasting the SSE gateway default onto `app`
