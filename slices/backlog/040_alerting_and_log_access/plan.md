@@ -51,6 +51,10 @@
   the Ansible repo is pushed only after that query returns the pod's lines; a failed query is a
   blocking finding. This is the operator's per-path permission for that one OpenBao value — no
   other path.
+- Fact (2026-10-03, operator: "yes, both are in"): both OpenBao leaves exist before the run —
+  `kv/eso/prd/prometheus/prd/healthchecks` (`ping_url`) and
+  `kv/eso/prd/elasticsearch/prd/filebeat-reader` (`password`). The reader's path keeps its name
+  (the operator asked for the path and wrote it there), so Ruling D4's permission stands as written.
 - Ruling review-A1 (2026-10-03, agreed): **healthchecks.io is modelled in the architecture
   artifact** — declared as an external service in the Architecture repo the way Telegram's Bot
   API is, and named in Alertmanager's `served_by` in PrometheusDeploy's judgment layer.

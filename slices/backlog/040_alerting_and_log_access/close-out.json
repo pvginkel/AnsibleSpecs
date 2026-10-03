@@ -23,8 +23,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "by": "the operator's ruling",
+        "date": "2026-10-03",
+        "commit": null
+      },
+      "ruling": {
+        "words": "yes, both are in.",
+        "did": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "date": "2026-10-03"
+      }
     },
     {
       "id": "A2",
@@ -46,8 +55,17 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
-      "ruling": null
+      "strike": {
+        "reason": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "by": "the operator's ruling",
+        "date": "2026-10-03",
+        "commit": null
+      },
+      "ruling": {
+        "words": "yes, both are in.",
+        "did": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "date": "2026-10-03"
+      }
     },
     {
       "id": "B1",
