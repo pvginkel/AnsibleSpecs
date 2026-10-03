@@ -184,7 +184,15 @@
         "area": "plain",
         "repo": "Ansible"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "consult 1",
+          "date": "2026-10-03",
+          "text": [
+            "Bears on V14 (--check --diff shows the first run's changes): the first dry run shows the role's file diffs but not the timer's enable/start, which the P1 done-record settled deliberately. Whoever settles V14 after the operator's srviac apply reads it with that exception, or the entry is fixed first."
+          ]
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
