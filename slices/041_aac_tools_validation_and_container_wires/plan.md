@@ -245,6 +245,16 @@ The repo's gate already runs `gen-architecture --stage prd` and `arch-validate`
 (`.kubecoder/project.yaml`), and both stay green with the edge drawn onto both containers. The pod
 rolls when Argo CD syncs; that is expected.
 
+**Done (P4).** FieldnotesDeploy `8212dab` (branch `phase/041-P4`): the `SSE_GATEWAY_URL` env entry
+and its three-line comment are gone from `app` in `chart/templates/app-deployment.yaml`; the `mcp`
+container's existing header comment gained two lines saying the model draws the SSE gateway edge
+onto it from the image's default though it does not call the gateway.
+
+Later phases:
+- Test phase (V09): the prd model, regenerated before and after, differs by exactly one relation —
+  `rel:fieldnotes-prd-fieldnotes-sse-gateway-serves-fieldnotes-prd-fieldnotes-mcp-ssegateway`
+  added; the `…-fieldnotes-app-ssegateway` edge is unchanged. `kc project test` and `lint` green.
+
 ## Not in scope
 
 - FN-14's wires in FieldnotesDeploy's `architecture.yaml` and the prd `models.url` value — FN-14's

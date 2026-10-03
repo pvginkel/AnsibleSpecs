@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "FieldnotesDeploy 8212dab drops SSE_GATEWAY_URL and its comment from the app container and adds a short note on mcp; the regenerated prd model gains exactly the gateway Serving edge onto mcp, app's edge unchanged; gate and lint green.", "refuted": []}
