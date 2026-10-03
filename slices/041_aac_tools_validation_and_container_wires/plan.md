@@ -226,7 +226,7 @@ Record:
 - Gate: `kc project test --project aac-tools` green; `ruff check .` / `ruff format --check .`
   clean (aac-tools declares no lint statement in kc).
 
-### P4 — FieldnotesDeploy stops pasting the SSE gateway default onto `app`
+### P4 — FieldnotesDeploy stops pasting the SSE gateway default onto `app` ✅ DONE 2026-10-03
 
 Target: github:pvginkel/FieldnotesDeploy
 
