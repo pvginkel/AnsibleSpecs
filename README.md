@@ -47,7 +47,6 @@ Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026
 
 - **039** — Cold boot: Keycloak and charts.home: Keycloak availability, break-glass and cold-start chain; the vendored homelab-shared tarballs reverted for a documented by-hand charts.home bootstrap
 - **042** — HelmCharts leftovers: KitchenDisplay's deploy key becomes a Jenkins SSH credential, and the openbao role's unconditional writes report changed honestly
-- **043** — Gitblit idle CPU: find what `gitblit-app` spends 0.5–0.8 core on while idle and bring it to near-idle
 
 ## Completed
 
@@ -111,6 +110,7 @@ Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026
 | [041 aac-tools-validation-and-container-wires](slices/completed/041_aac_tools_validation_and_container_wires/plan.md) | — | — | aac-tools validation and container wires: type errors show the source line, generated YAML quotes number-like strings, and an `upstream:` wire can be scoped per container |
 | [038 argocd-render-gate-and-terraform-only-pushes](slices/completed/038_argocd_render_gate_and_terraform_only_pushes/plan.md) | — | — | Argo CD render gate and Terraform-only pushes: the readonly-account gate refuses a widened `role:readonly`, and a FieldnotesDeploy push touching only `terraform/` reaches `terraform apply` |
 | [040 alerting-and-log-access](slices/completed/040_alerting_and_log_access/plan.md) | — | — | Alerting and log access: alerts for the 2026-09-25 failure modes, an out-of-cluster dead-man's switch, and a read-only `filebeat-*` Elasticsearch user in OpenBao |
+| [043 gitblit-idle-cpu](slices/completed/043_gitblit_idle_cpu/plan.md) | — | — | Gitblit idle CPU: find what `gitblit-app` spends 0.5–0.8 core on while idle and bring it to near-idle |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on

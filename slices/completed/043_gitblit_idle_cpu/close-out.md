@@ -4,13 +4,18 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: <not yet stamped>
+Run: 2026-10-03 14:31 → 16:37 · 1 phase · 0 bail-outs · 1 test round · doc phase done · $7.07
+(planner 41 %, research 15 %, rework 0 %)
 
-## For the wrap-up
+## Card requests
 
 ### P1 — Ansible docs/slice-testing-strategy.md assumes a push converges nothing; for an Argo CD deploy repo (GitSyncDeploy) a push to main rolls prd · minor
 
 **Consequence:** On a deploy-repo slice the test agent may treat the push as inert or mark live criteria as owed to the operator, unless the plan's criteria happen to spell the procedure out (043's do).
 
-**Route:** the wrap-up — fix
+**Route:** card request — the fix lives in Ansible, which the slice did not touch
 **Disposition:**
+
+## Record
+
+### E1 — The driver left a scratch clone at /work/scratch/GitSyncDeploy (`Target: github:pvginkel/GitSyncDeploy`)

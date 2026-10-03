@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "gitblit-app now sets JAVA_OPTS=\"-Xmx1024M -XX:+DisableExplicitGC\". The pinned image's entrypoint confirms the 1024M heap is kept, and only the CPU request is removed. Argo's client-side apply will drop the live cpu request. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

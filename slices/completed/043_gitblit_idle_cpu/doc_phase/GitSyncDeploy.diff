@@ -1,0 +1,36 @@
+/work/scratch/GitSyncDeploy — P1: git diff 01198bf62cae..4489edc752f5
+
+chart/templates/gitblit-deployment.yaml | 7 +++++--
+ config/prd/values.yaml                  | 1 -
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/chart/templates/gitblit-deployment.yaml b/chart/templates/gitblit-deployment.yaml
+index 2e8c6da..69192ee 100644
+--- a/chart/templates/gitblit-deployment.yaml
++++ b/chart/templates/gitblit-deployment.yaml
+@@ -69,8 +69,11 @@ spec:
+           env:
+             - name: TIMEZONE
+               value: Europe/Amsterdam
+-            # - name: JAVA_OPTS
+-            #   value: "-Xmx1024M -Dlog4j.configuration=file:///var/opt/gitblit/etc/log4j.properties"
++            # Gitblit's LuceneService calls System.gc() after every repository
++            # of each Lucene cycle (web.luceneFrequency, 2 minutes by default).
++            # A set JAVA_OPTS replaces the image entrypoint's -Xmx1024M default.
++            - name: JAVA_OPTS
++              value: "-Xmx1024M -XX:+DisableExplicitGC"
+           volumeMounts:
+             - name: git-sync-pvc
+               mountPath: /git
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 4befe9b..f2ba5bc 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -34,7 +34,6 @@ resources:
+         memory: 96Mi
+     gitblit-app:
+       requests:
+-        cpu: 600m
+         memory: 4096Mi
+     nginx:
+       requests:

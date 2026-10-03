@@ -26,6 +26,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "The driver left a scratch clone at /work/scratch/GitSyncDeploy (`Target: github:pvginkel/GitSyncDeploy`)",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/GitSyncDeploy` for `Target: github:pvginkel/GitSyncDeploy`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. The close-out session removes it then and says so under this entry; nothing is asked of the operator. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none — the clone is where the run works; left behind, it takes disk space and a sync in every later preflight, until the close-out session removes it.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
