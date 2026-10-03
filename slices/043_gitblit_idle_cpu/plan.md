@@ -110,6 +110,24 @@ container no longer requests CPU.
   records no resource requests or JVM options, so it should regenerate unchanged. Read the
   rendered gitblit Deployment to confirm both changes show up in it.
 
+**Done (P1).** GitSyncDeploy `4489edc` on `phase/043-P1`: the gitblit-app container sets
+`JAVA_OPTS="-Xmx1024M -XX:+DisableExplicitGC"`, and its requests are `memory: 4096Mi` only.
+
+Later phases:
+- The live JVM should show `java -server -Xmx1024M -XX:+DisableExplicitGC -Djava.awt.headless=true
+  … com.gitblit.GitBlitServer` (the image's entrypoint is `java -server $JAVA_OPTS …`), readable
+  from `/proc/<pid>/cmdline` in gitblit-app (V02).
+- `deploymentStamp` is not bumped; the env and resources change alone rolls the pod.
+
+Record:
+- Form: `JAVA_OPTS` carrying `-Xmx1024M` explicitly, not `JAVA_TOOL_OPTIONS`. Checked against
+  upstream `gitblit-org/gitblit-docker` `docker-entrypoint.sh`: an unset `JAVA_OPTS` defaults
+  to exactly `-Xmx1024M`, so the effective heap maximum is what it was.
+- The commented-out `JAVA_OPTS`/log4j entry is gone; a three-line comment says why the flag is
+  there and that a set `JAVA_OPTS` replaces the image default.
+- Gate: `kc project lint` and `kc project test` green. The architecture artifact regenerated
+  unchanged, and the rendered gitblit-app container shows both changes.
+
 ## Not in scope
 
 - The recommend-resources tool's CPU policy and the estate-wide run (Operator Action ANS-206).
