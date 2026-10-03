@@ -190,6 +190,26 @@ line whose subject is `role:readonly`, and holds the kubecoder-subject check to 
   `policy.*.csv` overlay key binding `kubecoder` to `role:admin`. The three reds go in the
   done-record.
 
+**Done (P2).** ArgoCDDeploy 63c370f: `policy_lines` (`tests/render-chart.py`) reads every
+argocd-rbac-cm key matching `policy.*.csv` (`policy.csv` included, as Argo's PolicyCSV joins
+them); `check_readonly_account` holds the kubecoder-binding check to all of them and adds a
+refusal of any rule whose subject (field 1) is `role:readonly`. `kc project test` green on the
+committed policy.
+
+Later phases:
+- None changed.
+
+Record:
+- Reds witnessed by scratch edits of `config/prd/values.yaml` (restored; not committed), each
+  `cexec iac tests/render-chart.py` exiting 1:
+  - `p, role:readonly, applications, sync, */*, allow` → `FAIL: argocd-rbac-cm widens role:readonly
+    by [('p', 'role:readonly', 'applications', 'sync', '*/*', 'allow')], and with it the kubecoder account`
+  - `g, role:readonly, role:admin` → `FAIL: argocd-rbac-cm widens role:readonly by [('g',
+    'role:readonly', 'role:admin')], and with it the kubecoder account`
+  - `policy.overlay.csv: g, kubecoder, role:admin` → `FAIL: argocd-rbac-cm binds the kubecoder account
+    by [('g', 'kubecoder', 'role:readonly'), ('g', 'kubecoder', 'role:admin')], not by role:readonly alone`
+- The reds are not a standing self-check in the gate (close-out T1).
+
 ### P3 — homelab-shared's hook include renders a ConfigMap carrying the synced commit, as a new version
 
 Target: ../Charts

@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "ArgoCDDeploy 63c370f: check_readonly_account now reads policy.csv and every policy.*.csv key, refuses any role:readonly-subject rule, and holds the kubecoder binding across all keys; kc project test green on the committed policy, the three scratch reds recorded in the done-record.", "refuted": []}

@@ -77,6 +77,31 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": null,
+      "headline": "ArgoCDDeploy render gate: the three role:readonly widenings are witnessed once, not held by a standing refusal check",
+      "body": [
+        "P2's check_readonly_account refuses a role:readonly-subject rule and holds the kubecoder binding across every policy.*.csv key; the three reds (p, role:readonly, ...; g, role:readonly, role:admin; a policy.overlay.csv binding kubecoder to role:admin) were witnessed on scratch edits of config/prd/values.yaml, per the plan. Nothing in tests/render-chart.py renders those overlays on every run, the way check_setting_refusals does for autoSync, so a later edit that loosens policy_lines or the check keeps the gate green."
+      ],
+      "consequence": "A later regression of the role:readonly or overlay-key check passes the gate unnoticed; the check is right today.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-writer, P2, r1, ArgoCDDeploy tests/render-chart.py (63c370f)",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "silent",
+        "fix": "design",
+        "area": "sensitive",
+        "repo": "ArgoCDDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
