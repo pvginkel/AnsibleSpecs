@@ -583,6 +583,23 @@ the route in its confirmed form. The test phase confirms both forms before it pu
   reader's Kibana session. A query sent to Elasticsearch directly confirms only the API form.
 - **A blocking finding:** either form returning no lines.
 
+**Done (P7).** Ansible `d401415` on `phase/040-P7`: `docs/runbooks/argocd.md` section renamed
+"A replaced hook's log: Kibana or the API" (`:156-201`). It names user `reader` and its OpenBao
+leaf; Kibana at `http://kibana.home` → Discover, data view `filebeat-*`, or, when none is saved,
+an ad-hoc one (pattern `filebeat-*`, `@timestamp`, **Use without saving**); the API form is a
+`curl` `$ELASTIC_URL/filebeat-*/_search` with `term` on `kubernetes.namespace` and `wildcard` on
+`kubernetes.pod.name`, sorted by `@timestamp`, piped through `jq` to timestamp/pod/message. The
+verified account names both routes as `reader` with no pod name or date of the check (slice 040,
+ANS-185); ANS-164's harvest fact stays. The `destroy-stage` paragraph (`:569-571`) loses its
+"unconfirmed" and links the new anchor `#a-replaced-hooks-log-kibana-or-the-api`.
+
+Later phases:
+- Test phase: three steps of the runbook are unwitnessed, because no credential exists before
+  the pushes: Kibana's **Use without saving** for `reader` (Kibana 8.x ad-hoc data views), and
+  the API query's `term`/`wildcard` on the two fields (Filebeat's default template maps them
+  `keyword`; `filebeat-*` matches Filebeat 8's data stream). Run the commands as written. If a
+  step differs, fix the runbook before the Ansible push.
+
 ## Not in scope
 
 - Exposing ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD to KubeCoder environments (KC-124).
