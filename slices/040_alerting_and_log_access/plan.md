@@ -308,7 +308,7 @@ Record:
   unannounced 42 are among them. Rule test mutations (look-back, reason set, guard, label, `> 0`)
   each fail a test.
 
-### P3 — PrometheusDeploy: is OIDC discovery answering, is DHCP answering
+### P3 — PrometheusDeploy: is OIDC discovery answering, is DHCP answering ✅ DONE 2026-10-03
 
 Target: github:pvginkel/PrometheusDeploy
 
