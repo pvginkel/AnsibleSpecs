@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "homelab-shared 0.4.0 (Charts 8fc4717, phase/038-P3): the hook include also renders an ordinary ConfigMap tf-presync-revision in hook.namespace carrying hook.revision, tarball committed in dist/; consumer gate asserts it whole and that it follows the revision; kc project lint/test green. P4/P5 edited to name 0.4.0 and the ConfigMap.", "refuted": []}

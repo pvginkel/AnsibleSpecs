@@ -1,0 +1,2 @@
+root: cexec iac tests/render-consumer.sh    [  OK  ]
+root: cexec iac tests/publish.sh    [  OK  ]

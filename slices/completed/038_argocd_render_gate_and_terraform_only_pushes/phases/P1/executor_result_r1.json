@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "argo-cd/decisions.md gains D67 (every deploy-repo push syncs and runs the Terraform hook: mechanism, why, turned-down options, cost), cross-referencing D1/D5/D12/D14/D17/D30/D46/D56; no entry needed amending. P3's header-comment bullet now names D67; done-record appended; committed 326c995 on phase/038-P1.", "refuted": []}

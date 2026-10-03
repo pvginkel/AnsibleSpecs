@@ -1,0 +1,2 @@
+root: cexec iac tools/build-index.sh    [  OK  ]
+root: kaniko --context . --destination registry:5000/charts-home:local --no-push    [  OK  ]

@@ -1,0 +1,49 @@
+/work/ArgoCDDeploy — P2: git diff b8d1a0cbb6b4..63c370f39122
+
+tests/render-chart.py | 20 +++++++++++++++++---
+ 1 file changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/tests/render-chart.py b/tests/render-chart.py
+index ff192fe..8e84979 100755
+--- a/tests/render-chart.py
++++ b/tests/render-chart.py
+@@ -1238,10 +1238,16 @@ def check_sso(docs, materialised):
+ 
+ 
+ def policy_lines(rbac):
+-    """policy.csv as casbin reads it: one tuple of stripped fields per rule."""
++    """The policy as casbin reads it: one tuple of stripped fields per rule.
++
++    Argo CD enforces policy.csv and every other policy.*.csv key of argocd-rbac-cm
++    as one policy (util/rbac PolicyCSV), so a rule in any of them counts.
++    """
+     return [
+         tuple(field.strip() for field in line.split(","))
+-        for line in rbac.get("policy.csv", "").splitlines()
++        for key in sorted(rbac)
++        if key.startswith("policy.") and key.endswith(".csv")
++        for line in rbac[key].splitlines()
+         if line.strip() and not line.lstrip().startswith("#")
+     ]
+ 
+@@ -1262,11 +1268,19 @@ def check_readonly_account(docs):
+     )
+ 
+     rbac = find(docs, "ConfigMap", "argocd-rbac-cm")["data"]
+-    granted = [line for line in policy_lines(rbac) if len(line) > 1 and line[1] == READONLY_ACCOUNT]
++    lines = policy_lines(rbac)
++    granted = [line for line in lines if len(line) > 1 and line[1] == READONLY_ACCOUNT]
+     check(
+         granted == [("g", READONLY_ACCOUNT, "role:readonly")],
+         f"argocd-rbac-cm binds the {READONLY_ACCOUNT} account by {granted!r}, not by role:readonly alone",
+     )
++    # role:readonly is Argo's built-in read-only role; a rule naming it as the
++    # subject gives the account everything that rule gives.
++    widened = [line for line in lines if len(line) > 1 and line[1] == "role:readonly"]
++    check(
++        not widened,
++        f"argocd-rbac-cm widens role:readonly by {widened!r}, and with it the {READONLY_ACCOUNT} account",
++    )
+     # The default role is every authenticated subject's, the account's included.
+     check(
+         rbac.get("policy.default", "") in ("", "role:readonly"),

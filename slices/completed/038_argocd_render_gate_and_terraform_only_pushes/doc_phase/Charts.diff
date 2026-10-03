@@ -1,0 +1,130 @@
+/work/Charts — P3: git diff cfae3462bcd9..8fc4717a90b5
+
+README.md                                            |   2 +-
+ charts/homelab-shared/Chart.yaml                     |   2 +-
+ charts/homelab-shared/templates/_tf-presync-hook.tpl |  19 ++++++++++++++++++-
+ dist/homelab-shared-0.4.0.tgz                        | Bin 0 -> 4342 bytes
+ tests/render-consumer.sh                             |  32 ++++++++++++++++++++++++++++++++
+ 5 files changed, 52 insertions(+), 3 deletions(-)
+
+diff --git a/README.md b/README.md
+index d4bb17b..d02b361 100644
+--- a/README.md
++++ b/README.md
+@@ -35,7 +35,7 @@ A consumer declares the dependency and includes a template in one line, with the
+ ```yaml
+ dependencies:
+   - name: homelab-shared
+-    version: "0.3.1"
++    version: "0.4.0"
+     repository: "https://charts.home"
+ ```
+ 
+diff --git a/charts/homelab-shared/Chart.yaml b/charts/homelab-shared/Chart.yaml
+index ad6a113..fa0e0d4 100644
+--- a/charts/homelab-shared/Chart.yaml
++++ b/charts/homelab-shared/Chart.yaml
+@@ -4,4 +4,4 @@ description: >-
+   The homelab's shared Helm surfaces — the estate's template helpers and the
+   Terraform PreSync hook Job — as one dependency for a migrated chart.
+ type: library
+-version: 0.3.1
++version: 0.4.0
+diff --git a/charts/homelab-shared/templates/_tf-presync-hook.tpl b/charts/homelab-shared/templates/_tf-presync-hook.tpl
+index cf82b5e..a7e38dd 100644
+--- a/charts/homelab-shared/templates/_tf-presync-hook.tpl
++++ b/charts/homelab-shared/templates/_tf-presync-hook.tpl
+@@ -30,6 +30,14 @@ what lets `BeforeHookCreation` find and replace the previous run. A
+ that policy never matched one and every run's Job stayed behind (ANS-137), and
+ two stages syncing one commit in the same second collided (ANS-124).
+ 
++It also renders a ConfigMap in `hook.namespace` carrying `hook.revision`, and
++that one is not a hook: Argo leaves hooks out of its diff, and auto-sync fires
++only on OutOfSync, so a push touching only terraform/ or the stage tfvars —
++both outside chart/ — rendered identically and never reached the hook. With the
++synced commit in an ordinary object every push renders differently, the app
++syncs, and the hook applies at that commit (argo-cd decisions.md D67). It lives
++in the app's namespace so it is pruned with the app.
++
+ */}}
+ {{- define "homelab-shared.tf-presync-hook" -}}
+ {{- $hook := .Values.hook | default dict -}}
+@@ -39,6 +47,15 @@ two stages syncing one commit in the same second collided (ANS-124).
+ {{- if gt (len $jobName) 63 -}}
+ {{- fail (printf "the hook Job name %q is longer than 63 characters; hook.namespace is too long" $jobName) -}}
+ {{- end -}}
++{{- $revision := required "hook.revision is required by the Terraform PreSync hook" $hook.revision -}}
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: tf-presync-revision
++  namespace: {{ $namespace | quote }}
++data:
++  revision: {{ $revision | quote }}
++---
+ apiVersion: rbac.authorization.k8s.io/v1
+ kind: RoleBinding
+ metadata:
+@@ -82,7 +99,7 @@ spec:
+           image: registry:5000/argocd-hook:{{ $hook.imageTag | default $lib.imageTag }}
+           args:
+             - {{ required "hook.repo is required by the Terraform PreSync hook" $hook.repo | quote }}
+-            - {{ required "hook.revision is required by the Terraform PreSync hook" $hook.revision | quote }}
++            - {{ $revision | quote }}
+             - {{ required "hook.stage is required by the Terraform PreSync hook" $hook.stage | quote }}
+             - {{ $namespace | quote }}
+           envFrom:
+diff --git a/dist/homelab-shared-0.4.0.tgz b/dist/homelab-shared-0.4.0.tgz
+new file mode 100644
+index 0000000..535bf40
+Binary files /dev/null and b/dist/homelab-shared-0.4.0.tgz differ
+diff --git a/tests/render-consumer.sh b/tests/render-consumer.sh
+index 0c62f41..6bb5df3 100755
+--- a/tests/render-consumer.sh
++++ b/tests/render-consumer.sh
+@@ -130,6 +130,32 @@ if [ "$rendered_binding" != "$expected_binding" ]; then
+ fi
+ refute 'the hook identity is bound cluster-wide by the library' 'kind: ClusterRoleBinding'
+ 
++# --- the synced commit, in an ordinary object (D67) ---------------------------
++# Read whole, like the binding: the object exists so that each commit renders
++# differently, which only holds if it carries the revision it was given and is
++# not a hook — Argo leaves hooks out of its diff.
++rendered_revision="$(awk '
++  /^---/ { if (doc ~ /\nkind: ConfigMap\n/) printf "%s", doc; doc = ""; next }
++  /^# Source:/ { next }
++  { doc = doc "\n" $0 }
++  END { if (doc ~ /\nkind: ConfigMap\n/) printf "%s", doc }
++' "$RENDER" | sed '1{/^$/d}')"
++
++expected_revision='apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: tf-presync-revision
++  namespace: "consumer-prd"
++data:
++  revision: "0123456789abcdef0123456789abcdef01234567"'
++
++if [ "$rendered_revision" != "$expected_revision" ]; then
++  fail 'the hook include renders the wrong revision ConfigMap, or none'
++  printf '      expected:\n%s\n      got:\n%s\n' \
++    "$(printf '%s\n' "$expected_revision" | sed 's/^/        /')" \
++    "$(printf '%s\n' "$rendered_revision" | sed 's/^/        /')" >&2
++fi
++
+ # --- the shared helpers ------------------------------------------------------
+ expect 'deployment.timestamp'             'deployment: "'
+ expect 'zpool2 node affinity key'         'key: homelab.local/storage'
+@@ -169,6 +195,12 @@ if ! helm template consumer "$CONSUMER" --set hook.imageTag=42 |
+   fail 'an app cannot override hook.imageTag'
+ fi
+ 
++# --- a different commit renders a different object ---------------------------
++if ! helm template consumer "$CONSUMER" --set hook.revision=fedcba9876543210fedcba9876543210fedcba98 |
++  grep -qF -- 'revision: "fedcba9876543210fedcba9876543210fedcba98"'; then
++  fail 'the revision ConfigMap does not follow hook.revision'
++fi
++
+ # --- the Job name fits the 63-character limit ---------------------------------
+ # tf-presync- plus the longest namespace that fits (52 characters) renders; one
+ # more fails the render rather than the sync.

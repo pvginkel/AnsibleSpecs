@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "P1 fixed: D17 now carries an amendment note pointing at the by-hand bootstrap (AnsibleSpecs 23644ac). The labels on T1 (future-change) and B2 (loud) hold in the code, so both are left. B1 is left with what the code shows; its csv-module proposal stands.",
+ "fixed": ["P1"], "folded": [], "cards": [], "left": ["T1", "B1", "B2"],
+ "relabelled": []}

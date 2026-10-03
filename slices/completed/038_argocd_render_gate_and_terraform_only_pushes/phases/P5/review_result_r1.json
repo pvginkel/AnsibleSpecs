@@ -1,0 +1,3 @@
+{"outcome": "signoff", "summary": "All 47 registry consumers besides FieldnotesDeploy and ArgoCDDeploy carry one unpushed commit that moves only their homelab-shared version to 0.4.0 (pin, lock, KubeCoderDeploy LIBRARY), matching ledger.md. Spot-rerun gates are green and render the ConfigMap, and an independent prd read confirms the at-risk list is empty. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

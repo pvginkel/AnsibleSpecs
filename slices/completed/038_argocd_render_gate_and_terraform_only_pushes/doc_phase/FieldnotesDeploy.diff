@@ -1,0 +1,31 @@
+/work/scratch/FieldnotesDeploy — P4: git diff 14ec1f77c561..2ece6fdf01b1
+
+chart/Chart.lock | 6 +++---
+ chart/Chart.yaml | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/chart/Chart.lock b/chart/Chart.lock
+index 8577a13..21a11b3 100644
+--- a/chart/Chart.lock
++++ b/chart/Chart.lock
+@@ -1,6 +1,6 @@
+ dependencies:
+ - name: homelab-shared
+   repository: https://charts.home
+-  version: 0.3.1
+-digest: sha256:3c59b3d17e0c986693d4a2837888cf81a86499cac5579ace9af0ad039210b600
+-generated: "2026-09-26T09:04:27.361959000+02:00"
++  version: 0.4.0
++digest: sha256:c9a32b6d981ffbb8284ac2c47580839ff4cfe7b7316d5e0503f461d7b3614e44
++generated: "2026-10-03T09:07:11.279569652+02:00"
+diff --git a/chart/Chart.yaml b/chart/Chart.yaml
+index 04fa19d..3d50368 100644
+--- a/chart/Chart.yaml
++++ b/chart/Chart.yaml
+@@ -5,5 +5,5 @@ type: application
+ dependencies:
+   # Exact, not a range (D17): the hook Job this chart renders moves on a deliberate commit.
+   - name: homelab-shared
+-    version: "0.3.1"
++    version: "0.4.0"
+     repository: https://charts.home

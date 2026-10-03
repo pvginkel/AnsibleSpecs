@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "FieldnotesDeploy's one commit moves only its homelab-shared version (Chart.yaml pin and re-resolved Chart.lock) to 0.4.0, which charts.home serves from Charts main 8fc4717; the prd render carries ConfigMap tf-presync-revision following hook.revision. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "homelab-shared 0.4.0 renders a non-hook ConfigMap tf-presync-revision in hook.namespace carrying hook.revision. The consumer gate checks the whole document and that it follows the revision, the tarball is published per the README, and no findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
