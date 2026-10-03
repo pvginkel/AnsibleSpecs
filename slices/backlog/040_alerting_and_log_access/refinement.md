@@ -178,6 +178,10 @@ Telegram chat Alertmanager uses? Settles the operator procedure under D1.
   reads the filebeat indices only; you generate its password and write it to OpenBao with one
   command, at a path both the setup Job and the later KubeCoder card can read, and the Job picks
   it up from there — manual creation in Kibana loses on being unrepeatable.
+  **Operator (plan review, 2026-10-03):** "I would prefer access is not limited to specific data
+  sets. I would like it to be able to read all data. If Kibana adds value (it sounds like it does),
+  and this allows logging into Kibana, that's a plus." — the user reads all data and can log into
+  Kibana, still read-only.
 - The Kibana check in the Argo CD runbook uses a current Argo hook pod's log — the one the runbook
   names expires around 2026-10-08 — and once a query returns lines, the runbook drops
   "unconfirmed".

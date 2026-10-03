@@ -1,4 +1,4 @@
-# Slice 040 — Prometheus alerts for the 2026-09-25 DHCP-outage failure modes, an out-of-cluster dead-man's switch through healthchecks.io, and a read-only Elasticsearch user for `filebeat-*` stored in OpenBao
+# Slice 040 — Prometheus alerts for the 2026-09-25 DHCP-outage failure modes, an out-of-cluster dead-man's switch through healthchecks.io, and a read-only Elasticsearch user (all data, Kibana login) stored in OpenBao
 
 ## Requirements / rulings
 
@@ -43,10 +43,18 @@
   plan's call.
 - Ruling D4 (2026-10-03, "Agreed"): **the test phase may read
   `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`, once, to run the
-  query confirming the runbook's Kibana route** against a current Argo CD hook pod's log. The
-  runbook edit is written as confirmed; the Ansible repo is pushed only after that query returns
-  the pod's lines; a failed query is a blocking finding. This is the operator's per-path
-  permission for that one OpenBao value — no other path.
+  query confirming the runbook's Kibana route** against a current Argo CD hook pod's log — and
+  (review-A3, agreed 2026-10-03) to witness the user's read-only limits live with that same read
+  (a write refused, an administrative call refused). The runbook edit is written as confirmed;
+  the Ansible repo is pushed only after that query returns the pod's lines; a failed query is a
+  blocking finding. This is the operator's per-path permission for that one OpenBao value — no
+  other path.
+- Ruling review-A1 (2026-10-03, agreed): **healthchecks.io is modelled in the architecture
+  artifact** — declared as an external service in the Architecture repo the way Telegram's Bot
+  API is, and named in Alertmanager's `served_by` in PrometheusDeploy's judgment layer.
+- Ruling review-A2 (2026-10-03, agreed): **the plan names the reader-password rotation path** —
+  `bao kv put` the new value, then make the setup Job rerun (delete it; Argo CD recreates it) —
+  documented in ElasticsearchDeploy's README. No automatic re-apply.
 - Settled (refinement, operator saw it): the **DHCP probe runs on srviac** (outside the cluster,
   static address 10.1.0.45, does not depend on the DHCP it tests) as a systemd timer writing its
   result to srviac's node-exporter (textfile collector), which in-cluster Prometheus already
@@ -55,8 +63,17 @@
 - Settled: **OIDC discovery is probed by a blackbox exporter added to the Prometheus deploy**, on
   `https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration` (the URL that failed
   in the outage and the one `docs/runbooks/cold-boot.md` checks).
+- Ruling review-Q1 (2026-10-03), on which surface the reader serves — supersedes R3's "only read
+  the `filebeat-*` indices": "I would prefer access is not limited to specific data sets. I would
+  like it to be able to read all data. If Kibana adds value (it sounds like it does), and this
+  allows logging into Kibana, that's a plus." So the user is **read-only over all data** (every
+  index; no write, no cluster or index management, no Kibana edits) **and can log into Kibana**
+  (Discover etc., read-only), and serves the Elasticsearch API as well. Elasticsearch's built-in
+  `viewer` role matches this shape; the plan may use it or an equivalent custom role. The
+  runbook route is confirmed through Kibana, and the runbook also gains the equivalent API query
+  (agents hold ELASTIC_URL/USER/PASSWORD, not a browser).
 - Settled: **the read-only user is created by the Elasticsearch setup Job** (DockerImages
-  `elasticsearch-setup`), with a role granting read on `filebeat-*` only; the operator generates
+  `elasticsearch-setup`), with the read-only role of Ruling review-Q1; the operator generates
   its password and writes it to OpenBao with one `bao kv put` at a path both the setup Job (via
   ESO) and the later KubeCoder card can read; the Job takes it from there. Not created by hand in
   Kibana.
