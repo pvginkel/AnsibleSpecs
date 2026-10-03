@@ -5,3 +5,15 @@
      `close_out.py show <id>` prints an entry in full. -->
 
 Run: <not yet stamped>
+
+## For the wrap-up
+
+### I1 — Architecture: quote YAML-1.2 number-like strings in the collector's published architecture.yaml too?
+
+**Proposal:** card — a cheap guard. The collector's published YAML should quote the same way the
+generators now do, but nothing misreads it today, so it does not belong in this slice.
+
+**Consequence:** none today; once live data puts a number-like string into the merged dataset, any YAML 1.2 reader of architecture.yaml reads it as a number while architecture.json stays right
+
+**Route:** the wrap-up — a small change, within its bar
+**Disposition:**

@@ -18,8 +18,8 @@
 - Ruling (ANS-184, on the card): "yes" — on the ask as written.
 - Ruling (ANS-151, operator's card comment 2026-09-30): "Please note that there's a link to a
   different card that's on Later. I want moved to New once this card is resolved." (FN-14.)
-  The session moves FN-14 Later → New at planning (its blocker shipped 2026-09-29, see R4
-  grounding), with a comment carrying the working wire shape; this slice does not edit FN-14's
+  Done at planning, 2026-10-03: FN-14 moved Later → New (its blocker shipped 2026-09-29, see R4
+  grounding) with a comment carrying the working wire shape; this slice does not edit FN-14's
   work.
 - Ruling (2026-10-03, on the boundByDefaultValue half of R4): "I see two options. This "fix"
   isn't a fix because it depends on changing a global default. An example of "Solves my
@@ -62,7 +62,11 @@
   (single write site, ~line 1245) and Architecture `tools/ha-fleet/gen-ha-fleet.py` (~line 394,
   writes live Home Assistant device data — the more exposed). Both get the same quoting. Quoting
   is safe for the readers: PyYAML loads (collector) and js-yaml (service) both read a quoted
-  scalar as a string.
+  scalar as a string. The quoting target is what the service's reader takes for a number, a
+  superset of the YAML 1.2 core grammar: js-yaml 4 also reads `_` digit separators (`1_0e5` →
+  1000000, `0o1_7` → 15; witnessed in plan review r1), which IoTSupport's resolvers do not
+  cover — so the two generators extend the reference pattern to those forms. Over-quoting a
+  string is harmless; under-quoting is the defect.
 - **R3 is already satisfied; no pipeline change.** Every generated architecture file is archived
   in its Generate stage before Validate runs: IoTSupport's `Jenkinsfile.architecture` (since its
   2026-10-01 restructure, slice 035) and every deploy repo via JenkinsPipelineUtils'
