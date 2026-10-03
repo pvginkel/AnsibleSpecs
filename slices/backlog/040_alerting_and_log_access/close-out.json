@@ -48,6 +48,31 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "NginxDeploy: https:// on a .home host without its own TLS server answers 200 with the Architecture validation service",
+      "body": [
+        "Witnessed 2026-10-03 with curl: https://kibana.home/, https://prometheus.home/ and https://alertmanager.home/ each return HTTP 200 with the page titled 'Architecture validation service'. Their http:// URLs reach the right app (Kibana's /login redirect, Prometheus' /query, Alertmanager). NginxDeploy declares a default server for port 80 only (chart/files/conf.d/20-default_server.conf:4), so nginx gives an unmatched TLS name to whichever 443 server comes first, and a wrong scheme lands on an unrelated app instead of failing. docs/runbooks/argocd.md's Kibana route gives https://kibana.home today. P7 of this slice corrects that one URL. Other docs and other hosts were not surveyed."
+      ],
+      "consequence": "A reader or agent who follows an https:// .home link gets an unrelated page with a 200 status, not an error. An agent using curl can take it for the service answering.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "plan-writer, planning, round 3, slices/backlog/040_alerting_and_log_access/plan.md P7",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "NginxDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

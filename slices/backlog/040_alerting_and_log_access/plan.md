@@ -148,27 +148,33 @@
 
 ## Task shape
 
-cross-cutting — the rulings land work in four repos (PrometheusDeploy rules, blackbox exporter
-and heartbeat receiver; Ansible's srviac DHCP probe; DockerImages' setup image;
-ElasticsearchDeploy's credential wiring) and set a new pattern: an out-of-cluster probe feeding
-in-cluster Prometheus through node-exporter's textfile collector.
+cross-cutting — the rulings land work in five repos (PrometheusDeploy rules, blackbox exporter
+and heartbeat receiver; Ansible's srviac DHCP probe and runbook; Architecture's external-service
+catalogue; DockerImages' setup image; ElasticsearchDeploy's credential wiring) and set a new
+pattern: an out-of-cluster probe feeding in-cluster Prometheus through node-exporter's textfile
+collector.
 
 ## Ordering constraints
 
 - **Two operator steps come before the run** (both are close-out actions headed `Before
   /dev:run-slice`). One: the healthchecks.io check, with the ping URL written to
-  `kv/eso/prd/prometheus/prd/healthchecks`. Two: the filebeat reader's password, written to
-  `kv/eso/prd/elasticsearch/prd/filebeat-reader`. The test phase pushes P4 and P6 to prd, and
-  Argo CD syncs them at once. Without the leaf behind it, the Alertmanager pod waits on its Secret
-  mount (`chart/templates/stage-manifests.yaml:6-7` in PrometheusDeploy says so of the Telegram
-  Secret), so all alerting stops. Without its leaf, the setup Job waits on its Secret.
+  `kv/eso/prd/prometheus/prd/healthchecks`. Two: the reader's password, written to
+  `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`. The test phase pushes P4
+  and P6 to prd, and Argo CD syncs them at once. Without the leaf behind it, the Alertmanager pod
+  waits on its Secret mount (`chart/templates/stage-manifests.yaml:6-7` in PrometheusDeploy says
+  so of the Telegram Secret), so all alerting stops. Without its leaf, the setup Job waits on its
+  Secret.
 - **The test phase's push order:**
   - ElasticsearchDeploy and DockerImages go in the order P6's done-record names. CI writes the
     setup image's pin into ElasticsearchDeploy after a DockerImages push
     (`DockerImages/elasticsearch-setup/deploy-pins.json`), so the slice reaches that repo as two
     commits that land separately.
-  - The Ansible repo goes last, after the query P7 depends on has returned a current hook pod's
+  - The Ansible repo goes last, after both of P7's queries have returned a current hook pod's
     lines (Ruling D4).
+  - Architecture goes before PrometheusDeploy, so the collector never meets Alertmanager's
+    healthchecks.io edge before its target exists. It would tolerate it: the collector runs
+    `--relaxed` (`Architecture/Jenkinsfile:91-103`), and `arch-validate` skips cross-producer
+    references (`Architecture/service/src/validate.ts:171-192`).
   - PrometheusDeploy may go before the operator applies srviac's play. Until that apply, P3's
     warning for a stale or missing DHCP-probe result fires. That is expected: the apply resolves
     it.
@@ -269,6 +275,19 @@ This environment's config does not check the repo out. The driver adopts or clon
 
 Each new group gets promtool tests and goes through the routing test, as in P2.
 
+### P3a — Architecture: healthchecks.io as an external service
+
+Target: ../Architecture
+
+Ruling review-A1, its first half: healthchecks.io joins the third-party services the federation
+publishes, declared the way Telegram's Bot API is (`docs/architecture/external-services.yaml:29-39`),
+so P4 can name it as a service Alertmanager uses. The done-record gives P4 the element's full
+composite id: a `served_by` entry is drawn as written and never resolved
+(`ArgoCDTools/aac-tools/image/gen_architecture.py:133-136`).
+
+The repo is public (its `CLAUDE.md`): the entry describes the service only, never the ping URL or
+anything else about the operator's check.
+
 ### P4 — PrometheusDeploy: a heartbeat to healthchecks.io
 
 Target: github:pvginkel/PrometheusDeploy
@@ -293,22 +312,26 @@ The dead-man's switch of Rulings D1 and F1:
   alert reaches one (`:96-109`). It learns the heartbeat as the one exception, and it asserts the
   exception's shape: the heartbeat reaches only the webhook, nothing else reaches the webhook, and
   the heartbeat sends no "resolved".
+- Ruling review-A1, its second half: the judgment layer names healthchecks.io, by the id P3a's
+  done-record gives, among the services that serve Alertmanager (`architecture.yaml:18-21`, which
+  names only Telegram's Bot API today).
 
-### P5 — DockerImages: the setup image creates the filebeat reader
+### P5 — DockerImages: the setup image creates the read-only reader
 
 Target: ../DockerImages
 
-The `elasticsearch-setup` image (`elasticsearch-setup/app/main.py`) also creates two things,
-beside what it does today (`:120-128`):
-
-- a role that grants read on the `filebeat-*` indices and nothing else: no write, no cluster
-  privilege, no other index;
-- a user that holds only that role, with the password the Job hands it.
+The `elasticsearch-setup` image (`elasticsearch-setup/app/main.py`) also creates the read-only
+reader of Ruling review-Q1, beside what it does today (`:120-130`). The reader reads all data,
+through the Elasticsearch API and in Kibana, where it can log in and use Discover. It writes
+nothing, manages nothing in the cluster or its indices, and edits nothing in Kibana. prd runs
+Elasticsearch 8.15.0 (its log, `version[8.15.0]`), whose built-in `viewer` role is that shape,
+as the ruling notes.
 
 The password reaches the image as an environment value, the way the existing ones do (`:5-8`).
-P6 wires that value from a Secret. The variable's name is this phase's to choose, and the
-done-record names it for P6, along with the user's name. Running the Job again converges,
-including onto a changed password.
+P6 wires that value from a Secret. The variable's name and the user's name are this phase's to
+choose, and the done-record names both for P6 and P7. Running the Job again converges, including
+onto a changed password: P6's rotation path depends on that. The test phase witnesses the
+reader's limits live under Ruling D4.
 
 A push builds the image and CI writes its tag into ElasticsearchDeploy's
 `images.elasticsearchSetup` (`elasticsearch-setup/deploy-pins.json`). DockerImages declares no
@@ -335,26 +358,57 @@ This environment's config does not check the repo out. The driver adopts or clon
 - The change reaches origin as two commits: this phase's, and the pin CI writes once P5's image
   has built. Whichever lands first must leave a sync that succeeds, and once both have landed the
   reader exists. The done-record names the push order the design needs, for the test phase.
+- The README names the reader, its OpenBao leaf, and its rotation path (Ruling review-A2):
+  `bao kv put` the new value, then make the setup Job rerun by deleting it so that Argo CD
+  recreates it. Followed as written, the path leaves Elasticsearch on the new password. Two facts
+  stand in its way, and the README accounts for both:
+  - ESO refreshes the Secret from OpenBao hourly (`chart/values.yaml:39-40`). A Job that reruns
+    before the refresh applies the old password again.
+  - Argo CD does not recreate a deleted Job by itself. The app auto-syncs with `selfHeal: false`
+    (live, and `ArgoCDDeploy/releases/templates/applications.yaml:67-70`), and auto-sync skips a
+    revision it has already synced (`controller/appcontroller.go:2401-2403` in argo-cd v3.5.1, the
+    version prd runs). The Job comes back on the next sync that someone starts.
 - Fact for the executor: the Job's `helm.sh/resource-policy: replace` annotation (`:8`) is not a
   policy Helm or Argo CD knows.
 - The plaintext elastic password (`config/prd/values.yaml:5`) stays where it is (ANS-200).
 
-### P7 — Ansible runbook: the Kibana route to a replaced hook's log, confirmed
+### P7 — Ansible runbook: the route to a replaced hook's log, through Kibana and the API, confirmed
 
 Target: root
 
-This is the settled Kibana-check ruling, carried out on `docs/runbooks/argocd.md`'s "A replaced
-hook's log: Kibana" (`:156-177`). That section drops "unconfirmed" and stops naming
-`tf-presync-fieldnotes-prd-sx956` as the check owed; that pod leaves the 7-day index around
-2026-10-08. The route becomes a real answer for a reader who holds the reader credential, which
-KC-124 later exposes as `ELASTIC_URL`/`ELASTIC_USER`/`ELASTIC_PASSWORD`. Its account of what is
-verified names a query made with that credential, which returns a current Argo CD hook pod's lines.
+This phase carries out the settled Kibana-check ruling and Ruling review-Q1 on
+`docs/runbooks/argocd.md`'s "A replaced hook's log: Kibana" (`:156-177`). The section drops
+"unconfirmed" and stops naming `tf-presync-fieldnotes-prd-sx956` as the check owed; that pod
+leaves the 7-day index around 2026-10-08.
+
+The route becomes an answer for whoever holds the reader credential, in two forms:
+
+- **Kibana**, for a person who logs in with the credential.
+- **The equivalent API query**, which this phase adds, for an agent. An agent holds
+  `ELASTIC_URL`/`ELASTIC_USER`/`ELASTIC_PASSWORD` (KC-124) and no browser.
+
+The section's account of what is verified names both, each made with that credential and each
+returning a current Argo CD hook pod's lines.
+
+The route must hold to two facts:
+
+- Kibana answers at `http://kibana.home`, with its own login form (`/internal/security/login_state`
+  lists the basic provider alone). `https://kibana.home`, which the section names today, lands on
+  another service. Witnessed 2026-10-03, the same as for `prometheus.home` and
+  `alertmanager.home`. Elasticsearch answers at `http://elasticsearch.home` (401 without
+  credentials).
+- The reader cannot save a data view, because it is read-only in Kibana. So a route through a
+  saved `filebeat-*` data view holds only if one is already saved, and nobody has checked that one
+  is: ANS-164 had no credential.
 
 The reader exists only once the test phase's pushes have landed P5 and P6, so this phase writes
-the route in its confirmed form. The test phase runs that query with the new credential before it
-pushes this repo (Ordering constraints). Ruling D4 lets it read the reader's password, once, at
+the route in its confirmed form. The test phase confirms both forms before it pushes this repo
+(Ordering constraints). Ruling D4 lets it read the reader's password, once, at
 `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`, and no other OpenBao value.
-If the query returns nothing, that is a blocking finding.
+
+- **The Kibana form is confirmed through Kibana:** a browser, or Kibana's own HTTP API with the
+  reader's Kibana session. A query sent to Elasticsearch directly confirms only the API form.
+- **A blocking finding:** either form returning no lines.
 
 ## Not in scope
 
