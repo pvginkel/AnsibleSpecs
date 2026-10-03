@@ -260,7 +260,7 @@ Record:
 - README's example pin moved to `"0.4.0"`, as the 0.3.1 publish did; its prose about what the
   include renders is left to the doc phase.
 
-### P4 — FieldnotesDeploy pins the new library version, once charts.home serves it
+### P4 — FieldnotesDeploy pins the new library version, once charts.home serves it ✅ DONE 2026-10-03
 
 Target: github:pvginkel/FieldnotesDeploy
 
