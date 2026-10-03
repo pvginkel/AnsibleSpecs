@@ -66,10 +66,49 @@
 - **The near-idle bar:** gitblit-app averages at most 50m CPU over an hour after the roll, read
   from Prometheus (today ≈ 500–600m). Settled on prd, after the run's push rolls the pod.
 
+## Task shape
+
+pre-settled — plan.md's settled section fixes the mechanism (`-XX:+DisableExplicitGC` with the
+`-Xmx1024M` heap kept), Ruling D2 names the one values key to change, and the near-idle bar is
+fixed; planning is transcription into one GitSyncDeploy phase.
+
 ## Ordering constraints
 
 - The near-idle reading can only be taken after the push to GitSyncDeploy `main` has synced and
-  the new pod has run for at least an hour.
+  the new pod has run for at least an hour. That reading is the test phase's (Ruling D1); no
+  implementation phase waits on it.
+- `web.luceneFrequency` is a contingency, not a phase: only if the test phase's reading is above
+  the bar does the run append a phase lengthening it (GitSyncDeploy's
+  `chart/files/gitblit/gitblit.properties` sets no Lucene keys today, so Gitblit's 2-minute
+  default is what runs).
+
+### P1 — gitblit-app: explicit GCs disabled, CPU request removed
+
+Target: github:pvginkel/GitSyncDeploy
+
+GitSyncDeploy is not checked out under `/work` in this environment (the research clone is
+`/work/scratch/GitSyncDeploy`, clean on `main`); the driver adopts a clean clone there.
+
+Outcome: the gitblit-app JVM ignores `System.gc()` — Gitblit's `LuceneService` calls it after
+every repository of each 2-minute Lucene cycle, which is where ≈ 97 % of the container's CPU
+goes (grounding above) — while keeping the 1 GB heap maximum it runs with today; and the
+container no longer requests CPU.
+
+- The JVM flag goes in the gitblit-app container's env in
+  `chart/templates/gitblit-deployment.yaml`, where a commented-out `JAVA_OPTS` entry sits today
+  (`gitblit-deployment.yaml:72-73`). Setting `JAVA_OPTS` *replaces* the image entrypoint's
+  `-Xmx1024M` default, so whatever form is chosen must leave the effective heap maximum at
+  1024M. The commented-out entry does not survive as a tombstone; its log4j property is not
+  carried over (switching logging config is not this slice's call).
+- Ruling D2: drop `cpu: 600m` from `resources.gitblit.gitblit-app.requests` in
+  `config/prd/values.yaml` (`values.yaml:35-38`); `memory: 4096Mi` stays, and no other
+  container's resources change.
+- Both edits change the pod template, so Argo CD rolls the pod on the push; `deploymentStamp`
+  needs no bump.
+- Gate: GitSyncDeploy's own `kc project lint` / `kc project test` (helm lint/template,
+  tf-check, `tests/clean-lucene.sh`, architecture generate/validate). The architecture artifact
+  records no resource requests or JVM options, so it should regenerate unchanged. Read the
+  rendered gitblit Deployment to confirm both changes show up in it.
 
 ## Not in scope
 

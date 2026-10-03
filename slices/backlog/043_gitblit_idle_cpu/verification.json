@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "R1 — Gitblit near-idle when idle",
+      "description": "ANS-176 — Gitblit near-idle when idle: \"Find what it spends the CPU on (Lucene indexing, a ticket or federation poll, a GC loop, the MCP server's queries) and bring it down to near-idle.\" Settled bar: after the run's push has rolled the pod, gitblit-app averages at most 50m CPU over an hour, read from Prometheus (`http://prometheus.home`, `rate(container_cpu_usage_seconds_total{namespace=\"git-sync-prd\",container=\"gitblit-app\"}[...])`); before the fix it ran ≈ 500–600m.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "R1 — the fix",
+      "description": "The running gitblit-app JVM has explicit GC disabled (`-XX:+DisableExplicitGC`) and still runs with a 1024M heap maximum — shown by the live pod and the JVM's own command line/startup, not only by the rendered chart. Today the container sets no `JAVA_OPTS` (GitSyncDeploy `chart/templates/gitblit-deployment.yaml:72-73`, commented out).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "Ruling D2 — CPU request",
+      "description": "gitblit-app has no CPU request in prd; its `memory: 4096Mi` request is unchanged, and no other container's resources changed (today `config/prd/values.yaml:35-38` requests `cpu: 600m`, `memory: 4096Mi`).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "Rollout — Ruling D1",
+      "description": "The run pushed the change to GitSyncDeploy `main`; Argo CD Application `argocd-prd/git-sync-prd` is Synced and Healthy on that commit, and the new gitblit pod is Ready with all three containers running and no restarts across the observation hour.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
