@@ -421,6 +421,32 @@ The dead-man's switch of Rulings D1 and F1:
   done-record gives (`svc:healthchecks-io,4d31c387-4492-4a39-8201-f5a9ff13ad22`), among the services that serve Alertmanager (`architecture.yaml:18-21`, which
   names only Telegram's Bot API today).
 
+**Done (P4).** PrometheusDeploy `4ad7708` on `phase/040-P4`: rule group `heartbeat` (last, after
+`dhcp`) with `Heartbeat` (`vector(1)`, no labels, no `for`); Alertmanager's first child route
+`alertname="Heartbeat"` → receiver `healthchecks` (`group_interval: 1m`, `repeat_interval: 1m`, so
+pings at most 2 m apart); receiver `healthchecks` = one `webhook_configs` entry, `url_file:
+/etc/secrets/healthchecks/ping_url`, `send_resolved: false`; ExternalSecret
+`alertmanager-healthchecks` (key `ping_url`) appended to `chart/templates/stage-manifests.yaml`,
+mounted by a second `extraSecretMounts` entry at `/etc/secrets/healthchecks`; `architecture.yaml`
+served_by lists both services. Tests `tests/alert-rules/heartbeat.yml` and `tests/alert-routing.py`.
+
+Later phases:
+- Test phase: after sync, ExternalSecret `alertmanager-healthchecks` in `prometheus-prd` reads
+  Ready, the Alertmanager pod has restarted with the new mount (the StatefulSet's pod spec
+  changed; it waits on the Secret until ESO syncs it), `ALERTS{alertname="Heartbeat"}` fires, and
+  the healthchecks.io check shows pings at most 2 m apart. No Telegram message carries Heartbeat.
+
+Settled beyond the text:
+- The heartbeat is matched by `alertname`, and carries no `severity` (the routing test prints
+  `None`).
+- `tests/alert-routing.py` now walks each route's effective `receiver`/`group_interval`/
+  `repeat_interval` and asserts, for Heartbeat, receiver `healthchecks` and interval sum ≤ 300 s;
+  that `healthchecks` is exactly `{url_file, send_resolved: false}` (no `url`, so the ping URL is
+  never in the rendered config); that no other alert or event reaches it; that every other
+  receiver is one Telegram config; and that Heartbeat is raised exactly once. Mutations witnessed
+  red: `send_resolved: true`, `repeat_interval: 5m`, a misspelt matcher, critical routed to the
+  webhook.
+
 ### P5 — DockerImages: the setup image creates the read-only reader
 
 Target: ../DockerImages
