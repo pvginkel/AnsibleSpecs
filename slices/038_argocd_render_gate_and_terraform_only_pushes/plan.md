@@ -294,7 +294,7 @@ Later phases:
 - Test phase — FieldnotesDeploy's bump is 2ece6fd on `phase/038-P4`, one commit on top of
   origin `main` (14ec1f7).
 
-### P5 — Every other deploy repo pins the new library version, ready to push in batches
+### P5 — Every other deploy repo pins the new library version, ready to push in batches ✅ DONE 2026-10-03
 
 Target: root
 
