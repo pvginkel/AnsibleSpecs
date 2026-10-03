@@ -123,32 +123,6 @@ float Infinity)`. Today the service parses with js-yaml and keeps no positions
 - **`test/arch-validate.test.ts` is where the card's case gets pinned end to end.** It already
   runs the canonical script against an in-process service.
 
-**Done (P1).** Architecture `2dcf07b` on `phase/041-P1`. `POST /api/validate` errors carry `line`
-wherever the pointer maps; a type error on a one-line scalar reads `firmware: 9e10234 (parsed as
-float Infinity) is not of expected type string`; `arch-validate` prints `line N: <message>`.
-
-Later phases:
-- P3: the canonical `.claude/architecture/arch-validate.py` at `2dcf07b` has md5
-  `766f6ec529466c321bf79cef1507e0db` — the value for `CANONICAL_ARCH_VALIDATE_MD5`.
-
-Record:
-- New `service/src/source-locator.ts`: `sourceLocator(text)` parses lazily (first lookup only, so a
-  valid artifact is never re-parsed) with `yaml` `^2.9.1` (`parseDocument` + `LineCounter`) and
-  returns `{line, key?, scalar?}` per JSON pointer. Line is the key's line for a mapping value,
-  else the node's first line; aliases resolve to their anchor; JSON bodies map too. A key that only
-  exists through a js-yaml `<<` merge does not map — that error keeps today's shape (pinned).
-- `translateErrors(raw, artifact, locate)` — `locate` is a required third argument;
-  `checkRelationsTriples` takes it too. `line` sits right after `path` in the error object.
-- Type message: `<key>: <scalar as written> (parsed as <t> <value>)`, or `value <scalar> (…)` for a
-  sequence item / root; `<t>` is `str|bool|int|float`, from the parsed JS value (so `1e5` reads
-  `int 100000`, as ajv sees it); null reads `(parsed as null)`. Multi-line scalars and non-scalars
-  keep the old `value X is not of expected type Y`. Scalars clip at 60 chars like `quoteShort`.
-- On the wire `value` stays `null` for Infinity (JSON) — unchanged; the message now carries it.
-- Script: one line changed in `print_human`; `--json` untouched; stdlib only.
-- Tests: `test/source-locator.test.ts` (new), card case + triple line + JSON + merge-key shape in
-  `validate.test.ts`, exact stderr for the card case and for a line-less (old-service) response in
-  `arch-validate.test.ts`. Gate: `kc project test --project service` green; build green.
-
 ### P2 — The Home Assistant fleet generator quotes strings YAML 1.2 reads as numbers
 
 Target: tooling
