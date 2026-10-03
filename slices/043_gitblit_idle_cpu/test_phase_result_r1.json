@@ -1,0 +1,1 @@
+{"outcome":"clean","summary":"Pushed GitSyncDeploy 4489edc; Argo Synced/Healthy; live JVM has -Xmx1024M -XX:+DisableExplicitGC, gitblit-app has no CPU request. A single pod ran 15:28-16:34 at ~12m mean CPU (<=50m bar; pre-fix 500-600m). All V01-V04 pass; no operator-owed deploy (Argo already converged)."}
