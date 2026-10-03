@@ -129,7 +129,7 @@ planning is transcription.
   version (V08).
 - ArgoCDDeploy (P2) may be pushed at any point: it syncs only by manual sync (argo-cd D3).
 
-### P1 — The Argo CD decision register records that every deploy-repo push syncs and runs the Terraform hook
+### P1 — The Argo CD decision register records that every deploy-repo push syncs and runs the Terraform hook ✅ DONE 2026-10-03
 
 Target: ../AnsibleSpecs
 
