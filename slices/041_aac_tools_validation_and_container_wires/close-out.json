@@ -128,6 +128,28 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Roll the Architecture service to prod, then run arch-validate on a 9e10234 firmware artifact (V04)",
+      "body": [
+        "Test r1: gates green; Architecture b641dc9, ArgoCDTools 3d5eff7, FieldnotesDeploy 8212dab pushed to main. Prod /api/validate still serves the old service (printed 'value Infinity is not of expected type string', no line) until image build and operator-gated promotion. After rollout run arch-validate on an artifact with 'firmware: 9e10234'; expect 'line N: firmware: 9e10234 (parsed as float Infinity) ...'. V04 marked owed."
+      ],
+      "consequence": "Until promoted, production validation errors lack source lines; nothing else breaks.",
+      "proposal": "do it: promote, then settle V04 with the command",
+      "evidence": "witnessed",
+      "author": "test-agent, test r1, verification.json V04",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
