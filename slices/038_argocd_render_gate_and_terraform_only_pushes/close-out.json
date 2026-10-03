@@ -127,6 +127,79 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "The driver left a scratch clone at /work/scratch/FieldnotesDeploy (`Target: github:pvginkel/FieldnotesDeploy`)",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/FieldnotesDeploy` for `Target: github:pvginkel/FieldnotesDeploy`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. The close-out session removes it then and says so under this entry; nothing is asked of the operator. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none — the clone is where the run works; left behind, it takes disk space and a sync in every later preflight, until the close-out session removes it.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E2",
+      "kind": "event",
+      "grade": null,
+      "headline": "P5 cloned 26 deploy repos into /work/scratch for the rollout (and committed a bump into 21 existing scratch clones)",
+      "body": [
+        "Cloned by P5: CalendarSupportDeploy, CsiDriverSmbDeploy, ElectronicsInventoryDeploy, GinbovNlDeploy, GitSyncDeploy, HomeappsDeploy, HomeassistantMcpDeploy, IacProvisionerDeploy, InfraStatisticsDeploy, IntercomDeploy, IotDeploy, MediaDeploy, ModelsDeploy, NewsfilterDeploy, ScantopdfDeploy, SourceDeploy, StorageDeploy, TelegramMcpDeploy, TrelloMcpDeploy, VersionPollerDeploy, WebathomeOrgDeploy, YoutrackMcpDeploy, YoutrackDeploy, Zigbee2mqttDeploy (and the rest listed in ledger.md). /work/scratch/p5-helm holds P5's throwaway helm repository config/cache and its render and at-risk scripts (atrisk.py reads apps.json, a kubectl dump of the prd Applications)."
+      ],
+      "consequence": "none — the clones carry the unpushed bump commits the test phase pushes from ledger.md; left behind afterwards, they take disk space until the close-out session removes them.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-writer, P5, r1, ledger.md",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "miscounted (24 cloned, 23 existing); replaced by the next entry",
+        "by": "code-writer P5",
+        "date": "2026-10-03",
+        "commit": null
+      },
+      "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "P5 cloned 24 deploy repos into /work/scratch for the rollout, and committed a bump into 23 existing scratch clones",
+      "body": [
+        "Cloned by P5: CalendarSupportDeploy, CsiDriverSmbDeploy, ElectronicsInventoryDeploy, GinbovNlDeploy, GitSyncDeploy, HomeappsDeploy, HomeassistantMcpDeploy, IacProvisionerDeploy, InfraStatisticsDeploy, IntercomDeploy, IotDeploy, MediaDeploy, ModelsDeploy, NewsfilterDeploy, ScantopdfDeploy, SourceDeploy, StorageDeploy, TelegramMcpDeploy, TrelloMcpDeploy, VersionPollerDeploy, WebathomeOrgDeploy, YoutrackMcpDeploy, YoutrackDeploy, Zigbee2mqttDeploy. All 47 bumped clones are listed in ledger.md. /work/scratch/p5-helm holds P5's throwaway helm repository config and cache, plus its render and at-risk scripts (atrisk.py reads apps.json, a kubectl dump of the prd Applications)."
+      ],
+      "consequence": "none — the clones carry the unpushed bump commits the test phase pushes from ledger.md; left behind afterwards, they take disk space until the close-out session removes them.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-writer, P5, r1, ledger.md",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

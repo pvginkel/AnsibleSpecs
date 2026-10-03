@@ -118,7 +118,7 @@ planning is transcription.
 - FieldnotesDeploy proves the new version live before the estate rollout pushes. The pushes of
   the deploy repos are the test phase's, in this order: FieldnotesDeploy's bump (P4); then a
   commit that only edits a comment in its `terraform/` — the live-proof ruling; only once that
-  proof holds, the repos in P5's ledger, in batches. Each deploy-repo push queues that repo's
+  proof holds, the repos in P5's ledger (`ledger.md` in this folder), in batches. Each deploy-repo push queues that repo's
   `AaC/<Repo>` architecture build, which re-triggers `AaC/Architecture`, and one Argo sync with
   one hook apply on prd. A repo whose origin moved after P5 (Jenkins' image-pin commits land
   daily) has its bump rebased onto it, and its at-risk check (P5) is re-read just before its
@@ -339,6 +339,30 @@ at planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumpe
 - **A ledger in the slice folder** lists every bumped repo — repo, clone path, branch, commit,
   its gate's result, and its at-risk finding. It is the test phase's push list, and the review
   reads the commits through it: this phase leaves no commit on the Ansible branch.
+
+**Done (P5).** 47 deploy repos bumped `0.3.1` → `0.4.0`, one commit each on `main` in
+`/work/scratch/<Repo>`, each the clone's only commit ahead of origin, none pushed; the push list
+is `ledger.md` in this folder (repo, clone, commit, parent, files, gate, at-risk finding). Every
+repo's `kc project test` is green at its bump commit; every app-stage render (49) carries ConfigMap
+`tf-presync-revision` with the passed revision and no annotations. **At-risk list: empty** — no
+app-stage's `terraform/` or `config/*/*.tfvars` changed between its last sync operation's revision
+(prd, read 2026-10-03) and its bump's parent; the bump pushes apply no pending Terraform.
+
+Later phases:
+- Test phase — push from `ledger.md`; ChartsDeploy is `284bdca`, KubeCoderDeploy `ca892f8`
+  (main only; kubecoder-prd waits for Promote-PRD). The at-risk re-check before each push is
+  `git diff <syncResult revision> origin/main -- terraform ':(glob)config/*/*.tfvars'`.
+
+Settled beyond the plan's text:
+- No repo but KubeCoderDeploy states the version outside `chart/`; its `tests/render-chart.py`
+  `LIBRARY` moved with the pin.
+- MosquittoDeploy alone gitignores `chart/Chart.lock`; its bump is `chart/Chart.yaml` alone. Its
+  gate is green from a fresh clone, where `chart-deps` resolves with no lock.
+- The lock was re-resolved by one `helm dependency update` pass over all 47 charts against a
+  throwaway repository config (charts.home, plus t3n for Mosquitto's upstream dependency). Every
+  tracked lock carries digest `sha256:c9a32b6d…`, the same as FieldnotesDeploy's.
+- WebathomeOrgDeploy's origin took an image-pin commit mid-phase; its bump was rebased and
+  re-gated (`ed044d1`). No parent commit's gate was red.
 
 ## Not in scope
 
