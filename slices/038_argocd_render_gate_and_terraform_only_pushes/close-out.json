@@ -51,7 +51,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved: AnsibleSpecs 23644ac adds an 'Amended 2026-10-03 (slice 039)' note under D17 in argo-cd/decisions.md, pointing at design.md 'Charts and charts.home' and Ansible docs/runbooks/cluster-bootstrap.md; spec repo has no kc gate (no .kubecoder/project.yaml)",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "23644ac"
+      },
       "ruling": null
     },
     {
@@ -99,7 +104,14 @@
         "repo": "ArgoCDDeploy"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "Trigger label holds. ArgoCDDeploy tests/render-chart.py check_readonly_account (:1255-1290) runs only against the real config/prd render; no overlay renders a role:readonly-subject rule, a 'g, role:readonly, role:admin' or a policy.overlay.csv kubecoder binding on every run, the way check_setting_refusals (:907) does for autoSync. The check is right today, so the gap shows only once a future edit loosens policy_lines (:1240) or the check, and then silently — future-change is what the code shows."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -124,7 +136,14 @@
         "repo": "ArgoCDDeploy"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "The code bears it out. policy_lines (tests/render-chart.py:1240-1252) splits on ',' and strips whitespace, leaving quotes in place, so line[1] is '\"role:readonly\"' / '\"kubecoder\"' and both the binding check (:1273) and the widening check (:1279) miss it. Argo CD's util/rbac loadPolicyLine (checked on master) reads each line with encoding/csv, TrimLeadingSpace=true, and so unquotes the subject. Reached only by a hand-written quoted line in config/prd/values.yaml. The proposal fits the code: csv.reader([line], skipinitialspace=True) in policy_lines matches Go's TrimLeadingSpace; one edit, plus a quoted-subject refusal case would hold it (T1's gap)."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -222,7 +241,14 @@
         "repo": "Charts"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "Signal label holds. A failed PreSync hook ends the Application's operation Failed (status.operationState.phase), and ArgoCDDeploy config/prd/values.yaml subscribes every Application, no selector, to trigger.on-sync-failed (when phase in ['Error','Failed']), which sends ArgoCDSyncFailed, severity critical, with the operation message to prometheus-prd Alertmanager; D7 as amended adds the standing failed-sync Prometheus rule for auto-synced apps. The failure announces itself — loud is what the code shows."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
