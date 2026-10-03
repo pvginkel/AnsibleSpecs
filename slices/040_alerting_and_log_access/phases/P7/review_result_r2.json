@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "F1 resolved: the API route now lists an app's hook attempts newest first (terms agg on keyword kubernetes.pod.name, ordered by max @timestamp), then reads one attempt's lines by exact pod name, so the current attempt is no longer truncated away. No new findings; F2 remains advisory.",
+ "details": "code_review_r2.md",
+ "findings": []}
