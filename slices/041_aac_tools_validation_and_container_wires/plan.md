@@ -206,6 +206,26 @@ Target: aac-tools
   regexes (P2's done-record, not IoTSupport's narrower ones) and the unchanged-otherwise rule are P2's. The image installs only `python3-yaml` beside
   the standard library (`tests/test_image.py:22-25`).
 
+**Done (P3).** ArgoCDTools `3d5eff7` (branch `phase/041-P3`): `image/arch-validate.py` is
+Architecture `a3f595e`'s copy byte for byte and `CANONICAL_ARCH_VALIDATE_MD5` is
+`766f6ec529466c321bf79cef1507e0db`. `gen-architecture` writes the artifact through
+`dump_yaml(envelope)`, a `yaml.dump` with `Yaml12SafeDumper` carrying P2's two resolvers and the old
+`sort_keys=False, default_flow_style=False, allow_unicode=True` (no `width`, as before).
+
+Later phases:
+- P4: the boundByDefaultValue block moved by 36 lines — `gen_architecture.py:1633-1642`, not
+  `:1597-1606` (P4's text updated; verification.json V09 still cites the planning-time lines).
+
+Record:
+- The dumper class and `dump_yaml` sit after `main()` in `gen_architecture.py`; the header
+  comment lines are still written before the dump, unchanged.
+- Tests (`tests/test_gen_architecture.py`, `ArtifactQuotingTests`): every P2 number form
+  (`1e5` … `1.`) comes out `'…'` and round-trips through `yaml.safe_load`; a mixed document
+  (non-number-like strings incl. `1_`, `_1`, `0xG`, unicode, int, float, inf, bool, null, list,
+  nested map) dumps identically to `yaml.safe_dump` with the old options.
+- Gate: `kc project test --project aac-tools` green; `ruff check .` / `ruff format --check .`
+  clean (aac-tools declares no lint statement in kc).
+
 ### P4 — FieldnotesDeploy stops pasting the SSE gateway default onto `app`
 
 Target: github:pvginkel/FieldnotesDeploy
@@ -216,7 +236,7 @@ the clean clone at `/work/scratch/FieldnotesDeploy`.
 `chart/templates/app-deployment.yaml` no longer sets `SSE_GATEWAY_URL` on the `app` container, and
 no longer carries the comment that justified it (`:57-61`). When no container sets the variable,
 gen-architecture applies the recipe's `boundByDefaultValue` to every instance of the product
-(`ArgoCDTools/aac-tools/image/gen_architecture.py:1597-1606`). The prd model therefore carries the
+(`ArgoCDTools/aac-tools/image/gen_architecture.py:1633-1642` after P3). The prd model therefore carries the
 SSE gateway Serving edge onto both `app` and `mcp`, which the 2026-10-03 ruling accepts as known.
 The operator allows one short comment on `mcp` saying the edge is drawn onto it though it does not
 call the gateway ("If you want"). Nothing beyond that comment goes in.
