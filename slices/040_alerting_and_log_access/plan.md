@@ -393,7 +393,7 @@ Later phases:
 Record: the summary describes the service generically (pings to hc-ping.com, notification after
 the grace period through its own integrations); nothing of the operator's check is in the repo.
 
-### P4 — PrometheusDeploy: a heartbeat to healthchecks.io
+### P4 — PrometheusDeploy: a heartbeat to healthchecks.io ✅ DONE 2026-10-03
 
 Target: github:pvginkel/PrometheusDeploy
 
