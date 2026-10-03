@@ -1,0 +1,9 @@
+{"outcome": "signoff",
+ "summary": "P1 meets its outcome: validate errors carry their source line (schema and relation-triple errors alike), type errors on scalars read in the card's form, and arch-validate prints the line while leaving line-less errors byte-identical; well pinned by tests. Two advisory message-quality edges only.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "Type error on an empty value renders an empty source scalar ('a:  (parsed as null) …'), less clear than the old 'value null …'"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "JSON body with duplicate keys: line/source come from the first occurrence while the validated value is the last"}
+ ]}

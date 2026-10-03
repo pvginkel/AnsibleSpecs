@@ -29,6 +29,56 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "Architecture service: a type error on an empty value prints an empty source scalar",
+      "body": [
+        "For `a:` with no value where a string is expected, /api/validate now says `a:  (parsed as null) is not of expected type string` (double space, nothing quoted). For an empty sequence item the message starts with a space. Before P1 both read `value null is not of expected type string`. The locator returns source \"\" for an empty scalar (service/src/source-locate.ts), and the type translator only checks that the scalar exists (service/src/error-translate.ts:197-201). The line still points at the field."
+      ],
+      "consequence": "an author who leaves a required string blank gets a slightly garbled message; the line and 'parsed as null' still identify the problem",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-reviewer, P1 r1, probe; phases/P1/code_review_r1.md F1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "Architecture"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "nit",
+      "headline": "Architecture service: on a JSON body with duplicate keys, the error line and source scalar come from the wrong occurrence",
+      "body": [
+        "JSON.parse keeps the last duplicate key; sourceLocator takes the first matching pair (service/src/source-locate.ts:36). For `{\"a\": 1, \"a\": \"x\"}` the locator returns line/source of `1` while the validated value is \"x\", so a type error would read `a: 1 (parsed as string 'x')`. YAML bodies are unaffected (js-yaml rejects duplicates with a 400). No estate generator emits duplicate JSON keys."
+      ],
+      "consequence": "on malformed hand-written JSON only, the error pairs the wrong source text with the parsed value and points at the earlier duplicate",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-reviewer, P1 r1, probe; phases/P1/code_review_r1.md F2",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "Architecture"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
