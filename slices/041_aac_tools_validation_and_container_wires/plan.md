@@ -152,7 +152,7 @@ Record:
 - `USAGE.md` documents the error shape (`schemaUrl` etc.) and does not yet mention `line` — the
   doc phase's.
 
-### P2 — The Home Assistant fleet generator quotes strings YAML 1.2 reads as numbers
+### P2 — The Home Assistant fleet generator quotes strings YAML 1.2 reads as numbers ✅ DONE 2026-10-03
 
 Target: tooling
 
