@@ -48,6 +48,30 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A2",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V09 after the operator's next KubeCoder/Promote-PRD run, which moves …",
+      "body": [
+        "V09 — kubecoder-prd, which tracks KubeCoderDeploy's `prd` branch (ArgoCDDeploy releases/values.yaml:172-174), syncs at the bump once promotion carries it to `prd`, and its PreSync hook runs.",
+        "",
+        "`verification.json` marks V09 owed after: the operator's next KubeCoder/Promote-PRD run, which moves KubeCoderDeploy's `prd` branch. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V09 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V09 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

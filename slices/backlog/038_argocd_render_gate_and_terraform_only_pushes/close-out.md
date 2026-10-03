@@ -18,6 +18,15 @@ then strike this entry.
 **Route:** to you — an action
 **Disposition:**
 
+### A2 — Settle V09 after the operator's next KubeCoder/Promote-PRD run, which moves …
+
+**Proposal:** When that has happened, say so: the session settles V09 in verification.json.
+
+**Consequence:** V09 stays unproven until then; the test phase does not settle it.
+
+**Route:** to you — an action
+**Disposition:**
+
 ## For the wrap-up
 
 ### P1 — AnsibleSpecs argo-cd/decisions.md D17 still tells the charts deploy repo to vendor the library, which slice 039 reverted · minor
