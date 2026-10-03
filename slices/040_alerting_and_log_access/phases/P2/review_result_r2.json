@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "r1 F1 is resolved: LoadBalancerNotAnnounced is now guarded by a MetalLB speaker being scraped up rather than by any announcement existing, so MetalLB withdrawing every Service fires critical. Live labels match the selector, and mutations of the new guard each fail a test. The fix commits introduce no new findings.",
+ "details": "code_review_r2.md",
+ "findings": []}
