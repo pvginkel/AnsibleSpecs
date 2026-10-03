@@ -79,6 +79,31 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "ArgoCDTools aac-tools: no test pins that gen-architecture's written artifact goes through the quoting dumper",
+      "body": [
+        "ArtifactQuotingTests (tests/test_gen_architecture.py) calls ga.dump_yaml directly. Reverting the write site at image/gen_architecture.py:1245 to plain yaml.safe_dump leaves the whole aac-tools suite green (100 tests OK, mutation run in review). The wiring is correct today; only the diff pins it."
+      ],
+      "consequence": "after a later edit of main()'s write block that drops the quoting, no test goes red, and number-like strings reach the validate service unquoted again, so it fails a repo's AaC Validate stage",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-reviewer, P3, r1, phases/P3/code_review_r1.md F1",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "design",
+        "area": "plain",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
