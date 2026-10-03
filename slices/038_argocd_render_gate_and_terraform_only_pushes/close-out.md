@@ -4,15 +4,36 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: <not yet stamped>
+Run: 2026-10-03 08:54 → 09:37 · 5 phases · 0 bail-outs · 1 test round · doc phase at stage
+writer · run docs
 
 ## Comes to you
+
+### B1 — ArgoCDDeploy render gate: a CSV-quoted subject ("role:readonly", "kubecoder") gets past check_readonly_account · minor
+
+**Proposal:** card — have policy_lines parse each line with Python's csv module, so the gate
+reads the subject the way Argo does; low priority, since only a deliberately quoted line gets
+through.
+
+**Consequence:** A widening written with quoted fields renders green and reaches prd: the kubecoder token can then do more than read, and the gate does not say so.
+
+**Route:** to you — a risk: severe, in place of a close
+**Disposition:**
 
 ### A2 — Settle V09 after the operator's next KubeCoder/Promote-PRD run, which moves …
 
 **Proposal:** When that has happened, say so: the session settles V09 in verification.json.
 
 **Consequence:** V09 stays unproven until then; the test phase does not settle it.
+
+**Route:** to you — an action
+**Disposition:**
+
+### A3 — Re-sync filebeat-prd and pgadmin-prd in Argo CD (prd); they sit OutOfSync with a failed PreSync hook at their bump commits
+
+**Proposal:** do it
+
+**Consequence:** The two apps stay OutOfSync with a Failed last operation, and their Terraform apply for the bump commit has not run (no pending Terraform change was found for either, so nothing is unapplied).
 
 **Route:** to you — an action
 **Disposition:**
@@ -29,6 +50,24 @@ register's own style, pointing at design.md and the cluster-bootstrap runbook.
 **Route:** the wrap-up — fix
 **Disposition:**
 
+## Closed
+
+### B2 — PreSync hook: ~46 Terraform applies launched by one batch of pushes race on the shared TerraformState repo, and two failed (filebeat-prd, pgadmin-prd) · minor
+
+**Route:** closed — it is loud on an ordinary condition
+**Disposition:**
+
+### T1 — ArgoCDDeploy render gate: the three role:readonly widenings are witnessed once, not held by a standing refusal check
+
+**Route:** closed — it cannot show with the code as it is
+**Disposition:**
+
 ## Record
 
+### E1 — The driver left a scratch clone at /work/scratch/FieldnotesDeploy (`Target: github:pvginkel/FieldnotesDeploy`)
+
+### E3 — P5 cloned 24 deploy repos into /work/scratch for the rollout, and committed a bump into 23 existing scratch clones
+
 ### ~~A1 — Before /dev:run-slice: push slice 039's three unpushed commits — Charts cfae346, ChartsDeploy 69ecb9f, RegistryDeploy e53c36b~~ — already pushed: Charts cfae346, ChartsDeploy 69ecb9f and RegistryDeploy e53c36b are all on origin/main (verified 2026-10-03); struck by run-slice session
+
+### ~~E2 — P5 cloned 26 deploy repos into /work/scratch for the rollout (and committed a bump into 21 existing scratch clones)~~ — miscounted (24 cloned, 23 existing); replaced by the next entry; struck by code-writer P5
