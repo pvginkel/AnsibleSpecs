@@ -95,7 +95,7 @@ drops its `SSE_GATEWAY_URL` entry); planning is transcription into per-repo phas
 - P1 changes the service and the canonical `arch-validate` together. P3 ships P1's script byte for
   byte, so it runs after P1.
 
-### P1 — The validate service locates each error in the source; arch-validate prints the line
+### P1 — The validate service locates each error in the source; arch-validate prints the line ✅ DONE 2026-10-03
 
 Target: service
 
