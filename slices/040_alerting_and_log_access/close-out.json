@@ -163,6 +163,31 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "nit",
+      "headline": "Ansible dhcp_probe: --check skips the timer task on every run, so a dry run never shows the timer's enable/start or its drift",
+      "body": [
+        "ansible/roles/dhcp_probe/tasks/main.yml:21-30 has `when: not ansible_check_mode` on the enable/start task. This is the microk8s watchdog.yml:43-45 precedent, and the P1 done-record states it. The first run's dry run previews only the file diffs. On a converged host where dhcp-probe.timer has been stopped or disabled, --check reports nothing, and the apply then reports changed=1."
+      ],
+      "consequence": "A dry run of srviac's play does not show the timer being enabled or a stopped timer being restarted. P3's staleness warning raises a stopped timer in production.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-reviewer, P1, round 1, phases/P1/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "design",
+        "area": "plain",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
