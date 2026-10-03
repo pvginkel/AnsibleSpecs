@@ -259,6 +259,31 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "PrometheusDeploy DHCPNotAnswering: the self-hold keeps a pending alert alive, so one failed probe then a lost srviac scrape pages critical",
+      "body": [
+        "The hold branch (config/prd/values.yaml:572-575) takes ALERTS{alertname=\"DHCPNotAnswering\"} in any alertstate, so while no dhcp_probe_success is scraped a pending alert keeps counting toward its for: 12m. A single 0 (a rollout gives up to ~10 m of them, per the rule's comment) followed by srviac going unscraped for the rest of the window fires the critical 'has not answered a DISCOVER for 12m'. The plan grades a missing result a warning (plan.md:331-332). Witnessed with promtool on the rendered rules: dhcp_probe_success 1x4 0 stale _x20 fires DHCPNotAnswering at 18 m. tests/alert-rules/dhcp.yml case 3 pins the hold through pending, so it is by design; the argocd group's holds (:328, :356) share the shape. DHCPProbeStale fires beside it."
+      ],
+      "consequence": "Rarely, a critical DHCP page arrives that claims 12 minutes without an OFFER when only one probe failed and srviac then went unscraped; the stale warning arrives with it.",
+      "proposal": "close — two coincident conditions, the stale warning names the real cause, and the pattern matches the argocd group's; card it only if it ever pages.",
+      "evidence": "witnessed",
+      "author": "code reviewer, P3, round 1, phases/P3/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "design",
+        "area": "plain",
+        "repo": "PrometheusDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

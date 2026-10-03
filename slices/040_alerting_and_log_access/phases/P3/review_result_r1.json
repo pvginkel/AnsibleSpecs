@@ -1,0 +1,6 @@
+{"outcome": "signoff",
+ "summary": "The OIDC blackbox probe, its alerts and the DHCP-probe alerts meet P3's outcome, with tests that catch threshold and hold mutations. One advisory edge: DHCPNotAnswering's self-hold also keeps a pending alert alive, so one failed probe followed by a ≥12 m srviac scrape gap pages critical.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional",
+               "anchor": "repro-trace",
+               "summary": "DHCPNotAnswering's ALERTS hold keeps a pending alert alive through a missing result, so one failed probe followed by 12 m of srviac unscraped pages critical"}]}
