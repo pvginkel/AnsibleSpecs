@@ -447,7 +447,7 @@ Settled beyond the text:
   red: `send_resolved: true`, `repeat_interval: 5m`, a misspelt matcher, critical routed to the
   webhook.
 
-### P5 — DockerImages: the setup image creates the read-only reader
+### P5 — DockerImages: the setup image creates the read-only reader ✅ DONE 2026-10-03
 
 Target: ../DockerImages
 
