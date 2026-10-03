@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "Pushed Charts main (8fc4717); charts.home serves homelab-shared 0.4.0. FieldnotesDeploy 2ece6fd on phase/038-P4 pins 0.4.0 with a re-resolved Chart.lock; kc project test green and the prd render carries ConfigMap tf-presync-revision with the gate's revision. Not pushed."}

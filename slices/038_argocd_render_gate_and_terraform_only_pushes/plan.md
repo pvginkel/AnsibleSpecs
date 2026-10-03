@@ -281,6 +281,19 @@ carries the ConfigMap `tf-presync-revision` (in the app's namespace, `data.revis
 revision the gate passes. Nothing is pushed: this commit is the
 first push of the test phase's live proof.
 
+**Done (P4).** Charts `main` pushed (`cfae346..8fc4717`); https://charts.home/index.yaml listed
+`0.4.0` (0.3.1 … 0.1.0 still listed) once IaC/Charts and the charts-prd sync ran. FieldnotesDeploy 2ece6fd on
+`phase/038-P4`: `chart/Chart.yaml` pins `"0.4.0"`, `chart/Chart.lock` re-resolved (digest
+`sha256:c9a32b6d…`), nothing else. `kc project test` green; the prd render carries ConfigMap
+`tf-presync-revision` in `fieldnotes-prd`, `data.revision` the gate's `hook.revision`, no
+annotations. Not pushed.
+
+Later phases:
+- P5 — the lock is re-resolved with `helm dependency update` against a throwaway repository
+  config; `chart-deps` does not re-resolve it (bullet added in place).
+- Test phase — FieldnotesDeploy's bump is 2ece6fd on `phase/038-P4`, one commit on top of
+  origin `main` (14ec1f7).
+
 ### P5 — Every other deploy repo pins the new library version, ready to push in batches
 
 Target: root
@@ -296,6 +309,10 @@ at planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumpe
 - **Where the edits land.** Each repo's clone under `/work/scratch/<Repo>` (cloned there when
   absent), on `main`, brought to origin's head first; one commit, its only one ahead of origin.
   Nothing is pushed: the test phase pushes after P4's live proof (Ordering constraints).
+- **Re-resolving the lock.** `chart-deps` only builds from `Chart.lock`; the lock is re-resolved
+  by `helm dependency update chart` in the `iac` sidecar (helm 4), given a throwaway
+  `--repository-config`/`--repository-cache`/`--content-cache` with charts.home added to it —
+  never the shared `~/.config/helm` (ArgoCDTools README, `chart-deps`). P4 did exactly this.
 - **ChartsDeploy and RegistryDeploy** take homelab-shared from charts.home like every other
   deploy repo — no deploy repo commits the library tarball (AnsibleSpecs `argo-cd/design.md:140`)
   — so theirs is the same bump. At planning their clones each carry an unpushed commit of slice
