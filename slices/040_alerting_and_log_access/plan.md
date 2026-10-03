@@ -379,6 +379,20 @@ composite id: a `served_by` entry is drawn as written and never resolved
 The repo is public (its `CLAUDE.md`): the entry describes the service only, never the ping URL or
 anything else about the operator's check.
 
+**Done (P3a).** Architecture `5253da5` on `phase/040-P3a`: `docs/architecture/external-services.yaml`
+gains application service `svc:healthchecks-io,4d31c387-4492-4a39-8201-f5a9ff13ad22` (label
+`healthchecks.io`, homepage `https://healthchecks.io/`, no logo — the viewer's library has none),
+and the file's header comment names Alertmanager as its consumer. `kc project test` green.
+
+Later phases:
+- P4: add `"svc:healthchecks-io,4d31c387-4492-4a39-8201-f5a9ff13ad22"` to Alertmanager's
+  `served_by` in `architecture.yaml`, beside Telegram's Bot API, written exactly so.
+- Test phase: the published architecture draws the element only once `phase/040-P3a` reaches the
+  Architecture repo's `main` (a push there redeploys the published dataset).
+
+Record: the summary describes the service generically (pings to hc-ping.com, notification after
+the grace period through its own integrations); nothing of the operator's check is in the repo.
+
 ### P4 — PrometheusDeploy: a heartbeat to healthchecks.io
 
 Target: github:pvginkel/PrometheusDeploy
@@ -404,7 +418,7 @@ The dead-man's switch of Rulings D1 and F1:
   exception's shape: the heartbeat reaches only the webhook, nothing else reaches the webhook, and
   the heartbeat sends no "resolved".
 - Ruling review-A1, its second half: the judgment layer names healthchecks.io, by the id P3a's
-  done-record gives, among the services that serve Alertmanager (`architecture.yaml:18-21`, which
+  done-record gives (`svc:healthchecks-io,4d31c387-4492-4a39-8201-f5a9ff13ad22`), among the services that serve Alertmanager (`architecture.yaml:18-21`, which
   names only Telegram's Bot API today).
 
 ### P5 — DockerImages: the setup image creates the read-only reader
