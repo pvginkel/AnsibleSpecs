@@ -5,3 +5,27 @@
      `close_out.py show <id>` prints an entry in full. -->
 
 Run: <not yet stamped>
+
+## Comes to you
+
+### A1 — Before /dev:run-slice: push slice 039's three unpushed commits — Charts cfae346, ChartsDeploy 69ecb9f, RegistryDeploy e53c36b
+
+**Proposal:** do it — push the three from their current clones (the 039 session's own pushes),
+then strike this entry.
+
+**Consequence:** The run loop does not start while this is open; run anyway, 038's Charts publish and rollout pushes would carry slice 039's commits to origin with them.
+
+**Route:** to you — an action
+**Disposition:**
+
+## For the wrap-up
+
+### P1 — AnsibleSpecs argo-cd/decisions.md D17 still tells the charts deploy repo to vendor the library, which slice 039 reverted · minor
+
+**Proposal:** fix now — one '> **Amended 2026-10-03 (slice 039)**' note under D17 in the
+register's own style, pointing at design.md and the cluster-bootstrap runbook.
+
+**Consequence:** A reader of D17 is told to vendor the library into ChartsDeploy — the shape slice 039 deliberately removed — with nothing in the register pointing at the by-hand bootstrap.
+
+**Route:** the wrap-up — fix
+**Disposition:**
