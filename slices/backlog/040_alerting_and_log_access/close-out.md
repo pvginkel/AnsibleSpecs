@@ -27,3 +27,39 @@ confirmation depend on it.
 
 **Route:** to you — an action
 **Disposition:**
+
+### A3 — Settle V02 after the operator's `ansible-playbook playbooks/site.yml --limit srviac`, …
+
+**Proposal:** When that has happened, say so: the session settles V02 in verification.json.
+
+**Consequence:** V02 stays unproven until then; the test phase does not settle it.
+
+**Route:** to you — an action
+**Disposition:**
+
+### A4 — Settle V08 after the operator's confirmation, after a drill that stops the pings past …
+
+**Proposal:** When that has happened, say so: the session settles V08 in verification.json.
+
+**Consequence:** V08 stays unproven until then; the test phase does not settle it.
+
+**Route:** to you — an action
+**Disposition:**
+
+### A5 — Settle V14 after the operator's `ansible-playbook playbooks/site.yml --limit srviac` …
+
+**Proposal:** When that has happened, say so: the session settles V14 in verification.json.
+
+**Consequence:** V14 stays unproven until then; the test phase does not settle it.
+
+**Route:** to you — an action
+**Disposition:**
+
+## For the wrap-up
+
+### B1 — NginxDeploy: https:// on a .home host without its own TLS server answers 200 with the Architecture validation service · minor
+
+**Consequence:** A reader or agent who follows an https:// .home link gets an unrelated page with a 200 status, not an error. An agent using curl can take it for the service answering.
+
+**Route:** the wrap-up — fix within its bar, or ask for a card
+**Disposition:**

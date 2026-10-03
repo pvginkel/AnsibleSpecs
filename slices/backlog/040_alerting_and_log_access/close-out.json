@@ -73,6 +73,78 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "A3",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V02 after the operator's `ansible-playbook playbooks/site.yml --limit srviac`, …",
+      "body": [
+        "V02 — \"Whether DHCP answers at all: a DISCOVER from outside the pod network\": a probe on srviac sends a relay-style DISCOVER to the DHCP service every few minutes and records the result through srviac's node-exporter. A critical alert fires when no OFFER comes back, and a warning fires when the result is stale or missing. The probe takes no lease. Evidence at planning: one DISCOVER from srviac with giaddr 10.1.0.45, sent from UDP 67, got an OFFER (10.1.1.80) after 3.018 s, from 10.1.0.29:85, and dnsmasq logged DHCPDISCOVER/DHCPOFFER for it (attachments/dhcp-probe.md).",
+        "",
+        "`verification.json` marks V02 owed after: the operator's `ansible-playbook playbooks/site.yml --limit srviac`, which puts the probe on srviac. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V02 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V02 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A4",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V08 after the operator's confirmation, after a drill that stops the pings past …",
+      "body": [
+        "V08 — When Alertmanager's pings stop, healthchecks.io notifies the operator over Telegram (Ruling F1).",
+        "",
+        "`verification.json` marks V08 owed after: the operator's confirmation, after a drill that stops the pings past the check's period plus grace, that healthchecks.io's Telegram notification arrived. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V08 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V08 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A5",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V14 after the operator's `ansible-playbook playbooks/site.yml --limit srviac` …",
+      "body": [
+        "V14 — The srviac play that installs the DHCP probe reports changed=0 on a second run, and its --check --diff shows the first run's changes.",
+        "",
+        "`verification.json` marks V14 owed after: the operator's `ansible-playbook playbooks/site.yml --limit srviac` (check mode, then apply, then a second apply). The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V14 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V14 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
