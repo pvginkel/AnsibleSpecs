@@ -212,6 +212,29 @@ and `--check --diff` shows what the first run would change.
 Before handing over, witness the probe once from srviac, outside Ansible, the way the attachment's
 witness was taken: a single DISCOVER, which takes no lease. Applying the role stays the operator's.
 
+**Done (P1).** New role `dhcp_probe` (`ansible/roles/dhcp_probe/`), last role of `site.yml`'s
+srviac play: a Python probe at `/usr/local/sbin/dhcp-probe`, a oneshot `dhcp-probe.service` and
+`dhcp-probe.timer` (every 3 min), writing `/var/lib/prometheus/node-exporter/dhcp_probe.prom`.
+Witnessed from srviac 2026-10-03 07:03 UTC under the unit's sandboxing: OFFER 10.1.1.80 after
+3.004 s; dnsmasq logged DHCPDISCOVER/DHCPOFFER for `02:00:00:40:04:01`.
+
+Later phases:
+- P3: the series are `dhcp_probe_success` (1 = OFFER within 10 s, 0 = none),
+  `dhcp_probe_last_run_timestamp_seconds` (unix time the probe finished) and
+  `dhcp_probe_duration_seconds`, each labelled `server="10.2.1.10"`. Cadence 3 min; an erroring
+  probe (UDP 67 taken, no route) writes nothing, so staleness covers it. Absent on prd until the
+  operator applies `site.yml --limit srviac`.
+
+Record:
+- Probe matches replies on `xid` + `chaddr` + OFFER on an unconnected socket bound to
+  `0.0.0.0:67`; DISCOVER padded to 300 octets, `hops=1`. No-OFFER exits 0 (a measurement, not a
+  unit failure).
+- `giaddr` derives in role defaults from the `network_devices` NIC carrying `gateway` (renders
+  `10.1.0.45`); `dhcp_probe_server: 10.2.1.10` is a role default with the IP-not-name reason.
+- The timer task is skipped under `--check` (as `microk8s` watchdog.yml does): the file diffs are
+  the dry run's preview. Unit tests at `ansible/roles/dhcp_probe/tests/`, wired into the root
+  component's `kc project test`.
+
 ### P2 — PrometheusDeploy: pod, node and LoadBalancer alerts
 
 Target: github:pvginkel/PrometheusDeploy
@@ -275,7 +298,12 @@ This environment's config does not check the repo out. The driver adopts or clon
 - **The DHCP probe's alerts**, over P1's metrics. Those arrive with the `homelab-nodes` job's
   scrape of `srviac.home:9100` (`config/prd/values.yaml:41-52`). The alert is critical when the
   probe gets no OFFER, which is the 2026-09-25 outage itself. It is a warning when the result is
-  stale or missing: srviac down, the timer stopped, or node-exporter not scraped.
+  stale or missing: srviac down, the timer stopped, or node-exporter not scraped. P1's series,
+  each labelled `server="10.2.1.10"` plus the scrape's `instance="srviac.home:9100"`:
+  `dhcp_probe_success` (1/0), `dhcp_probe_last_run_timestamp_seconds` (unix time the probe
+  finished; the timer runs every 3 min, up to ~10 s late), `dhcp_probe_duration_seconds`. A probe
+  that errors writes nothing, so its timestamp ages; the series is absent on prd until the
+  operator applies `site.yml --limit srviac` (close-out A3).
 
 Each new group gets promtool tests and goes through the routing test, as in P2.
 
