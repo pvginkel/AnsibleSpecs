@@ -81,11 +81,148 @@
   repos (FieldnotesDeploy c592e49, 2026-09-30, applied by the next pin push the same evening);
   the other ~41 were not counted.
 
+## Task shape
+
+pre-settled — R1's fix is spelled out by the card and its wrap-up (one function, the lines to
+refuse, the keys to read), and R2's mechanism and reach are fixed by rulings D1 (a non-hook
+ConfigMap carrying `hook.revision` in the library hook template) and D2 (estate-wide pin bump);
+planning is transcription.
+
 ## Ordering constraints
 
-- The library change is published to charts.home before any deploy repo pins the new version
-  (a pin to an unpublished version breaks that app's render).
-- FieldnotesDeploy proves the new version live before the estate rollout pushes.
+- P1 lands before P3: the library template's comment cites the decision P1 records, by the id
+  P1's done-record gives.
+- The library change is published to charts.home before any deploy repo pins the new version: a
+  pin to an unpublished version fails `chart-deps` (the repo-server's `helm dependency build`,
+  ArgoCDTools `aac-tools/image/chart_deps.py:100`) and breaks that app's render. P4 opens with
+  that publish.
+- FieldnotesDeploy proves the new version live before the estate rollout pushes. The pushes of
+  the deploy repos are the test phase's, in this order: FieldnotesDeploy's bump (P4); then a
+  commit that only edits a comment in its `terraform/` — the live-proof ruling; only once that
+  proof holds, the repos in P5's ledger, in batches. Each deploy-repo push queues that repo's
+  `AaC/<Repo>` architecture build, which re-triggers `AaC/Architecture`, and one Argo sync with
+  one hook apply on prd. A repo whose origin moved after P5 (Jenkins' image-pin commits land
+  daily) has its bump rebased onto it, and its at-risk check (P5) is re-read just before its
+  push; an app that turns at-risk in between is reported in the test phase's record beside P5's
+  list.
+- ArgoCDDeploy (P2) may be pushed at any point: it syncs only by manual sync (argo-cd D3).
+
+### P1 — The Argo CD decision register records that every deploy-repo push syncs and runs the Terraform hook
+
+Target: ../AnsibleSpecs
+
+`argo-cd/decisions.md`, section "Terraform and the PreSync hook" (`:477`), gains a Decided entry
+for ruling D1 (2026-10-03, operator): the library's hook include also renders an ordinary,
+non-hook ConfigMap carrying the synced commit, so every push to a deploy repo changes its render,
+Argo auto-syncs it, and the PreSync hook runs `terraform apply` on every commit — doc and test
+commits included.
+
+- **The why** is the plan's grounding: hooks are outside Argo's diff; `terraform/` and the stage
+  tfvars sit outside `chart/`, where Helm's `.Files` cannot reach; auto-sync fires only on
+  OutOfSync and no Argo option forces a sync on an identical render; no deploy pipeline calls
+  Argo and Jenkins holds no Argo credential (D1).
+- **What was turned down, and the trade-off taken**, from the ruling: a hash of `terraform/` in
+  `config/*/values.yaml` (the same chart object plus a manual step and a staleness gate, and a
+  non-per-stage value in per-stage config, D12); the registry-owned hook (parked as ANS-199). An
+  apply per push, mostly no-op, is the accepted cost.
+- Entries it touches — the sync policy (D5, D46), the hook (D30), the exact library pin (D17) —
+  are cross-referenced; one whose text it makes untrue is amended in the register's own
+  `> **Amended …**` style.
+
+The id is allocated at append time and given in the done-record.
+
+### P2 — ArgoCDDeploy's render gate refuses a widened role:readonly, in every policy key
+
+Target: ../ArgoCDDeploy
+
+R1, as the card and its wrap-up pin it. Today `policy_lines` (`tests/render-chart.py:1240-1246`)
+reads only `rbac["policy.csv"]`, and `check_readonly_account` (`:1249-1275`) holds only the lines
+whose subject is the `kubecoder` account, plus `policy.default`. After this phase the check reads
+the lines of `policy.csv` and of every `policy.*.csv` key of argocd-rbac-cm — Argo CD loads them
+all into one policy (the wrap-up's citation: argo-cd `util/rbac/rbac.go` PolicyCSV) — refuses any
+line whose subject is `role:readonly`, and holds the kubecoder-subject check to all of them.
+
+- **The committed render stays green.** The committed policy (`config/prd/values.yaml:69-71`) is
+  exactly `g, pvginkel@gmail.com, role:admin` and `g, kubecoder, role:readonly`; no committed line
+  has `role:readonly` as its subject.
+- **Witnessed red on a scratch render**, each line on its own on top of the committed binding:
+  `p, role:readonly, applications, sync, */*, allow`; `g, role:readonly, role:admin`; and a
+  `policy.*.csv` overlay key binding `kubecoder` to `role:admin`. The three reds go in the
+  done-record.
+
+### P3 — homelab-shared's hook include renders a ConfigMap carrying the synced commit, as a new version
+
+Target: ../Charts
+
+Ruling D1. Today `homelab-shared.tf-presync-hook`
+(`charts/homelab-shared/templates/_tf-presync-hook.tpl:34-91`) renders only hooks — the PreSync
+RoleBinding (`:42-59`) and the PreSync Job (`:61-90`) — and its one per-commit value,
+`hook.revision`, reaches only the Job's args (`:85`), which Argo leaves out of its diff. After
+this phase the same include also renders a small ordinary (non-hook) ConfigMap carrying
+`hook.revision`, so two commits of a deploy repo render differently and Argo auto-syncs every
+push.
+
+- **A consumer changes nothing but its pin.** The one-line include every deploy repo carries
+  (`chart/templates/tf-presync-hook.yaml`, e.g. FieldnotesDeploy's) stays as it is, and no new
+  value is asked of it.
+- **It lives with the app's own objects**, in `hook.namespace`, so it is pruned with the app;
+  the AppProject restricts only cluster-scoped kinds (ArgoCDDeploy
+  `chart/templates/appproject.yaml:33`). Not in argocd-hooks: that namespace holds the hook's
+  run and credentials (D33).
+- The template's header comment says why the object exists, citing P1's decision.
+- **Published per the Charts README** (§ Publishing a version): a new version, its tarball
+  packaged into the committed `dist/`; `tests/publish.sh` stays green. The consumer gate
+  (`tests/render-consumer.sh`) asserts the ConfigMap is in the render, is not a hook, and
+  carries the revision the render was given. Nothing is pushed here: P4 publishes.
+
+### P4 — FieldnotesDeploy pins the new library version, once charts.home serves it
+
+Target: github:pvginkel/FieldnotesDeploy
+
+FieldnotesDeploy is not one of this environment's checkouts; the driver clones it (or adopts the
+clean clone already there) at `/work/scratch/FieldnotesDeploy` for this slice alone.
+
+The phase opens by publishing: it pushes Charts' `main` — P3's reviewed, merged commit — and
+waits until `https://charts.home/index.yaml` lists the new version. That push runs `IaC/Charts`,
+which builds the charts-home image, commits its build pin into ChartsDeploy, and Argo syncs
+charts-prd (Charts README § How a publish reaches charts.home). No app changes yet: no consumer
+pins the new version.
+
+Then FieldnotesDeploy's homelab-shared pin (`chart/Chart.yaml`, `"0.3.1"` today) moves to the new
+version with its `chart/Chart.lock` re-resolved, and nothing else changes. The gate
+(`kc project test`, whose first step `chart-deps` resolves the lock against charts.home) is
+green, and its prd render carries the ConfigMap with the revision the gate passes. Nothing is
+pushed: this commit is the first push of the test phase's live proof.
+
+### P5 — Every other deploy repo pins the new library version, ready to push in batches
+
+Target: root
+
+Ruling D2. Every deploy repo whose chart pins homelab-shared, FieldnotesDeploy aside (P4), gets
+the same bump — the pin and its re-resolved `Chart.lock`, nothing else. The set comes from the
+registry (ArgoCDDeploy `releases/values.yaml`, one `repo` per app); every consumer read at
+planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumped.
+
+- **Where the edits land.** Each repo's clone under `/work/scratch/<Repo>` (cloned there when
+  absent), on `main`, brought to origin's head first; one commit, its only one ahead of origin.
+  Nothing is pushed: the test phase pushes after P4's live proof (Ordering constraints).
+- **ChartsDeploy** commits its homelab-shared tarball in `chart/charts/` (what deploys
+  charts.home must not need charts.home, argo-cd D17), so its bump carries the new tarball and
+  its own `tests/check-deps.sh` holds. Its change stays the pin and the tarball: backlog slice
+  039 works in that repo.
+- **KubeCoderDeploy** takes its commit on `main` as well: kubecoder-dev syncs from it, and
+  kubecoder-prd tracks the `prd` branch (`releases/values.yaml:172-174`, D34), which only the
+  operator's KubeCoder/Promote-PRD moves.
+- **Each bumped chart resolves its dependencies against charts.home and renders the
+  ConfigMap** — proven per repo in this phase.
+- **The at-risk list (ruling D2).** For every app-stage the bumps reach: did its deploy repo's
+  `terraform/` or `config/*/*.tfvars` change between the revision of its last sync operation
+  (its Application's status, read-only from prd; a multi-source app's deploy-repo revision is
+  one of several) and the bump's parent? Every app that did is named in the done-record with the
+  commits its bump push will apply.
+- **A ledger in the slice folder** lists every bumped repo — repo, clone path, branch, commit,
+  and its at-risk finding. It is the test phase's push list, and the review reads the commits
+  through it: this phase leaves no commit on the Ansible branch.
 
 ## Not in scope
 
@@ -93,3 +230,5 @@
   range, or moving the hook image tag to a registry parameter) — parked as ANS-199.
 - The app-facing homelab-shared helpers (Ceph PV/PVC, node affinity, ExternalSecrets) — unchanged.
 - ArgoCDDeploy has no Terraform and gets no bump.
+- Promoting KubeCoderDeploy's `prd` branch: kubecoder-prd takes the bump at the operator's next
+  KubeCoder/Promote-PRD.

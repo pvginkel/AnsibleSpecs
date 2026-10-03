@@ -1,0 +1,85 @@
+{
+  "items": [
+    {
+      "id": "V01",
+      "area": "ANS-178 render gate",
+      "description": "ANS-178 — the render gate refuses a widened `role:readonly`: check_readonly_account reads the lines of policy.csv and of every policy.*.csv key, refuses any line whose subject is role:readonly, and holds the kubecoder-subject check to all of them; witnessed by the entry's two lines (`p, role:readonly, applications, sync, */*, allow` and `g, role:readonly, role:admin`), and an overlay key binding kubecoder to role:admin, each turning a scratch render red. (Planning, verified 2026-10-03: today policy_lines reads only `policy.csv` — ArgoCDDeploy tests/render-chart.py:1240-1246 — and check_readonly_account checks only kubecoder-subject lines plus policy.default — :1249-1275.)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "area": "ANS-178 render gate",
+      "description": "The committed ArgoCDDeploy render stays green under the widened check: `kc project test` in ArgoCDDeploy passes with the committed policy, which is exactly `g, pvginkel@gmail.com, role:admin` and `g, kubecoder, role:readonly` (config/prd/values.yaml:69-71).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "area": "ANS-179 live proof",
+      "description": "ANS-179 — a Terraform-only FieldnotesDeploy push reaches `terraform apply`. Live proof: after FieldnotesDeploy's library bump is pushed, a commit that only edits a comment in terraform/ is pushed; Argo syncs fieldnotes-prd at that commit (`status.operationState` / `status.history` at the new SHA) and the hook Job `tf-presync-fieldnotes-prd` runs, with a no-op apply on prd — no Terraform state change. A push that changes only tfvars rides the same mechanism: the render changes with every commit.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V04",
+      "area": "D1 library mechanism",
+      "description": "homelab-shared's hook include renders a small ordinary, non-hook ConfigMap carrying the synced commit (`hook.revision`), so two commits of a deploy repo render differently; a consumer changes nothing but its version pin; no manual step, no gate, no new credential. The Charts consumer gate asserts the ConfigMap is rendered, is not a hook, and carries the revision. (Planning, verified 2026-10-03: today the include renders only the PreSync RoleBinding and Job — Charts charts/homelab-shared/templates/_tf-presync-hook.tpl:42-90 — and hook.revision reaches only the Job's args, :85.)",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V05",
+      "area": "D1 library publish",
+      "description": "The new homelab-shared version is served by https://charts.home, its tarball committed in Charts dist/, and every previously published version is still served unchanged (`tests/publish.sh` green).",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V06",
+      "area": "D2 estate rollout",
+      "description": "Every other deploy repo that pins homelab-shared is bumped to the new library version and pushed, in batches, after FieldnotesDeploy proved it live; every app-stage that deploys from `main` syncs at its repo's bump commit and its PreSync hook runs (kubecoder-prd, which deploys from `prd`, is V09). ArgoCDDeploy is not bumped.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V07",
+      "area": "D2 estate rollout",
+      "description": "Before pushing, every app whose terraform/ or config/*/*.tfvars changed since its last sync operation (a commit the defect left unapplied) is listed, since the bump push applies it; those apps are reported in the rollout phase's done-record.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V08",
+      "area": "D2 estate rollout",
+      "description": "ChartsDeploy's bump carries the new homelab-shared tarball in chart/charts/ and changes nothing but the pin and that tarball; its tests/check-deps.sh is green and charts-prd syncs at the bump commit.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V09",
+      "area": "D2 estate rollout",
+      "description": "kubecoder-prd, which tracks KubeCoderDeploy's `prd` branch (ArgoCDDeploy releases/values.yaml:172-174), syncs at the bump once promotion carries it to `prd`, and its PreSync hook runs.",
+      "owed_after": "the operator's next KubeCoder/Promote-PRD run, which moves KubeCoderDeploy's `prd` branch",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V10",
+      "area": "Decision register",
+      "description": "The Argo CD decision register (/work/AnsibleSpecs/argo-cd/decisions.md, Terraform and the PreSync hook section) carries a new decision recording that every push syncs and runs the hook, and why.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}
