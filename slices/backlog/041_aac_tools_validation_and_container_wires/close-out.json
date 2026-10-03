@@ -2,5 +2,33 @@
   "store": 1,
   "slice": "041_aac_tools_validation_and_container_wires",
   "closed": null,
-  "entries": []
+  "entries": [
+    {
+      "id": "I1",
+      "kind": "improvement",
+      "grade": null,
+      "headline": "Architecture: quote YAML-1.2 number-like strings in the collector's published architecture.yaml too?",
+      "body": [
+        "The collector writes the merged dataset's YAML with plain yaml.safe_dump (tooling/collect.py:1163), the same YAML 1.1 dump this slice fixes in the two generators. Producer strings such as a firmware '9e10234' reach the merged dataset as strings and are written there plain. The dataset is published at https://architecture.webathome.org/data/v0.1/architecture.yaml, and the producer manual points producers at it. A YAML 1.2 reader such as js-yaml or yq v4 would read such a string as a number. architecture.json is unaffected. No known reader reads the YAML by 1.2 rules today: gen-architecture uses PyYAML and the viewer reads the JSON. Loading today's published YAML with js-yaml and comparing it against architecture.json found 0 mismatches. The plan scopes this writer out ('Any YAML writer other than the two generators R2's grounding names')."
+      ],
+      "consequence": "none today; once live data puts a number-like string into the merged dataset, any YAML 1.2 reader of architecture.yaml reads it as a number while architecture.json stays right",
+      "proposal": "card — a cheap guard. The collector's published YAML should quote the same way the generators now do, but nothing misreads it today, so it does not belong in this slice.",
+      "evidence": "witnessed",
+      "author": "plan-reviewer, plan review r1: js-yaml load of the published architecture.yaml compared against architecture.json on 2026-10-03; tooling/collect.py:1163; plan_review_r1.md",
+      "labels": {
+        "benefit": "user",
+        "felt": "after-change",
+        "change": "adjust",
+        "size": "one-edit",
+        "product-call": "no",
+        "prevents": "degraded",
+        "area": "plain",
+        "repo": "Architecture"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
 }

@@ -1,0 +1,1 @@
+{"outcome": "go", "summary": "Plan is executable as written: criteria map 1:1 to R1-R4 in the operator's wording, all four Targets resolve, the cited code holds, and the P4 edge expectation reproduces; two advisory notes (js-yaml reads underscore number forms the reference quoting leaves plain; nothing in the run carries the FN-14 move)."}
