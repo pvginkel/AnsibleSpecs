@@ -1168,6 +1168,16 @@ second reason appears besides oversized objects.
   its Terraform on srvk8sdev, go into the archive with HelmCharts; doing it from a deploy repo is
   for a later date. The archive does not wait on it.
 
+> **Amended 2026-10-03 (operator, ANS-206): no CPU requests, and a 28-day window.** Operator: "I
+> have the feeling CPU reservations in my setup are useless. My utilization is very low in
+> general, and stuff will just get throttled." `recommend-resources` no longer recommends a CPU
+> request. It drops every CPU request in a deploy repo's values, measured or not: each registry
+> stage's `config/<stage>/values.yaml`, and a local chart's `chart/values.yaml`. A CPU limit
+> stays, and so does `cpu: null`, which drops a chart's default. Memory keeps its policy: p90
+> working set, the same rounding, raised only unless `--reset`. The window is 28 days, up from 7,
+> after the operator enlarged Prometheus' storage (retention 6w or 35 GiB). Where Prometheus holds
+> less, a report says when its data starts.
+
 ## Open
 
 **O1** — decided: bulk (D51).
