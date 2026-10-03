@@ -4,8 +4,7 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: 2026-10-03 08:42 → 08:42 · 1 bail-out (1 operator question) · 0 test rounds · run bailed in
-phases
+Run: <not yet stamped>
 
 ## Comes to you
 
