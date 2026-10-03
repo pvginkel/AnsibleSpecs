@@ -123,6 +123,35 @@ float Infinity)`. Today the service parses with js-yaml and keeps no positions
 - **`test/arch-validate.test.ts` is where the card's case gets pinned end to end.** It already
   runs the canonical script against an in-process service.
 
+**Done (P1).** Architecture `a3f595e` (branch `phase/041-P1`): on any error, `/api/validate`
+re-parses the body with the `yaml` package (new direct dependency, `^2.9.1`) and every error whose
+pointer maps gets a 1-based `line` (placed after `path`); a type error on a scalar reads
+`firmware: 9e10234 (parsed as float Infinity) is not of expected type string`. `arch-validate`
+prints `line N: <message>` when `line` is present, otherwise byte-for-byte as before.
+
+Later phases:
+- P3: the canonical `arch-validate.py` as P1 left it has MD5 `766f6ec529466c321bf79cef1507e0db` — that is the value
+  for `CANONICAL_ARCH_VALIDATE_MD5`.
+
+Record:
+- Locator is `service/src/source-locate.ts` (`sourceLocator(text)` → `(pointer) => {line,
+  scalar?}`), built lazily, so a valid artifact never pays for the second parse. Applied to JSON
+  bodies too (JSON is YAML 1.2 flow), not only YAML.
+- `line` is the key's line when the node is a mapping value (so `/devices/3/stats` points at
+  `stats:`), the node's own first line for a sequence item or the root. Aliases resolve to their
+  anchor; a pointer through a `<<` merge or past a missing segment does not map (no `line`).
+- Type message: `<key>: <source> (parsed as <int|float|bool|null|string> <value>)`, key omitted
+  for a sequence item; `int` when the source matches js-yaml's integer forms (incl. `_`, `0o`,
+  `0x`, `0b`), every other number is `float`. Source is the raw slice, cut to its first line /
+  57 chars + `…`. A type error on a non-scalar keeps the old `value … is not of expected type`.
+- `value` for Infinity serializes as `null` (JSON) — unchanged behavior, pinned in the test.
+- Tests: `test/source-locate.test.ts` (new), `error-translate.test.ts`, `validate.test.ts` (source
+  lines: card case, all golden-fixture errors, triple error, JSON body), `arch-validate.test.ts`
+  (card output end to end; no-`line` error via a stub server prints exactly as before). Card
+  fixture shared in `test/firmware-artifact.ts`.
+- `USAGE.md` documents the error shape (`schemaUrl` etc.) and does not yet mention `line` — the
+  doc phase's.
+
 ### P2 — The Home Assistant fleet generator quotes strings YAML 1.2 reads as numbers
 
 Target: tooling
@@ -145,9 +174,9 @@ the service as the strings it is. Today it dumps with plain `yaml.safe_dump` inl
 Target: aac-tools
 
 - **The image ships P1's canonical `arch-validate`.** `image/arch-validate.py` is a copy of
-  Architecture's `.claude/architecture/arch-validate.py` as P1 left it, byte for byte. The pinned
-  `CANONICAL_ARCH_VALIDATE_MD5` (`tests/test_image.py:20`, checked at `:74-78`) is that file's
-  hash. The copy is never edited or reformatted here (`tests/test_image.py:16-19`).
+  Architecture's `.claude/architecture/arch-validate.py` as P1 left it (Architecture `a3f595e`),
+  byte for byte. The pinned `CANONICAL_ARCH_VALIDATE_MD5` (`tests/test_image.py:20`, checked at
+  `:74-78`) is that file's hash, `766f6ec529466c321bf79cef1507e0db`. The copy is never edited or reformatted here (`tests/test_image.py:16-19`).
 - **`gen-architecture` writes every string that a YAML 1.2 reader would take for a number in
   quotes.** It has a single write site (`image/gen_architecture.py:1242-1245`). The reference
   pattern and the unchanged-otherwise rule are P2's. The image installs only `python3-yaml` beside
