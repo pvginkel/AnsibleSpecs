@@ -338,6 +338,34 @@ This environment's config does not check the repo out. The driver adopts or clon
 
 Each new group gets promtool tests and goes through the routing test, as in P2.
 
+**Done (P3).** PrometheusDeploy `245ee38` on `phase/040-P3`: `chart/templates/blackbox-exporter.yaml`
+(ConfigMap, Deployment, Service `blackbox-exporter:9115`, image
+`quay.io/prometheus/blackbox-exporter:v0.28.0`, module `oidc_discovery`: 200, TLS, body carries
+the homelab realm's `"issuer"`); scrape job `oidc-discovery` in `extraScrapeConfigs`; rule groups
+`oidc-discovery` and `dhcp` after `loadbalancers`; `architecture.yaml` gains image
+`blackbox-exporter: ss:blackbox-exporter` and a top-level `products:` entry for it. Tests
+`tests/alert-rules/{oidc-discovery,dhcp}.yml`; routing test passes unchanged.
+
+Later phases:
+- P4: Alertmanager's `extraSecretMounts` is now at `config/prd/values.yaml:632-636` (cited in
+  place); `architecture.yaml` now has a `products:` block below `images:`.
+- Test phase: after sync, `up{job="oidc-discovery"}` and `probe_success{job="oidc-discovery"}`
+  read 1 on prd and `OIDCDiscovery*` is quiet. `DHCPProbeStale` (warning, labels `job` only)
+  fires on prd until the operator applies srviac's play (A3); that is expected, not a finding.
+
+Record:
+- OIDC: `OIDCDiscoveryFailing` critical, `probe_success == 0` for 5 m; `OIDCDiscoveryUnprobed`
+  warning, `absent(probe_success{job="oidc-discovery"})` for 10 m — a probe that cannot run fires
+  the unwatched warning, the same split as P2's blind alerts and the plan's DHCP staleness.
+  keycloak-prd had zero available replicas ≤ 3 m in 42 d outside the outage (196 m).
+- DHCP: `DHCPNotAnswering` critical, `for: 12m` — a ≤ 6 m announcement drop reads as no OFFER for
+  ≤ 10 m 10 s at the 3 m cadence and 1 m scrape. It holds on its own ALERTS while no
+  `dhcp_probe_success` is scraped, so it resolves only on an OFFER. `DHCPProbeStale` warning, no
+  `for:`: last run > 15 m old (three missed runs pass) or `absent_over_time(...[15m])`.
+- Module witnessed with the v0.28.0 binary from here: homelab realm `probe_success 1`, master
+  realm 0 (regex), unknown realm 0 (404). Mutations (hold removed, `for` 4 m, look-back 14 m)
+  each fail a test.
+
 ### P3a — Architecture: healthchecks.io as an external service
 
 Target: ../Architecture
@@ -369,7 +397,7 @@ The dead-man's switch of Rulings D1 and F1:
   webhook.
 - The ping URL comes from OpenBao `kv/eso/prd/prometheus/prd/healthchecks`, property `ping_url`,
   and ESO materialises it into `prometheus-prd` the way `alertmanager-telegram` is materialised
-  (`chart/templates/stage-manifests.yaml:9-29`, mounted by `config/prd/values.yaml:517-521`). It
+  (`chart/templates/stage-manifests.yaml:9-29`, mounted by `config/prd/values.yaml:632-636`). It
   never appears in the rendered config. prd runs Alertmanager v0.34.1.
 - `tests/alert-routing.py` assumes every receiver is a Telegram one (`:83-84`) and that every
   alert reaches one (`:96-109`). It learns the heartbeat as the one exception, and it asserts the
