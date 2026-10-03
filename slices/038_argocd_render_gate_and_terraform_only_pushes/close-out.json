@@ -102,6 +102,31 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "ArgoCDDeploy render gate: a CSV-quoted subject (\"role:readonly\", \"kubecoder\") gets past check_readonly_account",
+      "body": [
+        "policy_lines (tests/render-chart.py:1248-1253) splits each line on ',' and strips whitespace, and it does not remove CSV quotes. Argo CD reads policy lines with Go's encoding/csv (util/rbac loadPolicyLine — from memory, not checked against v3.5.1), which does. So 'p, \"role:readonly\", applications, sync, */*, allow' passes the new role:readonly refusal (:1279) while Argo enforces it, and 'g, \"kubecoder\", role:admin' gets past the binding check (:1272) in the same way. The binding-check half predates slice 038."
+      ],
+      "consequence": "A widening written with quoted fields renders green and reaches prd: the kubecoder token can then do more than read, and the gate does not say so.",
+      "proposal": "card — have policy_lines parse each line with Python's csv module, so the gate reads the subject the way Argo does; low priority, since only a deliberately quoted line gets through.",
+      "evidence": "read",
+      "author": "code-reviewer, P2, r1, phases/P2/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "severe",
+        "signal": "silent",
+        "fix": "one-edit",
+        "area": "sensitive",
+        "repo": "ArgoCDDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }

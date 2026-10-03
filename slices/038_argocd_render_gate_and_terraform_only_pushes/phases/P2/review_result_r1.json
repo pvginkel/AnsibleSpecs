@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "check_readonly_account now reads policy.csv and every policy.*.csv key, refuses role:readonly-subject rules and holds the kubecoder binding across all keys; independently confirmed on in-memory renders (committed policy green, the three named widenings each red). One advisory finding: CSV-quoted subjects evade the naive split.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "policy_lines splits on ',' without CSV unquoting, so a quoted \"role:readonly\"/\"kubecoder\" subject evades both refusals while Argo's csv loader enforces it"}]}
