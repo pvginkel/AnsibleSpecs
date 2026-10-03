@@ -1,0 +1,1 @@
+{"outcome": "signoff", "summary": "gen-ha-fleet.py dumps through a SafeDumper with YAML 1.2 / js-yaml number resolvers; independently verified against the service's js-yaml 4.1.1 (137,560 strings as values and keys, zero mismatches) and against safe_dump (only number-like strings change, only by quoting). No findings.", "details": "code_review_r1.md", "findings": []}
