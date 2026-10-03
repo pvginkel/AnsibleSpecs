@@ -149,7 +149,7 @@ in-cluster Prometheus through node-exporter's textfile collector.
     (`DockerImages/elasticsearch-setup/deploy-pins.json`), so the slice reaches that repo as two
     commits that land separately.
   - The Ansible repo goes last, after the query P7 depends on has returned a current hook pod's
-    lines.
+    lines (Ruling D4).
   - PrometheusDeploy may go before the operator applies srviac's play. Until that apply, P3's
     warning for a stale or missing DHCP-probe result fires. That is expected: the apply resolves
     it.
@@ -205,15 +205,22 @@ quiet case at every edge the rule claims:
   `keycloak-prd` ImagePullBackOff and `dnsmasq-prd` `dhcp` CrashLoopBackOff series.
 - **A node NotReady**: critical, cluster-wide (Ruling D2). The window lets a node's ordinary
   reboot pass. Prometheus' 42-day history shows how long the nodes' recent NotReady spells lasted.
-- **A LoadBalancer Service that MetalLB does not announce**: critical, scoped as Ruling D2 says.
-  The speaker's `metallb_speaker_announced` (speaker scraped on :7472) is the announcement, the
-  same fact a `ServiceL2Status` records. MetalLB withdraws a Service with no ready endpoints,
-  which is the outage's chain (handover `report.md`), so one signal covers both of R1's halves.
-  Add the EndpointSlice signal only if it catches something the announcement misses. A gap in
-  MetalLB's own metrics must not read as every Service unannounced. Live on 2026-10-03: 42 of the
-  65 LoadBalancer Services were unannounced. All 42 are KubeCoder environments in
-  `kubecoder-prd`/`kubecoder-dev` (a stopped environment keeps its Service, labelled
-  `app.kubernetes.io/managed-by: kubecoder`). Every other LoadBalancer was announced.
+- **A LoadBalancer Service that MetalLB does not announce**: critical, on every LoadBalancer
+  Service except KubeCoder environments' (Ruling D3). The speaker's `metallb_speaker_announced`
+  (speaker scraped on :7472) is the announcement, the same fact a `ServiceL2Status` records.
+  MetalLB withdraws a Service with no ready endpoints, which is the outage's chain (handover
+  `report.md`), so one signal covers both of R1's halves. Add the EndpointSlice signal only if it
+  catches something the announcement misses. A gap in MetalLB's own metrics must not read as
+  every Service unannounced.
+
+  The rule recognises an environment's Service by the `app.kubernetes.io/managed-by: kubecoder`
+  label KubeCoder puts on it, not by its namespace. `kubecoder-prd` also holds KubeCoder's own
+  Helm-managed Services, and a LoadBalancer that KubeCoder's deploy adds there is not an
+  environment, so it stays in scope. kube-state-metrics exports no Service labels today: its only
+  flags are `--port` and `--resources`, witnessed live. The label therefore needs a labels
+  allow-list entry for Services. Live on 2026-10-03, 42 of the 65 LoadBalancer Services were
+  unannounced, and all 42 carry that label (32 in `kubecoder-prd`, 10 in `kubecoder-dev`). Every
+  other LoadBalancer was announced, so a correct rule fires on nothing when it lands.
 
 `tests/alert-routing.py` already checks that every rule reaches the Telegram receiver its
 severity picks, with a "resolved" message. The new rules go through it unchanged.
@@ -326,7 +333,9 @@ verified names a query made with that credential, which returns a current Argo C
 
 The reader exists only once the test phase's pushes have landed P5 and P6, so this phase writes
 the route in its confirmed form. The test phase runs that query with the new credential before it
-pushes this repo (Ordering constraints). If the query returns nothing, that is a blocking finding.
+pushes this repo (Ordering constraints). Ruling D4 lets it read the reader's password, once, at
+`kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`, and no other OpenBao value.
+If the query returns nothing, that is a blocking finding.
 
 ## Not in scope
 

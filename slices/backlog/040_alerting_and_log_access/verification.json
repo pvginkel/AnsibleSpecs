@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — LoadBalancer",
-      "description": "\"A LoadBalancer Service with no ready endpoints, or no MetalLB `ServiceL2Status` (the DHCP failure itself)\" raises a critical alert, scoped as Ruling D2 says. On the outage's chain (pod not Ready, so the EndpointSlice is not ready, so MetalLB withdraws and no ServiceL2Status exists; handover report.md) the alert fires. A gap in MetalLB's own metrics does not read as every Service unannounced. Evidence at planning: `metallb_speaker_announced` carries one series per announced Service as `service=\"<ns>/<name>\"` (23 series live on 2026-10-03). 42 of 65 LoadBalancer Services were unannounced then, all KubeCoder environments.",
+      "description": "\"A LoadBalancer Service with no ready endpoints, or no MetalLB `ServiceL2Status` (the DHCP failure itself)\" raises a critical alert on every LoadBalancer Service except KubeCoder environments' (Ruling D3), which the rule recognises by the `app.kubernetes.io/managed-by: kubecoder` label. On the outage's chain (pod not Ready, so the EndpointSlice is not ready, so MetalLB withdraws and no ServiceL2Status exists; handover report.md) the alert fires. A stopped KubeCoder environment raises no alert, and a LoadBalancer Service in a KubeCoder namespace that lacks the label stays in scope. A gap in MetalLB's own metrics does not read as every Service unannounced. Evidence at planning: `metallb_speaker_announced` carries one series per announced Service as `service=\"<ns>/<name>\"`. On 2026-10-03, 42 of 65 LoadBalancer Services were unannounced, all labelled environments in kubecoder-prd/kubecoder-dev. kube-state-metrics v2.20.0 ran with only `--port`/`--resources`, so no Service label was exported then.",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -77,7 +77,7 @@
     {
       "id": "V10",
       "area": "R3 — runbook route",
-      "description": "\"Then the Kibana route ANS-164 put in docs/runbooks/argocd.md for a replaced hook's log can be checked, and it becomes a real answer\": a query made with the new credential returns a current Argo CD hook pod's lines. The runbook's route (docs/runbooks/argocd.md:156-177) then drops \"unconfirmed\", no longer names tf-presync-fieldnotes-prd-sx956 as the check owed, and reads as an answer for a reader who holds the credential.",
+      "description": "\"Then the Kibana route ANS-164 put in docs/runbooks/argocd.md for a replaced hook's log can be checked, and it becomes a real answer\": a query made with the new credential returns a current Argo CD hook pod's lines. The test phase makes it, reading the password once under Ruling D4. The runbook's route (docs/runbooks/argocd.md:156-177) then drops \"unconfirmed\", no longer names tf-presync-fieldnotes-prd-sx956 as the check owed, and reads as an answer for a reader who holds the credential. The Ansible repo reaches origin only after that query has returned the pod's lines.",
       "verdict": null,
       "rationale": "",
       "evidence": []
