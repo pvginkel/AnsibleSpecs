@@ -277,6 +277,36 @@ quiet case at every edge the rule claims:
 `tests/alert-routing.py` already checks that every rule reaches the Telegram receiver its
 severity picks, with a "resolved" message. The new rules go through it unchanged.
 
+**Done (P2).** PrometheusDeploy `469380f`, `017c71f` on `phase/040-P2`: three rule groups after `argocd` in
+`config/prd/values.yaml` — `pods` (`PodStuckInBackOff`, warning, `for: 15m`, by namespace/pod,
+containers and init containers, reasons CrashLoopBackOff|ImagePullBackOff|ErrImagePull over a
+5 m `max_over_time`), `nodes` (`NodeNotReady`, critical, `for: 10m`), `loadbalancers`
+(`LoadBalancerNotAnnounced`, critical, `for: 10m`; `MetalLBAnnouncementsBlind`, warning,
+`absent(metallb_speaker_announced)` for 10 m). kube-state-metrics gains
+`metricLabelsAllowlist: [services=[app.kubernetes.io/managed-by]]`, and `tests/alert-rules.sh`
+asserts the rendered flag (`017c71f`). Tests `tests/alert-rules/{pods,nodes,loadbalancers}.yml`;
+routing test passes unchanged.
+
+Later phases:
+- P4: Alertmanager's `extraSecretMounts` moved to `config/prd/values.yaml:518-522` (cited in place).
+- Test phase: `kube_service_labels` exists on prd only once this lands; until then the 42
+  unannounced KubeCoder environments' Services would fire. Check on prd after sync that
+  `LoadBalancerNotAnnounced` is quiet and `kube_service_labels{label_app_kubernetes_io_managed_by="kubecoder"}` has 48 series.
+
+Record:
+- Look-back 5 m, not 10: 42 d of history at 1 m step show running spells ≤ 4 m; a 10 m look-back
+  would have fired once (jenkins-prd `iot-support-validation-140`, an 8 m loop). Accepted cost: a
+  loop whose last wait falls in the 5 m before minute 15 fires briefly; resolve lags 5 m.
+- NotReady spells in 42 d outside the outage: all 1 m. LB announcement drops 2026-09-16..10-03:
+  ≤ 6 m outside the outage's dhcp (166 m).
+- No "all speakers up" guard: srvk8s4's speaker target was `up == 0` for the whole outage, so that
+  guard would have silenced the dhcp alert. A down speaker reads as announcing nothing; only a
+  total absence of `metallb_speaker_announced` silences the rule (and fires the blind warning).
+- No EndpointSlice signal: the announcement covers the outage chain; nothing found it misses.
+- Live 2026-10-03: 48 LoadBalancer Services carry the kubecoder label (38 prd, 10 dev); the
+  unannounced 42 are among them. Rule test mutations (look-back, reason set, guard, label, `> 0`)
+  each fail a test.
+
 ### P3 — PrometheusDeploy: is OIDC discovery answering, is DHCP answering
 
 Target: github:pvginkel/PrometheusDeploy
@@ -338,7 +368,7 @@ The dead-man's switch of Rulings D1 and F1:
   webhook.
 - The ping URL comes from OpenBao `kv/eso/prd/prometheus/prd/healthchecks`, property `ping_url`,
   and ESO materialises it into `prometheus-prd` the way `alertmanager-telegram` is materialised
-  (`chart/templates/stage-manifests.yaml:9-29`, mounted by `config/prd/values.yaml:399-403`). It
+  (`chart/templates/stage-manifests.yaml:9-29`, mounted by `config/prd/values.yaml:518-522`). It
   never appears in the rendered config. prd runs Alertmanager v0.34.1.
 - `tests/alert-routing.py` assumes every receiver is a Telegram one (`:83-84`) and that every
   alert reaches one (`:96-109`). It learns the heartbeat as the one exception, and it asserts the
