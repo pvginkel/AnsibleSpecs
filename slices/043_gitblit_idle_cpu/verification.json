@@ -2,35 +2,43 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — Gitblit near-idle when idle",
-      "description": "ANS-176 — Gitblit near-idle when idle: \"Find what it spends the CPU on (Lucene indexing, a ticket or federation poll, a GC loop, the MCP server's queries) and bring it down to near-idle.\" Settled bar: after the run's push has rolled the pod, gitblit-app averages at most 50m CPU over an hour, read from Prometheus (`http://prometheus.home`, `rate(container_cpu_usage_seconds_total{namespace=\"git-sync-prd\",container=\"gitblit-app\"}[...])`); the hour is one in which a single gitblit pod (the one the push rolled) runs throughout — no second roll inside it — and which does not overlap the 02:00–03:00 Europe/Amsterdam git-sync and the re-index after it; before the fix it ran ≈ 500–600m, and ≈ 200m even in a pre-fix pod's first hours.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R1 \u2014 Gitblit near-idle when idle",
+      "description": "ANS-176 \u2014 Gitblit near-idle when idle: \"Find what it spends the CPU on (Lucene indexing, a ticket or federation poll, a GC loop, the MCP server's queries) and bring it down to near-idle.\" Settled bar: after the run's push has rolled the pod, gitblit-app averages at most 50m CPU over an hour, read from Prometheus (`http://prometheus.home`, `rate(container_cpu_usage_seconds_total{namespace=\"git-sync-prd\",container=\"gitblit-app\"}[...])`); the hour is one in which a single gitblit pod (the one the push rolled) runs throughout \u2014 no second roll inside it \u2014 and which does not overlap the 02:00\u201303:00 Europe/Amsterdam git-sync and the re-index after it; before the fix it ran \u2248 500\u2013600m, and \u2248 200m even in a pre-fix pod's first hours.",
+      "verdict": "pass",
+      "rationale": "Pod gitblit-5478ff97cf-xlzd2 (rolled 15:28 by the operator's follow-up push 29395a0, which contains 4489edc) ran 15:28-16:34 CEST, single pod, outside 02-03h; Prometheus rate(container_cpu_usage_seconds_total{container=gitblit-app}[5m]) 5m samples 7-21m, mean ~12m, far under 50m. The earlier pod gitblit-846d6b6cc5-q5fq2 (14:37-15:28 on 4489edc) ran 6-22m. Pre-fix 500-600m.",
+      "evidence": [
+        "prometheus.home query_range 16:34"
+      ]
     },
     {
       "id": "V02",
-      "area": "R1 — the fix",
-      "description": "The running gitblit-app JVM has explicit GC disabled (`-XX:+DisableExplicitGC`) and still runs with a 1024M heap maximum — shown by the live pod and the JVM's own command line/startup, not only by the rendered chart. Today the container sets no `JAVA_OPTS` (GitSyncDeploy `chart/templates/gitblit-deployment.yaml:72-73`, commented out).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "area": "R1 \u2014 the fix",
+      "description": "The running gitblit-app JVM has explicit GC disabled (`-XX:+DisableExplicitGC`) and still runs with a 1024M heap maximum \u2014 shown by the live pod and the JVM's own command line/startup, not only by the rendered chart. Today the container sets no `JAVA_OPTS` (GitSyncDeploy `chart/templates/gitblit-deployment.yaml:72-73`, commented out).",
+      "verdict": "pass",
+      "rationale": "kubectl exec into live gitblit-app, /proc cmdline: `java -server -Xmx1024M -XX:+DisableExplicitGC ...` (both pods); chart sets JAVA_OPTS in gitblit-deployment.yaml:75-76.",
+      "evidence": [
+        "/proc cmdline of live pod"
+      ]
     },
     {
       "id": "V03",
-      "area": "Ruling D2 — CPU request",
+      "area": "Ruling D2 \u2014 CPU request",
       "description": "gitblit-app has no CPU request in prd; its `memory: 4096Mi` request is unchanged, and no other container's resources changed (today `config/prd/values.yaml:35-38` requests `cpu: 600m`, `memory: 4096Mi`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Live deployment resources: gitblit-app requests {memory:4Gi} no cpu; 4489edc diff on config/prd/values.yaml only removes `cpu: 600m`. Later operator commit 29395a0 (ANS-206) also dropped other CPU requests and retuned mcp/nginx memory; gitblit-app memory still 4Gi.",
+      "evidence": [
+        "kubectl get deploy gitblit; git show 4489edc"
+      ]
     },
     {
       "id": "V04",
-      "area": "Rollout — Ruling D1",
+      "area": "Rollout \u2014 Ruling D1",
       "description": "The run pushed the change to GitSyncDeploy `main`; Argo CD Application `argocd-prd/git-sync-prd` is Synced and Healthy on that commit, and the new gitblit pod is Ready with all three containers running and no restarts across the observation hour.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Pushed 4489edc to GitSyncDeploy main; Argo CD git-sync-prd Synced+Healthy on it (pod 3/3 Running 97s later), later on descendant 29395a0 Synced/Healthy. Restarts 0 for both pods across the observation; the roll at 15:28 was a new commit, not a restart.",
+      "evidence": [
+        "kubectl get app git-sync-prd"
+      ]
     }
   ]
 }
