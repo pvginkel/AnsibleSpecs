@@ -2,5 +2,30 @@
   "store": 1,
   "slice": "043_gitblit_idle_cpu",
   "closed": null,
-  "entries": []
+  "entries": [
+    {
+      "id": "P1",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ansible docs/slice-testing-strategy.md assumes a push converges nothing; for an Argo CD deploy repo (GitSyncDeploy) a push to main rolls prd",
+      "body": [
+        "slice-testing-strategy.md §4 says 'A push to main no longer converges anything' and §5 says every slice that touches Terraform ends deploy-owed. Both are written for this repo's IaC/* pipelines. A slice targeting an Argo CD deploy repo such as GitSyncDeploy, which this slice does, deploys to prd on the test phase's push and is proven by a live reading inside the run (Ruling D1). The doc says nothing about that kind of slice. The test agent is told to execute this doc, so on such a slice it gets procedure that does not fit."
+      ],
+      "consequence": "On a deploy-repo slice the test agent may treat the push as inert or mark live criteria as owed to the operator, unless the plan's criteria happen to spell the procedure out (043's do).",
+      "proposal": null,
+      "evidence": "read",
+      "author": "plan-reviewer, planning, r1, plan_review_r1.md",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "design",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
 }
