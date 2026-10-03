@@ -521,6 +521,29 @@ This environment's config does not check the repo out. The driver adopts or clon
   policy Helm or Argo CD knows.
 - The plaintext elastic password (`config/prd/values.yaml:5`) stays where it is (ANS-200).
 
+**Done (P6).** ElasticsearchDeploy `9b33665` on `phase/040-P6`: ExternalSecret
+`elasticsearch-reader` (values entry `externalSecrets.secrets.reader`, leaf
+`eso/prd/elasticsearch/prd/filebeat-reader`, property `password` → key `password`); the setup Job
+reads it as `READER_PASSWORD` by `secretKeyRef`. The Job's name is now
+`elasticsearch-setup-<sha256 of the whole rendered spec, 5 chars>` (prd renders
+`elasticsearch-setup-c47cc` at pin `:2565`); the inert `helm.sh/resource-policy` annotation is
+gone. `tests/setup-job.sh` (in `kc project test`) asserts the secretKeyRef and that the name holds
+for an unchanged spec and changes with the env and with the pin. README: section "The read-only
+user `reader`" with the five-step rotation path (bao kv put from stdin; ESO `force-sync` and wait
+for `refreshTime`; delete the Job; the Argo CD UI's Sync; check with `_security/_authenticate`).
+
+Later phases:
+- Test phase — push order: ElasticsearchDeploy `phase/040-P6` to `main` first, DockerImages
+  `phase/040-P5` after. The first sync then creates `elasticsearch-setup-c47cc` on the old image
+  `:2565`, which ignores `READER_PASSWORD` and completes, and prunes `elasticsearch-setup-14d87`
+  (auto-sync `prune: true`). CI's pin then renames the Job again; the new image creates `reader`.
+  The reverse order fails the Job: the new image under the old template has no `READER_PASSWORD`
+  and exits on a KeyError until P6 lands.
+- Test phase: the Job is applied before its ExternalSecret has synced (no sync waves), so its pod
+  can show `CreateContainerConfigError` for seconds until Secret `elasticsearch-reader` exists;
+  kubelet retries, and it is not a finding. Check afterwards that ExternalSecret
+  `elasticsearch-reader` reads Ready and the Job named after the pin's render is Complete.
+
 ### P7 — Ansible runbook: the route to a replaced hook's log, through Kibana and the API, confirmed
 
 Target: root
