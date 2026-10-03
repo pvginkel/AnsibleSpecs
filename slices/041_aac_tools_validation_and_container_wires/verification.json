@@ -2,75 +2,93 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — arch-validate type errors",
+      "area": "R1 \u2014 arch-validate type errors",
       "description": "ANS-184.1: \"In a type error, have `arch-validate` print the source scalar and its line next to the parsed value, e.g. `line 42: firmware: 9e10234 (parsed as float Infinity)`, rather than only `/devices/3/stats/firmware: value Infinity is not of expected type string`.\" At planning the script printed only path, message, schema and hint (Architecture `.claude/architecture/arch-validate.py:100-105`). The service built the type message from the parsed value alone (`service/src/error-translate.ts:188-195`) and parsed with js-yaml, keeping no positions (`service/src/validate.ts:154`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Architecture a3f595e: error-translate.ts type translator emits \"key: source (parsed as float Infinity) is not of expected type string\" from a position-keeping yaml re-read (source-locate.ts); arch-validate prints \"line N: \". Service tests (error-translate, source-locate, arch-validate, validate) green in the sweep (Architecture service test GREEN).",
+      "evidence": [
+        "Architecture a3f595e diff read",
+        "sweeps/r1/Architecture_service_test.log GREEN"
+      ]
     },
     {
       "id": "V02",
-      "area": "R1 — source lines on every error",
+      "area": "R1 \u2014 source lines on every error",
       "description": "Every error in the `POST /api/validate` response that maps to a node of the submitted text carries that node's line, and `arch-validate` prints it. The relation-triple errors (`service/src/validate.ts:194-202`) are included. What the validator accepts or rejects is unchanged. An error with no line keeps today's shape, and the script prints it as before.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "validate.ts passes locator to translateErrors and checkRelationsTriples (line added only when mapped; spread omitted otherwise); js-yaml+ajv validation untouched; arch-validate prints prefix only if \"line\" in err, else prior output. Covered by validate.test.ts additions (sweep green).",
+      "evidence": [
+        "Architecture a3f595e validate.ts, arch-validate.py diff"
+      ]
     },
     {
       "id": "V03",
-      "area": "R1 — one canonical arch-validate",
+      "area": "R1 \u2014 one canonical arch-validate",
       "description": "The two copies of `arch-validate` stay byte-identical. ArgoCDTools' `aac-tools/image/arch-validate.py` is Architecture's `.claude/architecture/arch-validate.py` as changed by this slice, and `aac-tools/tests/test_image.py`'s pinned hash (`:20`, checked at `:74-78`) is that file's.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Both arch-validate.py have identical sha256 a899015910f1\u2026; md5 766f6ec529466c321bf79cef1507e0db equals CANONICAL_ARCH_VALIDATE_MD5 in aac-tools/tests/test_image.py:20.",
+      "evidence": [
+        "sha256sum/md5sum run on both files"
+      ]
     },
     {
       "id": "V04",
-      "area": "R1 — live",
+      "area": "R1 \u2014 live",
       "description": "Once the Architecture push has rolled the new service out to production (`https://architecture.webathome.org/api/validate`), `arch-validate` run against production on an artifact holding a number-like string where a string is expected prints the line, the source scalar and the parsed value in the card's form.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Pushed Architecture b641dc9 to main; production still serves the old service: arch-validate on a 9e10234 firmware artifact against https://architecture.webathome.org/api/validate printed \"value Infinity is not of expected type string\" with no line. Rollout needs the image build and the operator-gated promotion.",
+      "evidence": [
+        "live run 2026-10-03 07:17Z against prod, pre-rollout"
+      ]
     },
     {
       "id": "V05",
-      "area": "R2 — generated YAML quoting",
+      "area": "R2 \u2014 generated YAML quoting",
       "description": "ANS-184.2: \"Have the generators' YAML writer quote any string that YAML 1.2 would read as a number (`1e5`, `1.5e3`, `0o17`, `089`, `9e10234`).\" This holds for both generators that dumped with plain `yaml.safe_dump`: ArgoCDTools `aac-tools/image/gen_architecture.py:1245` and Architecture `tools/ha-fleet/gen-ha-fleet.py:394`. Each such string reads back as the same string through the service's YAML reader.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Ran both generators' dump_yaml on 1e5, 1.5e3, 0o17, 089, 9e10234, 1.0: each emitted single-quoted and yaml.safe_load round-trips to the same strings. Tests added in test_gen_architecture.py and test_ha_fleet.py (sweep green).",
+      "evidence": [
+        "python run of gen_architecture.dump_yaml and gen-ha-fleet.dump_yaml"
+      ]
     },
     {
       "id": "V06",
-      "area": "R2 — no collateral change",
+      "area": "R2 \u2014 no collateral change",
       "description": "Both generators write strings that are not number-like, and non-string values, exactly as before. The only change to a generated artifact is the quoting of number-like strings.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Same runs: \"abc\", ints, floats, bool, null emitted unchanged; both dumpers are Yaml12SafeDumper subclasses adding only an implicit resolver for number-like strings.",
+      "evidence": [
+        "dump_yaml output inspected",
+        "ArgoCDTools 3d5eff7 and Architecture b641dc9 diffs"
+      ]
     },
     {
       "id": "V07",
-      "area": "R3 — archive on a failed validate",
+      "area": "R3 \u2014 archive on a failed validate",
       "description": "ANS-184.3: \"If the pipeline change is small, archive the generated architecture file when an AaC validate stage fails.\" This already holds and needs no pipeline change: every generated architecture file is archived in its Generate stage, before Validate runs. The deploy-repo template archives at JenkinsPipelineUtils `docs/examples/deploy-architecture.groovy:48`, before Validate at `:55`, through `vars/architectureProducer.groovy:52`. FieldnotesDeploy's `Jenkinsfile.architecture` archives at `:47`, before `:54`. IoTSupport's `Jenkinsfile.architecture` archives at `:65`, before `:72`. Architecture's `Jenkinsfile.ha-fleet` archives at `:55`, before `:64`.",
-      "verdict": null,
-      "rationale": "",
+      "verdict": "pass",
+      "rationale": "Plan-owed nothing: statement of existing behaviour. Archive-before-Validate ordering confirmed per the cited line numbers.",
       "evidence": []
     },
     {
       "id": "V08",
-      "area": "R4 — a wire per container role",
+      "area": "R4 \u2014 a wire per container role",
       "description": "ANS-151: \"Wanted: a wire that names its container, or one drawn only on the containers that set the var, so one image with several roles carries a wire per role.\" This already holds and the slice adds no generator work. An image entry's `containers:` map scopes `upstream` (and `realizes`) to named containers: ArgoCDTools `aac-tools/image/gen_architecture.py:272` and `:950-957`, from commit `14d85ae`, pinned by `tests/test_gen_architecture.py:1319`.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Existing behaviour; no generator change in the slice (ArgoCDTools diff touches only quoting). Pinned by tests/test_gen_architecture.py containers test, sweep green.",
+      "evidence": [
+        "ArgoCDTools 3d5eff7 stat"
+      ]
     },
     {
       "id": "V09",
-      "area": "R4 — boundByDefaultValue, as ruled 2026-10-03",
+      "area": "R4 \u2014 boundByDefaultValue, as ruled 2026-10-03",
       "description": "ANS-151: \"The same scoping would keep a recipe's `boundByDefaultValue` off containers that never make the call; FieldnotesDeploy's chart now sets `SSE_GATEWAY_URL` on `app` to get that.\" Under the 2026-10-03 ruling there is no generator scoping. FieldnotesDeploy's chart no longer sets `SSE_GATEWAY_URL` on `app` and no longer carries its comment (`chart/templates/app-deployment.yaml:57-61` at planning). FieldnotesDeploy's prd architecture still generates and validates, and the SSE gateway Serving edge is drawn onto both `app` and `mcp` (the default applies to every instance when no container sets the variable: `gen_architecture.py:1597-1606`).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "FieldnotesDeploy 8212dab removes SSE_GATEWAY_URL from app-deployment.yaml and its comment, adds a note on mcp; FieldnotesDeploy lint/test green in the sweep. Generator default applies to every instance (gen_architecture.py:1597-1606). Pushed to main.",
+      "evidence": [
+        "git show 8212dab"
+      ]
     }
   ]
 }
