@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "Plan completed: pre-settled shape, one GitSyncDeploy phase (github:pvginkel/GitSyncDeploy) disabling explicit GC on gitblit-app with the 1024M heap kept and dropping its CPU request; luceneFrequency is a test-phase contingency. verification.json carries V01 (R1 near-idle bar) plus fix, D2 and rollout criteria; dry-run parses."}
