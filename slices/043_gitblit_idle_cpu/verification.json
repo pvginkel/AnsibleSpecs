@@ -3,7 +3,7 @@
     {
       "id": "V01",
       "area": "R1 — Gitblit near-idle when idle",
-      "description": "ANS-176 — Gitblit near-idle when idle: \"Find what it spends the CPU on (Lucene indexing, a ticket or federation poll, a GC loop, the MCP server's queries) and bring it down to near-idle.\" Settled bar: after the run's push has rolled the pod, gitblit-app averages at most 50m CPU over an hour, read from Prometheus (`http://prometheus.home`, `rate(container_cpu_usage_seconds_total{namespace=\"git-sync-prd\",container=\"gitblit-app\"}[...])`); before the fix it ran ≈ 500–600m.",
+      "description": "ANS-176 — Gitblit near-idle when idle: \"Find what it spends the CPU on (Lucene indexing, a ticket or federation poll, a GC loop, the MCP server's queries) and bring it down to near-idle.\" Settled bar: after the run's push has rolled the pod, gitblit-app averages at most 50m CPU over an hour, read from Prometheus (`http://prometheus.home`, `rate(container_cpu_usage_seconds_total{namespace=\"git-sync-prd\",container=\"gitblit-app\"}[...])`); the hour is one in which a single gitblit pod (the one the push rolled) runs throughout — no second roll inside it — and which does not overlap the 02:00–03:00 Europe/Amsterdam git-sync and the re-index after it; before the fix it ran ≈ 500–600m, and ≈ 200m even in a pre-fix pod's first hours.",
       "verdict": null,
       "rationale": "",
       "evidence": []
