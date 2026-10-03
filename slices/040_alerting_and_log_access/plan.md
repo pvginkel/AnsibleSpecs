@@ -235,7 +235,7 @@ Record:
   the dry run's preview. Unit tests at `ansible/roles/dhcp_probe/tests/`, wired into the root
   component's `kc project test`.
 
-### P2 — PrometheusDeploy: pod, node and LoadBalancer alerts
+### P2 — PrometheusDeploy: pod, node and LoadBalancer alerts ✅ DONE 2026-10-03
 
 Target: github:pvginkel/PrometheusDeploy
 
