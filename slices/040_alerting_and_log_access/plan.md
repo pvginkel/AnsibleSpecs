@@ -469,6 +469,24 @@ A push builds the image and CI writes its tag into ElasticsearchDeploy's
 gate for a Dockerfile-only directory, so a `kaniko --no-push` build of the image is this phase's
 proof that it builds.
 
+**Done (P5).** DockerImages `234f665` on `phase/040-P5`: `elasticsearch-setup/app/main.py` gains
+`create_reader_user`, run after `create_logstash_internal_user`: `put_user` of user `reader`,
+role `viewer` (built-in), password from env `READER_PASSWORD`. `architecture.yaml`'s summary
+names the reader. `kaniko --no-push` built the image; `kc project test` green.
+
+Later phases:
+- P6: wire env `READER_PASSWORD` into the setup Job. The image reads it with
+  `os.environ["READER_PASSWORD"]`, so a pin of this image into a Job without the variable fails
+  the Job at start (KeyError) — ElasticsearchDeploy's wiring must land before CI's pin.
+- P7 and the test phase: the user is `reader` (`ELASTIC_USER=reader`).
+
+Record:
+- `viewer` reads every index whose name has no leading dot (data streams included, so
+  `filebeat-*` resolves) and is read-only in Kibana; it holds no cluster privilege.
+- Convergence: `put_user` with a password on an existing user replaces the password and roles;
+  witnessed only against a stub client (call shape), not a live cluster — the test phase
+  witnesses the user live under Ruling D4.
+
 ### P6 — ElasticsearchDeploy: the reader's password from OpenBao into the setup Job
 
 Target: github:pvginkel/ElasticsearchDeploy
@@ -476,7 +494,7 @@ Target: github:pvginkel/ElasticsearchDeploy
 This environment's config does not check the repo out. The driver adopts or clones it at
 `/work/scratch/ElasticsearchDeploy` for this slice.
 
-- The setup Job gets P5's password variable from OpenBao
+- The setup Job gets P5's password variable, `READER_PASSWORD`, from OpenBao
   `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`, through the chart's
   `externalSecrets` section (`config/prd/values.yaml:6-13`). It is never a value in the repo. The
   KubeCoder card (KC-124) reads the same leaf later. prd's ESO reads `eso/prd/*`
@@ -532,7 +550,8 @@ The route must hold to two facts:
   saved `filebeat-*` data view holds only if one is already saved, and nobody has checked that one
   is: ANS-164 had no credential.
 
-The reader exists only once the test phase's pushes have landed P5 and P6, so this phase writes
+The reader (Elasticsearch user `reader`, P5) exists only once the test phase's pushes have
+landed P5 and P6, so this phase writes
 the route in its confirmed form. The test phase confirms both forms before it pushes this repo
 (Ordering constraints). Ruling D4 lets it read the reader's password, once, at
 `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`, and no other OpenBao value.
