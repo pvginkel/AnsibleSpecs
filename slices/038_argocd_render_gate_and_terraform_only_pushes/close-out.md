@@ -4,19 +4,10 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: <not yet stamped>
+Run: 2026-10-03 08:42 → 08:42 · 1 bail-out (1 operator question) · 0 test rounds · run bailed in
+phases
 
 ## Comes to you
-
-### A1 — Before /dev:run-slice: push slice 039's three unpushed commits — Charts cfae346, ChartsDeploy 69ecb9f, RegistryDeploy e53c36b
-
-**Proposal:** do it — push the three from their current clones (the 039 session's own pushes),
-then strike this entry.
-
-**Consequence:** The run loop does not start while this is open; run anyway, 038's Charts publish and rollout pushes would carry slice 039's commits to origin with them.
-
-**Route:** to you — an action
-**Disposition:**
 
 ### A2 — Settle V09 after the operator's next KubeCoder/Promote-PRD run, which moves …
 
@@ -38,3 +29,7 @@ register's own style, pointing at design.md and the cluster-bootstrap runbook.
 
 **Route:** the wrap-up — fix
 **Disposition:**
+
+## Record
+
+### ~~A1 — Before /dev:run-slice: push slice 039's three unpushed commits — Charts cfae346, ChartsDeploy 69ecb9f, RegistryDeploy e53c36b~~ — already pushed: Charts cfae346, ChartsDeploy 69ecb9f and RegistryDeploy e53c36b are all on origin/main (verified 2026-10-03); struck by run-slice session

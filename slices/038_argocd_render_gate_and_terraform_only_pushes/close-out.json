@@ -22,7 +22,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "already pushed: Charts cfae346, ChartsDeploy 69ecb9f and RegistryDeploy e53c36b are all on origin/main (verified 2026-10-03)",
+        "by": "run-slice session",
+        "date": "2026-10-03",
+        "commit": null
+      },
       "ruling": null
     },
     {
