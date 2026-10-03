@@ -210,7 +210,7 @@ Record:
     by [('g', 'kubecoder', 'role:readonly'), ('g', 'kubecoder', 'role:admin')], not by role:readonly alone`
 - The reds are not a standing self-check in the gate (close-out T1).
 
-### P3 — homelab-shared's hook include renders a ConfigMap carrying the synced commit, as a new version
+### P3 — homelab-shared's hook include renders a ConfigMap carrying the synced commit, as a new version ✅ DONE 2026-10-03
 
 Target: ../Charts
 
